@@ -1289,6 +1289,35 @@
 .lg-button:disabled .lg-content { opacity: .6; }
 .lg-button:disabled .lg-lens { opacity: 0; }
 
+/*
+  A tile is disabled WHILE on screen — General's disguise grid locks the moment
+  Undetectable turns on — so its dimming eases on the hover tint's own curve
+  instead of four tiles going dark in one frame. Tiles only: a pill that
+  disables mid-click (Saving…) is gone again before a fade would read.
+  This `transition` REPLACES .lg-button's list, so transform and
+  background-color are re-listed; dropping transform would snap the press.
+*/
+.lg-button.lg-tile {
+    transition:
+        transform 110ms cubic-bezier(.2, .85, .25, 1),
+        background-color var(--lg-hover-dur) var(--lg-hover-ease),
+        filter var(--lg-hover-dur) var(--lg-hover-ease);
+}
+.lg-button.lg-tile::before,
+.lg-button.lg-tile::after,
+.lg-button.lg-tile .lg-content {
+    transition: opacity var(--lg-hover-dur) var(--lg-hover-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+    /* (0,2,0) outranks the base reduced-motion .lg-button rule: restate it
+       without transform. The dimming is colour, not motion, so it stays. */
+    .lg-button.lg-tile {
+        transition:
+            background-color var(--lg-hover-dur) var(--lg-hover-ease),
+            filter var(--lg-hover-dur) var(--lg-hover-ease);
+    }
+}
+
 .lg-button:focus-visible {
     outline: 3px solid rgba(175, 214, 255, .95);
     outline-offset: 3px;

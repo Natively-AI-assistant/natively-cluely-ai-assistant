@@ -167,11 +167,16 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                 <button
                     key={url}
                     onClick={() => openLink(url)}
-                    className="text-text-tertiary hover:text-text-primary transition-colors"
+                    className="group text-text-tertiary hover:text-text-primary transition-colors"
                     title={label}
                     aria-label={label}
                 >
-                    <Icon size={18} />
+                    {/* The Community buttons' glyph pop, so the creator's links
+                        answer the pointer the same way: spring in, plain out. */}
+                    <Icon
+                        size={18}
+                        className="[transition:transform_150ms_cubic-bezier(0.23,1,0.32,1)] group-hover:[transition:transform_280ms_cubic-bezier(0.34,1.56,0.64,1)] group-hover:scale-[1.12] motion-reduce:group-hover:scale-100"
+                    />
                 </button>
             ))}
         </div>

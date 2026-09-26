@@ -3,8 +3,9 @@
    Used by HowItWorksRefund's "Watch demo", "Open" and "Email" actions: the
    chevron slides toward the reading direction and its arms spread into an
    arrow. Hover-only; focus and touch keep the resting chevron, so nothing is
-   communicated by the motion alone. Scoped to this component's file rather
-   than index.css so it ships with the only thing that uses it. */
+   communicated by the motion alone. About's and Setup & Help's Go buttons
+   ("Modes →") use the slide too, importing this file; their lucide arrow has
+   no .t-learn-arm paths, so only the slide applies. */
 :root {
   --learn-shift: 2px;
   --learn-spread: 8deg;

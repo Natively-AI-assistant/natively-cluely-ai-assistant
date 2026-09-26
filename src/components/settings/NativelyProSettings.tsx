@@ -7,6 +7,7 @@ import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/
 import { Disclosure } from '../ui/AccordionSection';
 import { getLicenseSnapshot, setLicenseSnapshot } from '../../lib/licenseCache';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
+import { SwapLabel } from './SettingsRow';
 
 // ─── Strong cubic-bezier easings (per emil-design-eng) ───────
 // Never use the weak default `ease` / `ease-in` for UI motion.
@@ -981,7 +982,13 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                 </span>
                             </span>
                             <span className="pro-teaser-cta relative z-[3] shrink-0 inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[12.5px] font-semibold" style={{ letterSpacing: '-0.005em' }}>
-                                {pricingOpen ? 'Hide' : 'See pricing'}
+                                {/* Both words share one grid cell: the pill keeps the
+                                    wider one's width, so it no longer shrinks ~45px
+                                    out from under the pointer that just pressed it,
+                                    and the word swaps (Settings' text swap). */}
+                                <SwapLabel id={pricingOpen ? 'hide' : 'show'} sizers={['See pricing', 'Hide']}>
+                                    {pricingOpen ? 'Hide' : 'See pricing'}
+                                </SwapLabel>
                                 <ChevronDown
                                     size={14}
                                     className={`shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${pricingOpen ? 'rotate-0' : '-rotate-90'}`}

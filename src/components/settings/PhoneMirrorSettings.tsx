@@ -1105,7 +1105,8 @@ export const PhoneMirrorSettings: React.FC = () => {
                         {copyButton(view.primaryUrl, copied, copyLink, t('Copy pairing link'))}
                       </div>
                       {view.exposeOnLan && view.lanUrls.length > 1 && (
-                        <div>
+                        // Fades up when LAN exposure turns on (.settings-swap-in).
+                        <div className="settings-swap-in">
                           <button
                             type="button"
                             aria-expanded={showOtherAddrs}

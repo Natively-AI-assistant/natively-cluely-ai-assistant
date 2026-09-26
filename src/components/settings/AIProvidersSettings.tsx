@@ -4,6 +4,7 @@ import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, 
 import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
+import { Presence, SettingsMenu, SettingsMotionReady, SwapLabel, useMotionReadyAfter } from './SettingsRow';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToggleInit } from './useToggleInit';
 import { PICKER_LABEL_MAX_CHARS, PICKER_MENU_WIDTH, capPickerLabel } from './SettingsRow';
@@ -445,8 +446,12 @@ export const AIP_CSS = `
     border: 1px solid var(--aip-card-border);
     border-radius: var(--aip-r-lg);
     background: var(--aip-card-bg);
+    /* opacity + filter: Fast Response's unavailable dim (opacity-50 grayscale)
+       lifts when a Groq key is saved, instead of snapping to full colour. */
     transition: border-color var(--aip-dur-travel) var(--aip-ease-out),
-                background   var(--aip-dur-travel) var(--aip-ease-out);
+                background   var(--aip-dur-travel) var(--aip-ease-out),
+                opacity      var(--aip-dur-travel) var(--aip-ease-out),
+                filter       var(--aip-dur-travel) var(--aip-ease-out);
 }
 /* NOTE: do not re-add a ".aip-card + .aip-card { margin-top }" rule. Every card stack
    in this file also carries a Tailwind "space-y-*", whose
@@ -869,6 +874,19 @@ export const AIP_CSS = `
                     visibility:hidden; transition: visibility 0s linear var(--aip-dur-state); }
 .aip-reveal[data-open='true'] > div { visibility:visible; transition-delay:0s; }
 
+/* A card row that appears once there is something for it to do: the Test + Models
+   row a saved key unlocks, and the error note (ProviderCard). The card is a flex
+   column, so its row gap moves INSIDE the clip: the margin cancels the gap while
+   closed and the content's padding restores it, so a closed row costs 0px and an
+   open one exactly the gap it always had. Its content settles like the model list's. */
+.aip-reveal--row { margin-top: calc(-1 * var(--aip-gap-row)); }
+.aip-reveal--row > div > * { padding-top: var(--aip-gap-row); }
+/* Until the panel's stored credentials have loaded, a row that opens is the card
+   loading, not news: it lands without a transition (SettingsMotionReady). */
+.aip-reveal[data-instant='true'],
+.aip-reveal[data-instant='true'] > div,
+.aip-reveal[data-instant='true'] > div > * { transition: none !important; }
+
 /* Content motion, scoped to the model list — AipSelect's listbox is a menu and keeps
    the bare clip. The transform CANNOT go on ".aip-reveal > div": that element carries
    the overflow:hidden, so transforming it would move the clip box with the content and
@@ -878,12 +896,14 @@ export const AIP_CSS = `
    Open: box starts, content follows 60ms later, both land at 220ms — one arrival, not
    two events. Close: content leads and is gone at 110ms, so the descending edge never
    chops through solid rows. */
-.aip-reveal--models > div > * {
+.aip-reveal--models > div > *,
+.aip-reveal--row > div > * {
     opacity:0; transform: translateY(-4px);
     transition: opacity   var(--aip-dur-press) var(--aip-ease-out),
                 transform var(--aip-dur-press) var(--aip-ease-out);
 }
-.aip-reveal--models[data-open='true'] > div > * {
+.aip-reveal--models[data-open='true'] > div > *,
+.aip-reveal--row[data-open='true'] > div > * {
     opacity:1; transform:none;
     transition: opacity   var(--aip-dur-state) var(--aip-ease-out) 60ms,
                 transform var(--aip-dur-state) var(--aip-ease-out) 60ms;
@@ -1153,7 +1173,8 @@ select.aip-input { cursor:pointer; }
     .aip-root .aip-tab:active { transform: none; }
     /* Remove the 4px displacement outright rather than trusting a 0.01ms transition
        to land it. Opacity is left alone: it aids comprehension and carries no motion. */
-    .aip-root .aip-reveal--models > div > * { transform: none !important; }
+    .aip-root .aip-reveal--models > div > *,
+    .aip-root .aip-reveal--row > div > * { transform: none !important; }
     .aip-root .aip-skeleton { animation: none; opacity: 0.55; }
     /* The success check's own guard: show the finished tick outright. */
     .aip-root .t-success-check { animation: none !important; opacity: 1; }
@@ -1307,6 +1328,71 @@ export const CLOUD_PROVIDERS = [
 export type CloudProviderId = (typeof CLOUD_PROVIDERS)[number]['id'];
 
 export const AIP_PROVIDER_BRANDS = AI_PROVIDER_BRANDS;
+
+/** A note line that opens and closes in place (.aip-reveal) rather than
+    shoving every card below it by a line in one frame. Holds its last text
+    while it closes, so the words don't blank out mid-collapse. Lands without a
+    transition until the panel's credentials have loaded (SettingsMotionReady),
+    since a requirement note resolving then is the panel loading, not news. */
+export const AipRevealNote: React.FC<{ text: string; className: string; role?: 'alert' | 'status' }> = ({ text, className, role }) => {
+    const ready = React.useContext(SettingsMotionReady);
+    const shown = React.useRef(text);
+    if (text) shown.current = text;
+    return (
+        <div className="aip-reveal" data-open={text ? 'true' : 'false'} data-instant={ready ? undefined : 'true'}>
+            <div>
+                <p className={className} role={role}>{shown.current}</p>
+            </div>
+        </div>
+    );
+};
+
+/** A gateway Save button's label: Save / Saving… / Saved swap in place, and the
+    button keeps the widest one's width (SwapLabel), so the Test and Remove
+    buttons beside it no longer shift as it changes. */
+export const AipSaveLabel: React.FC<{ saving: boolean; saved: boolean; dots?: boolean }> = ({ saving, saved, dots }) => {
+    const t = useT();
+    // Two spellings exist as separate i18n keys; `dots` keeps a caller's own.
+    const savingText = dots ? t('Saving...') : t('Saving…');
+    return (
+        <SwapLabel
+            id={saving ? 'saving' : saved ? 'saved' : 'save'}
+            sizers={[
+                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{savingText}</span>,
+                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Saved')}</span>,
+                t('Save'),
+            ]}
+        >
+            {saving
+                ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{savingText}</span>
+                : saved
+                    ? <span className="inline-flex items-center gap-1.5"><Check size={12} strokeWidth={2} className="aip-check" />{t('Saved')}</span>
+                    : t('Save')}
+        </SwapLabel>
+    );
+};
+
+/** A Test Connection label: the four states swap in place, the button keeps
+    the widest one's width (SwapLabel), and Passed draws its tick. */
+export const AipTestLabel: React.FC<{ status: 'idle' | 'testing' | 'success' | 'error' }> = ({ status }) => {
+    const t = useT();
+    return (
+        <SwapLabel
+            id={status}
+            sizers={[
+                t('Test Connection'),
+                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Testing...')}</span>,
+                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Passed')}</span>,
+                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Error')}</span>,
+            ]}
+        >
+            {status === 'testing' ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{t('Testing...')}</span> :
+                status === 'success' ? <span className="inline-flex items-center gap-1.5"><AipPassedCheck />{t('Passed')}</span> :
+                    status === 'error' ? <span className="inline-flex items-center gap-1.5"><AlertCircle size={12} strokeWidth={1.75} />{t('Error')}</span> :
+                        t('Test Connection')}
+        </SwapLabel>
+    );
+};
 
 /** A Test button's "Passed" tick with the success-check animation. Render it
     only in the success branch: each mount is one play. */
@@ -2048,11 +2134,15 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
                 <ChevronDown size={14} strokeWidth={1.75} className="aip-select-chevron" aria-hidden="true" />
             </button>
 
-            {isOpen && (
-                <div
-                    role="listbox"
-                    className={`aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1 ${menuClassName} z-50 max-h-60 p-1 custom-scrollbar`}
-                >
+            {/* Settings' menu move (SettingsMenu): grows from the trigger's corner
+                and eases out on close, where it used to vanish. It stays an
+                .aip-float while it leaves, so its card stays lifted until gone. */}
+            <SettingsMenu
+                open={isOpen}
+                origin="top right"
+                role="listbox"
+                className={`aip-float aip-scroll-y absolute top-full right-0 mt-1 ${menuClassName} z-50 max-h-60 p-1 custom-scrollbar`}
+            >
                     {options.map((option) => (
                         <button
                             key={option.id}
@@ -2072,8 +2162,7 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
                     {options.length === 0 && (
                         <div className="aip-select-empty">{t('No models available')}</div>
                     )}
-                </div>
-            )}
+            </SettingsMenu>
         </div>
     );
 };
@@ -2708,6 +2797,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [directAssistError, setDirectAssistError] = useState('');
     const [fastResponseMode, setFastResponseMode] = useState(false);
     const [credentialsLoaded, setCredentialsLoaded] = useState(false);
+    // Card rows that open on a saved key stay still while the stored ones load.
+    const motionReady = useMotionReadyAfter(credentialsLoaded);
     const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || (codexCliConfig.enabled && codexOauthStatus.signedIn));
     // Mirror of LLMHelper's `fastModeApplies` (2026-09-22): the runtime routes
     // through fast mode ONLY when the active model is itself a Groq or Natively
@@ -2729,6 +2820,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [technicalInterviewVisionFirst, setTechnicalInterviewVisionFirst] = useState<boolean>(true);
 
     // --- Cloud Provider Data Scopes (fail-closed cloud share controls) ---
+    // The scope badges below pop in when a row is switched off, but not while
+    // the saved scopes are still arriving (their own read, not credentials').
+    const [scopesLoaded, setScopesLoaded] = useState(false);
+    const scopesMotionReady = useMotionReadyAfter(scopesLoaded);
     const [providerDataScopes, setProviderDataScopes] = useState<{ transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }>({});
 
     // `screenUnderstandingMode` is one enum with three values, but it answers two
@@ -3574,7 +3669,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
     // Load Cloud Provider Data Scopes and subscribe to cross-window changes
     useEffect(() => {
-        window.electronAPI?.getProviderDataScopes?.().then(setProviderDataScopes).catch(() => { });
+        window.electronAPI?.getProviderDataScopes?.().then(setProviderDataScopes).catch(() => { }).finally(() => setScopesLoaded(true));
     }, []);
 
     useEffect(() => {
@@ -4267,6 +4362,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // would apply to THAT animation and put a 175ms stall in front of every
         // in-tab panel switch. `.aip-root`'s own reduced-motion guard (~line 841)
         // already neutralises both.
+        <SettingsMotionReady.Provider value={motionReady}>
         <div className="aip-root space-y-5 pb-10" data-theme={theme} data-settings-stagger>
             <AmbiguousStoresCard />
             {confirmCopy && (
@@ -4379,11 +4475,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             <ChevronDown size={14} strokeWidth={1.75} className="aip-select-chevron" aria-hidden="true" />
                         </button>
 
-                        {isAiLangDropdownOpen && (
-                            <div
+                        <SettingsMenu
+                                open={isAiLangDropdownOpen}
+                                origin="top right"
                                 role="listbox"
-                                aria-label={t('AI Response Language')}
-                                className="aip-float aip-scroll-y aip-panel-fade absolute right-0 top-full mt-1 min-w-full w-max z-20 p-1 select-none max-h-60 custom-scrollbar"
+                                ariaLabel={t('AI Response Language')}
+                                className="aip-float aip-scroll-y absolute right-0 top-full mt-1 min-w-full w-max z-20 p-1 select-none max-h-60 custom-scrollbar"
                             >
                                 {availableAiLanguages.map((option) => (
                                     <button
@@ -4400,8 +4497,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                         )}
                                     </button>
                                 ))}
-                            </div>
-                        )}
+                        </SettingsMenu>
                     </div>
                 </div>
 
@@ -4428,9 +4524,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         <p className="text-[10px] aip-muted mt-0.5">
                             {t('Sends your typed, spoken, screenshot, and page input straight to the model, unprocessed.')}
                         </p>
-                        {directAssistError && (
-                            <p className="text-[10px] aip-danger-fg mt-1" role="alert">{directAssistError}</p>
-                        )}
+                        <AipRevealNote text={directAssistError} className="text-[10px] aip-danger-fg mt-1" role="alert" />
                     </div>
                     <AipSwitch
                         checked={directAssistEnabled}
@@ -4475,12 +4569,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             control already says. */}
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Response Mode')}</label>
                         <p className="text-[10px] aip-muted mt-0.5">{t('Uses the fastest available provider instead of your selected model.')}</p>
-                        {!canUseFastMode && (
-                            <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Requires Groq, Natively API, or Codex CLI to be configured.')}</p>
-                        )}
-                        {canUseFastMode && fastResponseMode && !fastModeAppliesToActiveModel && (
-                            <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Not applied to the current Active Model — pick a Groq or Natively model (or sign in to Codex CLI) for this to take effect.')}</p>
-                        )}
+                        <AipRevealNote
+                            text={!canUseFastMode ? t('Requires Groq, Natively API, or Codex CLI to be configured.') : ''}
+                            className="text-xs aip-warn-fg mt-0.5 font-medium"
+                        />
+                        <AipRevealNote
+                            text={canUseFastMode && fastResponseMode && !fastModeAppliesToActiveModel
+                                ? t('Not applied to the current Active Model — pick a Groq or Natively model (or sign in to Codex CLI) for this to take effect.')
+                                : ''}
+                            className="text-xs aip-warn-fg mt-0.5 font-medium"
+                        />
                     </div>
                     {/* aria-disabled, not disabled: the onClick guard below is the
                         only thing that explains WHY the toggle is unavailable, and
@@ -4709,29 +4807,34 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     Reusing it keeps the two card families spaced identically instead of
                     close enough to look like a mistake. */}
                 <div className="aip-provider-row">
-                    {antigravityStatus.inProgress ? (
+                    {/* ONE bar through the round-trip: its label swaps to the wait
+                        and Cancel fades in beside it, where the two used to be
+                        different buttons that cut from one to the other. */}
+                    {antigravityStatus.inProgress || !antigravityStatus.signedIn ? (
                         <>
-                            <button type="button" className="aip-btn flex-1" data-size="row" disabled>
-                                <Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}
-                            </button>
                             <button
                                 type="button"
-                                className="aip-btn shrink-0"
+                                className="aip-btn flex-1"
                                 data-size="row"
-                                data-variant="ghost"
-                                onClick={() => window.electronAPI.antigravityCancelLogin().catch(() => setAntigravityError(t('Could not cancel sign-in. Try again.')))}
-                            >{t('Cancel')}</button>
+                                disabled={antigravityStatus.inProgress || antigravityBusy}
+                                onClick={() => void runAntigravityAction('login')}
+                            >
+                                <SwapLabel id={antigravityStatus.inProgress ? 'waiting' : 'signin'} sizers={[]}>
+                                    {antigravityStatus.inProgress
+                                        ? <span className="inline-flex items-center gap-1.5"><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" />{t('Waiting for browser…')}</span>
+                                        : <span className="inline-flex items-center gap-1.5"><ExternalLink size={13} strokeWidth={1.75} />{t('Sign in with Google')}</span>}
+                                </SwapLabel>
+                            </button>
+                            <Presence kind="control" id={antigravityStatus.inProgress ? 'cancel' : null} className="shrink-0">
+                                <button
+                                    type="button"
+                                    className="aip-btn shrink-0"
+                                    data-size="row"
+                                    data-variant="ghost"
+                                    onClick={() => window.electronAPI.antigravityCancelLogin().catch(() => setAntigravityError(t('Could not cancel sign-in. Try again.')))}
+                                >{t('Cancel')}</button>
+                            </Presence>
                         </>
-                    ) : !antigravityStatus.signedIn ? (
-                        <button
-                            type="button"
-                            className="aip-btn flex-1"
-                            data-size="row"
-                            disabled={antigravityBusy}
-                            onClick={() => void runAntigravityAction('login')}
-                        >
-                            <ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with Google')}
-                        </button>
                     ) : (<>
                         {/* "Reload models" is gone from this row: AipModelList owns
                            discovery, exactly as ProviderCard's comment says for the cloud
@@ -4878,9 +4981,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             className="aip-btn flex-1"
                             data-size="row"
                         >
-                            {codexOauthInProgress || codexAuthAction === 'login'
-                                ? <><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}</>
-                                : <><ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with ChatGPT')}</>}
+                            <SwapLabel id={codexOauthInProgress || codexAuthAction === 'login' ? 'waiting' : 'signin'} sizers={[]}>
+                                {codexOauthInProgress || codexAuthAction === 'login'
+                                    ? <span className="inline-flex items-center gap-1.5"><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" />{t('Waiting for browser…')}</span>
+                                    : <span className="inline-flex items-center gap-1.5"><ExternalLink size={13} strokeWidth={1.75} />{t('Sign in with ChatGPT')}</span>}
+                            </SwapLabel>
                         </button>
                     </div>
                 )}
@@ -5006,15 +5111,20 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                     className="aip-btn w-full"
                                     data-tone={codexCliStatus === 'success' ? 'ok' : codexCliStatus === 'error' ? 'danger' : undefined}
                                 >
+                                    <SwapLabel
+                                        id={codexCliStatus}
+                                        sizers={[t('Test Connection')]}
+                                    >
                                     {codexCliStatus === 'testing' ? (
-                                        <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing…')}</>
+                                        <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{t('Testing…')}</span>
                                     ) : codexCliStatus === 'success' ? (
-                                        <><AipPassedCheck /> {t('Passed')}</>
+                                        <span className="inline-flex items-center gap-1.5"><AipPassedCheck />{t('Passed')}</span>
                                     ) : codexCliStatus === 'error' ? (
-                                        <><AlertCircle size={12} strokeWidth={1.75} /> {t('Failed')}</>
+                                        <span className="inline-flex items-center gap-1.5"><AlertCircle size={12} strokeWidth={1.75} />{t('Failed')}</span>
                                     ) : (
                                         t('Test Connection')
                                     )}
+                                    </SwapLabel>
                                 </button>
                                 {codexCliStatus === 'error' && codexCliError && (
                                     <p className="text-[10px] aip-danger-fg md:col-span-2">{codexCliError}</p>
@@ -5123,13 +5233,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 className="aip-btn min-w-[92px]"
                                 data-variant="accent"
                             >
-                                {savingStatus.litellm
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving…')}</>
-                                    : savedStatus.litellm
-                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                        : t('Save')}
+                                <AipSaveLabel saving={!!savingStatus.litellm} saved={!!savedStatus.litellm} />
                             </button>
-                            {hasStoredKey.litellm && (
+                            {/* Gains a Remove once saved: it fades in rather than landing. */}
+                            <Presence kind="control" id={hasStoredKey.litellm ? 'remove' : null}>
                                 <button
                                     type="button"
                                     onClick={handleRemoveLitellm}
@@ -5138,7 +5245,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 >
                                     {t('Remove')}
                                 </button>
-                            )}
+                            </Presence>
 
                             {/* The proxy can expose dozens of models; without this the Active
                                 Model dropdown gets all of them. Reuses the cloud providers'
@@ -5310,11 +5417,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 className="aip-btn min-w-[92px]"
                                 data-variant="accent"
                             >
-                                {savingStatus.ninerouter
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving…')}</>
-                                    : savedStatus.ninerouter
-                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                        : t('Save')}
+                                <AipSaveLabel saving={!!savingStatus.ninerouter} saved={!!savedStatus.ninerouter} />
                             </button>
                             <button
                                 type="button"
@@ -5323,11 +5426,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 className="aip-btn"
                                 data-variant="ghost"
                             >
-                                {ninerouterTest.testing
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing…')}</>
-                                    : t('Test Connection')}
+                                <SwapLabel
+                                    id={ninerouterTest.testing ? 'testing' : 'idle'}
+                                    sizers={[t('Test Connection'), <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Testing…')}</span>]}
+                                >
+                                    {ninerouterTest.testing
+                                        ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{t('Testing…')}</span>
+                                        : t('Test Connection')}
+                                </SwapLabel>
                             </button>
-                            {hasStoredKey.ninerouter && (
+                            <Presence kind="control" id={hasStoredKey.ninerouter ? 'remove' : null}>
                                 <button
                                     type="button"
                                     onClick={handleRemoveNinerouter}
@@ -5336,7 +5444,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 >
                                     {t('Remove')}
                                 </button>
-                            )}
+                            </Presence>
 
                             {hasStoredKey.ninerouter && (
                                 <AipModelList
@@ -5856,9 +5964,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         <p className="text-xs aip-muted">{t('What cloud AI providers are allowed to receive.')}</p>
                     </div>
                     <span className="aip-meta tabular-nums shrink-0 pb-0.5">
-                        {SCOPE_ROWS.length - disabledScopeCount}/{SCOPE_ROWS.length} {t('shared')}
+                        {/* The count swaps with the switch that changed it. */}
+                        <SettingsMotionReady.Provider value={motionReady && scopesMotionReady}>
+                            <Presence kind="text" id={String(SCOPE_ROWS.length - disabledScopeCount)}>
+                                {SCOPE_ROWS.length - disabledScopeCount}
+                            </Presence>
+                        </SettingsMotionReady.Provider>
+                        /{SCOPE_ROWS.length} {t('shared')}
                     </span>
                 </div>
+                <SettingsMotionReady.Provider value={motionReady && scopesMotionReady}>
                 <div className="aip-card p-4 flex flex-col gap-2">
                     {SCOPE_ROWS.map(({ key, labelKey, Icon }) => {
                         const allowed = providerDataScopes[key] !== false;
@@ -5868,7 +5983,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 key={key}
                                 className="flex items-center gap-3"
                             >
-                                <Icon size={13} strokeWidth={1.75} className={allowed ? 'aip-faint shrink-0' : 'aip-warn-fg shrink-0'} aria-hidden="true" />
+                                <Icon size={13} strokeWidth={1.75} className={`transition-colors duration-150 ease-out ${allowed ? 'aip-faint shrink-0' : 'aip-warn-fg shrink-0'}`} aria-hidden="true" />
                                 <span className="text-xs aip-hero min-w-0 truncate">{label}</span>
                                 {/* A disabled scope is not inert: LLMHelper reroutes it to a local
                                     model, or DROPS it when none exists. One word each, so the row
@@ -5881,10 +5996,15 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
                                     Transcripts is special-cased again below: denying it does not
                                     merely trim context, it fails the whole request. */}
-                                {!allowed && (() => {
+                                {/* A status tag: transitions.dev "notification badge" (Presence
+                                    badge), a bouncy pop in and a quiet exit, keyed on what it
+                                    says so On-device -> Omitted re-pops. */}
+                                {(() => {
                                     const rowLocal = localFallbackFor(key);
                                     const isKillSwitch = key === 'transcript' && !rowLocal;
+                                    const badgeId = allowed ? null : rowLocal ? 'local' : isKillSwitch ? 'kill' : 'omitted';
                                     return (
+                                    <Presence kind="badge" id={badgeId} className="shrink-0">
                                     <span
                                         className="aip-badge shrink-0"
                                         data-tone={rowLocal ? 'neutral' : 'warn'}
@@ -5897,6 +6017,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                         {rowLocal ? <Laptop size={9} strokeWidth={2} aria-hidden="true" /> : null}
                                         <span className="aip-badge-label">{rowLocal ? t('On-device') : isKillSwitch ? t('Blocks cloud') : t('Omitted')}</span>
                                     </span>
+                                    </Presence>
                                     );
                                 })()}
                                 <div className="ml-auto shrink-0">
@@ -5914,10 +6035,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         );
                     })}
                 </div>
+                </SettingsMotionReady.Provider>
                 {/* Only when it says something the pills do not. The old version showed a
-                    permanent restatement of the per-row text. */}
+                    permanent restatement of the per-row text. Each arrives with the
+                    panel's own fade-up (.aip-panel-fade) rather than landing. */}
                 {providerDataScopes.transcript === false && !localFallbackFor('transcript') && (
-                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                    <div className="aip-inline-warn aip-panel-fade flex items-start gap-2" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         {/* Transcripts is not a context trim. Every request carries a
                             transcript scope at the provider boundary, so denying it with
@@ -5928,7 +6051,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     </div>
                 )}
                 {disabledScopeCount > 0 && !localFallbackFor('reference_files') && providerDataScopes.transcript !== false && (
-                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                    <div className="aip-inline-warn aip-panel-fade flex items-start gap-2" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span>{t('Disabled types are dropped from context, not handled on-device — select a local model under Local & Gateways to keep them.')}</span>
                     </div>
@@ -5942,5 +6065,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 margin onto <header>. */}
             <style>{AIP_CSS}</style>
         </div>
+        </SettingsMotionReady.Provider>
     );
 };

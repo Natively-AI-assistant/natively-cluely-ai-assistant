@@ -23,6 +23,7 @@ import {
     Collapse,
     CollapseItem,
     Presence,
+    SwapLabel,
     SettingsDisclosureButton,
     SettingsMotionReady,
     useMotionReadyAfter,
@@ -519,6 +520,11 @@ export const SkillsSettings: React.FC = () => {
             </div>
 
             {/* Preview card — shown when validate-only succeeded. */}
+            {/* Preview, success and status fold open and closed (Collapse) instead
+                of shoving the installed list in one frame. The stack's 20px gap
+                rides inside each fold (pt-5) so it opens with it. */}
+            <Collapse open={!!preview} className="!mt-0" skipStagger>
+            <div className="pt-5">
             {preview && (
                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
                     <div className="flex items-start justify-between gap-4">
@@ -586,7 +592,9 @@ export const SkillsSettings: React.FC = () => {
                             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg text-xs font-semibold transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 disabled:opacity-60"
                         >
                             <Check size={13} strokeWidth={2.5} />
-                            {installing ? t('Installing…') : t('Install')}
+                            <SwapLabel id={installing ? 'installing' : 'install'} sizers={[t('Install'), t('Installing…')]}>
+                                {installing ? t('Installing…') : t('Install')}
+                            </SwapLabel>
                         </button>
                         <button
                             onClick={handleCancel}
@@ -600,17 +608,24 @@ export const SkillsSettings: React.FC = () => {
                 </div>
             )}
 
-            {success && (
-                <div className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-xs text-green-400">
-                    {success}
-                </div>
-            )}
+            </div>
+            </Collapse>
 
-            {status && (
-                <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-                    {status}
+            <Collapse open={!!success} className="!mt-0" skipStagger>
+                <div className="pt-5">
+                    <div className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-xs text-green-400">
+                        {success}
+                    </div>
                 </div>
-            )}
+            </Collapse>
+
+            <Collapse open={!!status} className="!mt-0" skipStagger>
+                <div className="pt-5">
+                    <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+                        {status}
+                    </div>
+                </div>
+            </Collapse>
 
             <div>
                 <div className="flex items-center justify-between mb-2">

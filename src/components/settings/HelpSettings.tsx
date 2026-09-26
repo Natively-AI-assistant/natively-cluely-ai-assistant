@@ -14,6 +14,8 @@ import {
     Presence, SETTINGS_BTN, SettingsFootnote, SettingsMotionReady, SettingsNotice, SettingsRow,
     SettingsSectionHeading, useMotionReadyAfter, useSettingsTones,
 } from './SettingsRow';
+// The learn-more hover (.t-learn) the Go buttons use, shared with Plans and About.
+import './HowItWorksRefund.css';
 import {
     HelpClip, HelpCommand, HelpDefinitions, HelpFigure, HelpGuideRow, HelpKeys, HelpLegend, HelpLink,
     HelpPath, HelpSteps, HelpSubhead,
@@ -58,11 +60,12 @@ const OLLAMA_STARTER_COMMAND = 'ollama pull qwen2.5:3b';
 // Rows separate by rhythm, not rules — General's container, verbatim (see About).
 const ROW_GROUP = 'rounded-xl border bg-transparent border-transparent';
 
-/** A navigation button in a row's control rail: "Audio →". */
+/** A navigation button in a row's control rail: "Audio →". The arrow leans 2px
+    toward where it goes on hover (.t-learn, HowItWorksRefund.css), as About's do. */
 const GoButton: React.FC<{ label: string; onClick: () => void }> = ({ label, onClick }) => (
-    <button type="button" onClick={onClick} className={SETTINGS_BTN}>
+    <button type="button" onClick={onClick} className={`t-learn ${SETTINGS_BTN}`}>
         {label}
-        <ArrowRight size={13} />
+        <span className="t-learn-chevron" aria-hidden="true"><ArrowRight size={13} /></span>
     </button>
 );
 
@@ -291,14 +294,21 @@ const HelpPane: React.FC<{
     // A step's action is the Liquid Glass action button (Sync's Connect) while
     // the step is still to do; once done it steps back to the neutral button,
     // still there to change it.
-    const stepAction = (step: SetupStep | null, label: string, onClick: () => void) =>
-        step?.state === 'todo' ? (
-            <LiquidGlassButton variant="action" className="lg-sm" onClick={onClick}>
-                {label}
-            </LiquidGlassButton>
-        ) : (
-            <GoButton label={label} onClick={onClick} />
-        );
+    // Status re-reads on focus and on credential/model changes, so a step can go
+    // to-do -> done while the pane is on screen (allow the mic in System Settings,
+    // come back): the blue action then trades places with the Go button
+    // (Presence "control") instead of being swapped in one frame. Silent on load.
+    const stepAction = (step: SetupStep | null, label: string, onClick: () => void) => (
+        <Presence kind="control" id={step?.state === 'todo' ? 'todo' : 'go'}>
+            {step?.state === 'todo' ? (
+                <LiquidGlassButton variant="action" className="lg-sm" onClick={onClick}>
+                    {label}
+                </LiquidGlassButton>
+            ) : (
+                <GoButton label={label} onClick={onClick} />
+            )}
+        </Presence>
+    );
 
     return (
         <div className="space-y-6 pb-10" data-settings-stagger>
@@ -325,7 +335,11 @@ const HelpPane: React.FC<{
                     <SettingsRow
                         icon={<StepIcon done={status.natively.state === 'done'}><NativelyGlyph size={20} /></StepIcon>}
                         title={t('Natively API')}
-                        badge={status.natively.state === 'todo' ? <LiquidGlassBadge variant="neutral">{t('Quickest')}</LiquidGlassBadge> : undefined}
+                        badge={
+                            <Presence kind="badge" id={status.natively.state === 'todo' ? 'quickest' : null}>
+                                <LiquidGlassBadge variant="neutral">{t('Quickest')}</LiquidGlassBadge>
+                            </Presence>
+                        }
                         description={t(status.natively.detail)}
                         descriptionKey={status.natively.state}
                         control={onNavigate && <GoButton label={t('Plans & Billing')} onClick={go('plans')} />}
@@ -357,7 +371,11 @@ const HelpPane: React.FC<{
                     <SettingsRow
                         icon={<StepIcon done={status.mode.state === 'done'}><LayoutGrid size={20} /></StepIcon>}
                         title={t('Pick a mode')}
-                        badge={<LiquidGlassBadge variant="neutral">{status.mode.state === 'locked' ? t('Pro') : t('Optional')}</LiquidGlassBadge>}
+                        badge={
+                            <Presence kind="badge" id={status.mode.state === 'locked' ? 'pro' : 'optional'}>
+                                <LiquidGlassBadge variant="neutral">{status.mode.state === 'locked' ? t('Pro') : t('Optional')}</LiquidGlassBadge>
+                            </Presence>
+                        }
                         description={t(status.mode.detail)}
                         descriptionKey={status.mode.detail}
                         control={onOpenModes && <GoButton label={t('Modes')} onClick={onOpenModes} />}
@@ -365,7 +383,11 @@ const HelpPane: React.FC<{
                     <SettingsRow
                         icon={<StepIcon done={status.profile.state === 'done'}><UserRound size={20} /></StepIcon>}
                         title={t('Add your résumé')}
-                        badge={<LiquidGlassBadge variant="neutral">{status.profile.state === 'locked' ? t('Pro') : t('Optional')}</LiquidGlassBadge>}
+                        badge={
+                            <Presence kind="badge" id={status.profile.state === 'locked' ? 'pro' : 'optional'}>
+                                <LiquidGlassBadge variant="neutral">{status.profile.state === 'locked' ? t('Pro') : t('Optional')}</LiquidGlassBadge>
+                            </Presence>
+                        }
                         description={t(status.profile.detail)}
                         descriptionKey={status.profile.detail}
                         control={onOpenProfile && <GoButton label={t('Profile')} onClick={onOpenProfile} />}
@@ -443,7 +465,7 @@ const HelpPane: React.FC<{
                                         <HelpPath parts={permission.path} />
                                         {permission.olderTitle && <> ({permission.olderTitle} on macOS 14 and earlier)</>}
                                         {mac ? <>: turn on Natively. </> : <>: turn on both switches. </>}
-                                        <button type="button" onClick={() => openPermission(permission)} className="text-accent-primary hover:underline">
+                                        <button type="button" onClick={() => openPermission(permission)} className="text-accent-primary underline decoration-transparent hover:decoration-current transition-colors duration-150 ease-out">
                                             Open
                                         </button>
                                     </>

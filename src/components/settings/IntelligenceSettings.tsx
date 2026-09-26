@@ -303,17 +303,19 @@ const ContextDebugSection: React.FC = () => {
       description={t('Local logs. Verbose adds document text.')}
       control={levelPicker}
     >
-      {envForced ? (
+      {/* Both notices fold in and out like the log path below, rather than
+          shoving the rows under them (Verbose turns the second one on). */}
+      <Collapse open={!!envForced}>
         <SettingsNotice tone={tones.warn} icon={<ShieldAlert size={14} />}>
           {t('Set by NATIVELY_CONTEXT_DEBUG — the environment variable overrides this setting.')}
         </SettingsNotice>
-      ) : null}
+      </Collapse>
 
-      {cfg.contentInclusion ? (
+      <Collapse open={!!cfg.contentInclusion}>
         <SettingsNotice tone={tones.warn} icon={<ShieldAlert size={14} />}>
           {t('Full local evidence logging is enabled (development build). Logs may contain sensitive personal data.')}
         </SettingsNotice>
-      ) : null}
+      </Collapse>
 
       {/* The log path grows in when logging is switched on and folds away with Off. */}
       <Collapse open={cfg.level !== 'off' && !!logPath}>

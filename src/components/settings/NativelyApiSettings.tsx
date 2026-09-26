@@ -22,6 +22,7 @@ import { FreeTrialModal } from '../trial/FreeTrialModal';
 import { useTrialRemaining } from '../trial/useTrialRemaining';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
+import { Presence, SettingsMotionReady, SwapLabel } from './SettingsRow';
 // Painted as a CSS mask, not rendered as an <img>: the asset is a white
 // monochrome glyph, so on the light theme's pale plaque an <img> would be
 // invisible. See `.natively-key-mark` in index.css.
@@ -97,6 +98,19 @@ function readUsageCache(): UsageData | null {
 }
 
 let usageCache: UsageData | null = readUsageCache();
+
+/**
+ * Whether the free-trial offer was on screen when this tab last settled, for
+ * this process. Its gate waits on two reads that only start AFTER the first
+ * paint (credentials, then the local trial token), so every visit painted the
+ * tab without it and then popped it in a frame or two later, shoving the key
+ * card and the plans ~120px down (measured 2026-09-26: 273 -> 396px at +67ms
+ * with 20-40ms reads). A revisit now paints the offer where the last visit
+ * left it. A stale guess (a trial claimed or a key saved elsewhere since)
+ * corrects itself when the reads land, which is what every visit did before.
+ * Not persisted: a launch's first visit still waits on the reads.
+ */
+let trialOfferLastSettled = false;
 
 function setUsageCache(next: UsageData | null): void {
   usageCache = next;
@@ -557,7 +571,7 @@ function ActiveTrialCard({ expiresAt, onOptions }: { expiresAt: string; onOption
                         last two minutes: the same threshold and the same hue
                         the usage rows use when an allowance runs low, so one
                         colour means one thing across the panel. */}
-                    <span className={`tabular-nums ${isWarning ? 'text-amber-500' : ''}`}>{clock}</span>
+                    <span className={`tabular-nums transition-colors duration-500 ease-out ${isWarning ? 'text-amber-500' : ''}`}>{clock}</span>
                     {' left in your free trial'}
                   </>
                 )}
@@ -594,6 +608,20 @@ function ActiveTrialCard({ expiresAt, onOptions }: { expiresAt: string; onOption
 }
 
 // ─── Card wrapper ────────────────────────────────────────────
+/**
+ * A pill's label changing state (Activate -> Activating... -> Saved): glyph and
+ * word swap as ONE unit, Settings' text swap (SettingsRow's Presence: out up,
+ * in from below, 2px blur, 150ms each way). Always ready, because these labels
+ * only ever change in answer to a click.
+ */
+function CtaLabel({ id, children }: { id: string; children: React.ReactNode }) {
+  return (
+    <SettingsMotionReady.Provider value={true}>
+      <Presence kind="text" id={id}>{children}</Presence>
+    </SettingsMotionReady.Provider>
+  );
+}
+
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <div
@@ -777,6 +805,31 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   const [trialLoading, setTrialLoading] = useState(false);
   const [trialError, setTrialError] = useState<string | null>(null);
   const [showTrialModal, setShowTrialModal] = useState(false);
+
+  // The offer's gate, and its process memo (see trialOfferLastSettled).
+  const trialSettling = isLoading || isCheckingTrial;
+  const trialClaimed =
+    trialState?.expired === true || localStorage.getItem('natively_trial_claimed') === 'true';
+  const trialOfferSettled =
+    !isSaved && (!trialState || (trialState.expired && !trialState.active)) && !trialClaimed;
+  const showTrialOffer = trialSettling ? trialOfferLastSettled && !isSaved && !trialClaimed : trialOfferSettled;
+  useEffect(() => {
+    if (!trialSettling) trialOfferLastSettled = trialOfferSettled;
+  }, [trialSettling, trialOfferSettled]);
+
+  // One shake per failure, on the field that was wrong: transitions.dev
+  // "error state shake", the .t-notice-shake keyframes Settings' alerts use
+  // (dropped under reduced motion). remove -> reflow -> add replays it; a retry
+  // that fails with the SAME message still shakes, because handleSave and
+  // handleActivatePro clear `error` before they await.
+  const keyInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const el = keyInputRef.current;
+    if (!error || !el) return;
+    el.classList.remove('t-notice-shake');
+    void el.offsetWidth;
+    el.classList.add('t-notice-shake');
+  }, [error]);
   const trialPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -1459,20 +1512,40 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         />
       )}
 
+      {/* The trial region: the offer and the running trial are ONE slot. Starting
+          a trial used to cut from one card to the other; they now trade places
+          in this tab's own vocabulary (plansMotion): the leaver pops out of flow
+          and fades, the arrival takes the space at opacity 0 and inks in one
+          BEAT later. Opacity only, never size or y (PlansMotionCompositing). */}
+      <AnimatePresence mode="popLayout" initial={false}>
       {/* ── Active trial status card ──────────────────── */}
       {trialState?.active && (
+        <motion.div
+          key="trial-active"
+          style={{ width: '100%' }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, transition: { duration: INK.out, ease: EASE_LEAVE } }}
+          transition={{ duration: INK.in, ease: EASE_ENTER, delay: prefersReducedMotion ? 0 : BEAT }}
+        >
         <ActiveTrialCard
           expiresAt={trialState.expiresAt}
           onOptions={() => setShowTrialModal(true)}
         />
+        </motion.div>
       )}
 
       {/* ── Free trial start card (no key, no active trial) ── */}
-      {!isLoading &&
-        !isSaved &&
-        !isCheckingTrial &&
-        (!trialState || (trialState.expired && !trialState.active)) &&
-        (() => {
+      {showTrialOffer && (
+        <motion.div
+          key="trial-offer"
+          style={{ width: '100%' }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, transition: { duration: INK.out, ease: EASE_LEAVE } }}
+          transition={{ duration: INK.in, ease: EASE_ENTER, delay: prefersReducedMotion ? 0 : BEAT }}
+        >
+        {(() => {
           const isClaimed =
             trialState?.expired === true ||
             localStorage.getItem('natively_trial_claimed') === 'true';
@@ -1563,30 +1636,46 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                         trialLoading ? 'cursor-wait' : isClaimed ? 'cursor-not-allowed' : 'cursor-pointer'
                       }`}
                     >
-                    {trialLoading ? (
-                      <>
-                        <Loader2 size={13} className="animate-spin" /> Starting…
-                      </>
-                    ) : isClaimed ? (
-                      'Already claimed'
-                    ) : (
-                      'Start free trial'
-                    )}
+                    {/* The pill keeps the wider label's width through the swap. */}
+                    <SwapLabel
+                      id={trialLoading ? 'starting' : isClaimed ? 'claimed' : 'start'}
+                      sizers={['Start free trial', <span className="flex items-center gap-2"><span className="w-[13px]" /> Starting…</span>]}
+                    >
+                      {trialLoading ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 size={13} className="animate-spin" /> Starting…
+                        </span>
+                      ) : isClaimed ? (
+                        'Already claimed'
+                      ) : (
+                        'Start free trial'
+                      )}
+                    </SwapLabel>
                     </button>
                   </div>
 
-                  {/* Error Handling */}
+                  {/* Error Handling. Inks in a beat after its row opens, like
+                      every arrival in this tab. */}
                   {trialError && !isClaimed && (
-                    <div className="flex items-center gap-2">
+                    <motion.div
+                      key={trialError}
+                      className="flex items-center gap-2"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: INK.in, ease: EASE_ENTER, delay: prefersReducedMotion ? 0 : BEAT }}
+                    >
                       <AlertCircle size={13} className="text-[var(--text-danger)] shrink-0" strokeWidth={2} />
                       <p className="text-[12px] text-[var(--text-danger)]">{trialError}</p>
-                    </div>
+                    </motion.div>
                   )}
                 </div>
               </Card>
             </div>
           );
         })()}
+        </motion.div>
+      )}
+      </AnimatePresence>
 
       {/* ── Natively key card — one box for either credential type ────── */}
       <div>
@@ -1662,24 +1751,40 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               spellCheck={false}
               autoComplete="off"
               data-invalid={error ? 'true' : 'false'}
+              ref={keyInputRef}
               className="natively-key-input w-full px-3.5 h-11 text-[13px] font-mono text-text-primary
                             placeholder:text-text-tertiary placeholder:font-sans"
             />
 
-            {/* Error */}
+            {/* Error. The row takes its space at once (the plans below FLIP
+                down) and its ink follows a BEAT later, like every arrival in
+                this tab; keyed on the message so a different one re-inks. */}
             {error && (
-              <div className="flex items-center gap-2 text-[12px] text-[var(--text-danger)]">
+              <motion.div
+                key={error}
+                className="flex items-center gap-2 text-[12px] text-[var(--text-danger)]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: INK.in, ease: EASE_ENTER, delay: prefersReducedMotion ? 0 : BEAT }}
+              >
                 <AlertCircle size={13} className="shrink-0" />
                 {error}
-              </div>
+              </motion.div>
             )}
 
             {/* Not an error: the key is saved, Pro is still being activated. */}
             {!error && proNotice && (
-              <div className="flex items-start gap-2 text-[12px] text-[var(--text-secondary)]" role="status">
+              <motion.div
+                key={proNotice}
+                className="flex items-start gap-2 text-[12px] text-[var(--text-secondary)]"
+                role="status"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: INK.in, ease: EASE_ENTER, delay: prefersReducedMotion ? 0 : BEAT }}
+              >
                 <AlertCircle size={13} className="shrink-0 mt-[2px]" />
                 {proNotice}
-              </div>
+              </motion.div>
             )}
 
             {/* Save / Activate button. The disabled state used to be a
@@ -1706,6 +1811,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                       : 'cursor-pointer'
               }`}
             >
+              <CtaLabel id={isSaving ? 'saving' : justSaved ? 'saved' : justActivatedPro ? 'pro' : 'activate'}>
               {isSaving ? (
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 size={13} className="animate-spin" />
@@ -1724,6 +1830,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               ) : (
                 'Activate'
               )}
+              </CtaLabel>
             </button>
           </div>
         </Card>

@@ -238,6 +238,13 @@ const LabelSwap: React.FC<{ id: string | null; children?: React.ReactNode }> = (
     </SettingsMotionReady.Provider>
 );
 
+// The same swap for a whole description that follows a switch beside it.
+const DescriptionSwap: React.FC<{ id: string; children?: React.ReactNode }> = ({ id, children }) => (
+    <SettingsMotionReady.Provider value={true}>
+        <Presence kind="text" id={id} block>{children}</Presence>
+    </SettingsMotionReady.Provider>
+);
+
 interface CustomSelectProps {
     label: string;
     icon: React.ReactNode;
@@ -681,7 +688,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const renderShortcutConflictBadge = (actionId: keyof typeof shortcuts) => (
         conflicts.has(actionId) ? (
             <span
-                className="flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-500/15 border border-amber-500/20 px-1.5 py-0.5 rounded-full shrink-0"
+                className="settings-control-in flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-500/15 border border-amber-500/20 px-1.5 py-0.5 rounded-full shrink-0"
                 title={t('Another app on your system is already using this shortcut. Record a new key combo to fix it.')}
             >
                 <AlertCircle size={11} />
@@ -1979,6 +1986,25 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     }, [isOpen, selectedInput, selectedOutput]); // Re-run if isOpen changes, or if selected devices are cleared
 
+    /* General's switches, theme and disguise lock are read over IPC every time
+       Settings opens (the load effects above). Until those reads have landed, a
+       change is the pane loading, not news, and must not play a swap — the
+       Detectable row would announce "Undetectable" on open. Declared after the
+       load effects so its reads queue behind theirs; flips one tick after they
+       settle (useMotionReadyAfter's reason) and re-arms on close, because this
+       component outlives the modal. */
+    const [generalMotionReady, setGeneralMotionReady] = useState(false);
+    useEffect(() => {
+        if (!isOpen) { setGeneralMotionReady(false); return; }
+        let live = true;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        Promise.allSettled([
+            window.electronAPI?.getUndetectable?.(),
+            window.electronAPI?.getThemeMode?.(),
+        ]).then(() => { if (live) timer = setTimeout(() => { if (live) setGeneralMotionReady(true); }, 0); });
+        return () => { live = false; clearTimeout(timer); };
+    }, [isOpen]);
+
     // Fetch upcoming calendar events while the Calendar tab is open and connected.
     // Polls every 60s to mirror the Launcher's cadence.
     useEffect(() => {
@@ -2306,6 +2332,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 show its fallback on every other tab too. */}
                             <ErrorBoundary context={`Settings · ${panelKey}`}>
                             {activeTab === 'general' && (
+                                <SettingsMotionReady.Provider value={generalMotionReady}>
                                 <div className="space-y-6 animated fadeIn">
                                     <div className="space-y-3.5">
                                         <div data-settings-stagger>
@@ -2318,6 +2345,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            {/* The row's state, in all three places it shows: the glyph
+                                                                cross-fades, title and sentence swap (Presence). */}
+                                                            <Presence kind="icon" id={isUndetectable ? 'undetectable' : 'detectable'} slotClassName="w-5 h-5">
                                                             {isUndetectable ? (
                                                                 <svg
                                                                     width="20"
@@ -2336,11 +2366,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             ) : (
                                                                 <Ghost size={20} />
                                                             )}
+                                                            </Presence>
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{isUndetectable ? t('Undetectable') : t('Detectable')}</h3>
+                                                            <h3 className="text-sm font-bold text-text-primary">
+                                                                <Presence kind="text" id={isUndetectable ? 'undetectable' : 'detectable'}>
+                                                                    {isUndetectable ? t('Undetectable') : t('Detectable')}
+                                                                </Presence>
+                                                            </h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
-                                                                {isUndetectable ? t('Natively is currently undetectable by screen-sharing.') : t('Natively is currently detectable by screen-sharing.')} <button onClick={() => window.electronAPI?.openExternal?.('https://natively.software/supportedapps')} className="text-accent-primary hover:underline">{t('Supported apps here')}</button>
+                                                                <Presence kind="text" id={isUndetectable ? 'undetectable' : 'detectable'}>
+                                                                    {isUndetectable ? t('Natively is currently undetectable by screen-sharing.') : t('Natively is currently detectable by screen-sharing.')}
+                                                                </Presence>{' '}
+                                                                {/* The underline fades in with the hover rather than snapping on. */}
+                                                                <button onClick={() => window.electronAPI?.openExternal?.('https://natively.software/supportedapps')} className="text-accent-primary underline decoration-transparent hover:decoration-current transition-colors duration-150 ease-out">{t('Supported apps here')}</button>
                                                             </p>
                                                         </div>
                                                     </div>
@@ -2530,12 +2569,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[105px] justify-between"
                                                         >
                                                             <div className="flex items-center gap-1.5 overflow-hidden">
-                                                                <span className="text-text-secondary shrink-0">
-                                                                    {themeMode === 'system' && <Monitor size={14} />}
-                                                                    {themeMode === 'light' && <Sun size={14} />}
-                                                                    {themeMode === 'dark' && <Moon size={14} />}
+                                                                <span className="text-text-secondary shrink-0 flex">
+                                                                    <Presence kind="icon" id={themeMode}>
+                                                                        {themeMode === 'system' && <Monitor size={14} />}
+                                                                        {themeMode === 'light' && <Sun size={14} />}
+                                                                        {themeMode === 'dark' && <Moon size={14} />}
+                                                                    </Presence>
                                                                 </span>
-                                                                <span className="capitalize text-ellipsis overflow-hidden whitespace-nowrap">{themeMode}</span>
+                                                                <span className="capitalize text-ellipsis overflow-hidden whitespace-nowrap">
+                                                                    <Presence kind="text" id={themeMode}>{themeMode}</Presence>
+                                                                </span>
                                                             </div>
                                                             <ChevronDown size={12} className={`shrink-0 transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isThemeDropdownOpen ? 'rotate-180' : ''}`} />
                                                         </button>
@@ -2657,7 +2700,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             }
                                                         }}
                                                         disabled={updateStatus === 'checking'}
-                                                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center justify-start gap-2 shrink-0 min-w-[105px] ${
+                                                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-[color,background-color,border-color,box-shadow,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 flex items-center justify-start gap-2 shrink-0 min-w-[105px] ${
                                                             updateStatus === 'checking'
                                                                 ? 'bg-bg-input text-text-tertiary border-border-subtle cursor-wait'
                                                                 : updateStatus === 'available'
@@ -2671,32 +2714,22 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     >
                                                         {/* justify-start puts the glyph where Theme's and Language's
                                                             icons start; centred, it sat 12px further in. */}
-                                                        {updateStatus === 'checking' ? (
-                                                            <>
-                                                                <RefreshCw size={14} className="animate-spin" />
-                                                                {t('Checking')}
-                                                            </>
-                                                        ) : updateStatus === 'available' ? (
-                                                            <>
-                                                                <ArrowDown size={14} />
-                                                                {t('Update')}
-                                                            </>
-                                                        ) : updateStatus === 'uptodate' ? (
-                                                            <>
-                                                                <Check size={14} />
-                                                                {t('Up to date')}
-                                                            </>
-                                                        ) : updateStatus === 'error' ? (
-                                                            <>
-                                                                <X size={14} />
-                                                                {t('Error')}
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <RefreshCw size={14} />
-                                                                {t('Check')}
-                                                            </>
-                                                        )}
+                                                        {/* Each status is one glyph + one word: the glyph cross-fades
+                                                            in its 14px slot, the word swaps (Sync's Copy → Copied). */}
+                                                        <Presence kind="icon" id={updateStatus}>
+                                                            {updateStatus === 'checking' ? <RefreshCw size={14} className="animate-spin" />
+                                                                : updateStatus === 'available' ? <ArrowDown size={14} />
+                                                                : updateStatus === 'uptodate' ? <Check size={14} />
+                                                                : updateStatus === 'error' ? <X size={14} />
+                                                                : <RefreshCw size={14} />}
+                                                        </Presence>
+                                                        <LabelSwap id={updateStatus}>
+                                                            {updateStatus === 'checking' ? t('Checking')
+                                                                : updateStatus === 'available' ? t('Update')
+                                                                : updateStatus === 'uptodate' ? t('Up to date')
+                                                                : updateStatus === 'error' ? t('Error')
+                                                                : t('Check')}
+                                                        </LabelSwap>
                                                     </button>
                                                 </div>
                                             </div>
@@ -2710,7 +2743,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-text-tertiary hover:text-text-secondary transition-colors"
                                                 >
                                                     <DisclosureChevron open={showAdvancedSettings} />
-                                                    {showAdvancedSettings ? t('Hide advanced settings') : t('Show advanced settings')}
+                                                    <LabelSwap id={showAdvancedSettings ? 'hide' : 'show'}>
+                                                        {showAdvancedSettings ? t('Hide advanced settings') : t('Show advanced settings')}
+                                                    </LabelSwap>
                                                 </button>
                                                 <Disclosure open={showAdvancedSettings}>
                                                 <div className="mt-1">
@@ -2723,11 +2758,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <div>
                                                                 <h3 className="text-sm font-bold text-text-primary">{t('Meeting Interface Style')}</h3>
                                                                 <p className="text-xs text-text-secondary mt-0.5">
-                                                                    {meetingInterfaceTheme === 'liquid-glass'
-                                                                        ? t('Liquid glass — Apple-inspired transparent overlay')
-                                                                        : meetingInterfaceTheme === 'modern'
-                                                                            ? t('Modern — polished dark glass with cobalt accents')
-                                                                            : t('Default overlay appearance')}
+                                                                    <Presence kind="text" id={meetingInterfaceTheme}>
+                                                                        {meetingInterfaceTheme === 'liquid-glass'
+                                                                            ? t('Liquid glass — Apple-inspired transparent overlay')
+                                                                            : meetingInterfaceTheme === 'modern'
+                                                                                ? t('Modern — polished dark glass with cobalt accents')
+                                                                                : t('Default overlay appearance')}
+                                                                    </Presence>
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -2738,11 +2775,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[105px] justify-between"
                                                             >
                                                                 <span className="text-ellipsis overflow-hidden whitespace-nowrap">
-                                                                    {meetingInterfaceTheme === 'liquid-glass'
-                                                                        ? 'Liquid Glass'
-                                                                        : meetingInterfaceTheme === 'modern'
-                                                                            ? 'Modern'
-                                                                            : t('Default')}
+                                                                    <Presence kind="text" id={meetingInterfaceTheme}>
+                                                                        {meetingInterfaceTheme === 'liquid-glass'
+                                                                            ? 'Liquid Glass'
+                                                                            : meetingInterfaceTheme === 'modern'
+                                                                                ? 'Modern'
+                                                                                : t('Default')}
+                                                                    </Presence>
                                                                 </span>
                                                                 <ChevronDown size={12} className={`shrink-0 transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
                                                             </button>
@@ -2870,7 +2909,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <div>
                                                                 <h3 className="text-sm font-bold text-text-primary">{t('Export debug logs')}</h3>
                                                                 <p className="text-xs text-text-secondary mt-0.5">
-                                                                    {exportResult ?? t('Collect this session\u2019s logs into one folder to share')}
+                                                                    <Presence kind="text" id={exportResult ?? 'idle'}>
+                                                                        {exportResult ?? t('Collect this session\u2019s logs into one folder to share')}
+                                                                    </Presence>
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -2891,12 +2932,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                     setExportingLogs(false);
                                                                 }
                                                             }}
-                                                            className="shrink-0 min-w-[105px] text-xs font-medium px-2.5 py-1.5 rounded-lg bg-bg-item-surface border border-border-subtle text-text-primary hover:bg-[color:var(--bg-row-hover)] transition-colors disabled:opacity-50"
+                                                            className="shrink-0 min-w-[105px] text-xs font-medium px-2.5 py-1.5 rounded-lg bg-bg-item-surface border border-border-subtle text-text-primary hover:bg-[color:var(--bg-row-hover)] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 disabled:opacity-50"
                                                         >
                                                             {/* min-w-[105px] + px-2.5 like every other control in this
                                                                 column; it also holds "Exporting…", so the swap can't
                                                                 resize the box. */}
-                                                            {exportingLogs ? t('Exporting\u2026') : t('Export')}
+                                                            <LabelSwap id={exportingLogs ? 'exporting' : 'idle'}>
+                                                                {exportingLogs ? t('Exporting\u2026') : t('Export')}
+                                                            </LabelSwap>
                                                         </button>
                                                     </div>
 
@@ -3038,12 +3081,27 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {/* `.lg-clear` inherits its label colour from this grid. No blanket
                                             opacity when locked: `disabled` dims the parts and keeps the rim
                                             (ui-components/design.md, States). */}
-                                        <div className={`grid grid-cols-2 gap-3 text-text-secondary ${isUndetectable ? 'pointer-events-none' : ''}`}>
+                                        {/* The lock notice folds open above the grid rather than popping in
+                                            as a grid row, which shoved all four tiles down in one frame.
+                                            Same box as before: 8px under the header (the -4px margin it
+                                            always had, now animated with it), 16px over the tiles. */}
+                                        <AnimatePresence initial={false}>
                                             {isUndetectable && (
-                                                <p className="col-span-2 text-xs text-yellow-500/80 -mt-1 mb-1">
-                                                    ⚠️ {t('Disable Undetectable mode first to change disguise.')}
-                                                </p>
+                                                <motion.div
+                                                    key="disguise-lock"
+                                                    initial={generalMotionReady ? (reduceMotion ? { opacity: 0, marginTop: -4 } : { opacity: 0, height: 0, marginTop: 0 }) : false}
+                                                    animate={{ opacity: 1, height: 'auto', marginTop: -4 }}
+                                                    exit={reduceMotion ? { opacity: 0, transition: { duration: 0.15 } } : { opacity: 0, height: 0, marginTop: 0, transition: { duration: 0.15, ease: [0.22, 1, 0.36, 1] } }}
+                                                    transition={{ duration: reduceMotion ? 0.15 : 0.25, ease: [0.22, 1, 0.36, 1] }}
+                                                    style={{ overflow: 'hidden' }}
+                                                >
+                                                    <p className="text-xs text-yellow-500/80 pb-4">
+                                                        ⚠️ {t('Disable Undetectable mode first to change disguise.')}
+                                                    </p>
+                                                </motion.div>
                                             )}
+                                        </AnimatePresence>
+                                        <div className={`grid grid-cols-2 gap-3 text-text-secondary ${isUndetectable ? 'pointer-events-none' : ''}`}>
                                             {[
                                                 // Names match what _applyDisguise renames the app to per platform.
                                                 { id: 'none', label: 'None (Default)', icon: <Layout size={18} strokeWidth={1.75} /> },
@@ -3079,6 +3137,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     </div>
 
                                 </div>
+                                </SettingsMotionReady.Provider>
                             )}
 
                             {activeTab === 'ai-providers' && (
@@ -3124,9 +3183,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <div>
                                             <h4 className="text-sm font-bold text-text-primary">{t('Global shortcuts')}</h4>
                                             <p className="text-xs text-text-secondary mt-0.5">
-                                                {globalShortcutsEnabled
-                                                    ? t('Shortcuts work even when another app is focused.')
-                                                    : t('Shortcuts work only while Natively is focused. Toggle Visibility stays global so you can always bring Natively back.')}
+                                                <DescriptionSwap id={globalShortcutsEnabled ? 'global' : 'focused'}>
+                                                    {globalShortcutsEnabled
+                                                        ? t('Shortcuts work even when another app is focused.')
+                                                        : t('Shortcuts work only while Natively is focused. Toggle Visibility stays global so you can always bring Natively back.')}
+                                                </DescriptionSwap>
                                             </p>
                                         </div>
                                         <SettingsToggle
@@ -3142,7 +3203,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         manager, IME) can silently claim a combo Natively wants,
                                         which otherwise looks like "the hotkey just doesn't work". */}
                                     {conflicts.size > 0 && (
-                                        <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                                        <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 settings-swap-in">
                                             <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
                                             <p className="text-xs text-amber-200/90 leading-snug">
                                                 {t("Some shortcuts below (marked \"In use\") are claimed by another app on your system and won't fire. Record a new key combo for each to fix it.")}
@@ -3383,8 +3444,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             </div>
 
                                             {/* Groq Model Selector */}
+                                            {/* Each card below belongs to one provider and fades up as it
+                                                mounts (.settings-swap-in, src/index.css), so switching the
+                                                provider above swaps them in rather than cutting. */}
                                             {sttProvider === 'groq' && (
-                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
+                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4 settings-swap-in">
                                                     <label className="text-xs font-medium text-text-secondary mb-2.5 block">{t('Whisper Model')}</label>
                                                     <div className="grid grid-cols-2 gap-2">
                                                         {[
@@ -3417,7 +3481,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             )}
 
                                             {sttProvider === 'nvidia_nim' && hasStoredNvidiaNimKey && (
-                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
+                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4 settings-swap-in">
                                                     <label id="nvidia-nim-stt-model-label" className="text-xs font-medium text-text-secondary mb-2.5 block">{t('Nvidia Nim Speech Model')}</label>
                                                     {/* One column, not a 2-col grid: there are THREE models, so a
                                                         two-up grid leaves a lone orphan on the second row, and the
@@ -3474,7 +3538,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                             {/* Google Cloud Service Account */}
                                             {sttProvider === 'google' && (
-                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
+                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4 settings-swap-in">
                                                     <label className="text-xs font-medium text-text-secondary mb-2 block">{t('Service Account JSON')}</label>
                                                     <div className="flex gap-2">
                                                         <div className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-secondary font-mono truncate">
@@ -3512,7 +3576,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                             {/* API Key Input (non-Google providers) */}
                                             {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'apple-speech' && sttProvider !== 'natively' && sttProvider !== 'none' && (
-                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
+                                                // Keyed on the provider: every key-backed provider shares this
+                                                // card, so without a key it would never remount — and never swap.
+                                                <div key={sttProvider} className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3 settings-swap-in">
                                                     <label className="text-xs font-medium text-text-secondary block">
                                                         {sttProvider === 'nvidia_nim' ? 'Nvidia Nim' : sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram'} API Key
                                                     </label>
@@ -3706,11 +3772,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             )}
 
                                             {sttProvider === 'apple-speech' && (
-                                                <p className="text-xs text-text-secondary">{t('Apple Speech runs transcription on your device. macOS may download the selected language model on first use; “Auto” uses your system language.')}</p>
+                                                <p className="text-xs text-text-secondary settings-swap-in">{t('Apple Speech runs transcription on your device. macOS may download the selected language model on first use; “Auto” uses your system language.')}</p>
                                             )}
                                             {/* Local Whisper Model Panel */}
                                             {sttProvider === 'local-whisper' && (
-                                                <LocalWhisperModelPanel onModelConfigChanged={setLocalWhisperConfig} />
+                                                <div className="settings-swap-in">
+                                                    <LocalWhisperModelPanel onModelConfigChanged={setLocalWhisperConfig} />
+                                                </div>
                                             )}
 
                                             {/* Recognition Language Family — options restricted to what the
@@ -3738,7 +3806,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 (Whisper-family) or fixed (English-only checkpoints). Only
                                                 Nemotron consumes regional variants. */}
                                             {currentGroupVariants.length > 1 && (
-                                                <div className="mt-3 animated fadeIn">
+                                                <div className="mt-3 settings-swap-in">
                                                     <CustomSelect
                                                         label={t("Accent / Region")}
                                                         icon={<MapPin size={14} />}
@@ -3754,7 +3822,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                             {/* Local model capability notes */}
                                             {localLanguageCapability && languageLocked && (
-                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                <div className="flex gap-2 items-center mt-2 px-1 settings-swap-in">
                                                     <Info size={14} className="text-text-secondary shrink-0" />
                                                     <p className="text-xs text-text-secondary">
                                                         {(localLanguageCapability.englishOnlyNames.length > 0
@@ -3771,7 +3839,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 out of the selects above, so without this the control would
                                                 just sit on its placeholder with no explanation. */}
                                             {appleLanguageCapability && storedLanguageUnsupported && !storedLanguageParakeetOnly && (
-                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                <div className="flex gap-2 items-center mt-2 px-1 settings-swap-in">
                                                     <AlertCircle size={14} className="text-amber-400 shrink-0" />
                                                     <p className="text-xs text-amber-200/90">
                                                         {`"${availableLanguages[recognitionLanguage]?.label ?? recognitionLanguage}" ${t("isn't available in Apple Speech — pick one of the listed languages.")}`}
@@ -3783,7 +3851,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 reports a 0..1 fraction and no transfer size, so this is a
                                                 percentage — there is no MB figure available to show. */}
                                             {appleLanguageCapability && selectedAppleNeedsDownload && (
-                                                <div className="mt-3 rounded-xl border border-border-subtle bg-bg-card p-3">
+                                                <div className="mt-3 rounded-xl border border-border-subtle bg-bg-card p-3 settings-swap-in">
                                                     {/* Gate on the locale actually downloading, not merely on
                                                         "a download exists": switching language mid-download
                                                         otherwise showed the NEW language's card wearing the
@@ -3838,7 +3906,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 visible and recoverable — otherwise the sixth language just
                                                 fails with Apple's opaque "Too many allocated locales". */}
                                             {appleSlots && appleSlots.entries.length > 0 && (
-                                                <div className="mt-3 rounded-xl border border-border-subtle bg-bg-card p-3">
+                                                <div className="mt-3 rounded-xl border border-border-subtle bg-bg-card p-3 settings-swap-in">
                                                     <div className="flex items-center justify-between mb-2">
                                                         <span className="text-xs font-medium text-text-primary">
                                                             {t('Downloaded languages')}
@@ -3869,7 +3937,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                             )}
                                             {appleLanguageCapability && (
-                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                <div className="flex gap-2 items-center mt-2 px-1 settings-swap-in">
                                                     <Info size={14} className="text-text-secondary shrink-0" />
                                                     <p className="text-xs text-text-secondary">
                                                         {t('Languages marked Download are fetched by macOS the first time you use them — the first meeting starts once that finishes.')}
@@ -3877,7 +3945,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                             )}
                                             {localLanguageCapability && !languageLocked && storedLanguageUnsupported && (
-                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                <div className="flex gap-2 items-center mt-2 px-1 settings-swap-in">
                                                     <AlertCircle size={14} className="text-amber-400 shrink-0" />
                                                     <p className="text-xs text-amber-200/90">
                                                         {`"${availableLanguages[recognitionLanguage]?.label ?? recognitionLanguage}" ${t("isn't supported by the selected local model — pick one of the listed languages.")}`}
@@ -3885,7 +3953,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                             )}
                                             {storedLanguageParakeetOnly && (
-                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                <div className="flex gap-2 items-center mt-2 px-1 settings-swap-in">
                                                     <AlertCircle size={14} className="text-amber-400 shrink-0" />
                                                     <p className="text-xs text-amber-200/90">
                                                         {`"${availableLanguages[recognitionLanguage]?.label ?? recognitionLanguage}" ${t("is only available with the Parakeet TDT local model — pick one of the listed languages.")}`}
@@ -3893,7 +3961,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                             )}
                                             {localLanguageCapability && !languageLocked && autoDetectUnavailable && (
-                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                <div className="flex gap-2 items-center mt-2 px-1 settings-swap-in">
                                                     <Info size={14} className="text-text-secondary shrink-0" />
                                                     <p className="text-xs text-text-secondary">
                                                         {t("This model has no auto-detect mode — English is transcribed unless you pick a language.")}
@@ -3902,7 +3970,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             )}
                                             {localLanguageCapability && !languageLocked && !storedLanguageUnsupported && !autoDetectUnavailable
                                                 && !localLanguageCapability.accentSelectable && currentGroupVariants.length > 1 && (
-                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                <div className="flex gap-2 items-center mt-2 px-1 settings-swap-in">
                                                     <Info size={14} className="text-text-secondary shrink-0" />
                                                     <p className="text-xs text-text-secondary">
                                                         {t("This model doesn't distinguish accents or regions — only the language itself applies.")}
@@ -3915,7 +3983,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 choice was noise — and it pushed the genuinely useful notes
                                                 (download state, slot budget) further down the panel. */}
                                             {recognitionLanguage === 'auto' && (
-                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                <div className="flex gap-2 items-center mt-2 px-1 settings-swap-in">
                                                     <Info size={14} className="text-text-secondary shrink-0" />
                                                     <p className="text-xs text-text-secondary">
                                                         {autoDetectedLanguage
@@ -3947,7 +4015,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {/* Device-fallback banner: shown when main process couldn't
                                             open the selected device and silently used the default. */}
                                         {deviceFallbackNotice && (
-                                            <div className="mb-4 flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                                            <div className="mb-4 flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 settings-swap-in">
                                                 <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
                                                 <div className="min-w-0 flex-1">
                                                     <p className="text-xs text-amber-200/90 leading-snug">

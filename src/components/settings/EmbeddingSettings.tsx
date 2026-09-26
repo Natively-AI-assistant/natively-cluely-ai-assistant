@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Check, ChevronDown, Download, ExternalLink, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Search, Server, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, type AipTone } from './AIProvidersSettings';
+import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSaveLabel, AipTestLabel, type AipTone } from './AIProvidersSettings';
+import { Presence, SwapLabel, useMotionReadyAfter } from './SettingsRow';
 import { PICKER_MENU_WIDTH, RETRIEVAL_HERO_PICKER_ATTR, RETRIEVAL_HERO_PICKER_MIN_WIDTH, capPickerLabel } from './SettingsRow';
 import { isMac, isWindows } from '../../utils/platformUtils';
 
@@ -330,6 +331,8 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
 
     const [providers, setProviders] = useState<CatalogProvider[]>([]);
     const [loaded, setLoaded] = useState(false);
+    // Keys that load with the panel land; keys saved afterwards animate in.
+    const motionReady = useMotionReadyAfter(loaded);
     const [hasCatalog, setHasCatalog] = useState<Record<string, boolean>>({});
     const [fetchingModels, setFetchingModels] = useState<string | null>(null);
     const [active, setActive] = useState<ActiveDescription>({ configured: false });
@@ -963,14 +966,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                     className="aip-btn-seg aip-field-seg"
                                     data-tone={savedKey[p.id] ? 'ok' : undefined}
                                 >
-                                    {savingKey[p.id]
-                                        ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                        : savedKey[p.id]
-                                            ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                            : t('Save')}
+                                    <AipSaveLabel saving={!!(savingKey[p.id])} saved={!!(savedKey[p.id])} dots />
                                 </button>
                             </div>
-                            {storedKeys[p.id] && (
+                            {/* Arrives with the saved key, like AI Providers' cards. */}
+                            <Presence kind="control" id={storedKeys[p.id] ? 'remove' : null} ready={motionReady} className="shrink-0">
                                 <button
                                     onClick={() => void handleRemoveKey(p.id as 'gemini' | 'openai' | 'openrouter' | 'voyage')}
                                     className="aip-btn shrink-0"
@@ -980,7 +980,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                 >
                                     <Trash2 size={14} strokeWidth={1.75} />
                                 </button>
-                            )}
+                            </Presence>
                         </div>
                     </div>
                 )}
@@ -1008,11 +1008,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                     className="aip-field-seg"
                                     data-tone={endpointSaved ? 'ok' : undefined}
                                 >
-                                    {endpointSaving
-                                        ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                        : endpointSaved
-                                            ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                            : t('Save')}
+                                    <AipSaveLabel saving={!!(endpointSaving)} saved={!!(endpointSaved)} dots />
                                 </button>
                             </div>
                         </div>
@@ -1031,10 +1027,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                 data-tone={testStatus[p.id] === 'success' ? 'ok' : testStatus[p.id] === 'error' ? 'danger' : undefined}
                                 title={testErrors[p.id] || t('Test Connection')}
                             >
-                                {testStatus[p.id] === 'testing' ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</> :
-                                    testStatus[p.id] === 'success' ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</> :
-                                        testStatus[p.id] === 'error' ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</> :
-                                            <>{t('Test Connection')}</>}
+                                <AipTestLabel status={testStatus[p.id] ?? 'idle'} />
                             </button>
                         )}
 
@@ -1299,7 +1292,9 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                         onClick={() => void testLocalModel(m.id)}
                                         title={t('Measure how long one embedding takes on this device')}
                                     >
-                                        <span>{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
+                                        <SwapLabel id={testingLocalModelId === m.id ? 'testing' : 'test'} sizers={[t('Test'), t('Testing…')]}>
+                                            {testingLocalModelId === m.id ? t('Testing…') : t('Test')}
+                                        </SwapLabel>
                                     </button>
                                 )}
                                 {installed && !isSelected && !m.bundled && (
@@ -1326,7 +1321,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                             .filter(Boolean).join(' · ')}
                     </span>
                     {test?.latencyMs !== undefined && (
-                        <span className="text-[var(--aip-secondary)]">{`${test.latencyMs} ms · ${test.accelerator}`}</span>
+                        <span className="aip-panel-fade text-[var(--aip-secondary)]">{`${test.latencyMs} ms · ${test.accelerator}`}</span>
                     )}
                     {test?.error && <span className="aip-danger-fg">{test.error}</span>}
                 </div>

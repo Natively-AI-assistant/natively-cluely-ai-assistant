@@ -3,7 +3,8 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { AlertCircle, Check, ChevronDown, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, RefreshCw, Search, Server, ShieldAlert, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSelect, AipSwitch, type AipSelectOption, type AipTone } from './AIProvidersSettings';
+import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSaveLabel, AipSelect, AipSwitch, AipTestLabel, type AipSelectOption, type AipTone } from './AIProvidersSettings';
+import { Presence, useMotionReadyAfter } from './SettingsRow';
 import { RETRIEVAL_HERO_PICKER_ATTR, RETRIEVAL_HERO_PICKER_MIN_WIDTH, capPickerLabel } from './SettingsRow';
 import { isMac, isWindows } from '../../utils/platformUtils';
 import { candidateControlApplies, candidateControlRationale } from '../../lib/rerankCandidateControl.mjs';
@@ -604,6 +605,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
     // Model Library UI Optimization States
     const [filterTab, setFilterTab] = useState<'all' | 'installed' | 'recommended'>('all');
+    // The hosted cards mount with their key state already known; a key saved
+    // or removed after that animates its trash button in and out.
+    const hostedMotionReady = useMotionReadyAfter(hostedProviders.length > 0);
     const [modelQuery, setModelQuery] = useState('');
     const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
     const [expandedFileDrawers, setExpandedFileDrawers] = useState<Record<string, boolean>>({});
@@ -1521,14 +1525,10 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                         className="aip-btn-seg aip-field-seg"
                                         data-tone={saved ? 'ok' : undefined}
                                     >
-                                        {saving
-                                            ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                            : saved
-                                                ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                                : t('Save')}
+                                        <AipSaveLabel saving={!!(saving)} saved={!!(saved)} dots />
                                     </button>
                                 </div>
-                                {hasKey && (
+                                <Presence kind="control" id={hasKey ? 'remove' : null} ready={hostedMotionReady} className="shrink-0">
                                     <button
                                         type="button"
                                         onClick={() => void removeKey(p.id, p.staticCatalogue)}
@@ -1539,7 +1539,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                     >
                                         <Trash2 size={14} strokeWidth={1.75} />
                                     </button>
-                                )}
+                                </Presence>
                             </div>
                         </div>
                         )}
@@ -1558,13 +1558,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                             ? t('Pick a model from this provider first — testing sends a real request through whichever provider is selected.')
                                             : (testResult?.message || t('Test Connection'))}
                                     >
-                                        {testing && isSelected
-                                            ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
-                                            : isSelected && testResult?.success
-                                                ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
-                                                : isSelected && testResult
-                                                    ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
-                                                    : <>{t('Test Connection')}</>}
+                                        <AipTestLabel status={testing && isSelected ? 'testing' : isSelected && testResult?.success ? 'success' : isSelected && testResult ? 'error' : 'idle'} />
                                     </button>
                                 )}
 
@@ -1857,11 +1851,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                 className="aip-field-seg"
                                 data-tone={customSaved ? 'ok' : undefined}
                             >
-                                {customSaving
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                    : customSaved
-                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                        : t('Save')}
+                                <AipSaveLabel saving={!!(customSaving)} saved={!!(customSaved)} dots />
                             </button>
                         </div>
                     </div>
@@ -1893,11 +1883,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                 className="aip-btn-seg aip-field-seg"
                                 data-tone={customSaved ? 'ok' : undefined}
                             >
-                                {customSaving
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                    : customSaved
-                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                        : t('Save')}
+                                <AipSaveLabel saving={!!(customSaving)} saved={!!(customSaved)} dots />
                             </button>
                         </div>
                     </div>
@@ -1919,13 +1905,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                             data-tone={testResult?.success ? 'ok' : testResult ? 'danger' : undefined}
                             title={t('Test Connection')}
                         >
-                            {testing
-                                ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
-                                : testResult?.success
-                                    ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
-                                    : testResult
-                                        ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
-                                        : <>{t('Test Connection')}</>}
+                            <AipTestLabel status={testing ? 'testing' : testResult?.success ? 'success' : testResult ? 'error' : 'idle'} />
                         </button>
 
                         {customModels.length > 0 && (

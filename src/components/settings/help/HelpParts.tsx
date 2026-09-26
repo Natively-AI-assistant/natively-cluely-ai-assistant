@@ -440,7 +440,10 @@ export const HelpClip: React.FC<{
                   onClick={() => seek(i)}
                   aria-current={isActive ? 'step' : undefined}
                   title={typeof chapter.label === 'string' ? chapter.label : undefined}
-                  className="group/step w-full text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60"
+                  // Not ring-accent-primary/60: a bare var() colour takes no alpha
+                  // suffix (tailwind.config.js), so that emitted nothing and the ring
+                  // fell back to Tailwind's default blue.
+                  className="group/step w-full text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--accent-primary)_60%,transparent)]"
                 >
                   {/* The track is drawn in the text colour at low strength: --border-subtle
                       is transparent in dark, and a bare var() takes no alpha suffix. */}
@@ -459,7 +462,7 @@ export const HelpClip: React.FC<{
                       two steps. Labels are written to fit (gen-manifest checks
                       their length); the ellipsis only guards a translation. */}
                   <span className="mt-2 flex items-baseline gap-1.5 text-[11.5px] leading-snug whitespace-nowrap">
-                    <span className={`shrink-0 tabular-nums font-semibold ${isActive ? 'text-text-primary' : 'text-text-secondary'}`}>{i + 1}</span>
+                    <span className={`shrink-0 tabular-nums font-semibold transition-colors duration-200 ${isActive ? 'text-text-primary' : 'text-text-secondary'}`}>{i + 1}</span>
                     <span
                       className={`min-w-0 overflow-hidden text-ellipsis transition-colors duration-200 ${
                         isActive ? 'text-text-primary font-medium' : 'text-text-secondary group-hover/step:text-text-primary'
@@ -484,7 +487,8 @@ export const HelpLink: React.FC<{ href: string; children: React.ReactNode }> = (
   <button
     type="button"
     onClick={() => window.electronAPI?.openExternal?.(href)}
-    className="text-accent-primary hover:underline"
+    // The underline fades in with the hover, as General's "Supported apps here" does.
+    className="text-accent-primary underline decoration-transparent hover:decoration-current transition-colors duration-150 ease-out"
   >
     {children}
   </button>

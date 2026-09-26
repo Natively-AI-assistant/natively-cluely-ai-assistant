@@ -6,7 +6,8 @@ import { Trash2, AlertCircle, ExternalLink, Loader2, Check, KeyRound } from 'luc
 // src/components/settings/ EXACTLY equal its GUARDED_FILES list, so adding a file
 // here fails that suite. The resulting import cycle is safe — every reference
 // below is inside a render function, never at module-evaluation time.
-import { AipSwitch, AipProviderMark, AipModelList } from './AIProvidersSettings';
+import { AipSwitch, AipProviderMark, AipModelList, AipPassedCheck } from './AIProvidersSettings';
+import { Presence, SettingsMotionReady, SwapLabel } from './SettingsRow';
 import { isOptInModelProvider } from '../../utils/modelUtils';
 
 interface FetchedModel {
@@ -101,6 +102,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     const [isFetching, setIsFetching] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [selectedModel, setSelectedModel] = useState<string>(preferredModel || '');
+    // False until the panel's stored credentials have landed: a row that opens
+    // then is the card loading, not news (see the .aip-reveal--row CSS).
+    const motionReady = React.useContext(SettingsMotionReady);
 
     // Refs to avoid stale closures in the auto-save timer
     const savedRef = useRef(savedStatus);
@@ -185,6 +189,10 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     // what makes the key-backed cards consistent with them.
 
 
+    const note = keyWriteError || testError || (fetchError ? `${t('Model fetch error:')} ${fetchError}` : '');
+    const shownNote = useRef(note);
+    if (note) shownNote.current = note;
+
     return (
         // .aip-provider owns padding + an 8px flex column. No mb-* anywhere: the old
         // layout's trailing mb-3 stacked against p-5's bottom padding and produced a
@@ -220,13 +228,15 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                     </button>
                     {/* Only once a key is stored — nothing to switch off before that. The
                         key is never touched; this only hides the provider's models. */}
-                    {hasStoredKey && onToggleDisabled && (
-                        <AipSwitch
-                            checked={!isDisabled}
-                            onChange={() => onToggleDisabled(isDisabled)}
-                            label={`${isDisabled ? t('Enable') : t('Disable')} ${providerName}`}
-                            title={isDisabled ? t('Enable provider') : t('Disable provider (keeps your key)')}
-                        />
+                    {onToggleDisabled && (
+                        <Presence kind="control" id={hasStoredKey ? 'switch' : null}>
+                            <AipSwitch
+                                checked={!isDisabled}
+                                onChange={() => onToggleDisabled(isDisabled)}
+                                label={`${isDisabled ? t('Enable') : t('Disable')} ${providerName}`}
+                                title={isDisabled ? t('Enable provider') : t('Disable provider (keeps your key)')}
+                            />
+                        </Presence>
                     )}
                 </div>
             </div>
@@ -259,14 +269,25 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             className="aip-field-seg"
                             data-tone={savedStatus ? 'ok' : undefined}
                         >
-                            {savingStatus
-                                ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                : savedStatus
-                                    ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                    : t('Save')}
+                            {/* Sized to its widest label, so "Saving..." no longer
+                                grows the segment into the key mid-save. */}
+                            <SwapLabel
+                                id={savingStatus ? 'saving' : savedStatus ? 'saved' : 'save'}
+                                sizers={[
+                                    <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Saving...')}</span>,
+                                    <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Saved')}</span>,
+                                    t('Save'),
+                                ]}
+                            >
+                                {savingStatus
+                                    ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{t('Saving...')}</span>
+                                    : savedStatus
+                                        ? <span className="inline-flex items-center gap-1.5"><Check size={12} strokeWidth={2} className="aip-check" />{t('Saved')}</span>
+                                        : t('Save')}
+                            </SwapLabel>
                         </button>
                     </div>
-                    {hasStoredKey && (
+                    <Presence kind="control" id={hasStoredKey ? 'remove' : null} className="shrink-0">
                         <button
                             onClick={onRemoveKey}
                             className="aip-btn shrink-0"
@@ -276,7 +297,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         >
                             <Trash2 size={14} strokeWidth={1.75} />
                         </button>
-                    )}
+                    </Presence>
                 </div>
 
             </div>
@@ -287,7 +308,12 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 before the redesign. Costs 40px against putting Test after the trash on
                 one row, and buys back the left-edge alignment that made Test read as the
                 start of an action row rather than the tail of the credential row. */}
-            {hasStoredKey && (
+            {/* A saved key unlocks this row, which now opens (.aip-reveal--row)
+                instead of shoving every card below down 48px in one frame. Kept
+                mounted while closed, like every .aip-reveal: visibility keeps it
+                out of the tab order and away from screen readers. */}
+            <div className="aip-reveal aip-reveal--row" data-open={hasStoredKey ? 'true' : 'false'} data-instant={motionReady ? undefined : 'true'}>
+            <div>
                 <div className="aip-provider-row">
                     <button
                         onClick={onTestConnection}
@@ -296,10 +322,24 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         data-tone={testStatus === 'success' ? 'ok' : testStatus === 'error' ? 'danger' : undefined}
                         title={testError || t('Test Connection')}
                     >
-                        {testStatus === 'testing' ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</> :
-                            testStatus === 'success' ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</> :
-                                testStatus === 'error' ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</> :
-                                    <>{t('Test Connection')}</>}
+                        {/* Sized to its widest label: "Testing..." -> "Passed"
+                            used to slide the models control beside it left and
+                            right. Passed draws its tick (AipPassedCheck), as the
+                            Codex CLI test already did. */}
+                        <SwapLabel
+                            id={testStatus}
+                            sizers={[
+                                t('Test Connection'),
+                                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Testing...')}</span>,
+                                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Passed')}</span>,
+                                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Error')}</span>,
+                            ]}
+                        >
+                            {testStatus === 'testing' ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{t('Testing...')}</span> :
+                                testStatus === 'success' ? <span className="inline-flex items-center gap-1.5"><AipPassedCheck />{t('Passed')}</span> :
+                                    testStatus === 'error' ? <span className="inline-flex items-center gap-1.5"><AlertCircle size={12} strokeWidth={1.75} />{t('Error')}</span> :
+                                        t('Test Connection')}
+                        </SwapLabel>
                     </button>
 
                     {/* Beside the key field, not under it. >= 1, not > 1: this is the only
@@ -327,16 +367,21 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         />
                     )}
                 </div>
-            )}
+            </div>
+            </div>
 
             {/* One note line, and only when something is actually wrong. */}
             {/* A refused key write outranks the others: it means the key the user
-                just typed was NOT stored, which every other note assumes it was. */}
-            {(keyWriteError || testError || fetchError) && (
+                just typed was NOT stored, which every other note assumes it was.
+                Opens like the row above; the last message is held while it
+                closes so the text doesn't blank out mid-collapse. */}
+            <div className="aip-reveal aip-reveal--row" data-open={note ? 'true' : 'false'} data-instant={motionReady ? undefined : 'true'}>
+            <div>
                 <p className="aip-meta aip-danger-fg aip-provider-note" role="alert">
-                    {keyWriteError || testError || `${t('Model fetch error:')} ${fetchError}`}
+                    {shownNote.current}
                 </p>
-            )}
+            </div>
+            </div>
         </div>
     );
 };
