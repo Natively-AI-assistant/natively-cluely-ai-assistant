@@ -31,6 +31,7 @@ let sends = [];
 let wipes = 0;
 let verifyReply = { status: 503, body: {} };
 let statusReply = { status: 503, body: {} };
+let statusCalls = 0;
 let cm;
 let sm;
 
@@ -88,6 +89,7 @@ before(() => {
       return { ok: verifyReply.status < 300, status: verifyReply.status, json: async () => verifyReply.body };
     }
     if (u.includes('/v1/trial/status')) {
+      statusCalls += 1;
       return { ok: statusReply.status < 300, status: statusReply.status, json: async () => statusReply.body };
     }
     return { ok: false, status: 503, json: async () => ({ error: 'not_stubbed' }) };
@@ -191,6 +193,23 @@ describe('something supersedes the expired trial', () => {
     assert.equal(res.expired, true);
     assert.equal(res.showEndedCard, false);
     assert.equal(cm.getTrialToken(), undefined);
+  });
+});
+
+describe('the status poll after a superseded expiry', () => {
+  test('answers "no card" without the network once the token is gone', async () => {
+    giveTrial(inMinutes(-1));
+    cm.setGeminiApiKey('AIza_test_key');
+    statusCalls = 0;
+    statusReply = { status: 503, body: { error: 'unavailable' } }; // offline, or a slow server
+
+    const res = await handlers.get('trial:status')({});
+
+    assert.equal(cm.getTrialToken(), undefined, 'the local expiry settled and cleared the token');
+    assert.equal(res.ok, true, 'the renderer must get a usable verdict, not a network error');
+    assert.equal(res.expired, true);
+    assert.equal(res.showEndedCard, false, 'Settings must not open the card for a superseded trial');
+    assert.equal(statusCalls, 0, 'no request is made with a token that no longer exists');
   });
 });
 

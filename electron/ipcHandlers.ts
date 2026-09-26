@@ -318,7 +318,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   const isLicensed = (): boolean => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().isPremium() === true;
+      if (LicenseManager.getInstance().isPremium() === true) return true;
+    } catch {
+      /* premium module unavailable: fall through to the file check */
+    }
+    // isPremium() memoises a `false` when the stored licence cannot be read
+    // THIS session (a safeStorage decrypt failure; on Windows a Gumroad/Dodo
+    // licence whose native module antivirus quarantined). For the decisions
+    // made here (the profile wipe and the uncloseable Trial ended card, whose
+    // exit deletes the licence) a licence file on disk counts. Same file
+    // LicenseManager writes (LICENSE_PATH). Entitlement checks keep isPremium().
+    try {
+      return fs.existsSync(path.join(app.getPath('userData'), 'license.enc'));
     } catch {
       return false;
     }
@@ -11436,6 +11447,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (localExpiry && new Date(localExpiry).getTime() <= Date.now()) {
         await endExpiredTrialRuntime('Trial expired (local clock)');
         settleExpiredTrial('status poll (local clock)');
+        // A licence or key superseded it and the token is gone: answer now,
+        // without asking the server about a token that no longer exists.
+        if (!cm.getTrialToken()) return { ok: true, expired: true, showEndedCard: false };
       }
 
       const res = await fetch(`${NATIVELY_API_BASE}/v1/trial/status`, {

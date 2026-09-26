@@ -931,7 +931,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       limits: (res as { limits?: TrialLimits }).limits,
     });
     if (res.expired) {
-      setShowTrialModal(true);
+      // Main decides whether the user still has to choose; a licence or key
+      // that superseded the trial must never raise the card here either
+      // (toaster policy Phase 0: its only exit deactivates the licence).
+      if (res.showEndedCard) setShowTrialModal(true);
       if (trialPollRef.current) {
         clearInterval(trialPollRef.current);
         trialPollRef.current = null;
@@ -962,7 +965,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             startedAt: local.startedAt ?? '',
             usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
           });
-          setShowTrialModal(true);
+          if (local.showEndedCard) setShowTrialModal(true);
           refreshTrial(); // updates usage counters in the modal
           return;
         }
