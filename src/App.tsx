@@ -36,6 +36,7 @@ import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity 
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { permissionsNeedAttention } from './lib/permissionAttentionPolicy.mjs'
 import { collectRendererLegacy } from './lib/cards/rendererLegacy.mjs'
+import { cardInputsFromSources } from './lib/cards/cardInputs.mjs'
 import { isMac } from "./utils/platformUtils"
 import { trackAppOpen } from "./lib/toasterGating"
 import {
@@ -44,7 +45,7 @@ import {
   RemoteCampaignToaster,
   NativelyApiPromoToaster,
   MaxUltraUpgradeToaster,
-  useAdCampaigns
+  PREMIUM_ADS_AVAILABLE
 } from './premium'
 import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
@@ -407,10 +408,6 @@ const App: React.FC = () => {
     [orch],
   );
   const orchState = useSyncExternalStore(orchSubscribe, orchSnapshot);
-  const orchestratorAllowsAds = orchState
-    ? orchState.activeToasterId === null
-    : false;
-
   // Dev-only: `?forceAd=<ad>` (natively_api, profile, jd,
   // max_ultra_upgrade) opens that ad immediately, skipping the campaign
   // scheduler, so its design can be checked by hand or by
@@ -419,21 +416,76 @@ const App: React.FC = () => {
     import.meta.env.DEV ? new URLSearchParams(window.location.search).get('forceAd') : null
   );
 
-  const { activeAd: scheduledAd, dismissAd: dismissScheduledAd } = useAdCampaigns(
-    planDetails,
-    hasProfile,
-    isAppReady,
-    appStartTime,
-    lastMeetingEndTime,
-    isProcessingMeeting,
-    hasNativelyApi,
-    orchestratorAllowsAds
-  );
-  const activeAd = forcedAd ?? scheduledAd;
-  const dismissAd: typeof dismissScheduledAd = (...args) => {
-    if (forcedAd) { setForcedAd(null); return; }
-    return dismissScheduledAd(...args);
-  };
+  // Ads are scheduled by the onboarding orchestrator like every other card
+  // (toaster policy; OrchestratedToasterHost renders them). Only the DEV-only
+  // ?forceAd preview renders here, and it records nothing.
+  const activeAd = forcedAd;
+  const dismissAd = (..._args: unknown[]) => { setForcedAd(null); };
+
+  // ── Card scheduler inputs (toaster policy) ──────────────────────────────
+  // What decides which card is relevant (keys, plan, profile, JD, trial,
+  // extension, quota) is read live and re-read whenever it can have changed;
+  // the card ledger arrives from main and follows every cards:changed.
+  const refreshCardInputsRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!isLauncherWindow && !isDefault) return;
+    const api = window.electronAPI;
+    let disposed = false;
+    const refresh = async () => {
+      const [creds, licence, profile, trialLocal, extension] = await Promise.all([
+        api?.getStoredCredentials?.().catch(() => undefined),
+        api?.licenseGetDetails?.().catch(() => undefined),
+        api?.profileGetStatus?.().catch(() => undefined),
+        api?.getLocalTrial?.().catch(() => undefined),
+        api?.phoneMirrorGetInfo?.().catch(() => undefined),
+      ]);
+      const usage = creds?.hasNativelyKey ? await api?.getNativelyUsage?.().catch(() => undefined) : undefined;
+      if (disposed) return;
+      setOrchestratorUserState({
+        ...cardInputsFromSources({ creds, licence, profile, trialLocal, extension, usage }),
+        adsAvailable: PREMIUM_ADS_AVAILABLE,
+      });
+    };
+    refreshCardInputsRef.current = () => { void refresh(); };
+    const applyLedger = (ledger: unknown) => {
+      if (!disposed && ledger) setOrchestratorUserState({ cardLedger: ledger as never });
+    };
+    // Hand main this window's pre-ledger card history first (main ignores
+    // every import after the first), then load the ledger. Until it loads, no
+    // card stage shows.
+    let legacy = {};
+    try { legacy = collectRendererLegacy(localStorage); } catch { /* storage unavailable */ }
+    Promise.resolve(api?.cardsImportLegacy?.(legacy))
+      .catch(() => undefined)
+      .then(() => api?.cardsGet?.())
+      .then((res) => { if (res?.ok) applyLedger(res.ledger); })
+      .catch(() => {});
+    void refresh();
+    const offs = [
+      api?.onCardsChanged?.(applyLedger),
+      api?.onCredentialsChanged?.(() => { void refresh(); }),
+      // Trial start, end and expiry all broadcast credentials-changed too
+      // (syncNativelyModelRuntime), so they need no subscription of their own.
+      api?.onLicenseStatusChanged?.(() => { void refresh(); }),
+      api?.onPhoneMirrorStatus?.(() => { void refresh(); }),
+    ];
+    return () => {
+      disposed = true;
+      offs.forEach((off) => { try { off?.(); } catch { /* already gone */ } });
+    };
+  }, [isLauncherWindow, isDefault]);
+
+  // Profile / JD edits happen in the managers and keys in Settings: re-read
+  // the inputs when either closes.
+  useEffect(() => {
+    if (!isSettingsOpen && !isManagerOpen) refreshCardInputsRef.current();
+  }, [isSettingsOpen, isManagerOpen]);
+
+  // The Trial ended card owns the screen while it is open.
+  useEffect(() => {
+    if (!isLauncherWindow && !isDefault) return;
+    setOrchestratorUserState({ trialEndedOpen: showTrialExpiredModal });
+  }, [showTrialExpiredModal, isLauncherWindow, isDefault]);
 
   // Start the onboarding orchestrator (launcher window only). Stages are
   // registered lazily; the drain loop only runs while foreground + homepage
@@ -705,12 +757,6 @@ const App: React.FC = () => {
     // ── Onboarding orchestrator — push user-state patches ─────
     // The orchestrator owns scheduling; we just feed it the latest user state.
     if (isLauncherWindow || isDefault) {
-      // Card ledger (toaster policy): hand main this window's pre-ledger card
-      // history once; main ignores every import after the first.
-      try {
-        window.electronAPI?.cardsImportLegacy?.(collectRendererLegacy(localStorage)).catch(() => {});
-      } catch { /* storage unavailable */ }
-
       // Permissions state — first launch, then only when a required permission
       // needs attention (mac: mic/screen; Windows: mic). See permissionAttentionPolicy.mjs.
       const permsShown = localStorage.getItem('natively_perms_shown_v1') === '1';
@@ -1277,7 +1323,7 @@ const App: React.FC = () => {
         {/* Orchestrated onboarding toasters (single-slot, controlled by OnboardingOrchestrator) */}
         {!isolateOnboarding && (
           <OrchestratorProvider>
-            <OrchestratedToasterHost />
+            <OrchestratedToasterHost onOpenSettings={openSettingsExclusive} onOpenProfile={openProfileExclusive} />
           </OrchestratorProvider>
         )}
 

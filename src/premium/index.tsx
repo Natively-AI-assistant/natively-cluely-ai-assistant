@@ -59,6 +59,17 @@ const _maxUltraUpgradeToaster = import.meta.glob<any>(
   '../../premium/src/MaxUltraUpgradeToaster.tsx',
   { eager: true }
 );
+
+/**
+ * Every ad card's component is in this build. The card scheduler only
+ * schedules ad stages when this is true: a stage whose component is a no-op
+ * would hold the single card slot for the session while rendering nothing.
+ */
+export const PREMIUM_ADS_AVAILABLE =
+  Object.keys(_nativelyApiPromo).length > 0
+  && Object.keys(_profileToaster).length > 0
+  && Object.keys(_jdToaster).length > 0
+  && Object.keys(_maxUltraUpgradeToaster).length > 0;
 const _modesSettings = import.meta.glob<any>(
   '../../premium/src/ModesSettings.tsx',
   { eager: true }

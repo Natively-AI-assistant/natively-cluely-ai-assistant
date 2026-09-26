@@ -21,7 +21,7 @@ function ctx(user = {}, counters = {}) {
     appInForeground: true, homepageCurrentlyMounted: true, meetingActive: false,
     completed: {}, skipped: new Set(), lastShownTimes: {}, now: NOW,
     ...counters,
-    userState: { ...DEFAULT_USER_STATE, cardLedger: emptyLedger(NOW), ...user },
+    userState: { ...DEFAULT_USER_STATE, cardLedger: emptyLedger(NOW), adsAvailable: true, ...user },
   };
 }
 const eligible = (id, user, counters) => byId[id].customPredicate(ctx(user, counters));
@@ -142,3 +142,19 @@ table('support', [
   ['9 and 9', { cardLedger: launches(9) }, { turnCount: 9 }, false],
   ['paying', { isPremium: true }, { turnCount: 20 }, false],
 ]);
+
+test('ad cards need the premium module; without it they never schedule', () => {
+  const noPremium = { adsAvailable: false };
+  assert.equal(eligible('natively_api_new', { ...noPremium, trialClaimed: true }), false);
+  assert.equal(eligible('natively_api_existing', { ...noPremium, hasOwnAiKey: true }), false);
+  assert.equal(eligible('profile_ad', noPremium), false);
+  assert.equal(eligible('jd_ad', { ...noPremium, hasProfile: true }), false);
+  assert.equal(eligible('max_ultra', { ...noPremium, planTier: 'pro', nativelyQuotaPct: 95 }), false);
+  // Cards that live in this repo are unaffected.
+  assert.equal(eligible('trial_promo', noPremium), true);
+  assert.equal(eligible('browser_extension', noPremium), true);
+});
+
+test('ads default to unavailable until the app says otherwise', () => {
+  assert.equal(DEFAULT_USER_STATE.adsAvailable, false);
+});

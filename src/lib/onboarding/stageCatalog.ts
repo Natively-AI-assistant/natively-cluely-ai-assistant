@@ -120,7 +120,7 @@ export const STAGES: StageConfig[] = [
     triggers: home(6_000),
     requiresStages: ['permissions'],
     customPredicate: ({ userState: s }) =>
-      hasNoKeys(s) && !s.isPremium && !s.hasTrialToken
+      s.adsAvailable && hasNoKeys(s) && !s.isPremium && !s.hasTrialToken
       && (s.trialClaimed || (!!s.cardLedger && entryOf(s.cardLedger, 'trial_promo').retired)),
   },
 
@@ -166,7 +166,7 @@ export const STAGES: StageConfig[] = [
     card: 'max_ultra',
     triggers: home(10_000),
     customPredicate: ({ userState: s }) =>
-      promoAudience(s) && s.planTier === 'pro' && s.nativelyQuotaPct >= MAX_ULTRA_QUOTA_PCT,
+      s.adsAvailable && promoAudience(s) && s.planTier === 'pro' && s.nativelyQuotaPct >= MAX_ULTRA_QUOTA_PCT,
   },
   {
     id: 'natively_api_existing',
@@ -174,21 +174,21 @@ export const STAGES: StageConfig[] = [
     card: 'natively_api_existing',
     triggers: home(10_000),
     customPredicate: ({ userState: s }) =>
-      promoAudience(s) && s.hasOwnAiKey && !s.hasNativelyKey && !s.isPremium,
+      s.adsAvailable && promoAudience(s) && s.hasOwnAiKey && !s.hasNativelyKey && !s.isPremium,
   },
   {
     id: 'profile_ad',
     order: 12,
     card: 'profile_ad',
     triggers: home(10_000),
-    customPredicate: ({ userState: s }) => promoAudience(s) && !s.isPremium && !s.hasProfile,
+    customPredicate: ({ userState: s }) => s.adsAvailable && promoAudience(s) && !s.isPremium && !s.hasProfile,
   },
   {
     id: 'jd_ad',
     order: 13,
     card: 'jd_ad',
     triggers: home(10_000),
-    customPredicate: ({ userState: s }) => promoAudience(s) && !s.isPremium && s.hasProfile && !s.hasJD,
+    customPredicate: ({ userState: s }) => s.adsAvailable && promoAudience(s) && !s.isPremium && s.hasProfile && !s.hasJD,
   },
   {
     id: 'review_prompt',

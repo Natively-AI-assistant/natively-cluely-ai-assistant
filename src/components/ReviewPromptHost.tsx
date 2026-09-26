@@ -89,9 +89,15 @@ interface ReviewPromptHostProps {
     // pre-orchestrator behavior (check backend eligibility + dev hooks).
     isOpen?: boolean
     onClose?: () => void
+    /**
+     * What the user decided (toaster policy card ledger): a submitted rating
+     * is 'acted', "Maybe later" is 'later', "Never ask" is 'never'. Fired
+     * before onClose; the host records only the first one of a showing.
+     */
+    onOutcome?: (outcome: 'acted' | 'later' | 'never') => void
 }
 
-const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isOpenProp, onClose: onCloseProp }) => {
+const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isOpenProp, onClose: onCloseProp, onOutcome }) => {
     const [isOpenInternal, setIsOpen] = useState(false)
     const [forceTick, setForceTick] = useState(0)
     const checkedRef = useRef(false)
@@ -198,6 +204,7 @@ const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isO
     }, [isOrchestratorControlled, onCloseProp])
 
     const handleDismissLater = useCallback(() => {
+        onOutcome?.('later')
         void window.electronAPI?.reviewDismissLater?.()
         // Dev mode: keep showing after a soft dismiss so you can iterate.
         if (isDevForceShow()) {
@@ -207,9 +214,10 @@ const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isO
                 setIsOpen(true)
             }, 1500)
         }
-    }, [])
+    }, [onOutcome])
 
     const handleDismissForever = useCallback(() => {
+        onOutcome?.('never')
         void window.electronAPI?.reviewDismissForever?.()
         if (isDevForceShow()) {
             setTimeout(() => {
@@ -217,10 +225,12 @@ const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isO
                 setIsOpen(true)
             }, 1500)
         }
-    }, [])
+    }, [onOutcome])
 
     const handleSubmit = useCallback(async (payload: { rating: number; review_text: string | null }) => {
         const res = await window.electronAPI?.reviewSubmit?.(payload)
+        // A saved rating retires the prompt for good; a failed one is not a decision.
+        if (res?.ok) onOutcome?.('acted')
         // Dev mode: re-arm so you can run the funnel again without restart.
         if (isDevForceShow()) {
             setTimeout(() => {
@@ -229,7 +239,7 @@ const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isO
             }, 1500)
         }
         return res || { ok: false, error: "no_api" }
-    }, [])
+    }, [onOutcome])
 
     const handleTestimonial = useCallback(async (reviewId: string, payload: any) => {
         const res = await window.electronAPI?.reviewUpdateTestimonial?.({

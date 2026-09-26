@@ -46,7 +46,6 @@ export type ToasterId =
   | 'trial_promo'
   | 'quiet_window'
   | 'support'
-  | 'ads'
   | 'review_prompt'
   | 'natively_api_new'
   | 'natively_api_existing'
@@ -104,6 +103,14 @@ export interface UserState {
   hasJD: boolean;
   /** Highest Natively quota use this cycle, 0–100 (0 without a Natively key). */
   nativelyQuotaPct: number;
+  /** When the current Natively quota cycle ends (ms): Max/Ultra "acted" retires until then. */
+  nativelyQuotaResetsAt: number | null;
+  /**
+   * The premium ad components are in this build (src/premium/index.tsx). An
+   * ad stage without its component would hold the single card slot while
+   * rendering nothing, so ads only schedule when this is true.
+   */
+  adsAvailable: boolean;
   /** A free trial was ever claimed on this device (one per device). */
   trialClaimed: boolean;
   /** The main-process card ledger (cards:get); null until it has loaded. */
@@ -203,6 +210,8 @@ export const DEFAULT_USER_STATE: UserState = {
   planTier: 'free',
   hasJD: false,
   nativelyQuotaPct: 0,
+  nativelyQuotaResetsAt: null,
+  adsAvailable: false,
   trialClaimed: false,
   cardLedger: null,
   trialEndedOpen: false,
