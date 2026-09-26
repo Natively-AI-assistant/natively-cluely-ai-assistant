@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
+import './AccordionSection.css';
 
 // ─── Shared disclosure primitives ───────────────────────────
 // Promoted from HelpSettings.tsx / IntelligenceSettings.tsx, which had
@@ -10,33 +11,18 @@ import { ChevronDown } from 'lucide-react';
 // AccordionSection below is the title+icon convenience wrapper for the
 // common case.
 
-/**
- * Animated height/opacity wrapper for disclosure content. Respects reduced motion.
- *
- * `duration` and `blur` are opt-in, so every existing disclosure keeps its
- * 220ms plain fade. AccordionSection passes transitions.dev's accordion
- * values: 250ms, the same both ways (an accordion is one reversible motion,
- * not an open/close pair), with the content softened by a 2px blur that
- * settles to 0, which hides the height crop slicing through a row mid-open.
- */
-export const Disclosure: React.FC<{ open: boolean; children: React.ReactNode; duration?: number; blur?: boolean }> = ({
-  open,
-  children,
-  duration = 0.22,
-  blur = false,
-}) => {
+/** Animated height/opacity wrapper for disclosure content. Respects reduced motion. */
+export const Disclosure: React.FC<{ open: boolean; children: React.ReactNode }> = ({ open, children }) => {
   const reduce = useReducedMotion();
-  const hidden = blur ? { height: 0, opacity: 0, filter: 'blur(2px)' } : { height: 0, opacity: 0 };
-  const shown = blur ? { height: 'auto', opacity: 1, filter: 'blur(0px)' } : { height: 'auto', opacity: 1 };
   return (
     <AnimatePresence initial={false}>
       {open ? (
         <motion.div
           key="disclosure"
-          initial={reduce ? { opacity: 0 } : hidden}
-          animate={reduce ? { opacity: 1 } : shown}
-          exit={reduce ? { opacity: 0 } : hidden}
-          transition={{ duration, ease: [0.22, 1, 0.36, 1] }}
+          initial={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+          animate={reduce ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
+          exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           style={{ overflow: 'hidden' }}
         >
           {children}
@@ -93,15 +79,22 @@ export const AccordionSection: React.FC<AccordionSectionProps> = ({
   hoverFill = true,
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  // The children mount on first open and then stay: the grid track has to
+  // have something to collapse around for the close to animate. Until that
+  // first open they are not rendered at all, as when the body unmounted on close.
+  const [hasOpened, setHasOpened] = useState(defaultOpen);
 
   return (
     // Header hover is --bg-row-hover, not bg-item-surface: Plans renders this card
     // ON bg-item-surface, so that hover painted the colour it already was. The
     // focus ring is drawn inside (-2px): outside, the card's overflow-hidden cut
     // it off on every side and keyboard focus was invisible.
-    <div className={`border mb-4 overflow-hidden shadow-sm ${className}`}>
+    // Motion is transitions.dev's accordion on an Apple spring
+    // (AccordionSection.css): data-open drives the panel's height, the body
+    // settling in and out, and the chevron flip.
+    <div className={`t-acc acc-section border mb-4 overflow-hidden shadow-sm ${className}`} data-open={String(isOpen)}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => { setHasOpened(true); setIsOpen(!isOpen); }}
         aria-expanded={isOpen}
         className={`w-full flex items-center justify-between gap-3 p-4 text-left transition-colors ${hoverFill ? 'hover:bg-[color:var(--bg-row-hover)]' : ''} focus-visible:[outline-offset:-2px] group`}
       >
@@ -122,19 +115,28 @@ export const AccordionSection: React.FC<AccordionSectionProps> = ({
             )}
           </div>
         </div>
-        <ChevronDown
-          className={`w-5 h-5 text-text-tertiary shrink-0 transition-[transform,color] duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${hoverFill ? '' : 'group-hover:text-text-primary'} ${isOpen ? 'rotate-0' : '-rotate-90'}`}
-        />
+        {/* "v" closed, "^" open: the span flips, the glyph only recolours.
+            strokeWidth 5/3: the snippet's non-scaling-stroke draws the width in
+            screen pixels, so lucide's 2 would render 2px instead of the 1.67px
+            it gets scaled to at 20px (measured: 23% more ink). */}
+        <span className="t-acc-chevron shrink-0">
+          <ChevronDown
+            strokeWidth={5 / 3}
+            className={`w-5 h-5 text-text-tertiary transition-colors duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${hoverFill ? '' : 'group-hover:text-text-primary'}`}
+          />
+        </span>
       </button>
-      {/* Disclosure: smooth-out, a fade-only path under reduced motion, and no
-          open animation when the section mounts already open. */}
-      {/* The chevron above runs on this same 250ms smooth-out clock, so the
-          flip and the panel land together. */}
-      <Disclosure open={isOpen} duration={0.25} blur>
-        <div className={`p-5 text-sm leading-relaxed text-text-secondary ${divider ? 'border-t border-border-subtle' : ''}`}>
-          {children}
+      {/* Collapsed, the body is still in the DOM at 0px, so inert keeps its
+          links and buttons out of the tab order and the accessibility tree. */}
+      <div className="t-acc-panel" aria-hidden={!isOpen} {...(isOpen ? null : { inert: true })}>
+        <div className="t-acc-panel-inner">
+          {/* The body is always mounted, only its children wait for the first
+              open: the content's fade-in needs a closed style to start from. */}
+          <div className={`acc-section-body p-5 text-sm leading-relaxed text-text-secondary ${divider ? 'border-t border-border-subtle' : ''}`}>
+            {hasOpened && children}
+          </div>
         </div>
-      </Disclosure>
+      </div>
     </div>
   );
 };
