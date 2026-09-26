@@ -149,7 +149,8 @@ export function versionGte(a: string, b: string = MIN_VERSION): boolean {
 
 interface Props {
   isOpen:    boolean;
-  onDismiss: () => void;
+  /** Why it closed, for the host's card ledger: 'acted' after "Add to Chrome", else nothing. */
+  onDismiss: (reason?: 'acted') => void;
   onSkip?:   () => void;
 }
 
@@ -208,7 +209,7 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
     } finally {
       // Close now; the user is in the Chrome store. Not a permanent
       // dismiss, so they can return next launch if they didn't install.
-      closeThen(() => onDismiss());
+      closeThen(() => onDismiss('acted'));
     }
   };
 
@@ -218,7 +219,7 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
     const unsub = window.electronAPI?.onPhoneMirrorStatus?.(info => {
       if (info?.extensionConnected) {
         persistDismiss();
-        closeThen(onDismiss);
+        closeThen(() => onDismiss('acted'));
       }
     });
     return () => { unsub?.(); };

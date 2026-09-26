@@ -83,7 +83,8 @@ const ITEM = {
 
 interface SupportToasterProps {
   isOpen: boolean;
-  onDismiss: () => void;
+  /** Why it closed, for the host's card ledger: 'acted' once a donation is presumed, else nothing. */
+  onDismiss: (reason?: 'acted') => void;
   className?: string;
 }
 
@@ -99,8 +100,10 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
   // card closes itself first and reports once the genie has played.
   const [open, setOpen] = useState(true);
   const dismissedRef = useRef(false);
-  const dismiss = () => {
+  const dismissReasonRef = useRef<'acted' | undefined>(undefined);
+  const dismiss = (reason?: 'acted') => {
     dismissedRef.current = true;
+    dismissReasonRef.current = reason;
     setOpen(false);
   };
 
@@ -115,7 +118,7 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
       clickTimeRef.current = null;
       if (elapsed > PRESUMED_DONATION_MS) {
         await window.electronAPI?.setDonationComplete?.();
-        dismiss();
+        dismiss('acted');
       }
     };
     window.addEventListener('focus', handleFocus);
@@ -151,8 +154,8 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
       open={isOpen && open}
       label="SupportToaster"
       zIndex={9999}
-      onBackdropClick={dismiss}
-      onClosed={() => { if (dismissedRef.current) onDismiss(); }}
+      onBackdropClick={() => dismiss()}
+      onClosed={() => { if (dismissedRef.current) onDismiss(dismissReasonRef.current); }}
       // Dims, never blurs (3a9901ae4): frosting the whole launcher behind the
       // card left it unreadable.
       backdropStyle={{ background: isLight ? 'rgba(10,10,18,0.30)' : 'rgba(0,0,0,0.80)' }}
@@ -276,7 +279,7 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
 
             <button
               type="button"
-              onClick={dismiss}
+              onClick={() => dismiss()}
               style={{
                 background: 'none', border: 0, padding: '9px 0',
                 cursor: 'pointer', fontFamily: FONT,
@@ -319,7 +322,7 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
 
             <button
               type="button"
-              onClick={dismiss}
+              onClick={() => dismiss()}
               aria-label="Close"
               style={{
                 position: 'absolute', top: '8px', right: '8px', zIndex: 2,

@@ -42,7 +42,7 @@ test('returning after 20s from the support page is treated as a donation', () =>
   const focus = source.slice(source.indexOf('const handleFocus'), source.indexOf("window.addEventListener('focus'"));
   assert.ok(focus.includes('if (elapsed > PRESUMED_DONATION_MS)'));
   assert.ok(focus.includes('window.electronAPI?.setDonationComplete?.()'));
-  assert.ok(focus.includes('dismiss();'), 'the card closes itself (the genie) first');
+  assert.ok(focus.includes("dismiss('acted');"), 'the card closes itself (the genie) first, as acted');
   // The click time is consumed on the first refocus, so an unrelated later
   // focus cannot be mistaken for a return from the support page.
   assert.ok(focus.indexOf('clickTimeRef.current = null') < focus.indexOf('if (elapsed'),
@@ -52,12 +52,15 @@ test('returning after 20s from the support page is treated as a donation', () =>
 
 test('Escape, backdrop, close and "Maybe later" all dismiss', () => {
   assert.ok(rendered.includes("if (e.key === 'Escape') dismiss();"));
-  assert.ok(rendered.includes('onBackdropClick={dismiss}'));
-  assert.equal((rendered.match(/onClick=\{dismiss\}/g) || []).length, 2,
+  assert.ok(rendered.includes('onBackdropClick={() => dismiss()}'));
+  assert.equal((rendered.match(/onClick=\{\(\) => dismiss\(\)\}/g) || []).length, 2,
     'the close button and "Maybe later"');
+  // dismiss takes a reason now: passing it bare would hand the click event
+  // to the ledger as the outcome.
+  assert.ok(!/onClick=\{dismiss\}|onBackdropClick=\{dismiss\}/.test(rendered), 'no event leaks in as the reason');
   // The orchestrator unmounts the card the moment it hears "dismissed", so
-  // the host is told only once the genie has played.
-  assert.ok(rendered.includes('onClosed={() => { if (dismissedRef.current) onDismiss(); }}'));
+  // the host is told only once the genie has played, with the reason.
+  assert.ok(rendered.includes('onClosed={() => { if (dismissedRef.current) onDismiss(dismissReasonRef.current); }}'));
 });
 
 test('every electronAPI access is guarded', () => {

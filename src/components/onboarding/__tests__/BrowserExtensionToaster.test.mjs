@@ -82,13 +82,18 @@ test('CTA opens the canonical Chrome Web Store listing', () => {
 test('install closes the card WITHOUT the permanent dismiss', () => {
   // A user who opens the store but does not install should see this again.
   const install = source.slice(source.indexOf('const handleInstall'), source.indexOf('// ─── Auto-dismiss'));
-  assert.ok(install.includes('onDismiss()'));
+  // Toaster policy: opening the store is the card's action, so the ledger
+  // schedules the single follow-up rather than counting a strike.
+  assert.ok(install.includes("closeThen(() => onDismiss('acted'))"), 'install reports acted');
   assert.ok(!install.includes('DISMISS_KEY'), 'install must not set the permanent flag');
 });
 
 test('auto-dismisses the moment the extension connects', () => {
   assert.ok(source.includes('window.electronAPI?.onPhoneMirrorStatus?.(info =>'));
   assert.ok(source.includes('if (info?.extensionConnected)'));
+  // Connecting is the outcome the card asks for: acted, never a strike.
+  const connect = source.slice(source.indexOf('if (info?.extensionConnected)'), source.indexOf('return () => { unsub?.(); };'));
+  assert.ok(connect.includes("closeThen(() => onDismiss('acted'))"), 'connecting reports acted');
   assert.ok(source.includes('return () => { unsub?.(); };'), 'subscription is cleaned up');
 });
 
@@ -116,7 +121,7 @@ test('every way out plays the genie before reporting to the host', () => {
   const direct = handlers.match(/^\s*onDismiss\(\);/gm) || [];
   assert.equal(direct.length, 0, 'onDismiss called outside closeThen');
   assert.ok(handlers.includes('closeThen(onDismiss)'), 'Escape, backdrop and close');
-  assert.ok(handlers.includes('closeThen(() => onDismiss())'), 'install');
+  assert.ok(handlers.includes("closeThen(() => onDismiss('acted'))"), 'install');
   assert.ok(hook.includes('Promise.all([a, b]).then(() => { if (!live) return; setDone(true); finishClose(); });'),
     'reports once the card and scrim have both finished');
   assert.ok(hook.includes('cleanup = () => { live = false; clearTimeout(t); a.stop(); b.stop(); stopTrack(); runRef.current = null; };'),
