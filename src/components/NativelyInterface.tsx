@@ -11,6 +11,7 @@ import {
   Image,
   Lightbulb,
   List,
+  Loader2,
   MessageSquare,
   Mic,
   Pencil,
@@ -250,6 +251,8 @@ import {
   finalizeStreamingByIntentMessages,
   prepareIntelligenceStreamPlaceholderMessages,
   discardStreamingByIntentMessages,
+  intelligenceErrorIntent,
+  settleStreamingOnErrorMessages,
 } from '../lib/overlayMessagePersistence.mjs';
 import {
   resolveCgEventTapAvailable,
@@ -1785,6 +1788,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const lastManualSubmitRef = useRef<{ text: string; atMs: number } | null>(null);
   /** Blocks duplicate quick-action LLM calls (Clarify, Follow-up, Brainstorm, Answer). */
   const overlayActionInFlightRef = useRef(new Set<string>());
+  // Render mirror of the ref above, so a chip can show it is working. Without it
+  // a press on a busy action was absorbed with no visible response, and Answer's
+  // Stop sat unchanged for up to ~3.75s while the transcript tail landed.
+  const [busyOverlayActions, setBusyOverlayActions] = useState<ReadonlySet<string>>(() => new Set());
   const lastOverlayActionRef = useRef<{ key: string; atMs: number } | null>(null);
   // Set when the user tried to engage the tap but Accessibility isn't
   // granted yet. Renders the inline permission banner so we never silently
@@ -6170,12 +6177,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       return false;
     }
     overlayActionInFlightRef.current.add(actionKey);
+    setBusyOverlayActions(new Set(overlayActionInFlightRef.current));
     lastOverlayActionRef.current = { key: actionKey, atMs: nowMs };
     return true;
   }, []);
 
   const endOverlayAction = useCallback((actionKey: string) => {
     overlayActionInFlightRef.current.delete(actionKey);
+    setBusyOverlayActions(new Set(overlayActionInFlightRef.current));
     // Clear the dedupe stamp once the action has fully completed. The stamp only
     // exists to collapse a near-simultaneous double-fire of the SAME trigger; the
     // in-flight Set already blocks true concurrency. Leaving it set meant a
@@ -7184,14 +7193,30 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       window.electronAPI.onIntelligenceError((data) => {
         if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: genMessageId(),
-            role: 'system',
-            text: `❌ Error (${data.mode}): ${data.error}`,
-          },
-        ]);
+        // Settle this mode's open placeholder, or its "Thinking..." row spins
+        // beside the error forever. Clear the streaming refs first only when the
+        // failed mode owns the live stream (same ordering as the discard path).
+        const intent = intelligenceErrorIntent(data.mode, streamingIntentRef.current);
+        let partialText = '';
+        if (intent && streamingIntentRef.current === intent) {
+          partialText = streamingTextRef.current;
+          streamingNodeRef.current = null;
+          streamingTextRef.current = '';
+          streamingMsgIdRef.current = null;
+          streamingIntentRef.current = null;
+          streamingRenderModeRef.current = 'imperative';
+          if (streamingRafRef.current !== null) {
+            cancelAnimationFrame(streamingRafRef.current);
+            streamingRafRef.current = null;
+          }
+          if (streamingCodeRafRef.current !== null) {
+            cancelAnimationFrame(streamingCodeRafRef.current);
+            streamingCodeRafRef.current = null;
+          }
+        }
+        setMessages((prev) =>
+          settleStreamingOnErrorMessages(prev, intent, partialText, `❌ Error (${data.mode}): ${data.error}`, genMessageId),
+        );
       }),
     );
     return () => {
@@ -10988,43 +11013,51 @@ Provide only the answer, nothing else.`;
                 >
                 <button
                   onClick={handleWhatToSay}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
+                  aria-busy={busyOverlayActions.has('what_to_say')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
                   style={appearance.chipStyle}
                 >
-                  <Pencil className="w-3 h-3 opacity-70" /> {t('What to answer?')}
+                  {busyOverlayActions.has('what_to_say') ? <Loader2 className="w-3 h-3 opacity-70 animate-spin" /> : <Pencil className="w-3 h-3 opacity-70" />} {t('What to answer?')}
                 </button>
                 <button
                   onClick={handleClarify}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
+                  aria-busy={busyOverlayActions.has('clarify')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
                   style={appearance.chipStyle}
                 >
-                  <MessageSquare className="w-3 h-3 opacity-70" /> {t('Clarify')}
+                  {busyOverlayActions.has('clarify') ? <Loader2 className="w-3 h-3 opacity-70 animate-spin" /> : <MessageSquare className="w-3 h-3 opacity-70" />} {t('Clarify')}
                 </button>
                 <button
                   onClick={actionButtonMode === 'brainstorm' ? handleBrainstorm : handleRecap}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
+                  aria-busy={busyOverlayActions.has(actionButtonMode === 'brainstorm' ? 'brainstorm' : 'recap')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
                   style={appearance.chipStyle}
                 >
-                  {actionButtonMode === 'brainstorm' ? (
-                    <>
-                      <Lightbulb className="w-3 h-3 opacity-70" /> {t('Brainstorm')}
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="w-3 h-3 opacity-70" /> {t('Recap')}
-                    </>
-                  )}
+                  {/* Both labels share one grid cell and the inactive one is invisible, so
+                      this chip is always as wide as the wider label. Toggling Interview Mode
+                      used to widen it by ~24px ("Brainstorm" vs "Recap"), which overflowed
+                      the row and wrapped Answer onto a second line. */}
+                  <span className="grid">
+                    <span className={`col-start-1 row-start-1 flex items-center justify-center gap-1.5 ${actionButtonMode === 'brainstorm' ? '' : 'invisible'}`} aria-hidden={actionButtonMode !== 'brainstorm'}>
+                      {busyOverlayActions.has('brainstorm') ? <Loader2 className="w-3 h-3 opacity-70 animate-spin" /> : <Lightbulb className="w-3 h-3 opacity-70" />} {t('Brainstorm')}
+                    </span>
+                    <span className={`col-start-1 row-start-1 flex items-center justify-center gap-1.5 ${actionButtonMode === 'brainstorm' ? 'invisible' : ''}`} aria-hidden={actionButtonMode === 'brainstorm'}>
+                      {busyOverlayActions.has('recap') ? <Loader2 className="w-3 h-3 opacity-70 animate-spin" /> : <RefreshCw className="w-3 h-3 opacity-70" />} {t('Recap')}
+                    </span>
+                  </span>
                 </button>
                 <button
                   onClick={handleFollowUpQuestions}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
+                  aria-busy={busyOverlayActions.has('follow_up_questions')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-medium border transition-all active:scale-95 duration-200 interaction-base interaction-press whitespace-nowrap shrink-0 ${quickActionClass}`}
                   style={appearance.chipStyle}
                 >
-                  <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
+                  {busyOverlayActions.has('follow_up_questions') ? <Loader2 className="w-3 h-3 opacity-70 animate-spin" /> : <HelpCircle className="w-3 h-3 opacity-70" />} {t('Follow Up Question')}
                 </button>
                 <button
                   onClick={handleAnswerNow}
-                  className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${
+                  aria-busy={busyOverlayActions.has('answer_now')}
+                  className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-medium transition-all active:scale-95 duration-200 interaction-base interaction-press min-w-[74px] whitespace-nowrap shrink-0 ${
                     isManualRecording
                       ? 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
                       : 'overlay-chip-surface overlay-text-interactive'
@@ -11033,7 +11066,9 @@ Provide only the answer, nothing else.`;
                 >
                   {isManualRecording ? (
                     <>
-                      <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                      {busyOverlayActions.has('answer_now')
+                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                        : <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />}
                       {t('Stop')}
                     </>
                   ) : (

@@ -6962,9 +6962,10 @@ export class IntelligenceEngine extends EventEmitter {
 
         try {
             if (!this.followUpLLM) {
+                // Throw into the catch below so 'error' reaches the overlay — a silent
+                // null left its placeholder spinning.
                 console.error('[IntelligenceEngine] FollowUpLLM not initialized');
-                this.setMode('idle');
-                return null;
+                throw new Error('The AI model is not ready yet. Try again in a moment.');
             }
 
             const context = this.buildPreparedTranscriptContext(120) || this.session.getFormattedContextWithInterim(60);
@@ -7110,9 +7111,10 @@ export class IntelligenceEngine extends EventEmitter {
 
         try {
             if (!this.recapLLM) {
+                // Throw into the catch below so 'error' reaches the overlay — a silent
+                // null left its placeholder spinning.
                 console.error('[IntelligenceEngine] RecapLLM not initialized');
-                this.setMode('idle');
-                return null;
+                throw new Error('The AI model is not ready yet. Try again in a moment.');
             }
 
             const context = this.session.getFormattedContext(120);
@@ -7195,9 +7197,10 @@ export class IntelligenceEngine extends EventEmitter {
 
         try {
             if (!this.clarifyLLM) {
+                // Throw into the catch below so 'error' reaches the overlay — a silent
+                // null left its placeholder spinning.
                 console.error('[IntelligenceEngine] ClarifyLLM not initialized');
-                this.setMode('idle');
-                return null;
+                throw new Error('The AI model is not ready yet. Try again in a moment.');
             }
 
             const rawContext = this.buildActionContextWithManualFallback(180);
@@ -7262,9 +7265,10 @@ export class IntelligenceEngine extends EventEmitter {
 
         try {
             if (!this.followUpQuestionsLLM) {
+                // Throw into the catch below so 'error' reaches the overlay — a silent
+                // null left its placeholder spinning.
                 console.error('[IntelligenceEngine] FollowUpQuestionsLLM not initialized');
-                this.setMode('idle');
-                return null;
+                throw new Error('The AI model is not ready yet. Try again in a moment.');
             }
 
             const context = this.buildActionContextWithManualFallback(120);
