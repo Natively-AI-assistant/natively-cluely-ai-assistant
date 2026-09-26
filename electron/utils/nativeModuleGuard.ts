@@ -7,7 +7,12 @@ import { spawnSync } from 'child_process';
 // a startup crash with NODE_MODULE_VERSION mismatch on require(). Common trigger:
 // `npm rebuild` (skips postinstall), `npm install --ignore-scripts`, or a system
 // Node upgrade after a previous successful build. In dev, recover automatically.
-const GUARDED_MODULES = ['better-sqlite3', 'keytar'];
+// Linux does not use keytar: the app's credential store uses Electron's
+// safeStorage path there, and keytar's libsecret native build would otherwise
+// make a normal Linux install depend on libsecret headers at install time.
+const GUARDED_MODULES = process.platform === 'linux'
+  ? ['better-sqlite3']
+  : ['better-sqlite3', 'keytar'];
 
 interface AbiMismatch {
   module: string;

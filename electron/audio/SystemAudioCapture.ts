@@ -16,7 +16,7 @@ export class SystemAudioCapture extends EventEmitter {
     private sampleRatePollTimers: NodeJS.Timeout[] = [];
     // See MicrophoneCapture for the full rationale — same idempotent
     // teardown-tracking pattern. Awaiting stop() guarantees the CoreAudio
-    // Tap / SCK / WASAPI handle has been released before the caller
+    // Tap / SCK / WASAPI / PipeWire monitor handle has been released before the caller
     // constructs a new instance or restarts capture.
     private _teardownPromise: Promise<void> | null = null;
 
@@ -78,7 +78,7 @@ export class SystemAudioCapture extends EventEmitter {
 
     /**
      * Which native backend is actually capturing: 'sck' | 'coreaudio' |
-     * 'wasapi', or '' while the background init is still running (and after
+     * 'wasapi' | 'pulse-monitor', or '' while the background init is still running (and after
      * the monitor has been retired). main.ts compares it with the backend the
      * user asked for to notice a silent fallback (see startSckReprobeWatcher).
      */
@@ -201,7 +201,7 @@ export class SystemAudioCapture extends EventEmitter {
             });
 
             // getSampleRate MUST be called AFTER start() — background init updates
-            // the atomic once SCK/CoreAudio initialises (~5-7s). Reading before start()
+            // the atomic once SCK/CoreAudio/PipeWire initialises (~5-7s). Reading before start()
             // always returns the constructor default (48000), not the real hardware rate.
             // Fetch real sample rate as soon as monitor starts
             if (typeof this.monitor.getSampleRate === 'function' || typeof this.monitor.get_sample_rate === 'function') {

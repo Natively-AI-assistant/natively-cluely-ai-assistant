@@ -7,6 +7,7 @@
 // init_DatabaseManager() (which is what loads better-sqlite3).
 // ============================================================================
 import './nativeArchGate';
+import './profileBootstrap';
 
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
@@ -6538,7 +6539,8 @@ export class AppState {
           return;
         }
 
-        // Watch for default-output route changes so the CoreAudio Tap follows
+        // Watch for default-output route changes so the native system-audio
+        // backend follows the selected output route.
         // the user when they swap output devices mid-meeting (AirPods plug,
         // headphones, virtual cable). No-op if the user picked a specific
         // output or if the native binary lacks the getDefaultOutputDeviceId
@@ -6549,7 +6551,9 @@ export class AppState {
         if (this._verboseLogging) {
           const requestedInput = metadata?.audio?.inputDeviceId || 'default';
           const requestedOutput = metadata?.audio?.outputDeviceId || 'default';
-          const backend = requestedOutput === 'sck' ? 'sck' : 'coreaudio';
+          const backend = process.platform === 'linux'
+            ? 'pulse-monitor'
+            : requestedOutput === 'sck' ? 'sck' : 'coreaudio';
           const sysRate = this.systemAudioCapture?.getSampleRate() || 48000;
           const micRate = this.microphoneCapture?.getSampleRate() || 48000;
           console.log(`[Main][debug] Audio pipeline: input=${requestedInput} output=${requestedOutput} backend=${backend} sysRate=${sysRate}Hz micRate=${micRate}Hz`);

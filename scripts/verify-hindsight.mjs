@@ -61,12 +61,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 5. Server reachable?
 try {
-  const res = await fetch(`${baseUrl.replace(/\/$/, '')}/healthz`, { signal: AbortSignal.timeout(2000) }).catch(() => null);
+  // Hindsight exposes /health (not /healthz). Keep this probe identical to
+  // HindsightManager.healthCheck so the standalone verifier cannot report a
+  // false "health unknown" against a healthy local server.
+  const res = await fetch(`${baseUrl.replace(/\/$/, '')}/health`, { signal: AbortSignal.timeout(2000) }).catch(() => null);
   if (res && res.ok) {
-    note('SERVER_REACHABLE ✓  /healthz responded OK');
+    note('SERVER_REACHABLE ✓  /health responded OK');
   } else {
-    // Some builds expose health differently; a failed retain below is the real signal.
-    note('SERVER_HEALTH_UNKNOWN ~  /healthz not OK (will rely on retain/recall probes)');
+    // A failed retain below is still the real semantic signal, but the endpoint
+    // mismatch should never be the reason a healthy server is called unknown.
+    note('SERVER_HEALTH_UNKNOWN ~  /health not OK (will rely on retain/recall probes)');
   }
 } catch {
   note('SERVER_UNREACHABLE ✗  could not reach the server health endpoint');
@@ -113,7 +117,16 @@ if (retainOk) {
     isolationOk = !leaked;
     note(isolationOk ? 'ISOLATION_OK ✓  Bob cannot see Alice' : 'ISOLATION_LEAK ✗  Bob saw Alice data');
   } catch (e) {
-    note(`ISOLATION_CHECK_FAILED ~  ${e?.message || e}`);
+    // A fresh install may not materialize an empty bank until its first retain.
+    // A missing Bob bank is an empty namespace, not a cross-user leak; accept it
+    // as the strongest possible isolation result for this synthetic probe.
+    const message = String(e?.message || e);
+    if (/bank .*not found/i.test(message)) {
+      isolationOk = true;
+      note('ISOLATION_OK ✓  Bob bank is absent; no Alice data is visible');
+    } else {
+      note(`ISOLATION_CHECK_FAILED ~  ${message}`);
+    }
   }
 }
 

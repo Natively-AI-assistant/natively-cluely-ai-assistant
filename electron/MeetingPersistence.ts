@@ -18,6 +18,7 @@ import { isIntelligenceFlagEnabled } from './intelligence/intelligenceFlags';
 import { recordAttribution, hindsightModeFor } from './intelligence/IntelligenceAttribution';
 import { telemetryService } from './services/telemetry/TelemetryService';
 import type { ProviderDataScopePolicy } from './llm/ProviderRouter';
+import { localKnowledgeBridge } from './services/LocalKnowledgeBridge';
 const crypto = require('crypto');
 
 /** Longest a derived fallback title may be, before word-boundary truncation. */
@@ -890,6 +891,15 @@ Return ONLY valid JSON (no markdown code blocks):
             // is inside the same try, so that assumption has to be recorded, not
             // inferred — see the guard at the top of the catch.
             meetingSaved = true;
+
+            // LOCAL KNOWLEDGE FAN-OUT. This is fire-and-forget by design: the
+            // local DB is the source of truth and a missing/locked Agent Mesh
+            // or Obsidian sidecar must never turn a successful meeting save
+            // into a failed one. The bridge exports the generated summary only,
+            // never raw transcript turns.
+            void localKnowledgeBridge.syncMeeting(meetingData).catch((knowledgeErr: any) => {
+                console.warn('[LocalKnowledgeBridge] post-save sync skipped (non-fatal):', knowledgeErr?.message);
+            });
 
             // HINDSIGHT POST-MEETING RETAIN (Phase 13 wiring, behind
             // hindsight_post_meeting_retain_enabled). After the meeting is persisted

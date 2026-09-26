@@ -257,7 +257,8 @@
         }
       ],
       "icon": "assets/icons/png/",
-      "category": "Office"
+      "category": "Office",
+      "maintainer": "Natively AI Assistant <noreply@github.com>"
     },
     "nsis": {
       "oneClick": false,
@@ -353,7 +354,6 @@
     "groq-sdk": "^0.37.0",
     "jspdf": "^4.0.0",
     "katex": "^0.16.27",
-    "keytar": "^7.9.0",
     "liquid-glass-react": "^1.1.1",
     "lucide-react": "^0.460.0",
     "mammoth": "^1.11.0",
@@ -387,6 +387,7 @@
   },
   "optionalDependencies": {
     "@vectorize-io/hindsight-client": "^0.8.2",
+    "keytar": "^7.9.0",
     "sqlite-vec-darwin-arm64": "^0.1.7-alpha.2",
     "sqlite-vec-darwin-x64": "^0.1.7-alpha.2",
     "sqlite-vec-windows-x64": "^0.1.7-alpha.2"

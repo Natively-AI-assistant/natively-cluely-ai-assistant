@@ -196,7 +196,7 @@ pub struct SystemAudioCapture {
     native_sample_rate: Arc<AtomicU32>,
     device_id: Option<String>,
     /// Which backend the background thread actually ended up on ("sck",
-    /// "coreaudio", "wasapi"); empty until init completes. main.ts compares
+    /// "coreaudio", "wasapi", "pulse-monitor"); empty until init completes. main.ts compares
     /// it with the requested backend to notice a silent fallback.
     active_backend: Arc<Mutex<String>>,
 }
@@ -220,7 +220,7 @@ impl SystemAudioCapture {
         })
     }
 
-    /// "sck" | "coreaudio" | "wasapi", or "" until the background init finished.
+    /// "sck" | "coreaudio" | "wasapi" | "pulse-monitor", or "" until the background init finished.
     #[napi]
     pub fn get_active_backend(&self) -> String {
         match self.active_backend.lock() {
@@ -822,10 +822,11 @@ pub fn screen_capture_displays_available() -> bool {
 
 /// Returns the platform-native ID of the current default output device.
 /// macOS: CoreAudio device UID. Windows: WASAPI device id (eMultimedia/eConsole role).
+/// Linux: PipeWire/PulseAudio sink name.
 /// Empty string on error or unsupported platform.
 ///
 /// JS polls this every few seconds during an active meeting; when the value
-/// changes, main.ts recreates SystemAudioCapture so the CoreAudio Tap follows
+/// changes, main.ts recreates SystemAudioCapture so the native system-audio backend follows
 /// the new output route. Without this, switching output devices mid-meeting
 /// (plug in headphones, swap AirPods, route to virtual cable) leaves the tap
 /// bound to the original device, capturing silence.
