@@ -5101,7 +5101,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 {!codexOauthStatus.signedIn && (
                     <p className="text-xs aip-muted">
                         {codexOauthStatus.cliLogin === 'expired'
-                            ? t('Your Codex CLI login has expired — run any `codex` command to refresh it, or sign in with ChatGPT here.')
+                            ? t('Codex CLI login expired — run `codex` to refresh, or sign in above.')
                             : codexOauthStatus.cliLogin === 'api-key'
                                 ? t('Your Codex CLI is logged in with an API key, which Codex here cannot use — sign in with ChatGPT here, or run `codex login` with your ChatGPT account.')
                                 : t('Or run `codex login` in a terminal — Natively can use that ChatGPT login too.')}
