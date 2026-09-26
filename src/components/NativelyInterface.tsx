@@ -246,6 +246,7 @@ import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
 import { decideStreamingHeightCommit } from '../lib/streamingHeightDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
 import { createTranscriptTailWaiter } from '../lib/answerTailWait.mjs';
+import { audioWarningAction } from '../lib/audioWarningAction.mjs';
 import { backspace, editCommand, editShortcutLetter, paste, typed } from '../lib/stealthEdit.mjs';
 import {
   applyWhatToAnswerNullFeedbackMessages,
@@ -10134,12 +10135,16 @@ Provide only the answer, nothing else.`;
   // suppress the redundant error-tone pill. Reconnecting indication still shows
   // (the banner only fires on terminal/stuck, not transient reconnects).
   const audioFailureBannerActive = systemAudioWarning?.kind === 'audio-capture-failure';
+  // Same rule for "not configured": the Transcription Not Configured banner
+  // says it and carries the Settings → Audio action, so no "STT not
+  // configured" pill beside it (it stays gone if the banner is dismissed).
   const shouldShowSttSummaryPill =
-    (sttSummary.tone === 'error' && !audioFailureBannerActive) ||
+    !sttNotConfigured &&
+    ((sttSummary.tone === 'error' && !audioFailureBannerActive) ||
     sttUserStatus === 'reconnecting' ||
     sttInterviewerStatus === 'reconnecting' ||
     sttUserStatus === 'preparing' ||
-    sttInterviewerStatus === 'preparing';
+    sttInterviewerStatus === 'preparing');
   // Whether the vision chip will render (mirrors the IIFE's early-return guard).
   const visionPillFailed = screenContextStatus === 'failed' || !!latestVisionFailureReason;
   const visionPillSucceeded =
@@ -10382,6 +10387,17 @@ Provide only the answer, nothing else.`;
                   >
                     <Image className="h-3 w-3 opacity-70" />
                     <span className="max-w-[260px] truncate">{captureFallback.label}</span>
+                    {/* The detail tells the user to pair the extension in
+                        Settings → Sync; take them there (tab id phone-mirror). */}
+                    {captureFallback.detail?.includes('Settings → Sync') && (
+                      <button
+                        type="button"
+                        className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold underline-offset-2 hover:underline opacity-80 hover:opacity-100"
+                        onClick={() => window.electronAPI?.openSettingsTab?.('phone-mirror')}
+                      >
+                        {t('Open Sync')}
+                      </button>
+                    )}
                     <button
                       type="button"
                       aria-label={t('Dismiss page capture notice')}
@@ -10491,37 +10507,20 @@ Provide only the answer, nothing else.`;
                   payload.channel).
                 */
                 const rawTitleKey = systemAudioWarning.titleKey ?? '';
-                const reasonIsMicrophone = rawTitleKey.toLowerCase().includes('microphone');
-                const reasonIsScreenRecording = rawTitleKey
-                  .toLowerCase()
-                  .includes('screen recording');
-                // Neither pane fixes a same-device input/output loop: the user
-                // has to change the OUTPUT device. No verified deep link for
-                // the Sound pane exists in this codebase, so this falls to the
-                // already-wired internal-Settings fallback rather than sending
-                // the user somewhere confidently wrong.
-                const reasonIsAudioDeviceConfig = rawTitleKey
-                  .toLowerCase()
-                  .includes('same device');
-                const wantsMicrophonePane =
-                  reasonIsMicrophone ||
-                  (!reasonIsScreenRecording &&
-                    !reasonIsAudioDeviceConfig &&
-                    systemAudioWarning.kind === 'audio-capture-failure' &&
-                    systemAudioWarning.channel === 'mic');
-                const wantsScreenCapturePane =
-                  !wantsMicrophonePane &&
-                  !reasonIsAudioDeviceConfig &&
-                  (reasonIsScreenRecording ||
-                    systemAudioWarning.kind === 'screen-recording-permission' ||
-                    systemAudioWarning.channel === 'system');
-                const deepLinkUrl = !isMac
-                  ? null
-                  : wantsMicrophonePane
-                  ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
-                  : wantsScreenCapturePane
-                  ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
-                  : null;
+                // Where the one action goes, per platform (audioWarningAction.mjs):
+                // a macOS privacy pane, Windows mic privacy settings, or
+                // Natively Settings → Audio. The old fallback opened the
+                // quick-settings popover off-screen (-10000,-10000), so on
+                // Windows every "Open Settings" did nothing visible.
+                const warningAction = audioWarningAction({
+                  platform: isMac ? 'darwin' : isWindows ? 'win32' : 'other',
+                  kind: systemAudioWarning.kind,
+                  channel: systemAudioWarning.channel,
+                  titleKey: systemAudioWarning.titleKey,
+                  message: systemAudioWarning.message,
+                });
+                const deepLinkUrl = warningAction.type === 'external' ? warningAction.url : null;
+                const wantsMicrophonePane = warningAction.type === 'external' && warningAction.pane === 'microphone';
 
                 // Identity of THIS warning, so visiting a pane for one problem
                 // does not promote the button on a different problem that
@@ -10595,10 +10594,10 @@ Provide only the answer, nothing else.`;
                                 // restart meaningful, so that click is what
                                 // promotes the button.
                                 setPermissionPaneVisited(warningIdentity);
-                              } else {
-                                // Windows / unknown channel / device-config
-                                // faults: fall back to internal Settings.
-                                window.electronAPI?.toggleSettingsWindow?.();
+                              } else if (warningAction.type === 'mic-privacy') {
+                                window.electronAPI?.openMicSettings?.();
+                              } else if (warningAction.type === 'settings-tab') {
+                                window.electronAPI?.openSettingsTab?.(warningAction.tab);
                               }
                             }}
                             title={
@@ -10606,14 +10605,18 @@ Provide only the answer, nothing else.`;
                                 ? wantsMicrophonePane
                                   ? t('Open macOS Microphone privacy settings')
                                   : t('Open macOS Screen Recording privacy settings')
-                                : t('Open Natively Settings')
+                                : warningAction.type === 'mic-privacy'
+                                ? t('Open Windows microphone privacy settings')
+                                : t('Open Natively audio settings')
                             }
                           >
                             {deepLinkUrl
                               ? wantsMicrophonePane
                                 ? t('Open Mic Settings')
                                 : t('Open Screen Settings')
-                              : t('Open Settings')}
+                              : warningAction.type === 'mic-privacy'
+                              ? t('Open Mic Settings')
+                              : t('Open Audio Settings')}
                           </OverlayBannerButton>
                         )}
                         {/*
@@ -10663,7 +10666,9 @@ Provide only the answer, nothing else.`;
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => {
-                        window.electronAPI?.toggleSettingsWindow?.();
+                        // Settings → Audio, as the message says. toggleSettingsWindow()
+                        // opened the quick-settings popover (no STT section) off-screen.
+                        window.electronAPI?.openSettingsTab?.('audio');
                       }}
                       className="px-3 py-1.5 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 text-orange-700 dark:text-orange-500 text-[11px] font-semibold transition-all active:scale-95 border border-orange-500/20 shadow-sm"
                     >
@@ -11261,6 +11266,33 @@ Provide only the answer, nothing else.`;
                           {appRestarting ? t('Restarting…') : t('Restart Now')}
                         </OverlayBannerButton>
                       </>
+                    }
+                  />
+                )}
+
+                {/* Windows: the same failure (the keyboard hook would not
+                    start) used to set this state behind the macOS-only banner
+                    above, so stealth typing just did nothing. There is no
+                    permission to grant; the usual cause is security software
+                    blocking the low-level hook. */}
+                {isWindows && stealthPermissionMissing && (
+                  <OverlayBanner
+                    className="mb-2"
+                    data-stealth-ignore="true"
+                    title={t('Stealth Typing Blocked')}
+                    message={t('Windows did not let Natively capture typing. This is usually security software blocking the keyboard hook. Allow Natively there, then try again.')}
+                    onDismiss={() => setStealthPermissionMissing(false)}
+                    dismissLabel={t('Dismiss')}
+                    dismissButtonProps={{ 'data-stealth-ignore': 'true' }}
+                    actions={
+                      <OverlayBannerButton
+                        variant="primary"
+                        onClick={() => { void window.electronAPI.stealthTapStart?.(); }}
+                        title={t('Try to start stealth typing again')}
+                        data-stealth-ignore="true"
+                      >
+                        {t('Try Again')}
+                      </OverlayBannerButton>
                     }
                   />
                 )}

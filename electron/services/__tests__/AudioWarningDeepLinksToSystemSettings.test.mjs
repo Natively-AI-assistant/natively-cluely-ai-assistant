@@ -30,6 +30,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
 const tsxPath = path.join(root, 'src/components/NativelyInterface.tsx');
 const source = fs.readFileSync(tsxPath, 'utf8');
+// The pane routing moved to src/lib/audioWarningAction.mjs (2026-09-26); the
+// banner imports it. URL checks read the helper.
+const routing = fs.readFileSync(path.join(root, 'src/lib/audioWarningAction.mjs'), 'utf8');
 
 // Locate the SystemAudioWarning type body. The type is a local alias
 // inside the component body, so we scope to its `type ... = { ... };`.
@@ -94,8 +97,9 @@ describe('UX3: audio warning banner deep-links to the correct macOS System Setti
   });
 
   it('banner JSX references the macOS Microphone deep-link URL literally', () => {
+    assert.ok(source.includes("import { audioWarningAction } from '../lib/audioWarningAction.mjs'"), 'the banner must route through audioWarningAction');
     assert.ok(
-      source.includes(
+      routing.includes(
         'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
       ),
       'BUG: the macOS Microphone deep-link URL is missing from NativelyInterface.tsx. ' +
@@ -105,7 +109,7 @@ describe('UX3: audio warning banner deep-links to the correct macOS System Setti
 
   it('banner JSX references the macOS Screen Recording deep-link URL literally', () => {
     assert.ok(
-      source.includes(
+      routing.includes(
         'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
       ),
       'BUG: the macOS Screen Recording deep-link URL is missing from NativelyInterface.tsx. ' +

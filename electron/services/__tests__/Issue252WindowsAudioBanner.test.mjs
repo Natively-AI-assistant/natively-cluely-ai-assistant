@@ -84,40 +84,35 @@ test('issue #252: banner title is not hardcoded to "Screen Recording Permission 
   );
 });
 
-test('issue #252: Open Settings button does not unconditionally fire x-apple.systempreferences', () => {
-  // The macOS-only URL is correct ONLY for kind=screen-recording-permission.
-  // For kind=audio-capture-failure the action must open Natively's own
-  // settings (toggleSettingsWindow / openSettingsTab) — not an OS URL.
-  const stripped = ui.replace(/\s+/g, ' ');
-
-  // Count is the wrong test. The banner legitimately has TWO macOS deep links
-  // now — a Microphone pane and a Screen-Recording pane — and "at most one"
-  // failed on the second being added, not on a Windows leak.
+test('issue #252: Open Settings button does not unconditionally fire x-apple.systempreferences', async () => {
+  // The macOS-only URL is correct ONLY on darwin. The invariant is that NO
+  // x-apple URL can be reached off darwin.
   //
-  // The issue-#252 invariant is that NO x-apple URL can be reached off darwin.
-  // Both live in one `const deepLinkUrl = !isMac ? null : …` chain, so assert
-  // that: every occurrence must sit inside that guarded expression, and the
-  // expression must open with the !isMac bail. Adding a third pane keeps
-  // passing; moving one outside the guard fails.
-  const deepLinkMatch = stripped.match(/const deepLinkUrl = [\s\S]*?;/);
-  assert.ok(deepLinkMatch, 'the banner must build its OS deep link through a single deepLinkUrl expression');
-  assert.match(
-    deepLinkMatch[0],
-    /^const deepLinkUrl = !isMac \?\s*null\s*:/,
-    'deepLinkUrl must bail to null off darwin BEFORE any x-apple URL is selected'
-  );
-  const totalXApple = (stripped.match(/x-apple\.systempreferences:/g) || []).length;
-  const guardedXApple = (deepLinkMatch[0].match(/x-apple\.systempreferences:/g) || []).length;
-  assert.ok(totalXApple > 0, 'sanity: the macOS deep links should still exist');
-  assert.equal(
-    guardedXApple,
-    totalXApple,
-    'every x-apple.systempreferences URL must sit inside the !isMac-guarded deepLinkUrl expression'
-  );
+  // 2026-09-26: the pane choice moved into src/lib/audioWarningAction.mjs so
+  // Windows gets its own destinations (Windows mic privacy settings, Natively
+  // Settings → Audio). The banner JSX no longer holds any x-apple literal, and
+  // the helper is EXECUTED here for every warning shape off darwin, which is
+  // stronger than checking where the literals sit in the source.
+  const stripped = ui.replace(/\s+/g, ' ');
+  assert.equal((stripped.match(/'x-apple\.systempreferences:/g) || []).length, 0,
+    'the banner JSX must not hold an x-apple URL literal; the routing helper owns them');
 
-  // The banner JSX must include a JSX-level conditional keyed on the
-  // warning kind so that the audio-capture-failure case renders an
-  // in-app settings action instead of the macOS URL.
+  const { audioWarningAction } = await import(
+    new URL('../../../src/lib/audioWarningAction.mjs', import.meta.url).href
+  );
+  const kinds = ['audio-capture-failure', 'screen-recording-permission'];
+  const channels = ['mic', 'system', undefined];
+  const titles = [undefined, 'Microphone Is Silent', 'Microphone Blocked', 'Screen Recording Blocked',
+    'Input and Output Are the Same Device', 'System Audio Unavailable'];
+  for (const platform of ['win32', 'linux']) {
+    for (const kind of kinds) for (const channel of channels) for (const titleKey of titles) {
+      const action = audioWarningAction({ platform, kind, channel, titleKey, message: '' });
+      assert.notEqual(action.type, 'external', `${platform}/${kind}/${channel}/${titleKey} must not open a macOS pane`);
+    }
+  }
+
+  // The banner JSX must still branch on the warning kind (title) and open
+  // in-app settings / Windows mic settings rather than an OS URL off darwin.
   const bannerJsx = ui.match(
     /\{systemAudioWarning && \([\s\S]*?<X className="w-3 h-3" \/>/
   );
@@ -129,7 +124,12 @@ test('issue #252: Open Settings button does not unconditionally fire x-apple.sys
   );
   assert.match(
     bannerJsx[0],
-    /toggleSettingsWindow|openSettingsTab/,
-    'audio-capture-failure branch must open in-app settings, not an OS URL'
+    /openSettingsTab/,
+    'non-deep-link warnings must open in-app settings (Settings → Audio), not an OS URL'
+  );
+  assert.match(
+    bannerJsx[0],
+    /openMicSettings/,
+    'Windows microphone warnings must open Windows mic privacy settings via openMicSettings'
   );
 });
