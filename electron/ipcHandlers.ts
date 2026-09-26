@@ -11735,8 +11735,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         console.warn('[IPC] trial:end-byok: wipe incomplete:', wiped.failed.join(', '));
         return { success: false, error: 'wipe_failed' };
       }
-      const trialId = cm.getTrialStartedAt() || cm.getTrialExpiresAt();
-      if (trialId) SettingsManager.getInstance().set('trialExpiryWipedFor', trialId);
+      // No once-marker needed: the token is cleared below, so the expiry
+      // settle never sees this trial again.
 
       const token = cm.getTrialToken();
       if (token) {
@@ -14379,11 +14379,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     };
   });
 
-  safeHandle('open-external', async (event, url: string) => {
+  // Answers whether the page actually opened, so a card can say so when it
+  // did not (toaster policy §6 row 9). Existing callers ignore the answer.
+  safeHandle('open-external', async (event, url: string): Promise<{ ok: boolean }> => {
     try {
       if (typeof url !== 'string') {
         console.warn('[IPC] Blocked invalid open-external request', { reason: 'non-string' });
-        return;
+        return { ok: false };
       }
 
       const parsed = new URL(url);
@@ -14397,14 +14399,17 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       if (allowedWebUrl || allowedSystemSettingsUrl) {
         await shell.openExternal(url);
-      } else {
-        console.warn('[IPC] Blocked open-external request', {
-          protocol: parsed.protocol,
-          hostname: parsed.hostname,
-        });
+        return { ok: true };
       }
+      console.warn('[IPC] Blocked open-external request', {
+        protocol: parsed.protocol,
+        hostname: parsed.hostname,
+      });
+      return { ok: false };
     } catch {
+      // An invalid URL, or the system could not open it. Never log the URL.
       console.warn('[IPC] Invalid URL in open-external');
+      return { ok: false };
     }
   });
 

@@ -33,7 +33,9 @@ import { startTrialWithRetry } from '../../lib/trial/trialStart.mjs';
 /** Why a card closed, as the card reports it: its primary action, an explicit "never", or a plain close. */
 // 'after_error': the trial promo closed after our own error (network, server);
 // that showing ends with no outcome, so it is no strike (spec §6 row 8).
-type CloseReason = 'acted' | 'never' | 'after_error' | undefined;
+// 'connected': the browser extension connected while its card was open, which
+// retires the card (spec §6 row 9).
+type CloseReason = 'acted' | 'never' | 'after_error' | 'connected' | undefined;
 
 /** Write one card outcome to the main-process ledger (cards:record). */
 function recordCard(card: string, outcome: string, meta?: { until?: number }): void {
@@ -110,6 +112,7 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
   /** Close a card, recording why: its own reason, else a plain "later". */
   const closeWith = (id: ToasterId) => (reason?: CloseReason) => {
     if (reason === 'after_error') recorder.end();
+    else if (reason === 'connected') recorder.outcome('never');
     else recorder.outcome(reason ?? 'later');
     orch.markDismissed(id);
   };

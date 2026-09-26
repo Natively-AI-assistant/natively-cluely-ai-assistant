@@ -175,7 +175,7 @@ export interface ElectronAPI {
   onMeetingStateChanged: (callback: (data: { isActive: boolean }) => void) => () => void
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void
   onEnsureExpanded: (callback: () => void) => () => void
-  openExternal: (url: string) => Promise<void>
+  openExternal: (url: string) => Promise<{ ok: boolean }>
   // Genie snapshots (electron/genieSnapshots.ts): pictures of popup cards the genie warps.
   genieSnapshotCapture?: (rect: { x: number; y: number; width: number; height: number }) => Promise<{ png: Uint8Array; width: number; height: number } | null>
   genieSnapshotSave?: (key: string, png: Uint8Array) => Promise<boolean>

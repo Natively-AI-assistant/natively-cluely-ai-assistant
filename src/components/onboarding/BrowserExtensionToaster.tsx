@@ -150,12 +150,15 @@ export function versionGte(a: string, b: string = MIN_VERSION): boolean {
 interface Props {
   isOpen:    boolean;
   /** Why it closed, for the host's card ledger: 'acted' after "Add to Chrome", else nothing. */
-  onDismiss: (reason?: 'acted') => void;
+  onDismiss: (reason?: 'acted' | 'connected') => void;
   onSkip?:   () => void;
 }
 
 export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, onSkip }) => {
   const [opening, setOpening]       = useState(false);
+  // The store link did not open: say so and offer the link to copy.
+  const [storeFailed, setStoreFailed] = useState(false);
+  const [copied, setCopied]           = useState(false);
   const [plateHover, setPlateHover] = useState(false);
   const [ctaActive, setCtaActive]   = useState(false);
   const [ctaPressed, setCtaPressed] = useState(false);
@@ -201,16 +204,25 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
 
   const handleInstall = async () => {
     if (opening) return;
+    setOpening(true);
+    setStoreFailed(false);
+    let opened = false;
     try {
-      setOpening(true);
-      await window.electronAPI?.openExternal?.(CHROME_STORE_URL);
+      opened = window.electronAPI?.openExternal
+        ? (await window.electronAPI.openExternal(CHROME_STORE_URL))?.ok === true
+        : !!window.open(CHROME_STORE_URL, '_blank');
     } catch (e) {
       console.warn('[BrowserExtensionToaster] openExternal failed:', e);
-    } finally {
-      // Close now; the user is in the Chrome store. Not a permanent
-      // dismiss, so they can return next launch if they didn't install.
-      closeThen(() => onDismiss('acted'));
     }
+    // Opened: close now, the user is in the Chrome store. Not a permanent
+    // dismiss, so they can return next launch if they didn't install.
+    // Not opened: stay, say so, offer the link, and record nothing.
+    if (opened) closeThen(() => onDismiss('acted'));
+    else { setStoreFailed(true); setOpening(false); }
+  };
+
+  const copyStoreLink = async () => {
+    try { await navigator.clipboard?.writeText(CHROME_STORE_URL); setCopied(true); } catch { /* clipboard refused */ }
   };
 
   // ─── Auto-dismiss when the extension connects ──────────────
@@ -219,7 +231,8 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
     const unsub = window.electronAPI?.onPhoneMirrorStatus?.(info => {
       if (info?.extensionConnected) {
         persistDismiss();
-        closeThen(() => onDismiss('acted'));
+        // Connecting retires the card (spec §6 row 9).
+        closeThen(() => onDismiss('connected'));
       }
     });
     return () => { unsub?.(); };
@@ -377,6 +390,25 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, on
             marginTop: 'auto', paddingTop: '34px',
             display: 'flex', alignItems: 'center', gap: '22px', flexWrap: 'wrap',
           }}>
+            {storeFailed && (
+              <p role="alert" style={{
+                // Its own line at the top of the action row, right above the buttons.
+                flexBasis: '100%', margin: 0, fontSize: '12px', lineHeight: 1.45,
+                color: isLight ? '#B42318' : '#FCA5A5',
+              }}>
+                Couldn't open the Chrome Web Store.{' '}
+                <button
+                  type="button"
+                  onClick={copyStoreLink}
+                  style={{
+                    background: 'none', border: 0, padding: 0, cursor: 'pointer',
+                    font: 'inherit', color: 'inherit', textDecoration: 'underline',
+                  }}
+                >
+                  {copied ? 'Link copied' : 'Copy the link'}
+                </button>
+              </p>
+            )}
             {/*
               Outlined, not filled. On a flat card a filled button is the
               strongest object on the page and pulls the eye off the

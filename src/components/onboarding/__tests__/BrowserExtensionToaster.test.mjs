@@ -76,24 +76,25 @@ test('dismiss key is the documented one', () => {
 test('CTA opens the canonical Chrome Web Store listing', () => {
   assert.ok(source.includes('chromewebstore.google.com/detail/lmhgnkbjnelmciecjkleaomjpejcgaln'));
   assert.ok(source.includes('utm_source=item-share-cb'));
-  assert.ok(source.includes('window.electronAPI?.openExternal?.(CHROME_STORE_URL)'));
+  assert.ok(source.includes('window.electronAPI.openExternal(CHROME_STORE_URL)'));
 });
 
 test('install closes the card WITHOUT the permanent dismiss', () => {
   // A user who opens the store but does not install should see this again.
   const install = source.slice(source.indexOf('const handleInstall'), source.indexOf('// ─── Auto-dismiss'));
   // Toaster policy: opening the store is the card's action, so the ledger
-  // schedules the single follow-up rather than counting a strike.
-  assert.ok(install.includes("closeThen(() => onDismiss('acted'))"), 'install reports acted');
+  // schedules the single follow-up rather than counting a strike, but only
+  // when the store actually opened (open-external answers { ok }).
+  assert.ok(install.includes("if (opened) closeThen(() => onDismiss('acted'));"), 'install reports acted once the store opened');
   assert.ok(!install.includes('DISMISS_KEY'), 'install must not set the permanent flag');
 });
 
 test('auto-dismisses the moment the extension connects', () => {
   assert.ok(source.includes('window.electronAPI?.onPhoneMirrorStatus?.(info =>'));
   assert.ok(source.includes('if (info?.extensionConnected)'));
-  // Connecting is the outcome the card asks for: acted, never a strike.
+  // Connecting retires the card (spec §6 row 9): no follow-up, no strike.
   const connect = source.slice(source.indexOf('if (info?.extensionConnected)'), source.indexOf('return () => { unsub?.(); };'));
-  assert.ok(connect.includes("closeThen(() => onDismiss('acted'))"), 'connecting reports acted');
+  assert.ok(connect.includes("closeThen(() => onDismiss('connected'))"), 'connecting reports connected');
   assert.ok(source.includes('return () => { unsub?.(); };'), 'subscription is cleaned up');
 });
 
@@ -478,4 +479,18 @@ test('copy is present and dash-free', () => {
   for (const glyph of ['—', '–', '−']) {
     assert.ok(!rendered.includes(glyph), `rendered copy contains ${glyph}`);
   }
+});
+
+// ─── The store link failed (toaster policy Phase 3, spec §6 row 9) ─
+test('a store link that did not open says so, offers the link, and records nothing', () => {
+  const install = source.slice(source.indexOf('const handleInstall'), source.indexOf('// ─── Auto-dismiss'));
+  assert.ok(install.includes("(await window.electronAPI.openExternal(CHROME_STORE_URL))?.ok === true"), 'reads the answer');
+  assert.ok(install.includes('else { setStoreFailed(true); setOpening(false); }'), 'stays open, no outcome');
+  assert.ok(rendered.includes("Couldn't open the Chrome Web Store."));
+  assert.ok(rendered.includes('navigator.clipboard?.writeText(CHROME_STORE_URL)'), 'the link to copy');
+});
+
+test('host: connecting retires the card', () => {
+  const host = readFileSync(resolve(__dirname, '../OrchestratedToasterHost.tsx'), 'utf8');
+  assert.ok(host.includes("else if (reason === 'connected') recorder.outcome('never');"));
 });
