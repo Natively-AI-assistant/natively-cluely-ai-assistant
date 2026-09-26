@@ -14488,16 +14488,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const clarification = await intelligenceManager.runClarify();
-      // If null returned without throwing, the engine already set mode to idle.
-      // We must still ensure the frontend un-sticks — emit an error so onIntelligenceError fires.
-      if (clarification === null) {
-        const win = appState.getMainWindow();
-        win?.webContents.send('intelligence-error', {
-          error:
-            'Could not generate a clarifying question. Try again after some audio context is available.',
-          mode: 'clarify',
-        });
-      } else {
+      // null = the engine already emitted 'error' (it reaches the overlay), or
+      // a newer generation superseded this one. A synthetic error here used to
+      // double every failure, and on a supersede it settled the NEW placeholder.
+      if (clarification) {
         try {
           PhoneMirrorService.getInstance().publishAssistantMessage(
             crypto.randomUUID(),

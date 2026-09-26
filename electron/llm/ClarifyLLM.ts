@@ -59,6 +59,10 @@ export class ClarifyLLM {
                 Boolean(v3), [], undefined, undefined, v3 ? { v3Owned: true } : undefined);
         } catch (error) {
             console.error("[ClarifyLLM] Streaming generation failed:", error);
+            // Rethrow: the engine's catch emits 'error' so the overlay can settle
+            // its placeholder. Swallowing here ended the stream empty, and an empty
+            // stream emits nothing — the "Thinking..." row never resolved.
+            throw error;
         }
     }
 }
