@@ -73,3 +73,17 @@ test('quotaCycleEnd: the reset date as a timestamp, or undefined', () => {
   assert.equal(quotaCycleEnd({ ok: true, quota: { resets_at: 'soon' } }), undefined);
   assert.equal(quotaCycleEnd(undefined), undefined);
 });
+
+// Toaster policy Phase 3 (spec §6 row 18): the stored licence plan is never
+// rewritten after a Pro → Max upgrade (the reconciler stops once premium is
+// true), so a Max subscriber at 80 %+ still read as Pro and got the Max/Ultra
+// upsell. The plan the Natively API reports with the usage is the fresh one.
+test('planTier: the plan the usage reports wins over the stored licence plan', () => {
+  const quota = { ai: meter(90, 100) };
+  assert.equal(cardInputsFromSources({ licence: { isPremium: true, plan: 'pro' }, usage: { ok: true, plan: 'max', quota } }).planTier, 'max');
+  assert.equal(cardInputsFromSources({ licence: { isPremium: true, plan: 'pro' }, usage: { ok: true, plan: 'Ultra', quota } }).planTier, 'ultra');
+  assert.equal(cardInputsFromSources({ licence: { isPremium: true, plan: 'pro' }, usage: { ok: true, quota } }).planTier, 'pro', 'no usage plan: the licence');
+  assert.equal(cardInputsFromSources({ licence: { isPremium: true, plan: 'pro' }, usage: { ok: false, plan: 'max' } }).planTier, 'pro', 'a failed usage read proves nothing');
+  assert.equal(cardInputsFromSources({ licence: { isPremium: true, plan: 'lifetime' }, usage: { ok: true, plan: 'standard', quota } }).planTier, 'other');
+  assert.equal(cardInputsFromSources({ licence: { isPremium: false }, usage: { ok: true, plan: 'max', quota } }).planTier, 'free', 'not paying: free, whatever the key says');
+});

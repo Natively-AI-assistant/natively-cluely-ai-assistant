@@ -55,6 +55,10 @@ import { GENIE_CLOSE_MS } from "./components/onboarding/useGenieCard"
 import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
 import { useResolvedTheme } from "./hooks/useResolvedTheme"
 
+// How often the launcher may re-read the card inputs when it regains focus
+// (main caches /usage for 60 s; toaster policy §6 row 18).
+const CARD_INPUTS_FOCUS_REFRESH_MS = 5 * 60_000;
+
 
 // DEV-ONLY: should the launcher mount an uncontrolled ReviewPromptHost?
 // Mirrors ReviewPromptHost.tsx's isDevForceShow() so a developer running
@@ -442,7 +446,11 @@ const App: React.FC = () => {
     if (!isLauncherWindow && !isDefault) return;
     const api = window.electronAPI;
     let disposed = false;
+    // Refreshes overlap (focus, credentials, licence, extension); one carrying
+    // the /usage network call can land after a newer one. Only the latest writes.
+    let refreshSeq = 0;
     const refresh = async () => {
+      const mine = ++refreshSeq;
       const [creds, licence, profile, trialLocal, extension] = await Promise.all([
         api?.getStoredCredentials?.().catch(() => undefined),
         api?.licenseGetDetails?.().catch(() => undefined),
@@ -451,7 +459,7 @@ const App: React.FC = () => {
         api?.phoneMirrorGetInfo?.().catch(() => undefined),
       ]);
       const usage = creds?.hasNativelyKey ? await api?.getNativelyUsage?.().catch(() => undefined) : undefined;
-      if (disposed) return;
+      if (disposed || mine !== refreshSeq) return;
       setOrchestratorUserState({
         ...cardInputsFromSources({ creds, licence, profile, trialLocal, extension, usage }),
         adsAvailable: PREMIUM_ADS_AVAILABLE,
@@ -480,8 +488,19 @@ const App: React.FC = () => {
       api?.onLicenseStatusChanged?.(() => { void refresh(); }),
       api?.onPhoneMirrorStatus?.(() => { void refresh(); }),
     ];
+    // Quota climbs during the day: re-read on focus, at most every 5 minutes,
+    // so Max/Ultra can meet a Pro user who crossed 80 % without a relaunch.
+    let lastFocusRefresh = Date.now();
+    const onFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusRefresh < CARD_INPUTS_FOCUS_REFRESH_MS) return;
+      lastFocusRefresh = now;
+      void refresh();
+    };
+    window.addEventListener('focus', onFocus);
     return () => {
       disposed = true;
+      window.removeEventListener('focus', onFocus);
       offs.forEach((off) => { try { off?.(); } catch { /* already gone */ } });
     };
   }, [isLauncherWindow, isDefault]);

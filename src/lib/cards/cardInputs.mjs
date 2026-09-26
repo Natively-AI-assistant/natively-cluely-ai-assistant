@@ -12,11 +12,19 @@ const OWN_AI_FLAGS = [
   'hasNvidiaNimKey', 'hasOpenrouterKey', 'hasFluxionKey', 'hasNinerouterKey', 'hasLitellmBaseURL',
 ];
 
-function planTierOf(licence) {
+function tierOf(plan) {
+  const p = String(plan ?? '').toLowerCase();
+  return p === 'pro' || p === 'max' || p === 'ultra' ? p : 'other';
+}
+
+/**
+ * The paying user's tier. The plan the Natively API reports with the usage is
+ * the fresh one: the stored licence plan is never rewritten after an upgrade.
+ */
+function planTierOf(licence, usage) {
   if (!licence?.isPremium) return 'free';
-  const plan = String(licence.plan ?? '').toLowerCase();
-  if (plan === 'pro' || plan === 'max' || plan === 'ultra') return plan;
-  return 'other';
+  if (usage?.ok && typeof usage.plan === 'string' && usage.plan) return tierOf(usage.plan);
+  return tierOf(licence.plan);
 }
 
 /** The fullest METERED Natively meter this cycle, 0–100 (unmetered meters never count). */
@@ -55,7 +63,7 @@ export function cardInputsFromSources({ creds, licence, profile, trialLocal, ext
   }
   if (licence) {
     patch.isPremium = !!licence.isPremium;
-    patch.planTier = planTierOf(licence);
+    patch.planTier = planTierOf(licence, usage);
   }
   if (profile) {
     patch.hasProfile = !!profile.hasProfile;
