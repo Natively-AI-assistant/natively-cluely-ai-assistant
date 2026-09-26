@@ -160,3 +160,20 @@ describe('cards:import-legacy while the ledger is unreadable', () => {
     }
   });
 });
+
+// Final review #4: "Support Natively" must never reach someone who already
+// supported (spec §6 row 10). The support card is not the only way to donate
+// (About → Support), and the ledger import runs once, so the donation itself
+// retires the card, whichever surface it came from.
+describe('set-donation-complete', () => {
+  test('retires the support card and tells every window', async () => {
+    assert.notEqual(disk().cards.support?.retired, true, 'precondition: support is still on offer');
+    sends = [];
+    const res = await handlers.get('set-donation-complete')({});
+    assert.equal(res.success, true);
+    assert.equal(disk().cards.support.retired, true);
+    const changed = sends.filter((s) => s.channel === 'cards:changed');
+    assert.equal(changed.length, 1);
+    assert.equal(changed[0].data.cards.support.retired, true);
+  });
+});

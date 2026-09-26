@@ -1455,6 +1455,19 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('set-donation-complete', async () => {
     const { DonationManager } = require('./DonationManager');
     DonationManager.getInstance().setHasDonated(true);
+    // A supporter never sees "Support Natively" again (toaster policy §6 row
+    // 10), whichever surface they donated from: About as well as the card.
+    try {
+      const cardLedger = CardLedger.getInstance();
+      if (cardLedger.isReadable()) {
+        const ledger = cardLedger.record('support', 'acted');
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) win.webContents.send('cards:changed', ledger);
+        });
+      }
+    } catch (e: any) {
+      console.warn('[IPC] set-donation-complete: card ledger not updated:', e?.message);
+    }
     return { success: true };
   });
 
