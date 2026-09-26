@@ -135,3 +135,28 @@ describe('main-side legacy', () => {
     assert.equal(legacy.trialClaimed, true);
   });
 });
+
+// Final review #3: while the ledger file cannot be READ (an antivirus lock on
+// Windows), CardLedger serves an in-memory stand-in. Broadcasting it would
+// hand every window an empty ledger, so retired cards could come back and
+// their outcomes then fail silently. The import answers "unreadable" instead,
+// like cards:get.
+describe('cards:import-legacy while the ledger is unreadable', () => {
+  test('refuses and broadcasts nothing', async () => {
+    const { CardLedger } = require(path.join(ROOT, 'dist-electron/electron/services/cards/CardLedger.js'));
+    const locked = path.join(userData, 'locked-ledger');
+    fs.mkdirSync(locked, { recursive: true }); // a directory at the file path cannot be read as a file
+    const KEY = '__nativelyCardLedger';
+    const real = globalThis[KEY];
+    globalThis[KEY] = new CardLedger(locked);
+    try {
+      assert.equal(globalThis[KEY].isReadable(), false, 'precondition: unreadable');
+      sends = [];
+      const res = await handlers.get('cards:import-legacy')({}, { dismissedAds: ['profile'] });
+      assert.deepEqual(res, { ok: false, error: 'ledger_unreadable' });
+      assert.equal(sends.filter((s) => s.channel === 'cards:changed').length, 0, 'no stand-in broadcast');
+    } finally {
+      globalThis[KEY] = real;
+    }
+  });
+});

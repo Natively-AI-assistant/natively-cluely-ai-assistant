@@ -11861,7 +11861,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { ok: false, error: 'invalid_legacy' };
     }
     try {
-      const ledger = CardLedger.getInstance().importLegacy('renderer', legacy as Record<string, unknown>);
+      const cardLedger = CardLedger.getInstance();
+      // Unreadable (e.g. held by an antivirus scanner): importLegacy would hand
+      // back the in-memory stand-in, and broadcasting that tells every window
+      // the user has no card history. Answer like cards:get instead.
+      if (!cardLedger.isReadable()) return { ok: false, error: 'ledger_unreadable' };
+      const ledger = cardLedger.importLegacy('renderer', legacy as Record<string, unknown>);
       broadcastCardsChanged(ledger);
       return { ok: true, ledger };
     } catch (e: any) {
