@@ -22,9 +22,6 @@ import supportArt from '../assets/cards/support.jpg';
 
 const SUPPORT_URL = 'https://buymeacoffee.com/evinjohnn';
 
-// Returning to the app after this long from the support page is taken as a
-// donation, and the card retires itself.
-const PRESUMED_DONATION_MS = 20_000;
 
 // ─── Tokens ────────────────────────────────────────────────────
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
@@ -107,24 +104,6 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
     setOpen(false);
   };
 
-  // When the user left for the support page. Set on click, read on refocus.
-  const clickTimeRef = useRef<number | null>(null);
-
-  // Coming back after a while from the support page is treated as a donation.
-  useEffect(() => {
-    const handleFocus = async () => {
-      if (clickTimeRef.current === null) return;
-      const elapsed = Date.now() - clickTimeRef.current;
-      clickTimeRef.current = null;
-      if (elapsed > PRESUMED_DONATION_MS) {
-        await window.electronAPI?.setDonationComplete?.();
-        dismiss('acted');
-      }
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, []);
-
   // Escape closes it, like every other card in the onboarding set.
   useEffect(() => {
     if (!isOpen || !open) return;
@@ -138,13 +117,16 @@ export const SupportToaster: React.FC<SupportToasterProps> = ({ isOpen, onDismis
     if (!isOpen || !open) { setPlateHover(false); setCtaActive(false); setCtaPressed(false); }
   }, [isOpen, open]);
 
+  // "Support the Builder" is the card's action: the page opens and the card
+  // retires (toaster policy §6 row 10). A real donation is recorded by
+  // set-donation-complete, from wherever it happens.
   const handleSupport = () => {
-    clickTimeRef.current = Date.now();
     if (window.electronAPI?.openExternal) {
       window.electronAPI.openExternal(SUPPORT_URL);
     } else {
       window.open(SUPPORT_URL, '_blank');
     }
+    dismiss('acted');
   };
 
   const ctaDur = ctaActive ? CTA_IN : CTA_OUT;

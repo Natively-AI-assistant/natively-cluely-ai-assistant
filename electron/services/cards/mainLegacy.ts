@@ -6,6 +6,7 @@
 // fails (a missing module, an unreadable store) must not lose the others.
 
 import type { LegacyCardHistory } from '../../../src/lib/cards/cardPolicy.mjs';
+import type { CardLedger } from './CardLedger';
 
 export function gatherMainLegacy(): LegacyCardHistory {
   const legacy: LegacyCardHistory = {};
@@ -41,4 +42,29 @@ export function gatherMainLegacy(): LegacyCardHistory {
   }
 
   return legacy;
+}
+
+/** The review card's outcome implied by the review ledger, if any. */
+export function reviewCardOutcome(
+  state: { has_reviewed?: boolean; dont_show_again?: boolean } | null | undefined,
+): 'acted' | 'never' | null {
+  if (state?.has_reviewed === true) return 'acted';
+  if (state?.dont_show_again === true) return 'never';
+  return null;
+}
+
+/**
+ * Retire the review card when the review ledger says so. A review or "Never
+ * ask" from another install arrives only through ReviewService's backend sync,
+ * which lands after the one-time import above, so this runs again then.
+ * Returns the new ledger, or null when there was nothing to do.
+ */
+export function settleReviewCard(
+  cardLedger: CardLedger,
+  state: { has_reviewed?: boolean; dont_show_again?: boolean } | null | undefined,
+): ReturnType<CardLedger['get']> | null {
+  const outcome = reviewCardOutcome(state);
+  if (!outcome || !cardLedger.isReadable()) return null;
+  if (cardLedger.get().cards?.review_prompt?.retired) return null;
+  return cardLedger.record('review_prompt', outcome);
 }

@@ -37,17 +37,15 @@ test('support opens Buy Me a Coffee, with a browser fallback', () => {
   assert.ok(rendered.includes("window.open(SUPPORT_URL, '_blank')"));
 });
 
-test('returning after 20s from the support page is treated as a donation', () => {
-  assert.match(source, /const PRESUMED_DONATION_MS = 20_000;/);
-  const focus = source.slice(source.indexOf('const handleFocus'), source.indexOf("window.addEventListener('focus'"));
-  assert.ok(focus.includes('if (elapsed > PRESUMED_DONATION_MS)'));
-  assert.ok(focus.includes('window.electronAPI?.setDonationComplete?.()'));
-  assert.ok(focus.includes("dismiss('acted');"), 'the card closes itself (the genie) first, as acted');
-  // The click time is consumed on the first refocus, so an unrelated later
-  // focus cannot be mistaken for a return from the support page.
-  assert.ok(focus.indexOf('clickTimeRef.current = null') < focus.indexOf('if (elapsed'),
-    'the stamp is cleared before the check, whatever the outcome');
-  assert.ok(rendered.includes("window.removeEventListener('focus', handleFocus)"));
+// Toaster policy Phase 3 (spec §6 row 10): "Support the Builder" retires the
+// card at once. It used to stay open and presume a donation if the window
+// regained focus more than 20 s later; a click is the card's action, and a
+// real donation is recorded by set-donation-complete from wherever it happens.
+test('"Support the Builder" opens the page and retires the card at once', () => {
+  const support = source.slice(source.indexOf('const handleSupport'), source.indexOf('const ctaDur'));
+  assert.ok(support.includes('window.electronAPI.openExternal(SUPPORT_URL)'));
+  assert.ok(support.indexOf("dismiss('acted');") > support.indexOf('openExternal(SUPPORT_URL)'), 'the page opens first, then the card closes as acted');
+  assert.ok(!/PRESUMED_DONATION_MS|clickTimeRef|handleFocus/.test(rendered), 'no refocus guesswork left in the card');
 });
 
 test('Escape, backdrop, close and "Maybe later" all dismiss', () => {

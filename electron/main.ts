@@ -8608,6 +8608,18 @@ async function initializeApp() {
     const apiKey = getReviewApiKey();
     getReviewHardwareId()
       .then((hwid: string | null) => reviewService.syncWithBackend(apiKey, hwid))
+      .then(() => {
+        // A review or "Never ask" from another install lands here, after the
+        // card ledger's one-time import: retire the review card now too.
+        const { CardLedger } = require('./services/cards/CardLedger');
+        const { settleReviewCard } = require('./services/cards/mainLegacy');
+        const ledger = settleReviewCard(CardLedger.getInstance(), reviewService.getLocalState());
+        if (ledger) {
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed()) win.webContents.send('cards:changed', ledger);
+          });
+        }
+      })
       .catch(() => {});
   } catch (err) {
     console.warn('[Init] ReviewService recordSessionStart failed (non-fatal):', err);
