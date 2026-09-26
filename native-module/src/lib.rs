@@ -37,6 +37,10 @@ pub mod keyboard_tap;
 // though only keyboard_hook_windows uses it.
 pub mod app_chord;
 
+// Paste / select all / copy / cut inside the overlay's text box while stealth
+// typing is engaged (both hooks). Pure, so it unit-tests on every platform.
+pub mod edit_shortcut;
+
 #[cfg(target_os = "windows")]
 pub mod keyboard_hook_windows;
 
