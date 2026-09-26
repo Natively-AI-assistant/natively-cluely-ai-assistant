@@ -182,6 +182,21 @@ const CLAUDE_MODEL = "claude-sonnet-4-6"
 // lever is prompt size: JUDGE_PROMPT_RULES alone is 7420 chars of the ~12.2k
 // total, so trimming the boilerplate would buy more than any timeout tuning.
 const FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS = 1800
+/**
+ * First-token budgets for the Gemini TEXT cascade, per rung.
+ *
+ * The cascade used one flat 2.5 s (DEFAULT_TEXT_FALLBACK_CONFIG) for every rung.
+ * Measured 2026-09-26, streaming, on a live-sized answer prompt (13k-char system
+ * instruction + 4k-char transcript), at the thinking level each model is sent:
+ *   gemini-3.1-flash-lite (minimal)  1.0-1.5 s
+ *   gemini-3.8-flash (low; it 400s on minimal) 1.9-2.4 s — the app's DEFAULT
+ *   gemini-3.1-pro (low)              5.1-5.7 s
+ * So the default model missed 2.5 s often enough that a live Auto Answer took
+ * 13 s: Flash timed out twice, Pro (which can NEVER answer in 2.5 s) twice,
+ * then the turn fell through to the Natively key — and a Gemini-only user got
+ * no answer at all. Budgets are ~2× the measured first token.
+ */
+export const GEMINI_TEXT_TTFT_MS = Object.freeze({ flashLite: 2_500, flash: 5_000, pro: 10_000 })
 // Ceiling for a fast call made with no caller signal (the preferFast callers).
 const FAST_MODEL_DEFAULT_TIMEOUT_MS = 8000
 // Codex's measured first token is 1.7-2.0 s (gpt-5.5; see DEFAULT_CODEX_CLI_CONFIG),
@@ -11855,12 +11870,13 @@ let isMultimodal = !!(imagePaths?.length);
     if (!this.client) throw new Error("Gemini client not initialized");
 
     // Full ladder, cheapest → most capable. priority encodes the ladder order.
+    // Each rung carries its OWN first-token budget (GEMINI_TEXT_TTFT_MS).
     const ladder: TextStreamProvider[] = [
-      { id: 'gemini_flash_lite', name: 'Gemini Flash-Lite', isLocal: false, priority: 0,
+      { id: 'gemini_flash_lite', name: 'Gemini Flash-Lite', isLocal: false, priority: 0, ttftTimeoutMs: GEMINI_TEXT_TTFT_MS.flashLite,
         open: (sig) => this.streamWithGeminiModel(fullMessage, GEMINI_FLASH_LITE_MODEL, imagePaths, systemInstruction, sig, thinkingBudget) },
-      { id: 'gemini_flash', name: 'Gemini Flash', isLocal: false, priority: 1,
+      { id: 'gemini_flash', name: 'Gemini Flash', isLocal: false, priority: 1, ttftTimeoutMs: GEMINI_TEXT_TTFT_MS.flash,
         open: (sig) => this.streamWithGeminiModel(fullMessage, GEMINI_FLASH_MODEL, imagePaths, systemInstruction, sig, thinkingBudget) },
-      { id: 'gemini_pro', name: 'Gemini Pro', isLocal: false, priority: 2,
+      { id: 'gemini_pro', name: 'Gemini Pro', isLocal: false, priority: 2, ttftTimeoutMs: GEMINI_TEXT_TTFT_MS.pro,
         open: (sig) => this.streamWithGeminiModel(fullMessage, GEMINI_PRO_MODEL, imagePaths, systemInstruction, sig, thinkingBudget) },
     ];
 
