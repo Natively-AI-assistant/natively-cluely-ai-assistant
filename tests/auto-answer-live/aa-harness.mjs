@@ -66,7 +66,14 @@ fs.mkdirSync(CLIP_DIR, { recursive: true });
 function renderClip(text, i) {
   const raw = path.join(CLIP_DIR, `c${i}.aiff`);
   const wav = path.join(CLIP_DIR, `c${i}.wav`);
-  execFileSync('say', ['-v', VOICE.interviewer, '-r', String(WPM), '-o', raw, text]);
+  // `say -o` can wedge (seen: 21 min on one clip while another process used
+  // speech synthesis). Bound it and retry, rather than hang the whole run.
+  for (let attempt = 1; ; attempt++) {
+    try { execFileSync('say', ['-v', VOICE.interviewer, '-r', String(WPM), '-o', raw, text], { timeout: 30000 }); break; } catch (e) {
+      if (attempt >= 3) throw new Error(`say failed 3x rendering clip ${i}: ${e.message}`);
+      console.warn(`say stalled on clip ${i} (attempt ${attempt}); retrying`);
+    }
+  }
   const trim = 'silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse';
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', raw, '-af', trim, '-ar', '48000', '-ac', '1', wav]);
   const dur = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', wav], { encoding: 'utf8' }).trim());

@@ -66,4 +66,72 @@ export const technicalInterview = [
   { who: 'interviewer', id: 'T19', expect: 'silent', parts: ["Thanks so much for your time today. We'll be in touch soon."] },
 ];
 
-export const SCRIPTS = { ti: technicalInterview };
+// Looking for work: a recruiter screen. Personal and logistics questions, a
+// lot of recruiter monologue (company pitch, process) that must stay quiet,
+// and short asks without a question mark.
+export const lookingForWork = [
+  { who: 'interviewer', id: 'L01', expect: 'either', parts: ["Hi, this is Priya from the talent team at Northwind. Is now still a good time to talk?"] },
+  { who: 'user', text: "Yes, now works great, thanks for calling." },
+  { who: 'interviewer', id: 'L02', expect: 'silent', parts: ["Perfect. So just to give you some context, Northwind builds logistics software for mid size retailers. We're about two hundred people, fully remote, and this role sits on the integrations team."] },
+  { who: 'interviewer', id: 'L03', expect: 'answer', q: 'walk me through your background', check: /\w{4,}.*\w{4,}/s,
+    parts: ["To start, could you walk me through your background and what you're doing today?"] },
+  { who: 'user', text: "Sure. I'm a backend engineer at a fintech startup. I've been there three years, mostly on payment integrations in Go and Node." },
+  { who: 'interviewer', id: 'L04', expect: 'answer', q: 'what made you start looking', check: /\w{4,}.*\w{4,}/s,
+    parts: ['Great. And what made you start looking for something new'] },
+  { who: 'user', text: "I want to work on a bigger platform, and our team is being folded into another group." },
+  { who: 'interviewer', id: 'L05', expect: 'answer', q: 'what are your salary expectations for this role', check: /\d|range|flexib|compens|total/i,
+    parts: ["Makes sense. I have to ask this one early. What are your salary expectations for this role?"] },
+  { who: 'user', text: "I'm targeting around one hundred and forty to one hundred and sixty thousand base, but I'm flexible for the right role." },
+  { who: 'interviewer', id: 'L06', expect: 'silent', parts: ["Okay, that's within our band for this level, so no concerns there."] },
+  { who: 'interviewer', id: 'L07', expect: 'answer', q: "What's your notice period", check: /week|notice|month|start/i,
+    parts: ["And what's your notice period with your current employer?"] },
+  { who: 'user', text: "It's four weeks." },
+  { who: 'interviewer', id: 'L08', expect: 'answer', q: 'Tell me about a project you are really proud of', check: /\w{4,}.*\w{4,}/s,
+    parts: ["Tell me about a project you're really proud of."] },
+  { who: 'user', text: "I led a rewrite of our payout service. It cut failed payouts by half." },
+  { who: 'interviewer', id: 'L09', expect: 'answer', q: 'Why Northwind', check: /\w{4,}.*\w{4,}/s,
+    parts: ["That's impressive. So why Northwind, what drew you to us specifically?"] },
+  { who: 'user', text: "Logistics is a hard integration problem, and the remote culture is a big plus for me." },
+  { who: 'interviewer', id: 'L10', expect: 'silent', parts: ["So here's how the process works. There's a technical screen with an engineer, then a system design round, and then a final conversation with the hiring manager. The whole thing usually takes about three weeks."] },
+  { who: 'interviewer', id: 'L11', expect: 'answer', q: 'are you interviewing anywhere else right now', check: /\w{4,}/,
+    parts: ['Are you interviewing anywhere else at the moment'] },
+  { who: 'user', text: "Yes, I'm in early stages with two other companies." },
+  { who: 'interviewer', id: 'L12', expect: 'silent', parts: ["Thanks for being upfront. I'll send over a calendar invite for the technical screen later today."] },
+  { who: 'interviewer', id: 'L13', expect: 'answer', q: 'Do you have any questions for me about the role or the team', check: /\?/,
+    parts: ['Before we wrap up, do you have any questions for me about the role or the team?'] },
+  { who: 'user', text: 'What does the integrations team work on day to day?' },
+  { who: 'interviewer', id: 'L14', expect: 'silent', parts: ["Mostly building and maintaining connectors to carriers and warehouse systems. It's a lot of API work and a fair amount of on call."] },
+  { who: 'interviewer', id: 'L15', expect: 'silent', parts: ["Great talking with you. Have a good rest of your day."] },
+];
+
+// Sales discovery call: the "interviewer" channel is the PROSPECT. Objections
+// and buying questions must fire; the prospect describing their own setup,
+// and small talk, must not.
+export const salesCall = [
+  { who: 'interviewer', id: 'S01', expect: 'silent', parts: ["Hey, thanks for jumping on. Sorry I'm a couple of minutes late, my last meeting ran over."] },
+  { who: 'user', text: 'No worries at all. Thanks for making the time.' },
+  { who: 'interviewer', id: 'S02', expect: 'silent', parts: ["So a bit of background on us. We're a team of about forty support agents, and right now we use a mix of spreadsheets and a shared inbox to track escalations."] },
+  { who: 'interviewer', id: 'S03', expect: 'answer', q: 'how does your product handle escalations between tiers', check: /\w{4,}.*\w{4,}/s,
+    parts: ['So how does your product actually handle escalations between tiers?'] },
+  { who: 'user', text: 'Each ticket carries its tier, and escalation rules move it up automatically with the full history attached.' },
+  { who: 'interviewer', id: 'S04', expect: 'answer', q: 'Does it integrate with Zendesk', check: /zendesk|integrat|api|connector/i,
+    parts: ['Okay. Does it integrate with Zendesk'] },
+  { who: 'user', text: 'Yes, there is a native Zendesk connector that syncs both ways.' },
+  { who: 'interviewer', id: 'S05', expect: 'answer', q: 'what does pricing look like for a team our size', check: /\w{4,}.*\w{4,}/s,
+    parts: ["Good. And what does pricing look like for a team our size?"] },
+  { who: 'user', text: "For forty seats you'd be on our team plan. I can send the exact numbers after the call." },
+  { who: 'interviewer', id: 'S06', expect: 'answer', q: 'that seems expensive compared to what we pay now, why is it worth it', check: /\w{4,}.*\w{4,}/s,
+    parts: ["Honestly that seems expensive compared to what we pay now. Why would it be worth it for us?"] },
+  { who: 'user', text: 'Mostly time saved on manual routing, and fewer escalations that fall through the cracks.' },
+  { who: 'interviewer', id: 'S07', expect: 'silent', parts: ["Right. Our biggest pain is that escalations get lost over the weekend, when only two people are on shift."] },
+  { who: 'interviewer', id: 'S08', expect: 'answer', q: 'how do you handle data security and are you SOC 2 compliant', check: /SOC|secur|encrypt|complian/i,
+    parts: ['What about data security? Are you SOC two compliant?'] },
+  { who: 'user', text: 'We are SOC two type two, and data is encrypted at rest and in transit.' },
+  { who: 'interviewer', id: 'S09', expect: 'silent', parts: ["Okay, I'll need to loop in our IT lead on that before we go further."] },
+  { who: 'interviewer', id: 'S10', expect: 'answer', q: 'what would the next steps look like if we wanted to try it', check: /\w{4,}.*\w{4,}/s,
+    parts: ['If we wanted to try it, what would the next steps look like?'] },
+  { who: 'user', text: 'I can set up a two week pilot with your escalations team.' },
+  { who: 'interviewer', id: 'S11', expect: 'silent', parts: ["Sounds good. Send me the details and I'll share them with the team. Thanks again."] },
+];
+
+export const SCRIPTS = { ti: technicalInterview, lfw: lookingForWork, sales: salesCall };
