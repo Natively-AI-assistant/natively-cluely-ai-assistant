@@ -1241,8 +1241,9 @@ export class IntelligenceEngine extends EventEmitter {
     private revealSpeculativeAnswer(finished: SpeculativeAnswer, automatic: boolean, streamed?: SpeculativeStreamed): void {
         let text = finished.text;
         // A speculative run is never `isCoding` (see runWhatShouldISay), so it
-        // gets neither the StreamingSpecStripper nor the live path's
-        // stripVerificationSpec — but the PROMPT still asks for the hidden
+        // never gets the live path's stripVerificationSpec (its STREAM gets a
+        // StreamingSpecStripper when verification is on; this is the text that
+        // is stored and shown) — but the PROMPT still asks for the hidden
         // <verification_spec> block whenever code verification is enabled
         // (WhatToAnswerLLM passes isCodeVerificationEnabled() straight to
         // formatAnswerPlanForPrompt, which does not know about isSpeculative).
@@ -1262,6 +1263,8 @@ export class IntelligenceEngine extends EventEmitter {
         }
         if (!text.trim()) {
             console.warn('[IntelligenceEngine] Prefetched answer was empty — nothing to reveal');
+            // An adopted stream already opened a row; it gets no final, so close it.
+            if (streamed?.emitted) this.emit('suggested_answer_discard', 'empty_after_strip');
             return;
         }
         // "Repetition guard" covers THIS path too. An adopted prefetch (the most
@@ -3616,8 +3619,14 @@ export class IntelligenceEngine extends EventEmitter {
             // Suppress the hidden <verification_spec> from the live stream so it
             // never flashes in the UI (it trails the six sections). The raw
             // answer kept for verification still has it.
-            const { StreamingSpecStripper } = isCoding ? require('./llm/codingContract') as typeof import('./llm/codingContract') : { StreamingSpecStripper: null as any };
-            const specStripper: import('./llm/codingContract').StreamingSpecStripper | null = isCoding ? new StreamingSpecStripper() : null;
+            // A speculative run is never `isCoding`, but its prompt still asks for
+            // the block whenever verification is on, and once the dispatch adopts
+            // it mid-stream it paints live through paintBuffered. A code-first
+            // implementation answer has no leading heading for the scaffold hold
+            // to catch, so without this the block painted until the final replaced it.
+            const stripSpecFromStream = isCoding || (isSpeculative && isCodeVerificationEnabled());
+            const { StreamingSpecStripper } = stripSpecFromStream ? require('./llm/codingContract') as typeof import('./llm/codingContract') : { StreamingSpecStripper: null as any };
+            const specStripper: import('./llm/codingContract').StreamingSpecStripper | null = stripSpecFromStream ? new StreamingSpecStripper() : null;
 
             trace.mark('provider_request_started', { answerType: answerPlan.answerType });
 
@@ -4242,7 +4251,10 @@ export class IntelligenceEngine extends EventEmitter {
                         const cleaned = stripCannedOpener(visiblePrefix);
                         if (cleaned.stripped.length) { console.log('[IntelligenceEngine] canned opener stripped at first paint', { count: cleaned.stripped.length }); visiblePrefix = cleaned.text; }
                     } catch { /* emit unmodified */ }
-                    emitChunk(visiblePrefix);
+                    // The stripper holds back a possible partial tag; the
+                    // completion flush below releases it via finish().
+                    const visible = specStripper ? specStripper.push(visiblePrefix) : visiblePrefix;
+                    if (visible) emitChunk(visible);
                     streamingTokenBuffer = '';
                 }
             };
@@ -6280,8 +6292,14 @@ export class IntelligenceEngine extends EventEmitter {
                 // If the dispatch adopted this stream mid-flight it has been
                 // painting live; the reveal must then finish THAT row (flush the
                 // held prefix, replace by the same id) instead of opening a new one.
+                // The pending prefix goes through the same stripper as the painted
+                // text: once it has seen the tag it drops everything after, which
+                // a stripVerificationSpec of this fragment alone could not.
                 const streamed = speculativeStreamingLive
-                    ? { emitted: emittedStreamingToken, pendingBuffer: streamingTokenBuffer }
+                    ? {
+                        emitted: emittedStreamingToken,
+                        pendingBuffer: specStripper ? specStripper.push(streamingTokenBuffer) + specStripper.finish() : streamingTokenBuffer,
+                    }
                     : undefined;
                 return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer, wtaWriteDecision, streamed, {
                     answerType: answerPlan.answerType,
