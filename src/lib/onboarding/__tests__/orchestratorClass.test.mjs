@@ -334,17 +334,29 @@ test('a broken permission pushed before start() still brings the card back', () 
 
 // The un-skip is for the permissions card only. trial_promo also declares a
 // reEligibility rule; a skipped trial promo must not be re-armed just because
-// a key or trial flag flips mid-session.
-test('a skipped trial promo stays skipped when its reEligibility flips', () => {
+// a key or trial flag flips mid-session. Under the toaster policy a card's
+// skip no longer persists (the card ledger owns its waits), so the guarantee
+// is "not again this launch".
+test('a skipped trial promo is not re-armed this launch when its reEligibility flips', async () => {
+  const { emptyLedger } = await loadModule(join(__dirname, '..', '..', 'cards', 'cardPolicy.mjs'));
   localStorage.clear();
   timerQueue = [];
   mockNow = 0;
+  const trial = { ...STAGES.find((s) => s.id === 'trial_promo'), requiresStages: undefined };
   const orch = new OnboardingOrchestrator();
-  orch.start(STAGES);
+  orch.start([trial]);
+  orch.emit({ type: 'launcher:mounted' });
+  orch.emit({ type: 'foreground:change', isForeground: true });
+  orch.setUserState({ cardLedger: emptyLedger(Date.now()) });
+  mockNow += 10_000;
+  for (let i = 0; i < 5; i++) flushOneFrame();
+  assert.equal(orch.getSnapshot().activeToasterId, 'trial_promo', 'precondition: the promo shows');
   orch.markSkipped('trial_promo');
   orch.setUserState({ hasNativelyKey: true });
   orch.setUserState({ hasNativelyKey: false });
-  assert.ok(orch.getSnapshot().skipped.has('trial_promo'), 'trial_promo must stay skipped');
+  mockNow += 120_000;
+  for (let i = 0; i < 5; i++) flushOneFrame();
+  assert.equal(orch.getSnapshot().activeToasterId, null, 'trial_promo must not come back this launch');
 });
 
 // A persisted queue from an older build must follow the current catalog:

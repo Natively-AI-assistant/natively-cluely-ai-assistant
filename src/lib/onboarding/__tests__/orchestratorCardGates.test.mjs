@@ -158,3 +158,36 @@ test('a retired card never shows', () => {
   const ledger = policy.applyOutcome(matureLedger(), 'browser_extension', 'never', Date.now());
   assert.equal(active(launch([EXT], { cardLedger: ledger })), null);
 });
+
+// ─── Persisted skips never hide a card (final review #1) ────────
+// Older builds persisted skips through skipWhen (support, the extension, the
+// trial promo), and the extension's "Not now" still reports one. The card
+// ledger owns every card's waits now, so a skip must not outlive the launch.
+function relaunch(stages, userState = {}) {
+  timerQueue = [];
+  mockNow = 0;
+  const orch = new OnboardingOrchestrator();
+  orch.start(stages);
+  orch.emit({ type: 'launcher:mounted' });
+  orch.emit({ type: 'foreground:change', isForeground: true });
+  orch.setUserState(userState);
+  mockNow += 2_000;
+  flush();
+  return orch;
+}
+
+test('a card skipped in an earlier launch shows again once the ledger allows', () => {
+  const first = launch([EXT], { cardLedger: matureLedger() });
+  assert.equal(active(first), 'browser_extension');
+  first.markSkipped('browser_extension');
+  first.stop();
+  assert.equal(active(relaunch([EXT], { cardLedger: matureLedger() })), 'browser_extension');
+});
+
+test('a stage without a card keeps its persisted skip', () => {
+  const first = launch([PLAIN], { cardLedger: matureLedger() });
+  assert.equal(active(first), 'permissions');
+  first.markSkipped('permissions');
+  first.stop();
+  assert.equal(active(relaunch([PLAIN], { cardLedger: matureLedger() })), null);
+});

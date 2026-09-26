@@ -104,7 +104,6 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
   }, [activeId, recorder]);
 
   const onDismiss = (id: ToasterId) => () => orch.markDismissed(id);
-  const onSkip = (id: ToasterId) => () => orch.markSkipped(id);
   /** Close a card, recording why: its own reason, else a plain "later". */
   const closeWith = (id: ToasterId) => (reason?: CloseReason) => {
     recorder.outcome(reason ?? 'later');
@@ -155,7 +154,8 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
       );
 
     case 'browser_extension':
-      return <BrowserExtensionToaster isOpen={true} onDismiss={closeWith('browser_extension')} onSkip={onSkip('browser_extension')} />;
+      // No onSkip: a card's waits live in the card ledger, never in a skip.
+      return <BrowserExtensionToaster isOpen={true} onDismiss={closeWith('browser_extension')} />;
 
     case 'profile_intelligence':
       // Profile intelligence is rendered by Launcher's popover when triggered

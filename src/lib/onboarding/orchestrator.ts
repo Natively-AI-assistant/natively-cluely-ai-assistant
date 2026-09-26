@@ -270,6 +270,15 @@ export class OnboardingOrchestrator {
     // so rebuilding it loses nothing.
     this.state.queue = this.stageConfigs.map(c => c.id);
 
+    // A card's waits live in the card ledger. A skip persisted by an older
+    // build (skipWhen) or by a "Not now" would otherwise hide the card for
+    // good, long after its strike gap ran out.
+    let unskippedCard = false;
+    for (const c of this.stageConfigs) {
+      if (c.card && this.state.skipped.delete(c.id)) unskippedCard = true;
+    }
+    if (unskippedCard) console.log('[Orchestrator] cleared persisted skips for card stages');
+
     // Bump startup count on first start per session
     if (!this._sessionStartTracked) {
       this._sessionStartTracked = true;
@@ -682,7 +691,7 @@ export class OnboardingOrchestrator {
     const cfg = this.stageConfigs.find(c => c.id === id);
     if (cfg && !cfg.isGateOnly) this.lastCardClosedAt = performance.now();
     this.state.completed[id] = ts;
-    if (explicitSkip) this.state.skipped.add(id);
+    if (explicitSkip && !cfg?.card) this.state.skipped.add(id);
     this.state.activeToasterId = null;
 
     // Insert quiet_window after trial_promo (the 5th stage) to gate marketing.
