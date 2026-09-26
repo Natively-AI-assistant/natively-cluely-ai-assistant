@@ -127,7 +127,8 @@ test('every way out plays the genie before reporting to the host', () => {
   // The card keeps its own open state and reports once GenieModal says the
   // close has played.
   assert.ok(rendered.includes('open={visible}'));
-  assert.ok(rendered.includes('setVisible(isOpen || testForceShow);'));
+  // (?extToaster=force is now a DEV card override through the orchestrator, spec §10.)
+  assert.ok(rendered.includes('setVisible(isOpen);'));
   assert.ok(rendered.includes('onClosed={() => { const after = afterCloseRef.current; afterCloseRef.current = null; after?.(); }}'));
   const own = rendered.slice(rendered.indexOf('const closeThen'), rendered.indexOf('const handleDismiss'));
   assert.ok(own.includes('if (afterCloseRef.current) return;'), 'the first way out wins');

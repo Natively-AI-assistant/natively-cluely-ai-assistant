@@ -103,10 +103,12 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
   // Card ledger (toaster policy): record each showing and the first definite
   // outcome of it. A card the app takes away (unmount) records nothing.
   const recorder = React.useRef(createShowingRecorder(recordCard)).current;
+  // A card a DEV override forced (devOverrides.ts) records nothing (spec §10).
+  const forced = state.forcedToasterId === activeId;
   useEffect(() => {
-    if (activeId && Object.prototype.hasOwnProperty.call(CARDS, activeId)) recorder.start(activeId);
+    if (activeId && !forced && Object.prototype.hasOwnProperty.call(CARDS, activeId)) recorder.start(activeId);
     else recorder.end();
-  }, [activeId, recorder]);
+  }, [activeId, forced, recorder]);
 
   const onDismiss = (id: ToasterId) => () => orch.markDismissed(id);
   /** Close a card, recording why: its own reason, else a plain "later". */
@@ -126,7 +128,7 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
   // Development-only native-OOM bisection. Keep orchestration/state updates
   // alive but exclude every visible onboarding modal, which distinguishes the
   // host's scheduling work from the currently-active modal implementation.
-  if (new URLSearchParams(window.location.search).get('isolate') === 'no-modals') {
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('isolate') === 'no-modals') {
     return null;
   }
 
@@ -135,7 +137,7 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
       // Dev-only native-OOM bisection: keep the orchestrator and every later
       // stage active while excluding only the permissions card's animated,
       // backdrop-filter-heavy visual guide.
-      if (new URLSearchParams(window.location.search).get('isolate') === 'permissions-toaster') {
+      if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('isolate') === 'permissions-toaster') {
         return null;
       }
       return (
@@ -277,25 +279,6 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
       );
 
     case 'review_prompt':
-      // In dev builds an uncontrolled <ReviewPromptHost /> is mounted in
-      // App.tsx via shouldMountDevReviewHost() so the modal can be iterated
-      // on without going through the full orchestrator gating. Skip the
-      // orchestrator's own mount in that case to avoid two modals. In
-      // production, this branch is the only render path.
-      if (typeof window !== 'undefined') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const dev: boolean = !!(import.meta as any)?.env?.DEV
-        if (dev) {
-          try {
-            const params = new URLSearchParams(window.location?.search || '')
-            const explicit = params.get('review')
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const forced = (window as any).__reviewForceShow === true
-            const devAuto = (explicit !== 'off' && (forced || explicit === 'force'))
-            if (devAuto) return null
-          } catch { /* fall through */ }
-        }
-      }
       return (
         <ReviewPromptHost
           isOpen={true}

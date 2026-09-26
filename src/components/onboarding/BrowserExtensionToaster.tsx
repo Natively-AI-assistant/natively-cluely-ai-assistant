@@ -164,15 +164,11 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss }) 
   const isLight = useResolvedTheme() === 'light';
   const INK = isLight ? INK_LIGHT : INK_DARK;
 
-  // Test hook: ?extToaster=force bypasses the orchestrator and shows immediately.
-  const testForceShow = typeof window !== 'undefined'
-    && new URLSearchParams(window.location.search).get('extToaster') === 'force';
-
   // Starts closed, so the first thing the card does is pour out.
   const [visible, setVisible] = useState(false);
   useEffect(() => {
-    setVisible(isOpen || testForceShow);
-  }, [isOpen, testForceShow]);
+    setVisible(isOpen);
+  }, [isOpen]);
 
   // The orchestrator unmounts this the moment it hears "dismissed", so every
   // way out closes the card first (the genie) and reports from onClosed.
@@ -217,7 +213,7 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss }) 
 
   // ─── Auto-dismiss when the extension connects ──────────────
   useEffect(() => {
-    if (!isOpen || testForceShow) return;
+    if (!isOpen) return;
     const unsub = window.electronAPI?.onPhoneMirrorStatus?.(info => {
       if (info?.extensionConnected) {
         // Connecting retires the card (spec §6 row 9).
@@ -225,7 +221,7 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss }) 
       }
     });
     return () => { unsub?.(); };
-  }, [isOpen, testForceShow, onDismiss, closeThen]);
+  }, [isOpen, onDismiss, closeThen]);
 
   // ─── Escape key ─────────────────────────────────────────────
   useEffect(() => {

@@ -16,7 +16,6 @@ import { FreeTrialBanner }      from "./components/trial/FreeTrialBanner"
 import type { TrialUsage, TrialLimits } from './types/nativelyUsage';
 import { FreeTrialModal }       from "./components/trial/FreeTrialModal"
 import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrchestratorUserState, emitOrchestratorEvent } from "./components/onboarding/OrchestratedToasterHost"
-import ReviewPromptHost from "./components/ReviewPromptHost"
 // NOTE: explicit `.ts` extension is load-bearing. Vite's default resolver
 // tries `.mjs` before `.ts` (see DEFAULT_EXTENSIONS in vite/dist/node/constants.js),
 // and this directory also has an `orchestrator.mjs` companion (kept for
@@ -37,6 +36,7 @@ import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meet
 import { permissionsNeedAttention } from './lib/permissionAttentionPolicy.mjs'
 import { collectRendererLegacy } from './lib/cards/rendererLegacy.mjs'
 import { cardInputsFromSources } from './lib/cards/cardInputs.mjs'
+import { forcedCardFromQuery } from './lib/onboarding/devOverrides.ts'
 import { isMac } from "./utils/platformUtils"
 import { trackAppOpen } from "./lib/toasterGating"
 import { PREMIUM_ADS_AVAILABLE } from './premium'
@@ -52,30 +52,6 @@ import { useResolvedTheme } from "./hooks/useResolvedTheme"
 // (main caches /usage for 60 s; toaster policy §6 row 18).
 const CARD_INPUTS_FOCUS_REFRESH_MS = 5 * 60_000;
 
-
-// DEV-ONLY: should the launcher mount an uncontrolled ReviewPromptHost?
-// Mirrors ReviewPromptHost.tsx's isDevForceShow() so a developer running
-// the real onboarding funnel is not forced into the review modal every
-// reload. Production builds are unconditionally false.
-function shouldMountDevReviewHost(): boolean {
-  try {
-    if (typeof window === 'undefined') return false
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dev: boolean = !!(import.meta as any)?.env?.DEV
-    if (!dev) return false
-    const params = new URLSearchParams(window.location?.search || '')
-    const explicit = params.get('review')
-    if (explicit === 'off') return false
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any
-    if (w.__reviewForceShow === false) return false
-    // Dev default ON. Developers who want to test the real funnel append
-    // ?review=off or set window.__reviewForceShow = false.
-    return true
-  } catch {
-    return false
-  }
-}
 
 const queryClient = new QueryClient()
 const CropperWindow = React.lazy(() => import('./components/Cropper'))
@@ -501,7 +477,7 @@ const App: React.FC = () => {
     // entirely — no drain loop, no toasters. Lets the same build A/B the
     // orchestrator ON vs OFF to confirm/deny the 2026-07-04 native-leak
     // regression in the field. Remove once the leak fix is field-verified.
-    if (new URLSearchParams(window.location.search).get('noorch') === '1' || isolateOnboarding) {
+    if ((import.meta.env.DEV && new URLSearchParams(window.location.search).get('noorch') === '1') || isolateOnboarding) {
       console.warn(`[LeakTest] onboarding orchestrator disabled (${isolateOnboarding ? 'launcher isolation' : '?noorch=1'})`);
       return;
     }
@@ -522,15 +498,11 @@ const App: React.FC = () => {
       const orch = getOrchestrator();
       orch.start([...STAGES, QUIET_WINDOW_STAGE]);
       stopFn = () => orch.stop();
-      // DEV-ONLY: opt-in flag for review-prompt force-show. We do NOT
-      // mutate orchestrator state on boot — the host file
-      // (ReviewPromptHost.tsx) mounts an uncontrolled <ReviewPromptHost />
-      // whenever `isDevForceShow()` returns true (URL ?review=force, dev
-      // build default, or window.__reviewForceShow toggle). Clobbering
-      // markDismissed() here would silently rewrite every dev user's
-      // persisted onboarding ledger on every reload — defeating the point
-      // of testing the real funnel. Production builds are unaffected
-      // because isDevForceShow() defaults to false.
+      // DEV-only card overrides (?forceCard, ?forceAd, ?review=force,
+      // ?extToaster=force): the card goes through the orchestrator, takes the
+      // one slot like any card, and records no ledger outcome (spec §10).
+      const forced = import.meta.env.DEV ? forcedCardFromQuery(window.location.search) : null;
+      if (forced) orch.forceCard(forced);
     });
     return () => {
       cancelled = true;
@@ -1336,12 +1308,6 @@ const App: React.FC = () => {
           </OrchestratorProvider>
         )}
 
-        {/* DEV-ONLY: direct ReviewPromptHost mount for iterating on the modal UX.
-            Gated on import.meta.env.DEV plus the same opt-in flags the host
-            already respects (?review=force, window.__reviewForceShow). When
-            active, this bypasses the orchestrator entirely so the persisted
-            onboarding ledger is not modified. */}
-        {!isolateGlobalSurfaces && shouldMountDevReviewHost() && <ReviewPromptHost />}
 
         {/* Free trial countdown banner — only in launcher window while trial is active */}
         {!isolateGlobalSurfaces && (isLauncherWindow || isDefault) && activeTrial && (

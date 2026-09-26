@@ -81,6 +81,12 @@ export interface OrchestratorState {
   __rev?: number;
 }
 
+/** What subscribers see: the state plus which card, if any, a DEV override forced. */
+export interface OrchestratorSnapshot extends OrchestratorState {
+  forcedToasterId: ToasterId | null;
+  __rev?: number;
+}
+
 export interface UserState {
   isPremium: boolean;
   hasProfile: boolean;
@@ -315,12 +321,15 @@ export class OnboardingOrchestrator {
   // The bug lived in the orchestrator's own .mjs shim's comment history
   // (cf6a2f9) and was reintroduced by the round-1 revision-counter fix.
   // Cache key: revision counter (monotonically incremented by notify()).
-  private cachedSnapshot: OrchestratorState | null = null
+  private cachedSnapshot: OrchestratorSnapshot | null = null
   private cachedRevision = -1
 
-  getSnapshot(): OrchestratorState {
+  /** The card a DEV override forced into the slot (never persisted). */
+  private forcedToasterId: ToasterId | null = null;
+
+  getSnapshot(): OrchestratorSnapshot {
     if (this.cachedRevision !== this.revision || !this.cachedSnapshot) {
-      this.cachedSnapshot = { ...this.state, __rev: this.revision }
+      this.cachedSnapshot = { ...this.state, forcedToasterId: this.forcedToasterId, __rev: this.revision }
       this.cachedRevision = this.revision
     }
     return this.cachedSnapshot
@@ -659,6 +668,21 @@ export class OnboardingOrchestrator {
 
   // ─── Toaster dismissal / skip ─────────────────────────────────
 
+  /**
+   * DEV overrides only (devOverrides.ts): put a card in the slot now, whatever
+   * its rules. It is still the one card on screen (refused while another is
+   * open), and it is marked forced so the host records no ledger outcome for
+   * it (toaster policy spec §10). Not persisted: a crash leaves nothing behind.
+   */
+  forceCard(id: ToasterId): boolean {
+    if (this.state.activeToasterId) return false;
+    if (!this.stageConfigs.some(c => c.id === id && !c.isGateOnly)) return false;
+    this.state.activeToasterId = id;
+    this.forcedToasterId = id;
+    this.notify();
+    return true;
+  }
+
   markDismissed(id: ToasterId): void {
     // Record the explicit dismiss for this session so the drain loop does not
     // instantly re-raise a re-eligible stage (e.g. permissions while
@@ -675,6 +699,7 @@ export class OnboardingOrchestrator {
     // Gate-only stages can be "completed" without being the active toaster
     // (they're auto-completed inside evaluateAndDispatch).
     if (this.state.activeToasterId !== id && this.state.activeToasterId !== null) return;
+    if (this.forcedToasterId === id) this.forcedToasterId = null;
     const ts = Date.now();
     const cfg = this.stageConfigs.find(c => c.id === id);
     if (cfg && !cfg.isGateOnly) this.lastCardClosedAt = performance.now();
@@ -735,6 +760,7 @@ export class OnboardingOrchestrator {
     if (!before.trialEndedOpen && this.userState.trialEndedOpen && this.state.activeToasterId) {
       console.log('[Orchestrator] Trial ended took the slot from', this.state.activeToasterId);
       this.state.activeToasterId = null;
+      this.forcedToasterId = null;
       this.persist();
     }
   }
