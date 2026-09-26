@@ -12,12 +12,19 @@ export function withTimeout(p, ms, what) {
   return Promise.race([p, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(`timeout: ${what}`)), ms); })]).finally(() => clearTimeout(t));
 }
 
-/** .env values are often QUOTED — strip them, never log them. */
-export function envKey(name, file = path.join(ROOT, 'natively-api', '.env')) {
-  const src = fs.existsSync(file) ? file : '/Users/evin/natively-cluely-ai-assistant/natively-api/.env';
-  const line = fs.readFileSync(src, 'utf8').split('\n').find((l) => l.startsWith(`${name}=`));
+/**
+ * A key from the environment, else from an .env file: NATIVELY_ENV_FILE, then
+ * this checkout's natively-api/.env (a worktree's submodule dir is often empty —
+ * point NATIVELY_ENV_FILE at the main checkout's). Values there are often
+ * QUOTED and can carry trailing spaces: trim, unquote, trim. Never logged.
+ */
+export function envKey(name) {
+  if (process.env[name]) return process.env[name].trim();
+  const file = [process.env.NATIVELY_ENV_FILE, path.join(ROOT, 'natively-api', '.env')].find((f) => f && fs.existsSync(f));
+  if (!file) return null;
+  const line = fs.readFileSync(file, 'utf8').split('\n').find((l) => l.startsWith(`${name}=`));
   if (!line) return null;
-  return line.slice(name.length + 1).trim().replace(/^['"]|['"]$/g, '') || null;
+  return line.slice(name.length + 1).trim().replace(/^['"]|['"]$/g, '').trim() || null;
 }
 
 export async function connect() {
