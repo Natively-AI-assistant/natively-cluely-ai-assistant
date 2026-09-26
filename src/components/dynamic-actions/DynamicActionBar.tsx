@@ -1,7 +1,7 @@
 import type { DynamicActionPayload } from '@/types/electron';
-import { AnimatePresence } from 'framer-motion';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DynamicActionCard } from './DynamicActionCard';
+import { AnimatePresence, useReducedMotion } from 'framer-motion';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { CARD_ENTER_MS, DynamicActionCard, cardExitMs, type CardExitReason, type CardExits } from './DynamicActionCard';
 
 interface Props {
   // Called when the user accepts (or hits Tab on the primary). Parent should
@@ -15,21 +15,57 @@ interface Props {
   // The overlay's opacity-scaled chip fill (appearance.chipStyle), so a card
   // reads as the quick actions do at every overlay opacity.
   surfaceStyle?: React.CSSProperties;
+  // Asks the overlay to own the window height while a card's slot tweens open
+  // (growPx > 0) or closed: one window resize up front, none per frame. False
+  // = the overlay can't right now (an answer is streaming, another transition
+  // holds the height channel); an exit then collapses its slot in one step.
+  requestHeightMotion?: (growPx: number, durationMs: number) => boolean;
 }
+
+/** A card's slot: the 36px row plus its 3px above and below. */
+const CARD_SLOT_PX = 42;
+/** How long a Tab-accepted card shows its pressed keycap before it leaves (--duration-micro + a frame). */
+const TAB_PRESS_MS = 110;
 
 // DynamicActionBar — Cluely-style live action card row.
 // Subscribes to intelligence-dynamic-action events from the main process,
 // dedupes by id, expires stale cards, and renders up to maxVisible cards.
 // Tab keypress accepts the primary (highest-priority) card.
+//
+// The bar stays mounted when it is empty: returning null used to unmount the
+// AnimatePresence with the last card still inside it, so the last card could
+// never play its exit and everything below snapped up in one frame.
 export const DynamicActionBar: React.FC<Props> = ({
   onAcceptAction,
   maxVisible = 3,
   staleAfterMs = 60_000,
   surfaceStyle,
+  requestHeightMotion,
 }) => {
   const [actions, setActions] = useState<DynamicActionPayload[]>([]);
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
+  const reduceMotion = useReducedMotion() ?? false;
+  const reduceRef = useRef(reduceMotion);
+  reduceRef.current = reduceMotion;
+  const requestRef = useRef(requestHeightMotion);
+  requestRef.current = requestHeightMotion;
+  // Why each card left. Written BEFORE the removal: a removed card never sees
+  // new props, so its exit reads this through AnimatePresence's `custom`.
+  const exitsRef = useRef<CardExits>({});
+  const [pressingId, setPressingId] = useState<string | null>(null);
+  const pressingRef = useRef<string | null>(null);
+
+  const markExit = useCallback((ids: string[], reason: CardExitReason) => {
+    const shown = new Set(actionsRef.current.slice(0, maxVisible).map((a) => a.id));
+    const leaving = ids.filter((id) => shown.has(id));
+    if (leaving.length === 0) return;
+    // Accept starts an answer in the same moment, and the overlay must keep
+    // reporting that growth; so an accepted card never holds the height channel.
+    const tween = reason !== 'accept' && !reduceRef.current
+      && (requestRef.current?.(0, cardExitMs(reason)) ?? false);
+    for (const id of leaving) exitsRef.current[id] = { reason, tween };
+  }, [maxVisible]);
 
   const handleIncoming = useCallback(
     (action: DynamicActionPayload) => {
@@ -48,24 +84,40 @@ export const DynamicActionBar: React.FC<Props> = ({
   );
 
   const dismiss = useCallback((id: string) => {
+    markExit([id], 'dismiss');
     setActions((prev) => prev.filter((a) => a.id !== id));
     window.electronAPI?.dismissDynamicAction?.(id).catch(() => {
       /* swallow */
     });
-  }, []);
+  }, [markExit]);
 
   const accept = useCallback(
-    async (action: DynamicActionPayload) => {
-      // Optimistically remove from the bar so the user gets immediate feedback.
-      setActions((prev) => prev.filter((a) => a.id !== action.id));
-      try {
-        await window.electronAPI?.acceptDynamicAction?.(action.id);
-      } catch {
-        /* swallow — the parent answer flow is the source of truth */
+    (action: DynamicActionPayload, holdMs = 0) => {
+      const remove = () => {
+        markExit([action.id], 'accept');
+        setActions((prev) => prev.filter((a) => a.id !== action.id));
+      };
+      // A click is its own press; Tab shows the keycap going down first. The
+      // answer starts NOW either way — only the card's departure waits.
+      if (holdMs > 0) {
+        window.setTimeout(() => {
+          remove();
+          pressingRef.current = null;
+          setPressingId(null);
+        }, holdMs);
+      } else {
+        remove();
       }
-      onAcceptAction(action);
+      void (async () => {
+        try {
+          await window.electronAPI?.acceptDynamicAction?.(action.id);
+        } catch {
+          /* swallow — the parent answer flow is the source of truth */
+        }
+        onAcceptAction(action);
+      })();
     },
-    [onAcceptAction],
+    [markExit, onAcceptAction],
   );
 
   // Subscribe to push from main process
@@ -76,7 +128,9 @@ export const DynamicActionBar: React.FC<Props> = ({
     // Auto Answer V3 offer card: main retracts by id when the offer expired,
     // was replaced by a newer question, or was committed via the hotkey.
     const offRetract = window.electronAPI?.onIntelligenceDynamicActionRetract?.((data) => {
-      if (data?.id) setActions((prev) => prev.filter((a) => a.id !== data.id));
+      if (!data?.id) return;
+      markExit([data.id], 'expire');
+      setActions((prev) => prev.filter((a) => a.id !== data.id));
     });
     return () => {
       try {
@@ -86,7 +140,7 @@ export const DynamicActionBar: React.FC<Props> = ({
         /* ignore */
       }
     };
-  }, [handleIncoming]);
+  }, [handleIncoming, markExit]);
 
   // Keyboard: Tab accepts primary
   useEffect(() => {
@@ -101,7 +155,13 @@ export const DynamicActionBar: React.FC<Props> = ({
         if (tag === 'input' || tag === 'textarea' || target.isContentEditable) return;
       }
       e.preventDefault();
-      void accept(visible[0]);
+      // A second Tab during the press would accept the same, still-visible
+      // card again: one Tab, one answer.
+      if (pressingRef.current) return;
+      pressingRef.current = visible[0].id;
+      setPressingId(visible[0].id);
+      accept(visible[0], reduceRef.current ? 0 : TAB_PRESS_MS);
+      if (reduceRef.current) pressingRef.current = null;
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -111,32 +171,51 @@ export const DynamicActionBar: React.FC<Props> = ({
   useEffect(() => {
     if (actions.length === 0) return;
     const t = setInterval(() => {
-      setActions((prev) => {
-        if (prev.length === 0) return prev;
-        const now = Date.now();
-        return prev.filter((a) => now - a.createdAt < staleAfterMs && (a.expiresAt === undefined || now < a.expiresAt));
-      });
+      const now = Date.now();
+      const stale = actionsRef.current
+        .filter((a) => !(now - a.createdAt < staleAfterMs && (a.expiresAt === undefined || now < a.expiresAt)))
+        .map((a) => a.id);
+      if (stale.length === 0) return;
+      markExit(stale, 'expire');
+      const gone = new Set(stale);
+      setActions((prev) => prev.filter((a) => !gone.has(a.id)));
     }, 5_000);
     return () => clearInterval(t);
-  }, [staleAfterMs, actions.length]);
+  }, [staleAfterMs, actions.length, markExit]);
 
   const visible = useMemo(() => actions.slice(0, maxVisible), [actions, maxVisible]);
 
-  if (visible.length === 0) return null;
+  // A card whose slot is about to open: the window must LEAD that growth.
+  // Runs after the new card is in the DOM at height 0, before it paints.
+  const shownIdsRef = useRef<string[]>([]);
+  useLayoutEffect(() => {
+    const before = new Set(shownIdsRef.current);
+    const added = visible.filter((a) => !before.has(a.id)).length;
+    shownIdsRef.current = visible.map((a) => a.id);
+    if (added > 0 && !reduceRef.current) requestRef.current?.(added * CARD_SLOT_PX, CARD_ENTER_MS);
+  }, [visible]);
 
   return (
     <div
-      className="flex flex-col gap-1.5 px-3 pt-1 pb-1 w-full"
+      className="flex flex-col px-3 w-full"
       data-testid="dynamic-action-bar"
       aria-label="Suggested actions"
     >
-      <AnimatePresence initial={false}>
+      <AnimatePresence
+        initial={false}
+        custom={exitsRef.current}
+        onExitComplete={() => {
+          const live = new Set(actionsRef.current.map((a) => a.id));
+          for (const id of Object.keys(exitsRef.current)) if (!live.has(id)) delete exitsRef.current[id];
+        }}
+      >
         {visible.map((a, i) => (
           <DynamicActionCard
             key={a.id}
             action={a}
             isPrimary={i === 0}
-            onAccept={accept}
+            pressing={pressingId === a.id}
+            onAccept={(action) => accept(action)}
             onDismiss={dismiss}
             surfaceStyle={surfaceStyle}
           />

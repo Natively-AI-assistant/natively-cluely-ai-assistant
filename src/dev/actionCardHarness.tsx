@@ -8,6 +8,11 @@
 // colours. 2026-09-27: the cue-row direction ("A") was picked here over a
 // suggestion-chip direction and the old bolt card.
 //
+// ?motion=1 instead mounts the REAL DynamicActionBar in one shell, over a
+// stubbed electronAPI, and exposes window.__cards (push / retract) and
+// window.__heightCalls (every requestHeightMotion the bar made), so a script
+// can drive enter, hover, Tab, dismiss and expiry and record the frames.
+//
 // Production has NO backdrop blur of the desktop: the overlay window is
 // transparent, and CSS backdrop-filter only sees pixels inside the page. So the
 // harness puts real text BEHIND the shell and turns backdrop-filter off, or
@@ -15,14 +20,12 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { AnimatePresence, MotionConfig } from 'framer-motion';
-import {
-  AlignLeft, BookOpen, Calculator, CodeXml, ListChecks, CornerDownRight, MessageSquare, Pencil, ScanText, Workflow, X,
-  type LucideIcon,
-} from 'lucide-react';
+import { MessageSquare, Pencil } from 'lucide-react';
 import '../index.css';
 import GlassEffectLayer from '../components/ui/GlassEffectLayer';
 import { getOverlayAppearance, getGlassOverlayAppearance } from '../lib/overlayAppearance';
 import { DynamicActionCard as RealCard } from '../components/dynamic-actions/DynamicActionCard';
+import { DynamicActionBar } from '../components/dynamic-actions/DynamicActionBar';
 import type { DynamicActionPayload } from '@/types/electron';
 
 type Theme = 'default' | 'liquid-glass' | 'modern';
@@ -134,5 +137,56 @@ function Harness() {
   );
 }
 
+// ── ?motion=1: the real bar, driven by a script ─────────────────────────────
+type Listener = ((data: any) => void) | null;
+const motionMode = new URLSearchParams(location.search).get('motion') === '1';
+if (motionMode) {
+  const listeners: { action: Listener; retract: Listener } = { action: null, retract: null };
+  (window as any).electronAPI = {
+    onIntelligenceDynamicAction: (cb: Listener) => { listeners.action = cb; return () => { listeners.action = null; }; },
+    onIntelligenceDynamicActionRetract: (cb: Listener) => { listeners.retract = cb; return () => { listeners.retract = null; }; },
+    acceptDynamicAction: async () => {},
+    dismissDynamicAction: async () => {},
+  };
+  (window as any).__heightCalls = [];
+  (window as any).__accepted = [];
+  (window as any).__cards = {
+    push: (id: string, type: string, label: string, quote: string, priority: number) =>
+      listeners.action?.({ action: { ...mk(id, type, label, quote, priority), createdAt: Date.now() } }),
+    retract: (id: string) => listeners.retract?.({ id }),
+  };
+}
+
+function MotionScene() {
+  const shellRef = React.useRef<HTMLDivElement | null>(null);
+  const params = new URLSearchParams(location.search);
+  const theme = (params.get('theme') as Theme) ?? 'default';
+  const mode = (params.get('mode') as Mode) ?? 'dark';
+  const grant = params.get('grant') !== '0';
+  React.useEffect(() => { document.documentElement.setAttribute('data-theme', mode); }, [mode]);
+  const isGlass = theme === 'liquid-glass';
+  const appearance = isGlass ? getGlassOverlayAppearance() : getOverlayAppearance(0.65, mode);
+  return (
+    <div data-interface-theme={theme} className="harness-block" style={{ padding: '28px 40px', width: 680, minHeight: 240, boxSizing: 'border-box', background: mode === 'light' ? '#f5f5f7' : '#1e1f22', position: 'relative', overflow: 'hidden' }}>
+      <style>{`.harness-block *, .harness-block *::before, .harness-block *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }`}</style>
+      <pre style={{ position: 'absolute', inset: 0, margin: 0, padding: '14px 22px', fontSize: 13, lineHeight: '19px', whiteSpace: 'pre-wrap', fontFamily: 'SF Mono, Menlo, monospace', color: mode === 'light' ? '#1d1d1f' : '#d4d4d4', opacity: 0.55, pointerEvents: 'none' }}>
+        {BACKDROP_TEXT}
+      </pre>
+      <div ref={shellRef} data-shell-card="" className="relative max-w-full border rounded-[24px] overflow-hidden flex flex-col overlay-shell-surface overlay-shell-container overlay-text-primary" style={{ ...appearance.shellStyle, width: 600 }}>
+        {isGlass && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
+        <div className="relative z-10 pt-3">
+          <DynamicActionBar
+            onAcceptAction={(a) => { (window as any).__accepted.push({ id: a.id, t: performance.now() }); }}
+            surfaceStyle={appearance.chipStyle}
+            requestHeightMotion={(growPx, durationMs) => { (window as any).__heightCalls.push({ growPx, durationMs, t: performance.now() }); return grant; }}
+          />
+          <Transcript />
+          <QuickActions chipStyle={appearance.chipStyle} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const container = document.getElementById('harness-root');
-if (container) createRoot(container).render(<Harness />);
+if (container) createRoot(container).render(motionMode ? <MotionScene /> : <Harness />);

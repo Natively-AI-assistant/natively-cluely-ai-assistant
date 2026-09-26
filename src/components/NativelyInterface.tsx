@@ -431,6 +431,11 @@ import { DOM_CONTEXT_MAX_CHARS } from '../constants/domCapture';
 // reportShellSize's sync call below).
 const STREAMING_HEIGHT_GROW_BUFFER_PX = 96; // ~4 lines of headroom per forced grow
 
+// Slack after an action card's slot tween before its single settle report
+// (requestChromeHeightMotion): the tween is a fixed-duration ease, not a
+// spring, so it lands on time; this only absorbs a late frame.
+const CHROME_MOTION_TAIL_MS = 50;
+
 // How long the ResizeObserver's own height reporting stays suppressed PAST the
 // NOMINAL end of an expand/contract animation. Whichever channel is running
 // drives the OS height itself meanwhile (see startTransition / the viewport
@@ -5195,6 +5200,34 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const streamingTextRef   = useRef<string>('');
   const streamingMsgIdRef  = useRef<string | null>(null);
   const streamingIntentRef = useRef<string | null>(null);
+
+  // The action bar tweens a card's slot open or closed (DynamicActionBar).
+  // Per-frame setBounds on this transparent, blurred window is the flicker the
+  // height channel exists to avoid, so the bar asks here first: lead growth
+  // with ONE resize up front, hold the ResizeObserver's per-frame reports for
+  // the tween, settle ONCE after it. Refused while an answer streams (its
+  // growth must keep flowing through driveStreamingHeight) or while another
+  // transition owns the channel; the bar then collapses its slot in one step.
+  // It may extend only its OWN hold (one card leaves as the next one shows).
+  const chromeMotionUntilRef = useRef(0);
+  const requestChromeHeightMotion = useCallback((growPx: number, durationMs: number): boolean => {
+    if (!contentRef.current || !isExpandedRef.current || isResizingRef.current) return false;
+    if (streamingMsgIdRef.current !== null) return false;
+    const now = Date.now();
+    const heldUntil = heightReportSuppressedUntilRef.current;
+    if (now < heldUntil && heldUntil !== chromeMotionUntilRef.current) return false;
+    const until = Math.max(heldUntil, now + durationMs + CHROME_MOTION_TAIL_MS);
+    heightReportSuppressedUntilRef.current = until;
+    chromeMotionUntilRef.current = until;
+    if (growPx > 0) void resizeOverlayWindow(contentRef.current.offsetHeight + growPx);
+    window.setTimeout(() => {
+      if (chromeMotionUntilRef.current !== until) return; // a later card extended the hold
+      chromeMotionUntilRef.current = 0;
+      if (heightReportSuppressedUntilRef.current === until) heightReportSuppressedUntilRef.current = 0;
+      reportShellSize();
+    }, until - now);
+    return true;
+  }, [reportShellSize, resizeOverlayWindow]);
   // Reveal-ticker's rAF handle (see "Smooth reveal" block above). Originally
   // this was scheduleMarkdownRender's single-shot coalescing handle; it now
   // belongs to the self-rescheduling revealTick loop instead. Deliberately
@@ -10623,6 +10656,7 @@ Provide only the answer, nothing else.`;
                   void handleWhatToSay(action.promptInstruction);
                 }}
                 surfaceStyle={appearance.chipStyle}
+                requestHeightMotion={requestChromeHeightMotion}
               />
 
               {/* Rolling Transcript Bar — live transcript + on-demand diagnostics

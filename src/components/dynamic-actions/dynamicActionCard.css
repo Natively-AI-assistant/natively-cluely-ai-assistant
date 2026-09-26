@@ -1,7 +1,118 @@
-/* The action row wears the quick-action chip material, but liquid-glass and
-   modern press a chip to scale(0.97). That suits a pill; on a 576px row it is
-   a 17px lurch. Keep their hover lift, press the row to 0.99 instead. */
+/* Micro-interactions of the action cue row (DynamicActionCard). The slot's
+   own open / close lives in the component's Framer variants; this file is the
+   hover, press and Tab states.
+
+   transitions.dev tokens, written as literals like the rest of the renderer:
+   --duration-micro 80ms, --duration-quick 150ms, --duration-fast 250ms,
+   --ease-smooth-out cubic-bezier(0.22, 1, 0.36, 1), ease-in-out for the icon
+   swap, --blur-small 2px. Hover-in is quick (150ms); hover-out is the softer
+   250ms. */
+
+/* The row wears the quick-action chip material, but liquid-glass and modern
+   press a chip to scale(0.97). That suits a pill; on a 576px row it is a 17px
+   lurch. Keep their hover lift, press the row to 0.99 instead. */
 [data-interface-theme] .overlay-chip-surface.action-cue:active,
-.overlay-chip-surface.action-cue:active {
+.overlay-chip-surface.action-cue:active,
+.action-cue-row[data-pressing="true"] .overlay-chip-surface.action-cue {
   transform: translateY(0) scale(0.99);
+}
+
+.action-cue {
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    transform 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The glyph leans 2px toward "go" while the row is hovered. */
+.action-cue-glyph {
+  transition: transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.action-cue:hover .action-cue-glyph {
+  transform: translateX(2px);
+  transition-duration: 150ms;
+}
+
+/* A card promoted to primary (the one above it left) brightens its label. */
+.action-cue-label {
+  transition: color 250ms ease-in-out;
+}
+
+/* Tab keycap <-> dismiss ×: one slot, transitions.dev's icon swap (cross-fade,
+   scale 0.8 and a 2px blur). The keycap also fades in when a card becomes
+   primary. */
+.action-cue-key,
+.action-cue-dismiss {
+  transition:
+    opacity 250ms ease-in-out,
+    transform 250ms ease-in-out,
+    filter 250ms ease-in-out,
+    background-color 80ms ease-out,
+    color 80ms ease-out;
+}
+.action-cue-key {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0);
+}
+.action-cue-row[data-primary="false"] .action-cue-key,
+.action-cue-row:hover .action-cue-key {
+  opacity: 0;
+  transform: scale(0.8);
+  filter: blur(2px);
+}
+.action-cue-row:hover .action-cue-key {
+  transition-duration: 150ms, 150ms, 150ms, 80ms, 80ms;
+}
+
+.action-cue-dismiss {
+  opacity: 0;
+  transform: translateY(-50%) scale(0.8);
+  filter: blur(2px);
+  pointer-events: none;
+}
+.action-cue-row:hover .action-cue-dismiss,
+.action-cue-dismiss:focus-visible {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+  filter: blur(0);
+  pointer-events: auto;
+  transition-duration: 150ms, 150ms, 150ms, 80ms, 80ms;
+}
+
+/* Tab pressed: the keycap goes down (--duration-micro) before the card
+   leaves, so the key you pressed visibly did something. */
+.action-cue-row[data-pressing="true"] .action-cue-key {
+  opacity: 1;
+  transform: scale(0.9);
+  filter: blur(0);
+  color: var(--overlay-text-primary);
+  background-color: var(--overlay-control-hover-bg);
+  transition-duration: 80ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-cue,
+  .action-cue-glyph,
+  .action-cue-key,
+  .action-cue-dismiss {
+    transition-property: opacity, background-color, border-color, color;
+  }
+  .action-cue:hover .action-cue-glyph {
+    transform: none;
+  }
+  .action-cue-row .action-cue-key,
+  .action-cue-row[data-pressing="true"] .action-cue-key {
+    transform: none;
+    filter: none;
+  }
+  .action-cue-row .action-cue-dismiss,
+  .action-cue-row:hover .action-cue-dismiss {
+    transform: translateY(-50%);
+    filter: none;
+  }
+  .overlay-chip-surface.action-cue:active,
+  .action-cue-row[data-pressing="true"] .overlay-chip-surface.action-cue {
+    transform: none;
+  }
 }
