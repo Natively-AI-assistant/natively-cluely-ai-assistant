@@ -191,3 +191,15 @@ test('a stage without a card keeps its persisted skip', () => {
   first.stop();
   assert.equal(active(relaunch([PLAIN], { cardLedger: matureLedger() })), null);
 });
+
+// ─── Trial ended takes the slot (final review #2) ───────────────
+// "Trial ended" is exclusive (spec §3.2 rule 5). A card already open when it
+// arrives is taken away, not completed: the host then records no outcome
+// (interrupted), so the card costs no strike.
+test('Trial ended opening takes an open card away without completing it', () => {
+  const orch = launch([EXT], { cardLedger: matureLedger() });
+  assert.equal(active(orch), 'browser_extension');
+  orch.setUserState({ trialEndedOpen: true });
+  assert.equal(active(orch), null, 'the card leaves the slot');
+  assert.equal(orch.getSnapshot().completed.browser_extension, undefined, 'not completed: interrupted');
+});

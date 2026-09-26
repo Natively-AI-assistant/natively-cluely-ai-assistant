@@ -741,6 +741,14 @@ export class OnboardingOrchestrator {
     const before = this.userState;
     this.userState = { ...before, ...patch };
     this.unskipOnReEligibility(before, this.userState);
+    // "Trial ended" is exclusive: a card already open when it arrives leaves
+    // the slot without being completed. The host then records no outcome for
+    // it (interrupted), so it costs no strike and may show on a later launch.
+    if (!before.trialEndedOpen && this.userState.trialEndedOpen && this.state.activeToasterId) {
+      console.log('[Orchestrator] Trial ended took the slot from', this.state.activeToasterId);
+      this.state.activeToasterId = null;
+      this.persist();
+    }
   }
 
   private unskipOnReEligibility(before: UserState, after: UserState): void {

@@ -377,6 +377,9 @@ const App: React.FC = () => {
   const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(() =>
     import.meta.env.DEV && new URLSearchParams(window.location.search).has('forceTrialEnded')
   );
+  // The card is due (expired at launch) but still inside its 10 s delay: it
+  // already owns the card slot, so no other card can open under it.
+  const [trialEndedDue, setTrialEndedDue] = useState(false);
 
   const isManagerOpen = activeManagerPanel !== null;
   const managerContentVariants = {
@@ -484,8 +487,8 @@ const App: React.FC = () => {
   // The Trial ended card owns the screen while it is open.
   useEffect(() => {
     if (!isLauncherWindow && !isDefault) return;
-    setOrchestratorUserState({ trialEndedOpen: showTrialExpiredModal });
-  }, [showTrialExpiredModal, isLauncherWindow, isDefault]);
+    setOrchestratorUserState({ trialEndedOpen: showTrialExpiredModal || trialEndedDue });
+  }, [showTrialExpiredModal, trialEndedDue, isLauncherWindow, isDefault]);
 
   // Start the onboarding orchestrator (launcher window only). Stages are
   // registered lazily; the drain loop only runs while foreground + homepage
@@ -676,6 +679,7 @@ const App: React.FC = () => {
 
     // ── Trial: check stored token and start polling if active ──
     let trialPollId: ReturnType<typeof setInterval> | null = null;
+    let trialEndedTimer: ReturnType<typeof setTimeout> | null = null;
     const checkTrial = async () => {
       try {
         const res = await window.electronAPI?.getTrialStatus?.();
@@ -702,7 +706,10 @@ const App: React.FC = () => {
         // Already expired at launch. Main has settled it (wiped once if due) and
         // says whether the user still has to choose; a licence or key replaced
         // the trial otherwise, and the token is already gone.
-        if (local.showEndedCard) setTimeout(() => setShowTrialExpiredModal(true), 10_000);
+        if (local.showEndedCard) {
+          setTrialEndedDue(true);
+          trialEndedTimer = setTimeout(() => { trialEndedTimer = null; setShowTrialExpiredModal(true); }, 10_000);
+        }
         return;
       }
       // Seed the banner from the LOCAL token before the first poll answers.
@@ -729,6 +736,8 @@ const App: React.FC = () => {
     const removeTrialListener = window.electronAPI?.onTrialEnded?.(() => {
       setActiveTrial(null);
       setShowTrialExpiredModal(false);
+      setTrialEndedDue(false);
+      if (trialEndedTimer) { clearTimeout(trialEndedTimer); trialEndedTimer = null; }
       if (trialPollId) { clearInterval(trialPollId); trialPollId = null; }
     });
 
@@ -744,6 +753,7 @@ const App: React.FC = () => {
         limits: data?.limits as TrialLimits | undefined,
       });
       setShowTrialExpiredModal(false);
+      setTrialEndedDue(false);
       // Start the status poll if the mount path did not (it only starts one when
       // a token already existed). Guarded so a re-issue of the same trial — the
       // API is idempotent per hardware id — cannot leak a second interval, which
@@ -918,6 +928,7 @@ const App: React.FC = () => {
       if (removeReindexProgress) removeReindexProgress();
       if (removeLicenseListener) removeLicenseListener();
       if (trialPollId) clearInterval(trialPollId);
+      if (trialEndedTimer) clearTimeout(trialEndedTimer);
       if (removeTrialListener) removeTrialListener();
       if (removeTrialStartedListener) removeTrialStartedListener();
       if (removeOpenSettingsTab) removeOpenSettingsTab();
@@ -1359,6 +1370,7 @@ const App: React.FC = () => {
             }}
             onDone={() => {
               setShowTrialExpiredModal(false);
+              setTrialEndedDue(false);
               setActiveTrial(null);
             }}
           />
