@@ -24,6 +24,11 @@ export interface HelpRowCopy {
 
 export function getRowCopy(platform: HelpPlatform): HelpRowCopy;
 
+export type HelpClipId =
+  | 'answer' | 'permissions' | 'speech' | 'model' | 'stealth' | 'verify' | 'sync' | 'modes' | 'profile' | 'notes' | 'search';
+
+export declare const HELP_CLIP_IDS: readonly HelpClipId[];
+
 export interface HelpPlatformFacts {
   platform: HelpPlatform;
   osName: 'macOS' | 'Windows';
@@ -39,7 +44,7 @@ export interface HelpPlatformFacts {
   shortcutGuard: boolean;
   pythonCommand: string;
   sqliteBundled: boolean;
-  recordings: { overlay: boolean; speechProviders: boolean; activeModel: boolean };
+  clips: Record<HelpClipId, boolean>;
 }
 
 export function getPlatformFacts(platform: HelpPlatform): HelpPlatformFacts;

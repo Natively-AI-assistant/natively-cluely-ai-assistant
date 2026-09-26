@@ -24,18 +24,33 @@
 // Keep copy here short and free of things that rot: no model ids, no counts,
 // no prices or trial lengths. Point at UI labels instead.
 //
-// `recordings` says which screen recordings of the real app a platform may be
-// shown. Every recording was made on macOS (2026-09-25), so each one is
-// macOS-only unless a frame-by-frame review found nothing platform-specific in
-// it — no ⌘ keycap, no Apple Speech row, no macOS window chrome:
-//   overlay          the overlay answering a spoken question; its ask box shows
-//                    ⌘ ⇧ H keycaps → macOS only
-//   speechProviders  Audio's provider list, which includes Apple Speech → macOS only
-//   activeModel      AI Providers' Active Model menu; nothing platform-specific → both
+// `clips` says which screen recordings of the real app a platform may be shown.
+// Every recording was made on macOS (2026-09-25/26), so a clip is shown on
+// Windows only when a frame-by-frame review found nothing macOS-only in it —
+// no ⌘ keycap, no Apple Speech row, no macOS disguise names, no macOS-only
+// permission. A Windows-only row missing from a clip is not treated as
+// misleading (Settings › General there also lists Protect Natively shortcuts).
+//   answer        the overlay answering a spoken question; ⌘ ⇧ H keycaps → macOS
+//   permissions   the permissions card, which lists Screen Recording → macOS
+//   speech        Audio's provider list, which includes Apple Speech → macOS
+//   model         AI Providers' Active Model menu → both
+//   stealth       General › Process Disguise names macOS apps → macOS
+//   verify        General › Show advanced settings › Verify coding answers → both
+//   sync          Sync; its extension row shows ⌘+Y → macOS
+//   modes         Launcher › Modes → both
+//   profile       Launcher › Profile Intelligence → both
+//   notes         Launcher › a meeting's notes, transcript and Ask → both
+//   search        Launcher search finding a meeting (its step says "Open
+//                 search", not a key) → both
 
 /** @typedef {'darwin'|'win32'} HelpPlatform */
 
 export const HELP_PLATFORMS = /** @type {const} */ (['darwin', 'win32']);
+
+/** Every recording the pane can show, in the order the guides use them. */
+export const HELP_CLIP_IDS = /** @type {const} */ ([
+  'answer', 'permissions', 'speech', 'model', 'stealth', 'verify', 'sync', 'modes', 'profile', 'notes', 'search',
+]);
 
 /** @param {unknown} platform @returns {platform is HelpPlatform} */
 export function isHelpPlatform(platform) {
@@ -148,7 +163,10 @@ export function getPlatformFacts(platform) {
         shortcutGuard: false,
         pythonCommand: 'python3',
         sqliteBundled: true,
-        recordings: { overlay: true, speechProviders: true, activeModel: true },
+        clips: {
+          answer: true, permissions: true, speech: true, model: true, stealth: true,
+          verify: true, sync: true, modes: true, profile: true, notes: true, search: true,
+        },
       };
     case 'win32':
       return {
@@ -173,9 +191,11 @@ export function getPlatformFacts(platform) {
         shortcutGuard: true,
         pythonCommand: 'python or py',
         sqliteBundled: false,
-        // Nothing has been recorded on Windows yet; only a clip with no
-        // platform-specific content is shown here.
-        recordings: { overlay: false, speechProviders: false, activeModel: true },
+        // Nothing has been recorded on Windows; see `clips` above.
+        clips: {
+          answer: false, permissions: false, speech: false, model: true, stealth: false,
+          verify: true, sync: false, modes: true, profile: true, notes: true, search: true,
+        },
       };
   }
 }

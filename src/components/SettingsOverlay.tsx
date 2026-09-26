@@ -510,6 +510,9 @@ interface SettingsOverlayProps {
     initialHasNativelyKey?: boolean;
     /** Close without the genie: the Modes / Profile manager is taking over. */
     closeInstantly?: boolean;
+    /** Setup & Help's "Pick a mode" / "Add your résumé": hand over to that manager. */
+    onOpenModes?: () => void;
+    onOpenProfile?: () => void;
 }
 
 /**
@@ -542,6 +545,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     initialIsPremium = null,
     initialHasNativelyKey = false,
     closeInstantly = false,
+    onOpenModes,
+    onOpenProfile,
 }) => {
     const resolvedTheme = useResolvedTheme();
     const isLight = resolvedTheme === 'light';
@@ -4387,7 +4392,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             )}
 
                             {activeTab === 'help' && (
-                                <HelpSettings onNavigate={setActiveTab} />
+                                <HelpSettings onNavigate={setActiveTab} onOpenModes={onOpenModes} onOpenProfile={onOpenProfile} />
                             )}
 
                             {activeTab === 'about' && (

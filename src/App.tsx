@@ -1186,6 +1186,8 @@ const App: React.FC = () => {
                   initialIsPremium={hasLoadedLicense ? isPremiumActive : null}
                   initialHasNativelyKey={hasNativelyApi}
                   closeInstantly={isManagerOpen}
+                  onOpenModes={openModesExclusive}
+                  onOpenProfile={openProfileExclusive}
                 />
                 {/* Modes and Profile Intelligence share one card, which pours out
                     of and back into the bottom of the window like every other
