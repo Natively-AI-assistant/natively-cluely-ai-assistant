@@ -34,19 +34,15 @@
   .t-learn-chevron, .t-learn-arm { transition: none !important; }
 }
 
-/* ── Sky blue for this section's controls ────────────────────────────────
-   The tab pill, "Watch the demo" and "Manage" share one sky blue. Light theme
-   keeps .lg-sky's own #3a9ff7; dark theme takes the midpoint between that and
-   the darker step LiquidGlassButton.css names (#0972ce) — #2188e2, so the
-   controls don't glare on the dark card without going navy (owner's call;
-   white text there reads 3.69:1). The app always sets data-theme (default
-   'dark', src/main.tsx), so the dark value is the default and light overrides
-   it. */
+/* ── Indigo for this section's controls ──────────────────────────────────
+   The tab pill, "Watch the demo" and "Manage" share the Settings toggle's ON
+   colour, --toggle-on #6688F5 (owner's call, 2026-09-27; it was sky blue,
+   then a deeper Tailwind indigo that read too dark). Fed through .lg-sky's
+   --lg-sky-bg, so the material is unchanged and only the hue moves. One value
+   for both themes, as the toggles have; hover lifts to the accent scale's
+   -400 step. White text on it reads 3.28:1, under AA's 4.5:1 for small text, as
+   the earlier sky (2.80:1) was; lightness was the owner's ask. */
 :root {
-  --hiw-sky: #2188e2;
-  --hiw-sky-hover: #3398f0;
-}
-[data-theme='light'] {
-  --hiw-sky: #3a9ff7;
-  --hiw-sky-hover: #4dacff;
+  --hiw-indigo: var(--toggle-on);
+  --hiw-indigo-hover: var(--periwinkle-400);
 }
