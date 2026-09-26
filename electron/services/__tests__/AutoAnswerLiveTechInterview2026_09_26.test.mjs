@@ -30,6 +30,10 @@ const require = createRequire(import.meta.url);
 const { planNextAssistantAction } = require(plannerPath);
 
 const flush = () => new Promise((r) => setImmediate(r));
+async function until(cond, ms = 3000) {
+    const t0 = Date.now();
+    while (!cond()) { if (Date.now() - t0 > ms) throw new Error('condition not met in time'); await new Promise((r) => setTimeout(r, 5)); }
+}
 
 async function makeEngine(answer = 'Yes, I can hear you clearly, thanks for checking.') {
     const { IntelligenceEngine } = await import(pathToFileURL(enginePath).href);
@@ -136,11 +140,102 @@ test('prefetch: an EXPIRED, finished speculation no longer blocks the next prefe
     assert.equal(engine.getSpeculativeSnapshot().questionId, '1-q2');
 });
 
-test('prefetch: a speculation still inside its adoption window keeps the slot', async () => {
+test('prefetch: the SAME question keeps a finished prefetch; a DIFFERENT one replaces it', async () => {
     const { engine, runs } = await makeEngine();
     engine.prefetchAutoAnswer('1-q1', "What's the difference between a process and a thread?");
     await untilIdle(engine);
-    engine.prefetchAutoAnswer('1-q2', 'How does a hash map handle collisions?');
+    engine.prefetchAutoAnswer('1-q2', "What's the difference between a process and a thread?");
     await flush();
-    assert.equal(runs(), 1, 'an adoptable prefetch is not thrown away for another');
+    assert.equal(runs(), 1, 'an adoptable prefetch is claimed, not regenerated');
+    assert.equal(engine.getSpeculativeSnapshot().questionId, '1-q2');
+    // A different candidate: its dispatch could never adopt the old text
+    // (another id, and under the similarity bar), so it gets its own head start.
+    engine.prefetchAutoAnswer('1-q3', 'How does a hash map handle collisions?');
+    await untilIdle(engine);
+    assert.equal(runs(), 2);
+    assert.equal(engine.getSpeculativeSnapshot().questionId, '1-q3');
+});
+
+// ── 4. the prefetch and the engine's own interim speculation ────────────────
+// Live T04: an interim speculation on "…a process and a" held the slot, the
+// prefetch of the finished question was refused, and the dispatch then
+// rejected the interim run (Jaccard 0.60) and started over.
+
+async function makeGatedEngine() {
+    const { IntelligenceEngine } = await import(pathToFileURL(enginePath).href);
+    const { SessionTracker } = require(sessionPath);
+    const session = new SessionTracker();
+    const engine = new IntelligenceEngine({ setNegotiationCoachingHandler() {} }, session);
+    engine.lastTriggerTime = 0;
+    const gates = [];
+    let runs = 0;
+    engine.whatToAnswerLLM = {
+        async *generateStream() {
+            const n = ++runs;
+            let release; const gate = new Promise((r) => { release = r; }); gates[n] = release;
+            yield `ANSWER-${n} starts here and`;
+            await gate;
+            yield ` it finishes with more words for run ${n}.`;
+        },
+    };
+    engine.planSuggestionTrigger = async (trigger) => ({ kind: 'answer', reason: 'answerable_question', confidence: trigger.confidence ?? 0.9 });
+    const finals = [];
+    engine.on('suggested_answer', (text, question) => finals.push({ text, question }));
+    return { engine, finals, runs: () => runs, release: (n) => gates[n]?.() };
+}
+
+test('prefetch REPLACES an interim speculation on fewer words, and the dispatch adopts the prefetch', async () => {
+    const { engine, finals, runs, release } = await makeGatedEngine();
+    void engine.runWhatShouldISay("Nice. What's the difference between a process", 1, undefined, { speculative: true });
+    await until(() => runs() === 1);
+    assert.equal(runs(), 1, 'interim speculation running');
+    engine.prefetchAutoAnswer('1-q7', "Nice. What's the difference between a process and a thread?");
+    await until(() => runs() === 2);
+    assert.equal(runs(), 2, 'the finished question started its own run');
+    release(1); await flush(); await flush();                      // the replaced run winds down
+    const snap = engine.getSpeculativeSnapshot();
+    assert.equal(snap.questionId, '1-q7', 'the replaced run must not wipe the new slot');
+    assert.match(String(snap.text), /and a thread\?/);
+    await engine.handleSuggestionTrigger(autoTrigger("What's the difference between a process and a thread?", 1, '1-q7'));
+    release(2);
+    await untilIdle(engine); await flush();
+    assert.equal(runs(), 2, 'adopted — no third generation');
+    assert.equal(finals.length, 1);
+    assert.match(finals[0].text, /ANSWER-2/);
+});
+
+test('prefetch CLAIMS an interim speculation that already covers the question — no second generation', async () => {
+    const { engine, finals, runs, release } = await makeGatedEngine();
+    void engine.runWhatShouldISay('How does a hash map handle collisions between keys?', 1, undefined, { speculative: true });
+    await until(() => runs() === 1);
+    engine.prefetchAutoAnswer('1-q8', 'How does a hash map handle collisions between keys?');
+    await flush(); await flush();
+    assert.equal(runs(), 1, 'the running speculation is claimed, not duplicated');
+    assert.equal(engine.getSpeculativeSnapshot().questionId, '1-q8');
+    await engine.handleSuggestionTrigger(autoTrigger('How does a hash map handle collisions between keys?', 1, '1-q8'));
+    release(1);
+    await untilIdle(engine); await flush();
+    assert.equal(runs(), 1);
+    assert.equal(finals.length, 1);
+    assert.match(finals[0].text, /ANSWER-1/);
+});
+
+test('prefetch never takes over a NON-speculative run (a dispatch or a press in flight)', async () => {
+    const { engine, runs, release } = await makeGatedEngine();
+    void engine.runWhatShouldISay('Tell me about a time you disagreed with a teammate.', 1, undefined, { skipCooldown: true });
+    await until(() => runs() === 1);
+    engine.prefetchAutoAnswer('1-q9', 'And how did you resolve it in the end with them?');
+    await flush(); await flush();
+    assert.equal(runs(), 1, 'a live answer is never superseded by a prefetch');
+    release(1);
+    await untilIdle(engine);
+});
+
+test('speculationCoversQuestion: a prefix is NOT the whole question, however similar it scores', async () => {
+    const { speculationCoversQuestion, speculativeQuestionSimilarity } = require(path.resolve(__dirname, '../../../dist-electron/electron/llm/speculativeSimilarity.js'));
+    const full = "Nice. What's the difference between a process and a thread?";
+    assert.ok(speculativeQuestionSimilarity("Nice. What's the difference between", full) >= 0.75, 'the dispatch metric accepts the prefix');
+    assert.equal(speculationCoversQuestion("Nice. What's the difference between", full), false);
+    assert.equal(speculationCoversQuestion("Nice. What's the difference between a process", full), false);
+    assert.equal(speculationCoversQuestion("Nice. What's the difference between a process and a thread", full), true);
 });

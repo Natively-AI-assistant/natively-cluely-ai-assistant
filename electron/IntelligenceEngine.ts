@@ -23,7 +23,7 @@ import {
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE, BOLD_PSEUDO_HEADER_RE,
     buildProfileJitPrompt, decideSessionWritePolicy,
     checkAnswerRelevance, AnswerDiversityGuard,
-    speculativeQuestionSimilarity, acceptRepairedAnswer
+    speculativeQuestionSimilarity, speculationCoversQuestion, acceptRepairedAnswer
 } from './llm';
 import {
     validateDocumentGroundedAnswer,
@@ -1182,18 +1182,60 @@ export class IntelligenceEngine extends EventEmitter {
      * ask, so a whole meeting of exposition does not each start a generation.
      */
     prefetchAutoAnswer(questionId: string, text: string): void {
-        if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return;
-        this.releaseExpiredSpeculation();
-        if (this.speculativeText !== null) return;
-        if (this.speculativeTimer !== null) return;
-        if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
         const trimmed = (text ?? '').trim();
         if (trimmed.length < 12) return;
+        this.releaseExpiredSpeculation();
+        // The engine's OWN speculation (from an interviewer interim) is not a
+        // busy engine: the candidate below is the same speech, finished.
+        const ownSpeculationStreaming = this.activeMode === 'what_to_say'
+            && this.speculativeGenerationId !== null
+            && this.speculativeGenerationId === this.currentGenerationId;
+        if (this.activeMode !== 'idle' && this.activeMode !== 'assist' && !ownSpeculationStreaming) return;
+        if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
+        // A debounced interim speculation that has not fired yet would start on
+        // FEWER words than this candidate: the candidate replaces it.
+        if (this.speculativeTimer !== null) {
+            clearTimeout(this.speculativeTimer);
+            this.speculativeTimer = null;
+        }
+        if (this.speculativeText !== null) {
+            // Live 2026-09-26 (T04): an interim speculation on "…a process and a"
+            // held the slot, so this prefetch was refused — then the dispatch
+            // rejected that interim run (Jaccard 0.60 against the finished
+            // question) and started from scratch, 1.2 s after the head start
+            // this prefetch would have had. The candidate is the SAME speech,
+            // finished, so decide here, once:
+            //  - it already heard the whole question (see speculationCoversQuestion:
+            //    the similarity alone accepts any prefix) → claim it for this
+            //    candidate, so the dispatch adopts it by id;
+            //  - it does not → it would be rejected at dispatch anyway, so the
+            //    finished question replaces it now (runWhatShouldISay aborts it).
+            const similarity = speculativeQuestionSimilarity(this.speculativeText, trimmed);
+            if (similarity >= this.SPECULATIVE_SIMILARITY_THRESHOLD && speculationCoversQuestion(this.speculativeText, trimmed)) {
+                this.currentAutoCandidateId = questionId;
+                this.speculativeQuestionId = questionId;
+                console.log(`[IntelligenceEngine] Auto Answer prefetch claims the running interim speculation`, { questionId, similarity: Number(similarity.toFixed(2)) });
+                return;
+            }
+            console.log(`[IntelligenceEngine] Auto Answer prefetch replaces an interim speculation on fewer words`, { questionId, similarity: Number(similarity.toFixed(2)) });
+        }
         this.currentAutoCandidateId = questionId;
         this.speculativeQuestionId = questionId;
         console.log(`[IntelligenceEngine] Auto Answer prefetch fired while the judge decides`, { questionId, length: trimmed.length });
         this.runWhatShouldISay(trimmed, 0.9, undefined, { speculative: true })
             .catch(err => console.error('[IntelligenceEngine] Auto Answer prefetch error:', err));
+    }
+
+    /**
+     * Whether a superseded speculative run may still clear the speculative
+     * slot. A dispatch or a press that replaced it leaves `speculativeGenerationId`
+     * null (and has already dealt with the slot) — clearing stays as it was.
+     * A NEWER speculative run that replaced it (an Auto Answer prefetch taking
+     * over an interim speculation) owns the slot now, and the old run's abort
+     * must not wipe the new run's question from it.
+     */
+    private ownsSpeculativeSlot(generationId: number): boolean {
+        return this.speculativeGenerationId === null || this.speculativeGenerationId === generationId;
     }
 
     /**
@@ -4621,7 +4663,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // If we opened a streaming row, discard it so the superseding
                 // generation's row is the only one (no orphaned partial answer).
                 if (openedStreamRow) this.emit('suggested_answer_discard', 'superseded');
-                if (isSpeculative) {
+                if (isSpeculative && this.ownsSpeculativeSlot(generationId)) {
                     this.speculativeText = null;
                     this.speculativeTextExpiry = Infinity;
                     // Stamp lastTriggerTime so the real trigger that caused this abort
@@ -6606,7 +6648,7 @@ export class IntelligenceEngine extends EventEmitter {
             // request or reset replaced this turn.
             if (isWtaSuperseded()) {
                 recordWtaCancellation();
-                if (isSpeculative) { this.speculativeText = null; this.speculativeTextExpiry = Infinity; }
+                if (isSpeculative && this.ownsSpeculativeSlot(generationId)) { this.speculativeText = null; this.speculativeTextExpiry = Infinity; }
                 if (openedStreamRow) this.emit('suggested_answer_discard', 'superseded');
                 return null;
             }
