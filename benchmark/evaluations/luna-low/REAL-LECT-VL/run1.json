@@ -1,0 +1,398 @@
+{
+ "blind_id": "S-add9a3ac",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 69668,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 46833,
+  "candidatesTokenCount": 1799,
+  "totalTokenCount": 58478,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 46833
+   }
+  ],
+  "thoughtsTokenCount": 9846,
+  "serviceTier": "standard"
+ },
+ "fact_count": 87,
+ "evaluation": {
+  "factual_accuracy": 9,
+  "important_information_retention": 9,
+  "hallucination_control": 10,
+  "action_item_retention": 9,
+  "decision_retention": 9,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 9,
+  "entity_retention": 9,
+  "timeline_accuracy": 9,
+  "conclusion_accuracy": 9,
+  "structure": 2,
+  "conciseness": 1,
+  "readability": 2,
+  "overall_summary_quality": 4,
+  "critical_errors": [],
+  "missing_important_information": [
+   "The learning objectives of the lecture",
+   "The fact that Kaplan-Meier handles right censoring fine but left censoring is not as easy",
+   "The advice that KM plus log-rank may be enough in many randomized studies, but to ask for more if things go wrong"
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "missing"
+   },
+   {
+    "id": "F04",
+    "status": "partial"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "partial"
+   },
+   {
+    "id": "F08",
+    "status": "partial"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "partial"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "missing"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "partial"
+   },
+   {
+    "id": "F34",
+    "status": "partial"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "partial"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "missing"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "partial"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "partial"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "missing"
+   },
+   {
+    "id": "F68",
+    "status": "missing"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   },
+   {
+    "id": "F73",
+    "status": "present"
+   },
+   {
+    "id": "F74",
+    "status": "present"
+   },
+   {
+    "id": "F75",
+    "status": "present"
+   },
+   {
+    "id": "F76",
+    "status": "present"
+   },
+   {
+    "id": "F77",
+    "status": "present"
+   },
+   {
+    "id": "F78",
+    "status": "present"
+   },
+   {
+    "id": "F79",
+    "status": "partial"
+   },
+   {
+    "id": "F80",
+    "status": "partial"
+   },
+   {
+    "id": "F81",
+    "status": "present"
+   },
+   {
+    "id": "F82",
+    "status": "present"
+   },
+   {
+    "id": "F83",
+    "status": "present"
+   },
+   {
+    "id": "F84",
+    "status": "present"
+   },
+   {
+    "id": "F85",
+    "status": "present"
+   },
+   {
+    "id": "F86",
+    "status": "partial"
+   },
+   {
+    "id": "F87",
+    "status": "partial"
+   }
+  ],
+  "rationale": "The notes capture an extraordinary amount of detail from the transcript, resulting in high scores for factual accuracy and information retention. However, the structure and conciseness are abysmal. The notes repeat the exact same facts across 10 different sections (Core concepts, Definitions, Examples, Formulas, Things to memorize, Confusing points, Questions to review, Study summary), creating a massive, unreadable wall of redundant bullet points. This severe lack of synthesis and structural abuse heavily penalizes the conciseness, readability, and overall summary quality scores."
+ }
+}

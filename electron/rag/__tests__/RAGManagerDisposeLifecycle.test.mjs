@@ -42,6 +42,13 @@ function makeManager(db, { vectorStore } = {}) {
   mgr.vectorStore = vectorStore ?? new VectorStore(db, ':memory:', '/nonexistent-ext');
   mgr.embeddingPipeline = {
     getActiveSpaceKey: () => 'gemini:gemini-embedding-2:768',
+    getActiveProviderName: () => 'gemini',
+    // The sweep refuses to migrate the corpus into a stand-in space. Auto mode
+    // (no pin) is the "a fallthrough IS the intent" case, so it stays armed —
+    // which is what this lifecycle test needs. See
+    // PinnedSpaceNotWipedByFallback2026_09_13.
+    isRunningOnUnpinnedFallback: () => false,
+    setPinnedSpaceRestoredHandler: () => {},
     getQueueStatus: () => ({ pending: 0, processing: 0, completed: 0, failed: 0 }),
     requeueMeetingForReindex: async () => {},
   };

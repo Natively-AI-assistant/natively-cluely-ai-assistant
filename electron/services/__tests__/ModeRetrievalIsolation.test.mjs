@@ -43,7 +43,7 @@ describe('Retrieval isolation — only active mode files contribute', () => {
     });
     assert.ok(result.snippets.length > 0, 'Test data should produce at least one snippet');
     assert.ok(
-      result.formattedContext.includes('<reference_grounding_guard>'),
+      result.formattedContext.includes('<evidence_use_rule>'),
       'Grounding guard envelope must wrap retrieved snippets'
     );
   });

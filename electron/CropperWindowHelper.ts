@@ -1,10 +1,17 @@
-import { BrowserWindow, screen, app, ipcMain, IpcMainEvent } from "electron"
+import { BrowserWindow, screen, app, ipcMain, IpcMainEvent, globalShortcut } from "electron"
 import path from "node:path"
+import { setVisibleOnAllWorkspacesKeepingDock } from "./utils/macDockPolicy"
+import { attachNoActivate } from "./utils/windowsFocusPolicy"
+import { DEV_SERVER_URL } from './devServerUrl';
 
-const isDev = process.env.NODE_ENV === "development"
+// Force production mode if running as packaged app — matches WindowHelper.ts's
+// isDev predicate. A stray NODE_ENV=development in a packaged launch's
+// environment must not point this window at a dev server that doesn't exist
+// in a shipped build.
+const isDev = process.env.NODE_ENV === "development" && !app.isPackaged
 
 const startUrl = isDev
-    ? "http://localhost:5180"
+    ? DEV_SERVER_URL
     : `file://${path.join(app.getAppPath(), "dist/index.html")}`
 
 /**
@@ -18,8 +25,16 @@ const CROPPER_CONFIG = {
     /** Delay in ms before setting opacity to 1 (Windows opacity shield) */
     OPACITY_DELAY_MS: parseInt(process.env.CROPPER_OPACITY_DELAY || '60', 10),
 
-    /** Window type for the cropper window */
+    /** Window type for the cropper window (Linux; macOS uses MAC_WINDOW_TYPE) */
     WINDOW_TYPE: 'toolbar' as const,
+
+    /**
+     * macOS window type. Electron ignores 'toolbar' on macOS (a plain
+     * NSWindow), and a plain window can only cover another app's fullscreen
+     * Space after an activation-policy flip — the flip that left duplicate
+     * Dock tiles (utils/macDockPolicy.ts). An NSPanel covers it with no flip.
+     */
+    MAC_WINDOW_TYPE: 'panel' as const,
 
     /** Maximum retries for loading cropper URL */
     MAX_LOAD_RETRIES: 3,
@@ -78,6 +93,97 @@ function getCombinedDisplayBounds(): Electron.Rectangle {
 }
 
 /**
+ * Builds the cropper BrowserWindow constructor options for a given platform.
+ *
+ * Extracted (and platform-injected) so BOTH platform branches are unit-testable
+ * without mutating `process.platform`.
+ *
+ * PLATFORM GATE — `enableLargerThanScreen` is macOS-ONLY, and the gate used to
+ * have it backwards: set on win32 (where Electron never reads it) and omitted on
+ * darwin, the one platform whose -[NSWindow constrainFrameRect:toScreen:] clamps
+ * a window to a single screen. The macOS cropper was therefore silently confined
+ * to one display, leaving the rest of the desktop unselectable.
+ *
+ * The correction is additive — darwin gains the flag, win32 keeps it — so this
+ * function changes NOTHING on Windows. See the inline note at the gate.
+ *
+ * WINDOW TYPE — macOS gets `type: 'panel'`; Linux keeps `'toolbar'`; win32 gets
+ * none. Electron ignores 'toolbar' on macOS, so the cropper used to be a plain
+ * NSWindow there (and applyStealthToWindow's NSPanel-only attributes were
+ * no-ops on it). A plain window only covered another app's fullscreen Space
+ * because setVisibleOnAllWorkspaces flipped the activation policy — the flip
+ * behind the duplicate Dock tiles. As a panel it covers the fullscreen Space with
+ * no flip, and show() no longer activates the app. Verified on the real build
+ * over a real fullscreen app (2026-09-23), normal and undetectable mode: the
+ * cropper shows on that Space, Esc cancels, a drag captures the app's pixels.
+ * ElectronNSPanel subclasses ElectronNSWindow, so enableLargerThanScreen (below)
+ * still applies.
+ */
+export function buildCropperWindowSettings(
+    combinedBounds: Electron.Rectangle,
+    platform: NodeJS.Platform,
+): Electron.BrowserWindowConstructorOptions {
+    const settings: Electron.BrowserWindowConstructorOptions = {
+        width: combinedBounds.width,
+        height: combinedBounds.height,
+        x: combinedBounds.x,
+        y: combinedBounds.y,
+        frame: false,
+        transparent: true,
+        resizable: false,
+        // NOTE: do NOT use fullscreenable: true — on Windows it limits the
+        // window to a single monitor.
+        fullscreenable: false,
+        hasShadow: false,
+        alwaysOnTop: true,
+        backgroundColor: "#00000000",
+        show: false,
+        skipTaskbar: true,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, "preload.js")
+        }
+    };
+
+    if (platform === 'darwin') {
+        settings.type = CROPPER_CONFIG.MAC_WINDOW_TYPE;
+    } else if (platform !== 'win32') {
+        settings.type = CROPPER_CONFIG.WINDOW_TYPE;
+    }
+
+    // darwin is the ADDITION here; win32 is left exactly as it was found.
+    //
+    // macOS needs this: -[ElectronNSWindow constrainFrameRect:toScreen:] clamps
+    // the window to a single screen unless the flag is set, and for a FRAMELESS
+    // window (this one) the flag unconstrains position as well as size — which is
+    // precisely what a negative-origin multi-monitor span requires. Without it the
+    // macOS cropper silently covered one display.
+    //
+    // win32 keeps the flag even though Electron documents it as macOS-only and
+    // implements it solely in shell/browser/ui/cocoa/electron_ns_window.mm — so it
+    // is never read on Windows. It is retained rather than removed because that
+    // makes this whole change provably behaviour-neutral on Windows, the platform
+    // this cannot be executed on. Dropping a line that is "documented dead" is not
+    // worth spending the one risk in the diff on an untestable platform.
+    if (platform === 'darwin' || platform === 'win32') {
+        settings.enableLargerThanScreen = true;
+    }
+
+    return settings;
+}
+
+/**
+ * True when `actual` matches `target` on all four edges.
+ */
+function boundsMatch(target: Electron.Rectangle, actual: Electron.Rectangle): boolean {
+    return actual.x === target.x
+        && actual.y === target.y
+        && actual.width === target.width
+        && actual.height === target.height;
+}
+
+/**
  * CropperWindowHelper manages the life cycle of the area-selection window.
  *
  * DESIGN STRATEGY:
@@ -95,6 +201,7 @@ export class CropperWindowHelper {
     private isUndetectable: boolean = false;
     private isWaitingForSelection: boolean = false;
     private isDisposed: boolean = false;
+    private isEscapeRegistered: boolean = false;
 
     // IPC listener references for cleanup
     private readonly confirmedListener: (event: IpcMainEvent, bounds: unknown) => void;
@@ -112,15 +219,38 @@ export class CropperWindowHelper {
                 return;
             }
 
-            // Validate input data for security
-            if (!this.validateBounds(bounds)) {
-                console.error('[CropperWindowHelper] Invalid bounds received:', bounds);
+            // The renderer fires 'cropper-confirmed' with WINDOW-LOCAL coordinates
+            // (e.clientX/clientY inside the cropper BrowserWindow, which itself spans
+            // the combined multi-monitor virtual screen at combinedBounds.{x,y}). The
+            // downstream screenshot pipeline + validateBounds both expect GLOBAL
+            // screen coordinates, so we add the cropper window's absolute position.
+            //
+            // If the cropper window is gone (e.g. closed mid-IPC), there's no safe
+            // global mapping; reject the selection rather than forwarding local
+            // coords to a global-coordinate consumer.
+            const cropperBounds = this.cropperWindow?.getBounds();
+            if (!cropperBounds) {
+                console.error('[CropperWindowHelper] cropper window missing on confirmed — refusing selection');
                 this.rejectCurrentSelection(null);
                 this.hideOrClose();
                 return;
             }
 
-            this.resolveCurrentSelection(bounds);
+            const globalBounds: Electron.Rectangle = {
+                ...bounds,
+                x: bounds.x + cropperBounds.x,
+                y: bounds.y + cropperBounds.y,
+            };
+
+            // Validate input data for security using global coordinates to support multi-monitor setups
+            if (!this.validateBounds(globalBounds)) {
+                console.error('[CropperWindowHelper] Invalid bounds received:', globalBounds);
+                this.rejectCurrentSelection(null);
+                this.hideOrClose();
+                return;
+            }
+
+            this.resolveCurrentSelection(globalBounds);
             this.hideOrClose();
         };
 
@@ -138,11 +268,55 @@ export class CropperWindowHelper {
         this.beforeQuitHandler = () => {
             if (!this.isDisposed) {
                 console.log('[CropperWindowHelper] before-quit: auto-disposing IPC listeners');
+                this.unregisterEscapeShortcut();
                 ipcMain.removeListener('cropper-confirmed', this.confirmedListener);
                 ipcMain.removeListener('cropper-cancelled', this.cancelledListener);
             }
         };
         app.on('before-quit', this.beforeQuitHandler);
+    }
+
+    /**
+     * On Windows, the cropper is placed under WS_EX_NOACTIVATE and never receives
+     * keyboard focus so the user's foreground app (Zoom / Chrome) never loses focus.
+     * We temporarily register a global Escape hotkey while waiting for selection
+     * so the user can cancel without having to click or focus the cropper (Issue #518).
+     */
+    private registerEscapeShortcut(): void {
+        if (process.platform !== 'win32') return;
+        if (this.isEscapeRegistered) return;
+        try {
+            if (typeof globalShortcut !== 'undefined' && globalShortcut && typeof globalShortcut.register === 'function') {
+                if (typeof globalShortcut.isRegistered === 'function' && globalShortcut.isRegistered('Escape')) {
+                    return;
+                }
+                const registered = globalShortcut.register('Escape', () => {
+                    console.log('[CropperWindowHelper] Escape captured via globalShortcut');
+                    this.rejectCurrentSelection(null);
+                    this.hideOrClose();
+                });
+                this.isEscapeRegistered = registered;
+                if (!registered) {
+                    // Another app holds Escape. The no-activate cropper never gets
+                    // keyboard focus, so it can now only be dismissed by the timeout.
+                    console.warn('[CropperWindowHelper] Could not register global Escape (held by another app?) — cancel falls back to the selection timeout');
+                }
+            }
+        } catch (e) {
+            console.error('[CropperWindowHelper] Failed to register global Escape shortcut:', e);
+        }
+    }
+
+    private unregisterEscapeShortcut(): void {
+        if (!this.isEscapeRegistered) return;
+        try {
+            if (typeof globalShortcut !== 'undefined' && globalShortcut && typeof globalShortcut.unregister === 'function') {
+                globalShortcut.unregister('Escape');
+            }
+        } catch (e) {
+            console.error('[CropperWindowHelper] Failed to unregister global Escape shortcut:', e);
+        }
+        this.isEscapeRegistered = false;
     }
 
     /**
@@ -211,6 +385,7 @@ export class CropperWindowHelper {
      * Protection against multiple resolve/reject calls.
      */
     private resolveCurrentSelection(bounds: Electron.Rectangle | null): void {
+        this.unregisterEscapeShortcut();
         if (!this.isWaitingForSelection) {
             console.warn('[CropperWindowHelper] resolveCurrentSelection called but not waiting for selection');
             return;
@@ -228,6 +403,7 @@ export class CropperWindowHelper {
      * Protection against multiple resolve/reject calls.
      */
     private rejectCurrentSelection(reason?: unknown): void {
+        this.unregisterEscapeShortcut();
         if (!this.isWaitingForSelection) {
             console.warn('[CropperWindowHelper] rejectCurrentSelection called but not waiting for selection');
             return;
@@ -295,6 +471,7 @@ export class CropperWindowHelper {
         }
 
         this.isWaitingForSelection = true;
+        this.registerEscapeShortcut();
 
         return new Promise((resolve, reject) => {
             // Set up selection timeout
@@ -314,6 +491,27 @@ export class CropperWindowHelper {
             };
 
             if (this.cropperWindow && !this.cropperWindow.isDestroyed()) {
+                // F-113: the window was sized to the combined display bounds
+                // at CREATION (app startup) and reused forever — no display
+                // change listener exists anywhere. After a monitor plug/unplug
+                // or DPI change the stale bounds leave new screen regions
+                // unselectable, and the local→global mapping (stale origin)
+                // disagrees with validateBounds' FRESH combined bounds, so
+                // valid selections were silently rejected. Re-fit on every
+                // show; the confirm listener reads getBounds() fresh, so the
+                // mapping is correct once the window matches reality.
+                const combinedNow = getCombinedDisplayBounds();
+                const current = this.cropperWindow.getBounds();
+                if (
+                    current.x !== combinedNow.x ||
+                    current.y !== combinedNow.y ||
+                    current.width !== combinedNow.width ||
+                    current.height !== combinedNow.height
+                ) {
+                    console.log('[CropperWindowHelper] Display arrangement changed — refitting cropper to', combinedNow);
+                    this.applyCombinedBounds(combinedNow, 'show:refit');
+                }
+
                 // Get cursor position and display info at the moment cropper is shown
                 const cursorPosition = screen.getCursorScreenPoint();
                 const displays = screen.getAllDisplays();
@@ -360,17 +558,31 @@ export class CropperWindowHelper {
      *
      * HOW:
      * 1. Set opacity to 0 (invisible to eye, but "active" for DWM)
-     * 2. Show window
+     * 2. Show window via showInactive() on Windows (never activating show())
      * 3. Apply protection flag
      * 4. Delay to let DWM process the flag
-     * 5. Set opacity to 1
+     * 5. Set opacity to 1 (do NOT call focus() on Windows; Issue #518)
      */
     private applyOpacityShield(): void {
         if (!this.cropperWindow || this.isDisposed) return;
 
         if (process.platform === 'win32') {
             this.cropperWindow.setOpacity(0);
-            this.cropperWindow.show();
+            if (typeof this.cropperWindow.showInactive === 'function') {
+                this.cropperWindow.showInactive();
+            } else {
+                this.cropperWindow.show();
+            }
+            // showInactive() is SW_SHOWNOACTIVATE, which is not expected to change
+            // the z-order, and nothing activates the window any more to raise it.
+            // The cropper is preloaded at startup, so any always-on-top window
+            // shown since then (Zoom's share toolbar, say) would sit above it.
+            // moveTop() raises it without activating (SWP_NOACTIVATE).
+            try {
+                this.cropperWindow.moveTop();
+            } catch (e) {
+                console.error('[CropperWindowHelper] moveTop failed:', e);
+            }
             this.cropperWindow.setContentProtection(this.isUndetectable);
 
             // NOTE: Do NOT call maximize() - it limits to current monitor on Windows
@@ -380,7 +592,8 @@ export class CropperWindowHelper {
             this.opacityTimeout = setTimeout(() => {
                 if (this.cropperWindow && !this.cropperWindow.isDestroyed() && !this.isDisposed) {
                     this.cropperWindow.setOpacity(1);
-                    this.cropperWindow.focus();
+                    // Issue #518: Do NOT call focus() on Windows! Calling focus()
+                    // deactivates the user's foreground app and emits blur/focus events.
                 }
             }, CROPPER_CONFIG.OPACITY_DELAY_MS);
         } else {
@@ -388,6 +601,73 @@ export class CropperWindowHelper {
             this.cropperWindow.show();
             this.cropperWindow.focus();
         }
+    }
+
+    /**
+     * Sets the cropper window to `target` and verifies the OS honored it.
+     * Returns true when the window ended up exactly at `target`.
+     */
+    private applyCombinedBounds(target: Electron.Rectangle, reason: string): boolean {
+        if (!this.cropperWindow || this.cropperWindow.isDestroyed()) return false;
+        this.cropperWindow.setBounds({
+            x: target.x,
+            y: target.y,
+            width: target.width,
+            height: target.height
+        });
+        return this.verifyCombinedBounds(target, reason);
+    }
+
+    /**
+     * Reads the cropper window's ACTUAL bounds back and reports any divergence
+     * from the combined virtual-desktop rectangle we asked for.
+     *
+     * WHY THIS EXISTS: positioning the cropper used to be fire-and-forget. When
+     * the OS declines the request the app carried on as if it had worked, and
+     * the failure surfaced as two unrelated-looking symptoms:
+     *
+     *   1. Desktop regions outside the misplaced window are simply not
+     *      selectable — the user drags over them and nothing happens.
+     *   2. The confirm listener maps window-local → global using the window's
+     *      REAL origin, while validateBounds() checks the result against the
+     *      IDEAL combined display bounds. A misplaced window pushes legitimate
+     *      selections outside the real display area, so they are silently
+     *      rejected.
+     *
+     * validateBounds() is deliberately NOT relaxed to paper over this: a
+     * selection that maps outside real screen territory cannot be captured, so
+     * rejecting it is correct. The window placement is what is wrong, and this
+     * is the line that says so.
+     *
+     * Reported on 2.8.7/win32 with a mixed-DPI layout: a setBounds of
+     * {x:0, y:-442, w:3627, h:1509} came back as {x:569, y:-83, w:3628, h:1510}.
+     * The scale factors are logged alongside the rectangles because that is the
+     * evidence needed to confirm (or kill) the per-monitor-DPI hypothesis from
+     * a user's log.
+     */
+    private verifyCombinedBounds(target: Electron.Rectangle, reason: string): boolean {
+        if (!this.cropperWindow || this.cropperWindow.isDestroyed()) return false;
+
+        const actual = this.cropperWindow.getBounds();
+        if (boundsMatch(target, actual)) {
+            console.log(`[CropperWindowHelper] bounds honored (${reason}):`, actual);
+            return true;
+        }
+
+        console.error(
+            `[CropperWindowHelper] bounds NOT honored (${reason}) — the cropper does not cover the virtual desktop. ` +
+            'Regions outside it are unselectable, and selections that map outside the real display area will be ' +
+            'rejected by validateBounds.',
+            {
+                requested: target,
+                actual,
+                displays: screen.getAllDisplays().map(d => ({
+                    bounds: d.bounds,
+                    scaleFactor: d.scaleFactor
+                }))
+            }
+        );
+        return false;
     }
 
     private createWindow(showImmediately: boolean): void {
@@ -398,42 +678,17 @@ export class CropperWindowHelper {
 
         // Get combined bounds of ALL displays for multi-monitor support
         const combinedBounds = getCombinedDisplayBounds();
-        const { width, height } = combinedBounds;
 
         console.log(`[CropperWindowHelper] Creating cropper window with multi-monitor bounds:`, combinedBounds);
 
-        const windowSettings: Electron.BrowserWindowConstructorOptions = {
-            width,
-            height,
-            x: combinedBounds.x,
-            y: combinedBounds.y,
-            frame: false,
-            transparent: true,
-            resizable: false,
-            // NOTE: On Windows, do NOT use fullscreenable: true as it limits the window
-            // to a single monitor. We use enableLargerThanScreen + maximize instead.
-            fullscreenable: false,
-            hasShadow: false,
-            alwaysOnTop: true,
-            backgroundColor: "#00000000",
-            show: false,
-            skipTaskbar: true,
-            webPreferences: {
-                nodeIntegration: false,
-                contextIsolation: true,
-                preload: path.join(__dirname, "preload.js")
-            }
-        }
-
-        // Windows requires enableLargerThanScreen to span multiple monitors
-        // macOS uses fullscreenable + visibleOnAllWorkspaces instead
-        if (process.platform === 'win32') {
-            (windowSettings as any).enableLargerThanScreen = true;
-        } else {
-            windowSettings.type = CROPPER_CONFIG.WINDOW_TYPE;
-        }
+        const windowSettings = buildCropperWindowSettings(combinedBounds, process.platform);
 
         this.cropperWindow = new BrowserWindow(windowSettings)
+
+        // Issue #518: apply WS_EX_NOACTIVATE on Windows right after construction
+        // while the window is still hidden, so clicking or dragging the cropper
+        // never activates Natively or steals foreground focus from Chrome/Zoom.
+        attachNoActivate(this.cropperWindow);
 
         // Apply NSPanel stealth attributes (becomesKeyOnlyIfNeeded +
         // _setPreventsActivation: SPI + sharingType=None + collectionBehavior).
@@ -452,23 +707,17 @@ export class CropperWindowHelper {
         // from being usable; partial stealth is better than no cropper.)
 
         // On Windows, ensure window spans all monitors by explicitly setting bounds
-        // This is needed because BrowserWindow might auto-adjust to primary monitor
+        // This is needed because BrowserWindow might auto-adjust to primary monitor.
+        // Every path that positions the cropper VERIFIES the result — see
+        // verifyCombinedBounds for why a silent mismatch is so damaging.
         if (process.platform === 'win32') {
-            this.cropperWindow.setBounds({
-                x: combinedBounds.x,
-                y: combinedBounds.y,
-                width: combinedBounds.width,
-                height: combinedBounds.height
-            });
+            this.applyCombinedBounds(combinedBounds, 'create:win32-span');
+        } else {
+            this.verifyCombinedBounds(combinedBounds, 'create');
         }
 
-        // Debug: log actual window bounds after creation
-        const actualBounds = this.cropperWindow.getBounds();
-        console.log(`[CropperWindowHelper] Window created. Actual bounds:`, actualBounds);
-        console.log(`[CropperWindowHelper] Expected bounds: {x:${combinedBounds.x}, y:${combinedBounds.y}, width:${combinedBounds.width}, height:${combinedBounds.height}}`);
-
         if (process.platform === "darwin") {
-            this.cropperWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+            setVisibleOnAllWorkspacesKeepingDock(this.cropperWindow, true, true)
             this.cropperWindow.setAlwaysOnTop(true, "screen-saver")
         }
 
@@ -505,7 +754,7 @@ export class CropperWindowHelper {
         // the cropper, not the overlay's hidden chat input. Same rationale
         // as Settings + Model Selector.
         this.cropperWindow.on('show', () => {
-            if (process.platform !== 'darwin') return;
+            if (process.platform !== 'darwin' && process.platform !== 'win32') return;
             try {
                 // eslint-disable-next-line @typescript-eslint/no-var-requires
                 const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
@@ -516,6 +765,7 @@ export class CropperWindowHelper {
         });
 
         this.cropperWindow.on('closed', () => {
+            this.unregisterEscapeShortcut();
             // Protect against race condition: window closed after successful selection
             if (this.isWaitingForSelection) {
                 this.rejectCurrentSelection(null);
@@ -562,6 +812,7 @@ export class CropperWindowHelper {
     }
 
     private hideOrClose(): void {
+        this.unregisterEscapeShortcut();
         if (this.cropperWindow && !this.cropperWindow.isDestroyed() && !this.isDisposed) {
             if (process.platform === 'linux') {
                 // Linux: close and recreate each time (no preload strategy on Linux)
@@ -599,6 +850,7 @@ export class CropperWindowHelper {
 
         console.log('[CropperWindowHelper] Disposing...');
         this.isDisposed = true;
+        this.unregisterEscapeShortcut();
 
         // Clear opacity timeout with safety check
         if (this.opacityTimeout) {
@@ -625,8 +877,15 @@ export class CropperWindowHelper {
         ipcMain.removeListener('cropper-cancelled', this.cancelledListener);
         console.log('[CropperWindowHelper] IPC listeners removed');
 
-        // Close window
-        this.closeWindow();
+        // Close window. Direct — NOT via closeWindow(): its guard includes
+        // `!this.isDisposed`, and isDisposed was set to true above, so the
+        // old `this.closeWindow()` call here was a guaranteed no-op and the
+        // live BrowserWindow was orphaned by the null on the next line
+        // (F-112). destroy() is deliberate for this forced-cleanup path: it
+        // skips close events entirely.
+        if (this.cropperWindow && !this.cropperWindow.isDestroyed()) {
+            this.cropperWindow.destroy();
+        }
         this.cropperWindow = null;
         console.log('[CropperWindowHelper] Window closed');
 

@@ -49,9 +49,11 @@ import {
 // without intent this list forces an explicit update — it pins the public surface the
 // settings UI enumerates.
 const EXPECTED_KEYS = [
+  // WTA audit flags (2026-08-18, default OFF).
+  'questionLedgerShadow',
+  'wtaClauseCoverageRepair',
   'trace',
   'durableMemoryWindow',
-  'intelligenceOsEnabled',
   'profileTreeV2',
   'contextRouterV2',
   'liveTranscriptBrain',
@@ -62,12 +64,12 @@ const EXPECTED_KEYS = [
   'meetingModeAutoDetect',
   'followUpDraftV2',
   'speakerLabelsV1',
-  'meetingNotesStructuredOutput',
   'meetingSummaryLlmPolish',
   'speakerDiarizationV1',
   'globalSearchV2',
   'inMeetingSearchV2',
   'conversationMemoryV2',
+  'chatHistoryMultiTurn',
   'lectureIntelligenceV2',
   'diagramIntelligence',
   'hindsightMemory',
@@ -77,22 +79,180 @@ const EXPECTED_KEYS = [
   'ragLocalRerank',
   'ragRrfFusion',
   'ragSpeculativeRerank',
+  // Extension-provided rerankers (default OFF; also gated on an enabled extension).
+  'extensionRerankers',
+  // OKF document knowledge system flags.
+  'okfKnowledgePacks',
+  'okfMarkdownExport',
+  'okfHybridRetrieval',
+  'okfGraphExpansion',
+  'okfKnowledgeUi',
+  'okfUserEditableCards',
+  // OKF Profile Intelligence upgrade flags (2026-07-02).
+  'okfProfilePacks',
+  'okfProfileHybridRetrieval',
+  'okfProfileMarkdownExport',
+  'okfProfileGraphExpansion',
+  'okfProfileKnowledgeUi',
+  // Document-grounded safety isolation gates.
+  'docGroundedStrictIsolation',
+  'docGroundedFalseRefusalRepair',
+  // Custom-Mode Source Isolation (2026-07-06).
+  'customModeSourceEnforcement',
+  // Full-JIT final-answer law (2026-07-07).
+  'jitFinalAnswerEnforced',
+  // Context OS / Source Authority Kernel (2026-07-10) — docs/context-os/.
+  'contextOsEnabled',
+  'contextOsManualChatEnabled',
+  'contextOsWtaEnabled',
+  'contextOsRecapFollowupEnabled',
+  'contextOsEvidencePackEnabled',
+  'contextOsMemorySafetyEnabled',
+  'contextOsEnforceSourceCapabilities',
+  'contextOsPropertyValidation',
+  'contextOsMultiFamilyEvidenceEnabled',
+  // Answer-relevance semantic guard (campaign2 longsession, 2026-07-19). Was
+  // already missing from this list before Slice 1/2 of the context-rebuild
+  // (found 2026-07-25 — this file has its
+  // own independent hardcoded key list from IntelligenceFlags.test.mjs's,
+  // so the earlier fix there did not cover this one).
+  'answerRelevanceGuardLive',
+  // Phase 6 Slice 5 (context-rebuild, 2026-07-25) — promoted to unconditional
+  // `true` (2026-08-30, see DEFAULT_ON_KEYS below).
+  'atomicJdProfilePackGeneration',
+  // Phase 6 Slice 4 item 2 follow-up (context-rebuild, 2026-07-26) — promoted to
+  // unconditional `true` (2026-08-30, see DEFAULT_ON_KEYS below).
+  'pronounRegexShadowObservation',
+  // EvidencePack impossible-evidence-state gate, Stage 0 AND Stage 1 (answer-
+  // pipeline-rebuild, 2026-07-28) — both promoted to unconditional `true`
+  // (2026-08-30, two SEPARATE user-directed overrides; see DEFAULT_ON_KEYS below).
+  'contextOsImpossibleStateGateShadow',
+  'contextOsImpossibleStateGateEnforceForbidden',
+  // Prompt System v2 (2026-08-01) — default OFF everywhere.
+  'promptSystemV2',
+  // WTA governance yields to a V3-composed turn (2026-08-28) — default ON,
+  // literal (never isInternalDevTestContext): it restores the !v3OwnedTurn
+  // invariant LLMHelper already enforces, and a fix for a production-only
+  // failure must not resolve differently in dev/test.
+  'wtaGovernanceYieldsToV3',
+  // The doc-grounded validator checks the block that was SENT (2026-08-28) —
+  // default ON, literal (never isInternalDevTestContext).
+  'docGroundedValidatorUsesSentEvidence',
+  // Provider Performance Profile (2026-09-08). All four default ON:
+  //   providerPerformanceProfile      observe-only recording; changes no deadline
+  //   adaptiveStreamIdle              derives the stall guard from observed gaps,
+  //                                   clamped to [2500, 8000] so nothing ever waits
+  //                                   LONGER than the shipped constant
+  //   adaptiveTtft                    may only WIDEN the shipped first-token ceiling
+  //   providerPerformanceDiagnostics  read-only surface; no request behaviour
+  'providerPerformanceProfile',
+  'adaptiveStreamIdle',
+  'adaptiveTtft',
+  'providerPerformanceDiagnostics',
+  // The two BILLABLE flags (2026-09-08), default OFF — deliberately unlike the
+  // four Provider Performance flags above, which default ON because nothing
+  // they do can spend money. These can, so they wait for an explicit opt-in.
+  'calibration',
+  'capabilityProbe',
+  // Provider performance, second wave (2026-09-08).
+  //   adaptiveConnectTimeout  widen-only connect timeout; its own flag so it is
+  //                           not coupled to adaptiveTtft. Default ON.
+  //   adaptiveImageQuality    the only adaptive consumer that visibly DEGRADES
+  //                           output, so unlike the rest it defaults OFF.
+  'adaptiveConnectTimeout',
+  'adaptiveImageQuality',
 ];
 
 // All NATIVELY_* env vars these flags read — cleared before/after so a leaked env from the
 // host (or another test) can't make an assertion pass/fail spuriously.
 const DEFAULT_ON_KEYS = new Set([
+  // Multi-turn chat history. ON via a plain literal (never isInternalDevTestContext)
+  // because it guards a REGRESSION fix — chat history was one turn / 280 chars from
+  // V3's default-ON flip on 2026-07-30 until 2026-08-29 — and the context-intelligence
+  // suites assert the FIXED behaviour. A dev/test-only default would pin a behaviour
+  // users never receive, which is the exact failure contracts/flag.ts records.
+  'chatHistoryMultiTurn',
   'meetingSummaryV3',
   'meetingModeAutoDetect',
   'followUpDraftV2',
   'speakerLabelsV1',
   'meetingSummaryLlmPolish',
+  // Safety isolation gates — ON everywhere by default. (The okf*/okfProfile* dev/
+  // test-default flags resolve to isInternalDevTestContext(), which is FALSE when
+  // NODE_ENV is unset as it is under this bare `node --test` harness, so they are
+  // NOT default-ON here.)
+  'docGroundedStrictIsolation',
+  'docGroundedFalseRefusalRepair',
+  // Full-JIT final-answer law — unconditionally `true` everywhere (the intended
+  // production policy, not a dev/test-only experiment), restored 2026-07-14
+  // after the 2026-07-09 stability rollback was resolved.
+  'jitFinalAnswerEnforced',
+  // Context OS core pipeline — promoted from dev/test-only to unconditional
+  // production default-ON (2026-07-18, grounding campaign) after live
+  // verification (H4/NEW-3/THESIS-091/C8 traces, real MiniMax-M3, real
+  // documents). contextOsEnforceSourceCapabilities/contextOsPropertyValidation/
+  // contextOsMultiFamilyEvidenceEnabled are SEPARATE stricter flags not
+  // covered by this promotion — they stay dev/test-only (isInternalDevTestContext).
+  'contextOsEnabled',
+  'contextOsManualChatEnabled',
+  'contextOsWtaEnabled',
+  'contextOsRecapFollowupEnabled',
+  'contextOsEvidencePackEnabled',
+  'contextOsMemorySafetyEnabled',
+  // Prompt System v2 — promoted to production default-ON (2026-08-02) after the
+  // 8-run benchmark campaign (see the intelligenceFlags.ts promotion comment).
+  'promptSystemV2',
+  // WTA governance yields to a V3-composed turn (2026-08-28) — default ON,
+  // literal (never isInternalDevTestContext): it restores the !v3OwnedTurn
+  // invariant LLMHelper already enforces, and a fix for a production-only
+  // failure must not resolve differently in dev/test.
+  'wtaGovernanceYieldsToV3',
+  // The doc-grounded validator checks the block that was SENT (2026-08-28) —
+  // default ON, literal (never isInternalDevTestContext).
+  'docGroundedValidatorUsesSentEvidence',
+  // Provider Performance Profile (2026-09-08) — all four ON by plain literals.
+  // The two that change behaviour are bounded so that ON can only ever be safer
+  // or equal: the stall guard is clamped at or below today's constant, and the
+  // TTFT filter may only widen.
+  'providerPerformanceProfile',
+  'adaptiveStreamIdle',
+  'adaptiveTtft',
+  'providerPerformanceDiagnostics',
+  // Widen-only, so ON can only ever buy a slow network more room.
+  'adaptiveConnectTimeout',
+  // Promoted to unconditional `true` (2026-08-30, dev/prod parity audit):
+  // both are pure shadow-observation side channels (divergence logging only,
+  // zero change to any real return value), so there is no risk to running
+  // them in production.
+  'pronounRegexShadowObservation',
+  'contextOsImpossibleStateGateShadow',
+  // Promoted to unconditional `true` (2026-08-30, SEPARATE user-directed
+  // override — no packaged-build/real-traffic validation, unlike the shadow
+  // pair above which are risk-free by construction). See each flag's
+  // intelligenceFlags.ts comment for the specific risk it carries.
+  'ragConfidenceGate',
+  'ragLocalRerank',
+  'ragSpeculativeRerank',
+  'okfKnowledgePacks',
+  'okfHybridRetrieval',
+  'okfProfilePacks',
+  'okfProfileHybridRetrieval',
+  'atomicJdProfilePackGeneration',
+  'contextOsEnforceSourceCapabilities',
+  'contextOsPropertyValidation',
+  'contextOsImpossibleStateGateEnforceForbidden',
+  // Promoted to unconditional `true` (2026-08-30, third/final batch of the
+  // same user-directed override).
+  'okfMarkdownExport',
+  'okfProfileMarkdownExport',
+  'contextOsMultiFamilyEvidenceEnabled',
 ]);
 
 const ALL_ENV_VARS = [
+  'NATIVELY_QUESTION_LEDGER_SHADOW',
+  'NATIVELY_WTA_CLAUSE_COVERAGE_REPAIR',
   'NATIVELY_INTELLIGENCE_TRACE',
   'NATIVELY_DURABLE_MEMORY_WINDOW',
-  'NATIVELY_INTELLIGENCE_OS',
   'NATIVELY_PROFILE_TREE_V2',
   'NATIVELY_CONTEXT_ROUTER_V2',
   'NATIVELY_LIVE_TRANSCRIPT_BRAIN',
@@ -103,7 +263,6 @@ const ALL_ENV_VARS = [
   'NATIVELY_MEETING_MODE_AUTODETECT',
   'NATIVELY_FOLLOWUP_DRAFT_V2',
   'NATIVELY_SPEAKER_LABELS_V1',
-  'NATIVELY_MEETING_NOTES_STRUCTURED_OUTPUT',
   'NATIVELY_MEETING_SUMMARY_LLM_POLISH',
   'NATIVELY_SPEAKER_DIARIZATION_V1',
   'NATIVELY_GLOBAL_SEARCH_V2',
@@ -114,6 +273,38 @@ const ALL_ENV_VARS = [
   'NATIVELY_HINDSIGHT_MEMORY',
   'NATIVELY_HINDSIGHT_LIVE_RECALL',
   'NATIVELY_HINDSIGHT_POST_MEETING_RETAIN',
+  'NATIVELY_RAG_CONFIDENCE_GATE',
+  'NATIVELY_RAG_LOCAL_RERANK',
+  'NATIVELY_RAG_RRF_FUSION',
+  'NATIVELY_RAG_SPECULATIVE_RERANK',
+  'NATIVELY_OKF_KNOWLEDGE_PACKS',
+  'NATIVELY_OKF_MARKDOWN_EXPORT',
+  'NATIVELY_OKF_HYBRID_RETRIEVAL',
+  'NATIVELY_OKF_GRAPH_EXPANSION',
+  'NATIVELY_OKF_KNOWLEDGE_UI',
+  'NATIVELY_OKF_USER_EDITABLE_CARDS',
+  'NATIVELY_OKF_PROFILE_PACKS',
+  'NATIVELY_OKF_PROFILE_HYBRID_RETRIEVAL',
+  'NATIVELY_OKF_PROFILE_MARKDOWN_EXPORT',
+  'NATIVELY_OKF_PROFILE_GRAPH_EXPANSION',
+  'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI',
+  'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION',
+  'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR',
+  'NATIVELY_CUSTOM_MODE_SOURCE_ENFORCEMENT',
+  'NATIVELY_JIT_FINAL_ANSWER_ENFORCED',
+  'NATIVELY_CONTEXT_OS',
+  'NATIVELY_CONTEXT_OS_MANUAL_CHAT',
+  'NATIVELY_CONTEXT_OS_WTA',
+  'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP',
+  'NATIVELY_CONTEXT_OS_EVIDENCE_PACK',
+  'NATIVELY_CONTEXT_OS_MEMORY_SAFETY',
+  'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES',
+  'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION',
+  'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE',
+  'NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE',
+  'NATIVELY_PROMPT_COMPOSER_V2',
+  'NATIVELY_ATOMIC_JD_PROFILE_PACK',
+  'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION',
 ];
 
 function clearAllEnv() {

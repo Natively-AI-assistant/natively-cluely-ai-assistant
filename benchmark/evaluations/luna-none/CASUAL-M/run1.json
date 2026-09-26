@@ -1,0 +1,284 @@
+{
+ "blind_id": "S-a7207775",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 49705,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 22305,
+  "candidatesTokenCount": 2010,
+  "totalTokenCount": 29644,
+  "cachedContentTokenCount": 16315,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 22305
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 16315
+   }
+  ],
+  "thoughtsTokenCount": 5329,
+  "serviceTier": "standard"
+ },
+ "fact_count": 51,
+ "evaluation": {
+  "factual_accuracy": 3,
+  "important_information_retention": 8,
+  "hallucination_control": 8,
+  "action_item_retention": 7,
+  "decision_retention": 3,
+  "speaker_attribution": 6,
+  "numeric_accuracy": 4,
+  "entity_retention": 8,
+  "timeline_accuracy": 2,
+  "conclusion_accuracy": 2,
+  "structure": 1,
+  "conciseness": 1,
+  "readability": 2,
+  "overall_summary_quality": 2,
+  "critical_errors": [
+   "The notes present superseded decisions as final (e.g., planning for October 16-19, Priya booking the cabin).",
+   "The notes list several resolved items as 'Open questions' (e.g., whether to hire a chef, whether Waffles can come, departure time, gift price).",
+   "The follow-up draft incorrectly states the cost split is $285 among four people, ignoring that Mia is unconfirmed and the current split is $380 among three."
+  ],
+  "missing_important_information": [
+   "Birchwater Lake is about a 3-hour drive, versus about 4.5 hours to Hollins Ridge."
+  ],
+  "hallucinated_information": [
+   "The trip length was reduced to three nights after the proposed Tuesday extension was rejected (it was never more than three nights; the extension was merely floated and dropped)."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "The planned trip dates are Friday, October 16th through Monday, October 19th, subject to Priya checking her rota."
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Priya will book the cabin using her Hearthstay credit, pending the remaining listing checks."
+   },
+   {
+    "correction_id": "C03",
+    "reported": "the $1,140 cabin cost split at $285 among the four paying participants (in the follow-up draft)"
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "The planned trip dates are Friday, October 16th through Monday, October 19th",
+   "Priya will book the cabin using her Hearthstay credit"
+  ],
+  "distractors_included": [
+   "Dan described an ongoing work reorganization process that already includes a 22-slide pre-meeting deck.",
+   "Priya's puppy Waffles is eleven weeks old and has already chewed two phone chargers and a work clog."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "missing"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "contradicted"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "missing"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "contradicted"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "contradicted"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "missing"
+   },
+   {
+    "id": "F24",
+    "status": "contradicted"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "contradicted"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "contradicted"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "missing"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "missing"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   }
+  ],
+  "rationale": "The candidate notes suffer from a severe failure to resolve the final state of the meeting. They chronologically list superseded ideas (like the October 16-19 dates and Priya booking the cabin) as final decisions and action items, while simultaneously listing the actual final decisions elsewhere, creating massive contradictions. Furthermore, many items that were definitively resolved (pets, private chef, departure time) are listed under 'Open questions'. The structure is chaotic, featuring duplicate sections (e.g., 'Action items' and 'Action items (structured)'), making the notes incredibly repetitive and difficult to read."
+ }
+}

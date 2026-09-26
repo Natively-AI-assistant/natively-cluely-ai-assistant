@@ -1,0 +1,162 @@
+{
+ "blind_id": "S-1a2cdaaa",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 32662,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 10660,
+  "candidatesTokenCount": 841,
+  "totalTokenCount": 15544,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 10660
+   }
+  ],
+  "thoughtsTokenCount": 4043,
+  "serviceTier": "standard"
+ },
+ "fact_count": 28,
+ "evaluation": {
+  "factual_accuracy": 9,
+  "important_information_retention": 9,
+  "hallucination_control": 10,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 10,
+  "entity_retention": 10,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 10,
+  "structure": 9,
+  "conciseness": 3,
+  "readability": 6,
+  "overall_summary_quality": 7,
+  "critical_errors": [],
+  "missing_important_information": [
+   "The mainframe connector costs extra."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The customer retired its mainframe two years ago."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "partial"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "partial"
+   }
+  ],
+  "rationale": "The notes are exceptionally thorough and capture almost every detail from the transcript with high accuracy, including all numbers, dates, and action items. There are no hallucinations or superseded values presented as final. However, the notes suffer from severe repetition, with the same facts (e.g., 54 seats, 24 months, 18% off, October 15 start, security documents) repeated across nearly every section. This extreme redundancy significantly impacts conciseness and readability. A minor distractor about retiring the mainframe two years ago was included, while the detail that the mainframe connector costs extra was omitted."
+ }
+}

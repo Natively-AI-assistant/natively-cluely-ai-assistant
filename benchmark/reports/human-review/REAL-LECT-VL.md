@@ -1,0 +1,3430 @@
+# REAL-LECT-VL — lecture, very_long (90.2 min, 11692 words)
+
+**Source transcript:** `benchmark/transcripts/src/REAL-LECT-VL.txt` (from https://www.youtube.com/watch?v=dYorCZaF8ag)  
+**Reference fact sheet:** `benchmark/references/REAL-LECT-VL.json`  
+**Context:** Real 90-minute NIH Clinical Center IPPCR 2015 lecture, 'Conceptual Approach to Survival Analysis', by Dr. Laura Lee Johnson of the US FDA, from human-authored captions with no speaker diarization. It covers time-to-event vocabulary, censoring and truncation, survival and hazard functions, Kaplan-Meier, the log-rank test and Cox proportional hazards models, illustrated with trial examples (zidovudine HIV transmission, liver cirrhosis) and ends with conclusions and course logistics.
+
+## What a good summary must include
+- survival/time-to-event analysis = inference on event rates among those at risk; event, origin, scale must be defined (F22, F11)
+- report median not mean survival (F23)
+- survival function S(t)=P(T>=t) and hazard = instantaneous event rate, with worked examples (F26, F31, F30)
+- right vs left censoring and truncation (F41, F42, F39, F40)
+- independent censoring is the key assumption; violation biases hazard and makes analyses worthless (F44, F45)
+- Kaplan-Meier: product of conditional probabilities, handles right censoring, no covariates/competing risks/recurrent events (F57, F63, F14)
+- log-rank test: all time points, observed vs expected, p value only, biased by confounding/imbalance (F64, F65)
+- Cox PH model: semiparametric, exp(beta)=relative rate, beta=0 -> HR 1, must test proportionality (log-time interaction, p=.94 vs p=.003) (F70, F71, F69, F73)
+- zidovudine HIV trial: 8.3% transmission at interim, trial stopped, guidelines changed (F08, F09)
+- cirrhosis/ascites example: delayed enrollment of sicker patients biased KM survival too high; Cox with ascites fixes it (F81, F82)
+- conclusions: Cox most robust; analysis follows the design (F83, F85)
+
+## Most important disagreements (judge fact checks)
+
+✔ present · ◐ partial · ✘ missing · ⚠ contradicted
+
+| Fact | Imp. | A | B | C | D | E | F |
+|---|---|---|---|---|---|---|---|
+| F03: Learning objectives: interpret a Kaplan-Meier graph, interpret Cox model covariates, and understand the basic assumptions and what goes wrong when they are not met. | important | ◐ | ✔ | ✘ | ✔ | ◐ | ◐ |
+| F04: Mother-infant HIV transmission trial (worked out by Dennis Dixon): zidovudine versus placebo, powered to detect a 33% reduction in transmission, from 30% to 20%. | important | ✔ | ✔ | ◐ | ✔ | ✔ | ✘ |
+| F43: Kaplan-Meier (and essentially all methods) handle right censoring fine; left censoring is not as easy. | important | ✔ | ✔ | ✘ | ✔ | ✔ | ✔ |
+| F67: KM plus log-rank may be enough in many randomized studies, but if that is all you get and other things go wrong, ask for more, such as Cox models. | important | ◐ | ✔ | ✘ | ✔ | ◐ | ✔ |
+| F86: Post questions to the discussion board, which stays open about 2 weeks after the lecture; online viewers must use the separate board for this faculty member. | important | ✔ | ✔ | ◐ | ✔ | ✘ | ✔ |
+
+## Judge-flagged problems
+
+**A** — overall 6/10, accuracy 9, retention 9, conciseness 2
+- none flagged
+
+**B** — overall 5/10, accuracy 9, retention 10, conciseness 1
+- none flagged
+
+**C** — overall 4/10, accuracy 9, retention 9, conciseness 1
+- none flagged
+
+**D** — overall 5/10, accuracy 9, retention 9, conciseness 1
+- none flagged
+
+**E** — overall 5/10, accuracy 9, retention 8, conciseness 2
+- none flagged
+
+**F** — overall 4/10, accuracy 8, retention 9, conciseness 1
+- hallucination: The notes state 'Following everyone for four years was presented as not necessarily sufficient', misinterpreting the transcript's 'foreign year' (which meant 'for a year').
+
+
+---
+
+# Summary A
+
+_(run1)_
+
+### Title: Survival Analysis and HIV Trial Stopping Decisions
+
+#### Overview
+Dr. Laura Lee Johnson introduced survival analysis through a mother–infant HIV transmission trial, explaining censoring, competing risks, Kaplan–Meier curves, and how interim DSMB review supported stopping the study and offering zidovudine to controls. The lecture explains why survival analysis uses event timing and censoring, distinguishes survival from hazard, introduces the survival-model structure, and emphasizes defining the event and time origin. The lecture defined survival-analysis time origins, scales, survival and hazard functions, and emphasized event-based sample-size planning and precise event definitions. The lecture distinguished truncation from censoring, explained right and left censoring with examples, and emphasized independent censoring as the key survival-analysis assumption. The lecture explains independent censoring, competing risks, and how to manually compute a Kaplan–Meier survival curve while accounting for censoring. The lecture contrasted Kaplan–Meier/log-rank methods with Cox proportional-hazards modeling, emphasizing censoring, confounding, time-dependent covariates, recurrent events, and the need to test proportionality. The lecture explained testing and modeling for nonproportional hazards, time-dependent exposures, and how delayed recruitment of high-risk patients can bias Kaplan–Meier estimates while Cox regression can remain valid under independent censoring. The lecture concluded by summarizing when survival-analysis methods are appropriate, emphasizing independent censoring, model assumptions, competing risks, and the principle that analysis must follow study design. Key decisions: The DSMB recommended stopping the mother–infant HIV transmission study after reviewing toxicity, transmission rates, and related information.; Zidovudine was provided to everyone in the control group after the study was stopped.; Trial leaders agreed to stop the study.. Study summary: Survival or time-to-event analysis studies when an event occurs, not merely whether it occurs, and requires explicit definitions of the event, time origin, and time scale.
+
+#### Summary
+- The meeting covered survival or time-to-event analysis, emphasizing clear definitions of the event, time origin, and time scale, along with censoring, competing risks, Kaplan–Meier curves, and Cox models.
+- The DSMB recommended stopping the mother–infant HIV transmission study after reviewing toxicity, transmission rates, and related information, and trial leaders agreed.
+- After the study stopped, zidovudine was provided to everyone in the control group.
+- The discussion concluded that survival methods must match the study design and account for censoring, competing events, recruitment, covariates, and changing hazards.
+
+#### Core concepts
+- Survival analysis, also called time-to-event analysis, models the time until an event that may be death or another outcome such as HIV transmission.
+- The lecture emphasizes conceptual understanding of survival methods, vocabulary, interpretation, and assumptions rather than exhaustive computation.
+- A survival outcome requires both an event and a defined time origin and time scale.
+- Kaplan–Meier curves estimate survival or event occurrence over time and can be stratified by study arm or other factors.
+- Cox models can incorporate continuous and multiple covariates, making them more flexible than simple stratification.
+- Censoring allows participants to contribute information up to the last time they are observed, even if the event has not occurred.
+- Competing risks arise when another event eliminates the possibility of observing the event of interest.
+- Interim survival analyses can inform decisions by a data safety monitoring board during a group sequential trial.
+- Survival analysis studies events and the times at which they occur, rather than only whether an event occurred.
+- Survival analysis can be applied to death, infection, myocardial infarction, hospitalization, cancer recurrence, and engineering failures.
+- Failure analysis in engineering uses the same general event-time logic as survival analysis.
+- Survival analysis preserves information from censored participants and can capture differences in event trajectories.
+- A single assessment time can conceal clinically important differences that occur earlier in follow-up.
+- Survival analysis is used to infer event rates among people who remain at risk at a given time.
+- Delayed outcomes may require epidemiologic follow-up beyond the duration of typical phase 3 trials.
+- Surrogate events are indirect measures believed to predict a direct event, but developing valid surrogate variables is difficult.
+- Survival analysis measures progression along a dimension, typically time, until a defined event occurs.
+- A study must define its time origin, meaning the point at which the study clock begins.
+- The appropriate time origin depends on the study, such as diagnosis or treatment initiation in clinical trials, first exposure in occupational epidemiology, or birth in mortality studies.
+- Survival curves are monotonically decreasing because the proportion remaining event-free can decline or stay flat but cannot increase.
+- Survival analysis can represent either the proportion alive or the proportion that has not yet experienced the event.
+- The hazard function describes instantaneous event risk and provides the small increments that underlie the survival curve.
+- Hazard may vary over time, so proportional-hazards analyses involve assumptions about how risk changes across time.
+- Unlike a simple yes/no remission model, survival analysis preserves information about when the event occurs.
+- A distinctive feature of survival data is that the event may not occur during the observation period.
+- Survival-study sample size should be based on the expected number of events, not merely the total number of participants.
+- Covariates and the expected event risk of the study population must be considered when planning sample size.
+- Recruiting people at higher baseline risk can increase the number of observed events.
+- Truncation excludes people from observation based on how or when they enter the study, whereas censoring represents incomplete observation of participants who are in the study.
+- Independent truncation or censoring is a central assumption underlying the discussed survival-analysis methods.
+- Valid left-truncation analysis requires entrants at time t to be a random sample of the population at risk at time t.
+- Participants should remain under follow-up when possible even if they stop treatment or cannot attend study visits.
+- Independent censoring requires that subjects remaining at risk at each time point be representative random samples of the population at risk at that time.
+- Independent censoring must hold throughout the entire study rather than only at one time point.
+- The purpose of independent censoring is to allow the hazard function to be estimated fairly, without bias, and validly.
+- Censoring may depend on a modeled covariate and still be conditionally independent within groups defined by that covariate.
+- In a Cox model, censoring related to age or disease severity can be addressed by including that variable in the model.
+- Censoring can differ between study arms as long as the analysis has a way to handle that difference.
+- Competing events prevent the event of interest from occurring and therefore must be considered when interpreting observed event rates.
+- Kaplan–Meier estimation uses the observed risk set at each event time and incorporates censoring by removing censored subjects from later risk sets.
+- Censored observations still provide information about the risk of death or another event while participants remain under observation.
+- Kaplan–Meier curves can be drawn separately for intervention groups, age categories, or other stratification variables.
+- A single-time-point survival comparison does not use all available follow-up information.
+- The log-rank test compares observed event counts with expected event counts across follow-up time.
+- A log-rank test examines overall survival over all time points but does not adjust for covariates.
+- A stratified log-rank test compares data within each stratum before performing the overall test.
+- The Cox proportional-hazards model includes a baseline hazard, regression coefficients, and prognostic factors.
+- Cox modeling allows covariates to be incorporated directly rather than requiring stratification on every variable.
+- The Cox model is described as semiparametric because the baseline hazard is left unspecified.
+- The lecture emphasized that survival-analysis methods have evolved as medical outcomes increasingly include recurrences rather than only one death event.
+- Proportional hazards should be tested rather than assumed because covariate effects may change over time.
+- A time interaction can reveal whether the effect of age or drug on the hazard function changes over time.
+- When the drug effect changes over time, the model must include time in a way that allows the drug hazard effect to vary.
+- Crossing hazard curves are a possible consequence of nonproportional hazards.
+- Time-dependent survival analysis must account for changes in exposure or treatment during follow-up.
+- The timing of transplant must be considered separately from time to death in transplant studies.
+- Kaplan–Meier estimation is simple but can be misleading when recruitment and risk-set composition are problematic.
+- Cox proportional hazards is widely used, but more general Cox models may be needed when proportionality fails.
+- How time is measured and when measurement occurs are central to survival-model validity.
+- Independent censoring with respect to ascites allows the Cox partial-likelihood estimator to remain consistent in the example.
+- Independent censoring, at least with respect to the stated covariates, is presented as sufficient for consistency of the Cox partial-likelihood estimator.
+- Under the stated independent-censoring condition, Cox-model coefficients and interpreted relative risks are described as correct.
+- Survival analysis concerns inference about event rates at time t among individuals who remain at risk.
+- Cox regression is characterized as a robust general method that provides a framework for inference about covariates.
+- Risk sets are used to estimate the event rate or event occurrence.
+- Kaplan–Meier methods are simple but become difficult to use or interpret when covariates or competing risks are present.
+- The log-rank test is valued for simplicity, but its interpretation fails in settings involving time-dependent covariates or competing risks.
+- The lecture's overarching principle is that the analysis must be chosen to match the study design, clinical question, hypothesis, protocol, and collected data.
+
+#### Definitions
+- An event in time-to-event analysis is the defined outcome being observed, such as a baby testing positive for HIV.
+- The HIV transmission event in the example is infant seroconversion or testing positive.
+- Censoring is using partial follow-up information when a participant has not experienced the event by the end of observation or is otherwise no longer fully observed.
+- A competing risk is an event that occurs first and means the participant can no longer experience the event of interest.
+- A group sequential design includes preplanned efficacy reviews during a study rather than only at its conclusion.
+- A Kaplan–Meier graph in this example places probability of transmission on the y-axis and weeks on the x-axis.
+- The log-rank test supplies the p-value associated with the displayed comparison of curves.
+- An interval-censored event is known to have occurred between two assessment times rather than at an exactly observed moment.
+- Survival analysis is analysis used to make inferences about event rates over time.
+- The event rate at time t is evaluated among individuals who are still at risk at that time.
+- Survival time and time-to-event are two terms used for the time until the defined event occurs.
+- The outcome variable in this framework is the event time.
+- Lowercase t denotes a point on the time axis, whereas capital T denotes the random time at which the event occurs.
+- The time origin is the point designated as t = 0 when observation for events begins.
+- The survival quantity discussed is the probability that the event time T is greater than or equal to a specified time t.
+- Median survival is typically reported because many studies do not observe the event for every participant.
+- Mean survival requires the event to have been measured for every individual in the study.
+- The survival model has a baseline hazard multiplied by the exponential of a linear regression component.
+- Covariates may also be called prognostic factors in survival-model discussions.
+- The survival function is the proportion of the population still without the event by time t.
+- For pancreatic cancer, survival was defined as the probability that time from surgical treatment to death is greater than or equal to a specified time.
+- A survival value of 0.25 at 9 months means that 25% of patients remain alive nine months after resection.
+- A survival probability of 0.3 at 60 months is a five-year survival probability of 30%.
+- A five-year survival probability of 30% can also be expressed as 70% of patients dying within the first five years.
+- The hazard function is also described as an incidence rate, force of mortality, event rate, or instantaneous risk at time t.
+- The hazard at a particular time can be communicated as the chance of experiencing the event in the following time interval.
+- The time scale specifies the unit used to measure elapsed progression, such as hours, days, months, years, or milliliters of air.
+- In the herpes example, the event was recurrence and the target duration was time from the end of the primary episode to first recurrence.
+- In the nickel-refinery example, the event was lung-cancer death and the time origin was estimated first exposure at the beginning of employment.
+- Right truncation was described as sampling only people who have had the event of interest, such as cases found in a cancer registry.
+- Left truncation occurs when people who experienced the event or died before the study entry point are never observed.
+- Right censoring occurs when follow-up ends before an event is observed, while the participant is known to be event-free up to the censoring time.
+- Left censoring occurs when the event is known to have happened before observation began, but its exact time is unknown.
+- Type-one censoring follows everyone for the same fixed duration.
+- Type-two censoring stops observation after a prespecified number of events has occurred.
+- Random censoring allows follow-up time to vary according to when participants enter and how long they are observed.
+- The event time is represented by T, while the observed time is represented by T-star and equals event time for an event or follow-up time for a censored participant.
+- A censoring indicator may be called a delta in some textbooks, but software may define it oppositely from a failure indicator.
+- Right censoring occurs when follow-up ends before the subject experiences the event of interest.
+- The risk set is the group of subjects still under observation and at risk for the event at a particular time.
+- The time origin is usually enrollment or the beginning of treatment.
+- In randomized studies, the time axis is commonly time since enrollment or treatment, whereas in some nonrandomized studies it may be age.
+- A competing event is an event such as myocardial infarction that removes a person from risk of the primary event, such as cancer.
+- Kaplan–Meier survival is built from conditional survival probabilities multiplied across successive event times.
+- Hash marks on a Kaplan–Meier curve indicate censored observations.
+- A censored observation is represented by a hash mark on a Kaplan–Meier curve.
+- The null hypothesis for comparing two survival groups at a specified time is that their survival probabilities are equal.
+- The single-time-point survival test statistic was described as a normal-based z statistic using the difference between survival estimates divided by the square root of their summed variances.
+- The log-rank test is a survival-comparison statistic that accounts for censoring and truncation but not time-dependent covariates or recurrent events.
+- A hazard ratio of one corresponds to a regression coefficient equal to zero.
+- A hazard ratio of one means the compared groups have the same survival experience with respect to that factor.
+- The exponential of a Cox regression coefficient represents the relative rate or risk associated with its covariate.
+- The Cox model was characterized as multiplicative because a covariate changes the hazard rate by a multiplicative factor.
+- The proportional-hazards assumption requires a covariate's relative rate to remain constant over time.
+- A time-dependent covariate is a predictor whose value or effect can change during follow-up.
+- Proportional hazards means the relative hazard between comparison groups does not vary over time.
+- A time interaction term represents how a covariate's effect on the hazard changes with time.
+- The natural logarithm of time is used in the interaction terms because of how the model is set up.
+- A baseline hazard is the event rate at time t for a specified reference subject defined by the covariate coding.
+- In the example, treatment and ascites are categorical covariates, while prothrombin time is continuous.
+- The Cox model encodes treatment as treatment equals one and placebo equals zero.
+- Ascites was used as an indicator of liver-cirrhosis severity in the trial example.
+- Independent censoring is presented as the condition needed for consistency of the partial-likelihood estimator in the example.
+- Median survival is the time by which 50% of the study population has experienced the event.
+- Mean time to event requires considering the time until everyone has experienced the event, unlike median survival.
+- Right censoring, left truncation, recurrent events, and competing risks are distinct survival-analysis data or event structures with different handling requirements.
+- Censoring refers to individuals leaving observation or not experiencing the event during the period they are being followed.
+- The Cox model is presented as a covariate-based framework for making inference and explaining results.
+- The proportional-hazards assumption is a model assumption that must be evaluated when using Cox regression.
+
+#### Examples
+- The lecture uses mother–infant HIV transmission, comparing placebo with zidovudine given to mothers, as its central survival-analysis example.
+- The study was designed around reducing transmission from 30% to 20%, described as detecting a 33% transmission-rate reduction.
+- At the first interim analysis, the zidovudine group had an observed transmission rate of 8.3% with a relatively tight confidence interval.
+- The interim review was intended to include mothers enrolled through December 1993 and their babies, and took place in February 1994.
+- The Kaplan–Meier display showed separate curves for placebo and zidovudine groups, with the numbers of babies at risk shown below.
+- An infant observed to be 24 weeks old without seroconversion still contributes information to the analysis through censoring.
+- Death from a diarrheal infection at six weeks is an example of a competing risk for later HIV seroconversion.
+- Death from cancer and death from a heart attack were used as a general illustration of mutually exclusive competing events.
+- A new cancer treatment can be evaluated by asking whether it extends life five months beyond the current treatment.
+- A recurring infection illustrates why the analyst must distinguish a cleared prior infection from a genuinely new infection.
+- The time to score a soccer goal is an example of an event that may take a long time to occur.
+- A balloon bursting can be analyzed by the amount of air in milliliters rather than by calendar time.
+- A three-day flu treatment and a seven-day treatment look identical if outcomes are assessed only at day 10.
+- The Cox-2 inhibitor example illustrates that short-term studies can miss increased mortality emerging around 12–18 months.
+- An observational comparison may associate lower blood pressure, lower BMI, or blueberry consumption with longer life, but randomized results may differ.
+- A follow-up of the MIST trial examined time to pregnancy or first live birth after miscarriage among women randomized to two management approaches.
+- Possible event definitions mentioned include an HIV-positive test, an AIDS-defining event, mother-infant HIV transmission, or blood pressure or cholesterol falling below a cutoff.
+- For an oncology study, possible time origins included surgical resection, designation, or the start of chemotherapy.
+- In pancreatic cancer, the lecture used surgery as the origin and death as the event, with elapsed time measured in months.
+- The pancreatic cancer curve illustrated that everyone was alive at enrollment and that the proportion alive declined over time.
+- At nine months in the pancreatic cancer example, approximately 25% of participants were still alive.
+- A myocardial-infarction example illustrated that surviving the first 30 days may be associated with better longer-term survival prospects.
+- In the herpes example, recurrence of lesions after treatment for a primary episode was the event of interest.
+- In the occupational nickel-refinery study, years since first exposure were used to study death from lung cancer.
+- For population mortality, birth was the origin, death was the event, and age at death was measured in years.
+- The balloon demonstration treated bursting as the event and milliliters of infused air as the time-like measurement, beginning at zero milliliters.
+- A cancer-registry study can suffer right truncation because people with cancer that was never recorded in the registry are absent from the sample.
+- Restricting enrollment to people aged 65 or older illustrates left truncation because those who died before age 65 cannot enter the study.
+- A five-year study censors participants who reach the study end without experiencing the event.
+- Interviewing 12-year-olds about when they began smoking illustrates left censoring when a participant already smokes but cannot identify the start time.
+- A childhood infection study encountered left censoring when two children were already infected at enrollment.
+- A participant who reaches 24 months without the event is censored at 24 months, while retaining information that the participant was event-free through that time.
+- Replacing all light bulbs after four bulbs fail illustrates type-two censoring of the remaining bulbs.
+- In a five-year study where death is the event, patients who remain alive at the end of follow-up are censored.
+- Students followed from age five to twenty-five who never start smoking by age twenty-five are right-censored for time to smoking initiation.
+- If older subjects are admitted only after a study changes its age eligibility criteria, their shorter potential follow-up can violate independent censoring unless age is included or conditioned on.
+- The polar bear plunge example assumes annual plunge deaths of 3%, other-cause deaths of 2% for males and 1% for females, and ten years of follow-up.
+- The polar bear plunge example produces apparent deaths of 25% among women and 24% among men over ten years, potentially leading to the misleading headline that the plunge kills women.
+- The apparent sex difference is explained by different cumulative mortality from other causes—33.5% in women versus 40% in men—which changes who remains exposed to the plunge.
+- A Kaplan–Meier calculation with 20 people at risk and 2 events gives a survival estimate of 0.9.
+- At a later time with 18 people at risk and no events, the survival estimate remains 0.9 because the conditional factor is one.
+- At ten months, three subjects censored between months six and ten reduce the risk set to 15, and one event updates survival using 1 minus 1 divided by 15.
+- At thirteen months, two events among 14 at risk reduce the illustrative survival estimate to approximately 0.42.
+- A Kaplan–Meier curve may be biased when high-risk participants enter the study late because their curve can fall faster when later follow-up is unavailable.
+- The lecturer used placebo versus a new intervention as an example of two survival groups to compare.
+- Recurrent events were illustrated with a soccer example in which a participant might score zero or six goals.
+- Age categories were given as an example of a variable that could define separate Kaplan–Meier curves.
+- Age was used to show that older subjects may be censored earlier than younger subjects when they lack sufficient time on study.
+- The lecturer proposed adding age to a Cox model instead of relying only on oversampling older participants.
+- A Cox model can incorporate changing weight measurements and medication changes over time.
+- The lecturer used duration of Cox-2 inhibitor use—two months versus 18 or 24 months—as an example of a time-varying treatment effect.
+- One proportional-hazards example included age and drug as covariates and added their interactions with the natural log of time.
+- In the first test example, the time-interaction terms had large p-values and a joint test produced p = .94, supporting proportional hazards.
+- In the second example, a partial likelihood-ratio test produced p = .003, indicating that proportional hazards did not hold.
+- The second example localized the nonproportionality to the drug effect rather than age.
+- Antiretroviral therapy was used as an example where patients may move on and off treatment during long follow-up.
+- The Stanford heart-transplant study illustrated why time to transplant must be considered in addition to time to death.
+- The liver-cirrhosis trial compared a new treatment with placebo using survival as the outcome.
+- The cirrhosis example included treatment, ascites status, and prothrombin time as model covariates.
+- Physicians initially hesitated to enroll patients with ascites because of toxicity concerns, causing these sicker patients to enter recruitment later.
+- Because ascites patients entered after roughly a year and a half, later risk sets lacked adequate representation of this worse-prognosis group.
+- The speaker contrasts median survival with mean survival by noting that median survival requires only half the population to have had the event, whereas mean time to event requires everyone to have had it.
+- Kaplan–Meier calculation is portrayed as simple enough to do informally, but its interpretation becomes problematic with covariates or competing risks.
+- The speaker uses recurrent events as an example requiring a more sophisticated survival model.
+- Baseline imbalance in prognostic factors is given as an example of a situation that can bias an estimate.
+- The speaker describes people entering and leaving research studies to illustrate truncation and censoring.
+
+#### Formulas / steps
+- To estimate a transmission rate, count the babies who eventually seroconvert and relate that event count to the total number of infants of interest.
+- When planning sample size for a time-to-event study, work backward from the required number of events and account for dropouts and loss to follow-up.
+- Define the event, select the time origin, choose the time scale, and specify how the event time is determined before analyzing survival data.
+- Use the last available follow-up time for participants who are censored rather than discarding all of their observed information.
+- Construct a Kaplan–Meier curve by tracking event occurrence over the time scale and updating the estimated probability as participants experience events or are censored.
+- Compare survival curves using a log-rank test, whose result can be reported as a p-value.
+- Review interim Kaplan–Meier results alongside toxicity, transmission rates, and other study information before making a monitoring decision.
+- Begin by defining exactly what counts as the event.
+- Specify the time origin at which observation begins and the clock starts.
+- Choose an appropriate time scale, such as months for oncology follow-up or days or hours for flu.
+- Record when the event occurs, recognizing that some participants may never experience it during observation.
+- Use event-time assessments across follow-up rather than relying only on one fixed endpoint.
+- At each time t, evaluate the event rate among participants still at risk.
+- For survival probability, evaluate whether the event time T is at least as large as the chosen time point t.
+- Consider covariates or prognostic factors only as needed for the specific analysis.
+- The general survival model combines a baseline hazard with the exponential of a linear predictor.
+- Define the event before analysis, including clear criteria for what counts as its occurrence.
+- Choose a clinically meaningful time origin at which follow-up begins.
+- Choose the time scale and its unit, such as days, months, years, or milliliters in the balloon demonstration.
+- Measure elapsed time from the origin to the first occurrence of the defined event.
+- Construct the survival function as the proportion remaining event-free at each time point.
+- Interpret a survival estimate in both statistical and clinically understandable language, such as S(60 months)=0.30 becoming five-year survival of 30%.
+- Evaluate whether hazard is constant or changes over time before relying on constant-risk assumptions.
+- Account for censoring or truncation when estimating the hazard function.
+- Base sample-size planning on the expected number of observed events and consider the covariates intended for the model.
+- Plan sample size by considering the expected number of events and the covariates intended for the model.
+- For left truncation, assess whether study entrants at each entry time are a random sample of people currently at risk.
+- For each participant, retain the time observed until either the event occurs or censoring occurs.
+- Record an indicator identifying whether the observed endpoint is a failure event or censoring, and confirm the software's coding convention.
+- When a participant withdraws or moves, investigate the reason and its possible relationship to future event risk before treating the observation as independently censored.
+- To compute Kaplan–Meier survival at an event time, multiply the previous survival estimate by one minus the number of events divided by the number at risk.
+- Initialize the Kaplan–Meier estimate at time zero as one because no events have occurred yet.
+- At each event time, count only subjects currently in the risk set; previously observed events and prior censorings are excluded.
+- If there are no events at a time point, multiply by one and keep the survival estimate flat.
+- After an event, remove that subject from subsequent risk sets.
+- Censored subjects contribute follow-up until their censoring time and are then removed from later risk sets.
+- Confidence intervals can be placed around the Kaplan–Meier curve, with several possible calculation methods.
+- The same survival-estimation idea can be applied to one minus survival when the complement is the quantity of interest.
+- For a single-time-point survival comparison, formulate equality of survival between groups as the null hypothesis.
+- Construct the single-time-point statistic by taking the difference between two survival estimates and dividing by the square root of the sum of their variances.
+- Choose a comparison time point such as 24 weeks or 72 weeks, recognizing that this uses only part of the follow-up data.
+- For a log-rank analysis, compare observed event counts with expected event counts across all event times.
+- Use stratification by comparing observations within each stratum and then combining the resulting comparisons into a test.
+- In a Cox model, add prognostic variables as covariates rather than necessarily stratifying on them.
+- Interpret each Cox coefficient by exponentiating it to obtain the associated relative rate or hazard ratio.
+- If a covariate's effect changes over time, include the relevant time element in the model.
+- Use statistical software to fit and test Cox models rather than attempting the calculations manually.
+- Test hypotheses about individual Cox regression coefficients to make inference about covariate effects.
+- Fit a model without time interactions using the primary covariates, such as age and drug.
+- Fit a second model that adds covariate-by-natural-log-time interaction terms.
+- Compare the models using a Wald test or a partial likelihood-ratio test.
+- Use the p-values of individual time interactions to identify which covariate violates proportional hazards.
+- A joint test of two interaction terms uses two degrees of freedom.
+- For a specified subject, obtain the relative rate by substituting the covariate values into the exponentiated Cox-model linear predictor.
+- Under proportional hazards, the relative rate calculated at two years remains the same at three years and other follow-up times.
+- When analyzing a transplant study, separate the time-to-transplant process from the time-to-death process.
+- Before interpreting a survival curve, check whether recruitment timing creates an appropriate risk set at every time point.
+- Begin with the clinical question, derive the hypothesis, design the study to test it, collect data consistent with that design, and then select an analysis that supports the intended conclusion.
+- Before interpreting a Cox model, verify that censoring is independent with respect to the relevant covariates.
+- When using Cox regression, include measured covariates that are appropriate for the model and assess whether the proportional-hazards assumption holds.
+- For recurrent events, select a survival model more specialized than a basic form that may not handle them adequately.
+- Do not rely on Kaplan–Meier or log-rank methods without considering covariates, time dependence, competing risks, and interpretability.
+- If an analysis does not answer the clinical question, test the hypothesis, or match the protocol, replace it with a more appropriate analysis.
+
+#### Things to memorize
+- Survival analysis is also called time-to-event analysis, and the event need not be death.
+- Kaplan–Meier curves display event or survival information over time and commonly show the number of participants remaining under observation beneath the graph.
+- The log-rank test is associated with the p-value used to compare Kaplan–Meier curves in this lecture.
+- Censoring preserves partial follow-up information from participants who have not experienced the event by their last observation.
+- Competing risks remove a participant from being at risk for the event of interest once the competing event occurs.
+- A survival analysis requires an event definition, a time origin, and a time scale.
+- Cox models can accommodate continuous and multiple covariates, unlike a basic stratified curve display.
+- Kaplan–Meier curves can become unreliable or non-robust when many stratification factors leave very few participants per curve.
+- Survival analysis focuses on both whether an event occurs and when it occurs.
+- Censoring contains information that a simple fixed-time yes/no analysis does not fully use.
+- Median survival is preferred when not all study participants experience the event.
+- Mean survival requires complete event measurement for every participant.
+- The event-rate denominator at time t consists of people at risk at time t.
+- Lowercase t represents a time point, while capital T represents the random event time.
+- t = 0 is the time origin for beginning event follow-up.
+- The survival probability discussed is P(T ≥ t).
+- A survival model includes a baseline hazard and an exponential linear predictor.
+- Survival function means the proportion of the population remaining without the event by time t.
+- A survival curve is monotonically decreasing: it can fall or remain flat, but it does not rise.
+- S(9 months)=0.25 means a 25% probability of remaining alive beyond or at nine months in the stated example.
+- S(60 months)=0.30 is equivalent to a five-year survival probability of 30%.
+- The hazard is an instantaneous risk or event rate at a particular time.
+- Hazard depends on the chosen time unit, so a statement such as 1% risk must specify whether the interval is a month, day, or another unit.
+- Survival-analysis sample size should be based on the expected number of events rather than only the total number enrolled.
+- Independent censoring is the key assumption for standard survival analysis.
+- Right truncation can underestimate survival because unrecorded cases are excluded from observation.
+- Left truncation can omit short survivors who die before they become eligible or enter the study.
+- Kaplan-Meier analysis was stated to handle right censoring, but left censoring is more difficult.
+- Solid graph symbols generally indicate observed events, whereas open circles indicate censoring.
+- Type-one censoring uses a common follow-up duration, and type-two censoring ends after a specified number of events.
+- Failure-indicator and censoring-indicator variables may use opposite coding conventions in software.
+- The Kaplan–Meier update is previous survival multiplied by 1 minus events divided by the risk set size.
+- Kaplan–Meier survival starts at one at time zero.
+- Censoring reduces later risk-set sizes but does not count as an event.
+- A censoring indicator and a failure indicator may use opposite coding conventions, so the software convention must be checked.
+- Competing events must be considered because occurrence of one event can preclude occurrence of the event being analyzed.
+- Hash marks on a Kaplan–Meier graph represent censored observations.
+- Hash marks on a Kaplan–Meier curve indicate censored observations.
+- The log-rank test provides a p-value for an overall survival comparison but does not itself provide a measure of the size of the difference.
+- A log-rank test requires two independent samples from the same population framework.
+- Confounding and imbalance in prognostic factors can invalidate an unadjusted log-rank comparison.
+- For a Cox model, beta equal to zero corresponds to a hazard ratio of one.
+- A hazard ratio of one indicates no difference in survival experience between the compared groups for that factor.
+- The exponentiated Cox coefficient is interpreted as a relative rate or risk.
+- The proportional-hazards assumption requires the relative rate to be constant over time.
+- The proportionality assumption must be tested whenever a proportional-hazards model is used.
+- Kaplan–Meier and simple log-rank methods cannot model time-dependent covariates or recurrent events.
+- The lecture's first test example yielded p = .94 and supported assuming proportional hazards.
+- The lecture's second test example yielded p = .003 and rejected proportional hazards.
+- Natural log of time was used for the time-interaction terms in the illustrated model.
+- Treatment was coded as 1 and placebo as 0 in the cirrhosis Cox model.
+- Ascites status was treated as a severity-related covariate in the liver-cirrhosis example.
+- Kaplan–Meier is simple but potentially misleading when the risk set is distorted.
+- If proportional hazards hold, a relative rate does not vary with time.
+- Independent censoring is required for consistency of the partial-likelihood estimator in the described Cox analysis.
+- Independent censoring is identified as the condition required for consistency of the Cox partial-likelihood estimator.
+- Median survival is the time at which 50% of participants have experienced the event.
+- Survival analysis can handle right censoring and left truncation, but not every method handles recurrent events and competing risks.
+- Risk sets support estimation of event occurrence or rates.
+- Kaplan–Meier and log-rank methods are limited in settings with covariates, time-dependent covariates, or competing risks.
+- Cox regression requires attention to proportional hazards and appropriate covariate selection.
+- Analysis follows study design.
+
+#### Confusing points
+- The lecturer distinguishes the event of interest from death and notes that survival analysis can apply to outcomes such as HIV seroconversion.
+- An infant who has not seroconverted by 24 weeks is not treated as a simple negative outcome; the infant may be censored and contribute follow-up information.
+- Seroconversion time may be known only within an interval because testing occurs at discrete visits.
+- A competing risk makes ordinary interpretation of a Kaplan–Meier curve problematic because a participant who experiences the competing event can no longer experience the target event.
+- The unexpectedly low observed transmission rate cannot automatically be interpreted as a treatment effect because randomization, demographics, data quality, and other issues may contribute.
+- The lecture contrasts exact event timing at death with interval observation of seroconversion, which require different levels of time precision.
+- The lecture uses survival, time-to-event, and failure analysis as related labels, but the exact distinctions among them are not fully developed here.
+- The lecture mentions that hazard functions can cross but does not explain the mathematical or modeling consequences in detail.
+- The survival-model equation is introduced verbally without a complete displayed formula or explanation of each component.
+- The transcript alternates between event rates, survival, and hazard without fully separating their formal definitions.
+- The MIST-trial follow-up is described as examining pregnancy or first live birth, but the exact primary endpoint and censoring rules are not specified.
+- The relationship between a surrogate event and the direct clinical event is presented as difficult to establish but not fully explained.
+- The lecture contrasts survival probabilities with hazard rates, but hazard is not itself the cumulative proportion surviving.
+- The hazard is called instantaneous, yet its numerical interpretation depends on the selected increment or time unit.
+- The lecturer notes that survival can be plotted using either the percentage alive or the percentage experiencing the event, which requires careful attention to axis interpretation.
+- A yes/no remission model is possible, but it discards the timing information that motivates survival analysis.
+- The proportional-hazards concern is whether the event risk is effectively stable or changes across months of follow-up.
+- Defining the end of a herpes episode is difficult because both clinicians and participants at home must apply the definition.
+- The balloon example uses milliliters of air as the progression dimension, showing that survival analysis is not restricted to calendar time.
+- The lecture distinguishes left truncation from left censoring, but both involve missing information before the observation period and therefore require careful classification.
+- A participant who moves away cannot automatically be treated as independently censored because relocation may reflect access to last-resort treatment or changing health status.
+- Accidental death may appear unrelated to the event of interest, but treatment-related balance problems could make that competing outcome informative rather than independent.
+- Whether participants already affected before enrollment should be included is not resolved solely by the fact that the event is known to have occurred.
+- The notation for observed time and the event/censoring indicator may differ between textbooks and software.
+- The coding of delta, failure, and censoring indicators is potentially confusing because textbooks and software may use opposite conventions.
+- Censoring does not have to be marginally independent of everything; it may depend on a covariate if independence holds conditional on that covariate.
+- Different censoring patterns across study arms are not automatically invalid if the analysis accounts for them.
+- Treating competing events simply as ordinary censoring can make the resulting event-specific hazard interpretation non-meaningful.
+- The polar bear plunge example can produce a misleading sex comparison because cumulative competing mortality changes the composition of those still exposed.
+- Censoring subjects still contribute information before censoring, but they should not remain in later risk sets.
+- The lecture distinguishes simple Kaplan–Meier/log-rank analyses from richer Cox models, but the precise handling of competing risks was not developed.
+- It is unclear from this chunk how the lecturer intended the single-time-point statistic's variance term to be written exactly.
+- The lecturer states that the log-rank test accounts for censoring and truncation, but the exact meaning of 'truncation' was not clarified.
+- The distinction between using age as a stratification factor and including age as a Cox covariate was presented conceptually but not mathematically detailed.
+- The lecturer says that modeling can help with selection and censoring problems but also warns that it cannot solve every problem.
+- The precise test or diagnostic for proportional hazards was deferred to the next explanation.
+- The transcript refers to both a Wald test and a partial likelihood-ratio test, but the exact implementation and model comparison details are not fully spelled out.
+- The lecture mentions Schoenfeld residual plots but does not explain how to construct or interpret them.
+- The exact baseline-hazard reference subject in the numerical example is difficult to parse because the transcript's covariate coding is partially unclear.
+- The transcript's numerical coefficient description is unclear around the prothrombin-time term, so the full fitted equation should be reviewed from the original slide or recording.
+- The claim that Cox regression avoids the recruitment-related problem depends on the independent-censoring condition and should not be generalized without checking that assumption.
+- The discussion distinguishes time to transplant from time to death, but the precise two-stage statistical formulation is not provided.
+- The transcript distinguishes what survival analysis can handle generally from what particular models can handle, so the method must be matched to recurrent events and competing risks.
+- The claim that Kaplan–Meier cannot be used with covariates is stated categorically, but the surrounding discussion emphasizes that interpretation and practical use become difficult rather than explaining the exact boundary.
+- The transcript says proportional-hazards assumptions are difficult but feasible to test, without specifying the testing procedure.
+- The lecture states that competing risks make Kaplan–Meier interpretation nonsensible, but does not explain the alternative estimand or model in this chunk.
+- The distinction between truncation and censoring is introduced through participant entry and exit, but the transcript wording is imprecise and should be reviewed.
+
+#### Questions to review
+- What qualifies as the event in a specific survival analysis, and how is it operationalized?
+- What time origin and time scale should be used for an infant HIV-transmission analysis?
+- How does censoring allow an infant with incomplete follow-up to contribute to a Kaplan–Meier analysis?
+- What is the difference between an interval-measured event such as seroconversion and a continuously observed event such as death?
+- Why is a competing risk problematic for ordinary Kaplan–Meier interpretation?
+- When should a Cox model be used instead of adding many stratification factors to Kaplan–Meier curves?
+- What should a DSMB investigate when an interim transmission estimate is much lower than expected?
+- Why can survival analysis reveal differences that a logistic regression performed at a single time point misses?
+- How does censoring contribute information to survival analysis?
+- Why is median survival generally preferred to mean survival in incomplete-follow-up studies?
+- What kinds of events can be used as endpoints in survival analysis?
+- What is the difference between the time axis t and the random event time T?
+- How should the time origin be selected for an oncology or infectious-disease study?
+- Why can short-term Cox-2 inhibitor studies fail to detect later mortality differences?
+- What assumptions and interpretation accompany the baseline-hazard-plus-exponential-linear-predictor model?
+- How should recurrent events such as repeated infections be defined and analyzed?
+- How do you select the time origin for an oncology, clinical-trial, occupational-exposure, or population-mortality study?
+- Why must the event definition be clinically and operationally precise?
+- What does a survival estimate of 0.25 at nine months mean in words?
+- How would you translate S(60)=0.30 into a patient-facing statement?
+- What is the difference between a survival function and a hazard function?
+- Why can hazard be higher early after an event such as myocardial infarction and lower later?
+- Why does the chosen time unit matter when reporting a hazard?
+- What are censoring and truncation, and why can the hazard still be estimated when they are present?
+- Why should sample-size calculations use the expected number of events and account for planned covariates?
+- Why does sampling only recorded cases lead to an underestimate of the survival function?
+- How does enrolling only participants aged 65 or older create left truncation?
+- What is the difference between right censoring and left censoring?
+- Why must withdrawal be unrelated to subsequent event risk for independent censoring to hold?
+- What conditions make left-truncation-based hazard estimates valid?
+- How do type-one, type-two, and random censoring differ?
+- How should a software analysis encode the failure indicator versus the censoring indicator?
+- What is the difference between a failure indicator and a censoring indicator in the software used for an analysis?
+- What exactly does independent censoring require at every time point?
+- How can age or disease severity be incorporated to obtain conditional independent censoring?
+- Why does failing to condition on age bias the survival estimates when older subjects enter the study later?
+- How should an event-specific hazard be interpreted when myocardial infarction competes with cancer?
+- How is the Kaplan–Meier estimate updated when there are events, no events, and censoring between event times?
+- How do late entry of high-risk subjects and missing later follow-up distort a Kaplan–Meier curve?
+- Why can late entry of high-risk participants distort a Kaplan–Meier curve?
+- Why is a survival comparison at one selected time point less informative than a comparison using all follow-up time?
+- How does the log-rank test use observed and expected event counts?
+- Why can confounding cause a log-rank test to give an inaccurate result?
+- What is gained and what is lost when a log-rank test is stratified?
+- What does beta equal to zero imply about the hazard ratio and survival experience?
+- Why is the Cox model called semiparametric?
+- What should be done when a covariate's hazard effect is not constant over time?
+- How can changing weight, medication, or treatment duration be represented in a Cox model?
+- Why might adding age to a Cox model be preferable to oversampling older participants?
+- What statistical procedure should be used to test the proportional-hazards assumption?
+- How do you specify a Cox model with a covariate multiplied by the natural logarithm of time?
+- When should a Wald test versus a partial likelihood-ratio test be used to test proportional hazards?
+- How do Schoenfeld residual plots diagnose time-varying covariate effects?
+- What conclusion follows from a joint interaction test with p = .94?
+- What conclusion follows from a partial likelihood-ratio test with p = .003?
+- How can individual interaction p-values identify whether age or drug is responsible for nonproportional hazards?
+- Why can delayed enrollment of high-risk patients inflate a Kaplan–Meier survival estimate?
+- Under what censoring condition can the Cox partial-likelihood estimator still provide correct coefficients in the recruitment example?
+- What condition is required for consistency of the Cox partial-likelihood estimator?
+- How is median survival different from mean time to event?
+- Which survival-analysis methods can appropriately handle recurrent events?
+- Why do covariates and competing risks make Kaplan–Meier interpretation problematic?
+- Why can baseline imbalance in prognostic factors bias an estimate?
+- How should the proportional-hazards assumption be assessed in a Cox model?
+- How should study design, protocol, and the clinical hypothesis determine the final analysis?
+
+#### Study summary
+- Survival or time-to-event analysis studies when an event occurs, not merely whether it occurs, and requires explicit definitions of the event, time origin, and time scale.
+- Kaplan–Meier curves estimate event probabilities over time, accommodate censoring, and can compare groups such as placebo and zidovudine.
+- The mother–infant HIV example illustrates how interim Kaplan–Meier results can contribute to DSMB decisions, but curves must be interpreted alongside data quality, randomization, demographics, toxicity, and competing events.
+- Cox models extend analysis by allowing multiple and continuous covariates, whereas heavy stratification can produce sparse and unreliable curves.
+- In the example, the DSMB ultimately recommended stopping the trial and providing zidovudine to the control group.
+- Survival analysis is appropriate when both event occurrence and event timing matter.
+- Its major advantage over a single-time yes/no comparison is that it uses follow-up timing and information from censoring.
+- Median survival is usually the relevant summary because complete event observation is uncommon.
+- A study must explicitly define the event, time origin, time scale, and event time before analysis.
+- The survival framework uses t for follow-up time and T for the random time to event, with survival expressed through the probability T is at least t.
+- The model is conceptually related to linear regression but uses a baseline hazard and covariates or prognostic factors.
+- Delayed harms and benefits can be missed by short trials, so longer event-time follow-up may be essential.
+- Start every survival analysis by defining the event, time origin, and time scale.
+- The survival function tracks the proportion remaining event-free, while the hazard function describes instantaneous risk at each point in time.
+- Survival curves decrease or remain flat because participants can experience the event but do not return to the event-free state.
+- Hazard is not necessarily constant, and assuming constant risk across months can be unrealistic.
+- The time unit must accompany hazard statements because the meaning of an instantaneous rate changes with the chosen scale.
+- Precise operational definitions are especially important when study participants must identify events or episode endpoints outside the clinic.
+- Survival analysis is appropriate when event times vary and some participants may not experience the event during observation.
+- Sample-size planning should focus on expected events and incorporate the covariates that will be included in the model.
+- Survival-study planning must account for expected event counts, relevant covariates, and the baseline risk profile of recruited participants.
+- Truncation changes who can enter the observed sample, while censoring limits how long an enrolled participant is observed.
+- Right truncation can miss unrecorded cases and left truncation can miss early deaths, both potentially distorting survival estimates.
+- Right censoring preserves information that a participant remained event-free until the censoring time, whereas left censoring indicates the event happened before observation began.
+- Independent censoring must be evaluated rather than assumed, especially for withdrawals, deaths, or relocations related to health or treatment.
+- Correctly distinguish event time, observed follow-up time, and the software's event/censoring indicator when preparing data.
+- Standard survival analysis depends on independent censoring, meaning those remaining at risk are representative of the risk population at each time point.
+- Censoring can be conditionally independent given covariates such as age or disease severity, which can be included in a model.
+- Competing events, such as death from myocardial infarction when studying cancer, remove subjects from risk of the event of interest and can make naive hazard interpretations misleading.
+- The Kaplan–Meier estimator multiplies conditional survival factors, using the current risk set and excluding subjects after events or censoring.
+- Censored subjects contribute follow-up until censoring, and their censoring times appear as hash marks on the curve.
+- Late entry of high-risk participants can distort Kaplan–Meier estimates because later follow-up is unavailable for those participants.
+- Kaplan–Meier curves display survival over time and can show censoring with hash marks, but their interpretation can be distorted by differential entry, censoring, or unbalanced prognostic factors.
+- The log-rank test compares survival curves over all time points using observed versus expected events and returns a p-value.
+- Log-rank testing is limited because it does not adjust for covariates and cannot handle time-dependent covariates, recurrent events, or the other complexities discussed.
+- Stratified log-rank tests can address strata but may lose power when sample sizes become small within strata.
+- The Cox model provides a covariate-based alternative that estimates multiplicative effects on the hazard.
+- In Cox modeling, beta equal to zero gives a hazard ratio of one, while exponentiating a coefficient gives its relative rate or risk.
+- The proportional-hazards assumption must be tested, and time-varying effects should be modeled when relative rates change over time.
+- Cox models can incorporate changing covariate values such as repeated weight measurements and medication changes, provided the dataset supports the model complexity.
+- The main practical warning is that modeling is useful but cannot compensate for every design or data problem.
+- Test proportional hazards by comparing a standard Cox model with one containing covariate-by-log-time interactions.
+- A large p-value such as .94 supported proportional hazards in one example, whereas p = .003 indicated nonproportional hazards in another.
+- When only the drug-by-time term is significant, the drug effect changes over time while age is not the source of nonproportionality.
+- Longitudinal analyses must model changes in treatment exposure and account for clinically meaningful event timing such as transplant.
+- Kaplan–Meier curves can overestimate survival when patients with worse prognosis enter the study late and are absent from early risk sets.
+- Cox regression can recover correct coefficients in the example when censoring is independent with respect to ascites.
+- The overall lesson is to choose the appropriate survival-analysis model and carefully examine time measurement, protocol changes, recruitment, and censoring.
+- Cox regression is a flexible framework for covariate-based survival inference, provided independent censoring, appropriate covariates, and model assumptions such as proportional hazards are addressed.
+- Median survival denotes the time when half the population has experienced the event, whereas mean time to event requires event information for everyone.
+- Kaplan–Meier and log-rank approaches are simple, but their use or interpretation is limited by covariates, time-dependent covariates, competing risks, and baseline imbalance.
+- Recurrent events and competing risks may require more specialized survival models rather than basic methods.
+- Censoring and participant entry or exit are central design features that affect survival analysis.
+- The final methodological rule is to choose an analysis that answers the clinical question, tests the hypothesis, fits the protocol, and uses data gathered under the study design.
+
+#### Action items (structured)
+- When using survival-analysis software, verify whether the input variable is a failure indicator or a censoring indicator because conventions may be opposite.
+- Continue tracking participants after treatment discontinuation or relocation when possible to determine whether they are alive and whether the event occurred. [inferred]
+- Post questions to the appropriate course discussion board, with online students using the separate board for questions directed to the relevant faculty.
+- Complete the course evaluations because the instructors use them to make changes to the class each year.
+- Send examples that could be added to the course.
+
+#### Decisions (structured)
+- The DSMB recommended stopping the mother–infant HIV transmission study after reviewing toxicity, transmission rates, and related information.
+- Trial leaders agreed to stop the study.
+- Zidovudine was provided to everyone in the control group after the study was stopped.
+
+#### Open questions (structured)
+- What additional checks did the study team need to perform to explain the unexpectedly low 8.3% zidovudine transmission rate? [open]
+- How should survival analysis handle competing risks such as infant death before HIV seroconversion? [open]
+- Why and when should a Cox model be preferred over stratified Kaplan–Meier curves? [open]
+- How should an event such as mother-to-infant transmission be operationally defined in a study? [open]
+- What should be selected as the time origin when designing a survival study? [open]
+- Are covariates needed for the specific survival analysis? [open]
+- For each study, what should be selected as the time origin and when should the clock start? [open]
+- Is the hazard constant over time, or does the event risk change at different time points? [open]
+- How should the end of a primary herpes episode be defined consistently by clinicians and study participants? [open]
+- What difference between study arms is clinically important? [open]
+- For participants who already experienced the event before enrollment, should they be included or excluded when estimating the outcome of interest? [open]
+- How does truncation affect the generalizability of study findings? [open]
+- How should hazard be interpreted when another cause of death prevents the event of interest from occurring? [open]
+- Which censoring indicator convention does the software being used require? [open]
+- How should the proportional-hazards assumption be tested when fitting a Cox model? [open]
+- At what time point should survival be compared if using a single-time-point test? [open]
+- How can continuous prognostic factors be stratified without losing too much statistical power? [open]
+- How should a survival model be adapted when the hazard associated with a drug changes over time? [open]
+- How should time to transplant be incorporated when analyzing outcomes in a heart-transplant study? [open]
+- How does delayed recruitment of patients with ascites affect the validity of survival estimates at later time points? [open]
+- Whether the proportional-hazards assumption holds must be assessed for a given Cox model. [open]
+- How recurrent events and competing risks should be analyzed in a particular study remains dependent on selecting an appropriate advanced survival model. [open]
+
+#### Risks (structured)
+- [high] Competing events, such as death from another cause, can prevent observation of the event of interest and complicate interpretation of survival curves.
+- [high] Unexpectedly low transmission estimates may reflect randomization imbalance, demographic differences, data-quality problems, or other issues that Kaplan–Meier curves alone cannot identify.
+- [medium] Many stratification factors can leave only three or four people in each curve, making Kaplan–Meier estimates insufficiently robust.
+- [high] A fixed-time logistic-regression comparison can discard information from censoring and from when events occur.
+- [high] Short-term studies may miss delayed harms when hazard functions cross later in follow-up.
+- [high] Using mean survival is inappropriate when not every participant has experienced the event and been measured.
+- [medium] Poorly defined events or time origins can undermine interpretation of a survival analysis.
+- [medium] Poorly defined time origins or events can introduce measurement error, such as subtracting half a month from the herpes episode duration.
+- [high] Assuming a constant hazard can be inappropriate because event risk may be higher or lower at particular points in time.
+- [medium] Sample-size calculations can be inadequate if they ignore that the event may not occur for every participant and that covariates may be included in the model.
+- [high] Sampling only people whose events were recorded can underestimate the survival function because unrecorded cases are never observed.
+- [high] Left truncation can omit people with short survival times who die before reaching the study's eligibility age or entry point.
+- [high] Treating withdrawal or relocation as independent censoring can bias results if the reason is related to subsequent event risk.
+- [high] Misidentifying the failure indicator and censoring indicator in software can produce an incorrect analysis.
+- [high] Using the wrong failure-versus-censoring indicator convention can reverse the intended interpretation in software.
+- [high] Violating independent censoring produces biased hazard estimates and can make survival analyses and interpretations unreliable.
+- [high] Ignoring competing events can create misleading event-specific conclusions because people who experience another event are no longer at risk for the event of interest.
+- [medium] Enrolling high-risk subjects late can cause a Kaplan–Meier curve to decline faster than it should because later follow-up data are unavailable.
+- [high] Kaplan–Meier curves can be biased when high-risk subjects enter early or late and later data are unavailable for them.
+- [high] Simple Kaplan–Meier and log-rank analyses cannot accommodate time-dependent covariates, recurrent events, or competing risks.
+- [high] Confounding or imbalance in prognostic factors between treatment groups can make log-rank results inaccurate.
+- [medium] Stratified log-rank tests can lose power because they divide the data into smaller samples.
+- [high] A Cox model with too many covariates and too few subjects may be unreliable.
+- [high] Using a proportional-hazards model without a constant relative rate over time violates its key assumption.
+- [high] Assuming proportional hazards when hazards change over time can produce misleading model interpretations and inaccurate information for doctors and patients.
+- [high] Ignoring changes in exposure or treatment over time can invalidate survival analyses.
+- [high] Delayed recruitment of patients with worse prognosis can leave later risk sets unrepresentative and make Kaplan–Meier survival estimates too large.
+- [high] Failure to account for protocol or recruitment changes can cause substantial misinterpretation of a survival model.
+- [high] Using Kaplan–Meier curves or log-rank tests with covariates, time-dependent covariates, or competing risks can lead to invalid or nonsensible interpretation.
+- [high] Ignoring imbalance in baseline prognostic factors can produce a biased estimate.
+- [medium] Cox regression requires checking the proportional-hazards assumption and selecting appropriate measured covariates.
+- [high] Recurrent events and competing risks may not be handled adequately by every survival-analysis method.
+
+#### Follow-up draft
+Quick recap: Dr. Laura Lee Johnson’s session covered survival analysis through the mother–infant HIV trial; the DSMB recommended stopping it, leaders agreed, and zidovudine was given to controls. Define the event, time origin, and time scale first; survival analysis uses event timing and partial follow-up, while censoring removes participants from later risk sets and competing events prevent the target event. Memorize S(t)=P(T≥t), the Kaplan–Meier update Ŝ(t)=Ŝ(t−)[1−d(t)/n(t)], and the Cox form h(t|X)=h₀(t)exp(βX), where exp(β) is the hazard ratio and β=0 means HR=1. Check independent censoring and proportional hazards, and choose methods that match the design; a joint test p=.94 supported proportional hazards in one example, while p=.003 indicated a changing drug effect. That’s the recap.
+
+---
+
+# Summary B
+
+_(run1)_
+
+### Title: Survival Analysis and the Zidovudine Trial
+
+#### Overview
+Dr. Laura Lee Johnson (FDA) opens a lecture on survival / time-to-event analysis, framing it as the hardest statistical epidemiology topic and illustrating it with the mother-infant HIV zidovudine trial where an interim Kaplan-Meier analysis showed an 8.3% transmission rate and the DSMB recommended stopping. The lecturer uses the zidovudine trial and the Cox-2 inhibitor story to argue why survival analysis beats a fixed-time logistic regression, defines survival/median-survival and the time-to-event model, and works through the notation and steps (event, time origin, covariates) for designing a survival study. Lecture defines the time origin and time scale for survival analysis, introduces the survival function and hazard function, and illustrates them with oncology, herpes, nickel-refinery, population-mortality, and balloon-bursting examples. Lecture segment on censoring and truncation in survival analysis: sample size must be based on expected number of events, right vs left truncation and censoring are defined with examples, and independent censoring is stressed as the key assumption. Lecture segment on survival analysis: independent censoring as the key assumption (including conditional independence on covariates and competing risks), illustrated with the smoking-cohort and polar bear plunge examples, followed by a step-by-step worked Kaplan-Meier calculation with censoring, confidence bands, and the effect of late entry of high-risk subjects. The lecture explains why Kaplan-Meier curves are biased by differential entry and censoring, how the log-rank test compares observed to expected events but yields only a p value, and introduces the Cox proportional hazards model with its proportionality assumption, covariate effects, and time-dependent covariates. Speaker 1 explains how to test the proportional hazards assumption by adding age×ln(time) and drug×ln(time) interaction terms to a Cox model and comparing with a Wald or partial likelihood ratio test, showing a p=.94 case where proportional hazards hold versus a p=.003 case where the drug hazard changes over time, then works through the liver cirrhosis/ascites recruitment example and the Stanford heart transplant example to show how time-dependent exposures and changing risk sets distort Kaplan- In the closing session of the survival-analysis lecture, the instructor recapped when Cox regression, Kaplan-Meier and log-rank tests can and cannot be used, restated that truncation and censoring matter and that analysis must follow the design, and gave course logistics (question boards, evaluations, examples, mid-December summary). Key decisions: The DSMB recommended stopping the mother-infant HIV trial after careful review of toxicity and transmission rates, and trial leaders agreed to stop the study.; 
+
+#### Summary
+- This lecture defines survival, or time-to-event, analysis, covering its vocabulary and statistical methods so students can interpret a survival graph and Cox model covariates and recognize when assumptions fail.
+- Its anchor case was the mother-infant HIV zidovudine trial, where an interim analysis showed transmission below the expected 30%, and the DSMB recommended stopping the trial after reviewing toxicity and transmission rates, a recommendation trial leaders agreed to.
+- After the stop, zidovudine was provided to everybody in the control group, and the United States Public Health Service modified its national guidelines as did many groups in various other countries.
+- The simple workhorse of time-to-event analysis was presented as able to stratify but not model covariates, unable to handle time-dependent covariates, recurrent events, or competing risks, and having no sensible interpretation when competing risks are present.
+- The Cox proportional hazards model was described as the modern workhorse for inference about covariates, provided that independent censoring holds, the proportionality of hazards is tested, and the right covariates are in the model rather than merely the ones that were measured.
+
+#### Core concepts
+- The topic is time-to-event analysis, commonly called survival analysis, and the event of interest need not be death — it can be many other outcomes.
+- The lecturer states this is probably the most difficult of the statistical epidemiology lectures, typically taught late in a master's program or in the second or third year of a PhD.
+- The key gain of survival analysis over simpler summaries is censoring — using partial follow-up information from subjects who have not yet had the event, such as a 24-week-old infant who has not sero-converted.
+- A Kaplan-Meier curve is one way to estimate event probability (here HIV transmission); it is simple enough to compute by hand and supports stratification factors such as study arm, sex, or others.
+- Kaplan-Meier cannot handle covariates beyond stratification, whereas a Cox model is richer because it can include continuous variables and multiple variables.
+- Competing risks are the core limitation of the Kaplan-Meier approach for the interpretation of the event probability.
+- Data monitoring boards can conduct preplanned group sequential efficacy reviews partway through a study rather than waiting until the end.
+- The p value shown on a Kaplan-Meier figure comes from a log rank test.
+- Kaplan-Meier is described as a workhorse for time-to-event analysis, appearing in journals and used in fields such as animal science.
+- The practical goal of the lecture is literacy for reading manuscripts, proofreading protocols, and IRB review, so students know when to consult a statistician who specializes in this area.
+- The zidovudine trial is used as an example of how Kaplan-Meier analysis can inform a decision: trial leaders agreed to stop the studies and zidovudine was provided to everybody in the control group.
+- After those results the United States Public Health Service modified its national guidelines, as did many independent groups in various other countries.
+- The motivating question is whether a new cancer treatment extends a person's life five months longer than the current treatment.
+- Survival is about events and when they happen; candidate events include death, infections, myocardial infarction, hospitalizations, and recurrence of cancer after treatment.
+- Many events may never occur, so the idea of waiting long enough (like waiting for a child to marry) does not guarantee the event happens.
+- Survival analysis lets researchers capture the nuances/trajectory of events measured on a fairly frequent time scale and to use the information from censored people.
+- A logistic regression asking at five years whether the two groups differ throws away the research information found from censoring.
+- The Cox-2 inhibitor story shows a case where short-term studies did not show additional deaths, but the hazard functions crossed and Kaplan-Meier would not have picked up a problem starting around 12-18 months.
+- Observational findings (lower blood pressure, lower BMI, eating blueberries associated with living longer) do not always reproduce when the exposure is randomized.
+- The survival model mirrors the linear model but is built from a baseline hazard multiplied by the exponential of the linear predictor.
+- Survival and time-to-event are the same thing: CDC colleagues say 'time to event', while NIH clinical center scientists say 'survival' even when the event is not death.
+- Every survival study must define a time origin — the point when the clock starts ticking — which differs by design (e.g., oncology studies use time of surgical resection, time of diagnosis, or time chemotherapy started).
+- The choice of time scale depends on the disease: lung cancer is measured in years while flu is measured in days or hours.
+- The survival function is monotonically decreasing — it either goes down or stays flat and never rises, because it tracks death.
+- The hazard function underlies all of survival analysis and represents the instantaneous risk of the event at time t.
+- A central problem is whether the hazard is constant over time; proportional hazards assumes the risk in month 1 equals the risk in month 6, 25, or 60, which is usually not the case.
+- The hazard can be estimated even when there is censoring or truncation, which are to be described later in the lecture.
+- Unique features of survival analysis include an event, progression along some dimension (typically time), variable length of progression, and the event not necessarily happening while the subject is observed.
+- Covariates must be considered when modeling and when thinking about sample size, alongside the implications of not observing an event.
+- If a covariate does not vary at all in the data, you probably do not have to do this analysis for it.
+- Because the event may not happen for everyone, sample size has to be based on the number of events you expect to see, not just the number of subjects.
+- When sizing a study, think about everything else you want in the model and about the implications of having an event.
+- Case mix matters: investigators try to enroll people with higher exposure so they are more likely to have an event.
+- Cardiovascular studies deliberately enroll people already at high risk of a heart attack in order to ensure a higher number of events.
+- Truncation is about entering a study, and it is especially important in randomized trials; it is discussed less often than censoring.
+- Right truncation means only sampling people who have the outcome of interest, which biases the survival function downward.
+- Left truncation means short survival may be overlooked, which can produce weird estimates.
+- Independence of the truncation or censoring mechanism from the outcome is the main assumption all these analysis methods make.
+- Right censoring happens when the study shuts down for analysis and people who have not had the event are censored at that point.
+- Left censoring is when observed time is greater than the survival time but you know the subject exists.
+- Random censoring is more general than type one censoring and is what typically happens in clinical studies.
+- Independent censoring is the key assumption for survival analysis; without it you must find a way to set up a model that restores independence or you will face many analysis and interpretation issues.
+- Independent censoring means that people at risk at any given time point in the study are random samples of the population at risk at that time point, and this must hold all the way through the study group.
+- The purpose of the assumption is that the hazard function can be estimated in a fair, unbiased and valid way.
+- Without independent censoring you get a biased estimate of the hazard function and all survival analyses become worthless.
+- Censoring must be independent within a given group but may depend on a variable in the model; under a Cox model, if censoring depends on age or disease severity, including that variable makes the censoring conditionally independent and acce
+- Conditional independence requires that among people with similar values of the covariate x, censored subjects are at similar risk of the subsequent event as subjects with continued follow-up.
+- Censoring can differ between study arms and that is acceptable because there is a way to handle it.
+- When a competing event precludes the event of interest (e.g., you will not see cancer in people who all died of heart attacks), describing the risk as the risk of cancer at time t 'when the risk of death from MI or any other reason doesn't
+- What is meaningful instead is the risk of cancer among those people still at risk of cancer at that time, which effectively means censoring people who died of a heart attack because they were not at risk of cancer.
+- To make inference about the observed hazard rate among subjects under observation at each time, you must find a way to interpret that event rate as if it were independent.
+- Kaplan-Meier is the work horse model of the course and is built from basic multiplication and subtraction of a series of conditional probabilities.
+- Censored observations still provide information about the risk of death or of any event while people are on study, and hash marks on the plot indicate when people were censored.
+- If high-risk subjects enter the study early or late, the Kaplan-Meier curve will be not quite right; with late entry it comes down faster than it should because the later data for those subjects are not available.
+- High-risk subjects entering the study early or late makes the Kaplan-Meier curve not quite right, and late entry makes it come down faster than it should for lack of later data.
+- Censored observations provide information about the risk of death or risk of any event when people are on study.
+- Hash marks on a curve indicate when people were censored, though not all curves have them; putting them on is the mark of doing it well.
+- Kaplan-Meier is quick and dirty — all you do is draw curves — and it is often the only outcome in many models.
+- You may have a different Kaplan-Meier curve for different stratification variables, such as each intervention or age category.
+- At a given time point the null hypothesis is that survival in group one equals group two (e.g., women vs women, placebo vs new intervention), and you build a z test statistic on the normal distribution.
+- Kaplan-Meier cannot handle time-dependent covariates, recurrent events, or competing risks.
+- Log-rank statistics compare event rates across all time points, account for censoring but never account for time-dependent covariates or recurrent events.
+- Log-rank requires two independent samples from the same population and gives only a p value — no estimate of the difference and no sense of how things relate.
+- Confounding — when prognostic factors are not balanced between treatment groups — produces inaccurate log-rank results.
+- Statisticians developed minimization, biased coin methods and other allocation techniques specifically so they could validly do a log-rank test.
+- The general Cox model allows time-dependent covariates and stratification factors, so you no longer have to stratify by hand.
+- Cox proportional hazards is a semi-parametric model because the baseline hazard goes completely unspecified, and is a multiplicative model in which a covariate multiplies the hazard rate by some factor.
+- To test proportional hazards, Speaker 1 fits one model with age and drug only, then a second model adding coefficients for age×ln(time) and drug×ln(time) to see whether the impact of a covariate on the hazard function changes over time.
+- The natural log of time is used as the interaction variable because of how the proportional hazards model is set up.
+- Two tests are available for proportional hazards: the Wald test or the partial likelihood ratio test, and Speaker 1 compares the whole model across the two interaction terms.
+- A third diagnostic, Schoenfeld residuals, is discussed in various textbooks and widely available online, but Speaker 1 explicitly does not cover it here.
+- In the first example the two ln(time) interaction coefficients had large p-values nowhere near .05 or .01, and the Wald/ratio test with 2 degrees of freedom gave p=.94, so proportional hazards could be assumed.
+- In the second example the partial likelihood ratio test gave p=.003, so proportional hazards could not be assumed.
+- Digging deeper into the failing case, age was not the problem — the hazard related to the drug was changing over time, making the drug×time interaction the strikingly significant term.
+- Because the drug effect changes over time, the hazard functions (curves) are probably crossing, and time must be put into the model in that interaction form to give accurate information to doctors and patients.
+- Time-dependent survival curves matter because exposure or treatment changes over time — in HIV, people go on and off antiretroviral drugs over 10, 15 or 20 years, and the drugs themselves change.
+- The Stanford heart transplant study involved end-stage heart disease patients seeking a transplant early in the US transplant era, where whether or not you got a transplant depended on many factors.
+- Early analyses of the transplant data failed to account for the time to transplant, not just time to death, so the analysis had to be broken into two stages.
+- Speaker 1's take-home message is to choose the right model and test: Kaplan-Meier is simple but potentially misleading, Cox proportional hazards is the 40–50 year old modern workhorse whose proportionality must be checked, and more general
+- Any changes in protocol, especially inclusion/exclusion criteria and how recruitment is done, must be taken into account in the analysis or the model will be badly misinterpreted.
+- Using a Cox model instead of Kaplan-Meier in the cirrhosis example removes the dependent-censoring problem with respect to ascites, giving independent censoring and consistent partial likelihood estimates with correct coefficients and relat
+- With independent censoring (at least with respect to covariates), the partial likelihood estimator remains consistent, the coefficients are correct, and the relative-risk interpretation gives the right answer.
+- Survival analysis is framed as inference on event rates at a given time point t, i.e. the rate among those at risk.
+- Cox regression is described as the most robust general method because people keep tweaking it to match what they need.
+- Survival analysis can handle right censoring and left truncation, but may not in every form handle recurrent events and competing risks.
+- Risk sets exist to allow estimation of the event.
+- The log-rank test is loved for its simplicity but fails when time-dependent covariates or competing risks are present, and gives biased estimates when baseline Table 1 prognostic factors are imbalanced.
+- The Cox model provides a framework for inference about covariates, but only for covariates you actually measured and put into the model.
+- Truncation and censoring are emphasized as really important because people move in and out of research studies.
+- The overriding principle is that analysis follows the design: clinical questions generate hypotheses, the study is designed to test them, and the analysis must match the protocol.
+
+#### Definitions
+- In time-to-event or survival analysis, the outcome variable is not a single value — it combines an event with the timing of that event.
+- In the HIV example the event is mother-infant HIV transmission, which really means the baby testing positive.
+- The time origin must be defined; in the infant example it is asked whether it starts at birth, and typically both axes start at zero.
+- The time scale for the infant example is weeks, and the exact time at which the event occurs must be defined.
+- Censoring means following subjects for as much information as you have on them and including that partial information in the analysis.
+- A competing risk is when having one event means you are no longer at risk for the other event, e.g., if you die of cancer you cannot die of a heart attack.
+- Event times can be interval-measured — known negative at 12 weeks and positive at 24 weeks means sero-conversion happened somewhere in between.
+- Some event times are more continuously measured, such as time at death where the exact date is generally known.
+- A group sequential design performs a preplanned efficacy review partway through a study rather than at its end.
+- The numbers printed below a Kaplan-Meier plot show how many babies were in the placebo group versus the zidovudine group.
+- Survival is defined as the type of analysis that deals with making inference about the event rates.
+- The rate examined is the rate at some time t, specifically the rate among those people at risk at that time t.
+- Median survival, not mean survival, is what is typically talked about because usually not everyone in the study had the event.
+- Reporting mean survival is a red flag: mean survival requires that the event was measured on everything in the study — all the animals, all the people — otherwise the analyst does not know what they are doing.
+- In survival models the Xs may be called prognostic factors instead of covariates or response variables.
+- The outcome variable in these models is the event time.
+- Little t denotes the time axis, and t equals 0 is the time origin — when the researcher starts looking for events (the stopwatch starts).
+- Capital T is what statisticians call a random outcome variable — the time that the event occurs.
+- Events cited as examples include an HIV positive test, an AIDS defining event, mother-infant HIV transmission, and systolic blood pressure or cholesterol falling below a certain cut point.
+- Beta-naught (beta not) is the point where the regression line crosses when all the X predictors are zero.
+- Time origin is defined as the point at which the study clock starts (e.g., first exposure in occupational epidemiology, or time of birth in population mortality studies).
+- The survival function measures the proportion of the population still without the event by time t.
+- The hazard function is equivalent to an incidence rate or, as called in European texts, the force of mortality — the instantaneous risk of the event.
+- The hazard function (written as an upside-down y or h of t) measures the event rate at time t.
+- The survival function can be plotted either as the percent of people alive or as the percent of people who had the event on the y-axis.
+- When the event is death and the scale is months since treatment, S = 0.3 at t = 60 means five-year survival probability is 30%, or equivalently 70% of patients die within the first five years.
+- Right truncation: you only sample people who have the outcome of interest.
+- Left truncation: short survival may be overlooked because subjects who died early never enter the study.
+- Key assumption for left truncation: people who enter the study at time t are a random sample of the population at risk at that time point.
+- Censoring is defined as having incomplete observations.
+- Right censoring: following everyone to a fixed study end (e.g. 5 years) and censoring those who have not had the event up to that point.
+- Left censoring: observed time is greater than the survival time but the subject is known to exist in the study.
+- Type one censoring: everybody is followed for the same amount of time, e.g. everyone followed for one year.
+- Type two censoring: observation stops when a set number of events has occurred.
+- Random censoring: subjects are enrolled over a period and followed for a minimum period, so the amount of time watched differs by enrollment date.
+- Capital T is the event time; with a star next to it, T-star is the observation time — the event time if the event occurred, or the follow-up time if the subject was censored.
+- A failure indicator, called delta in many textbooks, is often written as a censoring indicator instead — the exact opposite.
+- Textbooks often use the symbol delta, which sometimes denotes a censoring indicator — the exact opposite of a failure indicator — so you must check which convention your software package uses.
+- The failure indicator and the censoring indicator are distinct inputs you must supply correctly in software, in whichever convention the package expects.
+- Independent censoring is defined as: those at risk at any given time point are a random sample of the population at risk at that time point, holding throughout the study.
+- Right censoring is illustrated by following students aged 5 to 25 who report never having started smoking: at age 25 they still have not had the event and are censored.
+- The time origin is usually time of enrollment or when some sort of treatment begins; the time axis is time that people are on study, and right censoring is pretty common.
+- In non-randomized studies, the time axis is a lot of times age.
+- A conditional-independence caveat: the covariate version of independent censoring asks whether, among people with similar covariate values x, censored subjects have similar risk of the subsequent event as those still under follow-up.
+- When a coefficient beta equals zero, that translates to a hazard ratio of one, meaning the two groups being compared have the same survival experience.
+- The exponential of a coefficient is a relative rate or risk (the hazard ratio) associated with that prognostic factor or covariate.
+- The Cox model is built from a baseline hazard, regression coefficients, and prognostic factors.
+- Semi-parametric: the baseline hazard is left completely unspecified in the model, although it can be recalculated back if wanted.
+- Proportional hazards requires that the relative rate be constant over time; if it is not, the rate has to be modeled over time.
+- A stratified log-rank test compares the data within each stratum and then performs a test.
+- The log-rank test works by comparing the observed number of events to the expected number of events.
+- A time-dependent covariate is one whose effect on the hazard changes over time, such as the duration someone has been taking a drug.
+- Proportional hazards means the relative rate does not vary over time — the same relative risk applies at 2 years, 3 years, and any other time point.
+- The baseline hazard in the cirrhosis model is the event rate at time t in the placebo arm for subjects without ascites (ascites=0) and with a prothrombin time of 1 second.
+- Ascites (presence/absence) is described as a pretty good indicator of the severity of liver cirrhosis, and it was coded as 0 when absent in the covariate.
+- Schoenfeld residuals are named as a third way to assess proportional hazards that is documented in textbooks, though not taught in this lecture.
+- Censoring is described as independent when it is unrelated to the covariate of concern (here, ascites), and independent censoring is all that is required for consistency of the partial likelihood estimator.
+- The risk set is the set of subjects still under observation at a given time point; in the cirrhosis trial, the risk set at later time points did not include ascites patients because they were not recruited early enough.
+- Survival analysis is defined as inference on event rates — the rate at some time point t among those at risk.
+- Median survival is the amount of time by which 50% of the people have had the event.
+- Mean survival (mean time to event) is de-emphasized because it requires that everybody must have had the event.
+- Truncation refers to people entering the study — the question being whether you got the right people into the study.
+- Censoring is defined as people leaving the study, or having/not having the event while you are watching them.
+- Independent censoring is the condition required for consistency of the partial likelihood estimator and is described as independent with respect to the covariates.
+- The proportional hazards assumption is the Cox-model property you must determine for your data — whether you have proportional hazards or not.
+
+#### Examples
+- The running example is a mother-infant HIV transmission trial of zidovudine that was powered to detect a 33% transmission rate difference, going from 30% down to 20%.
+- The example was worked out by Dennis Dixon, who worked on many studies and sat on their data safety monitoring board.
+- The data monitoring board met twice a year to monitor safety, and the first efficacy review took place in February 1994 covering mothers enrolled up to December 1993.
+- At the first interim analysis the observed transmission rate was 8.3% with a fairly tight confidence interval, far lower than the expected 30%.
+- The placebo arm at 72 weeks also showed a rate lower than the anticipated 30%, and the lecturer jokes that people are healthier once they enroll in trials.
+- Anecdote: in one study of people followed until death, enrollment required being 6 months before death, yet people were still being followed 18 to 24 months later — good for them, but problematic for the study.
+- The lecturer notes she could have stratified the Kaplan-Meier curves by boys versus girls instead of study arm, or added many other curves.
+- The DSMB recommendation to stop came after review of toxicity, transmission rates, and other factors, and it led to zidovudine being given to the control group and to guidelines being changed by the US Public Health Service and many other g
+- A new cancer treatment is introduced as the set-up for the next part of the lecture on why survival analysis is used.
+- Waiting for a child to get married is offered as an analogy for an event that may never actually happen no matter how long you wait.
+- Soccer goals illustrate that the event may take a long time even with nobody around to stop you from scoring.
+- Light bulbs failing and computers crashing are cited as engineering problems using the same mechanism, only called failure analysis under different names.
+- A balloon filling with air (when does it burst?) is an example where the event is measured not in time but in milliliters of air; quality control uses these measures too.
+- The original Kaplan-Meier paper was only a page and a half long, arising because a scientist wrote essentially the same paper and submitted it to the Journal of the American Statistical Association, and the editor told the two authors to wo
+- Flu symptom example: one drug resolves symptoms in 3 days and another at 7 days, so you want the 3-day drug, but if you measure at 10 days both look the same and realistically at 7 days they also both look the same.
+- The hypertension case illustrates why a simple five-year yes/no logistic regression is not sufficient for the question of interest.
+- The October 2009 BMJ follow-up of the MIST trial looked at incidence of pregnancy after a miscarriage, randomizing women to two different ways of handling a spontaneous abortion and then examining first live birth after the index miscarriag
+- The MIST example notes confounders of the live-birth outcome such as prior multiple miscarriages and age.
+- A systolic blood pressure example frames the outcome as systolic, with predictors such as whether the patient was on drug or placebo, sex, and age.
+- A lower blood pressure/BMI/blueberries observational result is given as the kind of finding that may or may not replicate under randomization.
+- A pancreatic cancer study measured time from surgical treatment to death in months; by 9 months survival was about 25% (S(9) = 0.25).
+- In the pancreatic cancer study everyone was alive at surgery when enrolled, and the survival line declined (sometimes flat) thereafter.
+- A herpes study measured time to recurrence of herpes lesions after treatment for a primary episode, where the event was recurrence.
+- The herpes study used a time scale of months from the end of the primary episode, measuring time from end of primary episode to first recurrence.
+- A famous occupational-exposure study at a nickel factory used death from lung cancer as the event, first exposure (beginning of employment) as the origin, and years since first exposure as the scale.
+- Because lung cancer takes decades to develop, defining origin as start of employment at the refinery was considered a reasonable approximation even if slightly off.
+- For population mortality, the event is death, the time origin is date of birth, the scale is years, and what is measured is age at death.
+- In a balloon experiment, the event was the balloon bursting and the 'time' dimension was milliliters of air infused, with origin at 0 milliliters.
+- After a myocardial infarction, if a patient survives the first 30 days their chances of living longer term are pretty good, illustrating that event risk is higher at certain times.
+- Cancer registry example: enrolling everyone from the registry underestimates the survival function because people whose cancer was never recorded or listed are never observed.
+- Cardiovascular Health Study example of left truncation: enrolling only people 65 or older means people who died before 65 are never in the study.
+- Smoking-initiation example of left censoring: interviewing people at age 12, where a 12-year-old is already a regular smoker but cannot say when he or she started.
+- Infection study example: kids were brought into an incidence study and two subjects had already been infected by enrollment, so the event happened before they entered the study.
+- Withdrawal example: an accidental death such as falling in front of a bus is usually treated as okay, but not if the new therapy causes balance problems that make people fall.
+- Moving example: people used to claim moving out of the area is independent censoring because secure people rarely move, but the speaker sees many people move for last-ditch therapies.
+- Graph example: patients enrolled from 0 to 6 months and followed to a maximum of 24 months; patient 9, followed from 5-6 months to 24 months with no event, was censored but that information is still used in the analysis.
+- Light bulb example of type two censoring from engineering: after four light bulbs failed, all of them were replaced, censoring the remaining bulbs.
+- On survival graphs, a solid circle or solid symbol means the subject had the event, while open circles mean they were censored.
+- Five-year follow-up with death as the event: a bunch of patients who have not died by the end are simply censored.
+- Smoking example: following a school group from age 5 to 25, censoring students at 25 who still have not started smoking (the event is starting to smoke).
+- Trial example: early in a trial older subjects are not enrolled, then the age limit in the inclusion/exclusion criteria is relaxed, so those late entrants can be on study for less time than everyone else; conditioning on age restores indepe
+- Cancer vs heart attack example: because everyone died of heart attacks, no cancer events are observed, so the hazard of cancer must be framed as the risk among those still at risk of cancer, censoring those who died of MI.
+- The polar bear plunge example was created by the speaker's friend Craig (who grew up near Lake Michigan) as a fictitious teaching example with made-up numbers, chosen because it is easier than dealing with smoking and other risks.
+- Polar bear plunge setup: people take the plunge every year, 3% die from taking the dip on January 1 in Lake Michigan, 2% of males and 1% of females die from all other causes annually, and the group is followed for ten years.
+- Observed outcome over the decade: 25% of the women died from taking the plunge versus 24% of the men — only a 1% difference — yet the sensational headline becomes 'Polar bear plunge kills women' rather than men.
+- The explanation for the misleading result is that over the decade 33.5% of women died from all other causes versus 40% of men, so more women remained to be harmed by the plunge as the male-female ratio changed over time.
+- The general lesson drawn from the polar bear example: people are always going to die of something, which means they cannot die of something else — so if your event is particular, think about what else precludes that event.
+- Heart disease and smoking status was described as a similar competing-risk story to the polar bear plunge example.
+- The zidovudine trial is cited as an example where DSM B tested survival at 72 weeks.
+- Soccer goals are used as the recurrent-event example: a player might score 0 or 6 goals, which the simple models cannot handle.
+- If the impact of age on the hazard is different when you are 20 than when you are 60, that time element must be put into the model.
+- The effect of a COX-2 inhibitor on a cardiovascular event may differ after 2 months versus 18 or 24 months of taking it, requiring the time element in the model.
+- Rather than only measuring weight at baseline, the Cox model allows putting in weight measured at a lot of times and medication changes.
+- In a trial, older subjects are not enrolled earlier, so if age is not in the Kaplan-Meier and you do not stratify on age, the curve is biased because older people are censored earlier and have less time on study.
+- A student's suggestion to oversample older people later in the study is acknowledged as something done all the time, but the lecturer argues putting age in the model is easier.
+- Example 1 of proportional hazards testing applied the two interaction terms and produced large, non-significant p-values for the coefficients plus a test p-value of .94, resulting in a conclusion of proportional hazards.
+- Example 2 of proportional hazards testing yielded a partial likelihood ratio p-value of .003, showing non-proportional hazards driven by the drug×time interaction rather than age.
+- The cirrhosis example comes from several papers: one in The Lancet in 1981, a couple of papers in 1985, and a Cochrane review in 2009 tracing the history of the treatment.
+- The cirrhosis study was a prospective cohort/randomized clinical study evaluating survival of patients with liver cirrhosis, comparing a new treatment against placebo, amid many conflicting reports.
+- One prior study reported a 2-year survival probability of .88 calculated with Kaplan-Meier, with data collected at randomization including staging and ascites information.
+- Fitting Cox regression to the randomized trial data gave a treatment coefficient of −0.135 (treatment=1, placebo=0) and a coefficient of .346 for the prothrombin time covariate.
+- A worked relative-rate question asks for the relative event rate 2 years post randomization for a treated subject (x1=1, x2=1, prothrombin time=1), computed by taking the exponential of −0.135.
+- In the cirrhosis trial, physicians were initially reluctant to enroll patients with ascites because of potential toxicity concerns, so sicker patients were not entered early even though nothing formally excluded them.
+- Around a year and a half into the trial, physicians became more comfortable and recruitment became more representative of the clinical population.
+- A numerical timeline example: if the first participant could be followed for up to 4 years while enrollment lasted 3 years, but ascites patients were only enrolled up to 1.5 years in, those patients could be on study only from 1 to 2.5 year
+- The Stanford heart transplant example is used to show that early analyses ignored time to transplant, requiring the evaluation to be split into two stages (time to transplant and time to death).
+- HIV antiretroviral therapy is used as an analogy for exposure changing over time: people go on and off drugs and the drugs themselves change across 10–20 years of follow-up.
+- Kaplan-Meier is presented as so simple that it can be done on an envelope or a napkin.
+- The instructor notes that many of the examples used in the course came from previous classmates.
+- A hypothetical competing-risks scenario is used to illustrate the analyst's job: identify the competing risks and figure out how the analysis will be done and interpreted.
+- The instructor characterises the common practice of people trying to use Kaplan-Meier curves all the time despite their limitations.
+
+#### Formulas / steps
+- Transmission rate is computed by counting the number of babies who eventually sero-convert (the events) over the total number of interest.
+- Sample size is developed by backing into the transmission rate while also accounting for dropouts and loss to follow-up.
+- Defining a time-to-event outcome requires four components: an event, a time origin, a time scale, and a defined time at which the event occurs.
+- Reading a Kaplan-Meier plot: probability of transmission on the y-axis from 0 to 40%, number of weeks on the x-axis, a log rank p value, and numbers at risk printed below.
+- When an interim result surprises you, the practical step is to check the randomization, demographics between groups, and data cleanliness before drawing conclusions, since the Kaplan-Meier curves cannot reveal all of these issues.
+- Basic linear model: y is the outcome/response variable, beta not is the intercept, and beta1 describes the relationship between covariate x1 and y given the other variables in the model.
+- Beta p describes the relationship between the predictor xp and the outcome y.
+- The survival model is the baseline hazard multiplied by the exponential of the linear predictor (baseline hazard x exp(linear model)).
+- The probability statement of interest is the probability that the time of the event (capital T) is greater than or equal to the little time t.
+- This is applied at concrete assessment points such as 6, 12, 18, and 24 months.
+- Study design steps: define the event, specify the time origin, know the time the event occurs, and decide whether covariates are needed.
+- Time-origin choices in oncology include the time of surgical resection, time of diagnosis, or the time and date chemotherapy was started.
+- The unit of time depends on the disease: lung cancer is measured in years, while flu is measured in days or hours.
+- Survival probability is stated as P(time from surgical treatment to death >= t), e.g. S(9) = 25% for the pancreatic cancer study.
+- For the hazard function, one states lambda of t = 1% at t = 12 months, i.e., at one year patients are dying at a rate of 1% per month.
+- The hazard at one year can be phrased as the chance of dying in the following month being 1%, and it may change to 2% at a year-and-a-half.
+- Scale matters for hazard: 120,000 people dying in one year is roughly equivalent to 10,000 per month, 2,500 per week, or 357 per day.
+- Defining the instantaneous time unit requires explicitly stating what one increment in time means.
+- When deciding on measurement, one must consider what constitutes a clinically important difference between study arms.
+- Step 1 for sample size: base it on the number of events expected, since not every subject will have the event.
+- In a randomized trial, zero out everything at the time of diagnosis, treatment, or wherever randomization is chosen — that is how left truncation is controlled.
+- For subjects with the event before enrollment you must decide whether to count them or exclude them, and justify which by what you are trying to measure.
+- Keep tracking enrolled subjects even when they cannot show up regularly or continue the treatment of interest — at minimum check whether they are alive or dead and whether the event occurred.
+- Before running software, determine whether the package expects a failure indicator or a censoring indicator, since the two are opposites.
+- Kaplan-Meier is computed by multiplying a series of conditional probabilities, and at t=0 nobody has had the event yet, so the estimated survival at time zero equals 1.
+- At t=5 with 20 people at risk and 2 events, the step is 1 minus (2 divided by 20), giving an estimated survival of 0.9.
+- At 6 months with 18 people at risk and no events, 1 minus (0 divided by 18) multiplied by the previous survival of 0.9 keeps the estimate flat at 0.9.
+- At 10 months the risk set has dropped to 15 because 3 people were censored between month 6 and month 10; those 3 contributed to the risk set up until the time they left the study.
+- With one event at 10 months, 1 minus (1 divided by 15) times the previous 0.9 gives a new survival estimate of 0.84.
+- At 13 months the risk set is 14 because one event out of the 15 reduced it by one and there was no new censoring, and with 2 more events the estimate is computed as 1 minus (2 divided by 14) times the previous survival estimate.
+- General KM step rule: one minus the number of events divided by the number of people at risk, multiplied by the previous survival estimate.
+- Handling censoring in the calculation: people who were censored are counted in the risk set until they leave the study, and then stop being counted in the risk set for later intervals.
+- The lecture states the 13-month arithmetic produces a new survival of .42; note that 1 minus 2/14 times the previous .84 does not obviously yield .42, so re-check this step.
+- Confidence bands can be drawn around the Kaplan-Meier curve, and there are several ways to calculate them, all coming from the textbook.
+- The z test statistic uses the two survival estimates, divided by the square root of the sum of the variances of those two survival estimates, based on the normal distribution.
+- The log-rank test compares observed versus expected numbers of events across all time points.
+- In the proportional hazards model you write a baseline hazard times the regression coefficients across prognostic factors, and the exponential of each coefficient is its hazard ratio.
+- Instead of stratifying, you can add any of the variables as covariates into the Cox model.
+- To test the proportional hazards assumption, you set up a model that does not include the extra time elements and compare.
+- These model computations must be done with statistical software, not on a napkin, a calculator, or your phone.
+- Rather than stratifying on every prognostic factor, you throw variables into the model and look at the proportional change in the hazard for each X.
+- Step 1 of the proportional hazards test: fit a model whose covariates are age and drug with no time elements.
+- Step 2: fit a second model adding a coefficient for age×ln(time) and a coefficient for drug×ln(time).
+- Step 3: compare the whole model using a Wald test or a partial likelihood ratio test with 2 degrees of freedom for the two interaction terms.
+- Interpretation rule: if the interaction p-values are large (nowhere near .05 or .01, e.g. test p=.94) you can assume proportional hazards; a test p-value of .003 means you cannot.
+- To get the relative rate from the Cox model, exponentiate the relevant coefficient (here exp(−0.135)), with the rest of the terms essentially plugging in numbers via the underlying algorithm.
+- Under proportional hazards, one computed relative risk (e.g. at 2 years) applies at all time points and for many different subject comparisons, enabling many papers and apps.
+- When the effect varies over time, time must be added to the model in the interaction form to describe the drug's changing impact on event rate.
+- For time-to-event designs with a changing exposure, the analysis should be broken into stages (as in the transplant example: time to transplant, then time to death).
+- The analysis workflow taught is: clinical questions → hypotheses derived from those questions → design studies to test the hypotheses → gather samples so the design yields the data → run the analysis → draw conclusions.
+- Decision rule: if an analysis does not answer the question, does not test the appropriate hypothesis, or does not match the protocol, you need a different analysis.
+- Cox-model workflow step 1: confirm independent censoring so the partial likelihood estimator is consistent.
+- Cox-model workflow step 2: test/verify the proportional hazards assumption — determine whether you have proportional hazards or not.
+- Cox-model workflow step 3: ensure the right covariates are in the model, not just any measured covariates.
+- If recurrent events are present, you must use a fancier survival model rather than a standard one.
+
+#### Things to memorize
+- Survival analysis and time-to-event analysis are the same thing, and the event does not have to be death.
+- Censoring is the mechanism that lets survival analysis use subjects with only partial follow-up data.
+- A competing risk exists when one event prevents the other event from being observed, such as dying of cancer meaning you cannot later die of a heart attack.
+- Kaplan-Meier can only stratify; it cannot model covariates, so effective covariates and multiple variables require a Cox model.
+- The p value on a Kaplan-Meier figure is generated by a log rank test.
+- A group sequential design is a preplanned efficacy review conducted partway through a study rather than at the end.
+- Competing risks explain why studies often analyze all-cause mortality rather than the cause-specific outcome of interest.
+- Kaplan-Meier curves are widely used — in journals generally and even in animal science.
+- Report median survival, not mean survival — mean survival is a red flag.
+- Mean survival is only legitimate if the event was measured, in time, on every subject in the study.
+- Little t is the time axis and t = 0 is the time origin when you start looking for events.
+- Capital T is the random outcome variable equal to the time the event occurs.
+- Survival and time-to-event mean the same thing and the outcome variable is the event time.
+- Memorize the survival model form: baseline hazard x exponential of the linear predictor, where the Xs may also be called prognostic factors.
+- Events need not be death — they may be an HIV positive test, an AIDS defining event, mother-infant HIV transmission, or a biomarker dropping below a cut point.
+- The survival function is monotonically decreasing — it only goes down or stays flat, never up.
+- S = 0.3 at t = 60 months means a 5-year survival probability of 30% (60 months = 5 years).
+- The hazard function is synonymous with the incidence rate and the European term 'force of mortality', representing instantaneous risk.
+- Time origin choices to remember by design: diagnosis or treatment start in clinical trials, first exposure in occupational epidemiology, and birth in population mortality studies.
+- Sample size in survival analysis must be based on the number of events expected, not simply the number of subjects.
+- The four unique features of survival analysis: an event is involved, progression occurs along a dimension (usually time), the length of progression varies, and the event may not happen while being observed.
+- The key assumption for survival analysis is independent censoring — the speaker says it will be repeated about 20 more times.
+- For both truncation and censoring, the main assumption is that the mechanism is independent of the outcome.
+- To meet the independence assumption, withdrawing from the study must be unrelated to the subsequent risk of the event.
+- Left truncation is valid only if people entering at time t are a random sample of those at risk at t; then the hazard function can be estimated validly.
+- Solid symbols mark events and open circles mark censored observations on the study timeline.
+- Memorize the notation: T = event time, T-star = observation time, delta = failure (or censoring) indicator.
+- Type one censoring = fixed follow-up for everyone; type two censoring = stop after a predetermined number of events; random censoring = the general clinical-studies case.
+- Independent censoring is the key assumption for survival analysis and, if violated, produces a biased hazard function estimate and worthless survival analyses.
+- Delta can be a censoring indicator in some textbooks and software, which is the exact opposite of a failure indicator — always confirm the convention.
+- The Kaplan-Meier computation rule: one minus (number of events / number at risk) multiplied by the previous survival estimate, applied at each event time.
+- Censoring must be independent within a given group but may depend on a covariate included in the model (e.g., age, disease severity).
+- Time origin is usually enrollment or the start of treatment; in non-randomized studies the time axis is often age.
+- Kaplan-Meier yields one estimate of survival time, and the same idea applies when you look at one-minus-survival.
+- Hash marks on a Kaplan-Meier curve mark the times when people were censored.
+- Memorize that beta equals zero corresponds to a hazard ratio of one and means no difference — the covariate is not related to the hazard.
+- Memorize that the hazard ratio equals the exponentiated regression coefficient associated with a covariate.
+- Do not forget that you must test the proportionality assumption when using proportional hazards.
+- Memorize that the log-rank test yields only a p value — no magnitude of difference — so with Kaplan-Meier you have just a curve and a p value.
+- Memorize that log-rank requires two independent samples drawn from the same population.
+- Remember that Kaplan-Meier/time-point tests cannot handle time-dependent covariates, recurrent events, or competing risks.
+- The history timeline to remember: Kaplan-Meier was developed in the 1940s and early Cox models in the 1970s.
+- Kaplan-Meier is simple but potentially misleading; Cox proportional hazards is the modern workhorse and is 40–50 years old.
+- You must always think about whether hazards are proportional, because a lot of people misuse the Cox model.
+- The two proportional hazards tests to remember are the Wald test and the partial likelihood ratio test, the latter using 2 degrees of freedom for two interaction terms.
+- Remember the two contrasting p-values: .94 means proportional hazards can be assumed, .003 means they cannot.
+- The natural log of time is the interaction form used, because of how the model is set up.
+- Time really matters: how you measure time and when you measure it is critically important in these models.
+- Changes in protocol, inclusion/exclusion criteria, and recruitment must be accounted for in the analysis, or the model will be seriously misinterpreted.
+- The cirrhosis example codes treatment as 1 and placebo as 0, with a treatment coefficient of −0.135.
+- First two covariates in the cirrhosis model are categorical and another covariate is continuous, as Speaker 1 described the coding of the Xs.
+- In the presence of dependent censoring the Kaplan-Meier hazard is biased too small, so the survival estimate comes out too large.
+- Independent censoring is all that is required for consistency of the partial likelihood estimator, after which coefficients and relative risk interpretations are correct.
+- Report median survival (time at which 50% have had the event), not mean survival, which requires everyone to have had the event.
+- Cox regression is the most robust general survival method.
+- Kaplan-Meier cannot be used (at least not easily) when covariates are present, and has no sensible interpretation under competing risks.
+- Log-rank cannot be used or correctly interpreted with time-dependent covariates or competing risks.
+- Survival analysis handles right censoring and left truncation but may not in every form handle recurrent events and competing risks.
+- The Cox model's weakness to remember: its assumptions are hard to test, though testing is doable for many of them.
+- Above all: analysis follows the design.
+
+#### Confusing points
+- The time origin is genuinely ambiguous — it is unclear whether it starts at birth, and events do not always begin at zero transmissions as they theoretically should.
+- Assay limitations make it hard to establish when a baby has truly tested positive, complicating the event definition.
+- It is not clear why the observed transmission rate was so much lower than expected — randomization problems, demographic imbalance, or dirty data are all candidates the curves cannot diagnose.
+- Competing risks have no sensible interpretation within Kaplan-Meier, which limits how the curves can be read.
+- Splitting into too many strata leaves too few subjects per curve for a reliable Kaplan-Meier estimate.
+- Mean versus median survival is easy to confuse; the mean is only valid when every subject's event was measured, which is usually not the case.
+- It is tempting to reduce a survival question to a single-time logistic regression, but that discards the censoring information and the event trajectory.
+- Defining the event precisely is a stumbling block — for example you cannot just say 'mother-infant transmission' without spelling out how it is defined.
+- It is unclear which time origin to use when several are plausible — surgical resection, diagnosis, or start of chemotherapy.
+- Recurrent events are ambiguous: with infections you must figure out whether the person cleared the last infection or has a brand new one.
+- Surrogate endpoints require deciding whether a measure thought to predict the event actually does, and developing such variables is very hard.
+- The same terminology varies by field: CDC colleagues say 'time to event' while NIH clinical center scientists say 'survival' even when the event is not death.
+- Defining the end of the primary episode in the herpes study is not as easy as it seems, and both clinicians and patients must agree on the definition.
+- Whether the hazard is constant over time is the core difficulty underlying proportional hazards and many assumptions in survival analysis.
+- A statistician's phrasing (S = 0.3 at t = 60) is confusing to non-statisticians, requiring translation into plain language like 'five-year survival is 30%'.
+- If the length of progression does not vary at all between subjects, the survival analysis is probably unnecessary.
+- Failure indicators and censoring indicators are exact opposites, so you must check which one your software package expects.
+- Right censoring is handled fine by Kaplan-Meier, but left censoring is not as easy.
+- Whether to count or exclude left-censored subjects is genuinely ambiguous and depends on the scientific question being measured.
+- Terminology overlaps: right/left truncation and right/left censoring are easy to mix up, and type one/two naming is also used for censoring.
+- People may object that the smoking example is just an inclusion/exclusion problem that should have been asked at age 5 or 7, but the speaker frames it as left censoring instead.
+- It may or may not matter whether truncation matters — it depends on how you intend to generalize the information.
+- The delta symbol is ambiguous across sources: it may denote a censoring indicator or a failure indicator, and because these are exact opposites you must verify which one your software uses.
+- The stated 13-month Kaplan-Meier result of .42 is worth reviewing, since it follows a step described as 1 minus 2/14 multiplied by the previous estimate of .84.
+- The idea that you cannot observe cancer events when everyone dies of heart attacks is counterintuitive and requires reinterpretation of the hazard (risk among those still at risk of the event).
+- The polar bear plunge numbers look paradoxical — women appear to die more from the plunge (25% vs 24%) — but reverse once you realize more men left the risk set from other causes (40% vs 33.5%), changing the sex ratio over time.
+- The notion that censoring can depend on a covariate and still be called 'independent' (conditional on that covariate) is a subtlety that needs review.
+- There was a gap in the recording during which the lecture moved into the cancer/heart-attack discussion, so the transition into that example is not captured.
+- The choice of the time point t at which to test survival is ambiguous — 72 weeks or 24 weeks — and testing at one time point does not use all the data.
+- Log-rank may emphasize early events in some versions and late events in others, which muddies interpretation.
+- It is unclear how to stratify when a prognostic factor is continuous and you may not have enough people to populate the strata.
+- Because log-rank is subject to confounding, a difference you observe could just be bias rather than a real treatment effect.
+- Whether to oversample subgroups or condition on them via modeling is presented as a judgment call about the easier path to answering the question.
+- The cirrhosis model coefficients are hard to pin down from the transcript: the treatment coefficient is clearly −0.135, but the values 1.773 and .346 and the phrase 'And second minus ten' are garbled and need review.
+- Speaker 1 says 'first two covariates are categorical' and then immediately 'the second one is continuous', so which covariate (likely prothrombin time) is continuous needs clarification.
+- The transcript renders the ascites covariate inconsistently as 'asighties', 'ascites', and 'covar 2009', so the exact covariate naming and coding should be verified.
+- Speaker 1 states 'the hazardous bias is too small. So your survival estimate was too large' — the logic linking the direction of the hazard bias to the direction of the survival estimate is worth restating carefully.
+- The lecture mentions a drug×time interaction as 'the time time interaction' in one place and as the drug effect changing over time elsewhere — the two phrasings should be reconciled.
+- The distinction between the Schoenfeld-residuals approach (mentioned but not covered) and the Wald/partial-likelihood-ratio approaches (covered) is a gap in the lecture.
+- Kaplan-Meier is called lovely and easy yet cannot be used with covariates — the instructor hedges with "at least not easily," which leaves the boundary unclear.
+- Whether survival methods handle recurrent events and competing risks depends on the form of the method — "it may not in every form" — so the specific model choice for these cases needs review.
+- The instructor maintains that he does not hate Kaplan-Meier, which can confuse students given how many limitations of the method he lists.
+- The Cox assumptions are simultaneously described as hard to test and doable for many of them, so students should note which assumptions are actually testable.
+- Having independent censoring is framed as sufficient for the partial likelihood estimator's consistency, but the earlier framing that it holds "at least with respect to covariates" limits the claim.
+
+#### Questions to review
+- How do you figure out transmission rates for sample size planning, and what do you account for beyond the rate itself?
+- What are those Kaplan-Meier curves telling us, and what part of the trial decision did they inform?
+- Where is the time origin for the outcome, and how is the time scale defined?
+- What do you do when the interim observed rate differs dramatically from what was planned?
+- Why do we use survival analysis at all, as opposed to simpler outcome summaries?
+- When reading a manuscript or protocol, how do you recognize a time-to-event analysis that needs a specialist statistician?
+- Why do we even use survival analysis?
+- Why not just run a logistic regression asking whether the two groups differ at five years?
+- When do you do your measurement, and does the timing hide a real difference (as with the 3-day vs 7-day flu drugs)?
+- What is the time origin, and when does the clock start ticking in a given study?
+- How do you actually define the event (e.g., mother-infant HIV transmission)?
+- How many people have events, how many die, and when?
+- Could you use a logistic remission model instead — a simple yes/no outcome — and what do you lose by doing so?
+- Is the hazard constant or not, and does the risk of an event go up or down over time?
+- What is the hazard function and how is it expressed (upside-down y or h of t)?
+- What are the unique features of survival analysis that distinguish it from other analyses?
+- Are older people more or less likely to have an event, and how does that feed into covariate and sample size decisions?
+- What case mix will you see in your study subjects, and can you shift it toward higher-exposure people to raise the event count?
+- Why does right truncation lead to an underestimate of the survival function?
+- If you exclude subjects who already had the event, does that keep you from valid estimates of what you are interested in?
+- When you see someone leave the study, do you understand why they left and how that may relate to the event of interest?
+- Can you generalize your study sample, given the left truncation entry assumption?
+- If you have a Kaplan-Meier curve, how do you describe the hazard?
+- How do you compute a Kaplan-Meier curve?
+- What else do we know about Kaplan-Meier?
+- What are the models available for making inference about the observed hazard rate as if censoring were independent?
+- How should you condition on covariates (e.g., age) to obtain independent censoring when trial enrollment ages change mid-study?
+- What are the 'headlines' — i.e., what misleading conclusions can arise when a competing risk removes people from the risk set differentially across groups?
+- What is t, and where do you draw that line for a survival comparison?
+- If you follow everybody for a year, are you okay — or is the study non-proportional by age to the population risk set?
+- Why can't you oversample older people later in the study to make the final study more proportional?
+- What must you check before using proportional hazards, and how do you test it?
+- When should you push back and ask for more than the Kaplan-Meier curve and log-rank p value, such as Cox models?
+- How do you test the proportional hazards assumption — via a Wald test or a partial likelihood ratio test on the age×ln(time) and drug×ln(time) interaction terms?
+- Does the impact of age on the hazard function change over time, and does the impact of the drug change over time?
+- What happens to the validity of a Kaplan-Meier estimator when recruitment changes over time and a subgroup is not recruited early enough?
+- If hazards are proportional, does a relative rate calculated at 2 years also hold at 3 years and other time points?
+- Where exactly is the non-proportionality problem — which covariate changes over time and how does that change the model you must fit?
+- When do you need more general Cox models rather than the standard proportional hazards model?
+- How does failing to account for changing exposure (e.g. people going on and off treatment) invalidate a time-dependent survival curve?
+- Do I have proportional hazards or not?
+- Do I have the right covariates in the model, not merely the ones I measured?
+- Did you get the right people into the study (the truncation/entry question)?
+- If there are competing risks, how will you analyze with them and how will you interpret your analysis?
+- What is the median survival time — the time at which 50% of your people have had the event?
+
+#### Study summary
+- This lecture defines survival (time-to-event) analysis, covers vocabulary and statistical methods, and aims to make students able to interpret a Kaplan-Meier graph and Cox model covariates and recognize when assumptions fail.
+- The lecturer warns it is the hardest statistical epidemiology lecture, covers a lot in 90 minutes, and may need rewatching — but is not decisive for the exam.
+- The mother-infant HIV zidovudine trial is the anchor case: powered for 30% to 20% transmission, interim KM showed 8.3%, and the DSMB stopped the trial, leading to zidovudine for controls and changed national guidelines.
+- Key conceptual takeaways are censoring (what survival analysis buys you), the components of a time-to-event outcome (event, time origin, time scale, event time), and competing risks as the main limitation of Kaplan-Meier.
+- Kaplan-Meier is the workhorse, simple enough to compute by hand and used across many fields, but Cox models are needed when you want continuous or multiple covariates.
+- Survival analysis is the type of analysis that makes inference about event rates at a time t among those at risk at that time t.
+- The reason to use it is that fixed-time yes/no analysis (like a 5-year logistic regression) throws away the censoring information and the timing trajectory.
+- Report median survival, not mean survival; mean survival is only valid if every subject's event was measured in time.
+- The model form to remember is baseline hazard x exp(linear predictor), with the outcome variable being the event time and the Xs sometimes called prognostic factors.
+- Notation to keep straight: little t is the time axis, t = 0 is the time origin, and capital T is the random time of the event.
+- A clean survival study design requires defining the event and the time origin, knowing the time the event occurs, and deciding whether covariates are needed.
+- Time origin and time scale are the first decisions in any survival study: origin is when the clock starts (surgery, diagnosis, first exposure, birth) and scale is the unit (hours, days, months, years).
+- The survival function S(t) is the proportion still event-free at time t and is monotonically decreasing; e.g., pancreatic cancer S(9 months) = 0.25.
+- The hazard function is the instantaneous event rate (incidence rate / force of mortality) and underlies all of survival analysis; whether it is constant drives proportional hazards assumptions.
+- Sample size must be driven by the expected number of events and by covariates planned for the model.
+- Censoring and truncation are flagged as topics to be described shortly as key features enabling hazard estimation.
+- Sample size in survival studies is driven by expected event counts, so covariate choice, case mix, and enrollment of high-risk subjects all serve to increase the number of events.
+- Truncation is about study entry: right truncation only samples people with the outcome (cancer registry, biased low survival), while left truncation misses short survivors (enrolling only those 65+).
+- Censoring means incomplete observations: right censoring (study ends / fixed or event-count stopping) is standard and Kaplan-Meier handles it, but left censoring (already smoking at 12, already infected at enrollment) is harder and raises t
+- The assumption to carry forward: censoring and truncation must be independent of the outcome, which is why withdrawals like moving or therapy-related accidents must be scrutinized and subjects kept under tracking.
+- Notation and software hygiene matter: T is event time, T-star observation time, and failure vs censoring indicators are opposite conventions that must be checked before coding.
+- Master the definition and consequences of independent censoring: at-risk subjects at any time point must be a random sample of those at risk, or the hazard estimate is biased and all survival analyses are worthless.
+- Remember that independent censoring can be achieved conditionally — censoring may depend on a covariate in the model (e.g., age in a Cox model) and may differ across study arms.
+- Use the cancer vs heart attack (competing risk) lesson and the polar bear plunge example to reason about what precludes your event and how risk-set composition changes over time.
+- Be able to perform the Kaplan-Meier calculation by hand: reduce the risk set as events and censorings occur, apply 1 minus events/at-risk, and multiply by the previous survival estimate.
+- Know the added details: confidence bands can be placed around the Kaplan-Meier curve (several textbook methods), it gives one estimate of survival time, and censoring hash marks appear on the curve.
+- Watch out for late entry of high-risk subjects (e.g., relaxing age eligibility mid-trial), which distorts the Kaplan-Meier curve so it drops faster than it should.
+- Kaplan-Meier curves are quick but biased when high-risk subjects enter early or late and when subgroups are censored unevenly, and their test statistics depend arbitrarily on the chosen time point.
+- The log-rank test compares observed to expected events over all time points but requires two independent samples from the same population, gives only a p value, and is undermined by confounding.
+- The Cox proportional hazards model adds covariates rather than stratifying, expresses effects as hazard ratios via exponentiated coefficients, and must have its proportionality assumption tested.
+- The general Cox model accommodates time-dependent covariates and stratification factors, letting weight, medication changes, and changing covariate effects enter the model, but only with enough data on enough people.
+- Modeling cannot save you from everything, but conditioning on a variable like age in the model can fix the bias that uncorrected Kaplan-Meier curves suffer.
+- Proportional hazards can be tested by adding ln(time) interaction terms for each covariate and comparing the full model with a Wald or partial likelihood ratio test (2 df here).
+- A test p-value of .94 supports assuming proportional hazards, whereas p=.003 rejects it, and following up showed the drug×time interaction (not age) was the culprit, implying crossing hazard curves.
+- Time-dependent survival curves require accounting for exposures that change over time (antiretroviral therapy on/off, changing drugs, transplant timing) rather than assuming no change.
+- In the liver cirrhosis trial, delayed recruitment of ascites patients made censoring dependent with respect to ascites and left an unrepresentative risk set at later time points, biasing the hazard too small and the survival estimate too la
+- A Cox model fixes that problem: censoring becomes independent with respect to ascites, which is all that is needed for consistency of the partial likelihood estimator, so coefficients and relative risks are correct.
+- Model selection matters: Kaplan-Meier is simple but can mislead, Cox PH is the workhorse that must be checked for proportionality, and more general Cox models may be necessary.
+- Time measurement decisions and protocol/recruitment changes must be built into the analysis, otherwise the model output will be badly misinterpreted.
+- Survival analysis is fundamentally inference on event rates — the rate at a given time point t among those at risk.
+- Cox regression is the most robust and most flexible general approach, giving a framework for covariate inference as long as censoring is independent and the proportional hazards assumption is checked.
+- Kaplan-Meier and log-rank are simple and appealing but break down with covariates, time-dependent covariates, competing risks, and baseline imbalance — so they are not default choices.
+- Recurrent events require a fancier survival model than the standard framework.
+- The organising principle to retain is that analysis follows the design, driven by the clinical question and hypothesis.
+- Course logistics: question boards stay open about two weeks from the original lecture date, evaluations are used for annual course changes, and a summary session is scheduled for mid-December with several other lectures in between.
+
+#### Action items (structured)
+- The DSMB asked the study team to check a list of specified items and get back in touch with them. [inferred]
+- students: Post questions to the course question board (open about 2 weeks from the date of the original lecture).
+- students: Fill out course evaluations, which are actually used to decide and make changes in the class each year.
+- students: Send in examples so the instructor can add them to the course materials.
+- online students: Online viewers must send their questions to the separate board, because the instructor can only see his own lectures.
+
+#### Decisions (structured)
+- The DSMB recommended stopping the mother-infant HIV trial after careful review of toxicity and transmission rates, and trial leaders agreed to stop the study.
+- After stopping, zidovudine was provided to everybody in the control group.
+- The United States Public Health Service modified its national guidelines, as did many groups in various other countries around the world.
+
+#### Open questions (structured)
+- How do you figure out transmission rates for sample size planning? [open]
+- What are the Kaplan-Meier curves actually telling us in the trial? [open]
+- Where is the time origin for the time-to-event outcome? [open]
+- Why do we even use survival analysis? [open]
+- When an interim result diverges sharply from expectation, what do you do? [open]
+- What should the time origin be in a study — for example in oncology is it time of surgical resection, time of diagnosis, or the time and date chemotherapy started? [open]
+- How do you actually define the event — you cannot just say 'mother-infant transmission' without specifying how it is defined? [open]
+- Why not just run a logistic regression at five years to ask whether the two groups differ, yes or no? [open]
+- If an intervention lowers blood pressure but people then die 20 years later, two years before someone who did not take the medicine, do we want to know that — have we accomplished our goal by lowering hypertension? [open]
+- When should the measurement be taken, given that a 3-day vs 7-day resolution difference may look identical if measured later? [open]
+- Were we sure that the patients cleared the episode that we started with in the herpes study? [open]
+- Is the hazard constant over time, or does it change? [open]
+- How do you define the end of the primary episode, and can the patients themselves reliably define it? [open]
+- Whether to count or exclude subjects who already had the event before enrollment (e.g., kids already infected at enrollment). [open]
+- Does excluding subjects who already had the event keep you from having valid estimates of what you are interested in? [open]
+- Are older people more or less likely to have an event — relevant when choosing covariates for sample size. [open]
+- What is your case mix going to be in your study subjects? [open]
+- Why does right truncation lead to an underestimate of the survival function? [open]
+- How do you compute a Kaplan-Meier curve? [open]
+- What else do we know about Kaplan-Meier beyond the basic estimate? [open]
+- If you have a Kaplan-Meier curve, how do you describe the hazard? [open]
+- What alternative models exist for interpreting the observed hazard rate as if it were independent? [open]
+- At what time point should the survival comparison be drawn — e.g., 72 weeks as DSM B did for the zidovudine trial, or 24 weeks? [open]
+- If you follow everybody for a year, are you okay — or can the study still be non-proportional by age to the population risk set? [open]
+- Why not oversample older people later in the study to make the final study more proportional, rather than putting age in the model? [open]
+- When physicians delayed recruiting ascites patients until about a year and a half in, what happens to the validity of the Kaplan-Meier estimator? [open]
+- When proportional hazards fail, which covariate is actually changing over time — the lecture answers this as the drug, not age, in the second example. [open]
+- If hazards are proportional, does the relative rate stay the same at 2 years as at 3 years (and can it be worked out for many subject comparisons)? [open]
+- How will you analyze and interpret your analysis when competing risks are present? [open]
+- Do I have proportional hazards or not? [open]
+
+#### Risks (structured)
+- [high] Competing risks have no sensible interpretation on a Kaplan-Meier curve, since one event removes the subject from being at risk for the other.
+- [medium] Adding too many stratification factors can leave only 3 or 4 people in each Kaplan-Meier curve, which is not enough for a robust curve.
+- [medium] Observed transmission was far below the expected 30%, raising concerns about randomization, demographic differences, or unclean data that the Kaplan-Meier curves cannot resolve.
+- [medium] Trial participants tend to be healthier once enrolled, so events can occur less often than planned, as in a study that required subjects to be 6 months before death but was still following them 18-24 months later.
+- [medium] A fixed-time logistic regression discards the information gained from censoring, so it misses the trajectory of events over time.
+- [high] Late harm can be missed: with Cox-2 inhibitors short-term studies showed no additional deaths and the hazard functions crossed, so Kaplan-Meier would not have flagged a problem starting around 12-18 months.
+- [medium] Observational associations (lower blood pressure, lower BMI, eating blueberries, longer life) may not be reproduced when the exposure is randomized into a study.
+- [medium] Surrogate endpoints (measures thought to predict the event) are hard to develop.
+- [medium] Reporting mean survival is a red flag because it requires that the event was measured on every subject — otherwise the analyst does not know what they are doing.
+- [medium] Assuming a constant hazard (as in proportional hazards) is often wrong because risk of an event is much higher at certain points in time.
+- [medium] Measurement error can arise if subjects or clinicians define the time origin inconsistently (e.g., knocking half a month off).
+- [medium] Because the event may not happen for everyone, sample size must be based on the number of events expected rather than number of subjects.
+- [high] Sampling only people who have the outcome (right truncation, e.g. a cancer registry) produces an underestimate of the survival function because unrecorded cases are never observed.
+- [medium] Enrolling only older subjects (e.g. 65+) creates left truncation in which short survivors who died before 65 are never observed, producing weird estimates.
+- [medium] Withdrawal may not be independent of the event if the new therapy itself causes the reason for withdrawal (e.g. balance problems leading to falls).
+- [medium] Moving out of the area cannot automatically be treated as independent censoring, because people may move for last-ditch therapies related to the outcome.
+- [medium] Using the wrong indicator in software (failure indicator vs censoring indicator) is a documented pitfall — they are exact opposites.
+- [medium] If age is not conditioned on when older subjects are enrolled late in a trial, the estimates will be biased and the risk sets will not be representative of the greater population.
+- [high] Lacking independent censoring yields a biased estimate of the hazard function and makes all survival analyses worthless.
+- [medium] Using the wrong indicator convention in software (delta as censoring indicator vs failure indicator) is a known source of error because the two are exact opposites.
+- [high] If high-risk subjects enter the study early or late, the Kaplan-Meier curve will be not quite right and will come down faster than it should because the later data for them is missing.
+- [high] If prognostic factors are not balanced between treatment groups, the log-rank test will not give the correct result and a difference you see could just be bias.
+- [medium] Stratifying on continuous variables or too many prognostic factors loses power because you perform a bunch of tests with much smaller sample sizes in each stratum.
+- [medium] If you fit a model with many covariates but data on very few people, you do not have enough data on enough people to do it.
+- [high] The Cox proportional hazards model is widely misused when analysts do not check whether hazards are actually proportional.
+- [high] Analysts often fail to account for changes in exposure or treatment over time and assume there is no change, which distorts time-dependent survival curves.
+- [high] Failing to account for protocol, inclusion/exclusion, or recruitment changes in the analysis can produce a large amount of misinterpretation of the model.
+- [high] In the cirrhosis example, censoring was not independent with respect to ascites because no stratified analysis by ascites was done, and the risk set at later time points excluded ascites patients, biasing the hazard too small and making the
+- [medium] Kaplan-Meier estimates are simple but potentially misleading, especially when risk sets are not representative of the population.
+- [medium] Kaplan-Meier curves cannot be used, at least not easily, when covariates are present.
+- [medium] With competing risks, Kaplan-Meier has no sensible interpretation.
+- [medium] The log-rank test cannot be used correctly with time-dependent covariates or competing risks.
+- [medium] Imbalance in the Table 1 baseline prognostic factors will probably give a biased estimate.
+- [medium] It is hard to test the Cox model assumption, even though it is doable for many of them.
+- [medium] Putting covariates in the model is not enough; you must be sure the right covariates are in the model.
+
+#### Follow-up draft
+Hi,
+
+Quick recap: this was the survival / time-to-event analysis lecture, anchored on the mother-infant HIV zidovudine trial, where the interim Kaplan-Meier showed 8.3% transmission against an expected 30% and the DSMB recommended stopping, after which controls were offered zidovudine and national guidelines changed. The concepts to hold onto are that survival analysis is inference on event rates at time t among those at risk, that censoring is what lets you use partial follow-up from people who never had the event, and that a competing risk is one event preventing another, which is exactly where Kaplan-Meier breaks down, since it can stratify but not model covariates. The definitions and formulas worth memorizing: the survival model is the baseline hazard times exp of the linear predictor, a hazard ratio is the exponentiated coefficient and beta of zero means a hazard ratio of one, the Kaplan-Meier step is one minus (events divided by number at risk) times the previous estimate, you report median survival, the time by which 50% have had the event, and never mean survival, and proportional hazards is tested by adding age x ln(time) and drug x ln(time) interactions and comparing with a Wald or partial likelihood ratio test, where p = .94 meant the assumption held and p = .003 meant it failed, with the drug-by-time term rather than age the culprit. Independent censoring and getting the right covariates into the Cox model are the other things to keep in mind, because analysis follows the design.
+
+That's the recap.
+
+---
+
+# Summary C
+
+_(run1)_
+
+### Title: Survival Analysis and Competing Risks
+
+#### Overview
+The lecture introduced survival analysis through a mother–infant HIV transmission trial, explaining censoring, competing risks, Kaplan–Meier curves, and how interim results informed stopping the trial. The lecture explains why survival analysis uses event timing and censoring, introduces survival and hazard concepts, and defines time origin, event time, and study-design requirements. The lecture defined time origins, scales, survival and hazard functions, and explained how censoring, event variability, and covariates shape survival-analysis design. The lecture explained how event-based sample size, truncation, censoring types, and the independent-censoring assumption affect survival-analysis validity. The lecture explained independent censoring, competing risks, and Kaplan–Meier survival estimation with worked examples. The lecture contrasted Kaplan–Meier/log-rank methods with Cox modeling, emphasizing confounding, proportional-hazards assumptions, time-dependent covariates, and the need to test model assumptions. The lecture explained how to test and address nonproportional hazards, time-dependent exposures, and recruitment-related bias using Cox-model examples. The lecture concluded by reviewing when survival-analysis methods are appropriate, emphasizing independent censoring, competing risks, proportional-hazards assessment, and the principle that analysis must follow study design. Key decisions: The trial was stopped after the data and safety monitoring board reviewed toxicity and transmission rates and agreed with the trial leaders.; Zidovudine was provided to participants in the control group after the study was stopped.; National guidelines in the United States and other countries were modified following the trial findings.. Study summary: Survival or time-to-event analysis studies an event together with its timing, rather than a single outcome value.
+
+#### Summary
+- Survival or time-to-event analysis studies an event together with its timing, rather than a single outcome value.
+- The lecture introduced survival analysis through a mother–infant HIV transmission trial, explaining censoring, competing risks, Kaplan–Meier curves, and how interim results informed stopping the trial.
+- The trial was stopped after the data and safety monitoring board reviewed toxicity and transmission rates and agreed with the trial leaders.
+- Zidovudine was provided to participants in the control group after the study was stopped.
+- Competing events can prevent observation of the event of interest, making ordinary survival interpretations problematic.
+
+#### Core concepts
+- Survival analysis is also called time-to-event analysis, and the event can be death or another defined outcome.
+- The outcome in time-to-event analysis includes both whether the event occurs and when it occurs.
+- The HIV trial used time to infant seroconversion as the event of interest.
+- Kaplan–Meier curves estimate the probability of transmission or another event over time.
+- Cox models can incorporate continuous and multiple covariates, whereas Kaplan–Meier analyses can be stratified but are less flexible.
+- Interim monitoring can use a preplanned group sequential design to review efficacy before the study ends.
+- Survival analysis studies event rates and the timing of events rather than only whether an event occurred by one fixed endpoint.
+- Events in survival analysis can include death, infection, myocardial infarction, hospitalization, cancer recurrence, or an engineering failure.
+- Survival analysis uses information from censored participants instead of treating them as if no useful information were available.
+- The method is useful when event trajectories differ even if groups look identical at a later assessment time.
+- Survival analysis can examine long-term consequences of an intervention beyond an initial clinical outcome such as lowering blood pressure.
+- Failure analysis in engineering applies the same general mechanism as survival analysis, although the terminology differs.
+- Survival models share a structure with regression models by combining a baseline hazard with an exponential of a linear predictor.
+- Survival analysis requires specifying an event, a time origin, and a time scale over which progression toward the event is measured.
+- The time origin is the point at which the study clock begins, such as diagnosis, treatment initiation, surgery, first occupational exposure, or birth.
+- The choice of time scale depends on the question and may be hours, days, months, years, age, or a physical quantity such as milliliters of air.
+- Survival curves are monotonically decreasing because the proportion remaining event-free can only decrease or stay flat as time advances.
+- The hazard function describes instantaneous event risk and provides the small increments that underlie the survival curve.
+- Hazard may vary over time, so proportional-hazards analyses require attention to the assumption that relative risks behave consistently over time.
+- A defining feature of survival analysis is that the event may not occur during the observation period for every participant.
+- Sample size for survival studies should be based on the expected number of events, not simply the number of enrolled subjects.
+- Covariate planning must consider both variables intended for the model and factors that change the likelihood of observing an event.
+- Researchers may select populations at higher baseline risk to increase the number of observed events.
+- The central assumption for truncation and censoring methods is that the observation mechanism is independent of the outcome.
+- Subjects should continue to be tracked after treatment interruption or relocation whenever possible so their event status remains known.
+- Independent censoring requires that people remaining at risk at each time point be representative random samples of the population at risk at that time.
+- Independent censoring must hold throughout the study rather than only at one time point.
+- Censoring may depend on a covariate if censoring is independent within groups defined by that covariate.
+- Censoring can differ between study arms and still be handled when the relevant variables are modeled.
+- The time origin is commonly enrollment or treatment initiation, while age is often the time axis in nonrandomized studies.
+- Competing events must be considered because experiencing one event can make another event impossible.
+- Kaplan–Meier curves describe survival over time and may be displayed separately for intervention groups, age categories, or other stratification variables.
+- Censored observations still provide information about event risk while individuals remain under observation.
+- The log-rank test compares survival experience across groups using information over all observed time points.
+- The log-rank test compares observed event counts with expected event counts under the null hypothesis.
+- A log-rank test alone provides a p-value but does not quantify the size of the survival difference or explain covariate relationships.
+- The Cox proportional-hazards model extends survival analysis by incorporating prognostic factors as covariates.
+- Cox modeling is described as a semiparametric multiplicative model because the baseline hazard is left unspecified and covariates multiply the hazard by factors.
+- Proportional hazards means that the relative hazard between groups does not vary over time.
+- A Cox model may need time interactions or a more general formulation when covariate effects change over time.
+- Modeling can help address some data limitations but cannot solve every problem.
+- Time-dependent survival analysis must account for exposure or treatment changes during follow-up.
+- Kaplan–Meier methods are simple but can be misleading when the risk set is not representative over time.
+- Cox proportional hazards regression is useful but is frequently misused when its proportionality assumption is not considered.
+- The choice of time scale, measurement timing, and protocol changes can materially affect survival-model validity.
+- Independent censoring, at least with respect to the relevant covariates, is presented as sufficient for consistency of the Cox partial-likelihood estimator.
+- When the Cox model is appropriately specified, its coefficients and relative-risk interpretation are expected to be correct.
+- Survival analysis concerns inference about event rates among individuals who remain at risk at time t.
+- Cox regression is characterized as a robust general method that provides a framework for inference about measured covariates.
+- Risk sets support estimation of the event process.
+- The central methodological principle is that analysis must follow the study design and clinical hypothesis.
+
+#### Definitions
+- Censoring means using all available follow-up information up to the point when an individual is no longer observed or has not yet experienced the event.
+- A competing risk is an event that prevents the primary event from subsequently occurring or being observed.
+- The time origin is the point from which follow-up begins, such as birth for an infant.
+- The time scale is the unit used to measure follow-up, which was weeks for the infants in this example.
+- An interval-measured event is known only to have occurred between two assessments.
+- A log-rank test supplies the p-value associated with the Kaplan–Meier comparison shown in the example.
+- Survival analysis is defined as analysis that makes inferences about event rates.
+- The event rate at time t is evaluated among people who remain at risk at that time.
+- Median survival is the typical summary because not every participant necessarily experiences the event during the study.
+- Mean survival requires that the event time be measured for everyone in the study.
+- Lowercase t denotes the time axis, while uppercase T denotes the random time at which the event occurs.
+- The time origin is the point at which observation for events begins, represented by t = 0.
+- Time-to-event and survival are essentially alternative terms, with usage varying across scientific groups.
+- A surrogate event is based on an indirect measure believed to predict the direct event.
+- The survival function is the proportion of the population that remains without the event by time t.
+- For pancreatic cancer, survival at nine months was illustrated as approximately 25%, meaning the probability of surviving at least nine months after surgery was 0.25.
+- A five-year survival probability of 30% can also be stated as 70% of patients dying within the first five years.
+- The hazard function is also described as an incidence rate, force of mortality, event rate, or instantaneous risk at time t.
+- A hazard of 1% at 12 months was explained as patients dying at a rate of 1% per month at one year or having a 1% chance of dying in the following month.
+- Censoring and truncation are features that survival methods can accommodate when estimating the hazard function.
+- In the herpes example, the event was recurrence and the measured interval was time from the end of the primary episode to first recurrence.
+- Right truncation occurs when only people with a recorded event or condition are sampled, so people whose event was never recorded are excluded.
+- Left truncation occurs when people enter observation after the relevant time origin, causing earlier short-survival subjects to be missed.
+- Right censoring means the subject has not experienced the event by the end of observation or another stopping point.
+- Left censoring means the event is known to have occurred before observation began, but its exact time is unknown.
+- Type I censoring follows every subject for the same fixed duration, whereas Type II censoring stops observation after a specified number of events.
+- Random censoring occurs when subjects enter over a period and therefore receive different amounts of follow-up.
+- Event time is denoted by T, while observed time is denoted by T-star and equals event time for events or follow-up time for censored subjects.
+- A censoring indicator may be called a delta in textbooks, but software conventions may use the opposite coding for failure and censoring.
+- Right censoring occurs when follow-up ends before the subject experiences the event of interest.
+- Independent censoring means that, conditional on similar covariate values, censored subjects have similar subsequent-event risk to subjects with continued follow-up.
+- The risk set is the set of subjects still under observation and at risk for the event at a given time.
+- Kaplan–Meier estimation is based on multiplying conditional survival probabilities over event times.
+- Censored observations contribute information up to the time the subject leaves the study but not afterward.
+- In the proportional-hazards model, the baseline hazard is combined with regression coefficients and prognostic factors.
+- A coefficient equal to zero corresponds to a hazard ratio of one.
+- A hazard ratio of one means the compared groups have the same survival experience with respect to that factor.
+- The exponential of a Cox regression coefficient represents the relative rate or risk associated with its covariate.
+- A proportional-hazards model assumes that a covariate's relative rate remains constant over time.
+- A stratified log-rank test compares data within each stratum and then performs a combined test.
+- A time interaction evaluates whether a covariate's effect on the hazard changes as time passes.
+- The lecture used natural log of time in interaction terms for testing time-varying effects.
+- The two described tests for proportional hazards were a Wald test and a partial likelihood ratio test.
+- Schoenfeld residual plots were identified as another way to investigate proportional-hazards assumptions.
+- In the example Cox model, treatment and ascites were categorical covariates, while prothrombin time was continuous.
+- The baseline hazard was described for the placebo group without ascites at a specified prothrombin-time value.
+- Independent censoring was presented as a condition required for consistency of the partial-likelihood estimator.
+- Median survival is the amount of time by which 50% of participants have experienced the event.
+- Mean time to event requires that everyone has experienced the event, unlike median survival.
+- Censoring refers to participants leaving observation or being observed without the event during the study period.
+- Truncation concerns who enters the study and whether the enrolled participants are the appropriate population.
+- Competing risks are event processes that require special consideration because standard survival summaries may not have a sensible interpretation.
+- Proportional hazards is an assumption that must be assessed when using a Cox model.
+
+#### Examples
+- The motivating example compared mother–infant HIV transmission between placebo and zidovudine study arms.
+- The study was designed around reducing transmission from 30% to 20%.
+- The interim analysis found an 8.3% transmission rate in the zidovudine group rather than the anticipated 20% rate.
+- An infant who dies from a diarrheal infection at six weeks illustrates a competing risk for later HIV seroconversion.
+- Death from cancer and death from a heart attack were used as an analogy for mutually competing events.
+- The lecturer noted that survival methods are used across fields, including animal science and journal research.
+- A new cancer treatment can be evaluated by asking whether it extends life five months beyond the current treatment.
+- A drug resolving flu symptoms in three days is better than one resolving them in seven days, but a day-ten measurement makes them appear equivalent.
+- A balloon's failure can be measured by the milliliters of air added before it bursts rather than by elapsed time.
+- The Cox-2 inhibitor example shows that short-term studies can miss a later safety problem beginning around 12 to 18 months.
+- A follow-up of the MIST trial examined time to pregnancy or first live birth after miscarriage following randomization to two management approaches.
+- Possible event definitions include an HIV-positive test, an AIDS-defining event, mother-infant HIV transmission, or blood pressure or cholesterol falling below a cutoff.
+- In a pancreatic cancer study, the origin was surgical treatment, the event was death, and the scale was months.
+- In occupational epidemiology of a nickel refinery, the origin was estimated first exposure at employment, the event was lung-cancer death, and the scale was years.
+- For population mortality, the origin was date of birth, the event was death, and the quantity measured was age at death in years.
+- The balloon example treated bursting as the event and milliliters of infused air as the time-like scale, starting at zero milliliters.
+- After myocardial infarction, the event risk may be higher early and lower after surviving the first 30 days.
+- The herpes study demonstrated that event criteria and the time origin can be difficult to define when participants are at home.
+- A cancer-registry study can suffer right truncation because people with cancer that was never recorded in the registry are absent from the sample.
+- Enrolling only people aged 65 or older misses individuals who died before age 65 and creates left-truncation concerns.
+- A smoking-onset study beginning interviews at age 12 left-censors a child who is already a regular smoker but cannot identify when smoking began.
+- In an infection-incidence study, children already infected at enrollment illustrate left censoring because the infection occurred before study observation.
+- Stopping a light-bulb experiment after four bulbs fail illustrates Type II censoring for the remaining bulbs.
+- Patients reaching 24 months without the event are censored, but their known event-free follow-up remains useful in the analysis.
+- In a five-year study where death is the event, patients who are alive at the end of follow-up are censored.
+- Students followed from age 5 to 25 who never begin smoking by age 25 are right-censored for time to smoking initiation.
+- Changing eligibility to enroll older subjects later can create informative follow-up unless age is included in the model.
+- The polar-bear-plunge example used made-up annual death rates of 3% from the plunge, 2% male deaths from other causes, and 1% female deaths from other causes.
+- After ten years in the polar-bear-plunge example, 25% of women and 24% of men died from the plunge, which could produce a sensational but misleading headline.
+- The polar-bear-plunge example attributed 33.5% of women’s deaths and 40% of men’s deaths over the decade to other causes.
+- Testing survival at a single time point, such as 72 weeks or 24 weeks, uses only part of the available survival data.
+- A recurrent-event example is a subject scoring anywhere from zero to six soccer goals, which simple Kaplan–Meier-style models cannot handle well.
+- The effect of age on hazard may differ between age 20 and age 60, requiring time-varying modeling if the effect changes over time.
+- The effect of taking a COX-2 inhibitor on cardiovascular events may differ after two months versus 18 or 24 months of treatment.
+- Older subjects entering later in a trial may be censored earlier than younger subjects, biasing an unadjusted Kaplan–Meier analysis.
+- Oversampling older people later in a study was presented as an alternative to adjusting for age in a model.
+- One proportional-hazards example included age and drug as covariates and added age-by-log-time and drug-by-log-time interactions.
+- In one test, the interaction terms had a p-value of .94, supporting the proportional-hazards assumption.
+- In another case, a partial likelihood ratio test produced p = .003, indicating that proportional hazards could not be assumed.
+- The problematic covariate in that second case was drug, whose hazard effect changed over time, whereas age was not the issue.
+- Antiretroviral therapy was used as an example of an exposure that may change repeatedly during long-term follow-up.
+- The Stanford heart transplant study illustrated why analysis must consider time to transplant as well as time to death.
+- The liver-cirrhosis trial compared a new treatment with placebo and recorded ascites, staging information, and prothrombin time.
+- Patients with ascites were initially under-recruited because physicians were concerned about potential toxicity, even though the protocol did not exclude them.
+- The lecturer contrasts median survival with mean time to event: median survival can be defined when half the participants have had the event, whereas the mean requires events for everyone.
+- Kaplan–Meier curves are described as simple enough to calculate on an envelope or napkin, but their interpretation becomes problematic with covariates or competing risks.
+- The log-rank test is presented as attractive because it is simple, even though its use is limited by time-dependent covariates and competing risks.
+- Recurrent events are given as a case where a more sophisticated survival model is needed.
+- Baseline imbalance in prognostic factors is given as an example of a condition that can bias estimates.
+
+#### Formulas / steps
+- To calculate a transmission rate, count the babies who eventually seroconvert and relate that event count to the total number of infants of interest.
+- Sample-size planning must work backward from the required number of events and account for dropouts and loss to follow-up.
+- Define the event, select the time origin, choose the time scale, and specify when the event is considered to have occurred.
+- Use an individual's observed follow-up up to censoring rather than discarding an infant who has not yet seroconverted.
+- Compare Kaplan–Meier curves between study arms and use a log-rank test for the associated p-value.
+- When curves or interim results are surprising, investigate randomization, demographic balance, data quality, toxicity, and transmission rates before deciding what to do.
+- Define the event precisely before designing or analyzing a time-to-event study.
+- Specify the time origin, the point at which the study clock begins.
+- Choose the relevant time scale and assessment schedule, such as months for oncology, days or hours for flu, and assessments at six, twelve, eighteen, and twenty-four months.
+- Represent the event time as uppercase T and evaluate probabilities such as P(T ≥ t) at selected times.
+- At each time t, calculate or model the event rate among participants still at risk.
+- Use a survival model with a baseline hazard and an exponential linear predictor, optionally including covariates or prognostic factors.
+- Define the event before analysis, such as death, recurrence, transmission, marriage, seropositivity, or balloon bursting.
+- Choose and explicitly define the time origin at which follow-up begins.
+- Select the time scale and its measurement unit, such as hours, days, months, years, age, or milliliters.
+- Define the event criteria precisely and ensure that clinicians and study participants apply the definitions consistently.
+- Estimate the proportion remaining event-free over time to construct or interpret the survival function.
+- Evaluate whether the hazard changes with time rather than automatically assuming that risk is constant.
+- Plan sample size around the number of expected events and consider the covariates intended for the model.
+- Plan sample size by estimating how many events are expected rather than treating every enrolled subject as an event-bearing observation.
+- When assessing left truncation, verify that entrants at time t are a random sample of the population at risk at time t.
+- For right censoring, record the last time each subject was known not to have experienced the event and include that follow-up in the analysis.
+- Investigate why a subject withdraws or moves before assuming that censoring is independent of event risk.
+- Before using survival-analysis software, determine whether its indicator variable is coded as a failure/event indicator or as a censoring indicator.
+- At time zero, the Kaplan–Meier survival estimate starts at 1 because no event has yet occurred.
+- At each event time, update survival by multiplying the previous estimate by one minus the number of events divided by the number at risk.
+- With 2 events among 20 at risk at month 5, the survival estimate changes from 1 to 0.9.
+- If there are no events among 18 at risk at month 6, the estimate remains 0.9 after removing the two prior events from the risk set.
+- Censoring between months 6 and 10 reduces the month-10 risk set from 18 to 15 without causing a survival drop by itself.
+- With one event among 15 at month 10, the updated Kaplan–Meier estimate is approximately 0.84.
+- With two events among 14 at month 13, the lecture reports multiplying the prior estimate by one minus 2 divided by 14 to obtain 0.42.
+- For a simple two-group survival comparison at a chosen time point, form a z statistic from the difference between the two survival estimates divided by the square root of their summed variances.
+- The log-rank workflow compares observed and expected event counts across time rather than testing only one selected time point.
+- A stratified log-rank workflow analyzes survival within each stratum and then performs the test across strata.
+- In Cox modeling, add prognostic variables as covariates rather than necessarily stratifying on them.
+- If a covariate's effect changes over time, include the relevant time element or time-dependent covariate in the model.
+- Use software for Cox model estimation and coefficient hypothesis tests rather than attempting the calculations manually.
+- To test proportional hazards, fit a base Cox model and a second model adding covariate-by-natural-log-of-time interactions.
+- Compare the base and expanded models using a Wald test or a partial likelihood ratio test.
+- For a likelihood-ratio comparison with two added interaction terms, use a test with two degrees of freedom.
+- A large p-value for the time interactions supports retaining the proportional-hazards assumption, while a small p-value indicates its violation.
+- When the drug effect varies over time, include the drug-by-time term in the Cox model.
+- To calculate a covariate comparison from the Cox model, exponentiate the relevant linear predictor, including the treatment coefficient and other covariate contributions.
+- For the cirrhosis example, compare a subject receiving treatment with specified covariate values against the reference profile at two years after randomization.
+- When recruitment changes over time, evaluate whether the risk set remains representative at each time point.
+- Begin with the clinical question and derive the hypothesis from that question.
+- Design the study so it can answer and test the hypothesis.
+- Gather a sample that will provide the data needed for the planned analysis and conclusions.
+- Select an analysis that matches the protocol and allows the hypothesis to be tested.
+- Before interpreting a Cox model, verify that the covariates are appropriate and assess whether the proportional-hazards assumption holds.
+- Use a more advanced survival model when recurrent events or competing risks are not handled adequately by the basic method.
+
+#### Things to memorize
+- Survival analysis is synonymous in this lecture with time-to-event analysis.
+- Kaplan–Meier curves display event probability over time and can accommodate censoring.
+- The Kaplan–Meier graph in the HIV example used probability of transmission on the y-axis and weeks on the x-axis.
+- A competing risk removes an individual from risk of the other event.
+- Cox models are more flexible than stratified Kaplan–Meier curves because they can include continuous and multiple variables.
+- The example's first interim analysis observed an 8.3% transmission rate.
+- Survival analysis focuses on both whether an event occurs and when it occurs.
+- Median survival is generally preferred to mean survival when some participants have not experienced the event.
+- Mean survival is interpretable only when every study participant has a measured event time.
+- Lowercase t is a point on the time axis, whereas uppercase T is the random event time.
+- The time origin is t = 0 and must be explicitly identified for each study.
+- The survival model includes a baseline hazard and an exponential of a linear regression component.
+- Survival at time t means the proportion or probability of remaining without the event through time t.
+- A survival value of 0.30 at 60 months is a five-year survival probability of 30%.
+- The survival curve is monotonically decreasing or flat and does not increase over time.
+- Hazard is an instantaneous risk or event rate at a specified time and depends on the chosen time unit.
+- The time origin, event definition, and time scale must all be explicitly specified in a survival study.
+- Expected event count, not only total enrollment, is central to survival-study sample-size planning.
+- The key survival-analysis assumption emphasized in the lecture is independent censoring.
+- Right truncation excludes subjects whose relevant event was not recorded, while left truncation excludes subjects who did not survive long enough to enter observation.
+- Right censoring indicates that no event was observed through the last known follow-up time.
+- Left censoring indicates that the event occurred before observation began but the event time is unknown.
+- Type I censoring uses a common follow-up duration, Type II censoring stops after a specified number of events, and random censoring gives subjects different follow-up durations.
+- Solid symbols generally represent observed events and open circles generally represent censored observations in survival plots.
+- Failure and censoring indicators may use opposite coding conventions, so the software definition must be checked.
+- Subjects who are censored remain in the risk set until their censoring time.
+- The Kaplan–Meier estimator is a product of conditional survival probabilities.
+- Censoring marks on a Kaplan–Meier curve indicate when observations were censored.
+- Censored observations are marked by hash marks on a Kaplan–Meier curve.
+- The null hypothesis for comparing two survival groups at a time point is that their survival probabilities are equal.
+- The log-rank test accounts for censoring but not time-dependent covariates, recurrent events, or competing risks.
+- A log-rank test generally produces a p-value, whereas Cox modeling can estimate covariate-associated hazard ratios.
+- A zero Cox coefficient implies a hazard ratio of one.
+- The proportional-hazards assumption must be tested before relying on a proportional-hazards model.
+- A p-value of .94 for the added time interactions was interpreted as consistent with proportional hazards.
+- A p-value of .003 from the partial likelihood ratio test was interpreted as evidence against proportional hazards.
+- The drug effect, rather than the age effect, was the time-varying effect in the second example.
+- Kaplan–Meier estimation can overestimate survival when severe patients are recruited later and are absent from earlier risk sets.
+- Ascites was treated as an indicator of liver-cirrhosis severity in the trial example.
+- Treatment was coded as 1 and placebo as 0 in the Cox-model example.
+- Independent censoring with respect to ascites was presented as sufficient for consistent partial-likelihood estimation.
+- The main survival-analysis lesson was to choose the appropriate measure and test rather than relying automatically on a simple method.
+- Independent censoring is required for consistency of the Cox partial-likelihood estimator.
+- Median survival is the time at which 50% of participants have experienced the event.
+- Kaplan–Meier methods do not readily accommodate covariates and lack a sensible interpretation in the presence of competing risks.
+- The log-rank test cannot be used or correctly interpreted with time-dependent covariates or competing risks.
+- Cox regression requires attention to covariate selection and the proportional-hazards assumption.
+- Analysis must follow the study design.
+
+#### Confusing points
+- The exact event time may be unknown when testing occurs only at visits, because seroconversion is known only to fall between two tests.
+- A Kaplan–Meier curve alone cannot distinguish whether an unexpected result reflects randomization imbalance, demographic differences, or data-quality problems.
+- Competing risks make a simple interpretation of the Kaplan–Meier event probability inappropriate.
+- It can be unclear whether follow-up should begin at birth or another defined time origin, and the lecturer indicated that methods are needed when baseline transmission is not zero.
+- Very small strata can make a Kaplan–Meier curve unstable or non-robust.
+- The lecture distinguishes time-to-event terminology from survival terminology by scientific community rather than by a different underlying outcome.
+- The event need not be death, despite the name survival analysis, and may instead be infection, hospitalization, recurrence, or a threshold crossing.
+- A fixed endpoint can make treatments with different recovery trajectories look identical, which is why event timing matters.
+- The lecture notes that hazard curves can cross, creating a delayed safety signal that may not be obvious from an early Kaplan–Meier view.
+- The relationship between observational associations and randomized-study results may differ, so lower risk observed in an observational group may not persist after randomization.
+- The lecture contrasts survival and hazard but does not provide a formal mathematical relationship between the two functions in this chunk.
+- The statement that hazard can be expressed as an incidence rate, force of mortality, or event rate uses related terms whose exact distinctions may require review.
+- A hazard of 1% per month is not the same type of quantity as a five-year survival probability, so the time unit must be kept explicit.
+- The lecture mentions proportional hazards and changing risk but does not fully explain how the assumption is assessed.
+- The distinction between an event not occurring during observation and censoring is raised but not fully developed here.
+- The lecture distinguishes truncation from censoring, but both can lead to incomplete representation of the underlying event-time population.
+- A person who moves away is not automatically independently censored because relocation may be related to treatment or event risk.
+- Accidental death may appear unrelated to the target event, but it can still be associated with treatment if the treatment increases balance problems and falls.
+- The meaning of the software indicator can reverse depending on whether it is defined as failure or censoring, so the same symbol should not be assumed to have a universal meaning.
+- The lecture uses inconsistent or unclear wording for the Kaplan–Meier month-13 calculation, reporting an estimate of 0.42 from the stated inputs.
+- The transcript alternates between failure and censoring terminology, making the software coding convention especially important to verify.
+- The distinction between censoring a competing event and modeling a competing risk is not fully developed in this chunk.
+- The lecture states that age can be included in a model to recover conditional independent censoring, but does not specify the exact modeling implementation.
+- A survival comparison at a single time point may permit simple inference but fails to use all available follow-up information.
+- The lecture distinguishes the log-rank test's usefulness in randomized studies from its limitations when it is the only reported analysis.
+- Stratification can control for prognostic factors but may be impractical or underpowered when factors are continuous or sample sizes are small.
+- Following everyone for the same duration does not necessarily make the study population proportional to the population risk set by age.
+- Including age in a Cox model is presented as potentially simpler than redesigning recruitment to oversample older participants, but modeling is not a universal solution.
+- The lecture distinguishes between a changing hazard effect and a changing exposure, but the appropriate modeling approach for each is not fully elaborated.
+- The transcript refers to both Wald and partial likelihood ratio tests, but does not fully explain when one should be preferred over the other.
+- The role of Schoenfeld residuals is mentioned but not taught in detail in this lecture segment.
+- The baseline-hazard interpretation in the cirrhosis example is difficult to follow because the exact reference covariate values are presented unclearly in the transcript.
+- The lecture states that Cox regression avoids the recruitment problem in this example, but the precise assumptions supporting that conclusion are only briefly described.
+- The distinction between bias in the Kaplan–Meier estimator and independent censoring in the Cox analysis requires review.
+- The lecture states that survival analysis can handle right censoring and left truncation but may not handle recurrent events and competing risks in every form.
+- The exact conditions under which Kaplan–Meier curves remain usable with covariates are not elaborated beyond the warning that they cannot be used easily.
+- The lecture says Cox assumptions are difficult but doable to test, without specifying the particular diagnostic procedures.
+- The relationship between baseline imbalance and biased estimates is asserted but not explained in detail in this chunk.
+- The transcript uses unclear wording around truncation, so the precise distinction intended between truncation and censoring should be reviewed.
+
+#### Questions to review
+- How is a Kaplan–Meier curve constructed and interpreted when some participants are censored?
+- What does the log-rank p-value test when comparing Kaplan–Meier curves?
+- How should researchers analyze competing risks when death prevents observation of HIV transmission?
+- What assumptions underlie Cox models and what can go wrong when those assumptions are not met?
+- Why are event counts, rather than only total enrollment, important for sample-size planning?
+- When should a study use a Cox model rather than stratified Kaplan–Meier curves?
+- Why does survival analysis preserve information that a binary outcome at five years would lose?
+- Why is median survival usually reported instead of mean survival in studies with censoring?
+- How does censoring contribute information to a survival analysis?
+- What kinds of delayed effects could be missed by short-term follow-up?
+- How should an event and time origin be defined in an oncology study?
+- What is the difference between a direct event measure and a surrogate event measure?
+- How is the survival function formally defined in probability notation?
+- How does the hazard function relate mathematically to the survival function?
+- Why can a binary remission model lose information compared with a time-to-event model?
+- What criteria should be used to define the start and end of a primary herpes episode?
+- When is a chosen time origin reasonable despite small measurement error, as in the nickel-refinery study?
+- How should sample size be calculated when only some participants are expected to experience the event?
+- Which covariates should be included, and how do they affect survival-study planning?
+- Why should survival-study sample size be based on expected events rather than only the number of participants?
+- What is the difference between right truncation and left truncation, and how can each bias survival estimates?
+- How do right censoring and left censoring differ in what is known about the event and its timing?
+- What condition must hold for left-truncated entrants to support a valid hazard-function estimate?
+- Why is relocation not sufficient evidence that censoring is independent?
+- How do Type I, Type II, and random censoring differ?
+- How should event time, observed time, and the failure or censoring indicator be represented in software?
+- What is the difference between a failure indicator and a censoring indicator, and how does the software being used code each one?
+- Why does non-independent censoring bias the hazard estimate?
+- How can a Cox model account for censoring that depends on age or disease severity?
+- Why can competing deaths make the observed cancer hazard difficult to interpret?
+- How are censored subjects handled in the risk set before and after their censoring time?
+- How are confidence intervals constructed around a Kaplan–Meier curve?
+- Why can late entry of high-risk subjects make a Kaplan–Meier curve fall faster than it should?
+- What are the limitations of testing survival at only 24 or 72 weeks?
+- Which types of data cannot be handled by simple Kaplan–Meier or log-rank analyses?
+- How does confounding affect the validity of a log-rank test?
+- What does a hazard ratio of one imply about two groups' survival experiences?
+- When should a time-dependent covariate be added to a Cox model?
+- Why is a Cox model with 16 covariates and data on only 20 people problematic?
+- How do the age-by-log-time and drug-by-log-time interaction terms test proportional hazards?
+- How should a p-value from a Wald test or partial likelihood ratio test be interpreted when assessing proportional hazards?
+- What does it imply clinically when the treatment hazard functions cross over time?
+- How should repeatedly changing treatment exposure be represented in a survival model?
+- Why did late recruitment of patients with ascites make the Kaplan–Meier survival estimate too large?
+- Why can the Cox model retain valid relative-risk estimates under the recruitment pattern described?
+- How should time to transplant and time to death be incorporated in the Stanford heart transplant analysis?
+- When is a more general Cox model preferable to the standard proportional-hazards model?
+- What assumptions are needed for consistency of the Cox partial-likelihood estimator?
+- When should median survival be reported instead of mean time to event?
+- Why do competing risks make Kaplan–Meier or log-rank interpretations inappropriate?
+- How should recurrent events be modeled when a basic survival model is inadequate?
+- How can the proportional-hazards assumption be assessed in a Cox model?
+- How do truncation and censoring affect study eligibility, follow-up, and analysis?
+- What should be done when the planned analysis does not match the clinical question, hypothesis, or protocol?
+
+#### Study summary
+- Survival or time-to-event analysis studies an event together with its timing, rather than a single outcome value.
+- In the HIV transmission example, Kaplan–Meier curves compared transmission probabilities over weeks between placebo and zidovudine groups.
+- Censoring allows partially observed infants, including those who are young or lost to follow-up, to contribute available follow-up information.
+- Competing risks require special attention because another event, such as death, can eliminate the possibility of observing HIV transmission.
+- The unexpectedly low interim transmission result prompted additional data checks and ultimately contributed to a monitored decision to stop the study.
+- Kaplan–Meier methods are useful and simple, but Cox models provide greater flexibility for multiple and continuous covariates.
+- Survival analysis is appropriate when the timing of an event matters and participants may be censored before experiencing it.
+- Unlike a binary logistic comparison at a single endpoint, survival analysis uses the observed event trajectory and information from people still at risk or censored.
+- The main summaries and model concepts introduced are event rates, median survival, survival functions, hazard functions, baseline hazard, and covariate effects.
+- Every study must specify what counts as the event, when the clock starts, the time scale, and when event assessments occur.
+- A survival model parallels linear regression by relating predictors to an outcome through a baseline hazard and an exponential linear predictor.
+- Start every survival analysis by defining the event, the clock's origin, and the time scale.
+- The survival function tracks the proportion remaining event-free, while the hazard function tracks instantaneous event risk at each time point.
+- Survival curves decrease or remain flat, whereas hazards may rise or fall depending on when risk is greatest.
+- Time units matter because a hazard stated per day, month, or year describes different instantaneous increments.
+- Precise definitions are essential because ambiguous episode boundaries can create measurement error.
+- Censoring, truncation, incomplete event occurrence, expected event counts, and covariates all need to be considered in study design and analysis.
+- Survival-study design must account for the expected number of events, relevant covariates, and the population's baseline event risk.
+- Truncation determines who can enter the observed sample, whereas censoring determines how incomplete event-time observations are handled after or during follow-up.
+- Left truncation is valid only when entrants at each time are representative of those at risk at that time.
+- Right-censored subjects still contribute valuable information about being event-free until their censoring time.
+- The most important practical safeguard is to maintain follow-up and verify that censoring is unrelated to subsequent event risk.
+- Survival analysis depends on independent censoring so that the observed risk sets remain representative and hazard estimates are unbiased.
+- Censoring may be conditionally independent given covariates such as age or disease severity, which can be included in a model.
+- Competing events such as death from myocardial infarction prevent the event of interest and must be considered when interpreting event rates.
+- The Kaplan–Meier estimator starts at 1 and repeatedly multiplies the previous survival estimate by one minus events divided by the current risk set.
+- Censoring reduces future risk-set size but does not itself create a survival-curve drop, while events do create drops.
+- Late entry of high-risk subjects can distort a Kaplan–Meier curve because their earlier survival history is unavailable.
+- Kaplan–Meier curves show survival over time and mark censoring, but late entry, unequal follow-up, and unbalanced prognostic factors can bias interpretation.
+- The log-rank test uses all time points and compares observed with expected events, but it mainly yields a p-value and does not accommodate time-dependent covariates, recurrent events, or competing risks.
+- Stratified log-rank testing can address strata-specific comparisons but may lose power through smaller within-stratum sample sizes.
+- Cox proportional-hazards models add covariates and estimate multiplicative effects through exponentiated coefficients.
+- The proportional-hazards assumption requires constant relative rates over time; changing effects require time-dependent modeling.
+- Cox models can incorporate repeated measurements such as changing weight or medication, provided the dataset is sufficiently large for the model complexity.
+- Test proportional hazards by comparing a standard Cox model with one containing covariate-by-log-time interactions.
+- A nonsignificant test supports proportional hazards, whereas a significant test indicates that at least one covariate effect changes over time.
+- When only the drug interaction is significant, include time dependence for drug rather than age.
+- Survival analyses must account for changing exposures, changing treatment status, and clinically meaningful time scales.
+- Kaplan–Meier estimates can be misleading when recruitment is selective over time and later risk sets exclude patients with worse prognosis.
+- In the cirrhosis example, Cox regression was presented as yielding correct coefficients and relative-risk interpretation under independent censoring with respect to ascites.
+- The overarching lesson is to select the correct survival measure and test while explicitly checking assumptions and recruitment procedures.
+- The lecture concludes that independent censoring supports consistent Cox partial-likelihood estimation and correct relative-risk interpretation.
+- Median survival is a key survival-analysis summary, whereas mean time to event requires complete event ascertainment for all participants.
+- Cox regression offers a flexible framework for covariate inference but requires appropriate covariates and assessment of proportional hazards.
+- Kaplan–Meier curves and log-rank tests are simple but can fail to provide valid interpretations with covariates, time-dependent covariates, or competing risks.
+- Right censoring and left truncation must be planned carefully, and recurrent events or competing risks may require more advanced survival models.
+- The overarching workflow is to start with clinical questions, formulate hypotheses, design the study, collect suitable data, and choose an analysis that matches the design.
+
+#### Action items (structured)
+- The study team was asked to check possible explanations for the unexpectedly low transmission rate and report back to the monitoring board.
+- Students: Post remaining questions to the course discussion board.
+- Students: Complete the course evaluations.
+- Students: Send useful examples that could be added to the course.
+- Students: Direct questions to the appropriate faculty discussion board, especially for online students.
+
+#### Decisions (structured)
+- The trial was stopped after the data and safety monitoring board reviewed toxicity and transmission rates and agreed with the trial leaders.
+- Zidovudine was provided to participants in the control group after the study was stopped.
+- National guidelines in the United States and other countries were modified following the trial findings.
+
+#### Open questions (structured)
+- What factors explained the unexpectedly low 8.3% transmission rate observed in the interim analysis? [open]
+- How should survival analyses handle competing risks such as death before HIV seroconversion? [open]
+- How should the time origin and event time be defined when measurements are made only at scheduled visits? [open]
+- How should the event be operationally defined in a study, such as mother-to-infant HIV transmission? [open]
+- What should serve as the time origin for a particular study? [open]
+- When are covariates needed in a survival analysis? [open]
+- How should the end of a primary herpes episode be defined consistently by clinicians and study participants? [open]
+- Is the hazard constant over the relevant period, or does the event risk change with time? [open]
+- What clinically important difference should be expected between study arms? [open]
+- When should subjects with an event that occurred before enrollment be included or excluded from the study? [open]
+- How does truncation affect whether the study sample can be generalized to the target population? [open]
+- Is withdrawal or loss to follow-up related to the subject's subsequent risk of the event? [open]
+- How should hazard be interpreted when competing events, such as myocardial infarction, prevent the event of interest from occurring? [open]
+- What methods can be used to calculate confidence intervals around a Kaplan–Meier curve? [open]
+- How should proportional-hazards assumptions be tested when beginning with a Cox model that excludes explicit time elements? [open]
+- When is stratification preferable to adding a prognostic factor as a covariate in the model? [open]
+- How should the model be modified when the drug hazard changes over time while age does not? [open]
+- How should survival estimates be interpreted when the recruited population changes over the enrollment period? [open]
+- How should recurrent events be analyzed when a basic survival model is insufficient? [open]
+- How should an analysis be interpreted when competing risks are present? [open]
+- Does the Cox model satisfy the proportional-hazards assumption for the analysis at hand? [open]
+
+#### Risks (structured)
+- [medium] Loss to follow-up, deaths from other causes, and infants who had not yet reached the end of follow-up can produce incomplete information in the trial.
+- [high] Competing events can prevent observation of the event of interest, making ordinary survival interpretations problematic.
+- [medium] A Kaplan–Meier curve may not reveal problems such as imbalanced demographics, randomization issues, or unclean data.
+- [medium] Using many stratification factors can leave only three or four people per curve, which is insufficient for a robust Kaplan–Meier curve.
+- [medium] A fixed-time logistic regression comparison can discard information from censoring and from differences in when events occur.
+- [high] Short-term studies may miss delayed treatment harms when hazard curves cross later, as illustrated by the Cox-2 inhibitor example.
+- [medium] Surrogate outcomes are difficult to develop because they must predict the direct event reliably.
+- [medium] Using a binary remission outcome instead of time-to-event analysis can lose substantial information.
+- [high] Poorly defined event or time-origin criteria can introduce measurement error, especially when participants must identify an episode's end at home.
+- [high] Assuming a constant hazard can be inappropriate because event risk may differ substantially across months or years.
+- [medium] Sample-size planning is complicated when not every participant experiences the event, so it must account for the expected number of events.
+- [high] Sampling only people whose cancer was recorded in a registry can underestimate the survival function because unrecorded cases are never observed.
+- [high] Left truncation can omit people with short survival who die before reaching the study's enrollment age or entry point.
+- [high] Assuming censoring is independent merely because someone moves away can bias the analysis if the move is related to treatment or event risk.
+- [high] Using the wrong event/failure versus censoring indicator in software can produce an incorrect analysis.
+- [high] Using the wrong convention for the failure versus censoring indicator in software can reverse the intended meaning of the analysis.
+- [high] Violating independent censoring can produce biased hazard estimates and invalidate survival analyses.
+- [high] Ignoring a covariate related to censoring, such as age, can make risk sets unrepresentative and bias estimates.
+- [high] Competing events can prevent the event of interest and make an observed event rate misleading if they are not considered.
+- [high] Kaplan–Meier curves can be biased when high-risk or older subjects enter late and therefore have insufficient follow-up or are censored earlier.
+- [high] Log-rank results can be confounded when prognostic factors are not balanced between treatment groups.
+- [medium] Stratifying on continuous or multiple prognostic factors can reduce statistical power because it creates smaller samples within strata.
+- [high] A Cox model with too many covariates relative to the number of subjects may be unreliable.
+- [high] Using a proportional-hazards model when relative rates change over time violates the model's key assumption.
+- [high] Assuming proportional hazards when hazards change over time can produce inaccurate information for doctors and patients.
+- [high] Failing to account for protocol or recruitment changes can cause substantial model misinterpretation.
+- [high] Early under-recruitment of patients with ascites made the Kaplan–Meier risk set unrepresentative at later time points and caused survival to be estimated too high.
+- [high] Using Kaplan–Meier curves with covariates or competing risks can produce an inappropriate or nonsensical interpretation.
+- [high] Log-rank testing is not appropriate for time-dependent covariates or competing risks and may be interpreted incorrectly.
+- [high] Imbalance in baseline prognostic factors can lead to a biased estimate.
+- [medium] Cox regression assumptions can be difficult to test, particularly the proportional-hazards assumption.
+- [high] Incorrect truncation or censoring can compromise the study because participants may enter, leave, or experience events during observation.
+
+#### Follow-up draft
+Quick recap: The lecture used the mother–infant HIV trial to introduce survival analysis, where the outcome is whether and when an event occurs; the interim 8.3% transmission result led monitoring leaders to stop the trial, provide zidovudine to controls, and contribute to revised guidelines. Define the event, time origin, and time scale first; censoring preserves follow-up until observation ends, whereas competing risks such as death can prevent HIV seroconversion and require specialized interpretation. Memorize S(t) = P(T ≥ t), the Kaplan–Meier update Ŝ(t) = Ŝ(previous)[1 − d/n], and the Cox form h(t|X) = h₀(t)exp(βX), where exp(β) is the hazard ratio; sample size depends on expected events, and Cox analysis requires independent censoring and assessed proportional hazards. That's the recap.
+
+---
+
+# Summary D
+
+_(run1)_
+
+### Title: Survival Analysis in Epidemiology
+
+#### Overview
+Dr. Laura Lee Johnson (FDA) introduces a lecture on survival/time-to-event analysis, covering its difficulty level, learning objectives for the 90-minute session, and the mother-infant HIV transmission example using Kaplan Meier curves and a group sequential design. The lecture explains why survival analysis is used, defines survival/time-to-event concepts and median survival, contrasts survival models with linear regression, and works through the MIST trial and other examples to illustrate choosing a time origin and defining events. The lecture continues on survival analysis by defining the choice of time origin and time scale, the survival function, and the hazard function, illustrating each with the pancreatic cancer, herpes, nickel refinery, population mortality, and balloon examples. Lecture continues on survival analysis covering sample size considerations driven by event counts, right vs left truncation, types of censoring (right, left, type one, type two, random), and the key independence assumption for censoring. Speaker 1 explained the independent censoring assumption and its consequences, illustrated competing risks with a polar bear plunge example, and demonstrated how to compute a Kaplan-Meier curve step by step. Speaker 1 explains censoring in Kaplan-Meier curves, the log-rank test (and its assumptions/limitations), and introduces the proportional hazards (Cox) model including baseline hazard, regression coefficients, prognostic factors, and the requirement to test the proportionality assumption. The lecturer explains testing the proportional hazards assumption (interaction with log time, Wald and partial likelihood ratio tests), contrasts Kaplan-Meier with Cox models using the Stanford heart transplant and liver cirrhosis examples, and shows how incorrect risk sets bias survival estimates. Lecturer wraps up the survival analysis lecture with conclusions: Cox regression is the most robust method, Kaplan-Meier and log-rank have limitations, and analysis must follow the study design. Key decisions: DSMB recommended stopping the study after careful review of toxicity and transmission rates, and trial leaders agreed to stop.; Zidovudine was provided to everybody in the control group after stopping.. Study summary: This lecture is considered the most difficult statistical epidemiology topic, typically covered at the end of a master's or in second/third year of PhD, and may require rewatching.
+
+#### Summary
+- This lecture introduces survival or time-to-event analysis, considered the most difficult statistical epidemiology topic, covering Kaplan Meier curves and Cox models.
+- In the mother-infant HIV transmission example, the DSMB recommended stopping the study after reviewing toxicity and transmission rates, and trial leaders agreed.
+- After stopping, zidovudine was provided to everybody in the control group.
+- Kaplan-Meier curves have no sensible interpretation for competing risks and can mislead, as short-term Cox 2 inhibitor studies missed a problem that started when hazard functions crossed.
+- Key limitations include biased estimates under non-independent censoring, right and left truncation, and misuse of the Cox model without checking proportional hazards.
+
+#### Core concepts
+- Survival analysis, also called time-to-event analysis, focuses on the time until an event occurs, not just death.
+- Kaplan Meier curves estimate survival or event probability over time and are a workhorse for time-to-event analysis.
+- Cox models allow richer analysis with continuous and multiple covariates, unlike Kaplan Meier which is limited to stratification.
+- Censoring allows use of partial information from subjects who have not yet experienced the event.
+- Competing risks occur when one event precludes another, e.g., infant death from diarrhea before HIV seroconversion.
+- Group sequential design allows preplanned interim efficacy reviews during a study, not just at the end.
+- Survival analysis is used to make inference about event rates, including the rate among those at risk at a given time t.
+- Survival is fundamentally about events and when they happen.
+- Survival analysis allows measuring events on a frequent time scale so that nuances in trajectory can be picked up.
+- The same mechanism appears in engineering as failure analysis (light bulbs failing, computers crashing).
+- The proportional hazards model uses a baseline hazard multiplied by the exponential of the linear predictor, and is the basic model used by all survival functions.
+- Covariates may be called prognostic factors instead of covariates or response variables.
+- The time origin is the point when the clock starts ticking, such as time of surgical resection or start of chemotherapy in oncology studies.
+- Choosing the appropriate time scale depends on the event; e.g., lung cancer is measured in years while flu is measured in days or hours.
+- Typical time origins include diagnosis or treatment start for clinical trials, first exposure for occupational epidemiology, and time of birth for population mortality.
+- The survival function is the proportion of the population still without the event by time t, which is monotonically decreasing as time progresses.
+- The hazard function represents instantaneous risk and underlies all survival analysis.
+- The hazard function can be estimated even with censoring or truncation.
+- Unique features of survival analysis include an event, progression along a dimension (typically time), variability in progression length, and the fact that the event may not occur while under observation.
+- Sample size must be based on the expected number of events, not just the number of subjects.
+- If a quantity doesn't vary at all, the analysis probably doesn't need to be performed.
+- A unique feature of survival studies is that the event may not happen for every subject while they are being observed.
+- Sample size must be based on the number of expected events rather than simply the number of subjects.
+- Covariates must be considered when sizing a study, including their implications for whether an event occurs.
+- Investigators may deliberately select high-exposure/high-risk subjects, as in cardiovascular studies enrolling people at high risk of heart attack, to ensure more events.
+- Truncation is often not discussed but is especially important in randomized trials.
+- Right truncation means only sampling people who have the outcome/event of interest.
+- Right truncation produces an under-estimate of the survival function because people must have had their condition recorded to be included.
+- Left truncation can lead to short survival times being overlooked and produce weird estimates, depending on how you intend to generalize.
+- Independence is the key assumption for both truncation and censoring: it must be independent of the outcome.
+- In medical studies (especially randomized trials) you control entry and zero out everything at the time of randomization/designation/treatment.
+- Censoring is incomplete observation, and right censoring is the type most methods (including Kaplan Meier) handle well.
+- For the independence assumption to hold, withdrawal from a study must be unrelated to subsequent risk of the event.
+- Once subjects are enrolled, investigators should keep tracking them (e.g., checking whether they are alive or dead) even if they can't attend or continue treatment.
+- Independent censoring is the key assumption for survival analysis; without it all survival analyses are worthless.
+- Independent censoring means that at any given time point, those at risk are random samples of the population at risk at that time point.
+- Censoring can be independent conditional on a covariate (e.g., age or disease severity) and that variable can be included in a Cox model.
+- Censoring can differ between study arms and that is acceptable if handled properly.
+- Competing risks: people are always going to die of something, which means they cannot die of something else, so you must consider what precludes the event of interest.
+- To make inference about the observed hazard rate among subjects under observation at each time, you must interpret that event rate as if it is independent.
+- Kaplan-Meier is the workhorse model and can be computed by hand with basic multiplication and subtraction.
+- Kaplan-Meier estimates can have confidence intervals/bands calculated in several ways from the textbook.
+- Censored observations still provide information about the risk of death or of any event while people are on study.
+- You may draw a different Kaplan-Meier curve for different stratification variables, such as each intervention or age category.
+- The log-rank statistic compares event rates across all time points and tests overall survival, using all the data rather than a single time point.
+- The log-rank test compares the observed number of events to the expected number, and requires two independent samples from the same population with no covariates.
+- Historically, Kaplan-Meier was developed in the 1940s and early Cox models in the 1970s, and the evolution of survival analysis mirrors the history of medicine.
+- The Cox model allows time-dependent covariates and stratification factors, so changes over time (weight, medication changes) can be modeled rather than only baseline values.
+- Putting age into the Cox model conditions on age, restoring independent censoring, whereas an unstratified Kaplan-Meier remains biased by age.
+- Modeling cannot solve every problem, but it can help answer the relevant question when there are not enough people to make a generalization.
+- Proportional hazards can be tested by adding interaction terms of covariates with the natural log of time and comparing models.
+- The natural log of time is used for the time interaction because of how the Cox model is set up.
+- Time-dependent survival curves must account for changes in exposure or treatment over time, which is often ignored.
+- In the Stanford heart transplant study, early analyses failed to separate time to transplant from time to death, so the analysis needed to be broken into two stages.
+- Kaplan-Meier is simple but potentially misleading, while Cox proportional hazards is the modern workhorse model and requires checking proportionality.
+- Any changes in protocol, especially inclusion/exclusion criteria and recruitment, must be accounted for in the analysis to avoid misinterpretation.
+- If censoring is independent at least with respect to a covariate like ascites, the partial likelihood estimator remains consistent and coefficients are correct.
+- With independent censoring, the partial likelihood estimator is consistent, so Cox coefficients are correct and relative risk interpretations give the right answer.
+- Survival analysis involves inference on event rates over time t and on the rate among those at risk.
+- Cox regression is described as the most robust method because people keep tweaking it to match what they need.
+- Survival analysis can handle right censoring and left truncation, but may not in every form handle recurrent events and competing risks.
+- Recurrent events require a fancier survival model.
+- Risk sets exist to allow estimation of the event.
+- Log-rank is valued for its simplicity and popularity of p-values, but has key restrictions.
+- The Cox model gives a framework for making inference about covariates, provided the covariates were measured.
+- Truncation concerns people entering the study (whether you got the right people in), while censoring concerns people leaving the study or having/not having the event while you watch them.
+- Clinical questions generate hypotheses; studies are designed to test them, samples are gathered accordingly, and the analysis must match the design to draw conclusions.
+- Sentiment toward Kaplan-Meier is clarified: the lecturer does not hate it and can do it on an envelope or napkin, but it has limitations.
+
+#### Definitions
+- Survival analysis: analysis where the outcome is time until an event, which can be death or other events.
+- Censoring: using partial follow-up information for subjects who have not yet had the event.
+- Competing risk: an event that prevents the event of interest from occurring or being observed.
+- Group sequential design: a design with preplanned interim efficacy reviews partway through the study.
+- Log rank test: a statistical test that produces a p-value for comparing survival curves.
+- Survival is the type of analysis dealing with making inference about event rates.
+- The outcome variable in survival analysis is the event time.
+- Little t is the time axis; capital T is the random outcome variable — the time the event occurs.
+- T equals 0 is the time origin, when the search for events starts.
+- Survival time and time-to-event are the same concept; CDC colleagues say time-to-event, NIH clinical center scientists say survival even if the event isn't death.
+- Beta zero is where the line crosses when all the Xs are zero; beta one describes the relationship between x1 and y given the other variables in the model.
+- Time origin: the point when the clock starts ticking in a study.
+- Survival at time t, denoted S(t), is the probability that the time from origin to event is greater than or equal to t.
+- Hazard function, denoted λ(t) or h(t), measures the instantaneous event rate at time t.
+- Right truncation is defined as only sampling people who have the outcome/event of interest.
+- Left truncation: short survival times may be overlooked because early deaths occur before subjects can enroll.
+- Right censoring is used when a follow-up period ends (e.g., a 5-year study shut down for analysis) and subjects who haven't had the event are censored at that point.
+- Left censoring occurs when the observed time is greater than the survival time but the subject is known to exist (the event happened before observation began).
+- The key assumption of left truncation: people entering the study at time t are a random sample of the population at risk at that time point.
+- Type one censoring: everybody is followed for the same amount of time (e.g., everyone followed for one year).
+- Type two censoring: observation stops when a set number of events has occurred (e.g., replacing all light bulbs after four fail).
+- Random censoring is more general than type one and is what occurs in clinical studies, where follow-up time varies by enrollment time.
+- Capital T denotes the event time; a star next to it denotes observation time (event time if an event occurred, follow-up time if censored).
+- The failure indicator (often called delta in textbooks) versus the censoring indicator are exact opposites, so you must know which one your software uses.
+- On survival plots, solid circles/symbols indicate the subject had the event, while open circles indicate the subject was censored.
+- A delta in textbooks is sometimes a censoring indicator, which is the exact opposite of a failure indicator, so you must verify which one your software package uses.
+- Independent censoring within a given group: among people with similar values of covariate x, censored subjects have similar risk of subsequent events as subjects with continued follow-up.
+- Time origin is usually time of enrollment or when the treatment of some sort begins.
+- Time axis is the time that people are on study, and in non-randomized studies the time axis is often age.
+- Right censoring example: following students until age 25 who have never smoked, then censoring them because they have not had the event of starting to smoke.
+- Censored observations provide information about the risk of death or risk of any event while people are on study.
+- Hash marks on a Kaplan-Meier curve indicate the points at which people were censored; not all curves display them but they should be included.
+- The log-rank test is a statistic used to compare event rates between groups while accounting for censoring and truncation.
+- A stratified log-rank test compares data within each stratum and performs a test, rather than pooling across strata.
+- The proportional hazards (Cox) model is a multiplicative model made up of a baseline hazard, regression coefficients, and prognostic factors.
+- When a coefficient beta equals 0, the hazard ratio equals 1, meaning the two compared groups have the same survival experience.
+- The exponential of a coefficient is a relative rate or risk associated with that prognostic factor (covariate).
+- Cox models are called semi-parametric because the baseline hazard is left completely unspecified.
+- In a multiplicative model, the effect of a covariate is to multiply the hazard rate by some factor.
+- A Cox model without extra time elements is the baseline model; a second model adds covariates multiplied by the natural log of time as interaction terms.
+- Schoenfeld residuals are another approach to assess proportional hazards, though the lecturer did not cover them here.
+- A partial likelihood ratio test with 2 degrees of freedom corresponds to adding two interaction terms to the model.
+- The baseline hazard is the event rate at time t in the placebo arm for subjects without ascites and with a prothrombin time of 1 second.
+- Independent censoring is the key requirement for consistency of the partial likelihood estimator.
+- Median survival is the amount of time by which 50% of people have had the event.
+- Mean survival/time to event is distinct: to look at mean time to event, everybody must have had the event.
+- Consistency of the partial likelihood estimator requires independent censoring with respect to the outcome.
+- Truncation = people entering the study; censoring = people leaving the study or having/not having the event while under observation.
+
+#### Examples
+- Mother-infant HIV transmission study (example worked out by Dennis Dixon) powered to detect a reduction from 30% to 20% transmission.
+- The first interim analysis found an 8.3% transmission rate, much lower than expected, with a tight confidence interval.
+- The data monitoring board met twice a year; first efficacy review took place February 1994, including mothers enrolled up to December 1993 and their babies.
+- Placebo group had about 30% transmission rate, but confidence interval did not exclude lower values.
+- Joke example: if an infant dies of diarrhea at 6 weeks, you don't know if they would have seroconverted at 24 weeks, illustrating competing risks.
+- Instance where people enrolled in a trial lived longer than expected, still being followed at 18-24 months despite criteria of being 6 months before death.
+- In the zidovudine trial, after trial leaders agreed to stop the studies, zidovudine was provided to everybody in the control group, and the U.S. Public Health Service modified national guidelines as did many groups in other countries.
+- A flu-symptom drug that resolves symptoms in 3 days vs. 7 days looks the same if measured at 10 days, showing that measurement timing determines whether a difference is detected.
+- For Cox 2 inhibitors, short-term studies showed no additional deaths, but hazard functions crossed, and Kaplan-Meier curves wouldn't have picked up a problem starting around 12-18 months.
+- The MIST trial follow-up published in BMJ October 2009 randomized women to two different ways of handling spontaneous abortion and asked whether it impacted the first live birth after the index miscarriage.
+- For the MIST trial, potential confounders for the live-birth outcome include whether the woman had multiple miscarriages before and age.
+- In an oncology study, the time origin could be the time of surgical resection, the time of diagnosis, or the date they started chemotherapy.
+- Examples of events include HIV-positive test, AIDS-defining event, mother-infant HIV transmission, and systolic blood pressure or cholesterol falling below a certain cut point.
+- A balloon filling with air, measured by milliliters of air rather than time, is an example of the same type of analysis used in quality control.
+- The Kaplan-Meier paper was originally a page and a half, written after two people from different disciplines submitted basically the same paper and the Journal of the American Statistical Association editor told them to work together and gi
+- The pancreatic cancer study: patients enrolled at surgery were all alive, and by 9 months survival dropped to about 25%.
+- The herpes study measured time from end of a primary episode to first recurrence, with event defined as recurrent herpes lesions.
+- The nickel refinery study used time of first exposure (beginning of employment) as the origin and years since first exposure as the scale for lung cancer, which was considered reasonable because lung cancer takes decades to develop.
+- The balloon example: event was the balloon bursting, time scale was milliliters of air infused, and origin was 0 milliliters.
+- After a myocardial infarction, the risk of death is much higher in the first 30 days, illustrating that hazard is not constant.
+- Cardiovascular studies enroll people already at high risk of a heart attack to ensure a higher number of events.
+- Going to a cancer registry and taking everybody is an example of right truncation, because subjects must have had their cancer recorded to be listed, producing an under-estimate of survival.
+- The Cardiovascular Health Study, which enrolls only people 65 or older, is given as an example of left truncation where people who died before 65 are never observed.
+- Left censoring example: measuring the age people start smoking, starting interviews at age 12, and having a 12-year-old report being a regular smoker who doesn't know when they started.
+- A cytomegalovirus (CMV) infection study is cited where two subjects were already infected by enrollment, raising the question of whether to count or exclude them.
+- Accidental death is given as an example of withdrawal that is usually acceptable as independent censoring, unless the therapy causes balance problems and falls.
+- Example of right censoring in a plot: patients enrolled from 0 to 6 months and followed up to 24 months; those reaching 24 months without the event were censored.
+- Patient 9 was followed from 6 to 24 months without an event, and that information is wanted as part of the analysis.
+- Light bulbs example of type two censoring: after four light bulbs fail, all of them are replaced, censoring the remaining bulbs.
+- Five-year follow-up censoring example: patients whose event is death and who have not died are censored.
+- Trial enrollment example: older subjects not enrolled early but enrolled later after age limits change have less time on study than others, causing non-independent censoring unless age is conditioned on.
+- Myocardial infarction vs cancer example: if you die of a heart attack you were not at risk of cancer, so such deaths are censored in the cancer analysis as a competing risk.
+- Craig's polar bear plunge fictitious example: 3% die from the plunge, 2% of males die from other causes annually, 1% of females die from other causes annually, followed for ten years.
+- Over the decade, 25% of women and 24% of men died from the polar bear plunge, leading to sensational headlines like 'Polar bear plunge kills women'.
+- The paradox occurs because 33.5% of women and 40% of men died from all other causes, altering the male-female ratio over time so more women remain to be harmed by the plunge.
+- Heart disease and smoking status is a similar competing-risk story.
+- A test statistic formed as a z-test based on two survival estimates divided by the square root of the sum of their variances illustrates a simple single-time-point comparison.
+- The zidovudine trial used 72 weeks as the comparison time point, raising the question of why not 24 weeks.
+- Soccer goals (scoring 0 or 6) illustrate recurrent events that simple survival models like Kaplan-Meier cannot handle.
+- The effect of taking a Cox-2 inhibitor on cardiovascular events may differ after 2 months versus 18 or 24 months, illustrating a time-dependent effect that must be modeled.
+- A student once asked whether following everybody for one year is sufficient, prompting the point that the study may not be proportional by age to the population risk set.
+- Age and drug were the covariates used to test proportional hazards by adding log-time interactions to detect whether the effect of age changes over time.
+- In one case the interaction p-values were large, nowhere near .05 or .01, and the likelihood ratio test gave a p-value of .94, so proportional hazards could be assumed.
+- In a second case the partial likelihood ratio test gave a p-value of .003, indicating proportional hazards could not be assumed.
+- In that second case the drug-by-time interaction was strikingly significant, so the drug's effect on event rate changed over time while age was not the issue.
+- The lecturer mentioned antiretroviral therapy as an example where people go on and off drugs over years, so exposure changes over time must be modeled.
+- The Stanford heart transplant study involved end-stage heart disease patients at the beginning of transplantation in the US, seeking a transplant for many reasons.
+- The liver cirrhosis example examined a new treatment versus placebo in a prospective cohort randomized clinical study, with conflicting prior reports, one showing a 2-year survival probability of .88 by Kaplan-Meier.
+- In the liver cirrhosis Cox model, treatment was coded 1 and placebo 0, with a coefficient of -.135; prothrombin time had a coefficient of .346.
+- The first two covariates (treatment, ascites) were categorical and the second continuous one (prothrombin time) was continuous.
+- Kaplan-Meier is simple enough to draw on an envelope or a napkin.
+- Many course examples came from previous classmates.
+
+#### Formulas / steps
+- To calculate transmission rates: count number of babies born who eventually seroconvert, divide by total number at risk, and account for dropouts and loss to follow-up.
+- Kaplan Meier curves can be computed by hand and on a napkin.
+- Kaplan Meier curves can be stratified by study arm or other factors like sex.
+- Survival probability is the probability that the time of the event (capital T) is greater than or equal to a given time t.
+- The model form is baseline hazard times the exponential of the linear predictor.
+- The linear regression model uses y as the outcome/response variable, with beta not as the intercept when all Xs are zero and each beta describing the relationship of its covariate with y.
+- Using hypertension as an example: instead of a logistic regression at five years asking whether two groups differ yes or no, survival analysis incorporates the research information from censoring.
+- To decide on time origin: identify the start point such as diagnosis, treatment, or first exposure, depending on study design.
+- To choose a time scale: select units such as years, months, days, or hours based on the event's timeline.
+- To interpret a hazard of λ(t)=1% at t=12 months: state it as 'patients are dying at a rate of 1% per month' or 'the chance of dying in the following month is 1%.'
+- Base sample size on the expected number of events rather than just the number of subjects.
+- When sizing a study, account for all covariates you want in the model and their implications for event occurrence.
+- In randomized trials, zero out time at the point of randomization/designation/treatment to control left truncation.
+- When using software, determine whether it expects a failure indicator or a censoring indicator because they are exact opposites.
+- Kaplan-Meier computation: at time t = 0, estimated survival equals 1 (no events yet).
+- At t = 5, with 20 at risk and 2 events, compute (1 - 2/20) × 1 = 0.9.
+- At t = 6, with 18 at risk and no events, (1 - 0/18) × 0.9 = 0.9 (flat, since the two event subjects dropped out of the risk set).
+- At t = 10, with 15 at risk because three were censored between months 6 and 10, and one event, compute (1 - 1/15) × 0.9 = 0.84.
+- At t = 13, with 14 at risk (one subject reduced the risk set by one), and two events, compute (1 - 2/14) × 0.84 = 0.42.
+- The general Kaplan-Meier formula is: (1 - number of events / number at risk) × previous survival estimate.
+- To form the z test statistic: take the two survival estimates, divide by the square root of the sum of their variances.
+- The log-rank test compares the observed number of events to the expected number of events.
+- Stratified log-rank procedure: compare the data within each stratum and perform a test within each.
+- In the Cox model, covariates are added into the model rather than being stratified on, setting up hypothesis tests for each coefficient like in linear regression.
+- Testing proportional hazards involves comparing one model that does not include time elements against one that does.
+- To test proportional hazards: build a model with covariates age and drug only, then a second model adding age×ln(time) and drug×ln(time), and compare them with a Wald test or partial likelihood ratio test.
+- To get the relative event rate at a time point, plug in the covariate values, e.g. take the exponential of negative .135 (.135 for treatment) holding other terms at baseline.
+- With proportional hazards, the relative rate stays constant over time, so the same relative risk holds at 2 years, 3 years, and all other time points.
+- When there is time-dependent effect, put time into the model as an interaction term to obtain accurate hazard functions.
+- Stepwise logic: clinical question → hypothesis → study design → sampling → analysis → conclusions.
+- If an analysis cannot answer the question, test the hypothesis, or match the protocol, a different analysis is needed.
+- Decision step for Cox modeling: determine whether proportional hazards holds or not.
+
+#### Things to memorize
+- Survival analysis is also called time-to-event analysis; the event is not limited to death.
+- Kaplan Meier graph: probability of event (e.g., transmission) on y-axis (0-40%), time (weeks) on x-axis.
+- Log rank test provides the p-value for comparing Kaplan Meier curves.
+- Kaplan Meier curves estimate survival or event probability over time.
+- Cox models can include continuous variables and multiple covariates, unlike Kaplan Meier which is limited to stratification.
+- Median survival is what is typically reported, not mean survival, because usually not everyone in studies has the event.
+- Mean survival is a red flag and requires that every subject (all animals, all people) had the event measured in time.
+- In survival analysis you must define the event precisely and specify the time origin at the study design stage.
+- A surrogate is an event based on something thought to predict the event rather than a direct measure, and developing those variables is very hard.
+- Death is the event in many studies; the time origin might be date of surgery and the scale months.
+- The survival curve is monotonically decreasing: it goes down or stays flat, never back up.
+- The hazard is the instantaneous risk, and the key assumption is whether it is constant over time.
+- The risk of an event often changes over time (e.g., higher after a myocardial infarction), so the hazard is usually not constant.
+- Time scale matters: 120,000 deaths in one year is similar to 10,000 in a month, 2,500 in a week, or 357 in a day.
+- For population mortality, event is death, origin is date of birth, scale is years, and the measure is age at death.
+- The key assumption for survival analysis is independent censoring.
+- All survival analysis methods assume truncation/censoring is independent of the outcome.
+- The left truncation assumption: subjects entering at time t are a random sample of the population at risk at time t.
+- Failure indicator and censoring indicator are exact opposites — always verify which one your software uses.
+- Capital T = event time; starred T = observation time (event time if event occurred, follow-up time if censored).
+- The delta symbol is often used in textbooks as the failure indicator name.
+- The Kaplan-Meier general formula: survival at time t = (1 - events/atRisk) × previous survival estimate.
+- When interpreting software output, a delta may represent either a censoring indicator or a failure indicator — they are opposites.
+- The time axis is the time on study; in non-randomized studies it is often age.
+- You must test the proportionality assumption when using a Cox model.
+- For proportional hazards, the relative rate (hazard ratio) must be constant over time; if not, the rate must be modeled over time.
+- A log-rank test yields only a p value — there is no estimate of the size of the difference and no indication of how things relate.
+- Kaplan-Meier plus a p value may be sufficient in many randomized studies, but when problems arise you should ask for more, such as Cox models.
+- Proportional hazards is a multiplicative model with a baseline hazard, regression coefficients, and prognostic factors, and is semi-parametric.
+- A large interaction p-value (e.g. .94) supports assuming proportional hazards, while a small one (e.g. .003) indicates non-proportional hazards.
+- Cox proportional hazards is described as the modern workhorse model, 40-50 years old.
+- Kaplan-Meier is simple but potentially misleading; time measurement choices matter critically in survival models.
+- A hazard biased too small produces a survival estimate that is too large for the population.
+- Analysis follows the design.
+- Cox regression is the most robust general survival method.
+- Median survival = time at which 50% have had the event.
+- Kaplan-Meier: cannot easily use with covariates and has no sensible interpretation under competing risks.
+- Log-rank: unusable with time-dependent covariates or competing risks; biased with baseline table-one imbalance.
+- Survival methods can handle right censoring and left truncation; recurrent events need fancier models.
+- Risk sets enable estimation of the event.
+
+#### Confusing points
+- Some tests are interval-measured, so you only know seroconversion occurred between visits (e.g., between 12 and 24 weeks), not exact time.
+- Time origin is not always clear; typically starts at birth with 0 transmissions, but that doesn't always happen.
+- Kaplan Meier curves cannot look at covariates; they can only stratify, and with many stratification factors, groups may become too small to be robust.
+- Which events are recurring versus single-shot matters: an infection may come once, never, or recur, and one must determine whether the last infection cleared or this is a brand new one.
+- Whether it counts as an event when some things may never happen — e.g., waiting long enough for a child to get married may not actually happen.
+- When to do the measurement is critical: measurement at 10 days makes a 3-day drug and a 7-day drug look the same, and realistically even at 7 days both may look the same.
+- The hazard function is sometimes called incidence rate or force of mortality, which can be confusing across disciplines.
+- The survival function can be plotted as percent alive or percent with the event, both representing the survival function.
+- Communicating statistical results: S(t)=0.3 at t=60 months can be stated as 'five-year survival probability is 30%' or '70% of patients die within the first five years.'
+- Withdrawal from a study appears independent but may not be: e.g., accidental death looks independent, but if the therapy causes balance problems and falls, it may not be.
+- The common assumption that moving out of an area is independent censoring is challenged because people move for last-ditch therapies related to the event.
+- Left censoring is described as harder to handle than right censoring, which Kaplan Meier deals with just fine.
+- Left censoring is defined with the condition that observed time exceeds survival time but the subject is known to exist — a formulation that may need review.
+- The distinction between truncation (buying into a study) and censoring, and between type one, type two, and random censoring, may be easy to conflate.
+- The delta symbol in textbooks may be a censoring indicator or a failure indicator, which are exact opposites, so you must check which one your software uses.
+- Independent censoring does not require independence unconditionally; it can be conditional on a covariate such as age or disease severity.
+- Censoring can differ between study arms and still be handled, which may seem counterintuitive.
+- Choosing the single time point t at which to test a survival difference is arbitrary and uses only part of the data.
+- Simple Kaplan-Meier-based analyses cannot accommodate time-dependent covariates or recurrent events.
+- Log-rank tests account for censoring and truncation but never account for time-dependent covariates or recurrent events.
+- If the effect of age on hazard differs at 20 versus 60, or a drug's effect changes over time, this time-varying effect must be explicitly modeled.
+- The transcript rendering of the drug×ln(time) and age×ln(time) terms was garbled, so the exact specification of the interaction terms needs review.
+- The relationship between the two-year time point and the calculation of relative rate was referenced but the math itself was dismissed as not required.
+- The exact coding and interpretation of the baseline hazard (placebo, no ascites, prothrombin time 1 second) may need further review.
+- Cox model assumptions are hard to test, though testing is doable for many of them.
+- Covariates must be measured to enter the model, and even then you must ensure the right covariates are in the model.
+- The boundaries between what survival analysis "can handle" versus "may not handle in every form" are nuanced (right censoring/left truncation vs. recurrent events/competing risks).
+
+#### Questions to review
+- What is the event and what is the time origin in a given survival analysis?
+- How do you handle competing risks in Kaplan Meier analysis?
+- Why do we use survival analysis? Consider a new cancer treatment scenario.
+- How can you distinguish recurrent infections from a new infection when counting events?
+- Why not just run a logistic regression at five years asking if two groups differ, yes or no?
+- What is the time origin when the clock starts ticking for a study — e.g., surgery, diagnosis, or chemotherapy start?
+- How do you define a specific event such as mother-infant transmission rather than just naming it?
+- How do you define the end of a primary episode in a herpes study when patients are self-reporting at home?
+- Is the hazard constant or not, and what are the implications for proportional hazards models?
+- What is a clinically important difference between study arms when designing a survival study?
+- Should left-censored subjects who already had the event be counted or excluded — and does excluding them prevent valid estimates?
+- How does case mix (e.g., older people more or less likely to have an event) affect sample size planning?
+- Does removing left-censored subjects keep you from having valid estimates of what you're interested in?
+- Which indicator (failure vs censoring) does your software package use when you see a delta?
+- How do you interpret the hazard rate as if censoring is independent when it is not?
+- If you have a Kaplan-Meier curve, how do you describe the hazard?
+- What else do we know about Kaplan-Meier?
+- Where do you draw the line for t when testing a survival difference — 72 weeks as in the zidovudine trial, or 24 weeks?
+- How do you stratify on continuous prognostic factors, and do you have enough people to form the strata?
+- Is it acceptable to follow everybody for one year, or to oversample older people later in the study to make the final sample proportional by age?
+- How do you test for proportional hazards, e.g., by comparing a model without time elements against one with them?
+- How do you detect and handle non-proportional hazards using interaction terms with log time?
+- How does the choice of time scale and measurement timing affect survival model validity?
+- What happens to the validity of a Kaplan-Meier estimator when the risk set is not representative over time?
+- Given competing risks, how will you analyze and interpret your survival analysis?
+- Do I have proportional hazards, or do I not?
+- Do I have the right covariates in the model?
+- Does the chosen analysis answer the question, test the appropriate hypothesis, and match the protocol?
+
+#### Study summary
+- This lecture is considered the most difficult statistical epidemiology topic, typically covered at the end of a master's or in second/third year of PhD, and may require rewatching.
+- Primary objectives: interpret Kaplan Meier graphs, interpret Cox model covariates, understand basic assumptions and what goes wrong when assumptions are violated.
+- The HIV transmission example demonstrates how Kaplan Meier curves informed a decision to stop a trial early and modify national guidelines.
+- Kaplan Meier curves are widely used in many fields, including animal science, and appear frequently in journals.
+- Survival analysis addresses how many people have events, how many die, and when, and it should be chosen when censoring information matters.
+- Use median survival rather than mean survival unless every subject's event time was measured.
+- The proportional hazards model is baseline hazard times exponential of the linear predictor, analogous to the linear regression model.
+- Time units vary by context: flu is measured in days or hours, while other conditions may be measured in years.
+- When designing studies you must define the event, specify the time origin, and decide whether covariates are needed.
+- The lecture covered how to define the time origin and time scale, how to interpret survival and hazard functions, and provided examples from pancreatic cancer, herpes, nickel refinery, population mortality, and balloon studies.
+- Key takeaway: survival analysis requires a well-defined event, time origin, and time scale, and the hazard function (instantaneous risk) underlies everything but is often not constant.
+- Survival study sample size must be driven by expected event counts and covariate structure, not just subject numbers.
+- Truncation (right and left) biases survival estimates unless entry is controlled, as in randomized trials where time is zeroed at randomization.
+- Right censoring is the standard and well-handled case (including by Kaplan Meier), while left censoring is harder.
+- Censoring types to know: type one (same follow-up time for all), type two (stop after a set number of events), and random censoring (clinical studies).
+- The single most important takeaway is that survival analysis assumes independent censoring.
+- Independent censoring is the key assumption for survival analysis; without it hazard estimates are biased and all survival analyses are worthless.
+- Censoring can be independent conditional on a covariate like age or disease severity, which can be included in a Cox model.
+- Competing risks matter because dying of one cause precludes dying of another, as illustrated by the polar bear plunge example where both sexes had similar plunge death percentages but different all-cause mortality.
+- Kaplan-Meier is computed by multiplying a series of conditional probabilities: (1 - events/atRisk) × previous survival estimate.
+- The Kaplan-Meier curve can be computed by hand with basic multiplication and subtraction.
+- Confidence bands can be placed around a Kaplan-Meier curve using several textbook methods.
+- Hash marks on a Kaplan-Meier plot indicate times when people were censored.
+- Kaplan-Meier curves should mark censoring with hash marks and may be drawn per stratification variable (intervention, age category).
+- The log-rank test tests overall survival across all time points and is easy to run (software available, many variations), but its assumptions (two independent samples, same population, balanced prognostic factors) are often problematic.
+- Stratified log-rank tests avoid confounding but cost power because they run many tests on smaller sample sizes.
+- The Cox proportional hazards model is the basic model to move to when log-rank/Kaplan-Meier is insufficient, allowing a rich model with many covariates and time-dependent effects.
+- Interpreting Cox coefficients: beta = 0 corresponds to a hazard ratio of 1 (no group difference), and exp(beta) gives the relative rate or risk for that covariate.
+- Modeling cannot fix everything but often helps — e.g., putting age into the Cox model resolves the age-related censoring bias of Kaplan-Meier more easily than oversampling.
+- Key takeaways: choose the right model and test, Kaplan-Meier can mislead, Cox models need proportional hazards checks, and time/protocol changes must be accounted for in analysis.
+- In the liver cirrhosis example, delayed recruitment of ascites patients created an incorrect risk set after 2.5 years, biasing the hazard too small and survival estimate too large when Kaplan-Meier was used.
+- Using a Cox model instead avoids the incorrect risk set problem because censoring is independent with respect to ascites, giving consistent partial likelihood estimates and correct relative risks.
+- Survival analysis deals with inference on event rates at some time point t among those at risk.
+- Survival analysis centers on inference for event rates over time and among those at risk, with median survival as a key summary.
+- Cox regression is the most robust general framework because it accommodates covariates and can be tweaked to fit needs, though its assumption is hard to test.
+- Kaplan-Meier and log-rank are simple but limited: covariates, time-dependent covariates, competing risks, and baseline imbalance constrain their use.
+- Truncation (entry) and censoring (leaving/event status) are crucial mechanisms to handle in study design.
+- Overarching rule: analysis follows the design — the clinical question drives the hypothesis, the hypothesis drives the design, and the design dictates the analysis.
+
+#### Action items (structured)
+- DSMB: DSMB went back to the study team and asked them to check listed items and get back in touch.
+- Post questions to the board (open about 2 weeks from the date of the original lecture)
+- Fill out course evaluations, as they are used to decide and make changes in the class each year
+- Send in examples to be added to the course (many came from previous classmates)
+- Online students should send their questions to the separate board so they reach the right set of faculty
+
+#### Decisions (structured)
+- DSMB recommended stopping the study after careful review of toxicity and transmission rates, and trial leaders agreed to stop. (owner: DSMB)
+- Zidovudine was provided to everybody in the control group after stopping. (owner: study team)
+
+#### Open questions (structured)
+- If an intervention lowers blood pressure but people die two years earlier than those who didn't take it, have we actually accomplished our goal by lowering hypertension? [open]
+- How do you actually define an event such as mother-to-infant transmission for study design purposes? [open]
+- What is the appropriate time origin for a given study — e.g., time of surgical resection, diagnosis, or start of chemotherapy? [open]
+- Is the hazard constant or not? [open]
+- Were we sure that the patients cleared the episode that we started with (herpes study)? [open]
+- When subjects are left-censored (event occurred before enrollment), do you count them in the study or exclude them, and does removing them prevent valid estimates? [open]
+- Does excluding subjects who already have the event keep you from having valid estimates of what you're interested in measuring? [open]
+- What is a 't' — where should the time line be drawn to test a survival difference (e.g., 72 weeks as in the zidovudine trial, or 24 weeks)? [open]
+- If you stratify on many prognostic factors, what about continuous variables — do you have enough people to put them into strata? [open]
+- If you follow everybody for one year, are you still okay (regarding censoring and proportionality by age)? [open]
+- How do you properly account for changes in exposure or treatment over time in time-dependent survival curves? [open]
+
+#### Risks (structured)
+- [medium] Kaplan Meier curves have no sensible interpretation for competing risks.
+- [medium] If you have multiple stratification factors, each curve may have only 3-4 people, which is not enough for a robust Kaplan Meier curve.
+- [high] Short-term studies of Cox 2 inhibitors did not reveal additional deaths, and the hazard functions crossed, so Kaplan-Meier curves missed a problem that started around 12-18 months.
+- [medium] Observational findings (e.g., people with lower blood pressure or BMI live longer) don't always show the same outcome change when randomized.
+- [medium] Mean survival is a red flag: it requires that every subject/animal had the event measured in time or the analyst doesn't know what they're doing.
+- [high] Assuming a constant hazard (as in proportional hazards) is often wrong because risk of an event changes over time.
+- [medium] Measurement error can arise if the end of the primary episode is defined inconsistently, e.g., knocking off half a month.
+- [medium] Right truncation (e.g., sampling only from a cancer registry) leads to an under-estimate of the survival function because undiagnosed/unlisted cases are never observed.
+- [medium] Left truncation can cause short survival to be overlooked (e.g., enrolling only those 65+), yielding weird estimates and affecting generalizability.
+- [medium] Withdrawal from a study may not be independent of event risk if the event or treatment relates to the reason for withdrawal (e.g., a therapy causing balance problems and falls).
+- [medium] Assumption that moving out of an area is independent censoring is not valid; people move for last-ditch therapies related to the event of interest.
+- [medium] Software may expect a failure indicator versus a censoring indicator (which are exact opposites), creating a risk of coding them backwards.
+- [high] If independent censoring does not hold, hazard function estimates will be biased and all survival analyses become worthless.
+- [high] If age is not conditioned on in the model when older subjects enroll late, censoring is not independent and estimates will be biased because risk sets are not representative.
+- [high] Risk sets that are not representative of the greater population make inference invalid.
+- [medium] If high-risk subjects enter the study early or late, the Kaplan-Meier curve will be not quite right and will come down faster than it should.
+- [medium] High-risk subjects entering early or late distort the Kaplan-Meier curve; late entrants make it fall faster than it should because later data are missing.
+- [high] Confounding around the log-rank test means results won't be accurate if prognostic factors are not balanced between treatment groups; a difference could just be bias.
+- [medium] Stratified log-rank testing loses power because each stratum has a much smaller sample size.
+- [medium] If age is not accounted for in Kaplan-Meier (or stratification), the curve is biased because older subjects are censored earlier and have less time on study.
+- [medium] Building models with many covariates (e.g., 16) on too few subjects (e.g., 20) is not feasible due to insufficient data.
+- [high] Physicians were initially reluctant to enroll patients with ascites due to toxicity concerns, so sicker patients entered the trial late, producing an incorrect risk set at later time points.
+- [high] Because the risk set at later time points excluded ascites patients, the hazard was biased too small and the survival estimate was too large.
+- [medium] The Cox proportional hazards model is commonly misused when the proportional hazards assumption is not checked.
+- [medium] Kaplan-Meier cannot be used easily when there are covariates
+- [medium] Kaplan-Meier has no sensible interpretation under competing risks
+- [medium] Log-rank cannot be used with time-dependent covariates or competing risks
+- [medium] Imbalance in baseline table-one early prognostic factors likely produces a biased log-rank estimate
+- [low] Cox model assumptions are hard to test (though doable for many)
+
+#### Follow-up draft
+Quick recap: this session covered survival (time-to-event) analysis, built around Kaplan-Meier curves and Cox models and the mother-infant HIV transmission trial where the DSMB stopped the study early and zidovudine was then offered to the control group. Remember that survival analysis uses the time until an event (not only death), that you must fix the event, the time origin, and the time scale at the design stage, and that the two key functions are the survival function S(t), the probability of remaining event-free past t (monotonically decreasing), and the hazard λ(t), the instantaneous event rate. In practice you report median survival (time by which 50% have had the event), not mean survival, and Kaplan-Meier is computed step by step as (1 − events/at risk) × previous estimate, with hash marks showing censoring and the log-rank test supplying only a p-value. The Cox model is a multiplicative, semi-parametric model — baseline hazard × exp(linear predictor) — where beta = 0 means a hazard ratio of 1 and exp(beta) is the relative risk, and proportional hazards must be checked by adding covariate × ln(time) terms and comparing with a Wald or partial likelihood ratio test. The one assumption to never forget is independent censoring, since log-rank fails with time-dependent covariates or competing risks and Kaplan-Meier has no sensible interpretation under competing risks, and analysis must always follow the design. That's the recap.
+
+---
+
+# Summary E
+
+_(run1)_
+
+### Title: Survival Analysis in HIV Trials
+
+#### Overview
+The lecture introduced survival analysis, also called time-to-event analysis, through a mother–infant HIV transmission trial and used it to explain how analyses retain both whether an event occurs and when it occurs. A complete survival outcome requires a precisely defined event, time origin, time scale, and method for determining event time; examples included HIV seroconversion, death, recurrence, myocardial infarction, transplantation, smoking initiation, and balloon bursting. The lecture contrasted survival analysis with fixed-time logistic regression, which discards event timing and information from censored participants, and explained survival probability, hazard as the instantaneous event rate among those still at risk, median survival, changing hazard over time, and the importance of interpreting hazard in its selected time unit. Study planning should be based on expected event counts rather than enrollment alone and should account for dropout, loss to follow-up, covariates, event-definition error, and the possibility of delayed treatment effects. Truncation determines who enters the observed sample, whereas censoring ends observation before the event is seen; right, left, Type I, Type II, and random censoring were distinguished, along with the need to verify software conventions for failure and censoring indicators. The lecture then developed Kaplan–Meier estimation as a recursive product of conditional survival probabilities based on changing risk sets. Participants contribute information until an event or censoring time, and hash marks identify censoring; the log-rank test compares observed with expected events across follow-up and provides an overall comparison, but can be confounded or lose power with unbalanced prognostic factors or excessive stratification. Competing risks require special caution because an event such as infant death or myocardial infarction can prevent observation of the target event and cannot always be treated as ordinary censoring. The central validity condition was independent censoring, possibly conditional on factors such as age or disease severity; violations, nonrepresentative late entry, withdrawals related to future risk, and recruitment changes can bias hazard or Kaplan–Meier estimates. Cox proportional-hazards regression was presented as a covariate-adjusted, multiplicative model that can incorporate continuous, multiple, stratified, and time-dependent covariates, but proportionality must be tested using covariate-by-log-time interactions and Wald or partial-likelihood-ratio tests. One example supported proportional hazards with p = .94, while another rejected it with p = .003 and suggested crossing treatment hazards. In the cirrhosis example, delayed recruitment of patients with ascites distorted Kaplan–Meier survival, whereas Cox regression could remain valid when censoring was independent with respect to ascites. The HIV trial provided the major decision point: the Data and Safety Monitoring Board reviewed toxicity, transmission rates, and other information, recommended stopping the study, and the trial leaders agreed; zidovudine was then provided to the control group, and national guidelines in the United States and several other countries were modified. The zidovudine group had an
+
+#### Summary
+- The lecture examined survival analysis for time-to-event outcomes, using mother–infant HIV transmission to explain censoring, Kaplan–Meier curves, competing risks, and Cox models.
+- The Data and Safety Monitoring Board recommended stopping the study after reviewing toxicity, transmission rates, and other information, and trial leaders agreed to provide zidovudine to the control group.
+- The decision led to modified national guidelines, while the lecture emphasized that competing events, non-independent censoring, unequal follow-up, delayed recruitment, and changing treatment effects can bias interpretation.
+
+#### Core concepts
+- Survival analysis is also called time-to-event analysis, and the event can be something other than death, such as infant HIV seroconversion.
+- The lecture emphasizes conceptual understanding, vocabulary, interpretation of statistical methods, and recognition of assumptions and their consequences.
+- A survival outcome includes the subject, the event, a time origin, a time scale, and the time at which the event occurs.
+- Kaplan–Meier curves estimate the occurrence of an event over time and can be stratified by factors such as study arm or sex.
+- Cox models can incorporate continuous and multiple covariates, whereas Kaplan–Meier analysis is commonly used with stratification.
+- Competing risks arise when one event eliminates the possibility of observing another event.
+- Group sequential designs use preplanned interim efficacy reviews before the study ends.
+- Survival analysis studies whether events occur and when they occur, including death, infection, myocardial infarction, hospitalization, cancer recurrence, and engineering failures.
+- Survival analysis can use information from censored participants instead of reducing the study to whether an event occurred by one fixed time.
+- The timing and trajectory of events can distinguish treatments even when both groups look identical at a later assessment point.
+- Survival analysis is used beyond clinical trials, including epidemiology, quality control, and engineering failure analysis.
+- Delayed effects can be clinically important even when short-term studies show no additional deaths.
+- A survival study must specify the time origin, meaning the point at which the study clock begins, such as diagnosis, treatment initiation, surgery, first exposure, or birth.
+- The time scale must match the scientific question and may be measured in hours, days, months, years, or a non-time quantity such as milliliters of air.
+- Survival analysis measures progression until an event and is especially useful when the time to the event varies across subjects.
+- A binary logistic remission outcome can be used instead of time-to-event analysis, but it discards substantial timing information.
+- The event does not have to be death; examples include recurrence, marriage, balloon bursting, HIV transmission, and seropositivity.
+- Survival analysis must account for the possibility that the event is not observed during follow-up for every participant.
+- Survival-study sample size should be based on the expected number of observed events because not every participant will experience the event during follow-up.
+- Covariate planning requires considering both variables that will enter the model and how participant characteristics affect the chance of experiencing the event.
+- Researchers may enrich a study with higher-risk participants to increase the number of events available for analysis.
+- Truncation concerns who becomes observable in the study, whereas censoring concerns incomplete observation of event time after a subject is under observation.
+- The central validity assumption for the survival-analysis methods discussed is that truncation or censoring is independent of the outcome.
+- Participants who remain in a study should continue to be tracked for vital status and event status even if they stop treatment or cannot attend regular visits.
+- Independent censoring requires people remaining at risk at each study time point to be representative random samples of the population still at risk at that time.
+- The purpose of the independent-censoring assumption is to estimate the hazard function fairly, without bias.
+- Censoring may depend on a modeled covariate such as age or disease severity as long as censoring is independent within subjects with similar covariate values.
+- Censoring can differ across study arms and still be addressed when the relevant structure is handled in the model.
+- Competing events must be considered because occurrence of one event can remove a person from risk of the event being analyzed.
+- Kaplan–Meier estimation is presented as a simple product of conditional survival probabilities based on successive risk sets.
+- Kaplan–Meier curves can be drawn for different intervention groups or stratification variables, but they provide a relatively simple description rather than a rich covariate-adjusted analysis.
+- Censored observations still provide information about event risk while participants remain under observation.
+- The log-rank test compares survival experience over all observed time points rather than at only one selected time.
+- The log-rank test compares observed event counts with expected event counts under the null hypothesis.
+- A stratified log-rank test performs comparisons within each stratum.
+- The Cox model extends survival analysis by incorporating covariates and, in its general form, time-dependent covariates and stratification factors.
+- The lecture presents the development of survival methods as reflecting the evolution of medicine from counting deaths to analyzing recurrences and more complex outcomes.
+- Proportional hazards testing evaluates whether the effect of a covariate on the hazard function remains constant over time.
+- A time interaction can reveal that a drug's effect on the event rate changes over time even when age is not responsible for the nonproportionality.
+- Natural log of time is used in the demonstrated time-interaction model because of how the model is set up.
+- Time-dependent survival analysis is needed when exposure or treatment status changes during follow-up.
+- Kaplan–Meier methods are simple but can be misleading when recruitment changes the composition of the risk set over time.
+- Cox proportional hazards regression is a common workhorse, but analysts must assess proportionality and may need more general Cox models.
+- Correct survival analysis requires attention to how time is measured, when measurement begins, and how protocol changes affect the data.
+- The final conceptual focus is inference about event rates at a given time among those still at risk.
+
+#### Definitions
+- An event is the outcome being timed; in the HIV example, it is the infant testing positive or seroconverting.
+- Censoring means using the information available up to the last observed follow-up time when the event has not yet been observed or follow-up ends.
+- A time origin is the defined starting point for measuring event time, such as birth in the infant example.
+- The time scale for infant follow-up was measured in weeks.
+- An interval-measured event is known only to have occurred between two observations, such as being negative at 12 weeks and positive at 24 weeks.
+- A competing risk is an event that occurs first and prevents the target event from occurring or being observed.
+- A log-rank test provides the p-value associated with the comparison of Kaplan–Meier curves in the example.
+- Survival analysis makes inferences about event rates among people who are at risk at a particular time t.
+- Lowercase t denotes the time axis or assessment time, while uppercase T denotes the random time at which the event occurs.
+- The time origin is the point at which follow-up begins and the study clock starts.
+- The survival probability at time t is the probability that the event time T is greater than or equal to t.
+- Median survival is typically reported because many studies end before every participant experiences the event.
+- In the survival model, the outcome variable is event time, and predictors may be called prognostic factors rather than covariates.
+- The survival function is the proportion of the population that remains without the event by time t.
+- For death as the event, the survival curve is monotonically decreasing because the proportion alive can decline or remain flat but cannot increase.
+- The hazard function represents the instantaneous event rate or risk at a particular time.
+- The hazard can be described as an incidence rate or the force of mortality when the event is death.
+- The hazard is tied to the selected time unit, so a rate stated per month is not interchangeable with a rate stated per year or per day.
+- Censoring and truncation are features that survival methods can accommodate when estimating the hazard function.
+- Right truncation was described as observing only people whose event of interest was recorded, such as people appearing in a cancer registry.
+- Left truncation occurs when people are observed only after entering the study at a later time, so those who experienced the event before entry are absent.
+- Right censoring occurs when follow-up ends before the event is observed, so the study knows the participant remained event-free only up to the censoring time.
+- Left censoring occurs when the event is known to have happened before observation began, but its exact time is unknown.
+- For each participant, observed time is the event time if the event occurs and the follow-up time if the participant is censored.
+- Type I censoring follows every participant for the same fixed duration, whereas Type II censoring stops observation after a prespecified number of events occurs.
+- Random censoring is the more general pattern in clinical studies where enrollment occurs over a period and follow-up duration varies by enrollment time.
+- A failure indicator records occurrence of the event, whereas a censoring indicator records that the subject left observation without the event being observed.
+- Right censoring occurs when follow-up ends while the subject has not yet experienced the event.
+- Independent censoring means that, conditional on relevant covariates, censored subjects have similar subsequent-event risk to subjects who continue follow-up.
+- The time origin is commonly enrollment or treatment initiation, while the time axis measures time spent on study.
+- In nonrandomized studies, age may serve as the time axis rather than time since enrollment.
+- A risk set is the group of subjects still under observation and eligible to experience the event at a specified time.
+- A Kaplan–Meier curve is a survival estimate that can display event-free survival over time and mark censored observations with hash marks.
+- The null hypothesis for comparing two groups at a given time is that their survival probabilities are equal.
+- A simple survival comparison can use a normal-based z statistic formed from the difference between two survival estimates divided by the square root of the sum of their variances.
+- The log-rank test is an overall survival comparison that accounts for censoring but does not handle time-dependent covariates or recurrent events.
+- The Cox model is a semiparametric model because the baseline hazard is left unspecified from the modeling perspective.
+- The Cox model is multiplicative: a covariate changes the hazard rate by a factor determined by its coefficient.
+- In the Cox model, a coefficient equal to zero corresponds to a hazard ratio of one and equal survival experience between the compared groups.
+- Proportional hazards means that the relative hazard effect of a covariate does not vary over time.
+- A time interaction represents the changing effect of a covariate as time progresses.
+- The demonstrated baseline Cox model used treatment, ascites, and prothrombin time as covariates, with treatment and ascites categorical and prothrombin time continuous.
+- In the coding example, treatment was represented as one for the new treatment and zero for placebo.
+- Ascites was presented as a binary indicator of liver-cirrhosis severity, with absence coded as zero.
+- The baseline hazard is the event rate at time t for the reference patient defined by the baseline covariate values.
+- Independent censoring is described as the condition required for consistency of the partial-likelihood estimator in the example.
+- A risk set is the group of subjects eligible to contribute information at a particular time point.
+
+#### Examples
+- The lecture uses mother-to-infant HIV transmission as an example in which infant seroconversion is the event.
+- The trial aimed to reduce transmission from approximately 30% to 20%, corresponding to a planned 33% reduction.
+- The Kaplan–Meier graph displayed transmission probability from 0% to 40% on the y-axis and weeks on the x-axis.
+- The graph compared infants whose mothers received placebo with infants whose mothers received zidovudine.
+- At the first interim analysis, the zidovudine group had an observed transmission rate of 8.3% with a relatively tight confidence interval.
+- An infant observed at 24 weeks without seroconversion still contributes information through censoring.
+- Infant death from another infection at six weeks illustrates a competing risk because later HIV seroconversion can no longer be observed.
+- A new cancer treatment can be evaluated by asking whether it extends life five months beyond the current treatment.
+- A drug resolving flu symptoms in three days is preferable to one resolving them in seven days, but a day-10 measurement makes both treatments appear equivalent.
+- A balloon bursting can be analyzed by the amount of air in milliliters rather than elapsed time, illustrating that survival-type methods can use different measurement scales.
+- The Cox-2 inhibitor example illustrates a delayed safety problem that became visible around 12 to 18 months rather than in short-term follow-up.
+- A follow-up of the MIST trial examined time to pregnancy or first live birth after miscarriage among women randomized to two approaches.
+- Possible event outcomes include an HIV-positive test, an AIDS-defining event, mother-infant HIV transmission, or blood pressure or cholesterol falling below a cutoff.
+- In a pancreatic cancer study, the time origin was surgical treatment, the event was death, the scale was months, and survival at nine months was approximately 25%.
+- A five-year survival of 30% can also be communicated as 70% of patients dying within the first five years.
+- After a myocardial infarction, surviving the first 30 days may be associated with better longer-term survival, illustrating that hazard can vary over time.
+- In the herpes example, the event was recurrence of lesions after treatment for a primary episode, and the target interval was from the end of the primary episode to first recurrence.
+- In the nickel refinery occupational study, death from lung cancer was measured from estimated first exposure at the beginning of refinery employment, using years as the scale.
+- For population mortality, the event is death, the origin is date of birth, the scale is usually years, and the measured quantity is age at death.
+- In the balloon example, bursting was the event, zero milliliters of air was the origin, and the progression measure was the volume of air infused.
+- A cancer-registry study illustrates right truncation because people whose cancer was never recorded cannot enter the observed sample.
+- Enrolling only people aged 65 or older illustrates left truncation because those who died before age 65 are never observed.
+- Interviewing 12-year-olds about the age they began smoking illustrates left censoring when a regular smoker cannot report when smoking began.
+- A childhood infection study illustrates left censoring when two children were already infected at enrollment but the infection time was unknown.
+- A five-year study ending before all participants experience the event illustrates administrative right censoring.
+- Replacing all light bulbs after four have failed illustrates Type II censoring of the bulbs that have not yet failed.
+- In a two-year follow-up example, children reaching 24 months without the event are censored at 24 months while retaining their event-free follow-up information.
+- In a five-year mortality follow-up, patients who have not died by the end of follow-up are censored for the death event.
+- In the school smoking example, students who have never started smoking by age 25 are right-censored for time to smoking initiation.
+- Changing study eligibility to enroll older subjects later creates unequal potential follow-up, which can be addressed by conditioning on age.
+- The cancer-versus-myocardial-infarction example illustrates that people who die from myocardial infarction can no longer experience cancer during follow-up.
+- The fictional polar-bear-plunge example shows how competing deaths can create a misleading headline that the plunge kills women more than men.
+- In the polar-bear-plunge scenario, 25% of women and 24% of men died from the plunge, while deaths from other causes were 33.5% for women and 40% for men over ten years.
+- The lecture uses placebo versus a new intervention and comparisons between women as examples of survival-group comparisons.
+- A recurrent-event example is the number of soccer goals, where a participant may have zero or six events.
+- The lecture contrasts possible single-time survival comparisons at 24 weeks and 72 weeks.
+- Age categories and intervention groups are examples of variables that can define separate Kaplan–Meier curves.
+- Age is used as an example of a covariate whose effect on hazard may differ between someone aged 20 and someone aged 60.
+- A Cox-2 inhibitor is used as an example of a treatment whose cardiovascular-event effect might differ after two months versus 18 or 24 months.
+- Older subjects entering a trial late are used to illustrate how unequal follow-up can bias an unadjusted Kaplan–Meier analysis.
+- The proportional-hazards test compared a model with age and drug alone against a model that added age-by-log-time and drug-by-log-time interactions.
+- In one example, the two added time-interaction coefficients had large p-values and a likelihood-ratio test with two degrees of freedom had p = .94, supporting proportional hazards.
+- In a second example, the partial-likelihood-ratio test had p = .003, indicating that proportional hazards could not be assumed.
+- The instructor interpreted the significant drug-by-time interaction as evidence that treatment hazard curves might cross.
+- The antiretroviral-therapy example illustrated why treatment exposure may need to be updated during long follow-up because patients can go on and off therapy.
+- The Stanford heart-transplant study illustrated that time to transplant must be considered separately from time to death.
+- The liver-cirrhosis trial compared a new treatment with placebo in a randomized study and included ascites and prothrombin time as covariates.
+- Physicians initially avoided enrolling patients with ascites because of toxicity concerns, so recruitment became more representative only after about a year and a half.
+
+#### Formulas / steps
+- To calculate a transmission rate, count the number of infants who eventually seroconvert and relate that event count to the total number of infants at risk.
+- When planning sample size, work backward from the required number of events and account for dropouts and loss to follow-up.
+- For a time-to-event analysis, define the event, choose the time origin, specify the time scale, and define how the event time will be determined.
+- Use interval information when testing shows that the subject was event-free at one visit and had the event by a later visit.
+- Construct or interpret Kaplan–Meier curves by time, event probability, and the number of subjects remaining under observation in each study group.
+- Compare survival curves using a log-rank test and interpret the associated p-value.
+- When interim results are unexpectedly favorable, investigate randomization, demographic balance, data quality, toxicity, and other explanations before making a trial decision.
+- Define the event precisely before designing or analyzing the study.
+- Specify the time origin, such as surgery, diagnosis, or chemotherapy initiation, so the beginning of follow-up is explicit.
+- Choose the relevant time scale for follow-up, which may be months, years, days, or hours depending on the event.
+- Track participants over time and record how many experience the event and when each event occurs.
+- Evaluate survival at selected times by considering the probability that T is at least as large as each assessment time t.
+- The basic survival model combines a baseline hazard with the exponential of a linear predictor.
+- Consider covariates such as treatment, placebo assignment, sex, and age when modeling the event time.
+- To define a survival analysis, specify the event, the time origin, and the time scale before measuring time to the event.
+- For pancreatic cancer, calculate time as date of death minus date of surgical treatment and express it in months.
+- Read a survival curve at a specified time t as the proportion still alive or otherwise free of the event at that time.
+- Convert survival probabilities into clinically understandable language by translating t = 60 months and S(t) = 0.30 into a five-year survival probability of 30%.
+- Interpret a hazard estimate together with its time unit, such as a 1% monthly death rate at 12 months or a 1% chance of death during the following month.
+- When planning the study, consider expected event counts as well as covariates that will be included in the model.
+- Plan sample size by estimating the number of events expected during follow-up rather than relying only on the total number of enrolled participants.
+- When planning covariates, list the variables intended for the model and assess how age, exposure, and case mix may change event probability.
+- For left truncation, assess whether entrants at time t are a random sample of the population at risk at that same time.
+- For participants who withdraw or move, investigate the reason and its possible relationship to the event instead of automatically treating the subject as independently censored.
+- Continue follow-up after treatment discontinuation or missed visits whenever possible, recording whether the participant is alive and whether the event occurred.
+- In a time-to-event dataset, use the event time for failures and the last known follow-up time for censored observations.
+- Before running software, verify whether the status variable must be coded as a failure indicator or as a censoring indicator because the two conventions are opposites.
+- At time zero, the Kaplan–Meier survival estimate starts at 1 because no events have occurred.
+- At each event time, update survival by multiplying the previous estimate by one minus the number of events divided by the number at risk.
+- With 2 events among 20 people at risk at month 5, the estimate becomes 1 × (1 − 2/20) = 0.9.
+- When there are zero events among 18 people at risk at month 6, survival remains 0.9 because the factor is 1 − 0/18.
+- Subjects censored between months 6 and 10 are removed from the later risk set but contribute risk information until the time they leave.
+- With 1 event among 15 at risk at month 10, the estimate is updated by multiplying 0.9 by 1 − 1/15, producing approximately 0.84.
+- With 2 events among 14 at risk at month 13, the lecture gives the next Kaplan–Meier estimate as 0.42 after multiplying by 1 − 2/14.
+- For a single-time survival comparison, form a z statistic using the difference between two survival estimates and divide by the square root of their summed variances.
+- To conduct a log-rank comparison, compare observed event numbers with expected event numbers across the available time points.
+- For a stratified log-rank analysis, divide the data into strata, compare groups within each stratum, and perform the combined test.
+- For Cox modeling, include prognostic factors as covariates rather than necessarily stratifying on each one.
+- Interpret each Cox coefficient by examining the proportional change in hazard associated with a change in its corresponding covariate.
+- If a covariate's hazard effect varies over time, add the relevant time element or time-dependent covariate to the model.
+- Use statistical software for Cox-model estimation and coefficient hypothesis tests rather than attempting the calculations manually.
+- Fit a baseline model containing the covariates without time interactions.
+- Fit an expanded model that adds covariate-by-natural-log-time interaction terms.
+- Evaluate the interaction coefficients and compare the full and reduced models using a Wald test or a partial-likelihood-ratio test.
+- Use two degrees of freedom when testing the joint contribution of the two interaction terms in the demonstrated likelihood-ratio comparison.
+- If the time-interaction test is not significant, treat the proportional-hazards assumption as reasonable for that analysis.
+- If the joint test is significant, inspect individual time interactions to identify which covariate violates proportional hazards.
+- For the Cox model example, calculate a relative rate by exponentiating the relevant linear predictor coefficients for the selected subject profile.
+- When proportional hazards holds, the relative rate calculated at two years remains the same at later years for the same comparison.
+- When recruitment is delayed, examine whether later risk sets still represent the target population before interpreting Kaplan–Meier estimates.
+
+#### Things to memorize
+- Time-to-event analysis and survival analysis are names for analyses in which the outcome includes event timing rather than only a single outcome value.
+- The event in the HIV example is infant HIV transmission, represented by testing positive or seroconverting.
+- Censoring allows partially observed subjects to contribute follow-up information up to their last known time without the event.
+- The Kaplan–Meier graph in this example uses weeks on the x-axis and probability of transmission on the y-axis.
+- The log-rank test is associated with the p-value used to compare the curves in the example.
+- A competing risk removes a subject from risk of the target event because another event has occurred first.
+- Kaplan–Meier analysis is useful and widely used, but extensive stratification can make each curve too small for robust estimation.
+- Survival analysis focuses on both whether an event occurs and when it occurs.
+- T equals zero is the time origin, and uppercase T represents the event time.
+- The survival probability is expressed as the probability that T is greater than or equal to t.
+- Median survival is generally preferred to mean survival when not everyone has experienced the event.
+- A mean survival estimate requires the event to have been measured for every study participant.
+- Survival time and time to event refer to essentially the same outcome concept, although different medical communities use different terms.
+- Survival function means the proportion of subjects who remain without the event by time t.
+- Hazard function means the instantaneous risk or event rate at time t.
+- A survival curve for death is monotonically decreasing, meaning it can go down or stay flat but cannot go back up.
+- A survival probability of 0.30 at 60 months is a five-year survival probability of 30%.
+- The chosen time unit is essential for interpreting an instantaneous hazard.
+- Survival-study sample size is based on the number of expected events because not every participant necessarily experiences the event during follow-up.
+- The key survival-analysis assumption emphasized in the lecture is independent censoring.
+- Right censoring means the event has not been observed by the last observation time, not that the participant is known never to experience it.
+- Left censoring means the event occurred before observation began but the event time is unknown.
+- Left truncation can remove early deaths from the sample, while right truncation can remove cases whose events were never recorded.
+- Kaplan–Meier analysis was described as handling right censoring, while left censoring was described as more difficult.
+- In a graph, a solid circle indicates an observed event and an open circle indicates censoring.
+- Type I, Type II, and random censoring differ by whether follow-up ends at a common time, after a fixed number of events, or at varying participant-specific times.
+- Non-independent censoring leads to biased hazard estimates.
+- The Kaplan–Meier update factor is one minus events divided by the number at risk, multiplied by the previous survival estimate.
+- Censored observations remain in the risk set until their censoring time and are excluded afterward.
+- Hash marks on a Kaplan–Meier curve indicate censoring times.
+- Hash marks on a Kaplan–Meier curve indicate censored observations.
+- The log-rank test gives a p-value for an overall survival comparison but does not directly describe the size of the difference.
+- The log-rank test assumes two independent samples from the same population.
+- Unbalanced prognostic factors can make a log-rank result inaccurate because of confounding.
+- A Cox model with a zero coefficient has a hazard ratio of one.
+- The exponential of a Cox coefficient represents the relative rate or risk associated with its covariate.
+- The proportional-hazards assumption requires the relative hazard effect to remain constant over time.
+- The proportional-hazards assumption must be tested whenever a proportional-hazards model is used.
+- The proportional-hazards test can use a Wald test or a partial-likelihood-ratio test.
+- A p-value of .94 in the demonstrated joint test supported the proportional-hazards assumption.
+- A p-value of .003 in the second example indicated nonproportional hazards.
+- Natural log of time is the time transformation used in the illustrated interaction terms.
+- Kaplan–Meier is simple but potentially misleading when the risk set is not representative.
+- The Cox model can provide correct coefficients and relative-risk interpretation in the example despite the recruitment problem, under independent censoring with respect to ascites.
+- Ascites indicated worse prognosis in the liver-cirrhosis example and therefore affected the composition of later risk sets.
+
+#### Confusing points
+- The lecture distinguishes between knowing an exact event time, such as date of death, and knowing only an interval in which seroconversion occurred.
+- Not every infant has complete 72-week information because of death, loss to follow-up, or insufficient age at the interim analysis.
+- The unexpectedly low transmission estimate cannot be explained by the Kaplan–Meier curves alone and requires checking study conduct and data quality.
+- Competing risks make a straightforward Kaplan–Meier interpretation problematic because the subject can no longer experience the target event after the competing event.
+- The lecture notes that all subjects may not begin with zero observed transmissions, even though curves are often conceptualized as starting at zero.
+- An event such as infection may recur, so the analysis must distinguish a cleared prior infection from a genuinely new infection.
+- A fixed-time logistic regression comparison can conceal clinically meaningful differences in how quickly events occur.
+- Crossing hazard functions can signal changing relative risk over time, so a single overall comparison may be misleading.
+- An observational association, such as longer life among people with lower blood pressure or BMI, may not be reproduced after randomization.
+- The lecture distinguishes direct events from surrogate outcomes that are expected to predict the event but are difficult to validate.
+- The lecture distinguishes survival probability from hazard, but the hazard is described as an instantaneous rate rather than the overall probability of eventually experiencing the event.
+- A 1% monthly hazard at one year should not be treated as automatically equivalent to a one-year survival probability of 99%, because hazard is local to the specified time interval.
+- The lecture notes that survival can be plotted with either people alive or people who experienced the event on the y-axis, which requires care when interpreting curve direction.
+- The proportional-hazards issue arises because the assumption of equal event risk at month 1, month 6, month 25, and month 60 is often unrealistic.
+- Defining the time origin in the herpes example is difficult because the end of the primary episode must be identified by both clinicians and participants.
+- The distinction between truncation and censoring requires attention because truncation determines who enters the observed sample, whereas censoring ends observation before an event time is seen.
+- The lecture distinguishes left truncation from left censoring even though both involve information before the usual observation period.
+- A participant moving away is not automatically independently censored because the move may be related to treatment seeking or event risk.
+- Accidental death may appear unrelated to the target event, but it can still be related if the study treatment increases balance problems and falls.
+- Failure indicators and censoring indicators may use opposite coding conventions, so the same variable name or symbol should not be assumed to have the same meaning across software.
+- Whether left-censored or pre-enrollment cases should be retained depends on the target estimand and the validity of the resulting estimates.
+- The lecture warns that some textbooks call a variable delta while software may use it as either a failure indicator or the opposite censoring indicator.
+- Censoring can depend on a covariate and still be acceptable, but only after conditioning on that covariate.
+- Different censoring patterns across study arms are not automatically invalid if the analysis has a way to handle them.
+- Treating deaths from another cause as ordinary censoring can obscure the fact that those subjects are no longer biologically capable of experiencing the target event.
+- Censoring reduces later risk-set size but does not remove the subject's earlier contribution to follow-up.
+- The lecture distinguishes a single-time survival comparison from a log-rank test over all time, but does not specify how to select the best single comparison time.
+- The log-rank test accounts for censoring but cannot incorporate time-dependent covariates, recurrent events, or competing risks in the simple form described.
+- Stratification can control for prognostic factors but may reduce power when it creates many small strata.
+- Following every participant for the same nominal duration does not necessarily make the study representative of the population risk set.
+- Including age in a Cox model can address age-related censoring concerns under the lecture's stated independent-censoring condition, whereas an unadjusted Kaplan–Meier curve may remain biased.
+- The lecture says Cox models can accommodate time-dependent covariates but also warns that sufficient data are needed, leaving the practical amount of data unspecified.
+- The lecture distinguishes a valid Cox coefficient estimate from a potentially biased Kaplan–Meier survival estimate under the same recruitment pattern.
+- The relationship between delayed recruitment, censoring, and the changing risk set requires careful review because patients cannot contribute follow-up before enrollment.
+- The lecture states that the Cox-model censoring is independent with respect to ascites, but the rationale depends on understanding the example's recruitment structure.
+- The phrase 'relative rate' is used for a comparison at a time point, while under proportional hazards the same relative comparison is said not to vary over time.
+- The lecture mentions Schoenfeld residual plots as another diagnostic but does not explain their construction or interpretation in this chunk.
+
+#### Questions to review
+- What is the difference between a survival outcome and an ordinary single-value outcome?
+- How does censoring allow an infant observed for only part of the follow-up period to contribute to the analysis?
+- What do the axes, curves, and numbers at risk mean on a Kaplan–Meier graph?
+- What assumptions underlie Kaplan–Meier and Cox analyses, and what can go wrong when those assumptions are not met?
+- When should a Cox model be preferred over stratified Kaplan–Meier curves?
+- How should competing risks be handled when death or another event prevents observation of HIV transmission?
+- Why did the interim zidovudine transmission rate of 8.3% differ so substantially from the anticipated control and treatment rates?
+- Why is survival analysis preferable to a yes-or-no logistic regression outcome at a fixed follow-up time?
+- How does censoring contribute information to survival analysis?
+- Why is median survival usually reported instead of mean survival?
+- What does it mean for hazard functions to cross, and what can that imply about treatment effects over time?
+- How should recurrent events such as repeated infections be defined and analyzed?
+- What are the consequences of choosing an inappropriate time origin or time scale?
+- What event, time origin, and time scale should be selected for a given clinical or occupational study?
+- Why does converting a time-to-event outcome into a yes/no outcome lose information?
+- How is survival at nine months interpreted when the survival curve is approximately 25%?
+- What is the difference between a survival probability at time t and the hazard at time t?
+- Why can the hazard change across months, years, or days, and how does the selected time unit affect interpretation?
+- Why must sample size planning focus on expected events and also account for covariates?
+- Why should survival-study sample size be tied to the expected number of events rather than only the number of participants?
+- How does selecting older or otherwise higher-risk participants change the expected event count and the generalizability of the study?
+- What is the difference between right truncation and left truncation, and what types of subjects are omitted by each?
+- What is the difference between right censoring and left censoring?
+- What condition must hold for subjects entering at time t to support valid hazard estimation under left truncation?
+- Why should investigators continue tracking participants who stop treatment or cannot attend study visits?
+- How do Type I, Type II, and random censoring differ operationally?
+- How does the chosen software define and code the failure indicator versus the censoring indicator?
+- Why does independent censoring matter for unbiased estimation of the hazard function?
+- When can censoring depend on a covariate without violating the relevant independence assumption?
+- How do competing events alter the interpretation of the observed hazard for the target event?
+- How is the Kaplan–Meier estimate updated when there are events, no events, and censoring between event times?
+- What do hash marks and confidence intervals communicate on a Kaplan–Meier curve?
+- Why can late entry by high-risk subjects make a Kaplan–Meier curve fall faster than it should?
+- What is the null hypothesis when comparing survival between two groups at a specified time?
+- How does the log-rank test use observed and expected event counts?
+- Why can confounding make a log-rank test produce an incorrect conclusion?
+- What information is missing when a report provides only Kaplan–Meier curves and a log-rank p-value?
+- What does a Cox coefficient of zero imply about the hazard ratio and survival experience?
+- When should a time-dependent covariate be added to a Cox model?
+- Why is it dangerous to fit a model with 16 covariates using data from only 20 people?
+- Why are covariate-by-log-time interactions useful for assessing proportional hazards?
+- What does a joint likelihood-ratio test with two degrees of freedom test in the expanded Cox model?
+- How can individual interaction p-values identify whether age or drug is responsible for nonproportional hazards?
+- Why might hazard functions cross when a drug effect changes over time?
+- Why must time to transplant and time to death be considered separately in the heart-transplant study?
+- Why did delayed enrollment of patients with ascites inflate the Kaplan–Meier survival estimate?
+- Under what censoring condition does the partial-likelihood estimator remain consistent in the example?
+
+#### Study summary
+- Survival analysis studies the time until a defined event, which may be death, HIV transmission, or another outcome.
+- A complete analysis requires defining the event, time origin, time scale, and method for determining when the event occurred.
+- Censoring preserves partial follow-up information when subjects have not experienced the event by their last observation.
+- Kaplan–Meier curves show estimated event probability over time, can compare study groups, and are commonly compared with a log-rank test.
+- Competing risks require special caution because one event can make another event impossible to observe.
+- In the HIV trial example, an unexpectedly low interim transmission rate prompted additional review and ultimately contributed to stopping the study and offering zidovudine to the control group.
+- Survival analysis models event occurrence over time and retains information from censored observations.
+- The key design elements are a precisely defined event, an explicit time origin, an appropriate time scale, and a clear record of event times.
+- Survival probability concerns whether the event time T is at least as large as a specified time t, while hazard concerns the event rate among those still at risk.
+- Median survival is usually more appropriate than mean survival because studies often end while some participants remain event-free.
+- Fixed-time analyses may miss early treatment advantages or delayed adverse effects that survival curves and hazard functions can reveal.
+- Start every survival analysis by clearly defining the event, the time origin, and the measurement scale.
+- The survival function describes the proportion remaining event-free, while the hazard function describes the instantaneous event rate at a particular time.
+- Hazard is time-scale dependent and may change over follow-up, so constant-risk assumptions require scrutiny.
+- Examples across cancer, herpes, occupational exposure, population mortality, and balloon bursting show that survival methods apply to varied events and origins.
+- Careful operational definitions are essential because ambiguous episode boundaries can create measurement error.
+- Study planning must account for censoring or unobserved events, expected event counts, and covariates intended for the model.
+- Survival-study power depends heavily on the number of observed events, so sample-size planning must account for event probability and participant risk.
+- Truncation can create selection bias by excluding people who are not observable because they entered after an earlier event or were never recorded.
+- Right censoring preserves information that a participant was event-free up to a known time, whereas left censoring means the event occurred before observation and its time is unknown.
+- Valid left-truncation analysis requires entrants at each time point to represent a random sample of people at risk at that time.
+- Independent censoring is the overarching assumption, and it must be evaluated rather than presumed for withdrawals, moves, or competing events.
+- Clinical studies commonly use random censoring because participants enroll at different times and therefore receive different amounts of follow-up.
+- When analyzing data, retain event-free follow-up through censoring and verify the software's required status-indicator convention.
+- Survival analysis depends on independent censoring so that the observed risk sets remain representative and hazard estimates are not biased.
+- Independence may be conditional on modeled variables such as age or disease severity, and censoring may vary between study arms.
+- Competing events must be recognized because a person who experiences one event can no longer experience another event of interest.
+- The Kaplan–Meier curve is built recursively by multiplying the prior survival estimate by one minus events over the current risk set.
+- Censoring removes subjects from future risk sets at their censoring time, while hash marks identify censoring on the plotted curve.
+- Late enrollment of high-risk subjects can distort Kaplan–Meier estimates because their later follow-up is unavailable.
+- Kaplan–Meier curves describe survival over time and mark censoring, but unequal entry or follow-up can bias them.
+- The log-rank test compares overall survival using observed versus expected events and accounts for censoring, but it generally produces only a p-value.
+- Log-rank analyses are vulnerable to confounding and may lose power when heavily stratified.
+- Cox proportional-hazards models add prognostic covariates and estimate multiplicative hazard effects.
+- A zero Cox coefficient means a hazard ratio of one, while exponentiating a coefficient gives its relative rate or risk.
+- The proportional-hazards assumption must be checked, and time-varying effects should be modeled when hazard ratios are not constant.
+- Cox models can incorporate changing measurements and medications but require enough observations relative to model complexity.
+- Test proportional hazards by comparing a model without time interactions to one with covariate-by-log-time interactions.
+- A nonsignificant joint test supports proportional hazards, whereas a significant result requires identifying which covariate's effect changes over time.
+- Time-dependent exposure models are important when treatment status changes during follow-up.
+- Kaplan–Meier estimates can be biased when recruitment changes who enters the risk set at later times.
+- In the cirrhosis example, delayed recruitment of patients with worse-prognosis ascites made the survival estimate too high.
+- Cox regression can still yield correct coefficients and relative-risk interpretation in the example when censoring is independent with respect to ascites.
+- The overarching lesson is to choose the correct survival-analysis method, define and measure time carefully, and incorporate protocol and recruitment changes into interpretation.
+
+#### Action items (structured)
+- Study team: The study team was asked to check potential explanations for the unexpectedly low zidovudine transmission rate and report back to the monitoring committee.
+
+#### Decisions (structured)
+- The Data and Safety Monitoring Board recommended stopping the mother–infant HIV transmission study after reviewing toxicity, transmission rates, and other information.
+- The trial leaders agreed to stop the study, and zidovudine was then provided to participants in the control group.
+- National guidelines in the United States and several other countries were modified after the trial decision.
+
+#### Open questions (structured)
+- What exactly do the Kaplan–Meier curves indicate about the event and transmission over time? [open]
+- How should the event, time origin, time scale, and event time be defined for a particular survival analysis? [open]
+- What statistical methods are appropriate when competing risks make a simple Kaplan–Meier interpretation unsuitable? [open]
+- Why was the observed zidovudine transmission rate substantially lower than the anticipated rate? [open]
+- How should the event be operationally defined in a study, rather than described only as a broad outcome such as mother-infant transmission? [open]
+- What should serve as the time origin for the study clock? [open]
+- Which time scale is appropriate for the outcome, such as years for lung cancer or days or hours for flu? [open]
+- Are covariates needed for the chosen survival analysis? [open]
+- How should the end of a primary episode be defined consistently in a herpes recurrence study by both clinicians and participants? [open]
+- Is the hazard constant over the study period, or does the risk of the event change with time? [open]
+- What clinically important difference should be expected between study arms when designing or interpreting the study? [open]
+- When subjects already experienced an event before enrollment, should they be included or excluded from the study? [open]
+- Does removing or retaining subjects with an event before enrollment preserve valid estimates of the target quantity? [open]
+- Is censoring independent when a participant withdraws, moves, or dies accidentally, given that the reason may be related to subsequent event risk? [open]
+- How should left-censored observations be handled in survival analysis? [open]
+- How should hazard be interpreted when death from another cause prevents the event of interest from occurring? [open]
+- What model or adjustment should be used when censoring is not independent? [open]
+- How should censoring that differs between study arms be handled? [open]
+- How should the analysis choose the time point at which to compare survival estimates, such as 24 or 72 weeks? [open]
+- How can survival analysis appropriately handle time-dependent covariates, recurrent events, and competing risks when simple Kaplan–Meier methods cannot? [open]
+- When is stratification preferable to including a prognostic factor as a covariate in a Cox model? [open]
+- How should proportionality be tested when the effect of a covariate changes over time? [open]
+- How should analysts choose the appropriate survival-analysis method and test for a particular study question? [open]
+- How should time-varying exposure or treatment changes be incorporated into survival models? [open]
+- What is the effect of delayed recruitment of patients with ascites on the validity of survival estimates? [open]
+
+#### Risks (structured)
+- [medium] Dropouts and loss to follow-up can affect sample-size planning and the available survival information.
+- [high] Competing events, such as an infant dying before possible seroconversion, prevent observation of the other event and complicate interpretation.
+- [medium] Excessive stratification can leave only a few people in each curve, making Kaplan–Meier estimates less robust.
+- [medium] Unexpectedly low transmission estimates may reflect randomization imbalance, demographic differences, data-quality problems, or other issues not revealed by Kaplan–Meier curves alone.
+- [high] A short-term study or an analysis at a single late time point can miss important differences in event trajectories and delayed harms.
+- [high] Using logistic regression at a fixed time point discards information from censoring and from when events occurred.
+- [high] Mean survival is inappropriate when not every participant has experienced the event by the end of follow-up.
+- [medium] Surrogate event measures may not reliably predict the direct event and are difficult to develop.
+- [high] Poorly defined event or time-origin criteria can introduce measurement error, especially when the end of an episode is determined partly by participants at home.
+- [high] Assuming a constant event risk across months can be unrealistic because hazard may be higher or lower at particular points in time.
+- [medium] Because the event may not occur during observation for every participant, sample size must be based on the expected number of events rather than only the total number enrolled.
+- [high] Estimating survival from a registry can underestimate the survival function because people whose cancer was never recorded are not observed.
+- [high] Left truncation can omit people with short survival, producing unusual estimates and limiting generalizability.
+- [high] Withdrawals are problematic if leaving the study is related to subsequent event risk, violating the independent-censoring assumption.
+- [high] Assuming that moving away is independent censoring can be wrong because people may move for last-ditch therapies or other event-related reasons.
+- [high] Using the wrong event-status variable in software can reverse the intended meaning because failure and censoring indicators may be opposites.
+- [high] Using the wrong software coding convention for the delta or censoring indicator can reverse the intended meaning of the event and censoring variables.
+- [high] Violation of independent censoring produces biased hazard estimates and undermines survival analyses and interpretation.
+- [high] Failing to condition on age when enrollment timing differs by age can make censoring non-independent and risk sets unrepresentative.
+- [high] Competing events such as myocardial infarction can preclude the event of interest and make a naive hazard interpretation misleading.
+- [medium] Enrolling high-risk subjects late can make a Kaplan–Meier curve fall faster than it should because later follow-up data are missing.
+- [high] Entering high-risk subjects late or having unequal follow-up can distort a Kaplan–Meier curve because later entrants do not contribute later survival data.
+- [high] A log-rank result can be confounded when prognostic factors are not balanced across treatment groups.
+- [medium] Stratifying on many or continuous prognostic factors can reduce statistical power by creating smaller samples within each stratum.
+- [high] A model with too many covariates relative to the available number of subjects may be unreliable.
+- [high] The Cox proportional-hazards model is inappropriate without modification when a covariate's hazard effect is not constant over time.
+- [high] Assuming proportional hazards when treatment effects change over time can produce misleading hazard comparisons.
+- [high] Ignoring changes in exposure or treatment over time can misrepresent survival relationships.
+- [high] Delayed and unrepresentative recruitment of sicker patients with ascites can make the Kaplan–Meier survival estimate too large because the later risk set is inappropriate.
+- [high] Changes in inclusion, exclusion, or recruitment protocols can cause substantial model misinterpretation if they are not incorporated into analysis.
+
+#### Follow-up draft
+Hi, Quick recap: The lecture used the mother–infant HIV trial to introduce survival analysis, where infant seroconversion is timed from birth in weeks, and the DSMB’s recommendation to stop the study led to zidovudine for the control group and modified national guidelines. Remember that survival analysis retains both whether and when an event occurs; censoring preserves follow-up until the last observation, while competing risks prevent the target event from being observed and require more than naive censoring. The survival function is S(t) = P(T ≥ t), hazard is the instantaneous event rate among those at risk, and Kaplan–Meier updates as Ŝ(t) = Ŝ(previous) × (1 − events/risk set); the log-rank test compares observed with expected events across follow-up. The Cox model is h(t|x) = h0(t)exp(β′x), with hazard ratio exp(β), so test proportional hazards using covariate-by-log-time interactions; independent censoring and representative risk sets remain essential, especially with delayed recruitment or changing treatment effects. That’s the recap.
+
+---
+
+# Summary F
+
+_(run2)_
+
+### Title: Survival Analysis in Clinical Trials
+
+#### Overview
+The lecture’s purpose was to build conceptual literacy in survival, or time-to-event, analysis and show how study design determines the method. It opened with an interim mother–infant HIV transmission trial, defining the event as an infant testing positive or seroconverting and using Kaplan–Meier curves to display transmission over follow-up. The first efficacy review occurred in February 1994 for mothers enrolled through December 1993 and their babies; complete follow-up at the scheduled endpoint was unavailable for infants who had died, were lost to follow-up, or had not yet reached that endpoint, although partial follow-up remained usable. The interim zidovudine estimate was much lower than the placebo estimate, but its relationship to the stated power target and desired reduction required clarification, as did the exact comparison. Randomization, demographic balance, and data quality were identified as possible explanations for the low estimate. After reviewing toxicity and transmission rates, the data safety monitoring board recommended stopping, the trial leaders agreed, zidovudine was provided to controls, and the United States Public Health Service and groups in other countries modified national guidelines. Death from another cause illustrated a competing risk because it prevents later HIV seroconversion. Trial-stopping, delayed-safety, flu-recovery, and fixed-duration yes/no examples motivated retaining both whether an event occurs and when. Before analysis, the event, time origin, time scale, and event-time definition must be specified; origins and scales must fit the study, from birth, enrollment, treatment initiation, surgery, or the end of a herpes episode to weeks, months, years, days, or hours. Survival was expressed as the probability of remaining event-free at an assessment time, while hazard was the instantaneous event rate among the risk set and could change over time. Sample size had to be based on expected events, accounting for dropout, loss to follow-up, covariates, age, and case mix. The lecture distinguished right and left censoring from right and left truncation, emphasized independent censoring and valid delayed entry, and warned that withdrawal, relocation, or treatment-related accidents may violate assumptions. It also required continued status tracking and checking whether software expects a failure or censoring indicator. Kaplan–Meier starts at one, multiplies conditional survival factors, and marks censoring with hashes; an example result was flagged because the reported value conflicted with the stated multiplication of conditional survival factors. Finally, pointwise comparison at one selected time was contrasted with log-rank’s observed-versus-expected counts across all times. Simple Kaplan–Meier and log-rank methods can be confounded by imbalance, lose power with thin strata, and omit time-dependent covariates, recurrent events, or competing risks. Cox modeling adds measured prognostic factors to a semiparametric multiplicative hazard and interprets exp(β) as a relative rate or risk, but requires enough subjects, independent censoring, and proportional-hazards testing. Adding age×ln(time) and drug×ln(time) produced a nonsignificant result
+
+#### Summary
+- The lecture focused on survival or time-to-event analysis, using an interim mother–infant HIV transmission trial to explain Kaplan–Meier curves, censoring, competing risks, and Cox models.
+- After reviewing toxicity and transmission rates, the data safety monitoring board recommended stopping the study; trial leaders agreed, zidovudine was provided to everyone in the control group, and public-health guidelines were modified.
+- The lecture emphasized retaining event timing and partial follow-up, recognizing competing risks, checking proportional hazards and independent censoring, modeling changing drug effects with time terms when needed, and viewing transplant analysis as two stages involving time to transplant and time to death.
+
+#### Core concepts
+- Time-to-event analysis, also called survival analysis, studies when an event occurs, and the event need not be death.
+- A survival-analysis outcome is not a single value because it incorporates both whether the event occurs and when it occurs for each participant.
+- The mother–infant HIV example defined the event as the baby testing positive or seroconverting.
+- A time-to-event analysis requires explicit choices about the time origin, time scale, and point at which the event is considered to occur.
+- Sample-size planning for transmission studies backs into the required number of events and must account for dropout and loss to follow-up.
+- Censoring allows partial follow-up to contribute information even when the participant has not experienced the event by the last observation.
+- Kaplan–Meier curves provide a simple way to estimate transmission or another time-to-event outcome over time and can be stratified by treatment arm or other factors.
+- A group-sequential design uses preplanned efficacy reviews during the study rather than waiting until the end.
+- Competing risks complicate interpretation because an event such as death can remove a participant from further risk of the target event.
+- The lecture contrasted Kaplan–Meier stratification with a richer Cox model that can include continuous and multiple variables.
+- The practical goal is conceptual literacy for evaluating manuscripts, protocols, and institutional review board materials and recognizing when a specialized statistician is needed.
+- Survival analysis treats an outcome as an event process whose timing matters, rather than only a binary event status.
+- The event can be death or a nonfatal endpoint such as infection, myocardial infarction, hospitalization, cancer recurrence, an HIV-positive test, an AIDS-defining event, transmission, or a biomarker crossing a cut point.
+- When an event can recur or never occur, analysis must distinguish a cleared infection from a genuinely new infection.
+- The same event-time mechanism is called failure analysis in engineering, with examples including light-bulb failure and computer crashes.
+- Event-time analysis can use a non-calendar-time exposure scale, illustrated by measuring a balloon's burst in milliliters of air and by similar quality-control measures.
+- Kaplan–Meier results can be part of a decision process about stopping studies.
+- A five-year yes/no logistic-regression comparison discards information contained in censoring and in when events occurred.
+- Frequent event measurement helps recover trajectory differences and retain information from censored participants.
+- Long-term follow-up can address whether an intervention changes later mortality, a question the lecturer associates more with epidemiologic work than with typical phase 3 trials.
+- The Cox-2 example links crossed hazard curves and a safety problem emerging around 12–18 months to limitations of short-term follow-up and possibly ordinary Kaplan–Meier viewing.
+- Associations from observational studies, such as lower blood pressure or BMI and eating blueberries being associated with longer life, may not be reproduced after randomization.
+- The survival framework parallels linear regression by combining a baseline hazard with the exponential of a linear predictor.
+- A valid time-to-event design requires an explicit event definition, time origin, and time scale before the event time is analyzed.
+- Every survival analysis needs a time origin that defines when the study clock begins, and the choice depends on the study question.
+- The time scale must match the phenomenon, with years used for long-latency cancer or population mortality, months for cancer survival or herpes recurrence, and days or hours for flu.
+- The event must be explicitly defined, whether it is death, recurrence, transmission, marriage, balloon bursting, or seropositivity.
+- Survival analysis follows progression from the origin to an event along a dimension usually represented by time, and variation in progression length is what is measured.
+- The survival function tracks the proportion still without the event by time t and, for death, decreases or stays flat rather than increasing.
+- The same survival result can be communicated as the probability of remaining alive or as the complementary proportion that experiences death by a stated time.
+- The hazard function represents instantaneous event risk, with small time-specific risks contributing to the overall survival curve.
+- Hazard can change over time, so treating the risk in month 1 as equal to the risk in months 6, 25, or 60 is often unrealistic.
+- The unit of time matters for an instantaneous hazard because each increment must be defined in months, days, weeks, or another unit.
+- Censoring and truncation are explicitly mentioned as settings in which the hazard can still be estimated.
+- Survival-study sample size should be based on the expected number of events, while covariates and their model implications also need consideration.
+- A binary logistic outcome can be used, but replacing time-to-event information with yes or no loses important detail.
+- The analysis is most relevant when event occurrence or timing varies, whereas the lecturer says it may not be needed if the event does not vary at all.
+- Because some participants may not experience the event during observation, sample size should be based on the expected number of events.
+- Sample-size planning must consider covariates and whether characteristics such as age change the likelihood of an event.
+- Case mix and selecting higher-risk or higher-exposure participants can be used to obtain more events, as in cardiovascular studies of people already at high risk of heart attack.
+- Truncation concerns who enters or is observable in the study, whereas censoring concerns incomplete observation of participants.
+- Right truncation can lead to an underestimate of the survival function because people whose events were never recorded are absent from the study.
+- Left truncation can omit short survivors through delayed entry, producing unusual estimates and affecting how broadly the results can be generalized.
+- Independent censoring or truncation is a central validity assumption, and left-truncated entry additionally requires a random sample of people at risk at the entry time.
+- Participants should continue to be tracked after they stop attending or treatment stops so the study can determine whether they are alive and whether the event occurred.
+- Independent censoring is presented as the key assumption for survival analysis.
+- Independent censoring requires the people at risk at each time point to be random samples of the population at risk at that time, and the condition must hold throughout the study.
+- The purpose of the independent-censoring assumption is to estimate the hazard function fairly, without bias, and in a valid way.
+- The lecturer warns that violating independent censoring biases the hazard estimate and can undermine the entire survival analysis.
+- Censoring can be independent conditional on a covariate, so it may depend on age or disease severity when that variable is included in the model.
+- Conditional independence means that among people with similar covariate values, censored subjects have similar subsequent-event risk to subjects with continued follow-up.
+- Censoring can differ between study arms, and the lecturer says there is a way to handle that difference.
+- The usual time origin is enrollment or treatment initiation, while the time axis is often time on study and may be age in nonrandomized studies.
+- The cancer-versus-myocardial-infarction example shows that another event can preclude the event of interest, so cancer risk must be interpreted among people still at risk of cancer.
+- Inference about the observed hazard requires interpreting the event rate among people under observation at each time as if censoring were independent.
+- Kaplan-Meier is presented as the workhorse survival method and is computed by multiplying a series of conditional survival probabilities.
+- Censored subjects contribute risk-set information until they leave the study, after which they are removed, and hash marks display their censoring times.
+- Entering high-risk subjects early or late can distort the Kaplan-Meier curve, with late entry described as making it fall faster than it should because later data are unavailable.
+- Censored observations still provide information about the risk of death or another event while people are on study, and hash marks identify those observations on the curve.
+- Kaplan-Meier curves can be drawn separately by intervention or stratification variables such as age categories.
+- A fixed-time survival comparison depends on the selected time point, so choosing 72 or 24 weeks leaves information from other times unused.
+- The log-rank test looks over all time points and compares observed event counts with expected counts to test overall survival.
+- The basic log-rank test has no covariate adjustment and requires two independent samples from the same population.
+- The lecture says log-rank methods account for censoring and truncation but not time-dependent covariates, recurrent events, or competing risks.
+- Confounding and unbalanced prognostic factors can make an apparent log-rank difference biased rather than treatment-related.
+- A stratified log-rank test compares data within strata, but stratifying into many small groups can reduce power, especially for a continuous factor.
+- The Cox proportional-hazards model is described as a semiparametric multiplicative framework combining a baseline hazard, regression coefficients, and prognostic factors.
+- The proportional-hazards assumption requires the relative rate to remain constant over time, and a changing effect must be modeled with a time element.
+- The general Cox framework can include time-dependent covariates and stratification factors, but the number of covariates must be supported by enough data on enough people.
+- In the age example, putting age in the Cox model conditions on age and is presented as a way to address the independent-censoring problem, although modeling is not a universal solution.
+- When the sample is too small to support generalization, the lecture says oversampling is common, while modeling can help but cannot solve every limitation.
+- The proportional-hazards check compares a model with age and drug only against an expanded model with time interactions.
+- Multiplying age and drug by the natural logarithm of time tests whether each covariate's hazard impact changes during follow-up.
+- A joint test with p=.94 supported proportional hazards in one case, whereas a partial likelihood-ratio p=.003 rejected it in another.
+- The second example localized the violation to the drug effect rather than age, so the drug effect needed a time term and the hazard curves might cross.
+- Exposure status must be allowed to change over time because long follow-up can include patients going on and off therapies.
+- The transplant example treats time to transplant and time to death as two distinct stages rather than analyzing death alone.
+- Model choice must match assumptions: Kaplan-Meier is simple but potentially misleading, while Cox proportional hazards requires checking proportionality.
+- The time scale, inclusion and exclusion rules, and recruitment changes can materially alter interpretation if they are not reflected in the analysis.
+- In the cirrhosis example, delayed enrollment of worse-prognosis ascites patients made later Kaplan-Meier risk sets unrepresentative, while Cox analysis was presented as retaining correct coefficients under independent censoring.
+- For Cox regression, independent censoring is presented as the condition required for consistency of the partial-likelihood estimator, with correct coefficients and relative-risk interpretation under that condition.
+- Survival analysis makes inference about event rates at a time point t for the people who are at risk at that time.
+- Median survival is the time by which 50% of people have experienced the event, whereas mean time to event is described as requiring everyone to have had the event.
+- Cox regression is characterized as generally the most robust survival method, although its assumptions can be difficult to test.
+- The Cox model provides a framework for inference and interpretation of covariates, but the covariates must have been measured and must be appropriate for the model.
+- Kaplan–Meier analysis is simple and commonly used, but it is not easy to use with covariates and lacks a sensible interpretation under competing risks.
+- The log-rank test is simple but cannot be used or correctly interpreted when time-dependent covariates or competing risks are present.
+- Recurrent events and competing risks may require a more specialized survival model rather than every standard survival-analysis form.
+- Risk sets provide the basis for estimating the event.
+- Truncation and censoring are central because participants enter and leave research studies and follow-up may end without an observed event.
+- The governing principle is that analysis must follow the clinical question, hypothesis, study design, sample, and protocol.
+
+#### Definitions
+- Time-to-event analysis is another name for survival analysis, with an event that may be death or another defined outcome.
+- In the HIV example, the event was infant HIV transmission operationalized as the baby testing positive or seroconverting.
+- The transmission rate was described as the number of babies who eventually seroconverted divided conceptually by the total number of infants of interest.
+- Censoring is the use of the follow-up information available up to the last observed time when the complete event outcome is not yet observed.
+- A group-sequential design is a design with preplanned interim efficacy reviews before the study ends.
+- In the example Kaplan–Meier graph, the y-axis showed probability of transmission from 0 to 40% and the x-axis showed weeks.
+- The p-value associated with the curves was described as coming from a log-rank test.
+- An interval-measured event is one whose exact time is unknown but is bracketed by two tests, such as negative at 12 weeks and positive at 24 weeks.
+- A competing risk is an event that prevents the target event from occurring or makes it impossible to know whether it would have occurred later.
+- In the lecture's model distinction, a Cox model can accommodate continuous and multiple variables, while Kaplan–Meier analysis is presented through curves and stratification.
+- Survival analysis is an analysis used to make inferences about event rates.
+- The hazard or event rate at time t is the rate among the subjects who are at risk at that time.
+- Median survival is the measure typically discussed when not every study participant has experienced the event.
+- Mean survival requires the event to have been measured in time for every subject in the study.
+- In the linear-regression analogy, β0 is the point where the line crosses when all X variables are zero.
+- β1 describes the relationship between x1 and the outcome given the other variables, while βp describes the relationship between xp and the outcome.
+- The survival model contains a baseline hazard together with the exponential of a linear regression component.
+- The X variables in a survival model may be called prognostic factors instead of covariates.
+- Survival time and time to event refer to essentially the same quantity, although different medical communities prefer different terms.
+- The outcome variable in this framework is the event time.
+- Lower-case t denotes the time axis or assessment time, capital T denotes the random time at which the event occurs, and t=0 is the time origin.
+- The survival probability discussed is the probability that T is greater than or equal to t, evaluated at times such as 6, 12, 18, and 24 months.
+- The time origin is the study-specific point at which the clock starts.
+- The time scale is the unit or dimension used to measure progression from the origin toward the event.
+- The event is the occurrence whose timing is being studied, such as death or a recurrent lesion.
+- Time to event is the elapsed interval from the chosen origin to the event, such as time from the end of a primary episode to first recurrence.
+- The survival function is the proportion of the population still without the event by time t.
+- For the death example, a monotonically decreasing survival curve can go down or remain flat but does not go back up.
+- Survival at time t can be expressed as the probability that the time to the event is greater than or equal to t.
+- The hazard function h(t) is the event rate at time t and is also described as an incidence rate or force of mortality.
+- A five-year survival probability of 30% corresponds to survival at 60 months of 0.3 and, in the example, 70% dying within five years.
+- The lecture defines right truncation as sampling only people who have had the event of interest.
+- Left truncation is delayed or controlled entry that can leave people with short survival unobserved.
+- Right censoring occurs when observation ends while the participant is known not to have had the event up to that point.
+- Left censoring occurs when the event is known to have happened before observation began, even though the subject is in the study.
+- Independent censoring requires withdrawal or censoring to be unrelated to the participant's subsequent risk of the event.
+- For left truncation, people entering at time t must be a random sample of the population at risk at that time.
+- Kaplan–Meier is described as handling right censoring well, while left censoring is presented as more difficult.
+- Capital T denotes event time, while the starred observation time is the event time for someone with an event or the follow-up time for someone censored.
+- A failure indicator may be called delta in textbooks, whereas a censoring indicator uses the opposite event-status convention.
+- Type I censoring follows everyone for the same fixed duration, whereas Type II censoring stops observation after a specified number or set of events.
+- Random censoring is more general than fixed-duration censoring because observation time varies with when participants enroll in clinical studies.
+- In the lecture's graph convention, a solid circle marks an event and an open circle marks censoring.
+- The notation delta is used by some textbooks for an indicator, but the lecturer warns that it may represent censoring depending on the convention.
+- The failure indicator and censoring indicator are described as exact opposites, so their software coding cannot be interchanged.
+- Independent censoring means that the observed at-risk group is a random sample of the population at risk at each time point.
+- Independent censoring given a covariate means that censored and continuously followed subjects with similar covariate values have similar subsequent-event risk.
+- Right censoring occurs when follow-up ends before the event is observed, such as being alive at the end of a death study or never starting to smoke by age 25.
+- A risk set is the group of people still at risk at a specified time, and its size decreases after events or censoring.
+- The time origin is usually enrollment or the start of treatment.
+- The time axis represents time on study, although age is often used as the time axis in nonrandomized studies.
+- A competing event is an event such as myocardial-infarction death that prevents the event of interest, such as a later cancer diagnosis, from occurring for that person.
+- The observed hazard is the event rate among subjects under observation and at risk at each time.
+- The Kaplan-Meier survival estimate is formed by multiplying sequential conditional-survival factors.
+- Censoring hash marks identify when observations were censored, while confidence intervals or bands can be drawn around the Kaplan-Meier curve.
+- A censored observation is represented by a hash mark on the survival curve and contributes information about event risk during the observed on-study period.
+- A Kaplan-Meier analysis is presented here as a curve-based survival representation that can be displayed separately for intervention or stratification groups.
+- At a chosen time t, the null hypothesis is that survival in group 1 equals survival in group 2.
+- The pointwise test statistic is a normal-based z formed from the difference between two survival estimates divided by the square root of their summed variances.
+- A log-rank test compares observed and expected event counts over time and returns a p-value for overall survival.
+- A stratified log-rank test performs the comparison within each stratum before producing the test result.
+- The basic Cox model contains a baseline hazard, regression coefficients, and prognostic factors.
+- In the stated Cox interpretation, a coefficient equal to zero corresponds to a hazard ratio of one and no difference in survival experience between the compared groups.
+- The exponential of a Cox coefficient is described as the relative rate or risk associated with that covariate.
+- The Cox model is called semiparametric because its baseline hazard is left completely unspecified for modeling.
+- The Cox model is called multiplicative because a covariate changes the hazard rate by a factor.
+- A time-dependent covariate is a covariate whose value can be entered at multiple times, such as changing weight or medication.
+- The proportional-hazards assumption means that the relative rate remains constant over time.
+- Proportional hazards means that a relative rate or hazard comparison does not vary over time.
+- A time-interaction term is a covariate multiplied by the natural logarithm of time, such as age×ln(time) or drug×ln(time).
+- The natural logarithm of time is used because of how the model is set up.
+- A Wald test and a partial likelihood-ratio test are named as methods for testing proportional hazards.
+- Schoenfeld residual plots are mentioned as another diagnostic for proportional-hazards assessment.
+- The baseline hazard is illustrated as the event rate at time t for the reference subject in the placebo arm, without ascites, with prothrombin time set to the stated reference value.
+- The treatment indicator is coded as 1 for the new treatment and 0 for placebo in the worked model.
+- Ascites is represented by presence or absence and is used as a severity-related covariate, with no ascites serving as the reference description.
+- The worked model distinguishes categorical covariates from a continuous prothrombin-time covariate.
+- A joint test of the two added time-interaction terms has 2 degrees of freedom.
+- Independent censoring is the censoring condition stated to be required for consistency of the Cox partial-likelihood estimator.
+- The displayed Cox output includes coefficients, standard errors, p-values, and 99% confidence intervals.
+- Median survival is the amount of time by which 50% of the people have had the event.
+- Mean time to event is distinguished from median survival and is described as requiring everyone to have had the event.
+- An event rate at time t is discussed as the rate among the people who are at risk at time t.
+- A risk set is the group used to estimate the event at a given point in the survival analysis.
+- Right censoring is explicitly listed as a type of follow-up structure that survival analysis can handle.
+- Left truncation is linked to participant entry and the question of whether the right people entered the study.
+- Censoring is described in terms of people leaving the study and whether an event is observed during the period of observation.
+- Proportional hazards is an assumption that must be assessed when fitting a Cox model.
+- Recurrent events and competing risks are identified as event structures that may make standard survival-analysis methods insufficient or difficult to interpret.
+
+#### Examples
+- The main case study was mother-to-infant HIV transmission, with infant seroconversion as the event.
+- The treatment comparison used placebo and zidovudine groups defined by which treatment the mothers received.
+- The first efficacy review occurred in February 1994 and was intended to include mothers enrolled through December 1993 and their babies.
+- The graph example displayed transmission probability from 0 to 40% over weeks and showed the number of babies in each treatment group below the curves.
+- At the interim point, complete 72-week information was unavailable for babies who had died, were lost to follow-up, or were not yet 72 weeks old.
+- A 24-week-old infant who had not seroconverted was used to demonstrate how partial follow-up can still contribute to analysis.
+- A separate mortality example involved enrolling people who were expected to be within six months of death but following some of them for 18 or 24 months because they did not die as expected.
+- An infant dying from a diarrheal infection at six weeks was used as a competing-risk example because later HIV seroconversion could no longer be observed.
+- The statement that a person who dies of cancer cannot later die of a heart attack illustrated mutually exclusive competing events.
+- The lecturer suggested that curves could be stratified by boys and girls in addition to treatment arm, but warned that many strata could leave only three or four people per curve.
+- A new cancer treatment was introduced at the end as a further hypothetical setting for survival analysis.
+- A Kaplan–Meier trial example involved leaders agreeing to stop studies, and the lecture connects Kaplan–Meier results with the decision process.
+- In the same historical example, zidovudine was provided to everyone in the control group and national guidelines were modified.
+- The lecturer notes that the original Kaplan–Meier paper was about a page and a half and resulted from an editor combining submissions from two disciplines into one paper.
+- A new cancer treatment illustrates the question of whether survival can be extended by five months relative to the current treatment.
+- An infection example may involve never having an infection, having a recurring infection, or determining whether the previous infection was cleared.
+- Engineering examples include light-bulb or computer failure, while a balloon-burst example measures the event by milliliters of air rather than elapsed time.
+- For hypertension, a five-year logistic-regression comparison could simply ask whether the groups differ and count events, but it would omit censoring information.
+- A flu-treatment example contrasts one drug resolving symptoms in three days with another resolving them in seven days, although a day-seven or day-ten measurement can make them look the same.
+- A blood-pressure intervention could lower hypertension while still requiring long-term follow-up to determine whether people die later or earlier than those who did not receive it.
+- The Cox-2 inhibitor example describes short-term studies without additional deaths, crossed hazard curves, and a problem beginning around 12–18 months.
+- An observational example associates lower blood pressure, lower BMI, and eating blueberries with longer life, but the lecturer warns that randomized studies may show a different outcome.
+- The BMJ October 2009 follow-up of the MIST trial examined pregnancy and the first live birth after an index miscarriage among women randomized to two approaches for handling spontaneous abortion.
+- An oncology study might use surgical resection, designation, or the start of chemotherapy as its time origin.
+- Clinical-trial study time may begin at diagnosis or when participants start treatment.
+- The pancreatic cancer example measured months from surgical treatment to death and showed about 25% of participants alive at nine months.
+- The nine-month pancreatic result was reported as S(9) equal to 25% or 0.25, meaning a 25% probability of surviving at least nine months after resection.
+- The five-year example translated survival at 60 months of 0.3 into a patient-facing statement that five-year survival is 30%.
+- Survival after myocardial infarction illustrated that risk can be especially high early and better later for people who live through the first 30 days.
+- The herpes study measured months from the end of a primary episode to first recurrence and required both clinicians and study subjects to help define when the episode ended.
+- The nickel-refinery occupational study used death from lung cancer as the event and estimated first exposure or beginning of employment as the origin, with years as the scale.
+- The population-mortality example used date of birth as the origin, years as the time scale, and age at death as the measured outcome.
+- The balloon demonstration treated bursting as the event, milliliters of air infused as the time-like scale, and zero milliliters as the origin.
+- A logistic remission model was presented as a possible yes-or-no alternative that would discard much of the timing information.
+- Cardiovascular studies may deliberately enroll people already at high risk of heart attack to increase the number of observed events.
+- A cancer-registry study illustrates right truncation because people whose cancer was never recorded in the registry never enter the observed sample.
+- Enrolling only people aged 65 or older omits people who died before 65 and therefore demonstrates left truncation.
+- In a five-year study that shuts down at the analysis date, participants who have not had the event are right-censored at the shutdown time.
+- Interviewing people about smoking onset beginning at age 12 creates left censoring when a 12-year-old reports already being a regular smoker but cannot identify the start date.
+- In the infection-study example, two children were already infected at enrollment, so the event was known but its timing before study entry was unknown.
+- An accidental death may initially appear to be acceptable censoring, but a treatment that causes balance problems could make a resulting fall related to the study risk.
+- Moving out of the study area is not automatically independent censoring because participants may relocate to seek last-ditch therapies.
+- When participants enroll from 0 to 6 months and maximum follow-up is 24 months, those reaching 24 months without an event are censored while their known event-free interval remains usable.
+- In the light-bulb example, observation stops for the remaining bulbs after four bulbs fail, so the remaining bulbs are censored.
+- In a five-year study where death is the event, patients who have not died by the end of follow-up are censored.
+- In the school-group example followed from age 5 to 25, students who never start smoking by age 25 are right-censored.
+- Allowing older subjects to enroll only after a study has begun gives them less possible follow-up than subjects enrolled earlier.
+- For the older-enrollment example, conditioning on age is described as restoring independent censoring, whereas omitting age produces biased estimates.
+- If cancer is the event of interest and people die first from myocardial infarction, those deaths remove people from the population still at risk of cancer.
+- In the polar-bear-plunge example, 3% of participants die from the plunge each year.
+- The same example assigns annual other-cause death rates of 2% for males and 1% for females.
+- After ten years, 25% of women and 24% of men in the example have died from the polar-bear plunge.
+- The one-percentage-point difference is used to illustrate how a misleading headline such as Polar bear plunge kills women can arise.
+- Over the decade, other-cause deaths are reported as 33.5% for women and 40% for men.
+- Because people who die from another cause cannot later die from the plunge, the male-female composition of people still available to experience the plunge changes over time.
+- The Kaplan-Meier numerical demonstration uses 20 at risk with 2 events at month 5, 18 at risk with no event at month 6, 15 at risk with 1 event at month 10, and 14 at risk with 2 events at month 13.
+- The lecturer's late-entry example has high-risk subjects enter late, after which the Kaplan-Meier curve drops too quickly because their later data are missing.
+- Hash marks on a Kaplan-Meier curve were given as the visual example of when participants were censored.
+- The pointwise comparison examples included placebo versus a new intervention and comparisons at 72 weeks or 24 weeks in the zidovudine trial.
+- Recurrent events were illustrated with a soccer player who might score zero goals or six goals.
+- The lecture noted that some log-rank variations place more emphasis on early events and others on late events.
+- Age was used as an example of a continuous prognostic factor that may be difficult to stratify when there are too few people in each age group.
+- A Cox-model time example was a Cox-2 inhibitor whose cardiovascular-event effect might differ after two months versus 18 or 24 months of use.
+- Repeated weight measurements and medication changes were examples of covariate information that can be entered at multiple times in a Cox model.
+- The age-bias example involved older subjects entering later, being censored earlier, and having insufficient time on study compared with younger subjects.
+- Following everyone for four years was presented as not necessarily sufficient, while oversampling older people later or simply putting age in the model were alternative responses.
+- The lecture used the historical progression from Kaplan-Meier in the 1940s to early Cox models in the 1970s as an example of methods evolving with recurrent outcomes in medicine.
+- The initial proportional-hazards model uses age and drug as covariates before any time terms are added.
+- The expanded model adds age×ln(time) and drug×ln(time) to test whether their effects change with follow-up.
+- In the proportional-hazards-compatible case, the time-term p-values were far above .05 and .01 and the joint test produced p=.94.
+- In the violating case, the partial likelihood-ratio test produced p=.003, indicating that proportional hazards could not be assumed.
+- The significant time-dependent effect in the violating case was associated with drug rather than age.
+- Long-term anti-retroviral therapy illustrates an exposure that may change because patients can go on and off treatment during extended follow-up.
+- The Stanford heart-transplant example concerns end-stage heart-disease patients seeking transplant after other therapies were unsuccessful.
+- The cirrhosis study compares a new treatment with placebo and includes a reported two-year Kaplan-Meier survival probability of .88 from one study.
+- Ascites is used in the cirrhosis example as an indicator of disease severity.
+- The displayed cirrhosis Cox model contains coefficients of -0.135, 1.773, and 0.346 for its covariates.
+- The lecture illustrates a two-year relative-rate calculation by plugging a subject's covariate values into the exponentiated model.
+- Physicians initially hesitated to enroll patients with ascites because of toxicity concerns, but recruitment became more representative after approximately one and a half years.
+- The enrollment illustration contrasts early entrants who could be followed for four years with late ascites entrants who could contribute only from one to about 2.5 years.
+- The lecturer compares Kaplan–Meier calculation to something that could be done on an envelope or napkin to illustrate its simplicity.
+- Having covariates is given as a situation in which Kaplan–Meier cannot be used easily.
+- Competing risks are given as a situation in which a Kaplan–Meier result may not have a sensible interpretation.
+- A simple log-rank comparison is given as an example that fails when time-dependent covariates or competing risks are present.
+- Recurrent events are used as the example requiring a more specialized survival model.
+- Imbalance in early baseline prognostic factors in the Table 1 information is given as an example that may bias an estimate.
+- People entering and leaving research studies illustrate why truncation and censoring must be handled explicitly.
+- The lecture gives a concrete design workflow that starts with clinical questions and hypotheses, proceeds through study design and sampling, and ends with analysis and conclusions.
+
+#### Formulas / steps
+- Compute the conceptual transmission rate as the number of infants who eventually seroconvert divided by the total number of infants of interest.
+- Plan sample size by working backward from the required number of transmission events and then accounting for dropout and loss to follow-up.
+- Define the target event operationally, such as an infant testing positive or seroconverting.
+- Choose the time origin, which in the infant example would typically be birth.
+- Choose a time scale appropriate to the population, with weeks used for the infant example.
+- Record the event time as exact when possible or as an interval when testing only establishes that the event occurred between visits.
+- Use censoring to retain an infant's known follow-up up to the last observation when the infant is still event-free or otherwise incompletely observed.
+- Read the Kaplan–Meier graph by identifying the treatment curves, the time axis, the transmission-probability axis, and the group counts shown below.
+- Identify the curve-comparison p-value as coming from a log-rank test.
+- In a group-sequential workflow, conduct preplanned interim efficacy reviews while a data monitoring board also monitors safety.
+- When an interim result is unexpectedly low, check randomization, demographics, data quality, and other explanations before relying on the curves.
+- Use simple stratified Kaplan–Meier curves for selected groups, but consider the richer Cox approach when continuous or multiple variables are needed and avoid overly thin strata.
+- Define the event operationally instead of using a vague label such as mother-infant transmission.
+- Set t=0 as the time origin at which observation for the event begins.
+- Choose a time scale and units appropriate to the event, such as years for long-term cancer follow-up or days and hours for flu.
+- Follow participants and record capital T, the time at which the event occurs.
+- Evaluate survival at selected assessment times by considering P(T ≥ t), including the example times of 6, 12, 18, and 24 months.
+- At each time t, evaluate the event rate among the individuals still at risk at that time.
+- Retain information from censored participants rather than discarding them as if only the final event status mattered.
+- Report median survival when not everyone has experienced the event, and use mean survival only when every subject's event has been measured in time.
+- Represent the hazard schematically as h(t | X) = h0(t) × exp(β1X1 + ... + βpXp), using the stated baseline hazard and exponential linear-predictor components.
+- Choose covariates or prognostic factors according to the analysis rather than assuming that every survival model must include them.
+- Use frequent event assessments when trajectory differences matter instead of collapsing follow-up into one late measurement.
+- First identify the event and establish clear criteria for what counts as that event.
+- Choose the time origin by specifying the point at which the study clock begins.
+- Choose a time scale whose units fit the process being studied, such as years, months, days, or hours.
+- For events whose endpoint is difficult to observe, make clinicians and participants agree on the endpoint definition before measuring time.
+- Measure the interval from the origin to the event, such as time from the end of a primary herpes episode to first recurrence.
+- Plot the proportion alive or otherwise without the event over the selected time scale.
+- Represent survival at time t as the probability that the measured time to the event is at least t, written as S(t) = P(time to event ≥ t).
+- Translate a selected survival value into an interpretable time statement, such as S(60 months) = 0.30 meaning five-year survival of 30%.
+- Describe the hazard using its time unit and the local interval, such as a 1% chance of dying in the following month at one year.
+- Assess whether hazard is constant or changing rather than automatically assuming equal risk at every time point.
+- Plan sample size around the expected number of events and consider the covariates intended for the model.
+- Plan sample size by estimating how many events are expected rather than using only the number of enrolled participants.
+- Add the planned model covariates and the expected event implications of age, exposure, and case mix to the sample-size assessment.
+- In a randomized trial, set the time origin to zero at the designated treatment or randomization point.
+- For left-truncated entry at time t, check that entrants are a random sample of the population at risk at t before estimating the hazard function.
+- For right censoring, record the participant as event-free through the last known observation time rather than treating the person as having experienced the event.
+- For a known event before observation begins, decide whether to include or exclude the participant and evaluate how that choice affects the estimate of interest.
+- For withdrawals, moves, and adverse events, investigate whether the reason is related to subsequent event risk and continue follow-up when possible.
+- Represent the observed time as the event time when an event occurs and as the follow-up time when the subject is censored.
+- Before analysis, identify whether the software requires a failure indicator or the opposite censoring indicator and code the data accordingly.
+- Set the time origin, commonly enrollment or treatment start, and select the time axis, such as time on study or age.
+- Initialize the Kaplan-Meier estimate at time zero as S_hat(0)=1 when nobody has yet experienced the event.
+- At each event time, identify the number at risk and the number of events before applying the survival update.
+- The Kaplan-Meier update is previous survival multiplied by one minus the number of events divided by the number at risk: S_hat(t)=S_hat(previous) × (1-d/n).
+- At month 5, 20 people at risk and 2 events give (1-2/20) × 1 = 0.9.
+- At month 6, 18 people are at risk and there are no new events, so (1-0/18) × 0.9 leaves survival at 0.9.
+- Subjects who experienced the event are removed from the risk set, while censored subjects remain counted only until their censoring time.
+- At month 10, three subjects censored between months 6 and 10 leave a risk set of 15, and one event gives (1-1/15) × 0.9, reported as approximately 0.84.
+- At month 13, one event from the prior risk set leaves 14 people at risk, two new events are used in the factor 1-2/14, and the lecturer reports a resulting estimate of 0.42.
+- The same general survival construction can be used when examining minus-one survival, as stated by the lecturer.
+- Confidence intervals or bands can be placed around the Kaplan-Meier curve, with several calculation methods referenced in the textbook.
+- Display censoring times as hash marks on the Kaplan-Meier curve.
+- For a selected time t, formulate the pointwise null hypothesis H0: S1(t) = S2(t).
+- Compute the pointwise z statistic as the difference between the two survival estimates divided by the square root of the sum of their variances.
+- Use a normal-based reference for the pointwise z statistic, while recognizing that the result depends on an arbitrary selected time point.
+- For a log-rank analysis, consider all time points and compare the observed number of events with the expected number.
+- Before relying on a basic log-rank comparison, check that the groups are independent samples from the same population and that important prognostic factors are balanced.
+- For a stratified log-rank test, compare the data within each stratum and then perform the test while checking whether the smaller strata have reduced power.
+- For a Cox model, include the baseline hazard, regression coefficients, and prognostic factors, adding covariates rather than necessarily stratifying on them.
+- Interpret a Cox coefficient by checking whether beta equals zero, which corresponds to hazard ratio one, and by using exp(beta) as the associated relative rate or risk.
+- If a covariate's effect changes over time, add a time element or time-dependent covariate and update values such as weight or medication status at multiple times.
+- Use software for Cox-model calculations and verify that the number of subjects supports the number of covariates before fitting a rich model.
+- Test the proportionality assumption and request Cox modeling or a variation when a report gives only a Kaplan-Meier curve and a p-value.
+- First fit the Cox model with age and drug as the covariates and no extra time elements.
+- Then add age×ln(time) and drug×ln(time) as time-interaction terms.
+- Use a Wald test or compare the reduced and expanded models with a partial likelihood-ratio test.
+- Use a two-degree-of-freedom joint comparison when the expanded model adds two interaction terms.
+- Interpret p=.94 as supporting the proportional-hazards assumption in the first case and p=.003 as evidence against it in the second case.
+- After a joint test indicates a violation, inspect the individual time-interaction p-values to identify which covariate is responsible.
+- Include a drug-by-time term when the drug effect changes over time rather than retaining a fixed drug effect.
+- Represent exposure changes over follow-up instead of assuming that treatment status remains constant.
+- For transplant data, separate the time-to-transplant process from the time-to-death process in two stages.
+- For the worked relative-rate calculation, set the subject's covariate values and evaluate the exponentiated coefficient combination, including the displayed exp(-0.135) component.
+- Under proportional hazards, the relative rate calculated at two years is treated as the same at later time points.
+- Before interpreting a Kaplan-Meier estimate, check recruitment timing and whether the risk set at each time point represents the intended population.
+- Before relying on Cox partial-likelihood consistency, verify the independent-censoring condition.
+- To estimate an event at time t, consider the risk set of people who are at risk at that time.
+- For survival summaries, distinguish median survival at 50% experiencing the event from mean time to event, which the lecture says requires everyone to have had the event.
+- When recurrent events occur, select a more specialized survival model rather than assuming every standard form is adequate.
+- When competing risks occur, determine an appropriate analysis and interpretation before relying on Kaplan–Meier or log-rank results.
+- For a Cox model, include covariates that have been measured and verify that they are the right covariates for the model.
+- Assess whether the proportional-hazards assumption holds, recognizing that testing Cox assumptions is difficult but doable for many of them.
+- Account for truncation at study entry and censoring during follow-up before interpreting the survival analysis.
+- Follow the sequence clinical question, hypothesis, study design, sample collection, analysis, and conclusion, and choose a different analysis if the planned one does not answer the question or match the protocol.
+
+#### Things to memorize
+- Time-to-event analysis is also called survival analysis, and its event may be death or another defined outcome.
+- For the HIV example, transmission rate is based on the number of infants who seroconvert relative to the total number of infants of interest.
+- The example Kaplan–Meier graph used weeks on the x-axis and transmission probability from 0 to 40% on the y-axis.
+- Censoring lets partially followed infants contribute information up to the time they were observed.
+- A group-sequential design uses preplanned interim efficacy reviews before the final analysis.
+- The p-value for the Kaplan–Meier curve comparison was associated with a log-rank test.
+- A competing event removes a participant from further risk of the target event, such as HIV transmission after death from another cause.
+- The Cox model can include continuous and multiple variables, whereas Kaplan–Meier analysis can become thin when many stratification factors are added.
+- The first efficacy review was in February 1994 and was intended to include mothers enrolled through December 1993 and their babies.
+- The illustrative trial reported an interim zidovudine transmission rate of 8.3% and ultimately stopped after DSMB review, with zidovudine given to controls.
+- Survival analysis is about events and when they happen.
+- The event in survival analysis does not have to be death; it can be infection, hospitalization, recurrence, transmission, or another defined endpoint.
+- A fixed five-year logistic comparison does not use all information supplied by censoring and event timing.
+- An event rate at time t is evaluated among people at risk at time t.
+- Median survival is generally preferred to mean survival when not everyone has had the event.
+- Mean survival requires a measured event time for every subject.
+- The survival model uses a baseline hazard and the exponential of a linear predictor.
+- Lower-case t is the analysis time, capital T is the random event time, and t=0 is the time origin.
+- The survival probability considered is P(T ≥ t).
+- Every study must specify what counts as the event, when the clock starts, and what time units are used.
+- Survival time and time to event are alternative labels for essentially the same concept.
+- A survival-analysis setup must specify the event, time origin, and time scale.
+- The survival function is the proportion of the population still without the event by time t.
+- For death, the survival curve is monotonically decreasing, meaning it can fall or remain flat but not rise.
+- In the pancreatic cancer example, survival at nine months was 25%, or 0.25.
+- In the five-year example, S(60 months) = 0.30, which was communicated as 30% five-year survival.
+- The complement of the five-year survival example was that 70% of patients died within the first five years.
+- The hazard function is an instantaneous event rate, also described in the lecture as an incidence rate or force of mortality.
+- At one year, the lecture's hazard example was 1% per month, while at one and a half years the following-month chance was 2%.
+- The scale illustration listed 120,000 deaths per year, 10,000 per month, 2,500 per week, and 357 per day to show why the time unit matters.
+- Survival-study sample size should be based on the expected number of events, with covariates also considered.
+- Survival-analysis sample size is based on the expected number of events, not simply the number of participants.
+- Right truncation means sampling only people with the event of interest and can lead to an underestimated survival function.
+- Left truncation can omit short survivors who die before the study's delayed entry point.
+- Right censoring means the event is not observed through the last follow-up point, whereas left censoring means the event occurred before observation began.
+- Independent censoring is the key assumption for these survival-analysis methods.
+- Valid left-truncation analysis requires entrants at time t to be a random sample of people at risk at t.
+- A solid graph symbol indicates an event, while an open circle indicates censoring.
+- Type I censoring uses the same follow-up duration for everyone, Type II stops after a set of events, and random censoring allows follow-up duration to vary.
+- Capital T is event time, while the starred observation time is event time for an event subject and follow-up time for a censored subject.
+- Failure and censoring indicators are opposite conventions, and textbooks may label the failure indicator delta.
+- Kaplan–Meier handles right censoring, while left censoring requires more difficulty than the standard right-censoring situation.
+- Check whether delta or the software indicator denotes failure/event or censoring, because the two indicators are opposites.
+- Independent censoring is the central survival-analysis assumption.
+- The at-risk subjects should be random samples of the population at risk at every time point, not only at baseline.
+- Censoring can be conditionally independent given modeled covariates such as age or disease severity.
+- Right-censored subjects contribute information until follow-up ends but do not experience the observed event during the study.
+- The usual time origin is enrollment or treatment initiation, and age is often used as the time axis in nonrandomized studies.
+- A competing event can remove someone from being at risk of the event of interest, as myocardial-infarction death does for later cancer.
+- The Kaplan-Meier estimate starts at one and is updated by multiplying the previous estimate by 1-d/n.
+- Censored subjects are removed from later risk sets at their censoring time, while prior events are already excluded from subsequent risk sets.
+- In the worked example, survival is reported as 0.9 after two events among 20 and approximately 0.84 after one event among 15.
+- Hash marks show censoring on the curve, and confidence intervals or bands can surround the Kaplan-Meier estimate.
+- Hash marks on a Kaplan-Meier curve indicate censored observations.
+- At a fixed time t, the pointwise null is equality of survival between the two groups.
+- The pointwise z statistic uses the difference in survival estimates divided by the square root of the summed variances.
+- The log-rank test examines all time points, compares observed with expected events, and produces a p-value for overall survival.
+- The basic log-rank test requires two independent samples from the same population and does not include covariates.
+- Simple Kaplan-Meier or log-rank analyses do not handle time-dependent covariates, recurrent events, or competing risks.
+- Stratifying into many small groups can reduce statistical power.
+- In the Cox model, beta equal to zero corresponds to hazard ratio one and exp(beta) represents the associated relative rate or risk.
+- The Cox model is semiparametric and multiplicative because its baseline hazard is unspecified and covariates alter hazard by a factor.
+- The proportional-hazards assumption requires the relative rate to remain constant over time.
+- A general Cox model can use time-dependent covariates and repeated measurements, but a model with 16 covariates and data on only 20 people is specifically discouraged.
+- Under proportional hazards, the relative rate or hazard ratio is assumed not to change over time.
+- The standard PH test adds age×ln(time) and drug×ln(time) interactions to the fixed age-and-drug model.
+- The named diagnostics are the Wald test, the partial likelihood-ratio test, and Schoenfeld residual diagnostics.
+- In the first example, p=.94 led the lecturer to assume proportional hazards.
+- In the second example, p=.003 indicated that proportional hazards could not be assumed.
+- The problematic time-varying effect in the second example was associated with drug, not age.
+- A significant drug-by-time effect can imply crossing hazard functions.
+- Longitudinal survival analyses must account for changes in exposure, such as patients going on and off anti-retroviral therapy.
+- The transplant example requires separate attention to time to transplant and time to death.
+- Kaplan-Meier is simple but potentially misleading, whereas Cox proportional hazards is a workhorse that must not be used without checking assumptions.
+- Protocol changes, recruitment procedures, and the definition of time must be reflected in the survival analysis.
+- Late recruitment of ascites patients can make Kaplan-Meier survival too large, while independent censoring supports correct Cox coefficients in the presented example.
+- Independent censoring is stated to be required for consistency of the Cox partial-likelihood estimator.
+- Under the stated Cox conditions, the lecturer says the coefficients and relative-risk interpretation will be correct.
+- An event rate at time t concerns the people who are at risk at time t, represented through risk sets.
+- Median survival is the time at which 50% of people have had the event.
+- The lecture distinguishes median survival from mean time to event and says mean time to event requires everyone to have had the event.
+- Survival analysis can handle right censoring and left truncation, but not every form automatically handles recurrent events or competing risks.
+- Recurrent events require checking whether a more specialized survival model is needed.
+- Kaplan–Meier is simple but is not easy to use with covariates and has no sensible interpretation under competing risks according to the lecture.
+- The log-rank test is simple but cannot be used or correctly interpreted with time-dependent covariates or competing risks.
+- Cox analysis requires checking proportional hazards and ensuring that the model contains the right measured covariates.
+- The central methodological rule is that analysis follows the study design and must match the question, hypothesis, and protocol.
+
+#### Confusing points
+- The lecture says the study was powered to detect a 33% transmission rate but also says the desired change was from 30% to 20%, so the relationship among these figures needs clarification.
+- The placebo estimate was described as around 30% and not excluded by its confidence interval, while the zidovudine interim estimate was 8.3%, but the exact comparison and interpretation were not fully developed.
+- Death is mentioned both as a reason complete 72-week information may be unavailable and as a competing risk, so the distinction between censoring and competing-risk handling needs review.
+- The claim that there is no sensible Kaplan–Meier interpretation for competing risks is stated without presenting the alternative analysis in this chunk.
+- The event time is exact for some outcomes such as death but only interval-known for HIV seroconversion between scheduled tests.
+- The interim graph cannot be interpreted as complete 72-week evidence because some infants were younger than 72 weeks or had incomplete follow-up.
+- The discussion linking all-cause mortality, competing risks, stratification, and the richer Cox model is compressed and requires clarification.
+- The lecture names basic assumptions and possible consequences of violating them but does not specify those assumptions in this chunk.
+- The term survival is used even when the event is not death, such as an HIV test, hospitalization, or a biomarker crossing a threshold.
+- A recurring infection is difficult to classify because the analysis must distinguish an unresolved infection from a newly acquired one.
+- The statement that both flu drugs look the same at day 7 or day 10 is counterintuitive because their symptom-resolution times differ.
+- The chunk says censored information is used but does not fully define the censoring mechanism or exactly how it enters the analysis.
+- The distinction between median and mean survival is easy to miss because mean survival is only supported when every event has been observed and timed.
+- The notation is potentially confusing because lower-case t indexes assessment time while capital T represents the random event time.
+- The time origin is not universal and may be surgery, diagnosis, or chemotherapy initiation in an oncology study.
+- The relationship between crossed hazard functions and what a Kaplan–Meier display would reveal is stated unclearly in the Cox-2 example.
+- A surrogate endpoint is not the direct event itself, and the chunk emphasizes that developing a useful surrogate is difficult.
+- The terminology around covariates and prognostic factors is potentially confusing because the lecturer says either terminology may be used and covariates may not always be needed.
+- The lecture says the y-axis may show either the percentage alive or the people who had the event while still calling the result a survival function, so the plotting convention needs clarification.
+- A survival probability and a hazard rate describe different aspects of risk: survival summarizes being event-free by a time point, whereas hazard describes an instantaneous rate at a particular time.
+- The lecture links the question of constant hazard to proportional-hazards assumptions but also emphasizes that equal risk across months is usually not true.
+- A hazard such as 1% per month is tied to the chosen unit, so it should not be interpreted without knowing whether the increment is a month, day, or year.
+- The herpes time origin is difficult because the end of the primary episode may not be obvious to either clinicians or participants at home.
+- The nickel example tolerated a small timing error because lung cancer takes decades to develop, indicating that acceptable origin imprecision depends on the disease context.
+- The lecture mentions censoring and truncation as relevant to estimation but does not explain their mechanics in this chunk.
+- The examples distinguish eventual death after sufficiently long follow-up from an event that has not occurred during the period of observation, which may require separate interpretation.
+- Right truncation and right censoring both use the word right, but truncation concerns which people enter or are observed while censoring concerns stopping observation after entry.
+- Left truncation and left censoring are distinct because left truncation can exclude short survivors before entry, while left censoring includes a subject whose event occurred before observation.
+- Being censored does not mean that no information exists, because the study still knows the participant was event-free up to the censoring time.
+- Independent censoring cannot be inferred automatically from an apparent accidental death or a participant moving away.
+- The reason for withdrawal or relocation matters because it may be related to subsequent event risk.
+- Type I, Type II, and random censoring differ by whether stopping is based on a fixed duration, a set of events, or variable observation time.
+- T and the starred observation time must not be confused because the latter is the event time only for participants who actually experience the event.
+- Failure-indicator coding and censoring-indicator coding are opposites, so software documentation must be checked before analysis.
+- The delta notation is not conventionally fixed in this lecture: it may label censoring in one source and the opposite failure indicator in another, so the software convention must be checked.
+- The distinction between ordinary independent censoring and censoring that is independent only after conditioning on age or another covariate needs careful review.
+- The statement that censoring can differ by study arm is presented as acceptable, but the specific handling method is not explained in this chunk.
+- The cancer example uses MI deaths as censoring-like removals, but conceptually those deaths are also events that preclude the cancer event, so the interpretation should be reviewed carefully.
+- The polar-bear-plunge example can make a one-percentage-point difference look like a sex-specific causal headline even though other-cause deaths change who remains at risk.
+- The month-13 Kaplan-Meier arithmetic is inconsistent: applying the stated prior estimate 0.84 and factor 1-2/14 gives 0.72, whereas the transcript reports 0.42.
+- The direction of the Kaplan-Meier distortion from early versus late entry of high-risk subjects is stated quickly and should be reviewed with the underlying risk-set logic.
+- The phrase minus one survival is ambiguous in the transcript and should be checked against the intended one-minus-survival quantity.
+- Review how censored observations can inform risk during observed follow-up while late entry and missing later follow-up can still distort a Kaplan-Meier curve.
+- Distinguish a pointwise survival test at one chosen time from a log-rank test that uses all time points.
+- Clarify why log-rank can account for censoring and truncation yet still fail to represent time-dependent covariates, recurrent events, or competing risks.
+- Review the tradeoff between stratifying to address prognostic factors and losing power because each stratum has fewer observations.
+- Distinguish adding a covariate to a Cox model from stratifying on it in a log-rank analysis, because the lecture presents them as different ways to address prognostic factors.
+- Keep separate the level of a covariate, such as age 20 versus 60, from an effect that changes with follow-up time, because the latter is the proportionality issue being modeled over time.
+- Review why following everyone for the same duration is not necessarily enough to correct age imbalance, while age adjustment or oversampling may help with the relevant question.
+- The lecture uses both relative rate and risk for exp(beta), so the precise interpretation of those terms should be reviewed.
+- The lecture says the natural log of time is used because of how the model is set up but does not explain the modeling rationale further.
+- Review the distinction between the Wald test and the partial likelihood-ratio test because both are offered for the same proportional-hazards assessment.
+- Schoenfeld residual diagnostics are named but not explained, so their relationship to the interaction-term tests remains to be reviewed.
+- The change in a covariate's hazard effect over time and a patient's change in exposure status over time are separate time-related problems that should not be conflated.
+- The transplant example says to use two stages but does not specify the stage-specific estimands or models.
+- The cirrhosis example requires reconciling why delayed ascites recruitment distorts Kaplan-Meier risk sets while the Cox argument depends on independent censoring.
+- The spoken sequence of coefficients -0.135, 1.773, and 0.346 does not clearly assign every number to a named covariate.
+- The baseline reference description combines placebo, no ascites, and a stated prothrombin-time value, so the exact coding and units should be checked.
+- The lecture uses relative rate, relative risk, hazard, and Kaplan-Meier survival probability in nearby examples, so these quantities need to be distinguished carefully.
+- The opening statements about being not doomed and not having a correctionering problem are garbled, so their intended methodological distinction is unclear.
+- The phrase about independent censoring being required at least with respect to asighties is unclear and does not specify the relevant variable or relationship.
+- Cox regression is called the most robust method, but the lecture does not define the comparison or explain precisely what robustness means.
+- The statement that Kaplan–Meier cannot be used with covariates is softened by the later phrase not easily, leaving the exact scope of the limitation unclear.
+- The lecture says competing risks make Kaplan–Meier interpretation nonsensible but does not specify the alternative estimand or method.
+- The phrase fancier survival model identifies the need for a specialized approach to recurrent events without naming which model to use.
+- The description of censoring includes garbled wording about having or not having the event, so the precise distinction between event occurrence and censoring needs review.
+- The warning that imbalance in Table 1 baseline prognostic factors can bias an estimate does not explain which estimate or corrective analysis is intended.
+- The statement that mean time to event requires everyone to have had the event does not explain how censoring affects the ability to estimate that quantity.
+
+#### Questions to review
+- How should the event, time origin, time scale, and event-time definition be specified for an infant HIV transmission analysis?
+- How is the transmission rate calculated, and why does sample-size planning need to work backward from the number of events?
+- How should the x-axis, y-axis, treatment curves, group counts, and confidence intervals on a Kaplan–Meier graph be interpreted?
+- How does censoring allow a 24-week-old infant who has not seroconverted to contribute information without being treated as having completed follow-up?
+- What explains the unexpectedly low 8.3% zidovudine transmission estimate, and which checks should be performed before interpreting it as a treatment effect?
+- How should competing risks such as death from another cause be handled when the target event can no longer occur?
+- When is a stratified Kaplan–Meier analysis sufficient, and when is a Cox model preferable because continuous or multiple covariates are needed?
+- What assumptions are required by the survival methods discussed, and what kinds of errors arise when those assumptions fail?
+- For a new cancer treatment, what should count as the event, what should be the time origin, and what time scale should be used?
+- What findings did the study team report after the DSMB asked them to investigate the unexpected interim results?
+- Why is survival analysis preferable to a five-year yes/no logistic-regression comparison when censoring and event timing are available?
+- What information from censored participants can survival analysis retain that a fixed endpoint would lose?
+- How do frequent assessments distinguish a three-day treatment trajectory from a seven-day treatment trajectory?
+- Does a blood-pressure-lowering intervention improve long-term mortality enough to accomplish its clinical goal?
+- How should survival follow-up detect a Cox-2 safety problem that emerges around 12–18 months after short-term studies show no additional deaths?
+- Would the observed association between lower blood pressure, lower BMI, or blueberries and longer life persist in a randomized study?
+- What makes a surrogate variable a useful predictor of a direct event, and why are such variables difficult to develop?
+- When is mean survival valid, and when should median survival be used instead?
+- How do lower-case t and capital T differ, and how is P(T ≥ t) evaluated at the selected assessment times?
+- How should mother-infant HIV transmission be operationally defined, and what should serve as the study's time origin?
+- Under what conditions should covariates be included in a survival analysis?
+- How should the time origin be selected for an oncology, occupational, population-mortality, or recurrence study?
+- How should the time scale be chosen when the process unfolds over years, months, days, or hours?
+- Why must the event definition be agreed upon before measuring time to event?
+- How is the survival function interpreted when S(9) equals 0.25 or S(60) equals 0.30?
+- How does the instantaneous hazard relate to the survival curve, and what changes when hazard is not constant?
+- What do censoring and truncation mean operationally, and how do they affect hazard estimation?
+- Why does a yes-or-no logistic remission outcome lose information compared with a time-to-event analysis?
+- How should a study determine its expected event count and incorporate planned covariates into sample-size considerations?
+- What constitutes a clinically important difference between study arms for the chosen time-to-event outcome?
+- Why should survival-analysis sample size be based on the expected number of events rather than only the total sample size?
+- How do covariates, age, exposure, and case mix change the expected event count?
+- Why can right truncation from a registry lead to an underestimate of the survival function?
+- What condition on the entering population makes left-truncated hazard estimation valid?
+- How should participants whose event occurred before enrollment be handled, and how might inclusion or exclusion affect the target estimate?
+- Why must withdrawal be unrelated to subsequent event risk, and why is moving not automatically independent censoring?
+- How do Type I, Type II, and random censoring differ in their stopping rules and follow-up durations?
+- Does the software require a failure indicator or a censoring indicator, and what value represents an event?
+- How do failure/event and censoring indicators differ, and how can you determine which convention a software package expects?
+- What exactly must be true of the at-risk group at every time point for censoring to be independent?
+- Why can censoring depend on age or disease severity while still being considered independent after conditioning on the covariate?
+- How could different censoring patterns across study arms be handled without violating the survival-analysis assumptions?
+- Why does changing the age eligibility criteria after a trial begins create biased estimates if age is not included in the model?
+- When another cause such as MI prevents cancer from occurring, what population should the cancer hazard describe?
+- Why do the polar-bear-plunge numbers produce a misleading headline when women have 25% plunge mortality and men have 24%?
+- Starting with survival equal to one, can you reproduce the month-5, month-6, month-10, and month-13 Kaplan-Meier calculations and resolve the reported 0.42?
+- What information does a censored observation contribute before it leaves the study, and how is its censoring time shown on the curve?
+- How does late entry of high-risk subjects affect the Kaplan-Meier curve when later follow-up data are unavailable?
+- What confidence intervals or bands can be placed around a Kaplan-Meier curve, and how are their calculation methods distinguished?
+- Why does choosing a single comparison time, such as 24 or 72 weeks, fail to use all available survival information?
+- Can you write the pointwise null hypothesis and derive the z statistic from the two survival estimates and their variances?
+- How does the log-rank test use observed and expected event counts across all time points?
+- What assumptions make a basic log-rank comparison vulnerable to confounding or imbalance?
+- When would an early-event-weighted or late-event-weighted log-rank variation be relevant?
+- Why can stratifying a continuous prognostic factor reduce power, and when might adding it as a Cox covariate be preferable?
+- Which outcome structures cannot be handled by the simple Kaplan-Meier or log-rank approach, and why do they require more complex methods?
+- How should beta equal to zero, hazard ratio one, and exp(beta) be interpreted in a Cox model?
+- How should the Cox model change when the effect of age, treatment duration, weight, or medication changes over time?
+- Why is testing the proportionality assumption necessary, and what is the procedure for doing so?
+- How many covariates can be supported by the available sample, and what additional analysis should be requested when only Kaplan-Meier and a p-value are reported?
+- How do the age×ln(time) and drug×ln(time) terms test the proportional-hazards assumption?
+- Why is the natural logarithm of time used in the interaction terms?
+- How do the Wald test and partial likelihood-ratio test differ, and what does the two-degree-of-freedom joint test evaluate?
+- Why did p=.94 support assuming proportional hazards while p=.003 indicated a violation?
+- How do the individual interaction p-values show that drug, rather than age, caused the proportional-hazards violation?
+- How would Schoenfeld residual plots supplement the interaction-term approach?
+- How should on-and-off anti-retroviral exposure be encoded in a survival model?
+- Why must the transplant analysis include time to transplant as well as time to death?
+- How does late ascites recruitment change the Kaplan-Meier risk set and inflate the survival estimate?
+- Under what censoring condition does the Cox partial-likelihood estimator retain correct coefficients in the cirrhosis example?
+- How is the two-year relative rate calculated from the displayed coefficients, and why would it remain unchanged at three years under proportional hazards?
+- What exact reference covariate pattern defines the baseline hazard in the cirrhosis model?
+- What must censoring be independent of for the Cox partial-likelihood consistency statement to hold?
+- How is an event rate at time t estimated from the people in the risk set?
+- What is the precise distinction between median survival and mean time to event, and when can each be estimated?
+- Which specialized survival models are appropriate for recurrent events?
+- What analysis and interpretation should be used when competing risks are present?
+- Why are Kaplan–Meier curves difficult to use when covariates are present?
+- Under what conditions is the log-rank test appropriate, and why do time-dependent covariates or competing risks undermine it?
+- How should the proportional-hazards assumption be assessed in a Cox model?
+- How should analysts choose the right measured covariates and address imbalance in baseline prognostic factors?
+- How do truncation at entry and censoring during follow-up affect study inclusion and interpretation?
+- How should the study design and protocol determine the final analysis?
+
+#### Study summary
+- Survival or time-to-event analysis studies the timing of an event that may be death, transmission, or another endpoint rather than a single fixed outcome value.
+- In the mother–infant HIV case, transmission was counted through infant seroconversion, with sample size driven by expected events and adjusted for dropout and loss to follow-up.
+- Kaplan–Meier curves plot transmission over weeks, show treatment-group counts, and use censoring so incomplete follow-up remains informative.
+- The interim HIV trial illustrated why partial follow-up, periodic testing, deaths, and loss to follow-up complicate interpretation of a 72-week curve.
+- Competing risks must be recognized because death or another event can eliminate the possibility of observing the target event.
+- Kaplan–Meier analysis is simple and widely used, while Cox models provide more flexibility for continuous and multiple covariates but require attention to assumptions.
+- In the historical example, interim curves prompted additional checks, the DSMB recommended stopping after reviewing toxicity and transmission, trial leaders agreed, controls received zidovudine, and guidelines changed.
+- Survival analysis is designed for event outcomes where both whether the event occurs and when it occurs matter.
+- Its advantage over a fixed binary endpoint is that it uses event timing and information from censored participants.
+- The event may be death, infection, recurrence, hospitalization, transmission, a test result, or another explicitly defined endpoint.
+- Event rates are evaluated among people at risk at time t, and the survival probability is framed as P(T ≥ t).
+- Median survival is generally appropriate when not everyone experiences the event, whereas mean survival requires complete measured event times.
+- The model is introduced as a regression-like structure with a baseline hazard and an exponential linear predictor.
+- Study design must specify the event, time origin, time scale, and event occurrence time before analysis.
+- The examples show why long-term and time-sensitive follow-up can reveal delayed safety or mortality patterns that a single late measurement may hide.
+- Survival analysis measures variable time from a carefully selected origin to a clearly defined event.
+- The origin and time scale must be chosen to fit the study, such as surgery and months for pancreatic cancer or birth and years for population mortality.
+- The survival function reports the proportion still event-free at a time point and is nonincreasing for the death example.
+- The hazard function reports the instantaneous event rate, which may change over time and must be interpreted using an explicit time unit.
+- Precise endpoint definitions are especially important when the event boundary depends on participant or clinician judgment, as in the herpes example.
+- Binary outcomes can replace time-to-event analysis but sacrifice information about when the event occurred.
+- Because some participants may not experience the event during observation, sample size should be based on expected events and should account for covariates in the intended model.
+- The central planning principle is to size survival studies around expected events and to account for covariates, age, and case mix.
+- Truncation changes who is represented in the study: right truncation can miss unrecorded cases, while left truncation can miss people who die before delayed entry.
+- Right censoring records that no event was observed through the last follow-up time, whereas left censoring records an event known to have occurred before observation.
+- Independent censoring is the key assumption, so reasons for withdrawal, death, or relocation must be considered rather than assumed irrelevant.
+- Left-truncated entry is valid when entrants are a random sample of people at risk at that entry time, supporting valid hazard estimation.
+- Follow-up should continue after treatment discontinuation or missed visits so event and vital status remain known.
+- Remember the graph and notation conventions: solid symbols mark events, open symbols mark censoring, and observed time is event time or censoring follow-up time depending on status.
+- Software may use either failure or censoring indicators, which are opposite conventions and must be verified before analysis.
+- Survival analysis depends on independent censoring: at each time, the observed risk set should represent the population still at risk.
+- Censoring may depend on measured covariates such as age or disease severity if independence holds within comparable covariate groups and the variables are modeled.
+- Right-censored observations remain informative until their censoring time, and the time origin and time axis must be defined consistently.
+- Competing events such as MI death can remove people from the population at risk of cancer, so the cancer hazard must be interpreted among those still at risk.
+- The polar-bear-plunge example shows how other-cause mortality changes the composition of people available to experience the event of interest and can create misleading comparisons.
+- Kaplan-Meier estimation starts at survival one and repeatedly multiplies the previous estimate by one minus events divided by the current risk set.
+- Censoring is displayed with hash marks, uncertainty can be shown with confidence intervals or bands, and late high-risk entry can distort the curve.
+- Kaplan-Meier curves use information from censored observations, but late entry and unequal follow-up can bias their shape.
+- A pointwise survival test uses a normal-based z statistic at one chosen time, whereas log-rank uses observed-versus-expected events over all time points.
+- Log-rank is useful but basic, because it has no covariates, requires independent samples from the same population, and can be distorted by confounding or imbalance.
+- The log-rank output may be only a p-value, so a Kaplan-Meier curve and p-value may be insufficient when effect size or covariate relationships matter.
+- The Cox model adds prognostic covariates to a semiparametric multiplicative hazard framework and interprets exp(beta) as a relative rate or risk.
+- Cox modeling can incorporate time-dependent covariates and stratification factors, but the proportionality assumption must be tested and the sample must support the model size.
+- Age adjustment may address age-related censoring imbalance, but following everyone for the same duration or modeling cannot solve every design and generalizability problem.
+- Test proportional hazards by comparing a fixed age-and-drug Cox model with one containing age-by-log-time and drug-by-log-time interactions.
+- Use Wald, partial likelihood-ratio, or Schoenfeld-residual diagnostics, with the examples producing p=.94 for compatibility and p=.003 for violation.
+- When proportional hazards fails, identify the offending covariate; here the drug effect changed over time while age did not.
+- Changing exposure status must be modeled, and the transplant example requires separating time to transplant from time to death.
+- Kaplan-Meier is simple but can mislead, while Cox is a workhorse only when proportionality, time measurement, and recruitment changes are handled correctly.
+- The cirrhosis example uses treatment versus placebo, ascites severity, and prothrombin time in a Cox model.
+- Late recruitment of ascites patients made later Kaplan-Meier risk sets unrepresentative and pushed the survival estimate upward.
+- The lecture concludes that independent censoring supports correct Cox coefficients and that survival analysis concerns event rates among subjects at risk at time t.
+- Survival analysis focuses on event rates among people at risk, with risk sets supporting event estimation.
+- Remember that median survival corresponds to 50% experiencing the event, while the lecture distinguishes mean time to event as requiring all people to have experienced it.
+- Cox regression is presented as broadly robust and useful for measured covariates, but independent censoring, appropriate covariates, and assumptions such as proportional hazards still require attention.
+- Kaplan–Meier and log-rank methods are simple, but covariates, time-dependent covariates, and competing risks can make them difficult to use or interpret.
+- Recurrent events may require a specialized survival model, while truncation and censoring must be considered as people enter and leave follow-up.
+- The key methodological rule is that the clinical question generates the hypothesis, the design and sample must support it, and the analysis must match the question and protocol.
+- If a selected analysis cannot answer the clinical question or test the hypothesis appropriately, it should be replaced with a different analysis.
+
+#### Action items (structured)
+- Study team: The study team was asked to check the possible explanations and data items and report back to the monitoring board.
+- If the course articles were not provided, look up the BMJ October 2009 follow-up of the MIST trial. [inferred]
+- Before analyzing a time-to-event study, specify the operational event, time origin, time scale, and when the event occurs. [inferred]
+- Follow participants and record how many events occur and when, rather than relying only on a final yes/no outcome. [inferred]
+- Verify whether the survival-analysis software expects a failure/event indicator or a censoring indicator before coding the data. [inferred]
+- Continue tracking enrolled participants after withdrawal, relocation, inability to attend, or treatment discontinuation so their vital and event status remains known. [inferred]
+- Test the proportionality assumption before relying on a proportional-hazards model.
+- When a report provides only a Kaplan-Meier curve and a log-rank p-value, ask for additional analysis such as Cox modeling or a variation.
+- Use statistical software for Cox-model calculations and effect testing rather than trying to perform the calculations by hand.
+- Post questions to the course board while it is open. (deadline: about 2 weeks)
+- Complete the course evaluations.
+- Send examples that could be added to the class.
+- online viewers: Online viewers should send questions to the separate board and ensure that they reach the appropriate faculty group.
+- The question boards are open for about two weeks. [inferred]
+- A summary lecture is planned for mid-December. [inferred]
+
+#### Decisions (structured)
+- The data safety monitoring board recommended stopping the study after careful review of toxicity and transmission rates. (owner: Data safety monitoring board)
+- The trial leaders agreed to stop the studies after the DSMB recommendation. (owner: Trial leaders)
+- Zidovudine was provided to everyone in the control group after the study was stopped. (owner: Study team)
+- The United States Public Health Service and groups in other countries modified their national guidelines. (owner: United States Public Health Service and other groups)
+- The trial leaders agreed to stop the studies in the historical example. (owner: trial leaders)
+- The herpes recurrence study example used months from the end of the primary episode as its time scale.
+- For the first interaction test, the analysis assumes proportional hazards because the two-degree-of-freedom test returned p=.94.
+- For the nonproportional case, time must be included in the model so the changing drug effect can be represented.
+- The transplant analysis is treated as two stages involving time to transplant and time to death.
+
+#### Open questions (structured)
+- What specifically explained the unexpectedly low 8.3% zidovudine transmission rate, given the possible randomization, demographic, and data-quality issues? [open]
+- How should the analysis distinguish ordinary censoring from death as a competing risk when an infant dies before possible seroconversion? [open]
+- What assumptions underlie the Kaplan–Meier and Cox methods, and what specifically goes wrong when those assumptions are not met? [open]
+- What did the study-team checks find before the DSMB ultimately recommended stopping the study? [open]
+- Whether lowering blood pressure produces the intended long-term mortality benefit, and therefore accomplishes the intervention's goal, remains unresolved. [open]
+- Whether associations from observational studies such as lower blood pressure, lower BMI, or eating blueberries persist after randomization remains uncertain. [open]
+- How to operationally define an event such as mother-infant HIV transmission is left open by this chunk. [open]
+- What follow-up or analysis best detects a safety problem when hazard curves cross and harm begins 12–18 months later is not resolved here. [open]
+- When covariates are needed in a particular survival analysis is not specified. [open]
+- What time origin should be selected for a particular study so that the clock starts at the most meaningful point? [open]
+- Is the hazard constant across the chosen time scale, or does event risk change at different time points? [open]
+- How should the end of a primary herpes episode be defined consistently when patients are managing the episode at home? [open]
+- What difference between study arms is clinically important enough to matter? [open]
+- Which covariates should be included in the model and reflected in sample-size planning? [open]
+- How should age, exposure, and case mix be incorporated when planning the expected number of events? [open]
+- For a participant whose event occurred before enrollment, should the participant be counted or excluded, and which choice preserves a valid estimate? [open]
+- Are people entering at time t truly a random sample of the population at risk at that time? [open]
+- Is a particular withdrawal or relocation independent of subsequent event risk, or is it related to the event of interest? [open]
+- Which event-status indicator convention does the analysis software use? [open]
+- Which specific model should be used when censoring is not independent, beyond the Kaplan-Meier discussion in this chunk? [open]
+- How should proportional hazards be tested when the starting model contains no time elements? [open]
+- What methods should replace simple Kaplan-Meier or log-rank analyses when recurrent events, competing risks, or time-dependent covariates are present? [open]
+- How should a continuous prognostic factor be handled when there are too few people per stratum to preserve statistical power? [open]
+- How should patients who go on and off therapy be represented as time-varying exposures in the survival model? [open]
+- What exact stage-specific modeling procedure should be used for the transplant and death processes? [open]
+- How are Schoenfeld residual diagnostics used to assess proportional hazards? [open]
+- What analysis and interpretation should be used when competing risks are present? [open]
+- Which specialized survival model is appropriate for recurrent events? [open]
+- Does the Cox model satisfy the proportional-hazards assumption? [open]
+- What exactly must censoring be independent of in the stated Cox consistency condition? [open]
+- Which covariates are the right covariates to include in the Cox model, and how should baseline imbalance be handled? [open]
+
+#### Risks (structured)
+- [medium] Dropouts and loss to follow-up can reduce available outcome information and must be accounted for in sample-size planning.
+- [medium] Incomplete 72-week follow-up can occur because infants die from other causes, are lost to follow-up, or are not yet old enough.
+- [high] Death from another cause is a competing risk because the infant can no longer experience the target HIV-seroconversion event.
+- [high] The unexpectedly low transmission estimate could reflect randomization problems, demographic imbalance, or unclean data that a Kaplan–Meier curve alone cannot diagnose.
+- [medium] Many stratification factors can leave only three or four people in each curve, making the Kaplan–Meier estimate insufficiently robust.
+- [medium] Periodic testing can make the event time interval-based rather than exact because positivity is only known between visits.
+- [medium] Violating the method assumptions can lead to unspecified analytical problems.
+- [high] Reducing a study to a five-year yes/no logistic endpoint can discard censoring and event-timing information.
+- [medium] Measuring flu recovery only at day 7 or day 10 can make a three-day treatment and a seven-day treatment appear equivalent.
+- [high] Short-term follow-up may miss delayed safety problems, as the Cox-2 example places a problem around 12–18 months.
+- [medium] A surrogate variable may not directly measure the event, and the lecturer notes that such variables are difficult to develop.
+- [high] Reporting mean survival when not every subject has a measured event risks an unsupported summary.
+- [medium] An imprecise event definition or time origin can make a time-to-event analysis ambiguous.
+- [medium] An imprecisely defined time origin or episode endpoint can create measurement error, such as shifting the measured interval by half a month.
+- [medium] The event may not occur during observation, so not every participant will contribute an observed event.
+- [high] Assuming the same event risk in month 1 and month 60 can be misleading because risk may be higher or lower at particular times.
+- [medium] Reducing a time-to-event outcome to a yes-or-no logistic outcome loses substantial timing information.
+- [medium] Sample-size planning can be inadequate if it ignores the number of events expected rather than considering only the total number of participants.
+- [medium] Hazard statements depend on the unit of time, so the instantaneous increment must be specified as months, days, weeks, or another unit.
+- [medium] Planning on participant count rather than the expected number of events may leave too few events for the intended survival analysis.
+- [high] Right truncation can underestimate the survival function because people whose cancer or event was never recorded are never observed in the registry-based study.
+- [high] Left truncation can produce distorted estimates and limit generalizability by omitting people who died before the delayed entry age.
+- [high] Withdrawal or censoring related to later event risk violates the independence assumption and can undermine the analysis.
+- [high] Assuming that relocation is independent censoring is risky because participants may move to obtain last-ditch therapies.
+- [high] A therapy that causes balance problems can make an apparently accidental fall related to the outcome or treatment rather than independent censoring.
+- [high] Using the wrong failure-versus-censoring indicator convention can miscode event status in the software.
+- [high] Using the wrong failure-versus-censoring indicator convention in software can reverse the meaning of the data coding.
+- [high] Non-independent censoring can bias the hazard estimate and create major analysis and interpretation problems.
+- [high] Omitting age in the older-enrollment example makes the risk sets nonrepresentative and produces biased estimates.
+- [high] Treating deaths from myocardial infarction as ordinary noninformative censoring can obscure that they preclude a later cancer event.
+- [medium] Changing population composition through other-cause deaths can produce misleading sex-specific event rates and sensational headlines.
+- [medium] Late entry of high-risk subjects can make the Kaplan-Meier curve inaccurate and cause it to fall faster than it should.
+- [high] Late entry by high-risk subjects can make the Kaplan-Meier curve fall faster than it should because later follow-up data are unavailable.
+- [high] Confounding or unbalanced prognostic factors between treatment groups can produce an inaccurate or biased log-rank result.
+- [medium] Stratifying a continuous factor into many small groups can substantially reduce power.
+- [high] Using simple Kaplan-Meier or log-rank methods when time-dependent covariates, recurrent events, or competing risks matter can omit important outcome structure.
+- [high] Applying a proportional-hazards model when the relative rate changes over time violates the model's stated assumption.
+- [high] A covariate-rich Cox model can be unreliable when there are too few subjects for the number of covariates.
+- [high] Age imbalance can bias Kaplan-Meier results because older subjects entering later may be censored earlier and have insufficient time on study.
+- [medium] A Kaplan-Meier curve plus a log-rank p-value may not communicate the size or substantive relationship of a difference.
+
+#### Follow-up draft
+Quick recap:
+
+This lecture used the interim mother–infant HIV transmission trial, including its 8.3% interim zidovudine estimate, the data safety monitoring board’s recommendation to stop, and zidovudine for controls, to introduce survival or time-to-event analysis. Remember that survival analysis retains both whether and when an event occurs: define the event (infant HIV positivity or seroconversion), time origin, time scale, and event-time rule; censoring preserves partial follow-up, death before seroconversion is a competing risk, independent censoring is required, and sample size is based on expected events. Memorize S(t)=P(T≥t), Ŝ(0)=1, and Ŝ(t)=Ŝ(previous)(1−d/n); hash marks show censoring, log-rank compares observed with expected events across all times, and Cox uses h(t|X)=h0(t)exp(β1X1+...+βpXp), with exp(β) as the relative rate or hazard ratio; test proportional hazards with age×ln(t) and drug×ln(t), add time terms when effects change, and treat transplant as separate time-to-transplant and time-to-death stages.
+
+That’s the recap.

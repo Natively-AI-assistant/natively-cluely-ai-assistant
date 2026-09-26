@@ -1,0 +1,368 @@
+{
+ "blind_id": "S-b84b95bc",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 82277,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 34496,
+  "candidatesTokenCount": 2513,
+  "totalTokenCount": 45646,
+  "cachedContentTokenCount": 24509,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 34496
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24509
+   }
+  ],
+  "thoughtsTokenCount": 8637,
+  "serviceTier": "standard"
+ },
+ "fact_count": 72,
+ "evaluation": {
+  "factual_accuracy": 5,
+  "important_information_retention": 7,
+  "hallucination_control": 8,
+  "action_item_retention": 6,
+  "decision_retention": 8,
+  "speaker_attribution": 4,
+  "numeric_accuracy": 7,
+  "entity_retention": 8,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 5,
+  "structure": 3,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 5,
+  "critical_errors": [
+   "Lists dropping the invoice preview as an open question, but this was explicitly rejected during the meeting.",
+   "Includes superseded action items as final commitments (e.g., Maya building the rollout plan around 10%, and Viktor owning the migration runbook).",
+   "Fails to consistently map speaker labels to names, leaving 'Speaker 1', 'Speaker 4', and 'Me' throughout the notes."
+  ],
+  "missing_important_information": [
+   "The meeting date (September 17) is not explicitly stated.",
+   "Four of the P1 bugs are customer-visible.",
+   "Dana will join Joel's call with Kestrel Logistics on September 23.",
+   "Viktor wanted to launch on October 20 to get two full weeks of testing.",
+   "Rohan will run a sales training session on October 9.",
+   "Viktor takes the first 24 hours of launch on-call, and Dana will ask Lukas Brandt to cover the second 24."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C04",
+    "reported": "Viktor: Own and deliver the migration runbook by Monday the 28th."
+   },
+   {
+    "correction_id": "C05",
+    "reported": "Maya: Build the rollout plan around 10% on day one."
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Should invoice preview be dropped or deferred for the roughly 60 large accounts to meet the launch date, or kept as-is with help from the dashboard layout? [open]"
+  ],
+  "distractors_included": [
+   "Speaker 4 noted their headset died during the meeting but they survived, calling it a win.",
+   "Someone should ask facilities whether monitors move with the team or new ones are provided in the Harlow building.",
+   "Crates must be sealed by October 1st; move is October 2nd.",
+   "Rohan flagged competitive pressure: Meterbase launched usage analytics in August."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "partial"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "missing"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "missing"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "partial"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "partial"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "partial"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "partial"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "partial"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "partial"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a large amount of the transcript's detail but suffer from severe structural and conciseness issues. The text is highly repetitive, with identical bullet points appearing across multiple sections (e.g., 'Decisions' vs 'Decisions (structured)'). The model failed to map speaker labels consistently, leaving 'Speaker 1', 'Speaker 4', and 'Me' in the text. Furthermore, it includes superseded action items (like the 10% rollout and Viktor owning the runbook) alongside the final decisions, and incorrectly lists dropping the invoice preview as an open question when it was explicitly rejected."
+ }
+}

@@ -20,10 +20,20 @@
  *      notarized+stapled trips Gatekeeper and needs the `xattr` workaround we're
  *      eliminating.
  *
+ *  (3) NEITHER STEP RETRIED (added 2026-08-26). These are the last two calls of a
+ *      ~55-minute signed build, long after both .apps are notarized + stapled and
+ *      both updater ZIPs are written. A build died here when the 1.01 GB arm64
+ *      upload was reset at part 148 ("Network.NWError error 54 - Connection reset
+ *      by peer"): notarytool does not retry, so one dropped connection cost a full
+ *      rebuild. FIX: the submit retries while NO verdict was reached (never after a
+ *      decided Invalid/Rejected) via scripts/lib/notary-transient.cjs, and the
+ *      staple goes through scripts/staple-with-retry.js for the CDN ticket race.
+ *
  * Per macOS arch slice (release/mac = x64, release/mac-arm64 = arm64):
  *   1. create-dmg → styled DMG from the signed .app (signs the DMG with Developer ID)
- *   2. xcrun notarytool submit --wait
- *   3. xcrun stapler staple
+ *   2. xcrun notarytool submit --wait  (bounded retry — see (3))
+ *   3. xcrun stapler staple            (retried through CDN ticket-propagation lag)
+ *
  * Then re-patch each dmg's sha512/size in latest*.yml (the dmg is brand-new bytes),
  * and assert the updater ZIP manifest still matches (the updater consumes the ZIP).
  *
@@ -37,6 +47,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { notarytoolSubmitWithRetry, isTransientNetworkMessage } = require('./lib/notary-transient.cjs');
+const { stapleWithRetry } = require('./staple-with-retry');
 
 const VOLNAME = 'Natively';
 const BACKGROUND = path.resolve(__dirname, '..', 'assets', 'dmg-background.png');
@@ -61,7 +73,18 @@ function resolveDeveloperIdIdentity() {
 function notarytoolArgs() {
   const e = process.env;
   if (e.APPLE_API_KEY && e.APPLE_API_KEY_ID && e.APPLE_API_ISSUER) {
-    return ['--key', e.APPLE_API_KEY, '--key-id', e.APPLE_API_KEY_ID, '--issuer', e.APPLE_API_ISSUER];
+    // Skip (loudly) when the .p8 path no longer resolves, so a stale export cannot
+    // shadow a working APPLE_KEYCHAIN_PROFILE. Kept in lockstep with the identical
+    // guard in scripts/notarize.js — see that file's resolveCredentials() for the
+    // full rationale. Without it the dead path reaches notarytool and kills the DMG
+    // notarization step AFTER the .app has already been notarized and stapled.
+    if (fs.existsSync(e.APPLE_API_KEY)) {
+      return ['--key', e.APPLE_API_KEY, '--key-id', e.APPLE_API_KEY_ID, '--issuer', e.APPLE_API_ISSUER];
+    }
+    console.warn(
+      `[dmg-notarize] APPLE_API_KEY points at a file that does not exist: ${e.APPLE_API_KEY} — ` +
+        'ignoring the api-key strategy and falling through (apple-id, then keychain-profile).'
+    );
   }
   if (e.APPLE_ID && e.APPLE_APP_SPECIFIC_PASSWORD && e.APPLE_TEAM_ID) {
     return ['--apple-id', e.APPLE_ID, '--password', e.APPLE_APP_SPECIFIC_PASSWORD, '--team-id', e.APPLE_TEAM_ID];
@@ -137,10 +160,93 @@ function verifyDmgAppSignature(dmgPath) {
   }
 }
 
+/**
+ * Did `stapler validate` fail because it could not REACH Apple, rather than
+ * because the ticket is absent? Network-class failures are inconclusive and must
+ * not be read as "unstapled" — see dmgHasStapledTicket for what that costs.
+ * Pure, so both shapes are testable without a network or a DMG.
+ */
+function isInconclusiveStaplerFailure(output) {
+  const out = String(output || '');
+  return (
+    /CloudKit|apple-cloudkit\.com|request timed out|ticket-delivery|Error 68/i.test(out) ||
+    isTransientNetworkMessage(out)
+  );
+}
+
+/**
+ * Does this DMG carry a stapled ticket?
+ *
+ * `stapler validate` CONSULTS THE NETWORK — it looks the ticket up against
+ * Apple's CloudKit ticket-delivery API — so on a flaky link a perfectly stapled
+ * DMG reports:
+ *
+ *   NSLocalizedDescription=The request timed out …
+ *   https://api.apple-cloudkit.com/database/1/com.apple.gk.ticket-delivery/…
+ *   CloudKit's response is inconsistent with expections: (null)
+ *   The validate action failed! Error 68.
+ *
+ * Observed 2026-08-27 on a DMG that this very hook had just stapled AND validated
+ * seconds earlier. Treating that as "not stapled" makes the idempotence guard
+ * rebuild and re-notarize a finished DMG — ~25 minutes thrown away for a network
+ * blip, which is precisely what that guard exists to prevent.
+ *
+ * So a network-class failure is INCONCLUSIVE, not negative — but the answer to an
+ * inconclusive result is to ASK AGAIN, not to ask a different question.
+ *
+ * WHY NOT GATEKEEPER (removed 2026-09-04): this used to fall back to
+ * `spctl -a -t open` and treat acceptance as proof of a stapled ticket. It is not.
+ * spctl will happily accept a DMG that is notarized but UNSTAPLED by assessing it
+ * ONLINE — and the fallback was only ever reached on a partially-up link, which is
+ * exactly when that online assessment succeeds. The comment claiming it "reads the
+ * stapled ticket straight off the file and needs no network" is what made the hole
+ * invisible. isDmgAlreadyValid would then return true, the rebuild+staple would be
+ * skipped, and an unstapled DMG would ship — failing Gatekeeper on any user machine
+ * that is offline at first launch, which is the precise failure stapling prevents.
+ *
+ * So: retry stapler itself (a blip is transient by definition), and if it is still
+ * inconclusive, report NOT stapled. The asymmetry decides it — a false negative
+ * costs one rebuild, a false positive ships a broken release.
+ */
+const STAPLER_VALIDATE_ATTEMPTS = 3;
+const STAPLER_RETRY_MS = 5000;
+
+/** Blocking sleep without a shell dependency (this script runs sync, macOS-only). */
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function dmgHasStapledTicket(dmgPath) {
+  let lastOut = '';
+  for (let attempt = 1; attempt <= STAPLER_VALIDATE_ATTEMPTS; attempt++) {
+    try {
+      execFileSync('xcrun', ['stapler', 'validate', dmgPath], { stdio: 'pipe' });
+      return true;
+    } catch (err) {
+      lastOut = `${(err && err.stdout) || ''}${(err && err.stderr) || ''}${(err && err.message) || ''}`;
+      // A definite answer: genuinely not stapled.
+      if (!isInconclusiveStaplerFailure(lastOut)) return false;
+      if (attempt < STAPLER_VALIDATE_ATTEMPTS) {
+        console.warn(
+          `[dmg] stapler validate could not reach Apple for ${path.basename(dmgPath)} ` +
+            `(attempt ${attempt}/${STAPLER_VALIDATE_ATTEMPTS}) — retrying in ${STAPLER_RETRY_MS / 1000}s.`
+        );
+        sleepSync(STAPLER_RETRY_MS);
+      }
+    }
+  }
+  console.warn(
+    `[dmg] stapler validate never reached Apple for ${path.basename(dmgPath)} — ` +
+      `treating as NOT stapled so the DMG is rebuilt and stapled rather than shipped unverified. ` +
+      `Last output: ${lastOut.trim().slice(0, 200)}`
+  );
+  return false;
+}
+
 /** Non-throwing check: is this DMG already stapled with a Gatekeeper-accepted app inside? */
 function isDmgAlreadyValid(dmgPath) {
   try {
-    execFileSync('xcrun', ['stapler', 'validate', dmgPath], { stdio: 'ignore' });
+    if (!dmgHasStapledTicket(dmgPath)) return false;
     verifyDmgAppSignature(dmgPath); // throws if the embedded app isn't accepted
     return true;
   } catch {
@@ -203,7 +309,13 @@ function buildStyledDmg({ appPath, outDmg, identity }) {
     '--hdiutil-quiet',
   ];
   if (fs.existsSync(VOLICON)) args.push('--volicon', VOLICON);
-  if (fs.existsSync(BACKGROUND)) args.push('--background', BACKGROUND);
+  // Background is opt-in. assets/dmg-background.png is 2640×1600 px = 660×400 pt at 4x,
+  // but create-dmg/Finder lays a non-@2x image 1:1 point-for-pixel into the 660×400-pt
+  // window, so the artwork renders off-scale/mis-positioned relative to the icon/drop-link.
+  // Ship the default white DMG window unless a correctly-sized background is explicitly enabled.
+  if (process.env.NATIVELY_DMG_BACKGROUND === '1' && fs.existsSync(BACKGROUND)) {
+    args.push('--background', BACKGROUND);
+  }
   if (identity) args.push('--codesign', identity); // sign the DMG container itself
   args.push(outDmg, stage);
 
@@ -278,10 +390,20 @@ module.exports = async function afterAllArtifactBuild(buildResult) {
     console.log(`[dmg] Rebuilding clean styled DMG for ${archDir}: ${dmgName}`);
     buildStyledDmg({ appPath, outDmg, identity });
 
+    // Submit with a bounded retry. A single dropped TCP connection during this
+    // ~1 GB upload used to fail the ENTIRE signed build after the apps had already
+    // been notarized + stapled (~55 min of work). Only the submit is retried — the
+    // DMG bytes are unchanged and already signed, so re-submitting the same file is
+    // correct and avoids re-running ditto + hdiutil per attempt. A DECIDED verdict
+    // (Invalid/Rejected) never retries. See scripts/lib/notary-transient.cjs.
     console.log(`[dmg] notarytool submit ${dmgName} (several minutes)…`);
-    execFileSync('xcrun', ['notarytool', 'submit', outDmg, ...creds, '--wait'], { stdio: 'inherit' });
+    await notarytoolSubmitWithRetry({ target: outDmg, credArgs: creds });
+    // Staple through Apple's CDN ticket-propagation lag (Error 65 / "Record not
+    // found"). Notarization has already SUCCEEDED at this point, so failing the
+    // build on that race would throw away the same hour the retry above protects.
+    // stapleWithRetry also runs `stapler validate`, matching isDmgAlreadyValid().
     console.log(`[dmg] stapler staple ${dmgName}`);
-    execFileSync('xcrun', ['stapler', 'staple', outDmg], { stdio: 'inherit' });
+    await stapleWithRetry(outDmg, { maxAttempts: 6, baseDelayMs: 15000 });
     // Verify the app INSIDE the freshly built+stapled dmg before trusting it.
     verifyDmgAppSignature(outDmg);
     rebuiltDmgs.push(outDmg);
@@ -298,3 +420,6 @@ module.exports = async function afterAllArtifactBuild(buildResult) {
   console.log('[dmg] All DMGs rebuilt (create-dmg) + signed + notarized + stapled + verified; ZIP manifest verified.');
   return [];
 };
+
+// Exported for scripts/__tests__ — electron-builder only calls the default hook.
+module.exports.isInconclusiveStaplerFailure = isInconclusiveStaplerFailure;

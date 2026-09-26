@@ -14,7 +14,7 @@ describe('buildHindsightRouterConfig', () => {
     const m = models(cfg);
     // Gemini's three models lead, in priority order.
     assert.deepEqual(m.slice(0, 3), [
-      'gemini/gemini-3.5-flash', 'gemini/gemini-3.1-flash-lite', 'gemini/gemini-3.1-pro-preview',
+      'gemini/gemini-3.6-flash', 'gemini/gemini-3.1-flash-lite', 'gemini/gemini-3.1-pro-preview',
     ]);
     // Provider order after Gemini.
     const firstOf = (re) => m.findIndex((x) => re.test(x));

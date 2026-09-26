@@ -1,0 +1,132 @@
+{
+  "written": 65,
+  "rejectedCells": [
+    {
+      "modeKey": "team-meet",
+      "category": "no_response",
+      "withFiles": true,
+      "problems": [
+        "fillers in only 10.0% of inputs (min 12%) — reads as written prose",
+        "repairs/restarts in only 0.0% of inputs (min 3%)",
+        "only 20.0% of inputs are <=5 words (min 30%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "sales",
+      "category": "no_response",
+      "withFiles": true,
+      "problems": [
+        "repairs/restarts in only 0.0% of inputs (min 3%)"
+      ]
+    },
+    {
+      "modeKey": "call-center",
+      "category": "no_response",
+      "withFiles": true,
+      "problems": [
+        "fillers in only 0.0% of inputs (min 12%) — reads as written prose"
+      ]
+    },
+    {
+      "modeKey": "lecture",
+      "category": "no_response",
+      "withFiles": true,
+      "problems": [
+        "only 10.0% of inputs are <=5 words (min 30%) — real turns are often very short"
+      ]
+    }
+  ],
+  "invalid": [],
+  "perMode": {
+    "team-meet": 10,
+    "technical-interview": 19,
+    "sales": 12,
+    "call-center": 13,
+    "lecture": 11
+  },
+  "perCategory": {
+    "normal_request": 19,
+    "fragment": 11,
+    "ambiguous": 10,
+    "multi_intent": 10,
+    "trap": 9,
+    "no_response": 6
+  },
+  "cells": 30,
+  "realismByMode": {
+    "team-meet": {
+      "n": 10,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.4,
+      "repairRate": 0.2,
+      "shortRate": 0.1,
+      "duplicateRate": 0,
+      "medianLength": 18,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": [
+        "only 10.0% of inputs are <=5 words (min 15%) — real turns are often very short"
+      ]
+    },
+    "technical-interview": {
+      "n": 19,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.5263157894736842,
+      "repairRate": 0.10526315789473684,
+      "shortRate": 0.15789473684210525,
+      "duplicateRate": 0,
+      "medianLength": 12,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "sales": {
+      "n": 12,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.6666666666666666,
+      "repairRate": 0.08333333333333333,
+      "shortRate": 0,
+      "duplicateRate": 0,
+      "medianLength": 17,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": [
+        "only 0.0% of inputs are <=5 words (min 15%) — real turns are often very short"
+      ]
+    },
+    "call-center": {
+      "n": 13,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.3076923076923077,
+      "repairRate": 0.07692307692307693,
+      "shortRate": 0.15384615384615385,
+      "duplicateRate": 0,
+      "medianLength": 16,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "lecture": {
+      "n": 11,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.8181818181818182,
+      "repairRate": 0,
+      "shortRate": 0,
+      "duplicateRate": 0,
+      "medianLength": 21,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": [
+        "repairs/restarts in only 0.0% of inputs (min 5%)",
+        "only 0.0% of inputs are <=5 words (min 15%) — real turns are often very short"
+      ]
+    }
+  },
+  "deduped": 0,
+  "parroted": 0
+}

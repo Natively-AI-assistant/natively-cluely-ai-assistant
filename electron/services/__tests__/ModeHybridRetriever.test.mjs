@@ -262,4 +262,202 @@ describe('ModeHybridRetriever', () => {
     // All chunks should have same sourceId (only one file)
     assert.strictEqual(uniqueSourceIds.length, 1, 'Should have only one unique source');
   });
+
+  // Regression (2026-07-13): on the document-grounded path the chunk `score`
+  // reported to the Context OS EvidenceResolver must reflect the composite
+  // signal that actually SELECTED the chunk (combined fts/vector + positive
+  // answerability), not the retrieval-only combined score. A Table-of-Contents
+  // navigation chunk promoted purely by the structural answerability boost is
+  // admitted with ftsScore/vectorScore = 0 for a query like "the title of
+  // Chapter 2" (no lexical overlap), so reporting bare combined score (0) made
+  // the resolver refuse a fact the ToC plainly contains (< MIN_ANSWER_CONFIDENCE
+  // 0.32). This is generic: no document/entity/question text is special-cased.
+  test('document-grounded ToC navigation chunk reports a confidence above the answer floor', async () => {
+    const { ModeHybridRetriever } = await loadRetriever();
+
+    // Lexical fallback (embeddings unavailable) — the ToC chunk has NO lexical
+    // overlap with "the title of Chapter 2", so its fts/vector are both 0 and
+    // only the structural answerability boost keeps it.
+    mockEmbeddingPipeline.isReady = mock.fn(() => false);
+
+    const retriever = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
+
+    const files = [{
+      id: 'thesis-file',
+      modeId: 'mode1',
+      fileName: 'thesis.pdf',
+      content: [
+        '[Page 5]',
+        'Contents',
+        '1 Introduction 7',
+        '1.1 Research Questions . . . . . . . . . . . . . . 8',
+        '1.2 Thesis Objectives . . . . . . . . . . . . . . . 9',
+        '2 State of The Art and Background Overview 10',
+        '2.1 Visual-Language-Action Models . . . . . . . . 10',
+        '2.2 Agentic AI . . . . . . . . . . . . . . . . . . 13',
+        '3 Research Methodology 25',
+        '3.1 Robotic Raw Data Acquisition . . . . . . . . . 27',
+        '4 Experiments and Results 43',
+        '4.1 Evaluation metrics . . . . . . . . . . . . . . 44',
+        '[Page 7]',
+        '1 Introduction',
+        'This thesis studies Agentic AI frameworks for embodied robotic systems.',
+        '[Page 10]',
+        '2 State of The Art and Background Overview',
+        'Prior work spans vision-language-action models and agentic systems.',
+        '[Page 25]',
+        '3 Research Methodology',
+        'We describe the data acquisition and finetuning procedure.',
+      ].join('\n'),
+      createdAt: new Date().toISOString(),
+    }];
+
+    const result = await retriever.retrieve({
+      query: 'What is the title of Chapter 2?',
+      modeId: 'mode1',
+      files,
+      tokenBudget: 4000,
+      topK: 8,
+      forceDocumentGrounding: true,
+    });
+
+    const MIN_ANSWER_CONFIDENCE = 0.32; // mirrors evidenceSufficiency.ts
+    const navChunk = result.chunks.find(c => c.text.startsWith('[Table of Contents |'));
+    assert.ok(navChunk, 'the Table of Contents navigation chunk must be retrieved for a chapter-title question');
+    assert.ok(
+      navChunk.score >= MIN_ANSWER_CONFIDENCE,
+      `ToC nav chunk score ${navChunk.score} must clear the answer floor ${MIN_ANSWER_CONFIDENCE} (was 0 before the reported-score fix)`,
+    );
+  });
+
+  // Regression (2026-07-13): the low-confidence gate that decides whether to
+  // escalate to the local cross-encoder reranker must ALSO count the positive
+  // answerability signal. Before the fix, a ToC navigation chunk (combined
+  // fts/vector ≈ 0) reported `weak_top` → lowConfidence → rerank escalation for a
+  // "title of Chapter N" question that never needed it; in a headless/benchmark
+  // environment where the reranker model is unavailable, that escalation stalled
+  // the whole turn (~7s deadline abort → false refusal). With the fix the
+  // structurally-selected nav chunk is high-confidence, so the gate does not trip.
+  test('document-grounded ToC navigation query is NOT flagged low-confidence (no needless rerank escalation)', async () => {
+    const prevGate = process.env.NATIVELY_RAG_CONFIDENCE_GATE;
+    process.env.NATIVELY_RAG_CONFIDENCE_GATE = '1'; // surfaces the observe-only confidence field
+    try {
+      const { ModeHybridRetriever } = await loadRetriever();
+      // Embeddings AVAILABLE (as in the real benchmark) so `lexical_degraded`
+      // cannot mask the real signal. The nav chunk still has near-zero lexical
+      // AND vector overlap with "title of Chapter 2" — only the structural
+      // answerability boost keeps it, so this isolates the confidence-gate fix.
+      mockEmbeddingPipeline.isReady = mock.fn(() => true);
+      mockEmbeddingPipeline.getEmbeddingForQuery = mock.fn(() => Promise.resolve([1, 0, 0, 0]));
+      mockEmbeddingPipeline.getEmbedding = mock.fn(() => Promise.resolve([0, 1, 0, 0])); // orthogonal → vectorScore 0
+
+      const retriever = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
+      const files = [{
+        id: 'thesis-file',
+        modeId: 'mode1',
+        fileName: 'thesis.pdf',
+        content: [
+          '[Page 5]', 'Contents', '1 Introduction 7',
+          '1.1 Research Questions . . . . . . . . . . . . . . 8',
+          '1.2 Thesis Objectives . . . . . . . . . . . . . . . 9',
+          '2 State of The Art and Background Overview 10',
+          '2.1 Visual-Language-Action Models . . . . . . . . 10',
+          '2.2 Agentic AI . . . . . . . . . . . . . . . . . . 13',
+          '3 Research Methodology 25',
+          '3.1 Robotic Raw Data Acquisition . . . . . . . . . 27',
+          '4 Experiments and Results 43',
+          '4.1 Evaluation metrics . . . . . . . . . . . . . . 44',
+          '[Page 7]', '1 Introduction',
+          'This thesis studies Agentic AI frameworks for embodied robotic systems.',
+          '[Page 10]', '2 State of The Art and Background Overview',
+          'Prior work spans vision-language-action models and agentic systems.',
+          '[Page 25]', '3 Research Methodology',
+          'We describe the data acquisition and finetuning procedure.',
+        ].join('\n'),
+        createdAt: new Date().toISOString(),
+      }];
+
+      const result = await retriever.retrieve({
+        query: 'What is the title of Chapter 2?',
+        modeId: 'mode1',
+        files,
+        tokenBudget: 4000,
+        topK: 8,
+        allowRerank: true,          // caller permits escalation — the gate must decline it
+        forceDocumentGrounding: true,
+      });
+
+      assert.ok(result.confidence, 'confidence telemetry must be present when the gate flag is on');
+      // The precise contract of the fix: the score-shape reasons that judge the
+      // TOP chunk's strength (`weak_top`, `flat_margin`) must NOT fire, because
+      // the structural answerability boost makes the nav chunk genuinely strong.
+      // (In the real benchmark, embeddings admit several chunks so no reason fires
+      // at all and rerank is skipped — proven by the live structural run. Here the
+      // degenerate orthogonal-vector mock admits only the boosted chunk, so
+      // `thin_results` can still fire; that is a mock artifact, not the defect.)
+      const reasons = result.confidence.reasons || [];
+      assert.ok(!reasons.includes('weak_top'), `nav chunk must not be judged weak_top (reasons: ${reasons.join(',')})`);
+      assert.ok(!reasons.includes('flat_margin'), `nav chunk must not be judged flat_margin (reasons: ${reasons.join(',')})`);
+      assert.ok(result.confidence.topScore >= 0.32, `nav chunk top confidence ${result.confidence.topScore} must reflect the structural boost, not bare fts/vector (~0)`);
+    } finally {
+      if (prevGate === undefined) delete process.env.NATIVELY_RAG_CONFIDENCE_GATE;
+      else process.env.NATIVELY_RAG_CONFIDENCE_GATE = prevGate;
+    }
+  });
+
+  // Regression (2026-07-13): the ToC navigation promotion must fire ONLY for a
+  // genuine structural/navigation question. selectTableOfContentsEntries matches on
+  // a shared title word, so a TOPICAL question that merely names a section ("What
+  // working voltage is listed for Mercury X1?" — "Mercury X1" is a ToC entry title)
+  // used to pull the navigation chunk to the top (+1.2) and starve the real spec
+  // section. The query-shape gate (document_structure_answer only) prevents that.
+  test('topical query naming a section title does NOT promote the ToC navigation chunk', async () => {
+    const { ModeHybridRetriever } = await loadRetriever();
+    mockEmbeddingPipeline.isReady = mock.fn(() => false);
+    const retriever = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
+
+    const files = [{
+      id: 'thesis-file',
+      modeId: 'mode1',
+      fileName: 'thesis.pdf',
+      content: [
+        '[Page 5]', 'Contents',
+        '2 State of The Art 10',
+        '2.1 Mercury X1 Robot . . . . . . . . 16',
+        '2.1.1 Design . . . . . . . . . . . . 17',
+        '2.1.2 Technical Specifications . . . 17',
+        '3 Research Methodology 25',
+        '3.1 Data Acquisition . . . . . . . . 27',
+        '[Page 17]', '2.1.2 Technical Specifications',
+        'Specification Value',
+        'Working Voltage 24 V',
+        'Battery Life 8 hours',
+        'Storage Space 15 L',
+        '[Page 16]', '2.1 Mercury X1 Robot',
+        'The Mercury X1 is a dual-arm mobile robot for manipulation tasks.',
+      ].join('\n'),
+      createdAt: new Date().toISOString(),
+    }];
+
+    const result = await retriever.retrieve({
+      query: 'What working voltage is listed for Mercury X1?',  // topical, NOT structural
+      modeId: 'mode1',
+      files,
+      tokenBudget: 4000,
+      topK: 8,
+      forceDocumentGrounding: true,
+    });
+
+    const top = result.chunks[0];
+    assert.ok(top, 'a chunk must be retrieved');
+    assert.ok(
+      !top.text.startsWith('[Table of Contents |'),
+      `a topical spec query must not rank the ToC navigation chunk first (got: ${top.text.slice(0, 60)})`,
+    );
+    // The answer-bearing spec section must be present in the retrieved set.
+    assert.ok(
+      result.chunks.some(c => /Working Voltage/i.test(c.text)),
+      'the spec section carrying the value must be retrieved for a topical spec query',
+    );
+  });
 });

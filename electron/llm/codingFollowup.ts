@@ -32,6 +32,14 @@ export type ExplicitCodingContract =
   | 'complexity_only'
   | 'dry_run_only'
   | 'explain_only'
+  // The user's STANDING instructions (the mode "Real-time prompt") define or
+  // reject an answer structure. Never produced by detectExplicitCodingContract
+  // (which reads one question) — resolved from the mode's instructions by
+  // userInstructionContract.resolveCodingFormatFromInstructions. Like every
+  // other member it replaces the section shape in the prompt AND stands the
+  // repair layer down, so an answer that obeyed the user's format is never
+  // rewritten into the six DSA headings (reproduced 2026-09-20).
+  | 'custom_format'
   | null;
 
 const lc = (s?: string) => (s || '').toLowerCase().trim();
@@ -55,8 +63,34 @@ const BIG_O_RE = /\bbig[- ]?o\b(?!ther)/i;
 // "without code" / "without writing code" / "no code" / "explain only" /
 // "don't write code" / "conceptually". The (?:writing|using|adding)? gerund covers
 // "without writing code" / "no actual code" phrasings.
-const EXPLAIN_ONLY_RE =
-  /\b(?:without|no|don'?t\s+(?:write|use|include|give))\s+(?:any\s+|actual\s+|writing\s+|using\s+|adding\s+|me\s+)*code\b|\bexplain\s+(?:it\s+|this\s+|the\s+\w+\s+)?(?:only|conceptually|in\s+words|in\s+plain\s+english)\b|\bonly\s+explain\b|\bconceptual(?:ly)?\s+(?:answer|explanation)\b|\bjust\s+explain\b/i;
+//
+// 2026-09-12 (in-app review "keeps giving code answers even when you tell it not
+// to"): the negation branch was a closed verb list, so the natural mid-session
+// push-backs — "stop giving me code", "I don't want code", "no more code answers",
+// "don't answer with code", "never output code" — fell through to the default
+// six-section contract. A trailing qualifier ("code that uses recursion", "the
+// code to crash") means the user is talking ABOUT code, not refusing it, so the
+// negation branches are guarded by NO_CODE_TAIL.
+const NO_CODE_TAIL = String.raw`(?:\s+(?:answers?|snippets?|blocks?))?\b(?!\s+(?:to|that|which|for|from|so|because|when|where|until|unless)\b)`;
+const NO_CODE_FILLER = String.raw`(?:any\s+|actual\s+|more\s+|writing\s+|using\s+|adding\s+|giving\s+|me\s+|the\s+|us\s+)*`;
+const EXPLAIN_ONLY_RE = new RegExp(
+  [
+    // "without code" / "no code" / "no more code answers"
+    String.raw`\b(?:without|no(?:\s+more)?)\s+${NO_CODE_FILLER}code${NO_CODE_TAIL}`,
+    // "don't write code" / "stop giving me code" / "never output code" /
+    // "please don't answer with code" / "I don't want code"
+    String.raw`\b(?:don'?t|do\s+not|never|stop|quit)\s+(?:want(?:\s+to\s+see)?|writ(?:e|ing)|us(?:e|ing)|includ(?:e|ing)|giv(?:e|ing)|show(?:ing)?|output(?:ting)?|return(?:ing)?|send(?:ing)?|answer(?:ing)?\s+with|respond(?:ing)?\s+with|reply(?:ing)?\s+with)\s+${NO_CODE_FILLER}code${NO_CODE_TAIL}`,
+    // "why do you keep giving me code?"
+    String.raw`\bwhy\s+(?:do\s+you\s+|are\s+you\s+)?(?:keep|still)\s+(?:giving|writing|showing|sending)\s+(?:me\s+)?code\b`,
+    // "answer in words not code" / "prose, not code"
+    String.raw`\b(?:words|prose|english|text|explanation)\s*,?\s+not\s+code\b`,
+    String.raw`\bexplain\s+(?:it\s+|this\s+|the\s+\w+\s+)?(?:only|conceptually|in\s+words|in\s+plain\s+english)\b`,
+    String.raw`\bonly\s+explain\b`,
+    String.raw`\bconceptual(?:ly)?\s+(?:answer|explanation)\b`,
+    String.raw`\bjust\s+explain\b`,
+  ].join('|'),
+  'i',
+);
 
 /**
  * Detect an explicit coding FORMAT constraint from the question. Deterministic,
@@ -84,7 +118,7 @@ const BACKREF_RE =
 // SHORT message containing them is a coding follow-up on their own ("make it iterative",
 // "what's the complexity", "handle duplicates", "without extra space").
 const CONTINUATION_STRONG_RE =
-  /\b(in[- ]?place|iterativ|recursiv|complexit|big[- ]?o|dry[- ]?run|trace|step\s+through|edge\s+cases?|handle\s+(?:duplicates?|negatives?|empty|nulls?)|space[- ]?optimi|without\s+(?:extra\s+)?space|one[- ]?pass|two[- ]?pointers?|time\s+and\s+space)\b/i;
+  /\b(in[- ]?place|iterativ|recursiv|brute[- ]?force|memoi[sz]\w*|tabulat\w*|complexit|big[- ]?o|dry[- ]?run|trace|step\s+through|edge\s+cases?|handle\s+(?:duplicates?|negatives?|empty|nulls?)|space[- ]?optimi|without\s+(?:extra\s+)?space|one[- ]?pass|two[- ]?pointers?|time\s+and\s+space)\b/i;
 // LOOSE generic verbs ("optimize", "improve", "rewrite", "convert", "faster") that ALSO
 // appear in non-coding asks ("improve our onboarding", "rewrite the landing page copy").
 // These only count as a coding continuation when paired with an explicit back-reference
@@ -101,9 +135,107 @@ const CONTINUATION_LOOSE_RE =
  * Guarded so a long, self-contained coding question is NOT treated as a follow-up:
  * a continuation must be short OR carry an explicit back-reference.
  */
+// A BARE request for the code — "code?", "the code", "show the code", "can I
+// see the code". These carry no problem of their own: they only mean anything
+// relative to what was just answered.
+//
+// Live repro 2026-08-18: after a What-to-Answer turn solved Trapping Rain Water
+// from a screenshot, typing "code?" in chat produced a confident, complete
+// BINARY SEARCH answer. The word "code" matches CODING_PATTERNS, so the turn was
+// routed coding and given the full contract — with no prior problem attached, so
+// the model picked one. Answering the wrong question with total confidence is
+// worse than answering nothing.
+// Matched as a TOKEN SET rather than a phrase list. Reported 2026-08-18: the
+// user typed "code answe" — a truncated "code answer" — and the phrase regex
+// missed it, so the turn again arrived with no problem attached and the model
+// invented one (a full Missing Number solution for a Trapping Rain Water
+// screen). Real users type fragments, and enumerating phrasings loses to them.
+//
+// The rule instead: a SHORT message built only from filler plus a
+// code/answer/solution token carries no subject of its own. Anything with a real
+// content word ("write code for two sum", "the code review went well") has one,
+// and falls through.
+const BARE_CODE_TOKENS = new Set([
+  'code', 'codes', 'coding',
+  'answer', 'answers', 'answe', 'ans',
+  'solution', 'soln', 'sol',
+  'the', 'a', 'me', 'my', 'your', 'that', 'this', 'it', 'its',
+  'show', 'give', 'send', 'see', 'can', 'i', 'you', 'please', 'pls', 'plz',
+  'and', 'now', 'with', 'also', 'just', 'only', 'full', 'complete', 'whole',
+  'for', 'of', 'in',
+]);
+const CODE_NOUNS = new Set(['code', 'codes', 'coding', 'answer', 'answers', 'answe', 'ans', 'solution', 'soln', 'sol']);
+
+/**
+ * Is this a bare "give me the code" with no problem of its own?
+ *
+ * True when the message is short, every token is filler or a code/answer noun,
+ * and at least one token IS a code/answer noun. "code?", "code answe",
+ * "show me the code", "and the code?", "full solution please" → true.
+ * "write code for two sum", "what does this code do" → false.
+ */
+export function isBareCodeRequest(question: string): boolean {
+  const tokens = (question || '')
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 5) return false;
+  if (!tokens.some((t) => CODE_NOUNS.has(t))) return false;
+  return tokens.every((t) => BARE_CODE_TOKENS.has(t));
+}
+
+// Issue #539: "show in python", "show the solution in python", "show me how you
+// would implement in python" — a request to present the CURRENT solution in a
+// named language. Live (Windows 2.8.8) all three routed general_meeting_answer
+// and the model invented an unrelated count_ways(n) problem.
+//
+// Token-set, like isBareCodeRequest: an imperative verb, a trailing language,
+// and nothing between them but filler. A content word ("write a web server in
+// go") gives the message its own subject, and an experience question ("tell me
+// about your experience with python", "have you worked in go?") never opens
+// with one of these verbs — both fall through.
+const LANGUAGE_TOKENS = new Set([
+  'python', 'py', 'java', 'javascript', 'js', 'typescript', 'ts', 'cpp', 'csharp',
+  'c', 'go', 'golang', 'rust', 'kotlin', 'swift', 'ruby', 'scala', 'php', 'sql',
+]);
+const LANGUAGE_REQUEST_VERBS = new Set([
+  'show', 'write', 'give', 'do', 'implement', 'code', 'convert', 'rewrite', 'redo', 'translate', 'port', 'solve',
+]);
+const LANGUAGE_REQUEST_LEAD = new Set(['ok', 'okay', 'so', 'now', 'and', 'then', 'please', 'can', 'could', 'would', 'will', 'you']);
+const LANGUAGE_REQUEST_FILLER = new Set([
+  ...BARE_CODE_TOKENS, ...LANGUAGE_REQUEST_VERBS,
+  'how', 'would', 'will', 'could', 'same', 'again', 'instead', 'one', 'version', 'using', 'into', 'to',
+]);
+
+function isLanguageRequest(question: string): boolean {
+  const tokens = (question || '')
+    .toLowerCase()
+    .replace(/c\+\+/g, 'cpp')
+    .replace(/c#/g, 'csharp')
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length < 2 || tokens.length > 10) return false;
+  if (!LANGUAGE_TOKENS.has(tokens[tokens.length - 1])) return false;
+  if (!['in', 'using', 'into', 'to'].includes(tokens[tokens.length - 2])) return false;
+  let i = 0;
+  while (i < tokens.length && LANGUAGE_REQUEST_LEAD.has(tokens[i])) i++;
+  if (!LANGUAGE_REQUEST_VERBS.has(tokens[i])) return false;
+  return tokens.slice(i, -1).every((t) => LANGUAGE_REQUEST_FILLER.has(t));
+}
+
+// "implement this", "write it", "solve that" — an action on the current problem
+// with nothing else in the message (issue #539).
+const DIRECT_ACTION_RE =
+  /^(?:(?:ok(?:ay)?|so|now|and|please)[,.!]?\s+)*(?:(?:can|could)\s+you\s+)?(?:implement|write|code|solve)\s+(?:this|it|that|the\s+(?:solution|same|above))(?:\s+(?:now|please|again))?\s*[?.!]*$/i;
+
 export function isCodingContinuation(question: string): boolean {
   const q = lc(question);
   if (!q) return false;
+  // A bare code request is ALWAYS a continuation — it has no subject of its own.
+  if (isBareCodeRequest(q)) return true;
+  if (isLanguageRequest(q) || DIRECT_ACTION_RE.test(q)) return true;
   if (detectExplicitCodingContract(q)) return true; // code_only/complexity/dry-run/explain are all continuations-or-constraints
   const words = q.split(/\s+/).filter(Boolean).length;
   // STRONG coding signal: a SHORT message is a follow-up on its own; a LONG one needs a
@@ -114,6 +246,23 @@ export function isCodingContinuation(question: string): boolean {
   // onboarding email" / "rewrite the landing page copy" are NOT coding follow-ups.
   if (CONTINUATION_LOOSE_RE.test(q)) return BACKREF_RE.test(q);
   return false;
+}
+
+/**
+ * Does this assistant answer LOOK like a coding/algorithm answer — something a
+ * coding follow-up ("complexity?", "make it iterative", "dry run it") can
+ * meaningfully anchor to?
+ *
+ * Gate for the cross-surface prior-answer fallback: a coding continuation after
+ * a SALES answer must not drag that answer in as a "prior coding problem". The
+ * check is broad on purpose — the overlay's spoken answers often carry no code
+ * fence (the live Trapping Rain Water answer was pure prose) but always name
+ * the technique, the complexity, or the algorithm.
+ */
+export function looksLikeCodingAnswer(text: string | undefined | null): boolean {
+  const t = (text || '');
+  if (!t.trim()) return false;
+  return /```|##\s*(?:Approach|Code|Complexity|Dry Run)|\bO\([a-z0-9 ]*\)|\b(?:time|space)\s+complexit|\balgorithm\b|\btwo[- ]pointer|\bhash\s*(?:map|set)\b|\bbinary\s+search\b|\bsliding\s+window\b|\brecursion\b|\bdynamic\s+programming\b|\blinear\s+time\b|\bconstant\s+space\b/i.test(t);
 }
 
 /** A stored coding turn (what we recall to give a follow-up its prior problem). */
@@ -168,6 +317,26 @@ ${NO_LEAK_RULES}${verification}
 </answer_contract>`;
   }
 
+  const body = codingFormatDirective(explicitContract);
+
+  return `<answer_contract>
+answerType: coding (explicit format: ${explicitContract})
+${body}
+
+${NO_LEAK_RULES}
+</answer_contract>`;
+}
+
+/**
+ * The imperative body for ONE explicit format constraint, without any wrapper.
+ *
+ * Exported so the live/WTA surfaces (promptSystemV2's coding contract block)
+ * state the SAME constraint as the manual-chat `<answer_contract>` instead of
+ * writing a second copy that can drift. Before this, "just give me the code"
+ * was honoured in chat and ignored on every live surface — the six-section
+ * template was attached regardless (see .audit/coding-template-audit-2026-08-18.md).
+ */
+export function codingFormatDirective(explicitContract: Exclude<ExplicitCodingContract, null>): string {
   const body = (() => {
     switch (explicitContract) {
       case 'code_only':
@@ -179,20 +348,16 @@ ${NO_LEAK_RULES}${verification}
 Reference the SAME problem/solution from the prior turn. Do NOT restate the problem, re-output the code, or add other sections.`;
       case 'dry_run_only':
         return `The user asked ONLY for a DRY RUN / trace of the solution already in the conversation, on the input they gave. Output ONLY the step-by-step trace (state at each step → final output). Do NOT re-output the code, the approach, or the complexity unless it falls out of the trace.`;
+      case 'custom_format':
+        return `The user's standing instructions for this mode define the answer FORMAT for coding turns. Follow THEIR structure exactly — their sections, their order, their headings, their language. Do NOT add the default sections ("## Approach", "## Technique / Data Structure / Algorithm Used", "## Dry Run", "## Complexity", "## Interviewer Follow-up Points") unless their format asks for them. Still put every piece of code in a fenced block tagged with the language you actually wrote.`;
       case 'explain_only':
         return `The user asked for an EXPLANATION with NO CODE. Output a clear, speakable explanation in prose (and short bullets if helpful). Do NOT output any code block. No "## Code" section.`;
     }
   })();
-
-  return `<answer_contract>
-answerType: coding (explicit format: ${explicitContract})
-${body}
-
-${NO_LEAK_RULES}
-</answer_contract>`;
+  return body;
 }
 
 /** Verification (the hidden test block) only makes sense when NEW code is produced. */
 export function explicitContractProducesCode(explicitContract: ExplicitCodingContract): boolean {
-  return explicitContract === null || explicitContract === 'code_only';
+  return explicitContract === null || explicitContract === 'code_only' || explicitContract === 'custom_format';
 }

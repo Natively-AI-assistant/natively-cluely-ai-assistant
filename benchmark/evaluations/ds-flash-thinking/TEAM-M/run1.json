@@ -1,0 +1,360 @@
+{
+ "blind_id": "S-6a86cd19",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 79650,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 37612,
+  "candidatesTokenCount": 1973,
+  "totalTokenCount": 49210,
+  "cachedContentTokenCount": 24515,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 37612
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24515
+   }
+  ],
+  "thoughtsTokenCount": 9625,
+  "serviceTier": "standard"
+ },
+ "fact_count": 72,
+ "evaluation": {
+  "factual_accuracy": 8,
+  "important_information_retention": 7,
+  "hallucination_control": 10,
+  "action_item_retention": 7,
+  "decision_retention": 9,
+  "speaker_attribution": 4,
+  "numeric_accuracy": 8,
+  "entity_retention": 8,
+  "timeline_accuracy": 7,
+  "conclusion_accuracy": 9,
+  "structure": 4,
+  "conciseness": 1,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Failed to map speaker labels ('Me', 'Speaker 1', 'Speaker 2', 'Speaker 3', 'Speaker 4') to their actual names in many places throughout the notes."
+  ],
+  "missing_important_information": [
+   "Kestrel Logistics is a freight company and one of the top ten accounts.",
+   "Kestrel Health is a separate, unrelated beta account ($95,000) that is happy with the dashboard.",
+   "Kestrel Logistics' shipment-tracking service retries API calls after about 8 minutes, mostly August 28-31.",
+   "Dana will ask Lukas Brandt (backend, not Lucas from data) to cover the second 24 hours of launch-week on-call.",
+   "Rohan will run a one-hour recorded sales training on October 9.",
+   "Dana's deadline to get a committed date for ledger 3.4 from Grace Obi is Monday.",
+   "Viktor's deadline to write the shadow-rating reconciliation script is October 7.",
+   "Viktor's deadline to draft the technical root cause for Kestrel Logistics is Monday, September 21."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Speaker 3 asked someone to save them a spot near the espresso machine on the 6th floor.",
+   "Rohan's line about taking stakeholders instead of stairs will be added to the retro doc.",
+   "For the office move the team packs its own desks, and crates must be sealed by October 1st because the move is the 2nd.",
+   "Harlow parking requires a permit and the waitlist is around 40 people; Ines is number 31 and expects a spot sometime in 2028.",
+   "The espresso machine exists but is on the 6th floor while the team sits on the 4th.",
+   "Someone needs to ask facilities whether the monitors move with the team or whether new ones are provided in the Harlow building.",
+   "The October 2nd tripwire collides with the office move, so nobody will be at a desk that day."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "partial"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "partial"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "partial"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "partial"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "partial"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "partial"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "partial"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "partial"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "partial"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "partial"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "partial"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture the vast majority of the meeting's facts and decisions but suffer from severe structural and stylistic issues. The text is incredibly repetitive, duplicating the same points across multiple overlapping sections (e.g., 'Decisions' and 'Decisions (structured)'), which destroys conciseness and readability. Additionally, the note-taker failed to map the raw speaker labels ('Speaker 1', 'Me', etc.) to the actual cast names in many places, resulting in a poor speaker attribution score. Several minor deadlines and details regarding the Kestrel Logistics escalation and on-call assignments were also omitted. Finally, a significant amount of irrelevant small talk about the office move and espresso machines was included."
+ }
+}

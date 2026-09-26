@@ -47,8 +47,20 @@ test('curl provider save handlers validate renderer payloads before persistence'
     assert.ok(validatorBody.includes(`typeof (provider as any).${field} !== 'string'`),
       `BUG: validator must require string ${field}.`);
   }
+  // The contract is "the validator refuses a template with no TEXT
+  // placeholder" — NOT the exact expression that enforces it. Two accepted
+  // forms: the original literal `.includes('{{TEXT}}')`, and the
+  // spacing-tolerant regex it became. The check was widened because
+  // deepVariableReplacer substitutes `{{ TEXT }}` perfectly well, so rejecting
+  // that template at the boundary told the user their cURL was invalid when the
+  // engine handles it — and pinning the literal form failed this suite for a
+  // change that made the validator strictly more correct.
+  //
+  // This stays a SOURCE pin because validateCurlProviderPayload is a closure
+  // inside registerIpcHandlers and is not exported; there is nothing to call.
   assert.ok(
-    /curlCommand[\s\S]*\.includes\(\s*['"]\{\{TEXT\}\}['"]\s*\)/.test(validatorBody),
+    /curlCommand[\s\S]*\.includes\(\s*['"]\{\{TEXT\}\}['"]\s*\)/.test(validatorBody)
+    || /TEXT[\s\S]{0,40}\.test\(\(provider as any\)\.curlCommand\)/.test(validatorBody),
     'BUG: validator must require {{TEXT}} prompt injection placeholder.',
   );
   assert.ok(
@@ -63,7 +75,12 @@ test('curl provider save handlers validate renderer payloads before persistence'
       `BUG: ${channel} must use the shared payload validator.`,
     );
     assert.ok(
-      /if\s*\(\s*!validation\.ok\s*\)[\s\S]*return\s*\{\s*success:\s*false,\s*error:\s*validation\.error\s*\}/.test(body),
+      // Accept `(validation as any).error` as well as `validation.error`. Both
+      // handlers carry the cast — the validator returns a discriminated union
+      // and the narrowing after `!validation.ok` needed help — so the pin was
+      // failing on a type annotation while the behaviour it guards (reject with
+      // the validator's OWN message, before anything is persisted) was intact.
+      /if\s*\(\s*!validation\.ok\s*\)[\s\S]*return\s*\{\s*success:\s*false,\s*error:\s*(?:\(validation as any\)|validation)\.error\s*\}/.test(body),
       `BUG: ${channel} must reject invalid providers before saveCurlProvider.`,
     );
     assert.ok(

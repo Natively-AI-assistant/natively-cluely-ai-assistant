@@ -9,7 +9,8 @@
 
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
-import { SessionTracker } from './SessionTracker';
+import { SessionTracker, type ConversationSurface } from './SessionTracker';
+import type { TurnIdentity } from './llm/turnIdentity';
 import { IntelligenceEngine } from './IntelligenceEngine';
 import { MeetingPersistence } from './MeetingPersistence';
 import { ScreenContext } from './services/screen/ScreenContextService';
@@ -19,7 +20,7 @@ export type { TranscriptSegment, SuggestionTrigger, ContextItem } from './Sessio
 export type { IntelligenceMode, IntelligenceModeEvents } from './IntelligenceEngine';
 export type { DynamicAction } from './services/dynamic-actions/DynamicAction';
 
-export const GEMINI_FLASH_MODEL = "gemini-3.5-flash";
+export const GEMINI_FLASH_MODEL = "gemini-3.8-flash";
 export const GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite";
 
 /**
@@ -53,12 +54,30 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     /**
+     * Give the engine lazy access to the RAG manager, for live-meeting
+     * evidence (issue #552's resolveMeetingEvidence — the JIT semantic port
+     * plus the BM25 live-transcript port).
+     *
+     * Called from main.ts AFTER RAGManager exists — this manager is
+     * constructed first, so a provider closure is passed rather than the
+     * instance. `RAGManager` satisfies `MeetingRagLike` structurally
+     * (getRetriever/getLiveMeetingId); the engine keeps no RAG import of its
+     * own, so it is typed here instead.
+     */
+    setMeetingRagProvider(provider: (() => import('./context-intelligence/retrieval/meeting-evidence').MeetingRagLike | null) | null): void {
+        this.engine.setMeetingRagProvider(provider);
+    }
+
+    /**
      * Forward all events from IntelligenceEngine through this facade
      * so existing listeners on IntelligenceManager continue to work.
      */
     private forwardEngineEvents(): void {
         const events = [
             'assist_update', 'suggested_answer', 'suggested_answer_token', 'suggested_answer_discard',
+            // Planner declined to answer a trigger (cooldown dedup) — forwarded so
+            // a skip is observable rather than silent.
+            'suggestion_skipped',
             // Verified code execution (background): ✓ badge + corrected message.
             'code_verified', 'code_correction',
             'refined_answer', 'refined_answer_token',
@@ -82,6 +101,11 @@ export class IntelligenceManager extends EventEmitter {
     // ============================================
     // LLM Initialization (delegates to engine)
     // ============================================
+
+    /** The V3 conversation-ring key. See IntelligenceEngine.conversationSessionId. */
+    conversationSessionId(): string {
+        return this.engine.conversationSessionId();
+    }
 
     initializeLLMs(): void {
         // Cancel any in-flight streams before swapping LLM clients
@@ -112,16 +136,25 @@ export class IntelligenceManager extends EventEmitter {
         }
     }
 
-    addAssistantMessage(text: string): void {
-        this.session.addAssistantMessage(text);
+    addAssistantMessage(
+        text: string,
+        writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean },
+        surface?: ConversationSurface,
+        identity?: TurnIdentity,
+    ): boolean {
+        return this.session.addAssistantMessage(text, writeDecision, surface, identity);
     }
 
     getContext(lastSeconds: number = 120) {
         return this.session.getContext(lastSeconds);
     }
 
-    getLastAssistantMessage(): string | null {
-        return this.session.getLastAssistantMessage();
+    getLastAssistantMessage(surface?: ConversationSurface): string | null {
+        return this.session.getLastAssistantMessage(surface);
+    }
+
+    getContextEpoch(): number {
+        return this.session.getContextEpoch();
     }
 
     getFormattedContext(lastSeconds: number = 120): string {
@@ -133,12 +166,32 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     /** Current meeting's full finalized transcript (for in-meeting search, Phase 10). */
-    getCurrentMeetingTranscript(): Array<{ speaker: string; text: string; timestamp: number }> {
-        return this.session.getFullTranscript().map(s => ({ speaker: s.speaker, text: s.text, timestamp: s.timestamp }));
+    getCurrentMeetingTranscript(): Array<{ speaker: string; text: string; timestamp: number; origin?: string }> {
+        // `origin` rides along so the live-transcript evidence can tell a line
+        // the user SAID from one they TYPED into the overlay (typed chat is
+        // echoed into the transcript as speaker 'user', origin 'manual_chat').
+        return this.session.getFullTranscript().map(s => ({ speaker: s.speaker, text: s.text, timestamp: s.timestamp, ...(s.origin ? { origin: s.origin } : {}) }));
     }
 
     logUsage(type: string, question: string, answer: string): void {
         this.session.logUsage(type, question, answer);
+    }
+
+    /**
+     * Raw usage-entry passthrough, for callers that must set fields `logUsage`
+     * does not expose — today only `synthetic`, which excludes an entry from
+     * `SessionTracker.getRecentManualTurn` (and therefore from
+     * `buildRecentManualContext`'s prompt injection) while still persisting it
+     * to the Meeting Notes usage panel.
+     *
+     * Added 2026-08-14: a truncated manual-chat turn needs exactly that split —
+     * the call was made and must be billed/shown, but its partial answer must
+     * never be replayed into the next prompt as context. Without this proxy the
+     * call site's `im?.pushUsage?.(…)` optional-chained into a silent no-op and
+     * dropped the usage row altogether.
+     */
+    pushUsage(entry: any): void {
+        this.session.pushUsage(entry);
     }
 
     // ============================================
@@ -152,6 +205,66 @@ export class IntelligenceManager extends EventEmitter {
     async handleSuggestionTrigger(trigger: import('./SessionTracker').SuggestionTrigger): Promise<void> {
         return this.engine.handleSuggestionTrigger(trigger);
     }
+
+    /** Mode + cooldown gate for the Auto Answer trigger. See IntelligenceEngine.canAutoAnswer. */
+    canAutoAnswer(): boolean {
+        return this.engine.canAutoAnswer();
+    }
+
+    /** Barge-in: abort the streaming AUTOMATIC answer only. See IntelligenceEngine.cancelAutomaticAnswer. */
+    cancelAutomaticAnswer(reason: 'user_barge_in'): boolean {
+        return this.engine.cancelAutomaticAnswer(reason);
+    }
+
+    /** Auto Answer V3 offer card: register an externally built action so accept/dismiss IPC resolves it. */
+    registerDynamicAction(action: import('./services/dynamic-actions/DynamicAction').DynamicAction): void {
+        this.engine.registerDynamicAction(action);
+    }
+
+    // ── Auto Answer V3 narrow APIs (V2 §43) ──
+    isManualAnswerActive(): boolean { return this.engine.isManualAnswerActive(); }
+    /** A What-to-Answer stream is live (any kind: manual, automatic, speculative). */
+    isAnswerStreaming(): boolean { return this.engine.isAnswerStreaming(); }
+    noteAutoAnswerCandidate(questionId: string, candidateGeneration: number): void {
+        this.engine.noteAutoAnswerCandidate(questionId, candidateGeneration);
+    }
+    getSpeculativeSnapshot(): { questionId: string | null; text: string | null } {
+        return this.engine.getSpeculativeSnapshot();
+    }
+    /**
+     * Start the answer while the judge is still deciding.
+     *
+     * This delegation was missing from the moment the prefetch landed
+     * (0d5bf7fb): main.ts called it on the MANAGER while it only ever existed
+     * on the ENGINE, so every call threw `is not a function` straight into the
+     * defensive catch in SimpleAutoAnswer.maybePrefetch — which is exactly the
+     * kind of "optimisation is never allowed to break the pipeline" guard that
+     * turns a hard failure into a silent one. The feature has therefore never
+     * run: no `Auto Answer prefetch fired` line appears in any captured log.
+     */
+    prefetchAutoAnswer(questionId: string, text: string): void {
+        this.engine.prefetchAutoAnswer(questionId, text);
+    }
+    runAutoAnswer(
+        question: Parameters<IntelligenceEngine['runAutoAnswer']>[0],
+        options: { reuseSpeculative: boolean },
+    ): Promise<void> {
+        return this.engine.runAutoAnswer(question, { ...options, context: this.getFormattedContext(120) });
+    }
+    /**
+     * The ONE canonical live read surface (V2 §11/§27). Lazily built over the
+     * manager's session with the deterministic extractor; the session instance
+     * is stable for the manager's lifetime.
+     */
+    getLiveTranscriptBrain(): import('./intelligence/LiveTranscriptBrain').LiveTranscriptBrain {
+        if (!this.liveTranscriptBrain) {
+            const { LiveTranscriptBrain } = require('./intelligence/LiveTranscriptBrain') as typeof import('./intelligence/LiveTranscriptBrain');
+            const { extractLatestQuestion } = require('./llm/transcriptQuestionExtractor') as typeof import('./llm/transcriptQuestionExtractor');
+            this.liveTranscriptBrain = new LiveTranscriptBrain(this.session as any, extractLatestQuestion as any);
+        }
+        return this.liveTranscriptBrain;
+    }
+    private liveTranscriptBrain: import('./intelligence/LiveTranscriptBrain').LiveTranscriptBrain | null = null;
 
     // ============================================
     // Mode Executors (delegates to engine)
@@ -222,8 +335,16 @@ export class IntelligenceManager extends EventEmitter {
     // Meeting Lifecycle (delegates to persistence)
     // ============================================
 
-    async stopMeeting(): Promise<string | null> {
-        return this.persistence.stopMeeting();
+    async stopMeeting(): Promise<{ meetingId: string; memoryEligibleCount: number } | null> {
+        try {
+            return await this.persistence.stopMeeting();
+        } finally {
+            this.engine.endMeetingConversation();
+        }
+    }
+
+    beginMeetingConversation(id: string): void {
+        this.engine.beginMeetingConversation(id);
     }
 
     async recoverUnprocessedMeetings(): Promise<void> {
@@ -231,7 +352,7 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     /** Regenerate V3 notes for a saved meeting (optionally with a different mode/tone). */
-    async regenerateMeetingSummary(meetingId: string, opts?: { templateType?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
+    async regenerateMeetingSummary(meetingId: string, opts?: { templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
         return this.persistence.regenerateSavedMeeting(meetingId, opts);
     }
 
@@ -251,6 +372,18 @@ export class IntelligenceManager extends EventEmitter {
      */
     clearSessionContext(): void {
         this.session.clearSessionContext();
+    }
+
+    /**
+     * Supersede every in-flight live answer (2026-07-31). Called by
+     * modes:set-active: WTA supersession was generation-relative only, so a
+     * slow generation planned under mode A stayed "current" through the switch
+     * and streamed A's answer into a UI showing mode B. engine.reset() bumps
+     * currentGenerationId (breaking every active stream's guard) and aborts
+     * the WTA cancellation token.
+     */
+    supersedeLiveAnswers(): void {
+        this.engine.reset();
     }
 
     // ============================================
@@ -299,5 +432,16 @@ export class IntelligenceManager extends EventEmitter {
     reset(): void {
         this.session.reset();
         this.engine.reset();
+        this.engine.clearWtaDiversityHistory();
+        // V3 conversation state (referents, active topic, previous source ids)
+        // outlived every reset: it is keyed by meeting id, and outside a
+        // meeting that key is a constant, so an ad-hoc session accumulated
+        // referents across unrelated questions until the next mode switch.
+        // Measured 2026-09-10: "Why do you want this role?" resolved to
+        // "(referring to: PYQ)" from a past-paper question asked before the
+        // reset. A reset is the session boundary; the referents go with it.
+        try {
+            require('./context-intelligence/question/conversation-state-store').clearConversationState();
+        } catch { /* non-fatal — the store is process-global and optional */ }
     }
 }

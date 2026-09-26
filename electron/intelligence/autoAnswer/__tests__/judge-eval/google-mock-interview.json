@@ -1,0 +1,1319 @@
+[
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "continuous",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "continuous",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "continuous",
+  "expect": "ask",
+  "asks": [
+   "task"
+  ]
+ },
+ {
+  "text": "So just these three operations.",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "actually store the duplicate."
+   },
+   {
+    "role": "interviewer",
+    "text": "The second thing is removing a value"
+   },
+   {
+    "role": "interviewer",
+    "text": "from this class. And where it gets"
+   },
+   {
+    "role": "interviewer",
+    "text": "interesting is I want you to be able to"
+   },
+   {
+    "role": "interviewer",
+    "text": "get a random value uh that is already"
+   },
+   {
+    "role": "interviewer",
+    "text": "inserted."
+   },
+   {
+    "role": "interviewer",
+    "text": "And among the values that are inserted,"
+   },
+   {
+    "role": "interviewer",
+    "text": "I want it to be of equal probability."
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "continuous",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Yep, that's exactly right.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "to you to make sure I understood it."
+   },
+   {
+    "role": "user",
+    "text": "From what I understand,"
+   },
+   {
+    "role": "user",
+    "text": "I have to create a class that"
+   },
+   {
+    "role": "user",
+    "text": "essentially has three functions."
+   },
+   {
+    "role": "user",
+    "text": "One is to insert an element. Second one"
+   },
+   {
+    "role": "user",
+    "text": "is to remove an element. And the third"
+   },
+   {
+    "role": "user",
+    "text": "one is to get a random value that is"
+   },
+   {
+    "role": "user",
+    "text": "currently in the class. Is that correct?"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "continuous",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Yeah, you can assume that they're integers.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "One is to insert an element. Second one"
+   },
+   {
+    "role": "user",
+    "text": "is to remove an element. And the third"
+   },
+   {
+    "role": "user",
+    "text": "one is to get a random value that is"
+   },
+   {
+    "role": "user",
+    "text": "currently in the class. Is that correct?"
+   },
+   {
+    "role": "interviewer",
+    "text": "Yep, that's exactly right."
+   },
+   {
+    "role": "user",
+    "text": "Nice. Are these values like integers or"
+   },
+   {
+    "role": "user",
+    "text": "strings or like animals? Like are they"
+   },
+   {
+    "role": "user",
+    "text": "specific something?"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "continuous",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Uh you can assume that it's like a reasonable amount like less maybe like in the terms of millions but it's you shouldn't run into like any limitations like with memory or anything like that.",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "Yeah, you can assume that they're"
+   },
+   {
+    "role": "interviewer",
+    "text": "integers."
+   },
+   {
+    "role": "user",
+    "text": "Okay."
+   },
+   {
+    "role": "user",
+    "text": "All right, great. So"
+   },
+   {
+    "role": "user",
+    "text": "then let me ask you this question."
+   },
+   {
+    "role": "user",
+    "text": "Are there going to be a lot of elements"
+   },
+   {
+    "role": "user",
+    "text": "we're inserting or um is it just going"
+   },
+   {
+    "role": "user",
+    "text": "to be a certain amount?"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "continuous",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Uh you can assume that they'll be like of equal quantity like equal proportion.",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "in the terms of millions but it's you"
+   },
+   {
+    "role": "interviewer",
+    "text": "shouldn't run into like any limitations"
+   },
+   {
+    "role": "interviewer",
+    "text": "like with memory or anything like that."
+   },
+   {
+    "role": "user",
+    "text": "Okay. So let me ask you another"
+   },
+   {
+    "role": "user",
+    "text": "question."
+   },
+   {
+    "role": "user",
+    "text": "Is there going to be more insertions"
+   },
+   {
+    "role": "user",
+    "text": "done or more removals done or more get"
+   },
+   {
+    "role": "user",
+    "text": "randoms done?"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "continuous",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Just ignore it. Yeah, you can just pretend like we can ignore the capitalization. You can just assume it's Hey, try to ignore it.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "So, class um"
+   },
+   {
+    "role": "user",
+    "text": "um"
+   },
+   {
+    "role": "user",
+    "text": "Okay. So, let's just call this a store."
+   },
+   {
+    "role": "user",
+    "text": "Class store."
+   },
+   {
+    "role": "user",
+    "text": "And we're going to start with the"
+   },
+   {
+    "role": "user",
+    "text": "constructor. Is there a way to turn off"
+   },
+   {
+    "role": "user",
+    "text": "this uh auto capitalization? Sir, this"
+   },
+   {
+    "role": "user",
+    "text": "is really annoying me."
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "continuous",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Yeah, when it comes to getting random, I'll actually help you out here and just let you know that you can assume that there is a method, let's call it random.choice, choice I think in Python and it takes some list of values and it'll return you a random number with equal probability from that list.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "Now"
+   },
+   {
+    "role": "user",
+    "text": "that sounds good to me."
+   },
+   {
+    "role": "user",
+    "text": "Mhm. Okay."
+   },
+   {
+    "role": "user",
+    "text": "The third thing we have to consider is"
+   },
+   {
+    "role": "user",
+    "text": "we need to get a random value out of"
+   },
+   {
+    "role": "user",
+    "text": "everything that is inserted."
+   },
+   {
+    "role": "user",
+    "text": "um hm how to get a random value with"
+   },
+   {
+    "role": "user",
+    "text": "equal probability."
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "continuous",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Yeah, you can just assume that it's an integer.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "value inside of it"
+   },
+   {
+    "role": "user",
+    "text": "I think this can actually just be a that"
+   },
+   {
+    "role": "user",
+    "text": "um since"
+   },
+   {
+    "role": "user",
+    "text": "inserting a value removing."
+   },
+   {
+    "role": "user",
+    "text": "Okay."
+   },
+   {
+    "role": "user",
+    "text": "So there there's nothing um for the"
+   },
+   {
+    "role": "user",
+    "text": "input. Is it just one value or is this"
+   },
+   {
+    "role": "user",
+    "text": "uh something else during the insertion?"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "continuous",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "yeah that's correct. So this definitely works. Is it possible to get the get random function to be a bit more efficient?",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "um"
+   },
+   {
+    "role": "user",
+    "text": "or to see if this map exists but I think"
+   },
+   {
+    "role": "user",
+    "text": "that's fine since by initializing this"
+   },
+   {
+    "role": "user",
+    "text": "class uh this map will exist. So yeah"
+   },
+   {
+    "role": "user",
+    "text": "this will be O of one insertion O of one"
+   },
+   {
+    "role": "user",
+    "text": "remove and um this will be"
+   },
+   {
+    "role": "user",
+    "text": "O of N for the get random and yeah"
+   },
+   {
+    "role": "user",
+    "text": "[Music]"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "continuous",
+  "expect": "ask",
+  "asks": [
+   "followup"
+  ]
+ },
+ {
+  "text": "Okay. So, this is a question. I want you",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate.",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted.",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "per-final",
+  "expect": "ask",
+  "asks": [
+   "task"
+  ],
+  "note": "All three operations have been stated (\"insert\", \"remove\", \"get a random value that is already inserted\") and the sentence closes; the \"equal probability\" refinement follows. Firing here is correct - the candidate needs to start thinking."
+ },
+ {
+  "text": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted,",
+  "ctx": [],
+  "lastAnswered": null,
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Yeah, you can assume that they're",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "One is to insert an element. Second one"
+   },
+   {
+    "role": "user",
+    "text": "is to remove an element. And the third"
+   },
+   {
+    "role": "user",
+    "text": "one is to get a random value that is"
+   },
+   {
+    "role": "user",
+    "text": "currently in the class. Is that correct?"
+   },
+   {
+    "role": "interviewer",
+    "text": "Yep, that's exactly right."
+   },
+   {
+    "role": "user",
+    "text": "Nice. Are these values like integers or"
+   },
+   {
+    "role": "user",
+    "text": "strings or like animals? Like are they"
+   },
+   {
+    "role": "user",
+    "text": "specific something?"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Uh you can assume that it's like a",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "Yeah, you can assume that they're"
+   },
+   {
+    "role": "interviewer",
+    "text": "integers."
+   },
+   {
+    "role": "user",
+    "text": "Okay."
+   },
+   {
+    "role": "user",
+    "text": "All right, great. So"
+   },
+   {
+    "role": "user",
+    "text": "then let me ask you this question."
+   },
+   {
+    "role": "user",
+    "text": "Are there going to be a lot of elements"
+   },
+   {
+    "role": "user",
+    "text": "we're inserting or um is it just going"
+   },
+   {
+    "role": "user",
+    "text": "to be a certain amount?"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Uh you can assume that it's like a reasonable amount like less maybe like",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "Yeah, you can assume that they're"
+   },
+   {
+    "role": "interviewer",
+    "text": "integers."
+   },
+   {
+    "role": "user",
+    "text": "Okay."
+   },
+   {
+    "role": "user",
+    "text": "All right, great. So"
+   },
+   {
+    "role": "user",
+    "text": "then let me ask you this question."
+   },
+   {
+    "role": "user",
+    "text": "Are there going to be a lot of elements"
+   },
+   {
+    "role": "user",
+    "text": "we're inserting or um is it just going"
+   },
+   {
+    "role": "user",
+    "text": "to be a certain amount?"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Uh you can assume that it's like a reasonable amount like less maybe like in the terms of millions but it's you",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "Yeah, you can assume that they're"
+   },
+   {
+    "role": "interviewer",
+    "text": "integers."
+   },
+   {
+    "role": "user",
+    "text": "Okay."
+   },
+   {
+    "role": "user",
+    "text": "All right, great. So"
+   },
+   {
+    "role": "user",
+    "text": "then let me ask you this question."
+   },
+   {
+    "role": "user",
+    "text": "Are there going to be a lot of elements"
+   },
+   {
+    "role": "user",
+    "text": "we're inserting or um is it just going"
+   },
+   {
+    "role": "user",
+    "text": "to be a certain amount?"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Uh you can assume that it's like a reasonable amount like less maybe like in the terms of millions but it's you shouldn't run into like any limitations",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "Yeah, you can assume that they're"
+   },
+   {
+    "role": "interviewer",
+    "text": "integers."
+   },
+   {
+    "role": "user",
+    "text": "Okay."
+   },
+   {
+    "role": "user",
+    "text": "All right, great. So"
+   },
+   {
+    "role": "user",
+    "text": "then let me ask you this question."
+   },
+   {
+    "role": "user",
+    "text": "Are there going to be a lot of elements"
+   },
+   {
+    "role": "user",
+    "text": "we're inserting or um is it just going"
+   },
+   {
+    "role": "user",
+    "text": "to be a certain amount?"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Uh you can assume that they'll be like",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "in the terms of millions but it's you"
+   },
+   {
+    "role": "interviewer",
+    "text": "shouldn't run into like any limitations"
+   },
+   {
+    "role": "interviewer",
+    "text": "like with memory or anything like that."
+   },
+   {
+    "role": "user",
+    "text": "Okay. So let me ask you another"
+   },
+   {
+    "role": "user",
+    "text": "question."
+   },
+   {
+    "role": "user",
+    "text": "Is there going to be more insertions"
+   },
+   {
+    "role": "user",
+    "text": "done or more removals done or more get"
+   },
+   {
+    "role": "user",
+    "text": "randoms done?"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Just ignore it. Yeah, you can just",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "So, class um"
+   },
+   {
+    "role": "user",
+    "text": "um"
+   },
+   {
+    "role": "user",
+    "text": "Okay. So, let's just call this a store."
+   },
+   {
+    "role": "user",
+    "text": "Class store."
+   },
+   {
+    "role": "user",
+    "text": "And we're going to start with the"
+   },
+   {
+    "role": "user",
+    "text": "constructor. Is there a way to turn off"
+   },
+   {
+    "role": "user",
+    "text": "this uh auto capitalization? Sir, this"
+   },
+   {
+    "role": "user",
+    "text": "is really annoying me."
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Just ignore it. Yeah, you can just pretend like we can ignore the",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "So, class um"
+   },
+   {
+    "role": "user",
+    "text": "um"
+   },
+   {
+    "role": "user",
+    "text": "Okay. So, let's just call this a store."
+   },
+   {
+    "role": "user",
+    "text": "Class store."
+   },
+   {
+    "role": "user",
+    "text": "And we're going to start with the"
+   },
+   {
+    "role": "user",
+    "text": "constructor. Is there a way to turn off"
+   },
+   {
+    "role": "user",
+    "text": "this uh auto capitalization? Sir, this"
+   },
+   {
+    "role": "user",
+    "text": "is really annoying me."
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Just ignore it. Yeah, you can just pretend like we can ignore the capitalization. You can just assume it's",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "So, class um"
+   },
+   {
+    "role": "user",
+    "text": "um"
+   },
+   {
+    "role": "user",
+    "text": "Okay. So, let's just call this a store."
+   },
+   {
+    "role": "user",
+    "text": "Class store."
+   },
+   {
+    "role": "user",
+    "text": "And we're going to start with the"
+   },
+   {
+    "role": "user",
+    "text": "constructor. Is there a way to turn off"
+   },
+   {
+    "role": "user",
+    "text": "this uh auto capitalization? Sir, this"
+   },
+   {
+    "role": "user",
+    "text": "is really annoying me."
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Yeah, when it comes to getting random,",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "Now"
+   },
+   {
+    "role": "user",
+    "text": "that sounds good to me."
+   },
+   {
+    "role": "user",
+    "text": "Mhm. Okay."
+   },
+   {
+    "role": "user",
+    "text": "The third thing we have to consider is"
+   },
+   {
+    "role": "user",
+    "text": "we need to get a random value out of"
+   },
+   {
+    "role": "user",
+    "text": "everything that is inserted."
+   },
+   {
+    "role": "user",
+    "text": "um hm how to get a random value with"
+   },
+   {
+    "role": "user",
+    "text": "equal probability."
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Yeah, when it comes to getting random, I'll actually help you out here and just",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "Now"
+   },
+   {
+    "role": "user",
+    "text": "that sounds good to me."
+   },
+   {
+    "role": "user",
+    "text": "Mhm. Okay."
+   },
+   {
+    "role": "user",
+    "text": "The third thing we have to consider is"
+   },
+   {
+    "role": "user",
+    "text": "we need to get a random value out of"
+   },
+   {
+    "role": "user",
+    "text": "everything that is inserted."
+   },
+   {
+    "role": "user",
+    "text": "um hm how to get a random value with"
+   },
+   {
+    "role": "user",
+    "text": "equal probability."
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Yeah, when it comes to getting random, I'll actually help you out here and just let you know that you can assume that",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "Now"
+   },
+   {
+    "role": "user",
+    "text": "that sounds good to me."
+   },
+   {
+    "role": "user",
+    "text": "Mhm. Okay."
+   },
+   {
+    "role": "user",
+    "text": "The third thing we have to consider is"
+   },
+   {
+    "role": "user",
+    "text": "we need to get a random value out of"
+   },
+   {
+    "role": "user",
+    "text": "everything that is inserted."
+   },
+   {
+    "role": "user",
+    "text": "um hm how to get a random value with"
+   },
+   {
+    "role": "user",
+    "text": "equal probability."
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Yeah, when it comes to getting random, I'll actually help you out here and just let you know that you can assume that there is a method, let's call it",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "Now"
+   },
+   {
+    "role": "user",
+    "text": "that sounds good to me."
+   },
+   {
+    "role": "user",
+    "text": "Mhm. Okay."
+   },
+   {
+    "role": "user",
+    "text": "The third thing we have to consider is"
+   },
+   {
+    "role": "user",
+    "text": "we need to get a random value out of"
+   },
+   {
+    "role": "user",
+    "text": "everything that is inserted."
+   },
+   {
+    "role": "user",
+    "text": "um hm how to get a random value with"
+   },
+   {
+    "role": "user",
+    "text": "equal probability."
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Yeah, when it comes to getting random, I'll actually help you out here and just let you know that you can assume that there is a method, let's call it random.choice, choice I think in Python",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "Now"
+   },
+   {
+    "role": "user",
+    "text": "that sounds good to me."
+   },
+   {
+    "role": "user",
+    "text": "Mhm. Okay."
+   },
+   {
+    "role": "user",
+    "text": "The third thing we have to consider is"
+   },
+   {
+    "role": "user",
+    "text": "we need to get a random value out of"
+   },
+   {
+    "role": "user",
+    "text": "everything that is inserted."
+   },
+   {
+    "role": "user",
+    "text": "um hm how to get a random value with"
+   },
+   {
+    "role": "user",
+    "text": "equal probability."
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Yeah, when it comes to getting random, I'll actually help you out here and just let you know that you can assume that there is a method, let's call it random.choice, choice I think in Python and it takes some list of values and",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "Now"
+   },
+   {
+    "role": "user",
+    "text": "that sounds good to me."
+   },
+   {
+    "role": "user",
+    "text": "Mhm. Okay."
+   },
+   {
+    "role": "user",
+    "text": "The third thing we have to consider is"
+   },
+   {
+    "role": "user",
+    "text": "we need to get a random value out of"
+   },
+   {
+    "role": "user",
+    "text": "everything that is inserted."
+   },
+   {
+    "role": "user",
+    "text": "um hm how to get a random value with"
+   },
+   {
+    "role": "user",
+    "text": "equal probability."
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Yeah, when it comes to getting random, I'll actually help you out here and just let you know that you can assume that there is a method, let's call it random.choice, choice I think in Python and it takes some list of values and it'll return you a random number with",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "Now"
+   },
+   {
+    "role": "user",
+    "text": "that sounds good to me."
+   },
+   {
+    "role": "user",
+    "text": "Mhm. Okay."
+   },
+   {
+    "role": "user",
+    "text": "The third thing we have to consider is"
+   },
+   {
+    "role": "user",
+    "text": "we need to get a random value out of"
+   },
+   {
+    "role": "user",
+    "text": "everything that is inserted."
+   },
+   {
+    "role": "user",
+    "text": "um hm how to get a random value with"
+   },
+   {
+    "role": "user",
+    "text": "equal probability."
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "Yeah, you can just assume that it's an",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "value inside of it"
+   },
+   {
+    "role": "user",
+    "text": "I think this can actually just be a that"
+   },
+   {
+    "role": "user",
+    "text": "um since"
+   },
+   {
+    "role": "user",
+    "text": "inserting a value removing."
+   },
+   {
+    "role": "user",
+    "text": "Okay."
+   },
+   {
+    "role": "user",
+    "text": "So there there's nothing um for the"
+   },
+   {
+    "role": "user",
+    "text": "input. Is it just one value or is this"
+   },
+   {
+    "role": "user",
+    "text": "uh something else during the insertion?"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "yeah that's correct. So this definitely",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "um"
+   },
+   {
+    "role": "user",
+    "text": "or to see if this map exists but I think"
+   },
+   {
+    "role": "user",
+    "text": "that's fine since by initializing this"
+   },
+   {
+    "role": "user",
+    "text": "class uh this map will exist. So yeah"
+   },
+   {
+    "role": "user",
+    "text": "this will be O of one insertion O of one"
+   },
+   {
+    "role": "user",
+    "text": "remove and um this will be"
+   },
+   {
+    "role": "user",
+    "text": "O of N for the get random and yeah"
+   },
+   {
+    "role": "user",
+    "text": "[Music]"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "yeah that's correct. So this definitely works. Is it possible to get the get",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "um"
+   },
+   {
+    "role": "user",
+    "text": "or to see if this map exists but I think"
+   },
+   {
+    "role": "user",
+    "text": "that's fine since by initializing this"
+   },
+   {
+    "role": "user",
+    "text": "class uh this map will exist. So yeah"
+   },
+   {
+    "role": "user",
+    "text": "this will be O of one insertion O of one"
+   },
+   {
+    "role": "user",
+    "text": "remove and um this will be"
+   },
+   {
+    "role": "user",
+    "text": "O of N for the get random and yeah"
+   },
+   {
+    "role": "user",
+    "text": "[Music]"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": []
+ },
+ {
+  "text": "yeah that's correct. So this definitely works. Is it possible to get the get random function to be a bit more",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "um"
+   },
+   {
+    "role": "user",
+    "text": "or to see if this map exists but I think"
+   },
+   {
+    "role": "user",
+    "text": "that's fine since by initializing this"
+   },
+   {
+    "role": "user",
+    "text": "class uh this map will exist. So yeah"
+   },
+   {
+    "role": "user",
+    "text": "this will be O of one insertion O of one"
+   },
+   {
+    "role": "user",
+    "text": "remove and um this will be"
+   },
+   {
+    "role": "user",
+    "text": "O of N for the get random and yeah"
+   },
+   {
+    "role": "user",
+    "text": "[Music]"
+   }
+  ],
+  "lastAnswered": "Okay. So, this is a question. I want you to design a class that supports these three operations. So, the first operation is inserting a value. And you can assume that there's no duplicates allowed. So, you might be given a duplicate, but you don't want to actually store the duplicate. The second thing is removing a value from this class. And where it gets interesting is I want you to be able to get a random value uh that is already inserted. And among the values that are inserted, I want it to be of equal probability.",
+  "mode": "per-final",
+  "expect": "silent",
+  "asks": [],
+  "note": "KNOWN FALSE FIRE: cut mid-phrase (\"...to be a bit more\"). The completeness rule should hold this one turn; it fires with roughly the right question, so the harm is small. Only reachable in the pessimistic per-final segmentation."
+ }
+]

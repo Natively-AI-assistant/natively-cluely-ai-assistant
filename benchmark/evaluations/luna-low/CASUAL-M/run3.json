@@ -1,0 +1,290 @@
+{
+ "blind_id": "S-6a768af9",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 46770,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 22389,
+  "candidatesTokenCount": 2204,
+  "totalTokenCount": 29219,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 22389
+   }
+  ],
+  "thoughtsTokenCount": 4626,
+  "serviceTier": "standard"
+ },
+ "fact_count": 51,
+ "evaluation": {
+  "factual_accuracy": 3,
+  "important_information_retention": 8,
+  "hallucination_control": 4,
+  "action_item_retention": 6,
+  "decision_retention": 4,
+  "speaker_attribution": 5,
+  "numeric_accuracy": 5,
+  "entity_retention": 8,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 3,
+  "structure": 2,
+  "conciseness": 1,
+  "readability": 3,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Reports superseded trip dates (Oct 16-19) as a final decision alongside the actual dates (Oct 23-26).",
+   "Reports that Priya will book the cabin as a decision and action item, contradicting the final decision that Dan will book it.",
+   "Reports the $285 per-person split as a final decision, ignoring that it is contingent on Mia's unconfirmed attendance (currently $380).",
+   "States that the departure time is open and deferred, contradicting the final decision to meet at 9:30.",
+   "Hallucinates an action item for Dan to send Priya $190, reversing the actual flow of funds.",
+   "Includes a cut-off, incomplete sentence in the Summary section.",
+   "Massive structural repetition, duplicating sections like 'Action items' and 'Action items (structured)' with conflicting information."
+  ],
+  "missing_important_information": [
+   "Maya has a big work presentation on Friday the 16th.",
+   "Ridgeway SUVs cost about $64 a day.",
+   "Halvorsen is hybrid and will pay for Tom's CFA level two certification.",
+   "Priya is moving to day shifts in November.",
+   "Dan's rent is going up $200 a month.",
+   "Jonah has not seen Maya in about fourteen months."
+  ],
+  "hallucinated_information": [
+   "Dan will send Priya $190 tonight.",
+   "Dan will double-check whether the cabin allows Waffles (he already checked and confirmed it does not).",
+   "Priya will check her work rota to confirm that the October 16-19 trip dates work (she already checked and confirmed she works nights)."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "The target dates are October 16th through October 19th."
+   },
+   {
+    "correction_id": "C03",
+    "reported": "Each of the four paying attendees will contribute $285 based on the corrected $1,140 total."
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Priya will book Heron Point Cabin using Hearthstay credit."
+   },
+   {
+    "correction_id": "C06",
+    "reported": "The departure time on Friday has not been finalized; Tom suggested 8 a.m., but the group deferred the timing discussion."
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "The target dates are October 16th through October 19th.",
+   "Priya will book Heron Point Cabin using Hearthstay credit.",
+   "Each of the four paying attendees will contribute $285 based on the corrected $1,140 total."
+  ],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "partial"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "contradicted"
+   },
+   {
+    "id": "F07",
+    "status": "partial"
+   },
+   {
+    "id": "F08",
+    "status": "missing"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "contradicted"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "contradicted"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "contradicted"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "missing"
+   },
+   {
+    "id": "F24",
+    "status": "contradicted"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "missing"
+   },
+   {
+    "id": "F40",
+    "status": "missing"
+   },
+   {
+    "id": "F41",
+    "status": "missing"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "missing"
+   }
+  ],
+  "rationale": "The notes suffer from severe structural and logical issues. They repeat the same information across multiple redundant sections (e.g., 'Action items' and 'Action items (structured)'). More critically, the notes fail to distinguish between initial proposals and final decisions, presenting superseded values (like the October 16-19 dates, Priya booking the cabin, and the $285 cost split) as final decisions alongside the actual final values. This creates massive contradictions throughout the text. There are also hallucinated action items, such as Dan sending Priya $190 instead of the other way around, and the summary contains a cut-off sentence."
+ }
+}

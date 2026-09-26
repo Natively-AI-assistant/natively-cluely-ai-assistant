@@ -1,5 +1,9 @@
 // removed unused anyhow::Result
 
+/// Shared by every backend — see stop_signal.rs for why a stopped stream must
+/// be surfaced instead of read as silence.
+pub mod stop_signal;
+
 #[cfg(target_os = "macos")]
 mod core_audio;
 #[cfg(target_os = "macos")]
@@ -14,6 +18,8 @@ pub use macos::SpeakerInput;
 pub use macos::SpeakerStream;
 #[cfg(target_os = "macos")]
 pub use sck::default_output_device_uid;
+#[cfg(target_os = "macos")]
+pub use sck::active_display_count;
 
 #[cfg(target_os = "windows")]
 pub mod windows;
@@ -60,6 +66,12 @@ pub mod fallback {
             unreachable!("SpeakerStream is never constructed on this platform")
         }
         pub fn take_consumer(&mut self) -> Option<HeapCons<f32>> {
+            unreachable!("SpeakerStream is never constructed on this platform")
+        }
+        pub fn take_stop_error(&self) -> Option<String> {
+            unreachable!("SpeakerStream is never constructed on this platform")
+        }
+        pub fn backend_name(&self) -> &'static str {
             unreachable!("SpeakerStream is never constructed on this platform")
         }
         pub fn pause(&mut self) {

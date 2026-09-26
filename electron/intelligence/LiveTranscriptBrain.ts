@@ -13,7 +13,7 @@
 //
 // It also carries the FIX for the verified long-range-memory bug: `getDurableWindow`
 // reads SessionTracker.getDurableContext() (backed by fullTranscript, which survives
-// the 120s eviction) instead of getContext() (capped at 120s by evictOldEntries).
+// the 180s eviction) instead of getContext() (capped at 180s by evictOldEntries).
 // Whether the live follow-up memory should USE the durable window is gated by the
 // `durableMemoryWindow` flag (default OFF → current behavior preserved); this facade
 // just exposes both windows and a helper that picks per the flag.
@@ -34,11 +34,11 @@ export interface TranscriptContextItem {
 }
 
 export interface SessionTrackerLike {
-  /** 120s-evicted rolling window (final-only). */
+  /** 180s-evicted rolling window (final-only). */
   getContext(lastSeconds?: number): TranscriptContextItem[];
-  /** 120s window + the latest interim interviewer partial. */
+  /** 180s window + the latest interim interviewer partial. */
   getContextWithInterim(lastSeconds?: number): TranscriptContextItem[];
-  /** Durable window backed by fullTranscript (survives 120s eviction). */
+  /** Durable window backed by fullTranscript (survives 180s eviction). */
   getDurableContext(lastSeconds?: number): TranscriptContextItem[];
   /** Last final interviewer turn, or null. */
   getLastInterviewerTurn(): string | null;
@@ -108,8 +108,8 @@ export class LiveTranscriptBrain {
 
   /**
    * The DURABLE window — finalized turns within `seconds` (default 2h) read from the
-   * persisted transcript that survives 120s eviction. This is what long-range
-   * follow-up recall must use; `getLiveWindow` cannot see past ~120s. (Bound: in a
+   * persisted transcript that survives 180s eviction. This is what long-range
+   * follow-up recall must use; `getLiveWindow` cannot see past ~180s. (Bound: in a
    * >1800-segment session the oldest raw turns are compacted into an epoch summary
    * and won't appear here — see SessionTracker.getDurableContext.)
    */
@@ -121,7 +121,7 @@ export class LiveTranscriptBrain {
    * The window the long-range follow-up MEMORY should be built from. When the
    * `durableMemoryWindow` flag is ON, returns the durable (fullTranscript-backed)
    * window so an entity from minute 1 is still present at minute 62. When OFF,
-   * returns the legacy getContext() window (current behavior, ~120s) — so enabling
+   * returns the legacy getContext() window (current behavior, ~180s) — so enabling
    * the flag is the ONLY thing that changes live recall.
    */
   getMemoryWindow(seconds: number = DEFAULT_DURABLE_WINDOW_SECONDS): TranscriptContextItem[] {

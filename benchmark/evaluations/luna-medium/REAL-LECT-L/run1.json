@@ -1,0 +1,374 @@
+{
+ "blind_id": "S-bb2cdced",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 67318,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 35542,
+  "candidatesTokenCount": 1688,
+  "totalTokenCount": 46793,
+  "cachedContentTokenCount": 24511,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 35542
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24511
+   }
+  ],
+  "thoughtsTokenCount": 9563,
+  "serviceTier": "standard"
+ },
+ "fact_count": 79,
+ "evaluation": {
+  "factual_accuracy": 9,
+  "important_information_retention": 9,
+  "hallucination_control": 10,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 8,
+  "entity_retention": 9,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 10,
+  "structure": 7,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 5,
+  "critical_errors": [],
+  "missing_important_information": [
+   "The lecturer's identity (Christine Grady) and her disclaimers.",
+   "The specific reasons why social value matters (minimizes exploitation, responsible use of resources).",
+   "NIH's specific policies for the inclusion of women, minorities, and children.",
+   "The lecturer's specific praise for the CIOMS document's detailed explanations."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "missing"
+   },
+   {
+    "id": "F02",
+    "status": "partial"
+   },
+   {
+    "id": "F03",
+    "status": "partial"
+   },
+   {
+    "id": "F04",
+    "status": "partial"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "partial"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "partial"
+   },
+   {
+    "id": "F12",
+    "status": "partial"
+   },
+   {
+    "id": "F13",
+    "status": "partial"
+   },
+   {
+    "id": "F14",
+    "status": "partial"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "partial"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "missing"
+   },
+   {
+    "id": "F20",
+    "status": "partial"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "partial"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "partial"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "partial"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "missing"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "partial"
+   },
+   {
+    "id": "F34",
+    "status": "partial"
+   },
+   {
+    "id": "F35",
+    "status": "partial"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "missing"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "partial"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "partial"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "partial"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "partial"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "partial"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   },
+   {
+    "id": "F73",
+    "status": "partial"
+   },
+   {
+    "id": "F74",
+    "status": "present"
+   },
+   {
+    "id": "F75",
+    "status": "present"
+   },
+   {
+    "id": "F76",
+    "status": "present"
+   },
+   {
+    "id": "F77",
+    "status": "present"
+   },
+   {
+    "id": "F78",
+    "status": "present"
+   },
+   {
+    "id": "F79",
+    "status": "partial"
+   }
+  ],
+  "rationale": "The candidate notes capture an impressive amount of the lecture's conceptual content with high factual accuracy and no hallucinations. However, the notes suffer from extreme repetition. The exact same concepts, definitions, and examples are rephrased and repeated across the Overview, Summary, Core Concepts, Definitions, Examples, Formulas/Steps, Things to Memorize, Confusing Points, Questions to Review, and Study Summary sections. This bloat severely damages conciseness and readability, making the notes a tedious slog rather than a useful summary."
+ }
+}

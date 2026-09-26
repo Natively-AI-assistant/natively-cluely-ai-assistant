@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { loadNativeModule } from './nativeModuleLoader';
+import { normalizeSpeechEdge } from './speechEdge';
 
 // RustAudioCapture is the native Rust class (napi-rs) that captures system audio.
 // May be null if the .node binary isn't available — constructor logs an error in that case.
@@ -76,6 +77,23 @@ export class SystemAudioCapture extends EventEmitter {
     }
 
     /**
+     * Which native backend is actually capturing: 'sck' | 'coreaudio' |
+     * 'wasapi', or '' while the background init is still running (and after
+     * the monitor has been retired). main.ts compares it with the backend the
+     * user asked for to notice a silent fallback (see startSckReprobeWatcher).
+     */
+    public getActiveBackend(): string {
+        try {
+            if (this.monitor && typeof this.monitor.getActiveBackend === 'function') {
+                return String(this.monitor.getActiveBackend() ?? '');
+            }
+        } catch (e) {
+            console.warn('[SystemAudioCapture] getActiveBackend failed:', e);
+        }
+        return '';
+    }
+
+    /**
      * Start capturing audio
      */
     public start(): void {
@@ -83,7 +101,13 @@ export class SystemAudioCapture extends EventEmitter {
 
         if (!RustAudioCapture) {
             console.error('[SystemAudioCapture] Cannot start: Rust module missing');
-            return;
+            // F-107: a bare return here made a missing/wrong-arch native
+            // module a SILENT no-op — no 'error', no 'start' (so the stuck
+            // watchdog never armed), empty device lists, and a meeting that
+            // reported success with zero transcript. Throw instead: every
+            // start() call site (startCaptureChannels, recovery, resume,
+            // audio test) catches and surfaces a terminal channel banner.
+            throw new Error('Native audio engine unavailable — the audio capture module failed to load. Reinstall the app (dev: npm run build:native).');
         }
 
         // LAZY INIT: Create monitor here when meeting starts (not in constructor)
@@ -110,6 +134,33 @@ export class SystemAudioCapture extends EventEmitter {
                 if (err) {
                     console.error('[SystemAudioCapture] Callback error:', err);
                     this.isRecording = false; // Allow recovery via restart
+                    // The Rust DSP thread has exited (a fatal init failure, or the
+                    // platform stopped the stream — see speaker/stop_signal.rs),
+                    // but its handle is still Some inside the monitor. A later
+                    // start() on this same instance would hit "Capture already
+                    // running". Retire the monitor now so the next start() takes
+                    // the lazy-init branch; stop() is deferred as in the failed-
+                    // start path below. isRecording is already false, so stop()
+                    // would otherwise skip the native teardown entirely.
+                    const dying = this.monitor;
+                    this.monitor = null;
+                    if (dying) {
+                        // Published as the teardown promise so the recovery
+                        // handler's `await destroy()` still means "native side
+                        // released" (F-104) even though stop() short-circuits.
+                        const retire = new Promise<void>((resolve) => {
+                            setImmediate(() => {
+                                try { dying.stop(); } catch (e) {
+                                    console.error('[SystemAudioCapture] Error retiring monitor after callback error:', e);
+                                }
+                                resolve();
+                            });
+                        });
+                        this._teardownPromise = retire;
+                        void retire.then(() => {
+                            if (this._teardownPromise === retire) this._teardownPromise = null;
+                        });
+                    }
                     this.emit('error', err);
                     return;
                 }
@@ -138,6 +189,15 @@ export class SystemAudioCapture extends EventEmitter {
                     return;
                 }
                 this.emit('speech_ended');
+            }, (err: Error | null, edge: any) => {
+                // Joint dual-channel transition (Auto Answer V3, Amendment 1).
+                // Optional third callback; absent consumers cost nothing.
+                if (err) {
+                    console.error('[SystemAudioCapture] Speech edge callback error:', err);
+                    return;
+                }
+                const normalized = normalizeSpeechEdge(edge);
+                if (normalized) this.emit('speech_edge', normalized);
             });
 
             // getSampleRate MUST be called AFTER start() — background init updates

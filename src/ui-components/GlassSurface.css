@@ -1,0 +1,199 @@
+/* src/ui-components/GlassSurface.css
+ *
+ * The refractive variant of the glass material: a surface that bends what is
+ * behind it, rather than tinting it.  Companion to LiquidGlassButton.css —
+ * that one is a FLAT body with a measured specular rim (see design.md); this
+ * one is an SVG displacement map fed to `backdrop-filter`, so the backdrop
+ * itself warps toward the edges the way real glass with thickness does.
+ *
+ * Class and custom-property names are `glass-surface` / `--glass-` prefixed
+ * because this stylesheet becomes global the moment the component is
+ * imported.
+ *
+ * TWO DELIBERATE DEPARTURES from the upstream React Bits stylesheet:
+ *
+ *  1. `light-dark()` and `@media (prefers-color-scheme: dark)` are gone.
+ *     This app's theme is an ATTRIBUTE — `[data-theme='light'|'dark']` on
+ *     <html>, written by useResolvedTheme — and it is not required to agree
+ *     with the OS.  `light-dark()` additionally resolves to its LIGHT branch
+ *     unless `color-scheme` is declared on the element or an ancestor, which
+ *     this app never sets, so the upstream rules would have handed the dark
+ *     theme a light rim.  Every themed value below is keyed to the attribute.
+ *
+ *  2. The fallback tier is DARK-first for the same reason: the app ships dark
+ *     by default, and the light branch is the override.
+ */
+
+.glass-surface {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Clips the refracted backdrop to the rounded box. Note for hosts: this
+       also clips an outline-based focus ring, so a focusable child wants a
+       ring drawn INSIDE the box (box-shadow inset) rather than around it. */
+    overflow: hidden;
+    transition: opacity 0.26s ease-out;
+}
+
+.glass-surface__filter {
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    z-index: -1;
+}
+
+.glass-surface__content {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    border-radius: inherit;
+    position: relative;
+    z-index: 1;
+}
+
+/* A host that lays its own children out — a field with a trailing button, say —
+   opts out of the centring box, because that padding silently becomes the
+   offset every absolutely-positioned child is measured from.
+
+   Doubled up on purpose. At one class each this would tie with the rule above
+   and be decided by source order, so moving either rule — or wrapping the
+   sheet in a @layer — would silently hand an absolutely-positioned child back
+   its 8px offset. */
+.glass-surface__content.glass-surface__content--bare {
+    display: block;
+    padding: 0;
+}
+
+/* ── The real thing: refraction via an SVG displacement map ───────────────── */
+
+/*
+  The rim, and the one place this port departs from upstream on looks rather
+  than correctness.
+
+  Upstream lights the whole perimeter uniformly — a 1px ring at 35% white plus
+  a 4px-spread bloom at 15%. On a light surface that is a soft edge; on a dark
+  one, where the fill is tinted most of the way to black, it is a fat grey halo
+  that traces the pill and pools at the caps. It reads as a smudged border, not
+  as glass.
+
+  design.md (the measured macOS 27 material, same folder) says why: the rim is
+  DIRECTIONAL. Bright along the top face where the key light hits, weaker along
+  the bottom where the material catches a bounce, and dying away across the left
+  and right caps, whose normals turn away from the light. "A uniform ring around
+  the perimeter is what makes a pill read as a plastic capsule instead of glass."
+
+  So: a 1px top highlight, a weaker 1px bottom one, and a ring so faint it only
+  keeps the caps from dissolving. No spread, no bloom. The full treatment —
+  masked rings that fade across the caps — lives in LiquidGlassButton.css; it
+  needs four layers, and at this scale the three lines below carry it.
+
+  Light theme keeps upstream's shadow set: it never had the problem, and its
+  rim is doing real work against a near-white ground.
+*/
+.glass-surface--svg {
+    /* --glass-tint, when a host sets it, is the whole fill: colour AND alpha.
+       Tinting toward pure black is right only when the surface behind is
+       lighter than the pill wants to be; over this app's dark #151515 page it
+       makes a hole. A host that knows its own backdrop passes its raised
+       surface colour instead. Note the variable applies in BOTH themes, so a
+       host setting it owns both values. */
+    background: var(--glass-tint, hsl(0 0% 0% / var(--glass-frost, 0)));
+    backdrop-filter: var(--filter-id, url(#glass-filter)) saturate(var(--glass-saturation, 1));
+    box-shadow:
+        0 1px 0 0 color-mix(in oklch, white, transparent 82%) inset,
+        0 0 0 1px color-mix(in oklch, white, transparent 92%) inset,
+        /* A real cast shadow, not the near-invisible rgba(17,17,26,.05) stack
+           upstream ships. A pane this transparent has no fill to separate it
+           from the page, so the shadow is what puts it in front. */
+        0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme='light'] .glass-surface--svg {
+    background: var(--glass-tint, hsl(0 0% 100% / var(--glass-frost, 0)));
+    box-shadow:
+        0 0 2px 1px color-mix(in oklch, black, transparent 85%) inset,
+        0 0 10px 4px color-mix(in oklch, black, transparent 90%) inset,
+        0 4px 16px rgba(17, 17, 26, 0.05),
+        0 8px 24px rgba(17, 17, 26, 0.05),
+        0 16px 56px rgba(17, 17, 26, 0.05);
+}
+
+/* ── Fallback: no displacement, just a blurred pane ───────────────────────── */
+
+.glass-surface--fallback {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px) saturate(1.8) brightness(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.8) brightness(1.2);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow:
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.2),
+        inset 0 -1px 0 0 rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='light'] .glass-surface--fallback {
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(12px) saturate(1.8) brightness(1.1);
+    -webkit-backdrop-filter: blur(12px) saturate(1.8) brightness(1.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow:
+        0 8px 32px 0 rgba(31, 38, 135, 0.2),
+        0 2px 16px 0 rgba(31, 38, 135, 0.1),
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.4),
+        inset 0 -1px 0 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Last tier — no backdrop-filter at all. Opaque enough to keep the content
+   legible against whatever is behind it. */
+@supports not (backdrop-filter: blur(10px)) {
+    .glass-surface--fallback {
+        background: rgba(0, 0, 0, 0.4);
+        box-shadow:
+            inset 0 1px 0 0 rgba(255, 255, 255, 0.2),
+            inset 0 -1px 0 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .glass-surface--fallback::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: inherit;
+        z-index: -1;
+    }
+
+    [data-theme='light'] .glass-surface--fallback {
+        background: rgba(255, 255, 255, 0.4);
+        box-shadow:
+            inset 0 1px 0 0 rgba(255, 255, 255, 0.5),
+            inset 0 -1px 0 0 rgba(255, 255, 255, 0.3);
+    }
+
+    [data-theme='light'] .glass-surface--fallback::before {
+        background: rgba(255, 255, 255, 0.15);
+    }
+}
+
+.glass-surface:focus-visible {
+    outline: 2px solid #0a84ff;
+    outline-offset: 2px;
+}
+
+[data-theme='light'] .glass-surface:focus-visible {
+    outline-color: #007aff;
+}
+
+/* The displacement is a static optical effect, not motion — it does not
+   animate — so reduced-motion leaves it alone. The only moving part is the
+   opacity transition above, which this stills. */
+@media (prefers-reduced-motion: reduce) {
+    .glass-surface {
+        transition: none;
+    }
+}

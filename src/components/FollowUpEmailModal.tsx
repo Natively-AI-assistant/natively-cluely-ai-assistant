@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Mail, RotateCcw, ExternalLink, Loader2, Paperclip } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useT } from '../i18n';
+import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
 interface Meeting {
     id: string;
@@ -27,6 +29,8 @@ interface FollowUpEmailModalProps {
 }
 
 const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose, meeting }) => {
+    const t = useT();
+    const isLight = useResolvedTheme() === 'light';
     const [recipientEmail, setRecipientEmail] = useState('');
     const [senderName, setSenderName] = useState('');
     const [recipientName, setRecipientName] = useState('');
@@ -62,8 +66,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
         try {
             // Try Calendar
             if (meeting.calendarEventId) {
-                // @ts-ignore
-                const attendees = await window.electronAPI?.invoke('get-calendar-attendees', meeting.calendarEventId);
+                const attendees = await window.electronAPI?.getCalendarAttendees(meeting.calendarEventId);
                 if (attendees && attendees.length > 0) {
                     loadedRecipientEmail = attendees[0].email;
                     if (attendees[0].name) loadedRecipientName = attendees[0].name.split(' ')[0];
@@ -72,8 +75,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
 
             // Fallback: Transcript
             if (!loadedRecipientEmail && meeting.transcript) {
-                // @ts-ignore
-                const extracted = await window.electronAPI?.invoke('extract-emails-from-transcript', meeting.transcript);
+                const extracted = await window.electronAPI?.extractEmailsFromTranscript(meeting.transcript);
                 if (extracted && extracted.length > 0) {
                     loadedRecipientEmail = extracted[0];
                 }
@@ -105,13 +107,16 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                 tone: 'neutral' as const // Default to neutral for auto-gen
             };
 
-            // @ts-ignore
-            const generatedBody = await window.electronAPI?.invoke('generate-followup-email', input);
+            const generatedBody = await window.electronAPI?.generateFollowupEmail(input);
             if (generatedBody) {
                 setEmailBody(generatedBody);
             }
         } catch (error) {
             console.error('Failed to generate email:', error);
+            // NOTE: Do NOT use t() here. This is the recipient-facing email body
+            // content, not the UI. The recipient's language isn't determined by
+            // the user's UI locale. Keep this English (or surface a per-recipient
+            // language signal if/when one exists).
             setEmailBody('Hi there,\n\nI enjoyed our conversation. Let me know if you have any questions.\n\nBest,');
         } finally {
             setIsGenerating(false);
@@ -124,14 +129,12 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
 
     const handleSendGmail = async () => {
         const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipientEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
-        // @ts-ignore
-        await window.electronAPI?.invoke('open-external', gmailUrl);
+        await window.electronAPI?.openExternal(gmailUrl);
         onClose();
     };
 
     const handleSendDefault = async () => {
-        // @ts-ignore
-        await window.electronAPI?.invoke('open-mailto', {
+        await window.electronAPI?.openMailto({
             to: recipientEmail,
             subject: subject,
             body: emailBody
@@ -152,7 +155,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 transition-opacity"
+                        className={`fixed inset-0 ${isLight ? 'bg-black/[0.06]' : 'bg-black/70'} z-[300] transition-opacity`}
                     />
 
                     {/* Modal Container */}
@@ -161,14 +164,14 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 10 }}
                         transition={{ duration: 0.3, type: "spring", damping: 25, stiffness: 300 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+                        className="fixed inset-0 z-[300] flex items-center justify-center p-4 pointer-events-none"
                     >
                         {/* The Window */}
                         <div className="w-full max-w-[640px] bg-[#121212]/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/[0.08] flex flex-col pointer-events-auto overflow-hidden ring-1 ring-white/5">
 
                             {/* Header / Top Bar */}
                             <div className="flex px-6 py-4 justify-between items-center border-b border-white/[0.06]">
-                                <h2 className="text-sm font-medium text-[#E9E9E9] tracking-wide">Draft Follow-up</h2>
+                                <h2 className="text-sm font-medium text-[#E9E9E9] tracking-wide">{t('Draft Follow-up')}</h2>
                                 <button onClick={onClose} className="text-[#71717A] hover:text-white transition-colors bg-white/5 hover:bg-white/10 p-1.5 rounded-full">
                                     <X size={14} />
                                 </button>
@@ -179,7 +182,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
 
                                 {/* TO Field */}
                                 <div className="flex items-start gap-6 group">
-                                    <label className="text-[#71717A] text-[13px] w-[50px] font-medium pt-2">To</label>
+                                    <label className="text-[#71717A] text-[13px] w-[50px] font-medium pt-2">{t('To')}</label>
                                     <div className="flex-1 min-h-[32px] flex items-center border-b border-white/[0.06] group-focus-within:border-white/20 transition-colors pb-1">
                                         {recipientEmail ? (
                                             <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#27272A] border border-white/10 rounded-full text-[#E9E9E9] text-[13px] shadow-sm animate-in fade-in zoom-in duration-200">
@@ -197,7 +200,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                                                 type="email"
                                                 value={recipientEmail}
                                                 onChange={(e) => setRecipientEmail(e.target.value)}
-                                                placeholder="Recipient email"
+                                                placeholder={t("Recipient email")}
                                                 className="w-full bg-transparent text-[#E9E9E9] placeholder-[#525255] focus:outline-none text-[14px]"
                                                 autoFocus
                                             />
@@ -207,14 +210,14 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
 
                                 {/* SUBJECT Field */}
                                 <div className="flex items-center gap-6 group">
-                                    <label className="text-[#71717A] text-[13px] w-[50px] font-medium">Subject</label>
+                                    <label className="text-[#71717A] text-[13px] w-[50px] font-medium">{t('Subject')}</label>
                                     <div className="flex-1 border-b border-white/[0.06] group-focus-within:border-white/20 transition-colors pb-1">
                                         <input
                                             type="text"
                                             value={subject}
                                             onChange={(e) => setSubject(e.target.value)}
                                             className="w-full bg-transparent text-[#E9E9E9] focus:outline-none text-[14px] font-medium placeholder-[#525255]"
-                                            placeholder="Subject line"
+                                            placeholder={t("Subject line")}
                                         />
                                     </div>
                                 </div>
@@ -231,7 +234,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                                                     <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                                                 </div>
                                             </div>
-                                            <span className="text-xs font-medium text-[#71717A] animate-pulse">Drafting perfect follow-up...</span>
+                                            <span className="text-xs font-medium text-[#71717A] animate-pulse">{t('Drafting perfect follow-up...')}</span>
                                         </div>
                                     </div>
                                 ) : (
@@ -239,7 +242,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                                         value={emailBody}
                                         onChange={(e) => setEmailBody(e.target.value)}
                                         className="w-full h-full bg-transparent text-[#D4D4D8] text-[15px] leading-7 focus:outline-none resize-none placeholder-[#3F3F46] font-normal"
-                                        placeholder="Write your email..."
+                                        placeholder={t("Write your email...")}
                                         spellCheck={false}
                                     />
                                 )}
@@ -266,10 +269,10 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
                                         onClick={handleReset}
                                         disabled={isGenerating}
                                         className="flex items-center gap-2 px-4 py-2.5 hover:bg-white/5 rounded-xl transition-colors text-[#71717A] hover:text-[#E9E9E9] disabled:opacity-30 disabled:cursor-not-allowed group"
-                                        title="Regenerate"
+                                        title={t("Regenerate")}
                                     >
                                         <RotateCcw size={15} className={`group-hover:rotate-180 transition-transform duration-500 ${isGenerating ? 'animate-spin' : ''}`} />
-                                        <span className="text-[13px] font-medium">Reset</span>
+                                        <span className="text-[13px] font-medium">{t('Reset')}</span>
                                     </button>
                                 </div>
                             </div>

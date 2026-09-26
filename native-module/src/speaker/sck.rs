@@ -1,16 +1,35 @@
 // ScreenCaptureKit-based system audio capture
 // Uses cidre 0.11.10 API with correct class registration and inner state
 
+use super::stop_signal::StopSignal;
 use anyhow::Result;
 use cidre::sc::StreamOutput;
+// Brings the optional-method selector helpers (sel_*) into scope for add_methods.
+use cidre::sc::stream::Delegate as _;
 use cidre::{api, arc, cm, define_obj_type, dispatch, ns, objc, sc};
 use ringbuf::{
     traits::{Producer, Split},
     HeapCons, HeapProd, HeapRb,
 };
+use std::sync::Arc;
 
 // keep for compatibility
 use cidre::core_audio as ca;
+
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+    fn CGGetActiveDisplayList(max_displays: u32, active_displays: *mut u32, display_count: *mut u32) -> i32;
+}
+
+/// Number of active displays. ScreenCaptureKit enumerates NO displays while
+/// they are asleep (SCShareableContent comes back empty and a running stream
+/// stops with -3815), so main.ts polls this to know when an SCK rebuild can
+/// succeed again after a system-initiated stop. 0 on error.
+pub fn active_display_count() -> u32 {
+    let mut count: u32 = 0;
+    let err = unsafe { CGGetActiveDisplayList(0, std::ptr::null_mut(), &mut count) };
+    if err != 0 { 0 } else { count }
+}
 
 pub fn list_output_devices() -> Result<Vec<(String, String)>> {
     let all_devices = ca::System::devices()?;
@@ -97,6 +116,54 @@ impl sc::stream::OutputImpl for AudioHandler {
                 println!("[SystemAudio-SCK] Failed to get audio buffer: {:?}", e);
             }
         }
+    }
+}
+
+/// SCStreamDelegate. Until 2026-09-11 the stream was created with NO delegate,
+/// so a stream the system stopped underneath us was indistinguishable from a
+/// silent meeting: the ring buffer just went quiet, JS saw 0 chunks, no error,
+/// no recovery. Live-reproduced on macOS 26: display sleep stops the stream
+/// with SCStreamErrorDomain -3815 ("Failed to find any displays or windows to
+/// capture") and it never resumes — even after the display wakes and audio
+/// plays. The same class covers a display unplugged mid-meeting and the user
+/// (or macOS) stopping the capture from the screen-sharing menu-bar item.
+/// The delegate raises the reason on a shared StopSignal; the DSP loop in
+/// lib.rs takes it and surfaces a capture error so main.ts rebuilds the capture.
+pub struct StopDelegateInner {
+    signal: Arc<StopSignal>,
+}
+
+define_obj_type!(
+    StopDelegate + sc::stream::DelegateImpl,
+    StopDelegateInner,
+    STOP_DELEGATE_CLS
+);
+
+impl sc::stream::Delegate for StopDelegate {}
+
+#[objc::add_methods]
+impl sc::stream::DelegateImpl for StopDelegate {
+    extern "C" fn impl_stream_did_stop_with_err(
+        &mut self,
+        _cmd: Option<&objc::Sel>,
+        _stream: &sc::Stream,
+        error: &ns::Error,
+    ) {
+        let domain: &ns::String = &error.domain();
+        let reason = format!(
+            "ScreenCaptureKit stopped the system-audio stream ({} code {}): {}",
+            domain,
+            error.code(),
+            error.localized_desc()
+        );
+        println!("[SystemAudio-SCK] {}", reason);
+        self.inner_mut().signal.raise(reason);
+    }
+
+    extern "C" fn impl_user_did_stop_stream(&mut self, _cmd: Option<&objc::Sel>, _stream: &sc::Stream) {
+        let reason = "ScreenCaptureKit system-audio stream was stopped from the macOS screen-sharing menu".to_string();
+        println!("[SystemAudio-SCK] {}", reason);
+        self.inner_mut().signal.raise(reason);
     }
 }
 
@@ -227,7 +294,11 @@ impl SpeakerInput {
         let rb = HeapRb::<f32>::new(buffer_size);
         let (producer, consumer) = rb.split();
 
-        let stream = sc::Stream::new(&self.filter, &self.cfg);
+        let stop_signal = Arc::new(StopSignal::new());
+        let delegate = StopDelegate::with(StopDelegateInner {
+            signal: stop_signal.clone(),
+        });
+        let stream = sc::Stream::with_delegate(&self.filter, &self.cfg, delegate.as_ref());
 
         // Initialize handler
         let inner = AudioHandlerInner { producer };
@@ -290,6 +361,8 @@ impl SpeakerInput {
         Ok(SpeakerStream {
             consumer: Some(consumer),
             stream,
+            stop_signal,
+            _delegate: delegate,
             _handler: handler,
             _filter: self.filter,
             _cfg: self.cfg,
@@ -300,6 +373,9 @@ impl SpeakerInput {
 pub struct SpeakerStream {
     consumer: Option<HeapCons<f32>>,
     stream: arc::R<sc::Stream>,
+    stop_signal: Arc<StopSignal>,
+    // The delegate is only weakly referenced by SCStream; we own it.
+    _delegate: arc::R<StopDelegate>,
     _handler: arc::R<AudioHandler>,
     _filter: arc::R<sc::ContentFilter>,
     _cfg: arc::R<sc::StreamCfg>,
@@ -313,11 +389,29 @@ impl SpeakerStream {
     pub fn take_consumer(&mut self) -> Option<HeapCons<f32>> {
         self.consumer.take()
     }
+
+    /// The reason the system stopped this stream, once. `None` while healthy.
+    pub fn take_stop_error(&self) -> Option<String> {
+        self.stop_signal.take()
+    }
+
+    pub fn backend_name(&self) -> &'static str {
+        "sck"
+    }
 }
 
 impl Drop for SpeakerStream {
     fn drop(&mut self) {
         use std::sync::{Arc, Condvar, Mutex};
+
+        if self.stop_signal.was_ever_raised() {
+            // Already stopped by the system (the DSP loop has usually taken
+            // the reason by now, hence the sticky flag); stopCapture on a dead
+            // stream only errors back (or never calls back), and the JS
+            // recovery path is awaiting this drop before it rebuilds.
+            println!("[SpeakerStream] ScreenCaptureKit stream already stopped by the system — skipping stopCapture.");
+            return;
+        }
 
         println!("[SpeakerStream] Stopping ScreenCaptureKit stream...");
 

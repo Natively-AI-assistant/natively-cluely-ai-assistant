@@ -1,0 +1,311 @@
+{
+ "blind_id": "S-7e57a9bb",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 59228,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 20228,
+  "candidatesTokenCount": 2139,
+  "totalTokenCount": 28673,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 20228
+   }
+  ],
+  "thoughtsTokenCount": 6306,
+  "serviceTier": "standard"
+ },
+ "fact_count": 61,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 8,
+  "hallucination_control": 7,
+  "action_item_retention": 8,
+  "decision_retention": 9,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 4,
+  "entity_retention": 7,
+  "timeline_accuracy": 9,
+  "conclusion_accuracy": 4,
+  "structure": 3,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Reported the superseded salary band ($128K-$146K) and Maya's superseded target ($155K) as a current action item and an unresolved open question, contradicting the later correction.",
+   "Hallucinated the company name as 'Novatek' in the open questions section.",
+   "The Summary section contains an incomplete, cut-off sentence."
+  ],
+  "missing_important_information": [
+   "The Series B money is mostly going into product and engineering hiring.",
+   "Brightlane is moving everyone to three days a week in office starting January, which is why Maya prefers remote work.",
+   "Corvella uses an outside immigration firm for H-1B transfers."
+  ],
+  "hallucinated_information": [
+   "Novatek (hallucinated company name)"
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "Whether the base comp gap (target $155K vs band top $146K) can be closed. [open]"
+   },
+   {
+    "correction_id": "C03",
+    "reported": "Theo Lindqvist: Note Maya's target base of $155,000 (above the top of the $128K-$146K band) and revisit comp later in the process."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Maya's cat and Theo's Biscuit"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "missing"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "partial"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "partial"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "contradicted"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "missing"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a high volume of information but suffer from severe structural and factual issues. The most critical error is presenting the superseded salary band ($128K-$146K) and Maya's initial target ($155K) as an unresolved open question and a current action item, which contradicts the final agreement in the transcript. Additionally, the company name is hallucinated as 'Novatek' in one instance. Structurally, the notes are extremely repetitive, duplicating the same points across the Overview, Summary, and Opportunity Summary sections, and the Summary section itself contains a cut-off, incomplete sentence. Action items and open questions are also heavily duplicated."
+ }
+}

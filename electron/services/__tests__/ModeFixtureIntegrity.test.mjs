@@ -61,15 +61,21 @@ describe('Fixture integrity — every declared sentinel exists in at least one f
     }
   });
 
-  test('every custom-mode folder has exactly 5 reference files with ≥4 distinct extensions', () => {
+  test('every custom-mode folder has at least 5 reference files with ≥4 distinct extensions', () => {
     const customRoot = path.join(FIX_ROOT, 'custom');
     if (!fs.existsSync(customRoot)) return;
     for (const customMode of fs.readdirSync(customRoot)) {
       const files = fs.readdirSync(path.join(customRoot, customMode)).filter(n => !n.startsWith('.'));
-      assert.equal(
-        files.length,
-        5,
-        `Custom mode "${customMode}" should have exactly 5 reference files (got ${files.length}: ${files.join(', ')})`,
+      // Was `=== 5`; relaxed to `>= 5` (2026-07-01) — the OKF work
+      // intentionally added a real PDF (`seminar_real_thesis.pdf`) to the
+      // seminar-presentation fixture for the real-PDF ingestion tests, so
+      // the fixture legitimately grew past 5. The test's actual intent is a
+      // representative MULTI-file fixture with broad format coverage, not an
+      // exact count; a hardcoded 5 just made every intentional fixture
+      // addition a spurious failure.
+      assert.ok(
+        files.length >= 5,
+        `Custom mode "${customMode}" should have at least 5 reference files (got ${files.length}: ${files.join(', ')})`,
       );
       const exts = new Set(files.map(f => path.extname(f).toLowerCase()));
       assert.ok(

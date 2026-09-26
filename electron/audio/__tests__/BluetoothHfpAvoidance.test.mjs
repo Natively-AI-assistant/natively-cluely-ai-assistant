@@ -11,7 +11,11 @@ const mainSource = readFileSync(mainPath, 'utf8');
 const coreAudioSource = readFileSync(coreAudioPath, 'utf8');
 
 function extractMethodBody(methodName) {
-  const methodRe = new RegExp(`private\\s+(?:async\\s+)?${methodName}\\s*\\([^)]*\\)[^{]*\\{`);
+  // `[^{]*\{` stopped at the FIRST `{` after the params, which is wrong when the
+  // return type is an object literal — `startCaptureChannels(...): { mic:
+  // boolean; system: boolean } {` would yield the type, not the body. Consume a
+  // one-level brace group as a unit so we land on the real body brace.
+  const methodRe = new RegExp(`private\\s+(?:async\\s+)?${methodName}\\s*\\([^)]*\\)\\s*(?::\\s*[^{;=]*(?:\\{[^{}]*\\}\\s*)?)?\\s*\\{`);
   const match = methodRe.exec(mainSource);
   assert.ok(match, `could not locate ${methodName}`);
 
@@ -185,14 +189,26 @@ test('active meeting reconfigure starts replacement captures and STT streams', (
     'BUG: active-meeting reconfigure must start replacements after new captures are constructed and wired.',
   );
 
-  const activeStartBlock = reconfigureBody.slice(activeStartIndex);
+  let activeStartBlock = reconfigureBody.slice(activeStartIndex);
+  // The four starts moved into the shared startCaptureChannels() helper (F-105:
+  // per-channel failure isolation, so a mic throw no longer skips the system
+  // channel and every downstream step). The active block now delegates to it,
+  // which is where the starts must be asserted — otherwise this reports a
+  // missing start against code that starts all four correctly.
+  const delegate = /this\.startCaptureChannels\(/.test(activeStartBlock);
+  if (delegate && !activeStartBlock.includes('this.microphoneCapture?.start()')) {
+    activeStartBlock = extractMethodBody('startCaptureChannels');
+  }
   for (const expected of [
     'this.systemAudioCapture?.start()',
     'this.microphoneCapture?.start()',
     'this.googleSTT?.start()',
     'this.googleSTT_User?.start()',
   ]) {
-    assert.ok(activeStartBlock.includes(expected), `BUG: active reconfigure must call ${expected}.`);
+    assert.ok(
+      activeStartBlock.includes(expected),
+      `BUG: active reconfigure must call ${expected}${delegate ? ' (checked inside startCaptureChannels)' : ''}.`,
+    );
   }
 });
 

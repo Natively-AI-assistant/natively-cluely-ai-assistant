@@ -83,6 +83,11 @@ const PROFILE_ANSWER_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>([
   'identity_answer', 'profile_fact_answer', 'project_answer', 'project_followup_answer',
   'skills_answer', 'skill_experience_answer', 'experience_answer', 'jd_fit_answer',
   'behavioral_interview_answer', 'negotiation_answer',
+  // JD-source + resume+JD shapes (2026-07-07). These are profile/JD answers too,
+  // so the false-refusal repair (no "I don't have the JD" when the JD is loaded)
+  // must cover them.
+  'jd_summary_answer', 'jd_requirements_answer', 'jd_fact_answer',
+  'resume_jd_fit_answer', 'resume_jd_gap_answer', 'resume_jd_intro_answer',
 ]);
 
 const isProfileAnswerType = (t: AnswerType): boolean => PROFILE_ANSWER_TYPES.has(t);
@@ -506,7 +511,21 @@ export function sanitizeCandidateAnswer(answer: string): CandidateSanitizeResult
   const repaired = (removed.size > 0 || perspectiveFlipped) && text !== original.trim();
   // If stripping emptied the answer (the whole thing was assistant-meta) or left a
   // fragment too short to be useful, the caller must fall back deterministically.
-  const needsFallback = text.length < 15;
+  //
+  // Code-review 2026-07-18 HIGH (campaign2 longsession, wiring this into
+  // IntelligenceEngine.ts's live WTA path surfaced a pre-existing latent bug
+  // shared with the manual path's identical needsFallback branch in
+  // ipcHandlers.ts): the ORIGINAL `text.length < 15` check fires on ANY short
+  // answer, not just one that was actually meta — live-reproduced with
+  // sanitizeCandidateAnswer("Python.") returning needsFallback:true despite
+  // removedMarkers being empty (nothing was ever stripped; "Python." IS the
+  // real, correct, complete answer to e.g. "what's your primary language?").
+  // A caller treating needsFallback as "substitute a deterministic fallback"
+  // would silently discard a genuinely short-but-correct answer. Require that
+  // something was ACTUALLY removed (or the original was empty, handled by the
+  // early return above) before claiming the caller needs a fallback — an
+  // untouched short answer is not evidence of an all-meta answer.
+  const needsFallback = removed.size > 0 && text.length < 15;
   return { text, repaired, needsFallback, removedMarkers: Array.from(removed) };
 }
 
@@ -540,13 +559,19 @@ export const ASSISTANT_VOICE_ANSWER_TYPES = new Set<AnswerType>([
 // ("I am an assistant coach, so I handle the drills") — code-review 2026-06-14
 // MEDIUM-1.
 const ASSISTANT_IDENTITY_MISFIRE_RE = /\bI(?:'m| am)\s+Natively\b|\bI(?:'m| am)\s+an?\s+(?:AI\s+)?(?:assistant|language model|chat\s?bot)(?=\s*(?:[.,!?;]|$|\s+(?:developed|created|made|built|designed|trained|here|created|that|who|which|to\b|and\s+I\b)))|\bI\s+was\s+developed\s+by\s+Evin\s+John\b|\bas\s+an\s+AI(?:\s+(?:language\s+)?model)?,?\s+I\b/i;
-const ASSISTANT_STOCK_REFUSAL_RE = /\bI\s+(?:cannot|can\s?not|can'?t)\s+share\s+that(?:\s+information)?\s*\.?\s*$/i;
+// Widened 2026-09-07 (always answer): a bare "I'm sorry, but I can't help with
+// that." — the whole answer — is the same misfire as "I can't share that".
+// Measured live in call-center: "How do I get a refund?" over two attached
+// documents produced exactly that line on the manual surface. Still gated on
+// the 240-char cap and the end-of-answer anchor, so a real answer that quotes
+// a refusal mid-sentence is never flagged.
+const ASSISTANT_STOCK_REFUSAL_RE = /\bI\s+(?:cannot|can\s?not|can'?t)\s+share\s+that(?:\s+information)?\s*\.?\s*$|^(?:(?:I(?:'m| am)\s+)?sorry,?\s+(?:but\s+)?)?I\s+(?:cannot|can\s?not|can'?t|am\s+unable\s+to|won'?t\s+be\s+able\s+to)\s+(?:help|assist)(?:\s+(?:you\s+)?with\s+(?:that|this)(?:\s+request)?)?\s*\.?\s*$/i;
 
 export interface AssistantVoiceSanitizeResult {
   /** True when the answer is a canned identity/refusal misfire (no real content). */
   isMisfire: boolean;
   /** Which pattern fired (telemetry; no raw content). */
-  reason: 'identity' | 'refusal' | null;
+  reason: 'identity' | 'refusal' | 'repeat_request' | null;
 }
 
 /**
@@ -558,13 +583,25 @@ export interface AssistantVoiceSanitizeResult {
  * + matches), so a long, real meeting answer that merely quotes "I can't share the
  * revenue figure" is never falsely flagged.
  */
+// A WHOLE answer that only asks the user to repeat or rephrase (2026-09-07,
+// measured live on a garbled turn: "Sorry, could you rephrase that? The audio
+// cut out and I didn't catch the question."). The permanent rules forbid it;
+// the model does it anyway on content-free fragments. Anchored to the whole
+// answer, so a real answer that ends with a clarifying question is untouched.
+const ASSISTANT_REPEAT_REQUEST_RE = /^(?:(?:i(?:'m| am)\s+)?sorry,?\s+)?(?:(?:i(?:'m| am)\s+not\s+(?:quite\s+)?sure\s+(?:what|which|if)[^.?!]{0,90}[.?!]|i\s+(?:don'?t|do\s+not)\s+have\s+the\s+(?:exact|full|complete)\s+(?:wording|question|text)[^.?!]{0,90}[.?!]|it\s+(?:sounds|looks|seems)\s+like\s+(?:the|your|that)\s+question\s+(?:got|was|is)\s+(?:cut\s+off|incomplete|unclear)[.!]?|(?:the|your)\s+question\s+(?:seems|looks)\s+(?:cut\s+off|incomplete)[.!]?)\s*)?(?:(?:could|can|would)\s+you\s+(?:please\s+)?(?:repeat|rephrase|clarify|specify|elaborate|say\s+that\s+again|ask\s+that\s+(?:again|once\s+more)|finish\s+(?:what|your|the)|complete\s+(?:the|your)\s+question)[^.?!]{0,200}\?|(?:what\s+is\?\s*)?(?:i\s+think\s+)?you\s+were\s+about\s+to\s+ask[^.?!]{0,80}[.?!]|go\s+ahead\s+and\s+(?:finish|complete|ask)[^.?!]{0,80}[.?!]|i\s+(?:didn'?t|did\s+not|couldn'?t)\s+(?:catch|hear|get)\s+(?:that|the\s+question|you)[^.?!]{0,60}[.!?])(?:\s*(?:and\s+|,\s*)?(?:the\s+audio\s+cut\s+out|i\s+(?:didn'?t|did\s+not)\s+(?:catch|hear|get)[^.?!]{0,60}|(?:could|can|would)\s+you\s+(?:please\s+)?(?:repeat|rephrase|say\s+(?:that|it)\s+again|ask\s+(?:that|it)\s+again)[^.?!]{0,60}|i\s+want\s+to\s+make\s+sure\s+i\s+(?:answer|address|understand)[^.?!]{0,80}|are\s+you\s+asking\s+about[^.?!]{0,120}|(?:or\s+)?is\s+there\s+(?:a|an|any)[^.?!]{0,100}|go\s+ahead\s+and\s+(?:finish|complete|ask)[^.?!]{0,80}|i(?:'m| am)\s+ready\s+to\s+answer[^.?!]{0,80}|(?:so\s+)?(?:just\s+)?(?:finish|complete)\s+(?:the|your)\s+(?:question|thought)[^.?!]{0,60})[.!?]?)*\s*$/i;
+
 export function detectAssistantVoiceMisfire(answer: string): AssistantVoiceSanitizeResult {
   const t = String(answer || '').trim();
   if (!t) return { isMisfire: false, reason: null };
   // Only a SHORT answer can be a pure canned non-answer; a real answer is longer.
-  if (t.length > 240) return { isMisfire: false, reason: null };
+  // 240 → 320 (2026-09-08): a clarify-only answer that lists two or three
+  // guesses at what the user meant runs past 240 characters and still says
+  // nothing. Every pattern below is anchored to the whole answer, so the
+  // higher cap cannot catch a real answer.
+  if (t.length > 320) return { isMisfire: false, reason: null };
   if (ASSISTANT_IDENTITY_MISFIRE_RE.test(t)) return { isMisfire: true, reason: 'identity' };
   if (ASSISTANT_STOCK_REFUSAL_RE.test(t)) return { isMisfire: true, reason: 'refusal' };
+  if (ASSISTANT_REPEAT_REQUEST_RE.test(t)) return { isMisfire: true, reason: 'repeat_request' };
   return { isMisfire: false, reason: null };
 }
 

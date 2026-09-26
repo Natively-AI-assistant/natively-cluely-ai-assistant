@@ -9,6 +9,7 @@ export interface SkillSummary {
   name: string;
   description: string;
   source: SkillSource;
+  enabled: boolean;
 }
 
 export interface SkillDetails extends SkillSummary {
@@ -18,6 +19,11 @@ export interface SkillDetails extends SkillSummary {
 
 const MAX_SKILL_FILE_BYTES = 100 * 1024;
 const SKILL_FILE_NAME = 'SKILL.md';
+const SKILLS_STATE_FILE_NAME = '.skills-state.json';
+
+interface SkillsState {
+  disabledFolders: string[];
+}
 
 const BUILTIN_HUMANIZE_TEXT = `---
 name: humanize-ai-text
@@ -468,7 +474,28 @@ You are a precise writing editor. Rewrite the user's text so it reads like a rea
 const BUILTIN_SKILLS: Array<{ id: string; content: string }> = [
   { id: 'humanize-text', content: BUILTIN_HUMANIZE_TEXT },
 ];
-const BUILTIN_SKILL_IDS = new Set(BUILTIN_SKILLS.map(skill => skill.id));
+// Canonical set of builtin skill identifiers. Includes BOTH the on-disk folder
+// names AND the parsed frontmatter ids because the two diverge today:
+//
+//   - Folder name (where ensureBuiltinSkills writes the SKILL.md):
+//     <skillsDir>/humanize-text/SKILL.md
+//   - Parsed id (slugified from the frontmatter name: 'humanize-ai-text'):
+//     the value shown to the user as /humanize-ai-text and as skill.id
+//     in SkillSummary.
+//
+// loadUserSkills() classifies a skill as 'builtin' if EITHER the folder name
+// OR the parsed id matches this set — this prevents the silent bug where a
+// builtin's folder is renamed or a skill is installed under a name that
+// happens to collide with a builtin's parsed id.
+//
+// KEEP THIS IN SYNC with electron/services/skills/SkillValidator.ts
+// DEFAULT_BUILTIN_SKILL_IDS — that set is the canonical source for upload-
+// time collision checks; this set is the canonical source for source-
+// classification. Adding a new builtin requires updating BOTH.
+const BUILTIN_SKILL_IDS = new Set<string>([
+  'humanize-text',     // on-disk folder name (matches BUILTIN_SKILLS[].id)
+  'humanize-ai-text',  // slugified frontmatter name: (the visible /skill id)
+]);
 
 function slugify(value: string): string {
   return value
@@ -547,7 +574,12 @@ function parseSkillMarkdown(content: string, fallbackId: string, source: SkillSo
     instructions: body,
     source,
     filePath,
-  };
+    // NOTE: `enabled` is intentionally OMITTED here. The parser is a pure
+    // frontmatter reader — it cannot know whether this skill is currently
+    // disabled in the user's .skills-state.json sidecar. The real value is
+    // always applied by loadUserSkills() based on the disabledFolders set,
+    // so any path that bypasses loadUserSkills would be a latent bug.
+  } as SkillDetails;
 }
 
 export class SkillsManager {
@@ -589,6 +621,12 @@ export class SkillsManager {
     if (byId) return byId;
     // Fallback: match by folder name slugified (e.g. "/humanize-text" finds the
     // skill whose folder is humanize-text/ even if the SKILL.md name differs)
+    //
+    // FLAT-FOLDER ASSUMPTION: skills live at <skillsDir>/<folder>/SKILL.md.
+    // We deliberately do NOT recurse into subfolders — nested layouts
+    // (skills/sub/skill/SKILL.md) won't be discovered. This matches the
+    // SkillInstaller.ts and SkillUploader.ts install layout (one folder per
+    // skill, written to skillsRoot/<id>/), so the entire pipeline is flat.
     return skills.find(skill => skill.filePath && slugify(path.basename(path.dirname(skill.filePath))) === wanted) ?? null;
   }
 
@@ -609,6 +647,110 @@ ${skill.instructions}
     const error = await shell.openPath(folder);
     if (error) return { success: false, path: folder, error };
     return { success: true, path: folder };
+  }
+
+  // Hard-delete a skill's folder. Built-in skills are rejected — they're
+  // re-seeded by ensureBuiltinSkills() on every load, so removing the folder
+  // would be silently undone. Built-ins can only be disabled (see setSkillEnabled).
+  //
+  // TOCTOU defense: between getSkill() (which stat'd the SKILL.md) and the
+  // rmSync call, a same-user-process attacker (or an antivirus scanner that
+  // moved a file) could swap the skill folder for a symlink pointing outside
+  // the skills dir. We close this window by (a) deriving the target from the
+  // folder name + skillsDir rather than from the previously-stat'd filePath,
+  // and (b) resolving the SYMLINKED target via fs.realpathSync() AT rm-time
+  // and verifying the result still lives under skillsDir before deleting.
+  public deleteSkill(id: string): { success: boolean; error?: string } {
+    const skill = this.getSkill(id);
+    if (!skill) return { success: false, error: `Skill "${id}" not found.` };
+    if (skill.source === 'builtin') {
+      return { success: false, error: 'Built-in skills cannot be deleted. You can disable them instead.' };
+    }
+    if (!skill.filePath) return { success: false, error: 'Skill has no on-disk location.' };
+
+    const folderName = path.basename(path.dirname(skill.filePath));
+    const targetDir = path.join(this.skillsDir, folderName);
+
+    // Resolve the on-disk realpath of both the target and the skills dir so
+    // symlinks that escape the sandbox can't hijack the rmSync. We do this
+    // fresh at delete-time rather than trusting the path captured at
+    // loadSkills() time.
+    let realSkillsDir: string;
+    let realTargetDir: string;
+    try {
+      realSkillsDir = fs.realpathSync(this.skillsDir) + path.sep;
+      realTargetDir = fs.realpathSync(targetDir);
+    } catch (error: any) {
+      if (error?.code === 'ENOENT') {
+        // The folder was already gone (e.g., user manually rm'd it). Treat
+        // as a no-op success and continue to prune the sidecar.
+        this.pruneDeletedFolder(folderName);
+        return { success: true };
+      }
+      console.warn('[SkillsManager] realpath failed during delete:', error?.message || error);
+      return { success: false, error: 'Could not delete skill.' };
+    }
+
+    if (!realTargetDir.startsWith(realSkillsDir) && realTargetDir + path.sep !== realSkillsDir) {
+      // The resolved realpath escapes the skills dir — refuse. Don't leak the
+      // resolved path in the error message (internal-implementation detail).
+      console.warn(`[SkillsManager] deleteSkill refused: "${realTargetDir}" is outside skillsDir`);
+      return { success: false, error: 'Could not delete skill.' };
+    }
+
+    try {
+      fs.rmSync(realTargetDir, { recursive: true, force: true });
+    } catch (error: any) {
+      return { success: false, error: error?.message || 'Failed to delete skill folder.' };
+    }
+
+    this.pruneDeletedFolder(folderName);
+    return { success: true };
+  }
+
+  // Sidecar-maintenance helper: when a skill folder goes away (whether via
+  // deleteSkill OR external rm), drop its name from disabledFolders if
+  // present so the sidecar array doesn't accumulate orphan entries.
+  private pruneDeletedFolder(folderName: string): void {
+    try {
+      const state = this.readSkillsState();
+      if (state.disabledFolders.includes(folderName)) {
+        this.writeSkillsState({
+          disabledFolders: state.disabledFolders.filter(f => f !== folderName),
+        });
+      }
+    } catch (error: any) {
+      console.warn('[SkillsManager] Failed to prune sidecar after delete:', error?.message || error);
+    }
+  }
+
+  // Set a skill's enabled state. Persisted by on-disk folder name (NOT by
+  // the parsed id, which is derived from the user-editable name: frontmatter —
+  // keying by id would silently orphan the entry if the user later hand-edits
+  // SKILL.md). Applies to built-ins too (non-destructive — never touches the
+  // SKILL.md file itself). No-op when the desired state already matches
+  // what's persisted (avoids needless file writes on repeated UI re-renders).
+  public setSkillEnabled(id: string, enabled: boolean): { success: boolean; error?: string } {
+    const skill = this.getSkill(id);
+    if (!skill) return { success: false, error: `Skill "${id}" not found.` };
+    if (!skill.filePath) return { success: false, error: 'Skill has no on-disk location.' };
+
+    const folderName = path.basename(path.dirname(skill.filePath));
+    const state = this.readSkillsState();
+    const currentlyDisabled = state.disabledFolders.includes(folderName);
+
+    if (enabled && currentlyDisabled) {
+      this.writeSkillsState({
+        disabledFolders: state.disabledFolders.filter(f => f !== folderName),
+      });
+    } else if (!enabled && !currentlyDisabled) {
+      this.writeSkillsState({
+        disabledFolders: [...state.disabledFolders, folderName],
+      });
+    }
+    // If the desired state already matches what's persisted, no-op (don't write).
+
+    return { success: true };
   }
 
   private ensureSkillsDir(): void {
@@ -633,6 +775,40 @@ ${skill.instructions}
     }
   }
 
+  // Sidecar persistence for non-destructive per-skill state (currently just
+  // "disabled" flag). Stored as JSON next to the skill folders. Defensive
+  // reader: a missing/corrupt file is treated as empty rather than throwing,
+  // matching the console.warn-on-fail style used throughout this file.
+  private readSkillsState(): SkillsState {
+    const statePath = path.join(this.skillsDir, SKILLS_STATE_FILE_NAME);
+    try {
+      if (!fs.existsSync(statePath)) return { disabledFolders: [] };
+      const raw = fs.readFileSync(statePath, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.disabledFolders)) return { disabledFolders: [] };
+      return {
+        disabledFolders: parsed.disabledFolders.filter((x: unknown) => typeof x === 'string'),
+      };
+    } catch (error: any) {
+      console.warn('[SkillsManager] Failed to read skills state file, defaulting to empty:', error?.message || error);
+      return { disabledFolders: [] };
+    }
+  }
+
+  // Atomic write: tmp file + rename, so a crash mid-write can't leave a
+  // half-written JSON file that subsequent reads would have to defend against.
+  private writeSkillsState(state: SkillsState): void {
+    const statePath = path.join(this.skillsDir, SKILLS_STATE_FILE_NAME);
+    const tmpPath = statePath + '.tmp';
+    try {
+      fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2), 'utf8');
+      fs.renameSync(tmpPath, statePath);
+    } catch (error: any) {
+      console.warn('[SkillsManager] Failed to write skills state file:', error?.message || error);
+      try { fs.rmSync(tmpPath, { force: true }); } catch { /* best effort */ }
+    }
+  }
+
   private loadSkills(): SkillDetails[] {
     this.ensureBuiltinSkills();
 
@@ -651,6 +827,9 @@ ${skill.instructions}
   private loadUserSkills(): SkillDetails[] {
     this.ensureSkillsDir();
     const skills: SkillDetails[] = [];
+    // The disabled set is keyed by on-disk folder name (NOT by parsed id) so a
+    // user hand-editing SKILL.md's name: field doesn't silently orphan the entry.
+    const disabledFolders = new Set(this.readSkillsState().disabledFolders);
 
     let entries: fs.Dirent[];
     try {
@@ -675,9 +854,29 @@ ${skill.instructions}
         }
 
         const content = fs.readFileSync(skillPath, 'utf8');
-        const source: SkillSource = BUILTIN_SKILL_IDS.has(entry.name) ? 'builtin' : 'userData';
-        const skill = parseSkillMarkdown(content, entry.name, source, skillPath);
-        skills.push(skill);
+        // parseSkillMarkdown: pass source=undefined initially — we'll
+        // overwrite with the canonical classification below. (Passing a
+        // throwaway value just to overwrite it wastes a tiny bit of work;
+        // a future refactor could make parseSkillMarkdown return `Omit<
+        // SkillDetails, 'source'> | { source?: SkillSource }`.)
+        const skill = parseSkillMarkdown(content, entry.name, 'userData', skillPath);
+        // Classify as 'builtin' if EITHER the on-disk folder name OR the
+        // parsed frontmatter id is in the canonical builtin set. This is the
+        // single point of truth for source classification — the UI uses it
+        // to gate the delete button (SkillsSettings.tsx), and the IPC handler
+        // uses it via getSkill() to route /skill-name lookups.
+        //
+        // Why both keys? Today's humanize-text builtin has folder='humanize-text'
+        // but parsed id='humanize-ai-text' (the SKILL.md frontmatter was renamed
+        // in a prior version). If only folder was checked, a future maintainer
+        // who renames the folder would silently re-classify the builtin as
+        // 'userData' and make it deletable. Checking the parsed id too means
+        // the protection survives folder renames as long as the visible
+        // /skill id is still in the canonical set.
+        const source: SkillSource = (
+          BUILTIN_SKILL_IDS.has(entry.name) || BUILTIN_SKILL_IDS.has(skill.id)
+        ) ? 'builtin' : 'userData';
+        skills.push({ ...skill, source, enabled: !disabledFolders.has(entry.name) });
       } catch (error: any) {
         if (error?.code !== 'ENOENT') {
           console.warn(`[SkillsManager] Skipping invalid skill "${entry.name}":`, error?.message || error);

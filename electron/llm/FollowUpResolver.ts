@@ -50,6 +50,18 @@ const NONE: ResolvedFollowUp = { resolvedQuestion: '', confidence: 0, reason: 'n
 /** Pure bare-follow-up fragments that carry no standalone meaning. */
 const BARE_FOLLOWUP_RE = /^(?:ok(?:ay)?,?\s*|so,?\s*|hmm,?\s*|right,?\s*|well,?\s*|and,?\s*|but,?\s*)*(?:why|why not|how so|how come|how|and|and\?|so|that|this|it|what about (?:it|that|this)|what about|continue|go on|carry on|keep going|tell me more|more|explain|expand|elaborate|can you (?:expand|elaborate|explain|go on)|go deeper|in more detail|then\??)[\s?.!]*$/i;
 
+/**
+ * Short "addend" phrases that request an enhancement to the prior answer — a code
+ * example, a diagram, an analogy — rather than asking a new standalone question.
+ * E.g. "with code?", "with a code example?", "with an example?", "show code?",
+ * "include code?", "can you add code?", "with code please". These carry zero
+ * standalone meaning and MUST be resolved against the prior answer in context.
+ *
+ * Guard: no stronger standalone cue ("write", "implement", "solve", etc.) so a
+ * genuine "write code for X" does not accidentally match.
+ */
+const ADDEND_RE = /^(?:with|show|include|add|using|also\s+(?:show|add|include))\b[^.?!]{0,40}?\b(?:code(?:\s+(?:example|snippet|sample|for\s+that|for\s+it|please|too))?|example|snippet|an?\s+example|a\s+(?:code\s+)?(?:example|snippet))\s*[?.!]?\s*$/i;
+
 export type FollowUpSurface = 'manual' | 'what_to_answer' | 'meeting' | 'lecture' | 'interview' | 'sales' | 'coding';
 
 /**
@@ -62,7 +74,7 @@ export function isBareFollowUp(question: string): boolean {
   if (!q) return false;
   const words = q.replace(/[?.!,]/g, '').split(/\s+/).filter(Boolean);
   if (words.length > 6) return false; // a real, self-contained question
-  return BARE_FOLLOWUP_RE.test(q);
+  return BARE_FOLLOWUP_RE.test(q) || ADDEND_RE.test(q);
 }
 
 // ── Refinement / editing follow-ups (task Phase 8, bug #3) ──────────────────────
@@ -84,7 +96,11 @@ const REFINEMENT_RE = new RegExp(
   'i',
 );
 // Comparative/qualitative refinements that imply "than the prior answer".
-const REFINEMENT_COMPARATIVE_RE = /\b(shorter|longer|briefer|tighter|punchier|simpler|clearer|more\s+\w+|less\s+\w+|the\s+(?:final|spoken|short|long|concise|polished|natural)\s+version|in\s+(?:one|two|three)\s+(?:line|lines|sentence|sentences)|as\s+bullets?|spoken version|final version)\b/i;
+// "in simple words" / "plain english" / "dumb it down" / "eli5" (2026-09-11, measured
+// in a manual chain): after a correct "net 45 days" answer, "in simple words" was not a
+// refinement, re-retrieved on its own three words, and the composer's absence framing
+// announced that no payment-terms line was retrieved — one turn after quoting it.
+const REFINEMENT_COMPARATIVE_RE = /\b(shorter|longer|briefer|tighter|punchier|simpler|clearer|more\s+\w+|less\s+\w+|the\s+(?:final|spoken|short|long|concise|polished|natural)\s+version|in\s+(?:one|two|three)\s+(?:line|lines|sentence|sentences)|as\s+bullets?|spoken version|final version|in\s+(?:simple|simpler|plain|easy|easier|layman'?s|everyday|normal)\s+(?:words|terms|english|language)|dumb(?:ed)?\s+(?:it|that|this)?\s*down|eli5|like\s+i'?m\s+(?:five|5)|simply\s+put|in\s+a\s+nutshell|tl;?dr|one[- ]liner|as\s+a\s+(?:one[- ]liner|headline|tweet))\b/i;
 // Must reference the PRIOR ANSWER — a demonstrative pronoun, OR "the <answer-noun>" from a
 // small allowlist of things an answer IS (NOT a generic "the <any noun>", which would treat
 // a brand-new imperative like "add caching to the payment service" or "fix the bug in the
@@ -235,6 +251,83 @@ const PROJECT_DRILLIN_RE = /^(?:ok(?:ay)?,?\s*|so,?\s*|and,?\s*)*(?:how (?:is|wa
 export function resolveFollowUp(ctx: FollowUpContext): ResolvedFollowUp {
   const q = lc(ctx.latestQuestion);
   if (!q) return NONE;
+
+  // ── NARROWING REFINEMENTS & CORRECTIONS (WTA audit F2, 2026-08-18) ────────
+  // "I mean specifically consumer groups." / "And specifically the rebalancing
+  // problem?" narrow the PREVIOUS question to a sub-topic; "Sorry, I mean
+  // Kafka." corrects an entity in it. Neither shape matched any rule below, so
+  // the resolver returned NONE and IntelligenceEngine's 0.7 apply gate dropped
+  // the turn (and any SessionMemory-recalled entity) on the floor. These run
+  // BEFORE the 8-word cap because the anchoring markers ("specifically",
+  // "sorry, I mean") are explicit enough to stay precise on longer turns; they
+  // carry their own 14-word cap. Synthesis is deliberately mechanical — the
+  // previous question is restated with the focus attached — so the rewrite
+  // never fabricates content.
+  {
+    const raw = (ctx.latestQuestion || '').trim();
+    const refWords = raw.split(/\s+/).filter(Boolean).length;
+    const prevRaw = (ctx.previousQuestion || '').trim();
+    const NARROW_RE = /^(?:(?:and|but|so|okay|ok|sorry|yes|no)[,.!]?\s+)*(?:i\s+meant?\s+)?(?:(?:more\s+)?specifically|in\s+particular|particularly)[,]?\s+(?:about\s+)?(.+?)[?.!\s]*$/i;
+    const CORRECTION_RE = /^(?:(?:sorry|no|actually|wait)[,.!]?\s+)+i\s+meant?\s+(.+?)[?.!\s]*$/i;
+    if (refWords <= 14) {
+      const narrow = raw.match(NARROW_RE);
+      if (narrow && narrow[1]) {
+        const focus = narrow[1].trim();
+        if (prevRaw) {
+          return {
+            resolvedQuestion: `${prevRaw.replace(/[?.!\s]+$/, '')} — specifically, ${focus}?`,
+            resolvedAnswerType: ctx.previousAnswerType,
+            resolvedEntity: ctx.lastEntity,
+            confidence: 0.75,
+            reason: 'narrowing_refinement',
+          };
+        }
+        if (ctx.lastEntity) {
+          return {
+            resolvedQuestion: `Tell me more about ${ctx.lastEntity} — specifically, ${focus}.`,
+            resolvedAnswerType: ctx.previousAnswerType,
+            resolvedEntity: ctx.lastEntity,
+            confidence: 0.7,
+            reason: 'narrowing_refinement_entity',
+          };
+        }
+      }
+      const corr = raw.match(CORRECTION_RE);
+      if (corr && corr[1] && prevRaw) {
+        const focus = corr[1].trim();
+        if (focus.split(/\s+/).length <= 4) {
+          // Swap the LAST non-sentence-initial proper-noun-ish token of the
+          // previous question for the corrected one ("Why did you choose
+          // Redis?" + "Kafka" → "Why did you choose Kafka?").
+          let swapTarget: string | null = null;
+          const properRe = /\b[A-Z][A-Za-z0-9+#.]*\b/g;
+          let m: RegExpExecArray | null;
+          while ((m = properRe.exec(prevRaw)) !== null) {
+            if (m.index > 0) swapTarget = m[0];
+          }
+          if (swapTarget) {
+            const lastIdx = prevRaw.lastIndexOf(swapTarget);
+            const swapped = prevRaw.slice(0, lastIdx) + focus + prevRaw.slice(lastIdx + swapTarget.length);
+            return {
+              resolvedQuestion: swapped,
+              resolvedAnswerType: ctx.previousAnswerType,
+              resolvedEntity: focus,
+              confidence: 0.75,
+              reason: 'correction_entity_swap',
+            };
+          }
+        }
+        return {
+          resolvedQuestion: `${prevRaw.replace(/[?.!\s]+$/, '')} — I mean ${focus}?`,
+          resolvedAnswerType: ctx.previousAnswerType,
+          resolvedEntity: ctx.lastEntity,
+          confidence: 0.7,
+          reason: 'correction_no_swap',
+        };
+      }
+    }
+  }
+
   // Long, self-contained questions are not bare follow-ups.
   const wordCount = q.split(/\s+/).filter(Boolean).length;
   if (wordCount > 8) return NONE;
@@ -246,10 +339,18 @@ export function resolveFollowUp(ctx: FollowUpContext): ResolvedFollowUp {
     const skillMatch = skillRaw.match(SKILL_TOKEN_RE);
     if (skillMatch && prevWasSkill(ctx)) {
       const skill = skillMatch[0];
+      // WTA audit fix (wta_skill_054, 2026-08-18): keep the FULL shifted
+      // phrase — "and Python frameworks?" must resolve to "…Python
+      // frameworks", not collapse to the bare recognised token "python"
+      // (which silently broadens the question and answers the wrong thing).
+      // Re-match on the RAW question so entity casing survives into the
+      // rewrite; the cascade otherwise operates on the lowercased copy.
+      const rawShift = (ctx.latestQuestion || '').trim().match(TOPIC_SHIFT_RE);
+      const phrase = (rawShift ? rawShift[1] : skillRaw).trim().replace(/[?.!,\s]+$/, '');
       // Inherit the EXACT prior framing (rating vs experience) with the new skill.
       const wasRating = /\brate|out of (?:10|ten)|scale\b/.test(lc(ctx.previousQuestion));
       return {
-        resolvedQuestion: wasRating ? `Rate your ${skill} skills out of 10.` : `What is your experience with ${skill}?`,
+        resolvedQuestion: wasRating ? `Rate your ${phrase} skills out of 10.` : `What is your experience with ${phrase}?`,
         resolvedAnswerType: 'skill_experience_answer',
         resolvedSkill: skill,
         confidence: 0.9,
@@ -280,10 +381,20 @@ export function resolveFollowUp(ctx: FollowUpContext): ResolvedFollowUp {
   // 1b. PROJECT DRILL-IN: "how is it developed?", "that project?", "what stack?",
   //     "your role?" — about the project already on the table.
   if (PROJECT_DRILLIN_RE.test(q) && (ctx.lastEntity || prevWasProject(ctx))) {
+    // WTA audit fix (wta_project_041, 2026-08-18): when no entity resolved,
+    // a SPECIFIC drill-in ("What tech stack did you use there?") must keep
+    // its own words — the value of this rule is the project_followup type
+    // inheritance, and the old canned replacement ("Can you go deeper on
+    // that project?") threw away the actual ask. Only a truly bare fragment
+    // (≤3 words, e.g. "That project?") still expands to the generic rewrite.
+    const rawDrillin = (ctx.latestQuestion || '').trim();
+    const drillinWords = rawDrillin.split(/\s+/).filter(Boolean).length;
     return {
       resolvedQuestion: ctx.lastEntity
-        ? `${ctx.latestQuestion.replace(/\b(it|that|this)\b/i, ctx.lastEntity).trim()}`.replace(/\?*$/, '?')
-        : 'Can you go deeper on that project?',
+        ? `${rawDrillin.replace(/\b(it|that|this)\b/i, ctx.lastEntity).trim()}`.replace(/\?*$/, '?')
+        : drillinWords >= 4
+          ? rawDrillin.replace(/\?*$/, '?')
+          : 'Can you go deeper on that project?',
       resolvedAnswerType: 'project_followup_answer',
       resolvedEntity: ctx.lastEntity,
       confidence: 0.85,

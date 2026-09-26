@@ -4,9 +4,12 @@
 // On provider exhaustion, automatically falls back to LocalEmbeddingProvider (on-device).
 
 import Database from 'better-sqlite3';
+import { describeProbeError } from './providers/probeError';
 import { VectorStore } from './VectorStore';
 
 import { EmbeddingProviderResolver, AppAPIConfig } from './EmbeddingProviderResolver';
+import { embeddingConfigChanged } from './embeddingConfigIdentity';
+import { describeEmbeddingProvider, type EmbeddingProviderDescription } from './embeddingStatus';
 import { IEmbeddingProvider } from './providers/IEmbeddingProvider';
 import { LocalEmbeddingProvider } from './providers/LocalEmbeddingProvider';
 
@@ -17,6 +20,76 @@ const RETRY_DELAY_BASE_MS = 2000;
 // forever, silently stalling the entire pipeline until app restart.
 // 30s is generous for large chunks on slow connections (typical: 200-800ms).
 const EMBED_TIMEOUT_MS = 30_000;
+// A QUERY embedding sits on the live answer path (2026-09-07): a hosted
+// embedder that stalled for 12.5s held the whole turn, and the caller's
+// lexical fallback never fired because the call eventually succeeded. Ingest
+// keeps the 30s budget; a query gets 3s and then lexical retrieval answers.
+const QUERY_EMBED_TIMEOUT_MS = 3_000;
+/** How long an identical query's vector is reused (see queryEmbedMemo). */
+const QUERY_EMBED_MEMO_TTL_MS = 5_000;
+const QUERY_EMBED_MEMO_MAX = 64;
+
+// ── T13 / RC12: query-path hysteresis (2026-08-28) ──────────────────────────
+//
+// THE DAMAGE. A single Gemini 429 or timeout on the QUERY path used to fall
+// straight through to MiniLM and PROMOTE it. Promotion changes the active
+// embedding space to `local:…:384`, which makes every persisted Gemini vector
+// in the corpus unusable at a stroke: ~90 chunks must be re-embedded
+// ephemerally inside one timeout, and on partial failure the remainder degrade
+// to FTS-only. One transient blip therefore costs the whole session its
+// semantic arm — and `text-embedding-004` returning 404 mid-investigation is a
+// live demonstration of how ordinary that blip is.
+//
+// The startup probe already solved this shape (EmbeddingProviderResolver:
+// CLOUD_PROBE_ATTEMPTS/BACKOFF, whose docblock describes this exact thrash).
+// This applies the same discipline to the query path, which never had it.
+//
+// The ordering is the point: retry the PRIMARY in place first, and only after
+// sustained failure consider a fallback that costs the session its space.
+const QUERY_RETRY_ATTEMPTS = 2;
+const QUERY_RETRY_BACKOFF_MS = [1_000, 3_000];
+/** Jitter so N concurrent turns do not retry in lockstep against a rate limit. */
+const QUERY_RETRY_JITTER_MS = 250;
+/**
+ * Consecutive HARD failures (primary exhausted its retries) before a mid-session
+ * promotion is allowed.
+ *
+ * Deliberately higher than the startup probe's 3: a promotion here is strictly
+ * more expensive than one at startup, because a running session already holds
+ * vectors in the primary space that the promotion strands.
+ */
+const PROMOTE_AFTER_CONSECUTIVE_FAILURES = 5;
+/** How long a hard failure counts toward the streak. */
+const FAILURE_WINDOW_MS = 5 * 60_000;
+/** How often to re-probe the primary after a promotion, so it can be demoted. */
+const PRIMARY_REPROBE_INTERVAL_MS = 60_000;
+/**
+ * First re-probe after a STARTUP demotion (2026-09-11). Deliberately inside
+ * RAGManager.AUTO_REINDEX_DEFER_MS (15 s): a launch-time blip that has already
+ * cleared restores the pinned space before the deferred re-index would start
+ * re-embedding the corpus into the bundled model's space.
+ */
+export const BOOT_REPROBE_FIRST_DELAY_MS = 5_000;
+
+/** `Retry-After` in seconds or as an HTTP date, when the provider sent one. */
+function retryAfterMs(err: unknown): number | null {
+    const raw = (err as { retryAfter?: unknown; headers?: Record<string, unknown> })?.retryAfter
+        ?? (err as { headers?: Record<string, unknown> })?.headers?.['retry-after'];
+    if (raw == null) return null;
+    const asNumber = Number(raw);
+    if (Number.isFinite(asNumber) && asNumber >= 0) return Math.min(asNumber * 1000, 30_000);
+    const asDate = Date.parse(String(raw));
+    if (Number.isFinite(asDate)) return Math.max(0, Math.min(asDate - Date.now(), 30_000));
+    return null;
+}
+
+const isRateLimited = (err: unknown): boolean => {
+    const status = (err as { status?: number; statusCode?: number })?.status
+        ?? (err as { statusCode?: number })?.statusCode;
+    if (status === 429) return true;
+    return /\b429\b|rate.?limit|too many requests|quota/i.test(
+        err instanceof Error ? err.message : String(err ?? ''));
+};
 
 /**
  * EmbeddingPipeline - Handles post-meeting embedding generation
@@ -34,11 +107,37 @@ export class EmbeddingPipeline {
     /** Set of meeting IDs that have been downgraded to local fallback after primary provider exhaustion. */
     private fallbackMeetings = new Set<string>();
     private db: Database.Database;
+    /** Set at shutdown: the drain loop exits at the next safe point and no new
+     *  work is accepted, so no embedding write can race the DB close. */
+    private stopped = false;
     private vectorStore: VectorStore;
     private isProcessing = false;
     private initPromise: Promise<void> | null = null;
+    /**
+     * Bumped by every initialize(). An initialization that finishes after a
+     * newer one started is STALE and must not touch the pipeline's state.
+     *
+     * Without this, overlapping initializations assigned `this.provider` in
+     * completion order, not request order: a slow boot-time `auto` resolve
+     * (cloud probes retrying a 429) finished after the user's `manual/local`
+     * selection and silently replaced it with a cloud provider
+     * (docs/local-embedding-benchmark.md §9d).
+     */
+    private initGeneration = 0;
     /** Tracks the config used in the most recent successful initialize() call to enable idempotency. */
     private _lastConfig: AppAPIConfig | null = null;
+    /**
+     * The provider name the user PINNED in Settings (manual mode), or '' in auto
+     * mode. Kept so the pipeline can answer whether what is actually running is
+     * the user's choice or a stand-in for it — see isRunningOnUnpinnedFallback().
+     */
+    private pinnedProviderName = '';
+    /**
+     * Called when the active provider becomes the pinned one again, so the
+     * re-index sweep that was deferred while running on a stand-in can be
+     * re-armed. Set by RAGManager, which owns the sweep.
+     */
+    private onPinnedSpaceRestored: (() => void) | null = null;
 
     constructor(db: Database.Database, vectorStore: VectorStore) {
         this.db = db;
@@ -46,16 +145,15 @@ export class EmbeddingPipeline {
     }
 
     /**
-     * Initialize with provider config (picks best available provider)
-     * Idempotent: re-initialization only runs if the new config adds at least one
-     * key/URL that was not present in the last config (e.g., Ollama becomes available,
-     * or a cloud API key is loaded from CredentialsManager after startup).
-     * If the config is unchanged or strictly worse, the existing initPromise is returned.
+     * Initialize with provider config (picks best available provider).
+     * Idempotent when the effective config is unchanged, but reinitializes on
+     * removals as well as additions. A removed Settings key must demote the stale
+     * provider immediately instead of keeping the old client alive until restart.
      */
     async initialize(config: AppAPIConfig): Promise<void> {
-        // Skip if config is identical or has no new information
-        if (this._lastConfig && !this._isConfigImprovement(this._lastConfig, config)) {
-            console.log('[EmbeddingPipeline] Config unchanged or no new keys — skipping re-initialization');
+        // Skip only if the effective config is truly unchanged.
+        if (this._lastConfig && !this._isConfigChanged(this._lastConfig, config)) {
+            console.log('[EmbeddingPipeline] Config unchanged — skipping re-initialization');
             return this.initPromise ?? Promise.resolve();
         }
         this._lastConfig = { ...config };
@@ -64,34 +162,100 @@ export class EmbeddingPipeline {
         console.log('[EmbeddingPipeline] Initializing with config:', {
             openaiKey: !!config.openaiKey,
             geminiKey: !!config.geminiKey,
+            nativelyApiKey: !!config.nativelyApiKey,
             ollamaUrl: config.ollamaUrl || null,
             geminiEmbeddingModel: config.geminiEmbeddingModel || null,
             geminiEmbeddingDims: config.geminiEmbeddingDims || null,
+            // The fields that actually DECIDE the provider. Without them the log
+            // showed six credential booleans and nothing about the choice, so a
+            // config that had silently lost the user's selection looked identical
+            // to one that carried it.
+            embeddingMode: config.embeddingMode || 'auto',
+            embeddingProvider: config.embeddingProvider || null,
         });
-        this.initPromise = this._doInitialize(config);
+        const generation = ++this.initGeneration;
+        this.initPromise = this._doInitialize(config, generation);
         return this.initPromise;
     }
 
     /**
-     * Returns true if `next` provides at least one credential that `prev` did not have.
-     * Prevents redundant re-initialization when the same keys are passed again.
+     * Returns true when any provider-selection input changed in either direction.
+     * Removals are as important as additions: clearing a Settings-managed key must
+     * re-resolve away from that provider rather than keeping the stale instance.
      */
-    private _isConfigImprovement(prev: AppAPIConfig, next: AppAPIConfig): boolean {
-        const hasNew = (prevVal: string | undefined, nextVal: string | undefined) =>
-            !prevVal && !!nextVal;
-        return (
-            hasNew(prev.openaiKey, next.openaiKey) ||
-            hasNew(prev.geminiKey, next.geminiKey) ||
-            hasNew(prev.ollamaUrl, next.ollamaUrl)
-        );
+    private _isConfigChanged(prev: AppAPIConfig, next: AppAPIConfig): boolean {
+        // Delegated to ONE comparator shared with the config builder. This used
+        // to be a hand-maintained field list here, and a field missing from it
+        // means changing that setting re-initializes nothing and reports no
+        // error — the "I changed it and nothing happened" bug.
+        return embeddingConfigChanged(prev, next);
     }
 
-    private async _doInitialize(config: AppAPIConfig): Promise<void> {
+    /**
+     * Tear down any local provider this pipeline currently holds.
+     *
+     * `provider` and `fallbackProvider` are deliberately the SAME object in
+     * local-only mode (see _doInitialize), so dedupe by identity — disposing
+     * twice is harmless but rejecting the same pending set twice is noise.
+     */
+    private async disposeLocalProviders(): Promise<void> {
+        const seen = new Set<unknown>();
+        for (const candidate of [this.provider, this.fallbackProvider]) {
+            if (!(candidate instanceof LocalEmbeddingProvider)) continue;
+            if (seen.has(candidate)) continue;
+            seen.add(candidate);
+            try {
+                await candidate.dispose('replaced by a new embedding configuration');
+            } catch {
+                /* a failed teardown must not block re-initialization */
+            }
+        }
+    }
+
+    /**
+     * Provider resolution, behind an instance method so tests can control its
+     * timing. The resolver is inlined into this bundle, so it cannot be
+     * replaced from outside.
+     */
+    private resolveEmbeddingProvider(config: AppAPIConfig) {
+        return EmbeddingProviderResolver.resolveWithDemotion(config);
+    }
+
+    /** Dispose a provider a stale initialization resolved but never installed. */
+    private async discardStaleProvider(provider: IEmbeddingProvider | null | undefined): Promise<void> {
+        if (!(provider instanceof LocalEmbeddingProvider)) return;
+        if (provider === this.provider || provider === this.fallbackProvider) return;
+        try {
+            await provider.dispose('superseded by a newer embedding configuration');
+        } catch {
+            /* best effort: the instance is unreachable either way */
+        }
+    }
+
+    private async _doInitialize(config: AppAPIConfig, generation: number): Promise<void> {
+        const isStale = () => generation !== this.initGeneration;
+        // Record the pin BEFORE resolution, so the "is this what the user asked
+        // for?" question is answerable no matter which way resolution goes —
+        // including the case where the pinned provider produced no candidate at
+        // all and the resolver never reported a demotion.
+        this.pinnedProviderName = config.embeddingMode === 'manual'
+            ? (config.embeddingProvider || '').trim()
+            : '';
         // Construct the local fallback up front, but do NOT call isAvailable() here.
         // LocalEmbeddingProvider construction is cheap (paths + static dimensions/space);
         // isAvailable() loads the MiniLM ONNX model via transformers.js and can stall
         // the Electron main process during first paint. The provider loads lazily on
         // first real fallback/query use through embed()/embedQuery().
+        // Release whatever the previous initialization left behind BEFORE
+        // replacing it. _doInitialize runs again on every embedding config
+        // change, and the outgoing instances may each be holding a worker with
+        // the MiniLM ONNX model resident; overwriting the field alone left them
+        // running, unreachable, for the rest of the session.
+        await this.disposeLocalProviders();
+        // A newer initialize() started while this one waited. It owns the
+        // fallback slot now; creating one here would leak a worker.
+        if (isStale()) return;
+
         this.fallbackProvider = new LocalEmbeddingProvider();
         console.log(`[EmbeddingPipeline] Local fallback provider registered for lazy load (${this.fallbackProvider.dimensions}d)`);
 
@@ -99,8 +263,28 @@ export class EmbeddingPipeline {
         // local, the resolver's instance becomes both primary and fallback so the model
         // is loaded at most once in local-only mode.
         try {
-            this.provider = await EmbeddingProviderResolver.resolve(config);
+            const resolution = await this.resolveEmbeddingProvider(config);
+            if (isStale()) {
+                console.log(`[EmbeddingPipeline] Discarding a superseded initialization's result (${resolution.provider.name}); a newer configuration was requested while it resolved.`);
+                await this.discardStaleProvider(resolution.provider);
+                return;
+            }
+            this.provider = resolution.provider;
             console.log(`[EmbeddingPipeline] Ready with provider: ${this.provider.name} (${this.provider.dimensions}d)`);
+            if (resolution.demotedPinned) {
+                // A startup demotion is NOT permanent for the session: the
+                // pinned provider is asked again shortly, then every minute,
+                // and its space is restored the moment it answers — the same
+                // recovery a mid-session promotion already had.
+                const pinned = resolution.demotedPinned;
+                console.warn(
+                    `[EmbeddingPipeline] ${pinned.name} failed its startup probe (transient); running on the bundled model `
+                    + `and re-probing it (first in ${BOOT_REPROBE_FIRST_DELAY_MS / 1000}s) so the ${pinned.space} space comes back without a restart.`
+                );
+                const first = setTimeout(() => { void this.reprobePrimaryOnce(pinned); }, BOOT_REPROBE_FIRST_DELAY_MS);
+                (first as unknown as { unref?: () => void }).unref?.();
+                this.schedulePrimaryReprobe(pinned);
+            }
 
             // If the primary IS local, point fallbackProvider at the same instance to avoid
             // loading the model twice.
@@ -122,23 +306,44 @@ export class EmbeddingPipeline {
                 // RAGManager.scheduleAutoReindex() handles the user-facing notification
                 // and the actual re-embedding. Here we only log — emitting a warning IPC
                 // too would double-notify.
-                console.log(`[EmbeddingPipeline] Found ${incompatibleCount} meetings in an incompatible embedding space (last: ${lastSpace ?? 'unknown'}, active: ${activeSpace}). Auto-reindex will handle them.`);
+                // Report the ROW count as the trigger, and say so when the state
+                // row already matches. Printing "last: X, active: X" for an
+                // equal pair reads as a false positive — it is actually the
+                // resume path for a re-index that was interrupted after the
+                // marker was written but before every meeting was re-embedded.
+                const resumed = lastSpace === activeSpace;
+                console.log(
+                    `[EmbeddingPipeline] ${incompatibleCount} meeting(s) still hold vectors from another embedding space; active is ${activeSpace}`
+                    + (resumed
+                        ? ' (marker already updated — resuming an interrupted re-index).'
+                        : ` (previous space: ${lastSpace ?? 'unknown'}).`)
+                    + ' Auto-reindex will handle them.'
+                );
             }
 
             // Save active space
             this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(activeSpace);
 
         } catch (err) {
+            if (isStale()) {
+                console.log('[EmbeddingPipeline] A superseded initialization failed; ignoring it, a newer configuration owns the pipeline.');
+                return;
+            }
             console.error('[EmbeddingPipeline] Failed to initialize primary provider:', err);
-            console.warn('[EmbeddingPipeline] Falling back to local-only mode for all meetings.');
-            // Promote fallback as the primary so isReady() returns true and queueing works.
-            // The local model still loads lazily on the first embed call.
-            this.provider = this.fallbackProvider;
-            // Persist the fallback provider's space so the next launch does not fire a
-            // false-positive incompatible-space warning (e.g. openai space vs local space).
-            try {
-                this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(this.provider.space);
-            } catch (_) { /* non-fatal — DB may not have app_state yet in edge cases */ }
+            if (!this.fallbackProvider) {
+                console.warn('[EmbeddingPipeline] No embedding provider available — pipeline idle.');
+                this.provider = null;
+            } else {
+                console.warn('[EmbeddingPipeline] Falling back to local-only mode for all meetings.');
+                // Promote fallback as the primary so isReady() returns true and queueing works.
+                // The local model still loads lazily on the first embed call.
+                this.provider = this.fallbackProvider;
+                // Persist the fallback provider's space so the next launch does not fire a
+                // false-positive incompatible-space warning (e.g. openai space vs local space).
+                try {
+                    this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(this.provider.space);
+                } catch (_) { /* non-fatal — DB may not have app_state yet in edge cases */ }
+            }
         }
 
         // Flush any queue items submitted during the startup race window (i.e. before the
@@ -151,10 +356,87 @@ export class EmbeddingPipeline {
     }
 
     /**
-     * Check if pipeline is ready
+     * Check if pipeline is ready to serve an embed() call WITHOUT a slow
+     * cold-load first.
+     *
+     * 2026-07-05 fix: previously this only checked `provider !== null`, which
+     * is true the instant _doInitialize() assigns LocalEmbeddingProvider as a
+     * fallback — before its ONNX worker has actually loaded the model (that
+     * only happens lazily on the first real embed() call, and can take up to
+     * 60s cold). Callers using isReady() as a synchronous "is it safe to use
+     * this right now" gate (ModeHybridRetriever.isEmbeddingAvailable(), used
+     * inside a live per-query retrieval budget) would see `true`, take the
+     * hybrid-retrieval branch, then stall for up to 60s on the first query
+     * during that narrow startup window.
+     * `provider.isLoaded?.()` is optional — cloud HTTP providers (Gemini/
+     * OpenAI/Ollama) have no meaningful "warm-up" state (every embed() call
+     * is already just a network round-trip), so they simply don't implement
+     * it and this defaults to true for them, preserving existing behavior for
+     * every provider except the local fallback.
      */
     isReady(): boolean {
-        return this.provider !== null;
+        return this.provider !== null && (this.provider.isLoaded?.() ?? true);
+    }
+
+    /**
+     * Force a lazily-registered provider to actually LOAD, for callers that can
+     * afford to block. Returns true when the pipeline is ready afterwards.
+     *
+     * ── WHY THIS EXISTS (2026-09-21, reproduced live) ───────────────────────
+     *
+     * The bundled local model is registered lazily: the resolver assigns the
+     * provider but the ONNX session is only built on the first real embed(),
+     * and `LocalEmbeddingProvider.isLoaded()` reports false until then — by
+     * design, so a live QUERY routes to lexical instead of stalling on a 60s
+     * model load.
+     *
+     * `isReady()` and `waitForReady()` disagreed about that state:
+     *
+     *     isReady()      -> provider !== null && provider.isLoaded()  -> FALSE
+     *     waitForReady() -> `if (this.provider) return;`              -> resolves at once
+     *
+     * So the INDEXING path awaited waitForReady(), got an instant resolve, then
+     * failed its own isReady() check and wrote every reference file off as
+     * `lexical_only`. Nothing in that path ever performs the embed that would
+     * load the model, so the retry path hit the same gate — a deadlock, not a
+     * race. Measured on a real app: reindex returned in 13-30ms having embedded
+     * 0 of 9 chunks, and the worker never logged a model load.
+     *
+     * Indexing is a background job where a sub-second load is acceptable;
+     * a live query is not. This method is therefore for INDEXING CALLERS ONLY —
+     * `isReady()` remains the right check on the query hot path, and nothing
+     * here changes it.
+     *
+     * A provider that does not implement `isLoaded()` (every cloud provider)
+     * is already considered loaded and returns immediately WITHOUT a probe, so
+     * this never introduces a network call for hosted providers.
+     */
+    async ensureProviderLoaded(timeoutMs: number = 60_000): Promise<boolean> {
+        const provider = this.provider;
+        if (!provider) return false;
+        if (provider.isLoaded?.() ?? true) return true;
+
+        // Only a provider that explicitly reports "assigned but not loaded"
+        // reaches here — today that is the bundled local model alone.
+        // isAvailable() is what performs the real load; it resolves false
+        // rather than throwing when the asset is missing or the ONNX gate
+        // refuses, so an outage still degrades to lexical instead of hanging.
+        try {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const loaded = await Promise.race([
+                provider.isAvailable(),
+                new Promise<boolean>((resolve) => {
+                    timer = setTimeout(() => resolve(false), timeoutMs);
+                }),
+            ]);
+            if (timer) clearTimeout(timer);
+            // Re-check through isReady() rather than trusting isAvailable():
+            // the provider is the authority on whether its model is loaded.
+            return loaded === true && this.isReady();
+        } catch (e: any) {
+            console.warn(`[EmbeddingPipeline] ensureProviderLoaded failed: ${e?.message || e}`);
+            return false;
+        }
     }
 
     /**
@@ -180,8 +462,32 @@ export class EmbeddingPipeline {
     /**
      * Get the currently active provider name (used for dimension safety checks)
      */
+    /**
+     * The active provider's upstream per-request batch ceiling, if it has one.
+     *
+     * Exposed so an indexing caller can size its sub-batches to ONE upstream
+     * round trip. Without it a caller picks a batch size blind, the provider
+     * silently splits it into N sequential requests, and the caller's single
+     * deadline has to cover all N — which is how one 429 discarded a 100-chunk
+     * batch instead of the 32 that actually failed.
+     */
+    getActiveProviderMaxBatch(): number | undefined {
+        return this.provider?.maxBatchSize;
+    }
+
     getActiveProviderName(): string | undefined {
         return this.provider?.name;
+    }
+
+    /**
+     * Full description of the RESOLVED provider for the settings panel.
+     *
+     * Deliberately reports what is actually running rather than what settings
+     * asked for: the two differ whenever a chosen provider was unavailable and
+     * the chain fell through, which is precisely the case the user needs to see.
+     */
+    getActiveProviderDescription(): EmbeddingProviderDescription {
+        return describeEmbeddingProvider(this.provider);
     }
 
     /**
@@ -199,10 +505,51 @@ export class EmbeddingPipeline {
     }
 
     /**
+     * True when the user PINNED a provider in Settings and something else is
+     * actually running — i.e. the active embedding space is a stand-in, not the
+     * space the user asked for.
+     *
+     * Exists so the re-index sweep can tell "the user changed provider, migrate
+     * the corpus" apart from "the pinned provider is missing or down, and this
+     * is a temporary stand-in". Both look identical to
+     * getIncompatibleSpaceCount(), which compares rows against whatever is
+     * active and knows nothing about intent — so a Natively pin whose key had
+     * been cleared cleared every 2048-d voyage-4 vector and re-embedded the
+     * whole corpus at 384-d MiniLM, then did it again in reverse once the key
+     * came back. Measured 2026-09-13 against Evin's live corpus.
+     *
+     * Two ways to land here, and this covers both:
+     *  - TRANSIENT: the pinned provider failed its startup probe (resolver hands
+     *    back demotedPinned and the pipeline re-probes it at 5s, then hourly).
+     *  - NO CANDIDATE: the pinned provider was never even built — its key is
+     *    absent — so the manual filter returned an empty list and the resolver
+     *    fell through to the bundled model reporting nothing about the pin.
+     */
+    isRunningOnUnpinnedFallback(): boolean {
+        if (!this.pinnedProviderName) return false;   // auto mode: the chain IS the intent
+        const active = this.provider?.name;
+        if (!active) return false;                     // nothing resolved yet; nothing to sweep either
+        return active !== this.pinnedProviderName;
+    }
+
+    /**
+     * Register the callback that re-arms the deferred re-index sweep once the
+     * pinned provider is active again. RAGManager owns the sweep, so the
+     * pipeline only signals; it does not schedule.
+     */
+    setPinnedSpaceRestoredHandler(handler: (() => void) | null): void {
+        this.onPinnedSpaceRestored = handler;
+    }
+
+    /**
      * Queue a meeting for embedding processing
      * Called when meeting ends
      */
     async queueMeeting(meetingId: string): Promise<void> {
+        if (this.stopped) {
+            console.log('[EmbeddingPipeline] Stopped — refusing new work during shutdown.');
+            return;
+        }
         // Get chunks without embeddings
         const chunks = this.vectorStore.getChunksWithoutEmbeddings(meetingId);
 
@@ -290,7 +637,21 @@ export class EmbeddingPipeline {
      * meeting is transparently downgraded to LocalEmbeddingProvider (on-device)
      * and its queue is reset so it re-embeds from scratch at the correct dimensions.
      */
+    /**
+     * Stop accepting and processing work (lifecycle fix, 2026-08-01). The
+     * pipeline's while-loop awaits network calls and backoff delays; between
+     * any of those awaits the before-quit handler used to close the shared
+     * better-sqlite3 handle, and the resumed loop's next db.prepare() raced a
+     * closed — or emergency-closed, uncheckpointed — database. Items in flight
+     * stay 'processing' and are recovered on next launch by processQueue's
+     * existing stuck-item reset.
+     */
+    stop(): void {
+        this.stopped = true;
+    }
+
     async processQueue(): Promise<void> {
+        if (this.stopped) return;
         if (this.isProcessing) {
             console.log('[EmbeddingPipeline] Already processing queue');
             return;
@@ -321,6 +682,7 @@ export class EmbeddingPipeline {
             const { ForegroundGate } = require('../services/ForegroundGate') as typeof import('../services/ForegroundGate');
             while (true) {
                 await ForegroundGate.waitUntilIdle();
+                if (this.stopped) break;
                 // Fetch next pending item. Items marked for local fallback (retry_count = -1)
                 // are also eligible, so we use a broad filter.
                 const pending = this.db.prepare(`
@@ -366,14 +728,20 @@ export class EmbeddingPipeline {
                         await this.embedMeetingSummary(pending.meeting_id, activeProvider);
                     }
 
+                    // The embed call awaited above may have outlived a shutdown;
+                    // never write to a database that may already be closed. The
+                    // item stays 'processing' and is recovered next launch.
+                    if (this.stopped) break;
+
                     // Mark as completed
                     this.db.prepare(`
-                        UPDATE embedding_queue 
+                        UPDATE embedding_queue
                         SET status = 'completed', processed_at = ?
                         WHERE id = ?
                     `).run(new Date().toISOString(), pending.id);
 
                 } catch (error: any) {
+                    if (this.stopped) break;
                     const newRetryCount = (pending.retry_count === -1 ? 0 : pending.retry_count) + 1;
                     console.error(
                         `[EmbeddingPipeline] Error processing queue item ${pending.id} ` +
@@ -381,8 +749,9 @@ export class EmbeddingPipeline {
                         error.message
                     );
 
-                    if (!useFallback && newRetryCount >= MAX_RETRIES && this.fallbackProvider) {
-                        // Primary provider exhausted. Downgrade the meeting to local fallback.
+                    if (!useFallback && (newRetryCount >= MAX_RETRIES || error?.permanentAuthFailure) && this.fallbackProvider) {
+                        // Primary provider exhausted, or failed with an auth/account error
+                        // that cannot self-heal on retry. Downgrade the meeting to local fallback.
                         await this.activateMeetingFallback(pending.meeting_id);
                     } else {
                         // Still have retries remaining — back-off and retry.
@@ -468,10 +837,38 @@ export class EmbeddingPipeline {
      * Routes through embedWithTimeout() so a frozen API cannot stall the live indexer.
      */
     async getEmbedding(text: string): Promise<number[]> {
-        if (!this.provider) {
+        const result = await this.getEmbeddingWithFallback(text);
+        return result.embedding;
+    }
+
+    /**
+     * Get a single document embedding with metadata from the provider that actually
+     * produced the vector. Callers that persist vectors MUST prefer this over the
+     * bare getEmbedding() when they also persist an embedding_space label: a
+     * primary→fallback promotion can happen inside this call.
+     */
+    async getEmbeddingWithFallback(text: string): Promise<{ embedding: number[]; space: string; provider?: string; dimensions?: number }> {
+        const active = this.provider;
+        if (!active) {
             throw new Error('Embedding provider not initialized');
         }
-        return this.embedWithTimeout(this.provider, text, 'live-chunk');
+        try {
+            const embedding = await this.embedWithTimeout(active, text, 'live-chunk');
+            const space = active.space;
+            if (!space) throw new Error('Embedding provider has no active space');
+            return { embedding, space, provider: active.name, dimensions: active.dimensions };
+        } catch (primaryError) {
+            const fallback = this.fallbackProvider;
+            if (!fallback || fallback === active) throw primaryError;
+            console.warn(
+                `[EmbeddingPipeline] Primary single embedding failed via ${active.name}; ` +
+                `falling back to ${fallback.name}:`,
+                primaryError instanceof Error ? primaryError.message : primaryError
+            );
+            const embedding = await this.embedWithTimeout(fallback, text, 'fallback-live-chunk');
+            this.promoteFallbackProvider(fallback);
+            return { embedding, space: fallback.space, provider: fallback.name, dimensions: fallback.dimensions };
+        }
     }
 
     /**
@@ -504,27 +901,396 @@ export class EmbeddingPipeline {
         });
     }
 
+    async getEmbeddingsWithFallback(texts: string[]): Promise<{ embeddings: number[][]; space: string; provider?: string; dimensions?: number }> {
+        // Capture the active provider BEFORE the await. A concurrent
+        // promoteFallbackProvider() (triggered by another caller failing over)
+        // can reassign this.provider while getEmbeddings() is in flight; re-reading
+        // this.provider / getActiveSpaceKey() afterward would stamp embeddings that
+        // were produced by the OLD provider with the NEW provider's space label,
+        // corrupting cosine comparability of persisted vectors. Derive ALL returned
+        // metadata from the same reference that produced the embeddings — mirroring
+        // what the fallback path below already does with its local `fallback` ref.
+        const active = this.provider;
+        try {
+            if (!active) throw new Error('Embedding provider not initialized');
+            const embeddings = await this.getEmbeddings(texts);
+            const space = active.space;
+            if (!space) throw new Error('Embedding provider has no active space');
+            return { embeddings, space, provider: active.name, dimensions: active.dimensions };
+        } catch (firstError) {
+            // ── T13 / D4.6: INGESTION retries the primary too ────────────────
+            //
+            // This path is how a reference file gets PERMANENTLY indexed in the
+            // MiniLM space. A rate-limit burst during ingestion fell straight to
+            // the fallback and promoted it, so the file's vectors were written
+            // with `space = local:…:384` and persisted that way — the query path
+            // then has to match a space the rest of the corpus is not in. The
+            // query path's own hysteresis cannot help: by the time a query runs,
+            // the wrong vectors are already on disk.
+            //
+            // Same ladder as the query path, and it shares the SAME streak
+            // counter deliberately: a burst that is hammering ingestion is the
+            // same outage the query path is seeing, and two independent counters
+            // would each need five failures to agree on one fact.
+            let primaryError: unknown = firstError;
+            for (let attempt = 0; attempt < QUERY_RETRY_ATTEMPTS; attempt++) {
+                const base = retryAfterMs(primaryError) ?? this.queryRetryBackoffMs[attempt] ?? 3_000;
+                const wait = base + Math.floor(Math.random() * QUERY_RETRY_JITTER_MS);
+                console.warn(
+                    `[EmbeddingPipeline] Batch embedding failed via ${active?.name ?? 'unknown'} `
+                    + `(attempt ${attempt + 1}/${QUERY_RETRY_ATTEMPTS + 1}); retrying in ${wait}ms:`,
+                    primaryError instanceof Error ? primaryError.message : primaryError,
+                    isRateLimited(primaryError) ? '(rate-limited)' : ''
+                );
+                await new Promise((r) => setTimeout(r, wait));
+                try {
+                    if (!active) throw primaryError;
+                    const embeddings = await this.getEmbeddings(texts);
+                    const space = active.space;
+                    if (!space) throw new Error('Embedding provider has no active space');
+                    this.noteQuerySuccess();
+                    return { embeddings, space, provider: active.name, dimensions: active.dimensions };
+                } catch (retryErr) {
+                    primaryError = retryErr;
+                }
+            }
+
+            const fallback = this.fallbackProvider;
+            // If no fallback is configured, or the primary IS already the fallback
+            // (local-only mode where `this.provider === this.fallbackProvider`),
+            // re-running the same call would silently double-embed and re-trigger
+            // the same timeout. Surface the original failure instead.
+            if (!fallback || fallback === this.provider) throw primaryError;
+
+            const hardFailures = this.noteQueryHardFailure('ingest_embed_hard_failure');
+            if (hardFailures < PROMOTE_AFTER_CONSECUTIVE_FAILURES) {
+                // FAIL THE BATCH rather than write vectors into a space the rest
+                // of the corpus is not in. The caller
+                // (ModeHybridRetriever.indexFileInner) already treats a batch
+                // failure as "persist the chunk TEXT, mark the file for a later
+                // retry" — lexical-only until the primary is back is strictly
+                // better than permanently-wrong-space, because the second is
+                // invisible and never retried.
+                console.warn(
+                    `[EmbeddingPipeline] Ingestion batch left unembedded rather than written to the `
+                    + `fallback space (${hardFailures}/${PROMOTE_AFTER_CONSECUTIVE_FAILURES} consecutive `
+                    + `failures; active space unchanged):`,
+                    primaryError instanceof Error ? primaryError.message : primaryError
+                );
+                throw primaryError;
+            }
+
+            console.warn(
+                `[EmbeddingPipeline] PROMOTING ${fallback.name} from the INGESTION path: ${hardFailures} `
+                + `consecutive hard failures on ${active?.name ?? 'unknown'}. Failure history: `
+                + this.queryFailureHistory.map((h) => `${new Date(h.at).toISOString()} ${h.reason}`).join('; ')
+            );
+            const embeddings = await new Promise<number[][]>((resolve, reject) => {
+                const timer = setTimeout(() => {
+                    reject(new Error(
+                        `[EmbeddingPipeline] fallback embedBatch() timed out after ${EMBED_TIMEOUT_MS}ms for ${texts.length} chunks via ${fallback.name}`
+                    ));
+                }, EMBED_TIMEOUT_MS);
+                fallback.embedBatch(texts).then(
+                    (results) => { clearTimeout(timer); resolve(results); },
+                    (err)     => { clearTimeout(timer); reject(err); }
+                );
+            });
+            this.promoteFallbackProvider(fallback);
+            if (active) this.schedulePrimaryReprobe(active);
+            return { embeddings, space: fallback.space, provider: fallback.name, dimensions: fallback.dimensions };
+        }
+    }
+
+    private promoteFallbackProvider(fallback: IEmbeddingProvider): void {
+        // Promote fallback for subsequent mode query embeddings. Persisted mode
+        // vectors are only comparable within one active space; keeping the
+        // exhausted cloud provider active would make freshly-local vectors look
+        // perpetually pending and unusable. The promotion guard is a no-op when
+        // already promoted (idempotent under concurrent indexFile callers).
+        if (this.provider === fallback) return;
+        const wasUnpinned = this.isRunningOnUnpinnedFallback();
+        this.provider = fallback;
+        // The pinned space is back. Any re-index that was deferred while a
+        // stand-in was active is now the RIGHT thing to run — and it is what
+        // reconciles anything indexed at the stand-in's width during the gap.
+        if (wasUnpinned && !this.isRunningOnUnpinnedFallback()) {
+            try { this.onPinnedSpaceRestored?.(); } catch (e: any) {
+                console.warn('[EmbeddingPipeline] Deferred re-index re-arm threw (non-fatal):', e?.message || e);
+            }
+        }
+        try {
+            this.db.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('last_embedding_space', ?)").run(fallback.space);
+        } catch (dbErr: any) {
+            console.warn('[EmbeddingPipeline] Failed to persist fallback space:', dbErr?.message || dbErr);
+            // MEDIUM #4: a swallowed persist failure means next launch can't
+            // read back the promoted space, leaving freshly-local vectors
+            // perpetually "pending" with no UI signal. Surface it so the
+            // renderer can warn the user that a re-index may be required.
+            try {
+                const { BrowserWindow } = require('electron');
+                BrowserWindow.getAllWindows().forEach((win: any) => {
+                    if (!win.isDestroyed()) {
+                        win.webContents.send('embedding:space-persist-failed', {
+                            fallbackProvider: fallback.name,
+                            space: fallback.space,
+                            reason: dbErr?.message || String(dbErr),
+                        });
+                    }
+                });
+            } catch { /* non-fatal — best-effort renderer notice */ }
+        }
+    }
+
     /**
      * Get embedding for a search query (may use different prefix for asymmetric models).
      * Routes through embedWithTimeout() so a frozen API cannot stall the query path.
      */
-    async getEmbeddingForQuery(text: string): Promise<number[]> {
-        if (!this.provider) {
+    /**
+     * QUERY-EMBEDDING MEMO (2026-09-20). One turn can ask for the SAME query
+     * vector more than once: the mode port and the profile port are separate by
+     * design and each embeds the question, and the legacy port's targeted retry
+     * embeds it again. Keyed by (active space, text), a few seconds, and it holds
+     * the PROMISE so two concurrent callers share one request. A rejection is
+     * never kept — the failure-streak accounting below must see every real
+     * failure, and a retry must be able to succeed.
+     */
+    // Created on first use, not as a field initialiser: a pipeline built with
+    // Object.create(prototype) — every hysteresis test does — has no fields, and
+    // an optimisation must not be able to throw on the query path.
+    private queryEmbedMemo?: Map<string, { at: number; promise: Promise<number[]> }>;
+
+    async getEmbeddingForQuery(
+        text: string,
+        opts?: { retryBudgetMs?: number },
+    ): Promise<number[]> {
+        const space = this.provider?.space ?? this.provider?.name ?? 'none';
+        // The retry BUDGET is part of the key (review finding, reproduced): a
+        // promise carries its starter's budget. A live caller with a 1.2 s budget
+        // that joined an unbudgeted caller's request waited 4.6 s for it, and an
+        // unbudgeted caller that joined a budgeted one inherited a rejection its
+        // own retries would have survived. Callers share a request only when they
+        // asked for the same thing.
+        const key = `${space}\u0000${opts?.retryBudgetMs ?? 'unbudgeted'}\u0000${text}`;
+        const now = Date.now();
+        const memo = (this.queryEmbedMemo ??= new Map());
+        // Swept on every call and hard-capped: expired 2048-d vectors used to stay
+        // until 33 entries existed, and 5,000 distinct queries inside the TTL
+        // left 5,000 entries.
+        for (const [k, v] of memo) if (now - v.at >= QUERY_EMBED_MEMO_TTL_MS) memo.delete(k);
+        while (memo.size >= QUERY_EMBED_MEMO_MAX) memo.delete(memo.keys().next().value as string);
+        const hit = memo.get(key);
+        // A copy per caller: the array used to be shared, so one caller
+        // normalising in place would have corrupted the other's vector.
+        if (hit) return hit.promise.then((v: number[]) => v.slice());
+        const promise = this.getEmbeddingForQueryUncached(text, opts);
+        memo.set(key, { at: now, promise });
+        promise.catch(() => { if (memo.get(key)?.promise === promise) memo.delete(key); });
+        return promise.then((v: number[]) => v.slice());
+    }
+
+    private async getEmbeddingForQueryUncached(
+        text: string,
+        opts?: {
+            /**
+             * The caller's own budget for this query embedding, in ms. Attempt 1
+             * always runs (it has its own QUERY_EMBED_TIMEOUT_MS); a RETRY is
+             * started only when its backoff plus its timeout still fit inside
+             * the budget. Absent = the historical 3-attempt ladder.
+             *
+             * Measured 2026-09-10 on a live turn while the hosted embed route
+             * was slow: 3 s + 1.1 s + 3 s + 3.2 s + 3 s = 13.3 s inside a
+             * retrieval the V3 orchestrator plans at 1200 ms, before the model
+             * was even asked. A live turn cannot spend four times its retrieval
+             * plan waiting for a retry that the lexical arm makes unnecessary.
+             */
+            retryBudgetMs?: number;
+        },
+    ): Promise<number[]> {
+        const provider = this.provider;
+        if (!provider) {
             throw new Error('Embedding provider not initialized');
         }
+        const queryStartedAt = Date.now();
+        // Capture `provider` before the await boundary — if a concurrent
+        // getEmbeddingsWithFallback() promotes the fallback while this call is
+        // pending, the captured reference still points to the provider that was
+        // active at the start of the query and matches its space.
         // embedQuery() uses a query-specific prefix for asymmetric models (e.g. Nomic).
         // Wrap with a manual timeout since embedQuery is not covered by embedWithTimeout directly.
-        return new Promise<number[]>((resolve, reject) => {
+        const runQuery = (p: IEmbeddingProvider, label: string) => new Promise<number[]>((resolve, reject) => {
             const timer = setTimeout(() => {
                 reject(new Error(
-                    `[EmbeddingPipeline] embedQuery() timed out after ${EMBED_TIMEOUT_MS}ms for live-query via ${this.provider!.name}`
+                    `[EmbeddingPipeline] embedQuery() timed out after ${QUERY_EMBED_TIMEOUT_MS}ms for ${label} via ${p.name}`
                 ));
-            }, EMBED_TIMEOUT_MS);
-            this.provider!.embedQuery(text).then(
+            }, QUERY_EMBED_TIMEOUT_MS);
+            p.embedQuery(text).then(
                 (result) => { clearTimeout(timer); resolve(result); },
                 (err)    => { clearTimeout(timer); reject(err); }
             );
         });
+
+        // ── T13: retry the PRIMARY in place before considering a fallback ────
+        //
+        // This used to be a single attempt, and any failure fell through to
+        // MiniLM AND promoted it — so one 429 cost the session its embedding
+        // space. Two bounded retries with jittered backoff absorb exactly the
+        // failures that were never worth a promotion. `Retry-After` is honoured
+        // when the provider sends one; jitter keeps concurrent turns from
+        // retrying in lockstep against the same rate limit.
+        let primaryError: unknown;
+        for (let attempt = 0; attempt <= QUERY_RETRY_ATTEMPTS; attempt++) {
+            try {
+                const embedding = await runQuery(provider, attempt === 0 ? 'live-query' : `live-query-retry-${attempt}`);
+                this.noteQuerySuccess();
+                return embedding;
+            } catch (err) {
+                primaryError = err;
+                if (attempt === QUERY_RETRY_ATTEMPTS) break;
+                const base = retryAfterMs(err) ?? this.queryRetryBackoffMs[attempt] ?? 3_000;
+                const wait = base + Math.floor(Math.random() * QUERY_RETRY_JITTER_MS);
+                const budget = opts?.retryBudgetMs;
+                if (typeof budget === 'number' && Number.isFinite(budget)
+                    && (Date.now() - queryStartedAt) + wait + QUERY_EMBED_TIMEOUT_MS > budget) {
+                    console.warn(
+                        `[EmbeddingPipeline] Primary query embedding failed via ${provider.name} `
+                        + `(attempt ${attempt + 1}/${QUERY_RETRY_ATTEMPTS + 1}); no retry — the next attempt `
+                        + `(${wait}ms backoff + ${QUERY_EMBED_TIMEOUT_MS}ms) would not fit the caller's ${budget}ms budget:`,
+                        err instanceof Error ? err.message : err,
+                    );
+                    break;
+                }
+                console.warn(
+                    `[EmbeddingPipeline] Primary query embedding failed via ${provider.name} `
+                    + `(attempt ${attempt + 1}/${QUERY_RETRY_ATTEMPTS + 1}); retrying in ${wait}ms:`,
+                    err instanceof Error ? err.message : err,
+                    isRateLimited(err) ? '(rate-limited)' : ''
+                );
+                await new Promise((r) => setTimeout(r, wait));
+            }
+        }
+
+        // The primary is HARD-failed for this turn. Whether that justifies
+        // changing the session's embedding space is a separate question, and
+        // the answer is almost always no.
+        const hardFailures = this.noteQueryHardFailure();
+        const fallback = this.fallbackProvider;
+
+        if (!fallback || fallback === provider || hardFailures < PROMOTE_AFTER_CONSECUTIVE_FAILURES) {
+            // DEGRADE THIS TURN, DON'T FLIP THE SESSION. Throwing here leaves
+            // `getActiveSpaceKey()` untouched, so every persisted vector stays
+            // usable and the caller falls back to its lexical arm for this one
+            // question. That is a latency and quality cost measured in ONE turn;
+            // a promotion is a cost measured in the whole session.
+            //
+            // Querying MiniLM without promoting would be worse than either: the
+            // query vector would live in a space none of the persisted document
+            // vectors share, and cross-space cosine is guarded to 0 — so it
+            // would return confident nonsense instead of an honest miss.
+            console.warn(
+                `[EmbeddingPipeline] Query embedding degraded to lexical-only for this turn `
+                + `(${hardFailures}/${PROMOTE_AFTER_CONSECUTIVE_FAILURES} consecutive failures; `
+                + `active space unchanged):`,
+                primaryError instanceof Error ? primaryError.message : primaryError
+            );
+            throw primaryError;
+        }
+
+        console.warn(
+            `[EmbeddingPipeline] PROMOTING ${fallback.name}: ${hardFailures} consecutive hard `
+            + `failures on ${provider.name} within ${Math.round(FAILURE_WINDOW_MS / 60000)}min. `
+            + `Every persisted vector in the ${provider.space} space becomes unusable until the `
+            + `primary recovers. Failure history: `
+            + this.queryFailureHistory.map((f) => `${new Date(f.at).toISOString()} ${f.reason}`).join('; ')
+        );
+        const embedding = await runQuery(fallback, 'fallback-live-query');
+        this.promoteFallbackProvider(fallback);
+        this.schedulePrimaryReprobe(provider);
+        return embedding;
+    }
+
+    // ── T13 failure accounting ───────────────────────────────────────────────
+
+    /** Hard failures inside the sliding window, newest last. */
+    private queryFailureHistory: Array<{ at: number; reason: string }> = [];
+    /**
+     * Retry backoff, overridable ONLY so tests can run in milliseconds.
+     *
+     * A suite that genuinely waited 1s + 3s per failed call takes two minutes
+     * for eight cases, and a two-minute suite is a suite that gets skipped —
+     * which is how a guard against silent degradation silently degrades. The
+     * production default is the constant; nothing in the app writes this.
+     */
+    private queryRetryBackoffMs: number[] = QUERY_RETRY_BACKOFF_MS;
+    private primaryReprobeTimer: ReturnType<typeof setInterval> | null = null;
+
+    /** One success clears the streak — the bar is CONSECUTIVE failures. */
+    private noteQuerySuccess(): void {
+        if (this.queryFailureHistory.length) this.queryFailureHistory = [];
+    }
+
+    private noteQueryHardFailure(reason = 'query_embed_hard_failure'): number {
+        const now = Date.now();
+        this.queryFailureHistory = this.queryFailureHistory
+            .filter((f) => now - f.at <= FAILURE_WINDOW_MS)
+            .concat({ at: now, reason });
+        return this.queryFailureHistory.length;
+    }
+
+    /**
+     * After a promotion, keep asking the primary whether it is back, and demote
+     * as soon as it answers.
+     *
+     * Without this a promotion is permanent for the session: nothing else ever
+     * re-tries the primary, so a two-minute outage costs the user their cloud
+     * embedding space until they restart the app. Demotion restores the space
+     * the persisted vectors are ALREADY in, so it causes no re-index — it ends
+     * one.
+     */
+    private schedulePrimaryReprobe(primary: IEmbeddingProvider): void {
+        if (this.primaryReprobeTimer) return;
+        this.primaryReprobeTimer = setInterval(() => { void this.reprobePrimaryOnce(primary); }, PRIMARY_REPROBE_INTERVAL_MS);
+        // Never hold the event loop open for a background probe.
+        (this.primaryReprobeTimer as unknown as { unref?: () => void }).unref?.();
+    }
+
+    /**
+     * One probe of a demoted primary. Restores it — and the space the persisted
+     * vectors are already in — the moment it answers. Shared by the interval
+     * re-probe and the early startup re-probe; returns whether it was restored.
+     */
+    private async reprobePrimaryOnce(primary: IEmbeddingProvider): Promise<boolean> {
+        if (this.provider === primary) {          // already demoted
+            this.stopPrimaryReprobe();
+            return true;
+        }
+        try {
+            await primary.embedQuery('probe');
+        } catch (error: any) {
+            // Still down; try again later — but SAY SO, and why. This was a bare
+            // `catch { return false }`: measured 2026-09-19, a session sat on
+            // the bundled model for four minutes, the re-probe announced at
+            // boot ("first in 5s") failed every time, and the log held not one
+            // line about it. One line per failed re-probe (at most one a minute).
+            const status = error?.status ? `HTTP ${error.status} · ` : '';
+            console.warn(`[EmbeddingPipeline] ${primary.name} re-probe failed (${status}${describeProbeError(error)}); still on the fallback, retrying in ${PRIMARY_REPROBE_INTERVAL_MS / 1000}s.`);
+            return false;
+        }
+        console.log(
+            `[EmbeddingPipeline] ${primary.name} recovered — demoting the fallback and `
+            + `restoring the ${primary.space} space (no re-index: the persisted vectors `
+            + `are already in it).`
+        );
+        this.promoteFallbackProvider(primary);     // idempotent; persists the space
+        this.queryFailureHistory = [];
+        this.stopPrimaryReprobe();
+        return true;
+    }
+
+    private stopPrimaryReprobe(): void {
+        if (!this.primaryReprobeTimer) return;
+        clearInterval(this.primaryReprobeTimer);
+        this.primaryReprobeTimer = null;
     }
 
     /**
@@ -554,6 +1320,22 @@ export class EmbeddingPipeline {
      */
     get localSpaceKey(): string | null {
         return this.fallbackProvider?.space ?? null;
+    }
+
+    /**
+     * Fraction (0-1) of the active provider's key pool that is currently healthy
+     * (not cooling from a 429), or null when the provider doesn't expose pool
+     * health (e.g. a single-key or non-Gemini provider — treat as healthy).
+     * Lets a caller doing an indexing burst then an immediate query decide
+     * whether to settle a moment first, rather than a blind delay every time.
+     */
+    get primaryPoolHealth(): number | null {
+        const p = this.provider as any;
+        if (p && typeof p.healthyKeyCount === 'function' && typeof p.keyPoolSize === 'function') {
+            const total = p.keyPoolSize();
+            return total > 0 ? p.healthyKeyCount() / total : null;
+        }
+        return null;
     }
 
     async getEmbeddingForQueryLocalOnly(text: string): Promise<number[] | null> {

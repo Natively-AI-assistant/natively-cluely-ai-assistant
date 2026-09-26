@@ -31,14 +31,15 @@ describe('W6b: buildGracefulRetry behavior', () => {
     test('topic-aware for a clear question', () => {
         const out = buildGracefulRetry('can you walk me through the database design?');
         assert.match(out, /database design/i);
-        assert.match(out, /\?$/, 'still a question (retry, not an answer)');
+        assert.doesNotMatch(out, /repeat|rephrase|say that again|once more/i, 'never asks the user to repeat (2026-09-07)');
+        assert.match(out, /press again/i, 'says what to do');
     });
 
     test('no hint → safe generic retry, never empty', () => {
         for (const q of [undefined, null, '', '   ', 'ok']) {
             const out = buildGracefulRetry(q);
             assert.ok(out.length > 20, `q=${JSON.stringify(q)} → "${out}"`);
-            assert.match(out, /\?/);
+            assert.doesNotMatch(out, /repeat|rephrase|once more/i);
         }
     });
 
@@ -72,9 +73,9 @@ describe('W6b: wiring (source pins)', () => {
         assert.match(engineSrc, /buildGracefulRetry\(/);
     });
 
-    test('WhatToAnswerLLM catch path uses buildGracefulRetry (provider-failure branch unchanged)', () => {
+    test('WhatToAnswerLLM catch path leaves the answer empty for the engine (provider-failure branch unchanged)', () => {
         assert.doesNotMatch(wtaSrc, /yield "Could you repeat that\?/);
-        assert.match(wtaSrc, /buildGracefulRetry\(/);
+        assert.doesNotMatch(wtaSrc, /yield buildGracefulRetry\(/, 'a non-provider failure yields nothing so the engine regenerates (2026-09-07)');
         assert.match(wtaSrc, /API key or rate-limit issue/);
     });
 });

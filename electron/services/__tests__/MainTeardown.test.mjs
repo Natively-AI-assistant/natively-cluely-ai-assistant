@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mainPath = path.resolve(__dirname, '../../main.ts');
 const source = fs.readFileSync(mainPath, 'utf8');
-const endMeetingStart = source.indexOf('public async endMeeting');
+const endMeetingStart = source.indexOf('private async endMeetingTransition');
 const endMeetingEnd = source.indexOf('private async processCompletedMeetingForRAG', endMeetingStart);
 const endMeetingSource = source.slice(endMeetingStart, endMeetingEnd);
 

@@ -1,0 +1,539 @@
+{
+ "id": "SALES-S",
+ "segments": [
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Hi Daniel, can you hear me? My headset's been acting up all week.",
+   "timestamp": 1789480805800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Hey Renata, yep, I can hear you fine. Thanks for jumping on again so quickly.",
+   "timestamp": 1789480812400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Of course. Sorry I'm a couple minutes late, I was stuck in the parking garage behind a delivery truck, which, working at a freight company, I guess I deserve.",
+   "timestamp": 1789480824600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ha, occupational hazard. Did you ever get the bathroom renovation finished? Last time you said the tiles were three weeks late.",
+   "timestamp": 1789480833600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Don't get me started. Still waiting on the tiles. Anyway, Tomasz said he'll join around the halfway point, he's coming out of a sprint review.",
+   "timestamp": 1789480844200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Perfect, that works. So let me just recap the proposal we sent over last Tuesday so we're all looking at the same thing.",
+   "timestamp": 1789480854000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The Lumenstack Pro plan lists at $38 per seat per month, and that includes 2 terabytes of monitored data ingest a month across all your pipelines.",
+   "timestamp": 1789480865000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Anything over that is billed at $0.40 per gigabyte, but based on what your team told us, you're sitting around 1.3 terabytes today, so you've got headroom.",
+   "timestamp": 1789480876400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And the proposal was built on 45 seats on a 12 month term.",
+   "timestamp": 1789480882200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Right. Okay, so I'll be straightforward with you. We have a quote from Cartograph, and they came in at $29 per seat per month for basically the same seat count.",
+   "timestamp": 1789480894800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So there's a pretty big gap there, and I- I need to be able to explain to our CFO why we'd pay the difference.",
+   "timestamp": 1789480905000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's fair, and I appreciate you sharing the number. Does the Cartograph quote include ingest, or is that metered separately?",
+   "timestamp": 1789480913600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Um, I believe it's metered separately. I'd have to double check, but I think it was 500 gigabytes included and then usage on top.",
+   "timestamp": 1789480923800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, so that's a meaningful difference at your volume. At 1.3 terabytes you'd be paying overage on Cartograph from day one.",
+   "timestamp": 1789480932800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That said, I do have some flexibility on price, but it's tied to term length. On a 12 month term I can do 12% off list.",
+   "timestamp": 1789480943800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "12% gets us to what, about 33 and change?",
+   "timestamp": 1789480948000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "$33.44 per seat. If you went to 24 months, I can take it to 18% off, which brings it to $31.16 per seat per month, locked for the full term.",
+   "timestamp": 1789480960600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Hm. 24 months is a bigger commitment. Let me think about that while we sort out the seat count, because I actually need to fix something in the proposal.",
+   "timestamp": 1789480972800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The 45 seats is wrong. That was a typo on our side when I sent the headcount over. It's 54, five four. We flipped the digits.",
+   "timestamp": 1789480983800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, good catch. So 54 seats, not 45. That changes the totals, I'll rework it.",
+   "timestamp": 1789480990400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, it's the 38 data engineers plus the 16 analytics folks who are on call for the dashboards.",
+   "timestamp": 1789480998200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Got it, 54. Oh, and it looks like Tomasz just joined.",
+   "timestamp": 1789481003200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Hey, sorry, sprint review ran over. Tomasz here, director of engineering. Hi Daniel.",
+   "timestamp": 1789481009000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Hey Tomasz, good to meet you properly. We were just at the part where Renata corrected the seat count to 54, and I'd put two pricing options on the table.",
+   "timestamp": 1789481021600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "12% off on a 12 month term, or 18% off, so $31.16 per seat, if you commit to 24 months.",
+   "timestamp": 1789481030200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Honestly, from the engineering side, 24 months is fine. We're not going to rip out observability after a year. The migration off our homegrown alerting alone is going to take a quarter.",
+   "timestamp": 1789481043600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "One product question while I'm here. The Pro plan covers the Snowflake and dbt connectors, right? Those are the two we actually care about.",
+   "timestamp": 1789481053800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yes, both are included in Pro, along with the Airflow integration. The only connector that costs extra is the mainframe one, and I don't think you need that.",
+   "timestamp": 1789481065600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "No, thankfully we retired the mainframe two years ago.",
+   "timestamp": 1789481069800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. If Tomasz is comfortable, then let's go with the 24 month term at the 18%.",
+   "timestamp": 1789481076800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Great. So 54 seats at $31.16 for 24 months. That's roughly $20,190 per year.",
+   "timestamp": 1789481083000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now, on payment. Our standard is quarterly in arrears, we really don't love paying a full year upfront.",
+   "timestamp": 1789481090800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I understand. The 18% on a 24 month deal is really built around annual upfront billing. Quarterly would pull that discount back down to around 15%.",
+   "timestamp": 1789481101800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Hmm. What about quarterly, but in advance, not arrears?",
+   "timestamp": 1789481106000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I can't do quarterly at the 18%, I'm sorry, that's a hard line from our finance team.",
+   "timestamp": 1789481113400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Then annual upfront, but I want net 45 payment terms on the invoice, not net 30.",
+   "timestamp": 1789481120800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Net 45 I can do. So annual upfront, invoiced once each year, net 45.",
+   "timestamp": 1789481127000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Fine, let's settle on that.",
+   "timestamp": 1789481129600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Can I jump in on timing? We'd originally talked about starting October 1st, but that's the week of our data center cutover, and nobody's going to touch onboarding that week.",
+   "timestamp": 1789481142200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Would the middle of the month work better?",
+   "timestamp": 1789481146000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "October 15th. Let's make that the start date instead.",
+   "timestamp": 1789481150200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Works for me, the 15th.",
+   "timestamp": 1789481152800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The other thing, and this is a blocker for us, our security team needs your completed security questionnaire before legal will sign anything. We use the SIG Lite.",
+   "timestamp": 1789481164600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And we'll need your DPA, plus the latest SOC 2 Type II report.",
+   "timestamp": 1789481170400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "No problem, we have a completed SIG Lite on file. I'll send the questionnaire, the DPA, and the SOC 2 report over by Friday.",
+   "timestamp": 1789481180600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Speaking of onboarding, one thing I'd love to see is the onboarding package thrown in for free. Your proposal lists it at $6,000.",
+   "timestamp": 1789481190400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That would help us a lot, honestly, with the migration.",
+   "timestamp": 1789481195000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I hear you. I can't commit to that on this call. I'd need to take it to my manager, Jon, and see what's possible given we're already at 18%.",
+   "timestamp": 1789481207200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, but please do ask. It'd make this a much easier sell internally.",
+   "timestamp": 1789481213000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I will. So, next steps. I'll send a revised order form with 54 seats, 24 months, 18% off, annual upfront, net 45, and an October 15th start, by Thursday end of day.",
+   "timestamp": 1789481226400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And once I have that, I'll route it to our legal team. Joan Park in legal handles vendor contracts, she usually turns things around in five business days.",
+   "timestamp": 1789481238200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'll get our security team to review the SIG Lite as soon as it lands, so it doesn't hold up Joan.",
+   "timestamp": 1789481247200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Perfect. Oh, one thing I should've asked. Tomasz, you mentioned the analytics team might grow next year?",
+   "timestamp": 1789481254600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yeah, we might add another 10 seats or so in the spring if the new BI team gets approved.",
+   "timestamp": 1789481262800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Which raises something. If we add seats mid-term, do those get the same 18% rate, or are they at list?",
+   "timestamp": 1789481271400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's a good question. I honestly don't know how our deal desk handles mid-term adds on a multi-year contract. Let me find out.",
+   "timestamp": 1789481281200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, because that'll matter for the business case.",
+   "timestamp": 1789481285000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I'll put it to our deal desk today and mention it in the email with the order form, but I can't promise an answer by Thursday.",
+   "timestamp": 1789481296000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Anything else before we drop?",
+   "timestamp": 1789481298600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Nope, that's it from me. I've got to run, we have a cutover dry run at three.",
+   "timestamp": 1789481306000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Same. Talk soon, Daniel.",
+   "timestamp": 1789481308200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Thanks both, talk soon.",
+   "timestamp": 1789481310400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  }
+ ],
+ "words": 1183,
+ "speakerCount": 3,
+ "durationMs": 510400,
+ "startEpochMs": 1789480800000
+}

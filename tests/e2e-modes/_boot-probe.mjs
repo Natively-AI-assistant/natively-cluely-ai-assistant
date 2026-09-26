@@ -1,0 +1,13 @@
+import { _electron as electron } from '@playwright/test';
+const env={...process.env,NATIVELY_E2E:'1',NATIVELY_API_URL:'http://localhost:3000',NODE_ENV:'development',NATIVELY_DEV_BYPASS_SCREEN_TCC:'1',NATIVELY_E2E_LOCAL_TEST_TOKEN:'local-test',OPENAI_API_KEY:'',OLLAMA_URL:'http://127.0.0.1:1'};
+const app=await electron.launch({args:['dist-electron/electron/main.js'],env,timeout:60000});
+const errs=[];
+app.process().stderr.on('data',d=>{const s=d.toString();if(/Error|crash|FATAL|uncaught|heap|out of memory/i.test(s))errs.push(s.trim().slice(0,200));});
+const win=await app.firstWindow({timeout:30000}); await win.waitForLoadState('domcontentloaded').catch(()=>{});
+const R=(ch,...a)=>app.windows()[0].evaluate(async({ch,a})=>(window.electronAPI||window.api).e2eInvoke(ch,...a),{ch,a});
+await R('__e2e__:enable-pro');
+const mk=await app.windows()[0].evaluate(async()=>{const api=window.electronAPI||window.api;const c=await api.modesCreate({name:'Boot Test',templateType:'technical-interview'});await api.modesUpdate(c.mode.id,{customContext:'Answer concisely.'});await api.modesSetActive(c.mode.id);return c.mode.id;});
+const ans=await R('__e2e__:ask',{question:'What is a database index and when would you use one?',timeoutMs:40000});
+console.log('answer len:',(ans?.answer||ans?.streamedTokens||'').length,'success:',ans?.success,'timedOut:',ans?.timedOut);
+console.log('errs:',errs.slice(0,3).join(' || ')||'none');
+await app.close().catch(()=>{});console.log('CLOSED');

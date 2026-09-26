@@ -1,0 +1,378 @@
+{
+ "blind_id": "S-9911844b",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 85595,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 35716,
+  "candidatesTokenCount": 2690,
+  "totalTokenCount": 48253,
+  "cachedContentTokenCount": 24512,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 35716
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24512
+   }
+  ],
+  "thoughtsTokenCount": 9847,
+  "serviceTier": "standard"
+ },
+ "fact_count": 72,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 8,
+  "hallucination_control": 6,
+  "action_item_retention": 6,
+  "decision_retention": 7,
+  "speaker_attribution": 6,
+  "numeric_accuracy": 8,
+  "entity_retention": 8,
+  "timeline_accuracy": 6,
+  "conclusion_accuracy": 6,
+  "structure": 3,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Misattributed Maya's (QA) concern about the replay tooling to the front-end team.",
+   "Listed 'Speaker 4: Write the rollout plan around the 10% day-one stage' as an action item, contradicting the final decision to use 5%.",
+   "Listed 'October 6 launch date' as an inferred action item, contradicting the final decision to launch on October 14.",
+   "Hallucinated an action item for Ines to 'Mock up the middle option', which Dana explicitly rejected doing."
+  ],
+  "missing_important_information": [
+   "Four of the P1 bugs are customer-visible.",
+   "Viktor's preference to launch on October 20 to get two full weeks of testing.",
+   "Rohan's action item to run a sales training session on October 9.",
+   "Rohan's action item to email the beta customers about the new date by September 22.",
+   "Viktor's deadline of September 30 for the invoice preview caching.",
+   "Viktor's deadline of Monday, September 21 for the technical root cause draft.",
+   "Dana's deadline of Monday to get a committed date from Grace Obi."
+  ],
+  "hallucinated_information": [
+   "Ines will mock up the middle option for the empty state.",
+   "Numerous facts and dates (e.g., 'October 6 launch date', 'Payments Platform release on the 29th') were hallucinated as '[inferred]' action items."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C05",
+    "reported": "Rollout first stage is 10% of eligible accounts on the 14th (later challenged by Maya, discussion ongoing). (owner: Me)"
+   },
+   {
+    "correction_id": "C05",
+    "reported": "Speaker 4: Write the rollout plan around the 10% day-one stage."
+   },
+   {
+    "correction_id": "C02",
+    "reported": "October 6 launch date, 19 days out [inferred]"
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Ines mocking up the middle option for the empty state."
+  ],
+  "distractors_included": [
+   "Ines briefly cut out on a train and sounded robotic.",
+   "A retro doc entry is warranted for Rohan's 'I take stakeholders' quip.",
+   "Someone should reserve a spot near the espresso machine on the 6th floor for Speaker 3.",
+   "Ask facilities whether monitors move with the team or new ones are provided at the Harlow building.",
+   "Crates must be sealed by October 1st; office move is October 2nd."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "partial"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "missing"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "partial"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "partial"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "partial"
+   },
+   {
+    "id": "F63",
+    "status": "partial"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "partial"
+   },
+   {
+    "id": "F66",
+    "status": "partial"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "partial"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a large amount of the transcript's information but suffer from severe structural and conciseness issues. The same facts are repeated across a dozen redundant sections (Overview, Summary, Progress, Decisions, Blockers, Dependencies, Follow-up, Action Items, Risks, etc.), making the document extremely dense and hard to read. There are critical errors, such as listing superseded values (10% rollout, October 6 launch date) as final decisions and action items. The notes also hallucinate action items (e.g., Ines mocking up a middle option) and misattribute QA's concerns to the front-end team. Several deadlines and specific action item owners are missing."
+ }
+}

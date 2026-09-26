@@ -1,0 +1,11 @@
+{
+  "model": "pipecat-ai/smart-turn-v3",
+  "file": "smart-turn-v3.1-cpu.onnx",
+  "url": "https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.1-cpu.onnx",
+  "sha256": "fb68d55c2d542ce79e44b12013bfd571e90df8594ab096d757198e851b0c6594",
+  "bytes": 8679180,
+  "license": "BSD-2-Clause",
+  "purpose": "Auto Answer V3 TurnPredictor (audio end-of-turn, Amendment 2). Optional at runtime: Auto Answer works without it.",
+  "input": "input_features float32 [1, 80, 800] — Whisper log-mel, 16 kHz mono, 8 s chunk, zero-mean/unit-var waveform",
+  "output": "sigmoid completion probability"
+}

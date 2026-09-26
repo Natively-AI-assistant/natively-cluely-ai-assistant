@@ -1,0 +1,22 @@
+[
+  {
+    "id": "resume-backend-1",
+    "type": "resume",
+    "text": "# Priya Nair\n\n## Summary\nBackend engineer with 6 years building distributed systems, focused on Kubernetes-based infrastructure and event-driven architectures.\n\n## Experience\n\n### Senior Software Engineer, Acme Robotics (2022-Present)\nLed the migration of a monolithic order-processing service to a container orchestration pipeline on Kubernetes (EKS), cutting deployment time from 45 minutes to 4 minutes. Designed an event-driven retry system using Kafka that reduced failed-order incidents by 80%. Mentored two junior engineers through their first on-call rotations.\n\n### Software Engineer, DataFlow Inc (2019-2022)\nBuilt a real-time analytics pipeline processing 2M events/day using Apache Flink and Cassandra. Owned the on-call rotation for the payments service, cutting P1 incident resolution time in half by writing automated runbooks.\n\n## Skills\nPython, Go, Kubernetes, Kafka, Terraform, PostgreSQL, AWS (EKS, RDS, S3).\n\n## Education\nB.S. Computer Science, University of Washington, 2019."
+  },
+  {
+    "id": "resume-pm-1",
+    "type": "resume",
+    "text": "# Marcus Chen\n\n## Summary\nProduct manager with 5 years of experience shipping consumer-facing features, focused on growth and experimentation.\n\n## Experience\n\n### Senior Product Manager, Northwind Retail (2021-Present)\nLed a cross-functional launch of a personalized recommendation carousel that grew to 40% of daily active users within two quarters, coordinating with 3 engineering teams and 2 designers. Ran a checkout-flow pricing experiment that showed no statistically significant lift; the post-mortem led the team to redesign the experiment framework to require a minimum sample size before shipping.\n\n### Product Manager, Bright Path Learning (2019-2021)\nOwned the onboarding funnel for a subscription education app, increasing trial-to-paid conversion from 8% to 14% through five iterative A/B tests. Wrote the product requirements for the mobile app's offline mode, coordinating with engineering and QA across two platforms.\n\n## Skills\nSQL, Figma, Amplitude, A/B testing, roadmap planning, stakeholder management.\n\n## Education\nB.A. Economics, University of Michigan, 2019."
+  },
+  {
+    "id": "resume-datasci-1",
+    "type": "resume",
+    "text": "# Sofia Alvarez\n\n## Summary\nData scientist with 4 years of experience building production ML models for consumer retention and experimentation.\n\n## Experience\n\n### Data Scientist, Loop Finance (2022-Present)\nBuilt a churn-prediction model using gradient-boosted trees that improved 90-day retention by 12% when its risk scores were used to trigger targeted retention offers. Designed the company's A/B testing infrastructure, including a sequential-testing library that let teams stop experiments early without inflating false-positive rates.\n\n### Data Analyst, Loop Finance (2020-2022)\nBuilt the weekly cohort-retention dashboard used by the executive team, replacing a manual spreadsheet process that took two days to update. Partnered with the growth team to design and analyze 15+ pricing experiments.\n\n## Skills\nPython, scikit-learn, SQL, dbt, pandas, experiment design.\n\n## Education\nM.S. Statistics, Carnegie Mellon University, 2020."
+  },
+  {
+    "id": "jd-backend-1",
+    "type": "jd",
+    "text": "# Senior Backend Engineer — CloudScale Systems\n\n## About the Role\nWe are hiring a Senior Backend Engineer to help scale our distributed order-processing platform. You'll work on infrastructure that handles millions of transactions per day.\n\n## Responsibilities\nDesign and operate Kubernetes-based services running on AWS EKS. Participate in an on-call rotation and lead incident response for production outages. Mentor junior engineers and review infrastructure-as-code changes.\n\n## Requirements\n5+ years of backend engineering experience. Deep experience with Kubernetes and container orchestration in production. Experience with event-driven architectures such as Kafka. Strong incident-response and debugging skills under pressure.\n\n## Nice to Have\nExperience with Terraform, exposure to Go, prior ownership of a payments or order-processing system."
+  }
+]

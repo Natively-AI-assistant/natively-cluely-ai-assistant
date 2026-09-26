@@ -1,0 +1,170 @@
+{
+ "blind_id": "S-27b64af8",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 52186,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 9801,
+  "candidatesTokenCount": 1167,
+  "totalTokenCount": 17027,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 9801
+   }
+  ],
+  "thoughtsTokenCount": 6059,
+  "serviceTier": "standard"
+ },
+ "fact_count": 29,
+ "evaluation": {
+  "factual_accuracy": 8,
+  "important_information_retention": 8,
+  "hallucination_control": 8,
+  "action_item_retention": 9,
+  "decision_retention": 9,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 10,
+  "entity_retention": 8,
+  "timeline_accuracy": 9,
+  "conclusion_accuracy": 9,
+  "structure": 6,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 5,
+  "critical_errors": [],
+  "missing_important_information": [
+   "Jon on the platform team is a different person from Joan the QA engineer",
+   "A release planning sync follows the standup at 10"
+  ],
+  "hallucinated_information": [
+   "Android 9 support affects 'backend sequencing' (transcript says it affects backend too)",
+   "Joan needs to 'follow up on obtaining replacement or borrowed Pixel devices' (transcript says she is already borrowing two from the design team)"
+  ],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [
+   "Load testing the workout history endpoint before prod (Theo's wish, not assigned, but listed as an action item)"
+  ],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "partial"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "partial"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "partial"
+   },
+   {
+    "id": "F24",
+    "status": "partial"
+   },
+   {
+    "id": "F25",
+    "status": "missing"
+   },
+   {
+    "id": "F26",
+    "status": "missing"
+   },
+   {
+    "id": "F27",
+    "status": "partial"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "partial"
+   }
+  ],
+  "rationale": "The notes capture almost all critical and important information accurately, including numbers, timelines, and decisions. However, they suffer from severe repetition, with entire sentences copy-pasted verbatim across the Overview, Summary, Progress, Decisions, and Action Items sections, which severely impacts conciseness and readability. There are also minor hallucinations, such as referring to 'backend sequencing' and framing Joan's borrowing of Pixel devices as a future follow-up rather than an ongoing action. Additionally, Theo's preference to load test the workout history endpoint is incorrectly listed as an assigned action item."
+ }
+}

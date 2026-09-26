@@ -20,6 +20,11 @@ export class GoogleSTT extends EventEmitter {
     private isStreaming = false;
     private isActive = false;
     private isFatalError = false;
+    // Set once a code-3 rejection has been answered by dropping to the `default`
+    // model. Bounds the downgrade to a SINGLE retry: a second INVALID_ARGUMENT,
+    // or one that arrives while we are already on `default`, is genuinely
+    // permanent and falls through to the fatal path.
+    private modelDowngraded = false;
     private label = 'default';
     private writeCount = 0;
 
@@ -37,6 +42,26 @@ export class GoogleSTT extends EventEmitter {
     //   7  = PERMISSION_DENIED (API not enabled / wrong project / no IAM)
     //   16 = UNAUTHENTICATED (bad/expired credentials)
     private static readonly PERMANENT_GRPC_CODES = new Set([3, 7, 16]);
+
+    // Google STT v1 does not accept the common `zh-*` BCP-47 tags — its
+    // supported-languages table lists Mandarin only as `cmn-Hans-CN` (and
+    // Traditional as `cmn-Hant-TW`). The shared RECOGNITION_LANGUAGES map
+    // keeps `zh-CN` because other providers (Deepgram, Soniox) expect it,
+    // so the translation must stay Google-local.
+    private static readonly V1_LANGUAGE_CODE_OVERRIDES: Record<string, string> = {
+        'zh-CN': 'cmn-Hans-CN',
+        'zh-TW': 'cmn-Hant-TW',
+    };
+
+    // Languages the `latest_long` model does not cover in STT v1 (Mandarin
+    // supports only `default`/`command_and_search`). Requesting latest_long
+    // for these returns INVALID_ARGUMENT (gRPC code 3), which
+    // PERMANENT_GRPC_CODES above then escalates to a session-wide STT
+    // shutdown — the "Chinese never transcribes" bug.
+    private static readonly LANGUAGES_WITHOUT_LATEST_LONG = new Set([
+        'cmn-Hans-CN',
+        'cmn-Hant-TW',
+    ]);
 
     // Config
     private encoding = 'LINEAR16' as const;
@@ -125,8 +150,8 @@ export class GoogleSTT extends EventEmitter {
                     return;
                 }
 
-                console.log(`[GoogleSTT/${this.label}] Updating recognition language to: ${key} (${config.bcp47})`);
-                this.languageCode = config.bcp47;
+                this.languageCode = GoogleSTT.V1_LANGUAGE_CODE_OVERRIDES[config.bcp47] ?? config.bcp47;
+                console.log(`[GoogleSTT/${this.label}] Updating recognition language to: ${key} (${this.languageCode})`);
 
                 if ('alternates' in config) {
                     this.alternativeLanguageCodes = (config as EnglishVariant).alternates;
@@ -139,6 +164,11 @@ export class GoogleSTT extends EventEmitter {
                     console.log(`[GoogleSTT/${this.label}] Alternates:`, this.alternativeLanguageCodes.join(', '));
                 }
             }
+
+            // A downgrade is a fact about the OLD language+model pair, so the new
+            // language gets its own latest_long attempt. (start() resets this too,
+            // but only the active path reaches start().)
+            this.modelDowngraded = false;
 
             // Restart if active
             if (this.isStreaming || this.isActive) {
@@ -155,6 +185,7 @@ export class GoogleSTT extends EventEmitter {
         if (this.isActive) return;
         this.isActive = true;
         this.isFatalError = false;
+        this.modelDowngraded = false;
         this.writeCount = 0;
 
         this.openDumpStream();
@@ -349,6 +380,27 @@ export class GoogleSTT extends EventEmitter {
         }
     }
 
+    /**
+     * `latest_long` is the quality default, but STT v1 offers it for only a
+     * subset of locales — Mandarin, for one, supports `default` and
+     * `command_and_search` only. An unsupported model+language pair is rejected
+     * with INVALID_ARGUMENT, a PERMANENT_GRPC_CODES entry, which used to kill
+     * STT for the entire session ("Chinese never transcribes", PR #494).
+     *
+     * LANGUAGES_WITHOUT_LATEST_LONG catches the pairs we know about up front;
+     * `modelDowngraded` catches the ones we do not, after Google has told us
+     * once. Google no longer publishes the v1 language x model table (both doc
+     * URLs now redirect to v2, which uses chirp/long/short), so the static list
+     * can never be proven complete — the runtime downgrade is what actually
+     * closes the class.
+     */
+    private resolveModel(): 'default' | 'latest_long' {
+        if (this.modelDowngraded) return 'default';
+        return GoogleSTT.LANGUAGES_WITHOUT_LATEST_LONG.has(this.languageCode)
+            ? 'default'
+            : 'latest_long';
+    }
+
     private startStream(): void {
         this.lastConnectAttempt = Date.now();
         this.isStreaming = true;
@@ -356,7 +408,18 @@ export class GoogleSTT extends EventEmitter {
 
         console.log(`[GoogleSTT/${this.label}] Creating gRPC stream (rate=${this.sampleRateHertz}Hz, ch=${this.audioChannelCount}, lang=${this.languageCode})...`);
 
-        this.stream = this.client
+        // F-203: bind the instance to a local so every STATE-MUTATING handler
+        // can verify it still owns `this.stream` before touching shared state.
+        // Without this, the synchronous stop()+start() restarts (setSampleRate
+        // — which main.ts triggers on the first audio chunk of every meeting —
+        // setAudioChannelCount, setRecognitionLanguage, and the 270s proactive
+        // restart) let the DESTROYED stream's async 'close'/'end' run
+        // `this.stream = null` against the freshly-created stream, orphaning it
+        // (open, never ended) and pushing writes into the lazy-reconnect path
+        // so a third stream opens. Mirrors NativelyProSTT's documented
+        // `guard(ws === this.ws)` pattern. Live-reproduced in
+        // scripts/audit/F-203-repro.mjs.
+        const stream: any = this.client
             .streamingRecognize({
                 config: {
                     encoding: this.encoding,
@@ -364,13 +427,14 @@ export class GoogleSTT extends EventEmitter {
                     audioChannelCount: this.audioChannelCount,
                     languageCode: this.languageCode,
                     enableAutomaticPunctuation: true,
-                    model: 'latest_long',
+                    model: this.resolveModel(),
                     useEnhanced: true,
                     alternativeLanguageCodes: this.alternativeLanguageCodes,
                 },
                 interimResults: true,
             })
             .on('error', (err: Error) => {
+                if (stream !== this.stream) return; // F-203 stale-stream guard
                 this.isConnecting = false;
                 this.isStreaming = false;
                 this.stream = null;
@@ -390,6 +454,26 @@ export class GoogleSTT extends EventEmitter {
                     || /Audio Timeout Error/i.test(err.message || '');
                 if (isIdleTimeout) {
                     console.warn(`[GoogleSTT/${this.label}] Stream idle-timed-out (Google's 10s no-audio limit), reconnecting on next chunk.`);
+                    return;
+                }
+
+                // INVALID_ARGUMENT on a `latest_long` stream is far more likely the
+                // model than the credentials: v1 supports latest_long for only some
+                // locales and rejects the pair outright. Answer the FIRST one by
+                // dropping to `default` and letting write()'s lazy reconnect reopen
+                // the stream, rather than disabling STT for the session. Not
+                // re-emitted, for the same reason the idle timeout is not: main.ts's
+                // consecutive-error counter would tear the session down anyway. A
+                // second code 3 — or one that arrives while we are already on
+                // `default` — falls through below and is treated as permanent.
+                if (grpcCode === 3 && !this.modelDowngraded && this.resolveModel() === 'latest_long') {
+                    this.modelDowngraded = true;
+                    console.warn(
+                        `[GoogleSTT/${this.label}] INVALID_ARGUMENT on model=latest_long ` +
+                        `(lang=${this.languageCode}) — retrying once on model=default. ` +
+                        `Add '${this.languageCode}' to LANGUAGES_WITHOUT_LATEST_LONG to skip this ` +
+                        `round-trip. Google said: ${err.message}`
+                    );
                     return;
                 }
 
@@ -414,12 +498,14 @@ export class GoogleSTT extends EventEmitter {
                 this.emit('error', err);
             })
             .on('end', () => {
+                if (stream !== this.stream) return; // F-203 stale-stream guard
                 console.log(`[GoogleSTT/${this.label}] Stream ended server-side (idle timeout)`);
                 this.isConnecting = false;
                 this.isStreaming = false;
                 this.stream = null;
             })
             .on('close', () => {
+                if (stream !== this.stream) return; // F-203 stale-stream guard
                 console.log(`[GoogleSTT/${this.label}] Stream closed server-side`);
                 this.isConnecting = false;
                 this.isStreaming = false;
@@ -442,6 +528,12 @@ export class GoogleSTT extends EventEmitter {
                     }
                 }
             });
+
+        // Publish the new stream only after its handlers are attached. The
+        // 'data' handler is deliberately NOT identity-guarded: it mutates no
+        // connection state, and a late final transcript is still real user
+        // speech that should reach the transcript.
+        this.stream = stream;
 
         // gRPC streams are writable immediately — no handshake needed.
         const bufferedCount = this.buffer.length;

@@ -1,0 +1,308 @@
+{
+ "blind_id": "S-df69d4cd",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 55464,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 20416,
+  "candidatesTokenCount": 2146,
+  "totalTokenCount": 28494,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 20416
+   }
+  ],
+  "thoughtsTokenCount": 5932,
+  "serviceTier": "standard"
+ },
+ "fact_count": 61,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 8,
+  "hallucination_control": 4,
+  "action_item_retention": 9,
+  "decision_retention": 9,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 4,
+  "entity_retention": 9,
+  "timeline_accuracy": 9,
+  "conclusion_accuracy": 4,
+  "structure": 3,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Treated the superseded $146,000 salary band maximum and Maya's initial $155,000 target as current, unresolved issues in the Concerns and Open Questions sections, contradicting the explicit corrections made in the transcript.",
+   "Hallucinated that the benefits package was 'not yet described' in the Open Questions section, despite detailing it earlier.",
+   "Hallucinated that the interview process and subsequent steps were 'not reached in this chunk' in the Open Questions section, despite detailing them earlier."
+  ],
+  "missing_important_information": [
+   "The Series B funding is mostly going into product and engineering hiring."
+  ],
+  "hallucinated_information": [
+   "The benefits package was raised but not yet described.",
+   "The interview process and subsequent steps were included in the planned agenda but were not reached in this chunk."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "The compensation package includes a $128,000-$146,000 base band... Whether Corvella can accommodate Maya's approximately $155,000 base target remains unresolved because it exceeds the stated salary-band maximum."
+   },
+   {
+    "correction_id": "C03",
+    "reported": "Maya's approximately $155,000 base target is above the $146,000 top of the stated range, so compensation could become an objection."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "partial"
+   },
+   {
+    "id": "F04",
+    "status": "partial"
+   },
+   {
+    "id": "F05",
+    "status": "missing"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "partial"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "partial"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "contradicted"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "contradicted"
+   },
+   {
+    "id": "F37",
+    "status": "contradicted"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "contradicted"
+   },
+   {
+    "id": "F43",
+    "status": "contradicted"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "contradicted"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "partial"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes suffer from severe internal contradictions and hallucinations. While many facts are initially captured correctly, the 'Concerns' and 'Open questions' sections explicitly contradict the transcript by treating superseded values (the $146k band maximum and Maya's initial $155k target) as current, unresolved issues. Furthermore, the notes hallucinate that the benefits package and interview process were 'not yet described' or 'not reached in this chunk,' despite detailing them in earlier sections. The notes are also extremely repetitive, with action items and decisions duplicated multiple times verbatim, severely impacting conciseness and readability."
+ }
+}

@@ -1,0 +1,313 @@
+{
+ "blind_id": "S-5ac67eeb",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 54639,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 19879,
+  "candidatesTokenCount": 2144,
+  "totalTokenCount": 27671,
+  "cachedContentTokenCount": 16307,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 19879
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 16307
+   }
+  ],
+  "thoughtsTokenCount": 5648,
+  "serviceTier": "standard"
+ },
+ "fact_count": 61,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 7,
+  "hallucination_control": 8,
+  "action_item_retention": 9,
+  "decision_retention": 9,
+  "speaker_attribution": 8,
+  "numeric_accuracy": 4,
+  "entity_retention": 8,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 4,
+  "structure": 4,
+  "conciseness": 3,
+  "readability": 4,
+  "overall_summary_quality": 5,
+  "critical_errors": [
+   "The notes contradict themselves by correctly stating the updated salary band ($148k-$172k) and Maya's updated target ($165k) in one section, but then listing the superseded values ($128k-$146k band and $155k target) as an active risk and an unresolved open question.",
+   "Included chunking artifacts ('This chunk covers stage one...') and raw speaker labels ('Me: Send the portfolio link...')."
+  ],
+  "missing_important_information": [
+   "The details of the final loop (60-minute critique, 45-minute cross-functional, 30-minute values conversation).",
+   "Maya's preference for remote work due to Brightlane's upcoming return-to-office mandate.",
+   "The sequencing of Dana's interview and the portfolio review before Maya's trip."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "Whether Corvella can accommodate Maya's target base salary of approximately $155,000, above the stated $128,000-$146,000 band, remains unresolved. [open]"
+   },
+   {
+    "correction_id": "C03",
+    "reported": "[medium] Maya's target base salary of approximately $155,000 exceeds the top of Corvella's stated salary band by about $9,000."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "partial"
+   },
+   {
+    "id": "F05",
+    "status": "missing"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "partial"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "partial"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "missing"
+   },
+   {
+    "id": "F23",
+    "status": "partial"
+   },
+   {
+    "id": "F24",
+    "status": "partial"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "contradicted"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "partial"
+   },
+   {
+    "id": "F39",
+    "status": "missing"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "partial"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "partial"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "missing"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "missing"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a significant amount of the transcript's detail but suffer from severe structural and logical flaws. The most critical error is the internal contradiction regarding compensation: the notes correctly state the updated salary band and target in one section, but then list the superseded, incorrect values as an active risk and an unresolved open question. Additionally, the notes are extremely repetitive, listing the same equity, bonus, and action items multiple times, which severely degrades conciseness and readability. There are also visible chunking artifacts and raw speaker labels ('Me', 'Speaker 1') left in the text."
+ }
+}

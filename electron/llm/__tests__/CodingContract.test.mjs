@@ -385,8 +385,11 @@ describe('validateAnswerStructure gating', () => {
     assert.equal(v.ok, true);
     assert.deepEqual(v.missingSections, []);
   });
-  test('coding answer type enforces the contract', () => {
-    const v = validateAnswerStructure('coding_question_answer', 'just prose, no sections');
+  test('dsa answer type enforces the contract', () => {
+    // Six-section enforcement moved to dsa_question_answer. coding_question_answer
+    // (general implementation) only requires a code block; prose-only is rejected
+    // but not template-repaired.
+    const v = validateAnswerStructure('dsa_question_answer', 'just prose, no sections');
     assert.equal(v.ok, false);
     assert.ok(v.repaired);
   });

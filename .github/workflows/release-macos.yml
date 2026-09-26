@@ -44,15 +44,51 @@ permissions:
 
 jobs:
   build-macos:
-    runs-on: macos-14 # Apple Silicon runner; builds both arches via NATIVELY_BUILD_ALL_MAC_ARCHES
-    timeout-minutes: 90
+    # Apple Speech uses SpeechAnalyzer/SpeechTranscriber from the macOS 26 SDK.
+    # The arm64 runner still cross-builds the separate Intel package.
+    runs-on: macos-26
+    # 90 was already tight for two ~28-min app notarizations plus two DMG
+    # notarizations. scripts/lib/notary-transient.cjs now retries a DMG submit up
+    # to 3x (~25 min each) and stapleWithRetry adds ~8 min of backoff per DMG, so a
+    # run that survives a dropped upload needs materially more headroom — otherwise
+    # the job is killed mid-retry and the retry buys nothing.
+    timeout-minutes: 180
     steps:
-      - name: Checkout (with submodules)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
           # Defaults to the triggering ref (tag on push, selected ref on dispatch).
           # No untrusted-input ref interpolation.
+          # Keep the checkout credential available to the explicit, path-limited
+          # private-submodule step below. The release needs only `premium`; an
+          # explicit checkout avoids fetching the unrelated natively-api tree
+          # and provides credentials for the separate private repository.
+          persist-credentials: true
+
+      - name: Detect submodule token
+        id: submodule_token
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          if [ -n "${SUBMODULE_TOKEN:-}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::error::A SUBMODULE_TOKEN or GH_APP_TOKEN with access to Natively-AI-assistant/natively-premium is required for a release build."
+            exit 1
+          fi
+
+      - name: Checkout premium submodule
+        if: steps.submodule_token.outputs.available == 'true'
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -c url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf="https://github.com/" \
+              submodule update --init --force -- premium
+          test -f premium/electron/knowledge/CompanyResearchEngine.ts
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -121,6 +157,12 @@ jobs:
           npm run build:electron
           NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native
           node scripts/ensure-sharp-mac-deps.js
+          # Both darwin arches of @napi-rs/canvas. The runner is arm64, so `npm ci`
+          # installs only the arm64 binding and the x64 pack ships without one —
+          # that is how v2.8.7 shipped an Intel DMG whose PDF text extraction died
+          # with "DOMMatrix is not defined". postinstall also covers this; the
+          # explicit call keeps it true if scripts are ever skipped.
+          node scripts/ensure-napi-canvas-mac-deps.js
           ./node_modules/.bin/electron-builder --mac --config electron-builder.signed.cjs --publish never
 
       - name: Verify signature + notarization (both arches + DMGs)
@@ -134,6 +176,16 @@ jobs:
             codesign --verify --deep --strict --verbose=4 "$APP"
             spctl -a -vvv -t execute "$APP"          # expect: accepted / source=Notarized Developer ID
             xcrun stapler validate "$APP"
+            # 2026-07-08: confirm the binary is NOT marked with a quarantine
+            # xattr (e.g. com.apple.quarantine). The notarization + stapling
+            # pipeline should clear this on signed apps, but a stale flag
+            # would make the app refuse to launch on a fresh macOS profile
+            # — exactly the "never opens again" failure mode we shipped to
+            # production in the past. Treat as a hard release gate.
+            if xattr -l "$APP" 2>/dev/null | grep -q 'com.apple.quarantine'; then
+              echo "::error::Natively.app carries com.apple.quarantine — would refuse to launch on a fresh macOS profile. Re-run electron-builder to clean the build artifact."
+              exit 1
+            fi
             echo "::endgroup::"
           done
           # DMGs are signed + notarized + stapled by scripts/afterAllArtifactBuild.cjs.
@@ -144,9 +196,48 @@ jobs:
             echo "::group::Verifying dmg: $DMG"
             xcrun stapler validate "$DMG"            # hard requirement
             spctl -a -vvv -t open --context context:primary-signature "$DMG" || true  # informational
+            # 2026-07-08: same quarantine gate for the DMG.
+            if xattr -l "$DMG" 2>/dev/null | grep -q 'com.apple.quarantine'; then
+              echo "::error::$DMG carries com.apple.quarantine. The .dmg would not auto-mount cleanly on a fresh macOS profile. Re-run electron-builder."
+              exit 1
+            fi
             echo "::endgroup::"
           done
 
+      # Required packaged local-fallback assets (ONNX/Transformers deps + bundled
+      # MiniLM/ms-marco models + local ONNX worker scripts). The packaged app
+      # must work on a clean machine with no Ollama, no API keys, no internet.
+      - name: Verify packaged local fallback assets (per-arch)
+        run: |
+          set -euo pipefail
+          APPS=$(find release -maxdepth 2 -name 'Natively.app' -path '*mac*')
+          if [ -z "$APPS" ]; then echo "No Natively.app found in release/"; exit 1; fi
+          for APP in $APPS; do
+            echo "::group::Verify packaged local assets: $APP"
+            node scripts/verify-packaged-local-assets.mjs --app "$APP"
+            echo "::endgroup::"
+          done
+
+      # Runtime gate: actually launch the packaged app with no Ollama and no
+      # API keys and assert the local fallback preflight passes. This is the
+      # only step that proves the packaged binary really works on a clean
+      # machine — the static verifier above can pass even when the runtime
+      # worker load path is broken. Uses arm64 to match the runner.
+      - name: Packaged no-Ollama no-keys smoke (arm64)
+        run: |
+          set -euo pipefail
+          APPS=$(find release -maxdepth 2 -name 'Natively.app' -path '*mac*')
+          if [ -z "$APPS" ]; then echo "No Natively.app found in release/"; exit 1; fi
+          APP=$(echo "$APPS" | tr ' ' '\n' | grep arm64 | head -n1)
+          if [ -z "$APP" ]; then echo "No arm64 Natively.app found"; exit 1; fi
+          echo "::group::Smoke: $APP"
+          node scripts/smoke-packaged-local-fallback.mjs --app "$APP" --no-ollama --no-keys
+          echo "::endgroup::"
+
+      # This is a CI artifact, NOT the GitHub Release. Attach it to the release with
+      # `node scripts/publish-github-release.mjs --platform mac --tag V<version>`,
+      # which refuses a set whose zips lack their .blockmap (V2.8.8 shipped without
+      # them, so every client re-downloaded ~1 GB instead of a differential update).
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -154,5 +245,6 @@ jobs:
           path: |
             release/*.dmg
             release/*.zip
+            release/*.zip.blockmap
             release/latest-mac.yml
           if-no-files-found: error

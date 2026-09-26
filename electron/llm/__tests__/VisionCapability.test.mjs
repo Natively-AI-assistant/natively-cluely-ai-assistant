@@ -23,7 +23,7 @@ const {
 
 describe('isOllamaVisionModelByName', () => {
   for (const m of ['llava:13b', 'llava-llama3', 'bakllava', 'moondream', 'llama3.2-vision',
-                   'minicpm-v', 'qwen2.5-vl:7b', 'pixtral-12b', 'gemma3:4b', 'llama4:scout',
+                   'minicpm-v', 'qwen2.5-vl:7b', 'qwen3-vl:8b', 'qwen-vl', 'pixtral-12b', 'gemma3:4b', 'llama4:scout',
                    'granite3.2-vision', 'mistral-small3.1']) {
     test(`recognizes vision model: ${m}`, () => assert.equal(isOllamaVisionModelByName(m), true));
   }

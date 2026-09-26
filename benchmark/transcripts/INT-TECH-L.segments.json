@@ -1,0 +1,3251 @@
+{
+ "id": "INT-TECH-L",
+ "segments": [
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Hi, hello? Can you hear me?",
+   "timestamp": 1789480803000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yes, I can hear you. Hi, you must be Marcus.",
+   "timestamp": 1789480807600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's me. Hi. Sorry, my camera took a second, it decided to update right when I clicked the link.",
+   "timestamp": 1789480815800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Of course it did. That's the law. Welcome, thanks for making the time this afternoon.",
+   "timestamp": 1789480822400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Thanks for having me. Is this Priya?",
+   "timestamp": 1789480825800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yes, Priya Raman. I'm the engineering manager for the Payments Platform team here at Tessellate Pay.",
+   "timestamp": 1789480832800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Great, nice to meet you properly. Diane mentioned you'd be running this one.",
+   "timestamp": 1789480838600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, Diane's been great, she's the recruiter on this role. So quick heads up on the format.",
+   "timestamp": 1789480846000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "We've got about 50 minutes. There's supposed to be a second interviewer, Alex, one of our staff engineers, but he's running a few minutes behind. He'll jump in when he can.",
+   "timestamp": 1789480859000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "No problem at all.",
+   "timestamp": 1789480861200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So, the plan is, a bit about you and your background, then a technical design discussion, which is the bulk of it, then some behavioural stuff, and then logistics and your questions at the end.",
+   "timestamp": 1789480875800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Sounds good.",
+   "timestamp": 1789480877200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Before we start, how's your week going? You're in Ontario, right?",
+   "timestamp": 1789480882200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, I'm in Hamilton. The week's been, uh, fine. It's raining sideways here, which is very on brand for September.",
+   "timestamp": 1789480890800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "It's the same in Toronto. I biked in this morning and I'm still regretting it.",
+   "timestamp": 1789480897400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Brave. I would have taken the GO train and complained the whole time.",
+   "timestamp": 1789480903200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Honestly, that's the smarter move. Okay, so let's start. Tell me a bit about yourself and how you got to where you are.",
+   "timestamp": 1789480913000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Sure. So, I'm currently a senior software engineer at Quillbank. I work on the payments orchestration team there.",
+   "timestamp": 1789480920800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Before Quillbank I was at Ferrow for about two and a half years, and before that I did internships and some research work while I was finishing my master's.",
+   "timestamp": 1789480933000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "All in, I've got about 8 years of experience building backend systems, mostly distributed stuff, mostly in, you know, money-adjacent domains.",
+   "timestamp": 1789480942000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. And what's the stack look like at Quillbank?",
+   "timestamp": 1789480946200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "At Quillbank it's mostly Go. The orchestration services are all Go, running on Kubernetes, we use Postgres as the main store and Kafka for pretty much all the async flows.",
+   "timestamp": 1789480958800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "At Ferrow it was Kotlin, JVM services, a lot of Kafka there too, and Flink later on.",
+   "timestamp": 1789480966200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Nice. So that overlaps a lot with us. Our newer services are Go, and the ledger itself is still a Kotlin service we're, um, slowly migrating.",
+   "timestamp": 1789480977200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, I saw that in the job posting. The Kotlin to Go migration part actually caught my eye.",
+   "timestamp": 1789480985000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Good, we'll come back to it. Walk me through Quillbank. When did you join and what do you own?",
+   "timestamp": 1789480993200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I joined Quillbank in April 2023. I started on the payouts team, and then about a year in I moved to payments orchestration.",
+   "timestamp": 1789481003000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What I own now is basically the layer that sits between our product APIs and the external payment processors. So retries, routing between processors, idempotency, the state machine for a payment.",
+   "timestamp": 1789481016000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "How many processors are you routing across?",
+   "timestamp": 1789481019400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Three right now. We had four but we dropped one last year because their settlement files were, uh, let's say creatively formatted.",
+   "timestamp": 1789481028800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Creatively formatted. I love that.",
+   "timestamp": 1789481031400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "One of them used a different date format depending on the day of the week. I'm not even joking.",
+   "timestamp": 1789481039600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh no. Okay. And the team size there?",
+   "timestamp": 1789481043400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Orchestration is six engineers plus me, and there's an EM and a PM we share with the payouts team.",
+   "timestamp": 1789481051600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And Ferrow, what were you doing there?",
+   "timestamp": 1789481055000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So I joined Ferrow in September 2020 and left in March 2023. I was a backend engineer and then a senior engineer by the end.",
+   "timestamp": 1789481065600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Most of my time was on streaming pipelines, moving event data from the product services into the warehouse and into some near real time dashboards.",
+   "timestamp": 1789481076200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Got it. And before that, the internships and research?",
+   "timestamp": 1789481080400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, so during my master's at McMaster I was a research assistant in a distributed systems lab for about a year, working on consensus protocols, mostly simulation work, nothing that ever went near production.",
+   "timestamp": 1789481094600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And I did two internships, one at a logistics company called Routeway, and one at a small insurance startup that doesn't exist anymore.",
+   "timestamp": 1789481104400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Doesn't exist anymore as in acquired or as in...",
+   "timestamp": 1789481108600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "As in the other thing. Good snacks though.",
+   "timestamp": 1789481112400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's usually how it goes. Okay, so let me just do the math on that. You said 8 years, but Ferrow from 2020 and Quillbank since 2023, that's more like six years?",
+   "timestamp": 1789481125800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes, sorry, that's fair, I should be more precise. It's 6 years professional, full time. The other 2 years are the internships and the research assistant role.",
+   "timestamp": 1789481137200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I tend to lump it together because the research work was pretty hands-on, but for leveling purposes, 6 years professional is the accurate number.",
+   "timestamp": 1789481147400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Totally fine, I just like having it straight for the packet. Six professional plus two of internships and research.",
+   "timestamp": 1789481155600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Exactly.",
+   "timestamp": 1789481156600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And what made you start looking? You've been at Quillbank what, three and a half years?",
+   "timestamp": 1789481163600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "About three and a half, yeah. Honestly, Quillbank has been good to me. But orchestration is fairly mature now, most of the work is incremental.",
+   "timestamp": 1789481174200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the thing I keep finding most interesting is the ledger side, the source of truth for money. At Quillbank that's owned by a different org, and I've been sort of peeking over the fence for two years.",
+   "timestamp": 1789481190000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's a pretty common story. The ledger is the part everybody wants to touch and nobody wants to be paged for.",
+   "timestamp": 1789481199000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Ha. I've been paged for the orchestration layer enough that I think I've built some immunity.",
+   "timestamp": 1789481206000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "We'll see if that survives our on-call. Okay, and in terms of languages, if I asked you to rank Go and Kotlin, where are you strongest?",
+   "timestamp": 1789481217000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Go, today, by a decent margin. I've written Go every day for three years. Kotlin I was very comfortable with at Ferrow but I'd need a couple of weeks to warm back up on things like coroutines.",
+   "timestamp": 1789481232400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And Postgres specifically? Like, are you the person who reads query plans, or the person who asks someone else to?",
+   "timestamp": 1789481241000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'm the one who reads them, for better or worse. I did a fair amount of work on partitioning and on locking behavior at Quillbank. We had a period where advisory locks were being misused and I spent a very long week untangling that.",
+   "timestamp": 1789481259200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Advisory locks being misused. That's a whole genre of horror story.",
+   "timestamp": 1789481264200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It is. The short version is someone was taking an advisory lock keyed on a hash that collided across two unrelated tables.",
+   "timestamp": 1789481273600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oof. Okay, and Kubernetes, how deep do you go there?",
+   "timestamp": 1789481278200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'm comfortable as a service owner. Writing deployments, tuning resource requests, debugging why a pod is getting OOM killed. I'm not a cluster operator, we have a platform team for that.",
+   "timestamp": 1789481291200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's roughly the split we have too. We run on EKS and there's an infra team that owns the clusters.",
+   "timestamp": 1789481299800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Makes sense.",
+   "timestamp": 1789481301200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So, Marcus, I'm going to set up the design question now, and if Alex joins partway through I'll catch him up.",
+   "timestamp": 1789481310200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Sure.",
+   "timestamp": 1789481311200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So the prompt is, we want you to design a payment ledger. Specifically a ledger service that records money movement for merchants, and the key requirement is that it has to be idempotent.",
+   "timestamp": 1789481325000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Clients, meaning our internal services, will call it to record things like a charge, a refund, a payout, and those clients retry. Sometimes aggressively.",
+   "timestamp": 1789481335200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So you should assume the same request can arrive more than once, possibly concurrently. Start wherever you like.",
+   "timestamp": 1789481343000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. Can I ask some clarifying questions first?",
+   "timestamp": 1789481346800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Please.",
+   "timestamp": 1789481347800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Roughly what volume are we talking about? Like order of magnitude for writes per second.",
+   "timestamp": 1789481354400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let's say peak of about 3,000 ledger writes per second, average more like 800.",
+   "timestamp": 1789481360600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And is it double-entry? Like, does every movement have to balance?",
+   "timestamp": 1789481365600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yes, double-entry. Every transaction has to net to zero across its entries.",
+   "timestamp": 1789481371000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. And the consumers of the ledger, do they need balances in real time, or is some lag acceptable?",
+   "timestamp": 1789481379200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Good question. For authorizing a payout, we need a balance that's accurate. For dashboards, a few seconds of lag is fine.",
+   "timestamp": 1789481388200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Got it. And multi-currency?",
+   "timestamp": 1789481390400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yes, but you can assume no FX inside the ledger. A transaction is single currency.",
+   "timestamp": 1789481397000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Perfect, that makes life easier.",
+   "timestamp": 1789481399600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So I'll start with the data model, because for a ledger I think everything falls out of that.",
+   "timestamp": 1789481407400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "At the core you'd have accounts, a transactions table, and an entries table. A transaction is the logical movement, and it has two or more entries, each one a debit or a credit against an account.",
+   "timestamp": 1789481422400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The entries are append-only. You never update or delete an entry. If something's wrong you post a reversing transaction.",
+   "timestamp": 1789481430600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay.",
+   "timestamp": 1789481431600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And on the transactions table, the client supplies an idempotency key. I'd put a unique constraint on the idempotency key scoped to the client, so like client ID plus key.",
+   "timestamp": 1789481444200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Hey, sorry, sorry. Hi everyone. Can you hear me?",
+   "timestamp": 1789481448400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Hey, yes, we can hear you. Marcus, this is Alex.",
+   "timestamp": 1789481453000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Hi Marcus, I'm Alex Brandt, I'm a staff engineer on Payments Platform. I'm so sorry I'm late, I was stuck in an incident review that ran over and then the meeting room booking system kicked me out of the room.",
+   "timestamp": 1789481469600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "No worries at all, nice to meet you.",
+   "timestamp": 1789481473400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The booking system strikes again.",
+   "timestamp": 1789481476000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "It literally put a sign on the door saying the room was reserved for \"Quarterly Vibes Sync\". I don't know whose meeting that is.",
+   "timestamp": 1789481486200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's marketing. Don't ask.",
+   "timestamp": 1789481488400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Noted. Okay, where are we?",
+   "timestamp": 1789481491000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Quick catch-up. Marcus has been at Quillbank since April 2023 on payments orchestration, Go, Postgres, Kafka. Before that Ferrow. 6 years professional plus a couple of years of internships and research.",
+   "timestamp": 1789481504000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "We're on the ledger design question. He's laid out accounts, transactions, append-only entries, and a unique constraint on client plus idempotency key.",
+   "timestamp": 1789481513400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Great, thanks. Oh, Ferrow, nice. So you were on their payments team? I know a couple of people from Ferrow payments, they're basically our main competitor in the SMB space.",
+   "timestamp": 1789481526000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Ah, actually no, I was on the data team at Ferrow, not payments. Data platform. I worked a lot with the payments team's event streams, but I never owned any of their services.",
+   "timestamp": 1789481539800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Oh, got it, my mistake. I think I saw Ferrow and just filled in the rest.",
+   "timestamp": 1789481546800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Easy mistake, half of LinkedIn thinks the same thing. My old manager there, Alex Kowalczyk, used to get messages from recruiters asking about payments roles too.",
+   "timestamp": 1789481557800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Another Alex. We're everywhere.",
+   "timestamp": 1789481560000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You really are. Different Alex, though, he's now at some climate startup, I think.",
+   "timestamp": 1789481566200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, back to the ledger. Marcus, you were on the idempotency key.",
+   "timestamp": 1789481571600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Right. So the unique constraint on client ID and idempotency key is the actual enforcement mechanism. Everything else is optimization.",
+   "timestamp": 1789481580200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The flow on a write is, you open a Postgres transaction, you try to insert the transaction row with the key. If it succeeds, you insert the entries, check they balance, update balances, and commit.",
+   "timestamp": 1789481594800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If the insert hits a unique violation, it means we've seen this key before, so you look up the existing transaction and return its result.",
+   "timestamp": 1789481605400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "What if the second request has the same key but a different payload? Like, a different amount.",
+   "timestamp": 1789481612800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Good one. So I'd store a hash of the request body alongside the key. On a conflict, if the stored hash matches the new request, you return the original response. If it doesn't match, that's a client bug, and you return a 422, like an idempotency key reuse error. You never silently return the old result for a different request.",
+   "timestamp": 1789481637400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, good. And how long do you keep the keys?",
+   "timestamp": 1789481642000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'd want to keep them at least as long as the longest retry window of any client. At Quillbank one of our processors retries webhooks for up to 72 hours, so we kept idempotency records for 7 days.",
+   "timestamp": 1789481657800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "For a ledger, honestly, the transaction row itself is permanent, so the key is effectively kept forever. The question is more about the fast-path cache, if you have one.",
+   "timestamp": 1789481670000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Fair. Do you have a cache?",
+   "timestamp": 1789481673000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'd start without one. The unique index lookup in Postgres is cheap. I'd only add a Redis layer in front if we saw the conflict path showing up in latency.",
+   "timestamp": 1789481685600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What about two identical requests arriving at exactly the same time? Both in flight.",
+   "timestamp": 1789481691800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So both try the insert. Postgres will block the second insert on the unique index until the first transaction commits or rolls back.",
+   "timestamp": 1789481701600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If the first commits, the second gets a unique violation, reads the committed row, returns the same result. If the first rolls back, the second one's insert succeeds and it just proceeds normally.",
+   "timestamp": 1789481715400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So you're leaning on the database for serialization there.",
+   "timestamp": 1789481719600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes, deliberately. It's the one place I really don't want to be clever.",
+   "timestamp": 1789481725400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I like that answer. Okay, balances. You said you update balances in the same transaction. How, exactly?",
+   "timestamp": 1789481732800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So there's an account balances table, one row per account and currency, with the balance and a version number.",
+   "timestamp": 1789481741000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "When you post a transaction, for each account touched, you do a select for update on the balance row, apply the delta, bump the version.",
+   "timestamp": 1789481751600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And, importantly, you lock the rows in a consistent order, like sorted by account ID, so two transactions touching the same pair of accounts don't deadlock.",
+   "timestamp": 1789481762600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "At 3,000 writes a second, what's the problem with that?",
+   "timestamp": 1789481767200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Hot accounts. Something like a platform fee account or a big merchant's settlement account shows up in a huge fraction of transactions, and now everything is serialized on that one row lock.",
+   "timestamp": 1789481780600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So what do you do?",
+   "timestamp": 1789481783200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A couple of options. One is you don't maintain a running balance synchronously for hot accounts. You just insert entries and compute the balance from the entries plus periodic snapshots.",
+   "timestamp": 1789481795800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Another option people use is splitting a hot account into sub-accounts, like shards, and the logical balance is the sum. That works but it makes overdraft checks harder.",
+   "timestamp": 1789481807600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Which one would you pick for the fee account?",
+   "timestamp": 1789481811800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "For a fee account, which only ever receives money and never needs an overdraft check, I'd do the first one. Append entries, no synchronous balance, snapshot every few seconds.",
+   "timestamp": 1789481824000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "For a merchant account where we need to authorize payouts against the balance, I'd keep the synchronous locked balance, because correctness matters more than throughput there.",
+   "timestamp": 1789481835000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, that's a good distinction.",
+   "timestamp": 1789481837600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let's talk about getting data out. Downstream services need to know when something posted. How do they find out?",
+   "timestamp": 1789481845800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So this is where Kafka comes in. The naive approach is, commit to Postgres and then publish an event to Kafka.",
+   "timestamp": 1789481854800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The problem is if the service crashes between the commit and the publish, the event is lost, and if you publish first and then the commit fails, you've announced something that never happened.",
+   "timestamp": 1789481868600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Right.",
+   "timestamp": 1789481869600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So I'd use a transactional outbox. In the same Postgres transaction as the entries, you insert a row into an outbox table. Then a separate relay process reads the outbox and publishes to Kafka, and marks rows as sent.",
+   "timestamp": 1789481885800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And what delivery guarantee does that give you?",
+   "timestamp": 1789481889600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So with Kafka's idempotent producer and transactions turned on, you get exactly-once. The relay publishes inside a Kafka transaction, consumers read committed, and you get exactly-once delivery end to end.",
+   "timestamp": 1789481902200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "End to end? Walk me through that. What happens if the relay publishes the batch, the Kafka transaction commits, and then the relay crashes before it marks the outbox rows as sent in Postgres?",
+   "timestamp": 1789481916400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Um. Then on restart it would read those rows again and publish them again.",
+   "timestamp": 1789481922600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So?",
+   "timestamp": 1789481923600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So, yeah, you're right. That's a duplicate. Kafka transactions give you exactly-once for read-process-write inside Kafka, but the moment one side of it is Postgres, it's not end to end.",
+   "timestamp": 1789481936200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Let me restate that properly. The outbox relay is at-least-once. Every event will be published at least once, possibly more.",
+   "timestamp": 1789481944800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the way you get effectively-once behavior is on the consumer side, by making consumers idempotent, keyed on the ledger transaction ID. So the event carries the transaction ID and every consumer dedupes on it.",
+   "timestamp": 1789481959400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay. That's the answer I was looking for. People say exactly-once a lot.",
+   "timestamp": 1789481965200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's like a unicorn. Everyone's heard of it, nobody's seen one outside of a Kafka to Kafka pipeline.",
+   "timestamp": 1789481973000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'm stealing that.",
+   "timestamp": 1789481974800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Marcus, what about ordering? Does a consumer care about the order of events for the same account?",
+   "timestamp": 1789481982200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "For balance-derived stuff, yes. I'd use the account ID as the partition key so events for one account land on the same partition in order.",
+   "timestamp": 1789481992800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "But a transaction touches multiple accounts, so I'd publish one event per transaction keyed by, hmm, probably the primary merchant account, and have consumers that need strict per-account ordering use the entry sequence number instead of relying on Kafka order.",
+   "timestamp": 1789482009400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The entry sequence being what?",
+   "timestamp": 1789482012000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A monotonically increasing sequence per account, assigned under the balance row lock. So a consumer can detect gaps.",
+   "timestamp": 1789482019800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Nice. Okay.",
+   "timestamp": 1789482021200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let me widen the scope a bit. Say a payout requires calling an external processor. The ledger records the payout, and something has to actually move the money. Where do retries live, and what happens when the processor times out?",
+   "timestamp": 1789482037800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So I'd keep the external call out of the ledger service itself. The ledger records intent and outcome. A separate payout worker does the processor call.",
+   "timestamp": 1789482048800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The payout goes through states. Something like created, then submitted, then either succeeded, failed, or unknown.",
+   "timestamp": 1789482055800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "When you create the payout, the ledger posts a transaction that moves funds from the merchant's available balance into a pending payouts account. So the money is reserved and can't be double spent.",
+   "timestamp": 1789482069600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And the timeout?",
+   "timestamp": 1789482071400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The timeout is the dangerous one. If the processor times out, you genuinely don't know whether the money moved. So the payout goes to unknown, not failed.",
+   "timestamp": 1789482082800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You must not release the reserved funds, and you must not blindly retry with a new request, because that's how you pay someone twice.",
+   "timestamp": 1789482093000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So what do you do instead?",
+   "timestamp": 1789482096000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Two things. First, you retry with the same idempotency key to the processor, assuming the processor supports idempotency keys, which the good ones do. If they return the original result, you're done.",
+   "timestamp": 1789482109400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Second, for the cases where that doesn't resolve it, there's a reconciliation job. It pulls the processor's settlement file or status API and matches against payouts in unknown, and then either posts the success or releases the funds.",
+   "timestamp": 1789482125200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "How long can something sit in unknown?",
+   "timestamp": 1789482128600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Depends on the processor. For the ones with a status API, minutes. For the ones where you only get a daily settlement file, up to a day or so. You'd want an alert if anything sits in unknown longer than, say, 24 hours.",
+   "timestamp": 1789482146400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What's the retry policy on the processor call itself?",
+   "timestamp": 1789482150600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Exponential backoff with jitter, capped. Like start at 200 milliseconds, double each time, cap at maybe 30 seconds, and a maximum number of attempts, after which it goes to unknown and reconciliation picks it up.",
+   "timestamp": 1789482165200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And a circuit breaker per processor, so if one processor is having a bad day you stop hammering them and, where it's allowed, route to another one.",
+   "timestamp": 1789482176600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Related question. Processors rate limit us. Say one of them gives us a hard cap of 200 requests per second across all our workers. How do you enforce that?",
+   "timestamp": 1789482188800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So it has to be a global limit, not per worker, because the workers autoscale. I'd do a token bucket in Redis, with the refill and take done atomically in a Lua script.",
+   "timestamp": 1789482202600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Each worker takes a token before the call. If there's no token, it waits a short time or re-queues the job instead of calling.",
+   "timestamp": 1789482212800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What if Redis goes down?",
+   "timestamp": 1789482215400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Then you fail, um, you have to decide. I would not fail open on a processor limit because getting throttled or banned by a processor is worse than being slow. So I'd fall back to a conservative local limit per worker, like the global limit divided by the max worker count.",
+   "timestamp": 1789482236400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That's reasonable. Slightly under-utilizes, but it's safe.",
+   "timestamp": 1789482239800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Right, it's a degraded mode, not the normal path.",
+   "timestamp": 1789482244000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, one more failure mode on the ledger itself. Postgres primary fails over. What's at risk?",
+   "timestamp": 1789482251000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So if you're on synchronous replication, committed transactions survive failover, and the main risk is the window where clients get errors and retry. Which is fine, because they retry with the same idempotency key.",
+   "timestamp": 1789482265200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If replication is asynchronous, you can lose the last few committed transactions. That's the scary one for a ledger, because you might have told a client \"success\" and then the transaction is gone.",
+   "timestamp": 1789482279000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And we're asynchronous today, for what it's worth.",
+   "timestamp": 1789482282800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Then I'd want to know that very explicitly. At minimum, the outbox and downstream consumers could re-post the lost transactions, and the reconciliation would catch mismatches. But I'd push for synchronous replication to at least one standby for the ledger specifically.",
+   "timestamp": 1789482299800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That's, uh, an active debate internally. Let's say you'd fit right in.",
+   "timestamp": 1789482305200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, I'm going to move us on because I want to leave time for other things. Marcus, that was a really good discussion.",
+   "timestamp": 1789482315000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Thanks, that was fun, honestly. Apart from the unicorn moment.",
+   "timestamp": 1789482319600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let's talk about a real incident. Tell us about a production incident you were involved in, what happened, what you did, and what changed afterwards.",
+   "timestamp": 1789482330200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Sure. So the one that comes to mind is from March 2025 at Quillbank. It was a duplicate payouts incident.",
+   "timestamp": 1789482338800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "One of our processors, I'll just call them the processor, had a latency spike. Their p99 went from about 400 milliseconds to over 9 seconds.",
+   "timestamp": 1789482349400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Our payout workers were timing out and retrying, which is expected. The problem was that a refactor two weeks earlier had moved the idempotency key generation inside the retry loop.",
+   "timestamp": 1789482362000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Oh no.",
+   "timestamp": 1789482363400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah. So every retry was a new idempotency key, so from the processor's point of view every retry was a brand new payout.",
+   "timestamp": 1789482373200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "How bad did it get?",
+   "timestamp": 1789482375800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We sent 1,412 duplicate payouts before we stopped it. The total value was about 2.3 million dollars.",
+   "timestamp": 1789482383200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Wow.",
+   "timestamp": 1789482384200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It took 38 minutes from the first duplicate to detection. We didn't catch it from our own alerting, a merchant's finance person emailed support saying they'd received the same payout three times.",
+   "timestamp": 1789482397600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And what was your role?",
+   "timestamp": 1789482400200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I led the incident. Well, let me be precise, because I think it matters. I was the secondary on call. The primary was the incident commander for the first 20 minutes and I was doing comms and digging through logs.",
+   "timestamp": 1789482416800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "About 20 minutes in, the primary had to hand off because they were the only person who could do the processor escalation call, so I took over as incident commander from there to the end.",
+   "timestamp": 1789482431400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's a helpful distinction, thank you.",
+   "timestamp": 1789482434400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So once I had it, the first thing we did was flip the kill switch on payouts for that processor, which stopped the bleeding. Then we rolled back the refactor, and we got the processor on a call to cancel whatever was still in flight.",
+   "timestamp": 1789482453000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We managed to cancel some that hadn't settled. For the rest, we worked with the merchants to recover the funds.",
+   "timestamp": 1789482461600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "How much did you end up recovering?",
+   "timestamp": 1789482465000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Within two weeks we'd recovered everything except about 41,000 dollars, which the company ended up writing off.",
+   "timestamp": 1789482472400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And after?",
+   "timestamp": 1789482473800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I wrote the postmortem. The fixes were, the idempotency key is now derived deterministically from the payout ID, so it's physically impossible to generate a new one per attempt.",
+   "timestamp": 1789482486000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We added a lint rule and a test that asserts the key is stable across retries. And we added a reconciliation alert that compares outgoing payout volume per merchant against the ledger in near real time.",
+   "timestamp": 1789482501000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "With that alert, we ran a game day six weeks later that simulated the same bug, and detection time was under 5 minutes.",
+   "timestamp": 1789482510800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Did you own the follow-up actions or just the write-up?",
+   "timestamp": 1789482515400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The write-up and two of the five actions, the key derivation and the alert. The lint rule and the processor escalation runbook were owned by other folks. I tracked all of them to completion though.",
+   "timestamp": 1789482530000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay.",
+   "timestamp": 1789482531000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What would you have done differently, looking back?",
+   "timestamp": 1789482534800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The refactor was reviewed by two people, including me, actually. I approved it. So honestly, I missed it.",
+   "timestamp": 1789482542600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What I'd do differently is, I'd have insisted that anything touching the retry path has a test that runs the retry path. The tests at the time only covered the happy path.",
+   "timestamp": 1789482556000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I appreciate you saying that you approved it. A lot of people leave that part out.",
+   "timestamp": 1789482563000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's in the postmortem, so it'd be a bit silly to leave it out here.",
+   "timestamp": 1789482569600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Can I sneak in a couple of technical follow-ups before we go to behavioural? I missed the first ten minutes, so I want to make sure I get my questions in.",
+   "timestamp": 1789482582600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Go for it, we've got a bit of room.",
+   "timestamp": 1789482586800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So, how do you test a ledger? Not unit tests for the handlers, I mean how do you convince yourself the money is right.",
+   "timestamp": 1789482597000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I think about it in terms of invariants. The two big ones are, every transaction's entries sum to zero per currency, and every account's balance equals its last snapshot plus the entries posted since.",
+   "timestamp": 1789482611200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "In tests, I like property-based testing for that. You generate random sequences of charges, refunds, payouts, including duplicates and concurrent retries, run them against a real post gress in a container, and assert the invariants hold at the end.",
+   "timestamp": 1789482627400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And in production you run the same invariant checks as a job. At Quillbank the orchestration side had a nightly checker, and I'd want something more frequent for a ledger, like hourly over the last day of data.",
+   "timestamp": 1789482643200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "What happens when the checker finds a mismatch at 3am?",
+   "timestamp": 1789482647800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It should page, but it should never auto-correct. A human looks at it. Auto-correcting a ledger is how you turn one bug into two.",
+   "timestamp": 1789482658000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Agreed. Okay, the second one is about the migration Priya mentioned. We're moving the ledger from the Kotlin service to Go. If you were running dual writes, how would you know the new one is right?",
+   "timestamp": 1789482673000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Shadow mode first. The old service stays the source of truth, the new one receives the same requests, and a comparator diffs the resulting entries and balances.",
+   "timestamp": 1789482684400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'd define a target diff rate before starting, like under 0.01% of transactions, and every diff gets categorized, because most of them will be boring stuff like rounding or timestamp precision, and one of them will be the real bug.",
+   "timestamp": 1789482701000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And you only flip reads for a transaction type once its diffs have been at zero for, say, two weeks.",
+   "timestamp": 1789482709600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "What's the rounding thing you've seen?",
+   "timestamp": 1789482712600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh, the JVM BigDecimal versus a Go decimal library with a different default rounding mode. Half-even versus half-up. It's one cent on maybe one in ten thousand transactions, and it's absolutely maddening to find.",
+   "timestamp": 1789482726800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yeah, we, uh, may have met that one.",
+   "timestamp": 1789482730600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Sorry, Alex, your Slack is going off like a slot machine, is that the incident review?",
+   "timestamp": 1789482737600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "It's the incident review people asking where I went. I'll mute it. They can review the incident without me for half an hour.",
+   "timestamp": 1789482747400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's the spirit. Marcus, sorry, internal chaos.",
+   "timestamp": 1789482750800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "No, it's reassuring, honestly. Every company has a meeting that eats the next meeting.",
+   "timestamp": 1789482757000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Last technical thing from me. You mentioned you're not a cluster operator. If a Go service in Kubernetes started getting OOM killed after a deploy, walk me through what you'd check, quickly.",
+   "timestamp": 1789482770400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "First, did the memory limit change in the deploy, or did the code change. Then I'd look at the container memory graphs versus the Go heap metrics, because if the heap is flat and the container memory climbs, it's often not the heap at all.",
+   "timestamp": 1789482789000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Could be goroutine leaks, each one holds a stack, or it could be cgo or a big buffer. And I'd check whether GOMEMLIMIT is set, because a lot of services are running without it and the garbage collector has no idea the container has a limit.",
+   "timestamp": 1789482808000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Good. That last one bit us last year.",
+   "timestamp": 1789482811800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It bites everyone once.",
+   "timestamp": 1789482814000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, let's switch to a couple of behavioural questions. Tell me about a time you had a real disagreement with someone at work, and how it got resolved.",
+   "timestamp": 1789482825800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Sure. So last year at Quillbank our product manager, Rohan, wanted to launch instant payouts for a set of merchants. The business case was solid, merchants really wanted it.",
+   "timestamp": 1789482838000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "My concern was that instant payouts would go out before our reconciliation ran, and at that point, remember, this was after the duplicate payouts incident, so I was, um, pretty sensitive to anything that moved money faster than we could check it.",
+   "timestamp": 1789482855400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Rohan's position was that we'd been talking about reconciliation improvements for months and the launch shouldn't wait on it. And he wasn't wrong that we'd been slow.",
+   "timestamp": 1789482866800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So what happened?",
+   "timestamp": 1789482868600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It got a bit tense in a planning meeting, honestly. I said something like \"we are not shipping this,\" which was not my finest phrasing.",
+   "timestamp": 1789482879200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Afterwards I went and talked to him one on one, and we tried to figure out what risk he was willing to accept and what I was actually afraid of.",
+   "timestamp": 1789482891800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The compromise was that we launched instant payouts with a cap of 5,000 dollars per payout for the first 6 weeks, and only for merchants who'd been with us more than a year. And I committed to shipping the near real time reconciliation alert during those 6 weeks.",
+   "timestamp": 1789482911600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Did you ship it in time?",
+   "timestamp": 1789482914600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We shipped it in week five, and they lifted the cap in week seven. Rohan and I actually get along really well now. He still brings up \"we are not shipping this\" at team dinners though.",
+   "timestamp": 1789482929600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "As he should. Okay, a failure. Something that didn't go well where you were responsible.",
+   "timestamp": 1789482936200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So at Ferrow I led a migration of our batch pipeline from Spark to Flink. I estimated it at 3 months. It took 7.",
+   "timestamp": 1789482946400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The main mistake was I planned it as one big cutover. I didn't break it into milestones that delivered anything on their own, so for months we had nothing to show and two pipelines to run.",
+   "timestamp": 1789482961400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "My manager at the time, Alex, the other Alex, sat me down around month five and basically asked, what's the smallest piece of this you could turn off the old system for next week.",
+   "timestamp": 1789482975600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That reframed it. We ended up migrating one event type at a time, and the last four months went much better than the first three. But the overrun was on me.",
+   "timestamp": 1789482988600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What do you do differently now?",
+   "timestamp": 1789482991600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now any project over a month, I plan in slices that can each be shipped and switched on independently. And I put the first one on the calendar within two weeks, even if it's tiny.",
+   "timestamp": 1789483006200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'm guessing the Spark to Flink thing is why you know Flink state backends better than you'd like.",
+   "timestamp": 1789483014000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh, I know RocksDB compaction settings better than any human should.",
+   "timestamp": 1789483019000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, two more quick ones. What would you say are your biggest strengths as an engineer?",
+   "timestamp": 1789483026000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I think the biggest one is debugging production systems. When something's on fire and it doesn't make sense, I'm calm and pretty methodical about narrowing it down.",
+   "timestamp": 1789483037400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The second is writing. I write clear design docs, and at Quillbank people use a couple of my docs as templates for how to write a design review.",
+   "timestamp": 1789483049200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And a weakness?",
+   "timestamp": 1789483051000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The honest one is I tend to take too much on myself. When something's important, my instinct is to just do it rather than delegate it, and at a senior level that doesn't scale and it doesn't grow other people.",
+   "timestamp": 1789483067600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What I'm doing about it is, this year I've paired a mid-level engineer on every project I lead, and I've made myself write down which pieces I'm explicitly not going to touch.",
+   "timestamp": 1789483081000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's a real answer, thank you.",
+   "timestamp": 1789483084000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, let me tell you a bit about the role and the team, and then we'll get into logistics. The role is Senior Backend Engineer on Payments Platform, and it's leveled at L5 in our framework.",
+   "timestamp": 1789483099000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The team owns the ledger, the payout orchestration, and the processor integrations. It's six engineers today, plus me as the manager.",
+   "timestamp": 1789483108000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Seven, actually. Ines starts on Monday.",
+   "timestamp": 1789483111000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, right, yes, sorry. Seven engineers including Ines, who starts on Monday. I keep forgetting because she's not in the standup yet.",
+   "timestamp": 1789483120400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So I'd be the eighth.",
+   "timestamp": 1789483123000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "You'd be the eighth, yes.",
+   "timestamp": 1789483125600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "On-call is a weekly rotation with a primary and a secondary. Realistically you'd be primary about one week in seven, and secondary one week in seven.",
+   "timestamp": 1789483136600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "How noisy is it?",
+   "timestamp": 1789483138800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "It's gotten a lot better. Last quarter we averaged about 4 pages a week, and most of those are business hours. Maybe one overnight page every couple of weeks.",
+   "timestamp": 1789483151000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And there's an on-call stipend, 400 dollars per week when you're primary.",
+   "timestamp": 1789483156400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, that's reasonable.",
+   "timestamp": 1789483158200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "In terms of work location, we're hybrid. The expectation is two days a week in our Toronto office, Tuesdays and Thursdays.",
+   "timestamp": 1789483167200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "From Hamilton that's about an hour each way on the GO. Is there any flexibility, like, one day a week?",
+   "timestamp": 1789483175800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The policy is two days. Exceptions go through Dan, our VP of engineering, and I'll be honest, he doesn't grant many. I wouldn't count on it.",
+   "timestamp": 1789483186800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's fair. Two days works, I was just asking. I did the commute for a while at Ferrow.",
+   "timestamp": 1789483194600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Good. And on work authorization, your resume mentions an open work permit. Would you need any sponsorship?",
+   "timestamp": 1789483202000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Ah, that's an older version of the resume, sorry. I became a permanent resident in July, so no sponsorship needed.",
+   "timestamp": 1789483210600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, congratulations. That's a big one.",
+   "timestamp": 1789483213600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Thanks, it was a long process. The paperwork alone could have been its own distributed systems problem.",
+   "timestamp": 1789483221000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, compensation. Diane will go into detail later, but I like to make sure we're not wildly apart. What are you looking for?",
+   "timestamp": 1789483230800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'm looking for somewhere around 240.",
+   "timestamp": 1789483233800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. So 240 base would be above what we have for this level, so let me make sure I understand. Is that base?",
+   "timestamp": 1789483243600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Sorry, no, that's total comp. Base, I'm looking for around 190. The 240 was base plus bonus plus equity annualized.",
+   "timestamp": 1789483252200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Got it, that's much closer. So the base band for L5 is 170,000 to 200,000 Canadian. On top of that there's a 10% target bonus, and an equity grant that's typically around 150,000 over four years.",
+   "timestamp": 1789483267200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, that's in range for me. For context, my base at Quillbank is 176,000.",
+   "timestamp": 1789483273400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's helpful. So 190 base is within the band. No promises today, obviously, but we're not far apart.",
+   "timestamp": 1789483281200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Sounds good.",
+   "timestamp": 1789483282600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And notice period, what are we looking at?",
+   "timestamp": 1789483286400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Four weeks. My contract says four weeks.",
+   "timestamp": 1789483289800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, so if things moved quickly, a start somewhere around mid-October is plausible?",
+   "timestamp": 1789483295600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Roughly, yeah, depending on when an offer lands.",
+   "timestamp": 1789483299400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Great. Okay, let's give you some time. What questions do you have for us?",
+   "timestamp": 1789483305600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "A few. First, what would the first 90 days look like for this role?",
+   "timestamp": 1789483311800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Honestly, most of it would be the ledger migration. We call it Project Tally. It's moving the ledger off the Kotlin service, which internally everyone calls Abacus, onto a new Go service.",
+   "timestamp": 1789483325200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The first month would be onboarding, getting on the on-call shadow rotation, and then you'd pick up one of the Tally workstreams. We're targeting the Tally cutover for Q2 2027.",
+   "timestamp": 1789483337800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And is that a big bang cutover, or incremental?",
+   "timestamp": 1789483342000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Incremental. Dual writes and shadow reads, one transaction type at a time. We learned from someone's Spark to Flink migration.",
+   "timestamp": 1789483350600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Ha. Glad my suffering was useful.",
+   "timestamp": 1789483353600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Second question, what's the biggest piece of technical debt on the team right now?",
+   "timestamp": 1789483359800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'd say two things. One is Abacus itself, it's a Kotlin monolith that nobody on the current team wrote.",
+   "timestamp": 1789483368000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The other is what we touched on earlier. The ledger database is one Postgres primary with asynchronous replicas, and at peak the primary is sitting around 70% CPU. So both failover risk and headroom.",
+   "timestamp": 1789483382200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's, um, a fun combination.",
+   "timestamp": 1789483384800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That's one word for it.",
+   "timestamp": 1789483387400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Third, how do you handle incidents and postmortems? Is it genuinely blameless?",
+   "timestamp": 1789483392800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "It's blameless, and we mean it. Every sev one and sev two gets a written postmortem within five business days, and we review action items weekly in the team sync until they're closed.",
+   "timestamp": 1789483406600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And the incident commander role rotates, it's not always the most senior person. We think people should practice it before they need it.",
+   "timestamp": 1789483416400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I like that a lot. That would have helped us in March 2025.",
+   "timestamp": 1789483422200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And last one, what do the next steps look like, if this goes well?",
+   "timestamp": 1789483428400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So there's a final round. It's four sessions: a system design deep dive, a coding session, a cross-functional conversation with our product lead, and a conversation with Dan, our VP of engineering.",
+   "timestamp": 1789483441800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Diane will coordinate scheduling. And there may be a take-home, we'll let you know.",
+   "timestamp": 1789483448000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Great. Oh, actually, one thing I should correct. On the notice period, I said four weeks, and that's what the contract says, but realistically it's going to be 6 weeks.",
+   "timestamp": 1789483460600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I've got an equity vest at Quillbank on November 15th. It's about 22,000 dollars, and I'd really rather not walk away from it.",
+   "timestamp": 1789483470400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Totally understandable. So realistically, six weeks.",
+   "timestamp": 1789483473400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes. So I'd plan for my last day to be just after the vest, and start on Monday, November 23rd.",
+   "timestamp": 1789483482000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "November 23rd. Okay, I've noted that. We can have a conversation later about whether there's anything we can do about the vest, but no promises.",
+   "timestamp": 1789483492600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Of course. I appreciate it.",
+   "timestamp": 1789483495200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Can I ask one quick follow-up before we let you go? When you said consumers dedupe on the transaction ID, where would that dedupe state live for a consumer that writes to, say, a search index?",
+   "timestamp": 1789483510200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "If the sink supports it, I'd write with the transaction ID as the document ID so the write itself is idempotent, an upsert. If the sink can't do that, a dedupe table in the consumer's own database, written in the same transaction as the side effect, where possible.",
+   "timestamp": 1789483530000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And where it's not possible?",
+   "timestamp": 1789483532600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Then you accept at-least-once and make the side effect harmless to repeat, or you're back to reconciliation. There's no free lunch.",
+   "timestamp": 1789483541600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Good. Thanks.",
+   "timestamp": 1789483543000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Alright, Marcus, thank you so much. This was great. Diane will be in touch in the next few days.",
+   "timestamp": 1789483551200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Thank you both, I really enjoyed it. And Alex, good luck with the Quarterly Vibes Sync.",
+   "timestamp": 1789483558200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Ha, thanks. Take care.",
+   "timestamp": 1789483560400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Bye.",
+   "timestamp": 1789483561400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, he's gone. Alex, thanks for jumping in, and sorry about the room.",
+   "timestamp": 1789483567200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Not your fault. So, what did you think?",
+   "timestamp": 1789483571000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "You first. You're the one who's going to work with him every day.",
+   "timestamp": 1789483576800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Honestly, I liked him a lot. The failure mode stuff was really strong. The unknown state for processor timeouts, not releasing the reserved funds, the point about not auto-correcting the ledger. That's exactly how I'd want someone on this team to think.",
+   "timestamp": 1789483594200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And the incident story had real numbers in it. 1,412 duplicates, 38 minutes to detect, under 5 after the fix. And he volunteered that he'd approved the PR. People don't do that.",
+   "timestamp": 1789483607600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Agreed on the incident story. He was also careful about separating secondary on call from incident commander, which I appreciated.",
+   "timestamp": 1789483616200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'd even say, and I'm just floating this, he might be closer to staff than senior. The way he reasoned about hot accounts and the migration comparator was staff-ish.",
+   "timestamp": 1789483628400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I don't think I'm there. I'd push back a bit on that.",
+   "timestamp": 1789483633800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The exactly-once thing bothers me more than it bothers you. He stated end-to-end exactly-once with a lot of confidence, and it took you walking him through the crash to get him to at-least-once.",
+   "timestamp": 1789483647600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Sure, but he got there in about ten seconds and then gave the right answer, idempotent consumers keyed on the transaction ID. And his follow-up on sink dedupe was good.",
+   "timestamp": 1789483660200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "He recovered well, I agree. But for someone who'll own ledger consistency, I want to see him find the boundary himself, not after being led to it.",
+   "timestamp": 1789483671600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And for staff specifically, I didn't hear much about influence beyond his own team. The Rohan story was one PM, one compromise. That's senior-level scope.",
+   "timestamp": 1789483682200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That's fair. The cross-team thing I don't have a strong signal on either way.",
+   "timestamp": 1789483688400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Also, small thing, but he said 8 years at the start and it was really 6. He corrected it immediately when I asked, so I'm not holding it against him, but I noticed it.",
+   "timestamp": 1789483702600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I think that's just how people count internships. I wouldn't read into it.",
+   "timestamp": 1789483708400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Probably. What did you see as weaknesses?",
+   "timestamp": 1789483711800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "He was a bit hand-wavy on event ordering for transactions that touch multiple accounts. Partition by the primary merchant account plus a per-account sequence is fine, but he didn't really think through the consumer side.",
+   "timestamp": 1789483726400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And for me, his answers ran long. The Flink story especially. Strong communicator, clear, but he needs to get to the point faster in a design review.",
+   "timestamp": 1789483737800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The self-stated weakness was taking too much on himself. That lines up with the incident story too, honestly, he tracked all five actions himself.",
+   "timestamp": 1789483748000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah. Okay, so where are we? I'm a yes to the final round. Not a yes to an offer yet.",
+   "timestamp": 1789483756600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'm a strong yes to the final round.",
+   "timestamp": 1789483760400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Then let's advance him to the final round. And the named concern we want the final round to probe is consistency boundaries, whether he can reason about where guarantees stop across Postgres, Kafka and the processors without being prompted.",
+   "timestamp": 1789483776600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Agreed. And maybe secondary, the cross-team influence thing, since that's what decides senior versus staff.",
+   "timestamp": 1789483783200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Fine, secondary. So, for the system design deep dive, I'll put together the design follow-up and send it to him as a pre-read.",
+   "timestamp": 1789483793000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Actually, let me own that. I'm going to run the deep dive anyway, and I want to design it around the async replication failover case, so he has to find the consistency boundary himself.",
+   "timestamp": 1789483807200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Even better. So Alex owns the system design follow-up. When can you get it to him?",
+   "timestamp": 1789483814200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I can have the prompt ready and sent through Diane by Friday. So the 25th.",
+   "timestamp": 1789483820800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Friday the 25th, good. And I'll email Diane today to kick off scheduling the final round. I'd like it to happen the week of October 5th.",
+   "timestamp": 1789483831800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That works for me. I'm out October 1st and 2nd anyway.",
+   "timestamp": 1789483836800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Now, the take-home. Our standard process has one for senior backend.",
+   "timestamp": 1789483841800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'd honestly skip it for him. He's clearly shipped real systems, and the deep dive gives us more signal than a take-home would.",
+   "timestamp": 1789483851600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I'm sympathetic, but skipping it needs Dan's sign-off, and we did it for the last candidate and got a bit of grief. I don't want to decide that today.",
+   "timestamp": 1789483863800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Fair enough. Can you ask Dan?",
+   "timestamp": 1789483866800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I'll raise it with him, but let's leave it open for now.",
+   "timestamp": 1789483872200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I also wondered about adding a pairing session on the Abacus code, like a real Kotlin debugging exercise.",
+   "timestamp": 1789483880000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'd rather not. Four sessions is already a long loop, and a fifth one on a Kotlin monolith he's never seen feels like hazing.",
+   "timestamp": 1789483890200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ha, okay. Fair, let's not do that.",
+   "timestamp": 1789483893600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And the staff question?",
+   "timestamp": 1789483895800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let's not change the level now. The role is L5. If the final round shows staff-level scope, we can revisit it then, but I'm not agreeing to that today.",
+   "timestamp": 1789483908000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, I can live with that.",
+   "timestamp": 1789483911000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The other thing is the vest. He's walking away from about 22,000 on November 15th if he leaves early, so a start date of November 23rd makes sense.",
+   "timestamp": 1789483922800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Could we do a sign-on bonus to cover it and get him earlier?",
+   "timestamp": 1789483928600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Maybe. Someone should check with the comp team whether there's any room for a sign-on bonus at L5 this cycle. I genuinely don't know.",
+   "timestamp": 1789483938800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Not it.",
+   "timestamp": 1789483940200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Noted, not you. Okay, and scorecards, let's both get ours in by end of day tomorrow, Wednesday, before we start anchoring on each other's take.",
+   "timestamp": 1789483950800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Deal. I'll write mine tonight while the unicorn is fresh.",
+   "timestamp": 1789483955400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Please don't put the unicorn in the scorecard.",
+   "timestamp": 1789483959200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "No promises. Okay, I have to go back and apologize to the incident review.",
+   "timestamp": 1789483965400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Go. Thanks, Alex.",
+   "timestamp": 1789483967200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  }
+ ],
+ "words": 7357,
+ "speakerCount": 3,
+ "durationMs": 3167200,
+ "startEpochMs": 1789480800000
+}

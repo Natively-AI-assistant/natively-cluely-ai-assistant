@@ -27,6 +27,28 @@ export interface PhoneMirrorInfo {
   clients: number;
   /** True when a companion browser extension is connected over /ws (capture-ready). */
   extensionConnected: boolean;
+  /**
+   * Epoch ms of the last successful one-click /pair this session (0 = none).
+   * A Re-pair while the extension is already connected changes nothing else —
+   * same persisted token, same open socket — so this is the only way Settings
+   * can tell the pairing window it opened has been used.
+   */
+  extPairedAt: number;
+  /** Resolved bind host ('127.0.0.1' or '0.0.0.0') so the UI can show "loopback only" / "LAN". */
+  bindAddress: string;
+}
+
+/**
+ * Thrown by setExposeOnLan when the caller tries to flip ON LAN exposure without
+ * first confirming via the IPC-layer `dialog.showMessageBoxSync` prompt. The
+ * IPC handler catches this, prompts the user, and either flips the sentinel
+ * + retries or returns { declined: true } so the toggle stays off.
+ */
+export class LANBindConfirmationRequired extends Error {
+  constructor() {
+    super('LAN bind requires explicit user confirmation');
+    this.name = 'LANBindConfirmationRequired';
+  }
 }
 
 export type StreamEvent =
@@ -127,6 +149,10 @@ export class PhoneMirrorService {
   private server: http.Server | null = null;
   private wss: WebSocketServer | null = null;
   private port = 0;
+  // Resolved bind host for the HTTP/WS listener. '127.0.0.1' when LAN is off
+  // (loopback only), '0.0.0.0' when LAN is on (any interface). Mirrored into
+  // PhoneMirrorInfo.bindAddress so the renderer can label it.
+  private bindAddress: '127.0.0.1' | '0.0.0.0' = '127.0.0.1';
   // Phone token: LAN-scoped. Serves the phone HTML page (`/`) and authenticates
   // phone WebSocket clients. Embedded in the QR/pairing URL, which travels over
   // plaintext HTTP on the LAN when exposeOnLan is on — so it is per-session (NOT
@@ -155,6 +181,8 @@ export class PhoneMirrorService {
   // Epoch (ms) until which the one-click /pair endpoint accepts a handshake.
   // Set by armExtensionPairing(); burned to 0 on the first successful /pair.
   private armedUntil = 0;
+  // When /pair last succeeded (see PhoneMirrorInfo.extPairedAt).
+  private extPairedAt = 0;
   // WebSocket clients that announced `{type:'hello', role:'extension'}`. Tracked
   // separately from phone clients so capture frames go only to the extension and
   // StreamEvents (phone chat) never reach it.
@@ -196,6 +224,13 @@ export class PhoneMirrorService {
   private metadataClassifier:
     | ((meta: unknown) => Promise<{ autoPolicy: string; category?: string }>)
     | null = null;
+  /**
+   * Per-session sentinel: once the IPC layer has shown the "Allow LAN access?"
+   * dialog and the user picked "Allow", subsequent calls to setExposeOnLan(true)
+   * do not re-prompt. Resets on app restart so a fresh run gets a fresh
+   * confirmation. Cleared by markLanBindDialogShown() in the IPC handler.
+   */
+  private hasShownLanBindDialog = false;
 
   static getInstance(): PhoneMirrorService {
     if (!PhoneMirrorService._instance) PhoneMirrorService._instance = new PhoneMirrorService();
@@ -241,12 +276,30 @@ export class PhoneMirrorService {
   }
 
   async setExposeOnLan(value: boolean): Promise<PhoneMirrorInfo> {
+    // LAN exposure binds the server to 0.0.0.0 so any device on the same Wi-Fi
+    // can connect with the pairing token. That is a deliberate security widening,
+    // so require an explicit confirmation in the IPC handler — the per-session
+    // sentinel short-circuits the prompt for subsequent in-session flips.
+    // The phone token is also rotated on every flip (see _start → generateToken)
+    // to invalidate any prior QR that may have already leaked to the LAN.
+    if (value === true && !this.hasShownLanBindDialog) {
+      throw new LANBindConfirmationRequired();
+    }
     SettingsManager.getInstance().set('phoneMirrorExposeOnLan', value);
     if (!this.isRunning()) {
       this.exposeOnLan = value;
       return this.snapshot();
     }
     return this.restart({ exposeOnLan: value });
+  }
+
+  /**
+   * IPC-layer helper: flip the per-session "user has confirmed LAN bind" sentinel
+   * AFTER the dialog has returned an explicit Allow. Without this the next
+   * setExposeOnLan(true) would re-prompt unnecessarily.
+   */
+  markLanBindDialogShown(): void {
+    this.hasShownLanBindDialog = true;
   }
 
   async rotateToken(): Promise<PhoneMirrorInfo> {
@@ -300,8 +353,15 @@ export class PhoneMirrorService {
   publishDone(streamId: string, fullContent: string): void {
     if (!this.isRunning()) return;
     const createdAt = new Date().toISOString();
-    const content =
+    let content =
       fullContent || (this.livePartial?.streamId === streamId ? this.livePartial.content : '');
+    // Prompt System v2 no-action sentinel: never display or record on the
+    // phone surface (a second live sink parallel to the renderer).
+    try {
+      const { shouldSuppressModelOutput, stripLeadingNoActionSentinel } = require('../llm/promptSystemV2') as typeof import('../llm/promptSystemV2');
+      if (shouldSuppressModelOutput(content)) content = '';
+      else content = stripLeadingNoActionSentinel(content) || content;
+    } catch { /* non-fatal */ }
     if (content.trim()) {
       const msg: PersistedMessage = { id: 'a:' + streamId, role: 'assistant', content, createdAt };
       this.recordHistory(msg);
@@ -323,6 +383,11 @@ export class PhoneMirrorService {
    */
   publishAssistantMessage(id: string, content: string, label: string): void {
     if (!this.isRunning() || !content?.trim()) return;
+    // Prompt System v2 no-action sentinel: suppress on the phone surface.
+    try {
+      const { shouldSuppressModelOutput } = require('../llm/promptSystemV2') as typeof import('../llm/promptSystemV2');
+      if (shouldSuppressModelOutput(content)) return;
+    } catch { /* non-fatal */ }
     const createdAt = new Date().toISOString();
     const msg: PersistedMessage = {
       id: 'a:' + id,
@@ -792,6 +857,8 @@ export class PhoneMirrorService {
         qrDataUrl: null,
         clients: 0,
         extensionConnected: false,
+        extPairedAt: this.extPairedAt,
+        bindAddress: this.exposeOnLan ? '0.0.0.0' : '127.0.0.1',
       };
       this.cachedInfo = info;
       return info;
@@ -829,6 +896,8 @@ export class PhoneMirrorService {
       qrDataUrl,
       clients: this.phoneClientCount(),
       extensionConnected: this.hasExtensionClient(),
+      extPairedAt: this.extPairedAt,
+      bindAddress: this.bindAddress,
     };
     this.cachedInfo = info;
     return info;
@@ -866,6 +935,9 @@ export class PhoneMirrorService {
     const port = await listenWithProbe(server, host, basePort, PORT_PROBE_RANGE);
     this.server = server;
     this.port = port;
+    // Cache the resolved bind host for snapshot() — the UI uses it to render
+    // "loopback only" vs "(LAN)" in the Enable status row.
+    this.bindAddress = host;
 
     const wss = new WebSocketServer({ noServer: true });
     this.wss = wss;
@@ -1199,7 +1271,25 @@ export class PhoneMirrorService {
       }
       // Burn the window — single-use.
       this.armedUntil = 0;
+      this.extPairedAt = Date.now();
       console.log('[PhoneMirror] extension paired via one-click /pair');
+      // Tell Settings now. On a first pair the extension's socket follows in a
+      // few ms (its hello flips extensionConnected); on a Re-pair while already
+      // connected nothing else will ever change, and the countdown would run
+      // out its whole window.
+      // Counts are read live, not from cachedInfo: that is only refreshed while
+      // someone is listening, and would otherwise report a connected extension
+      // as disconnected.
+      if (this.cachedInfo) {
+        const info = {
+          ...this.cachedInfo,
+          clients: this.phoneClientCount(),
+          extensionConnected: this.hasExtensionClient(),
+          extPairedAt: this.extPairedAt,
+        };
+        this.cachedInfo = info;
+        this.emitStatusNow(info);
+      }
       res.writeHead(200, jsonHeaders);
       // Hand out the EXTENSION token (loopback-scoped), not the phone token.
       res.end(JSON.stringify({ token: this.extToken, port: this.port }));
@@ -1451,6 +1541,13 @@ export class PhoneMirrorService {
 
   private emitStatusClientCount(): void {
     if (this.statusListeners.size === 0) return;
+    // A socket can close after _teardown() (stop, restart), when cachedInfo still
+    // describes the server that just went away. Report a fresh snapshot instead
+    // of laying these counts over it.
+    if (!this.wss) {
+      this.emitStatus();
+      return;
+    }
     const clients = this.phoneClientCount();
     const extensionConnected = this.hasExtensionClient();
     // Emit on a change to EITHER the phone-client count OR the extension-connected
@@ -1460,12 +1557,39 @@ export class PhoneMirrorService {
       this.cachedInfo &&
       (clients !== this.cachedInfo.clients || extensionConnected !== this.cachedInfo.extensionConnected)
     ) {
+      const extensionFlipped = extensionConnected !== this.cachedInfo.extensionConnected;
       const info = { ...this.cachedInfo, clients, extensionConnected };
       this.cachedInfo = info;
-      this.emitStatus(info);
+      // The extension flag is what Settings' pairing countdown and the launcher's
+      // extension toaster wait on, so it goes out now instead of 150 ms later.
+      // A phone-count change stays debounced: the extension's raw socket counts
+      // as a phone for the 1-3 ms before its hello, and the debounce is what
+      // keeps that from flashing "1 phone connected".
+      if (extensionFlipped) this.emitStatusNow(info);
+      else this.emitStatus(info);
       return;
     }
     this.emitStatus();
+  }
+
+  /**
+   * Emit at once, superseding any debounced emit still waiting. Only called
+   * while the server runs, when everything a pending emit could carry is
+   * already folded into cachedInfo, which `info` is built from.
+   */
+  private emitStatusNow(info: PhoneMirrorInfo): void {
+    if (this.statusListeners.size === 0) return;
+    if (this.statusDebounceTimer !== null) {
+      clearTimeout(this.statusDebounceTimer);
+      this.statusDebounceTimer = null;
+    }
+    for (const l of this.statusListeners) {
+      try {
+        l(info);
+      } catch (_) {
+        /* noop */
+      }
+    }
   }
 
   private emitStatus(prebuilt?: PhoneMirrorInfo): void {
@@ -1549,6 +1673,20 @@ export function pickTargetExtensionIndex(
     }
   }
   return best;
+}
+
+/**
+ * Pure decision for whether PhoneMirror should auto-start on boot, given the
+ * `NATIVELY_DISABLE_PHONE_MIRROR` kill switch (env.disablePhoneMirror) and the
+ * persisted `phoneMirrorEnabled` setting. Extracted from main.ts's boot
+ * sequence so the decision itself — not just its source text — is testable.
+ */
+export function shouldStartPhoneMirrorOnBoot(opts: {
+  disablePhoneMirror: boolean;
+  phoneMirrorEnabled: boolean;
+}): boolean {
+  if (opts.disablePhoneMirror) return false;
+  return opts.phoneMirrorEnabled;
 }
 
 /** True for IPv4/IPv6 loopback remote addresses (gates the /pair endpoint). */

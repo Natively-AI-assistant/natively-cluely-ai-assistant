@@ -1,0 +1,181 @@
+{
+  "direct": [
+    {
+      "project": "FieldServe-CRM Sync",
+      "kind": "idempotency key format",
+      "question": "What is the idempotency key format used on the FieldServe-CRM Sync project?",
+      "answer": "IDK-FSC-{workOrderId}-{revision}"
+    },
+    {
+      "project": "FieldServe-CRM Sync",
+      "kind": "retry policy",
+      "question": "How many retry attempts and what backoff multiplier does FieldServe-CRM Sync use?",
+      "answer": "6 attempts with a backoff multiplier of 2.5"
+    },
+    {
+      "project": "FieldServe-CRM Sync",
+      "kind": "dead-letter queue",
+      "question": "What is the name of the dead-letter queue on the FieldServe-CRM Sync integration?",
+      "answer": "fsc-sync-dlq-workorders"
+    },
+    {
+      "project": "FieldServe-CRM Sync",
+      "kind": "p95 SLO",
+      "question": "What p95 latency SLO does the FieldServe-CRM Sync project have?",
+      "answer": "p95 latency SLO of 450 ms"
+    },
+    {
+      "project": "FieldServe-CRM Sync",
+      "kind": "monitoring metric",
+      "question": "What is the primary monitoring metric name for FieldServe-CRM Sync?",
+      "answer": "fsc_sync_lag_seconds"
+    },
+    {
+      "project": "LedgerLink",
+      "kind": "idempotency key format",
+      "question": "What is the idempotency key format used on the LedgerLink project?",
+      "answer": "LL-{invoiceNumber}-{fiscalPeriod}-v2"
+    },
+    {
+      "project": "LedgerLink",
+      "kind": "retry policy",
+      "question": "How many retry attempts and what backoff multiplier does LedgerLink use?",
+      "answer": "4 attempts with a backoff multiplier of 3.0"
+    },
+    {
+      "project": "LedgerLink",
+      "kind": "dead-letter queue",
+      "question": "What is the name of the dead-letter queue on the LedgerLink integration?",
+      "answer": "ledgerlink-dlq-journal-entries"
+    },
+    {
+      "project": "LedgerLink",
+      "kind": "p95 SLO",
+      "question": "What p95 latency SLO does the LedgerLink project have?",
+      "answer": "p95 latency SLO of 900 ms"
+    },
+    {
+      "project": "LedgerLink",
+      "kind": "monitoring metric",
+      "question": "What is the primary monitoring metric name for LedgerLink?",
+      "answer": "ledgerlink_posting_failures_total"
+    },
+    {
+      "project": "FleetBridge",
+      "kind": "idempotency key format",
+      "question": "What is the idempotency key format used on the FleetBridge project?",
+      "answer": "FB-{vehicleVin}-{sequenceNumber}"
+    },
+    {
+      "project": "FleetBridge",
+      "kind": "retry policy",
+      "question": "How many retry attempts and what backoff multiplier does FleetBridge use?",
+      "answer": "8 attempts with a backoff multiplier of 1.7"
+    },
+    {
+      "project": "FleetBridge",
+      "kind": "dead-letter queue",
+      "question": "What is the name of the dead-letter queue on the FleetBridge integration?",
+      "answer": "fleetbridge-dlq-position-events"
+    },
+    {
+      "project": "FleetBridge",
+      "kind": "p95 SLO",
+      "question": "What p95 latency SLO does the FleetBridge project have?",
+      "answer": "p95 latency SLO of 250 ms"
+    },
+    {
+      "project": "FleetBridge",
+      "kind": "monitoring metric",
+      "question": "What is the primary monitoring metric name for FleetBridge?",
+      "answer": "fleetbridge_gps_gap_ratio"
+    },
+    {
+      "project": "StockMesh",
+      "kind": "idempotency key format",
+      "question": "What is the idempotency key format used on the StockMesh project?",
+      "answer": "SM-{sku}-{warehouseCode}-{mutationUlid}"
+    },
+    {
+      "project": "StockMesh",
+      "kind": "retry policy",
+      "question": "How many retry attempts and what backoff multiplier does StockMesh use?",
+      "answer": "5 attempts with a backoff multiplier of 2.0"
+    },
+    {
+      "project": "StockMesh",
+      "kind": "dead-letter queue",
+      "question": "What is the name of the dead-letter queue on the StockMesh integration?",
+      "answer": "stockmesh-dlq-stock-mutations"
+    },
+    {
+      "project": "StockMesh",
+      "kind": "p95 SLO",
+      "question": "What p95 latency SLO does the StockMesh project have?",
+      "answer": "p95 latency SLO of 600 ms"
+    },
+    {
+      "project": "StockMesh",
+      "kind": "monitoring metric",
+      "question": "What is the primary monitoring metric name for StockMesh?",
+      "answer": "stockmesh_oversell_incidents_total"
+    },
+    {
+      "project": "CarePoint Connect",
+      "kind": "idempotency key format",
+      "question": "What is the idempotency key format used on the CarePoint Connect project?",
+      "answer": "CPC-{appointmentGuid}-{hl7MessageControlId}"
+    },
+    {
+      "project": "CarePoint Connect",
+      "kind": "retry policy",
+      "question": "How many retry attempts and what backoff multiplier does CarePoint Connect use?",
+      "answer": "3 attempts with a backoff multiplier of 4.0"
+    },
+    {
+      "project": "CarePoint Connect",
+      "kind": "dead-letter queue",
+      "question": "What is the name of the dead-letter queue on the CarePoint Connect integration?",
+      "answer": "carepoint-dlq-adt-messages"
+    },
+    {
+      "project": "CarePoint Connect",
+      "kind": "p95 SLO",
+      "question": "What p95 latency SLO does the CarePoint Connect project have?",
+      "answer": "p95 latency SLO of 1200 ms"
+    },
+    {
+      "project": "CarePoint Connect",
+      "kind": "monitoring metric",
+      "question": "What is the primary monitoring metric name for CarePoint Connect?",
+      "answer": "carepoint_hl7_reject_rate"
+    }
+  ],
+  "followups": [
+    {
+      "project": "FieldServe-CRM Sync",
+      "question": "What did you monitor after launch on that project?",
+      "answer": "fsc_sync_lag_seconds"
+    },
+    {
+      "project": "LedgerLink",
+      "question": "What did you monitor after launch on that project?",
+      "answer": "ledgerlink_posting_failures_total"
+    },
+    {
+      "project": "FleetBridge",
+      "question": "What did you monitor after launch on that project?",
+      "answer": "fleetbridge_gps_gap_ratio"
+    },
+    {
+      "project": "StockMesh",
+      "question": "What did you monitor after launch on that project?",
+      "answer": "stockmesh_oversell_incidents_total"
+    },
+    {
+      "project": "CarePoint Connect",
+      "question": "What did you monitor after launch on that project?",
+      "answer": "carepoint_hl7_reject_rate"
+    }
+  ]
+}

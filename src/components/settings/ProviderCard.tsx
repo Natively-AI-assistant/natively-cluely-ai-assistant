@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trash2, AlertCircle, CheckCircle, ExternalLink, Loader2, ChevronDown, Check, RefreshCw } from 'lucide-react';
+import { useT } from '../../i18n';
+import { Trash2, AlertCircle, ExternalLink, Loader2, Check, KeyRound } from 'lucide-react';
+// Primitives live in AIProvidersSettings.tsx, not in their own module:
+// SettingsPeriwinklePortalScopeGuard.test.mjs asserts that the *.tsx files on disk in
+// src/components/settings/ EXACTLY equal its GUARDED_FILES list, so adding a file
+// here fails that suite. The resulting import cycle is safe — every reference
+// below is inside a render function, never at module-evaluation time.
+import { AipSwitch, AipProviderMark, AipModelList } from './AIProvidersSettings';
+import { isOptInModelProvider } from '../../utils/modelUtils';
 
 interface FetchedModel {
     id: string;
@@ -7,7 +15,27 @@ interface FetchedModel {
 }
 
 interface ProviderCardProps {
-    providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek';
+    providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion';
+    /** Provider switched off in Settings — keeps the key, hides the models. */
+    isDisabled?: boolean;
+    onToggleDisabled?: (enabled: boolean) => void;
+    /** The provider's full model universe: presets ∪ catalog ∪ allow-listed ids. */
+    selectableModels?: { id: string; label: string }[];
+    /**
+     * Allow-list of model ids. Empty means ALL of `selectableModels` for most
+     * providers — but NOTHING for an opt-in one (OpenRouter), whose catalogue is
+     * a gateway's. See isOptInModelProvider.
+     */
+    enabledModels?: string[];
+    onToggleModel?: (modelId: string) => void;
+    /** Clears the allow-list back to "all". */
+    onResetModels?: () => void;
+    /** A persist failed; the control reports it instead of lying about the state. */
+    modelSaveError?: boolean;
+    /** Promote a model to this provider's default (also allow-lists it). */
+    onSetDefaultModel?: (modelId: string) => void;
+    /** True once a catalog has been fetched for this provider; gates auto-discovery. */
+    hasCatalog?: boolean;
     providerName: string;
     apiKey: string;
     preferredModel?: string;
@@ -18,15 +46,39 @@ interface ProviderCardProps {
     onTestConnection: () => void;
     testStatus: 'idle' | 'testing' | 'success' | 'error';
     testError?: string;
+    /** A save/remove the main process refused (e.g. a degraded credential store). */
+    keyWriteError?: string;
     savingStatus: boolean;
     savedStatus: boolean;
     keyPlaceholder: string;
     keyUrl: string;
     onPreferredModelChange?: (modelId: string) => void;
+    /**
+     * Provider-specific settings rendered between the key row and the Test row.
+     * Exists for exactly one provider: Fluxion needs a wire-protocol choice
+     * alongside its key, because the protocol is a property of the key's group
+     * and cannot be read back from the key.
+     *
+     * A slot rather than a `fluxionProtocol` prop on purpose — this table drives
+     * eight cards, and the comment on CLOUD_PROVIDERS records that a new prop
+     * used to mean five edits with a missed one invisible. Keeping the control
+     * itself in AIProvidersSettings.tsx keeps that state where the rest of the
+     * panel's state already lives.
+     */
+    extraControls?: React.ReactNode;
 }
 
 export const ProviderCard: React.FC<ProviderCardProps> = ({
     providerId,
+    isDisabled = false,
+    onToggleDisabled,
+    selectableModels,
+    enabledModels,
+    onToggleModel,
+    onResetModels,
+    modelSaveError,
+    onSetDefaultModel,
+    hasCatalog,
     providerName,
     apiKey,
     preferredModel,
@@ -37,18 +89,18 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     onTestConnection,
     testStatus,
     testError,
+    keyWriteError,
     savingStatus,
     savedStatus,
     keyPlaceholder,
     keyUrl,
     onPreferredModelChange,
+    extraControls,
 }) => {
-    const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
+    const t = useT();
     const [isFetching, setIsFetching] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [selectedModel, setSelectedModel] = useState<string>(preferredModel || '');
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const dropdownRef = React.useRef<HTMLDivElement>(null);
 
     // Refs to avoid stale closures in the auto-save timer
     const savedRef = useRef(savedStatus);
@@ -72,38 +124,36 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         if (preferredModel) setSelectedModel(preferredModel);
     }, [preferredModel]);
 
-    // Close dropdown on outside click
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-                setIsDropdownOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
     const handleFetchModels = async () => {
         setIsFetching(true);
         setFetchError(null);
 
         try {
-            // If a new key is entered, save it first
-            if (apiKey.trim()) {
-                await onSaveKey();
-            }
-
+            // Deliberately does NOT save a typed-but-unsaved key. Save is the only
+            // thing that saves; discovery uses the stored key.
             // Fetch models using the key (or stored key)
             const keyToUse = apiKey.trim() || '';
             // @ts-ignore
             const result = await window.electronAPI?.fetchProviderModels(providerId, keyToUse);
 
             if (result?.success && result.models) {
-                setFetchedModels(result.models);
                 // If we have a preferred model that exists in the list, keep it; otherwise auto-select first
-                if (result.models.length > 0) {
+                // Only adopt a default when the provider has none at all. Previously
+                // this fired whenever the current default was absent from the returned
+                // list, so a Refresh could silently change which model answers your
+                // questions. A default that is missing from the catalog is surfaced as
+                // "Not offered" in the list instead.
+                //
+                // NEVER for an opt-in provider (OpenRouter). Its catalogue is a
+                // gateway's, sorted by label, so "first" was simply the
+                // alphabetically-first vendor — `openrouter/aion-labs/aion-2.0` on
+                // 2026-09-17 — and its allow-list starts EMPTY, so that model was
+                // not even routable: the card showed "Aion-2.0 · default" beside
+                // "None selected" for a model nobody chose. Reproduced live. There
+                // the user picks with "Set default", which also allow-lists.
+                if (result.models.length > 0 && !isOptInModelProvider(providerId)) {
                     const existsInList = result.models.some((m: FetchedModel) => m.id === selectedModel);
-                    if (!existsInList) {
+                    if (!existsInList && !selectedModel && !preferredModel) {
                         const firstModel = result.models[0].id;
                         setSelectedModel(firstModel);
                         // @ts-ignore
@@ -123,147 +173,170 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         }
     };
 
-    const handleSelectModel = async (modelId: string) => {
-        setSelectedModel(modelId);
-        setIsDropdownOpen(false);
-        try {
-            // @ts-ignore
-            await window.electronAPI?.setProviderPreferredModel(providerId, modelId);
-            if (onPreferredModelChange) {
-                onPreferredModelChange(modelId);
-            }
-        } catch (e) {
-            console.error('Failed to save preferred model:', e);
-        }
-    };
 
-    const selectedOption = fetchedModels.find(m => m.id === selectedModel);
+    // ── No status badge. Testing / Failed / Saving went first as echoes of the
+    // control you had just pressed; "Off" was the last one left, kept on the
+    // argument that nothing else stated it in words.
+    //
+    // It is gone too: the switch sits on the same header row, reads off, and is
+    // the control that owns this state — the badge was a second rendering of it
+    // 200px away. The OAuth cards on this panel (Antigravity, OpenAI Codex)
+    // already show disabled state through their switch alone, so this is also
+    // what makes the key-backed cards consistent with them.
+
 
     return (
-        <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle">
-            <div className="mb-2 flex items-center justify-between">
-                <label className="flex items-center text-xs font-medium text-text-primary uppercase tracking-wide">
-                    {providerName} API Key
-                    {hasStoredKey && <span className="ml-2 text-green-500 normal-case">✓ Saved</span>}
-                </label>
-                <button
-                    onClick={() => {
-                        // @ts-ignore
-                        window.electronAPI?.openExternal(keyUrl);
-                    }}
-                    className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors"
-                    title={`Get ${providerName} API Key`}
-                >
-                    <span className="text-[10px] uppercase tracking-wide">Get Key</span>
-                    <ExternalLink size={12} />
-                </button>
-            </div>
-            <div className="flex gap-2 mb-3">
-                <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => onKeyChange(e.target.value)}
-                    placeholder={hasStoredKey ? "••••••••••••" : keyPlaceholder}
-                    className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
-                />
-                <button
-                    onClick={onSaveKey}
-                    disabled={savingStatus || !apiKey.trim()}
-                    className={`px-5 py-2.5 rounded-lg text-xs font-medium transition-colors ${savedStatus
-                        ? 'bg-green-500/20 text-green-400'
-                        : 'bg-bg-input hover:bg-bg-secondary border border-border-subtle text-text-primary disabled:opacity-50'
-                        }`}
-                >
-                    {savingStatus ? 'Saving...' : savedStatus ? 'Saved!' : 'Save'}
-                </button>
-                {hasStoredKey && (
+        // .aip-provider owns padding + an 8px flex column. No mb-* anywhere: the old
+        // layout's trailing mb-3 stacked against p-5's bottom padding and produced a
+        // 32px dead band, which was the largest single block of nothing in the card.
+        <div className="aip-card aip-provider" data-off={isDisabled ? 'true' : undefined}>
+            <div className="aip-provider-head">
+                {/* The provider's official mark (vendored, MIT — see
+                    src/assets/provider-logos/README.md). Falls back to a two-letter
+                    monogram for providers with no licence-clean logo. */}
+                <AipProviderMark provider={providerId} name={providerName} />
+                {/* The mark is the identity and this is the title, so it is the provider
+                    NAME — not "GROQ API KEY". "API key" names a field; using it as the
+                    card's heading, uppercased, made an entity read as a form label. The
+                    input keeps its aria-label, so nothing is lost to a screen reader. */}
+                <h4 className="aip-card-title truncate min-w-0">{providerName}</h4>
+
+                {/* Get Key stays here permanently now that Test has moved back down to
+                    the body row. Key rotation is real, so the signpost is still useful
+                    once configured — just demoted visually. */}
+                <div className="ml-auto flex items-center gap-2 shrink-0">
                     <button
-                        onClick={onRemoveKey}
-                        className="px-2.5 py-2.5 rounded-lg text-xs font-medium text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-all"
-                        title="Remove API Key"
+                        onClick={() => {
+                            // @ts-ignore
+                            window.electronAPI?.openExternal(keyUrl);
+                        }}
+                        className="aip-btn"
+                        data-size="sm"
+                        data-variant="ghost"
+                        title={`Get ${providerName} API Key`}
                     >
-                        <Trash2 size={16} strokeWidth={1.5} />
+                        <span className="uppercase tracking-wide">{t('Get Key')}</span>
+                        <ExternalLink size={12} strokeWidth={1.75} />
                     </button>
-                )}
+                    {/* Only once a key is stored — nothing to switch off before that. The
+                        key is never touched; this only hides the provider's models. */}
+                    {hasStoredKey && onToggleDisabled && (
+                        <AipSwitch
+                            checked={!isDisabled}
+                            onChange={() => onToggleDisabled(isDisabled)}
+                            label={`${isDisabled ? t('Enable') : t('Disable')} ${providerName}`}
+                            title={isDisabled ? t('Enable provider') : t('Disable provider (keeps your key)')}
+                        />
+                    )}
+                </div>
             </div>
 
-            {/* Action Row: Test Connection + Conditional Dropdown + Fetch Models */}
-            <div className="flex items-center justify-between mb-3 w-full">
-                <button
-                    onClick={onTestConnection}
-                    disabled={(!apiKey.trim() && !hasStoredKey) || testStatus === 'testing'}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-border-subtle flex items-center gap-2 shrink-0 ${testStatus === 'success' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
-                        testStatus === 'error' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                            'bg-bg-input hover:bg-bg-elevated text-text-primary'
-                        }`}
-                    title={testError || "Test Connection"}
-                >
-                    {testStatus === 'testing' ? <><Loader2 size={12} className="animate-spin" /> Testing...</> :
-                        testStatus === 'success' ? <><CheckCircle size={12} /> Connected</> :
-                            testStatus === 'error' ? <><AlertCircle size={12} /> Error</> :
-                                <>{/* No Icon */} Test Connection</>}
-                </button>
-
-                {/* Inline Model Dropdown */}
-                {fetchedModels.length > 0 || preferredModel ? (
-                    <div className="relative flex-1 max-w-[200px] mx-4" ref={dropdownRef}>
+            <div className="aip-provider-row">
+                <div className="aip-provider-field">
+                    {/* One 32px shell: glyph + input + Save as an inset segment. */}
+                    <div className="aip-field">
+                        <KeyRound size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                        {/* No reveal-eye toggle, deliberately: these windows are marketed
+                            for on-screen stealth, so a plaintext key in a screen-shared
+                            overlay is a real hazard. */}
+                        <input
+                            type="password"
+                            value={apiKey}
+                            onChange={(e) => onKeyChange(e.target.value)}
+                            autoComplete="off"
+                            spellCheck={false}
+                            data-1p-ignore
+                            aria-label={`${providerName} ${t('API key')}`}
+                            placeholder={hasStoredKey ? "••••••••••••" : keyPlaceholder}
+                            className="aip-input"
+                        />
+                        {/* Rendered-and-disabled, never conditionally rendered: a button
+                            that appears on the first keystroke shrinks the input ~88px
+                            mid-typing and moves a target between aim and click. */}
                         <button
-                            onClick={() => fetchedModels.length > 0 && setIsDropdownOpen(!isDropdownOpen)}
-                            className={`w-full bg-bg-input border border-border-subtle rounded-md px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary flex items-center justify-between transition-colors ${fetchedModels.length > 0 ? 'hover:bg-bg-elevated' : 'opacity-80 cursor-default'}`}
-                            type="button"
+                            onClick={onSaveKey}
+                            disabled={savingStatus || !apiKey.trim()}
+                            className="aip-field-seg"
+                            data-tone={savedStatus ? 'ok' : undefined}
                         >
-                            <span className="truncate pr-2">{selectedOption ? selectedOption.label : (preferredModel || 'Select model')}</span>
-                            <ChevronDown size={14} className={`text-text-secondary transition-transform ${isDropdownOpen ? 'rotate-180' : ''} ${fetchedModels.length === 0 ? 'opacity-50' : ''}`} />
+                            {savingStatus
+                                ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
+                                : savedStatus
+                                    ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
+                                    : t('Save')}
                         </button>
-
-                        {isDropdownOpen && fetchedModels.length > 0 && (
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-full min-w-[200px] bg-bg-elevated border border-border-subtle rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto animated fadeIn">
-                                <div className="p-1 space-y-0.5">
-                                    {fetchedModels.map((model) => (
-                                        <button
-                                            key={model.id}
-                                            onClick={() => handleSelectModel(model.id)}
-                                            className={`w-full text-left px-3 py-2 text-xs rounded-md flex items-center justify-between group transition-colors ${selectedModel === model.id ? 'bg-bg-input hover:bg-bg-elevated text-text-primary' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                            type="button"
-                                        >
-                                            <span className="truncate">{model.label}</span>
-                                            {selectedModel === model.id && <Check size={14} className="text-accent-primary shrink-0 ml-2" />}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
                     </div>
-                ) : (
-                    <div className="flex-1 mx-4" />
-                )}
+                    {hasStoredKey && (
+                        <button
+                            onClick={onRemoveKey}
+                            className="aip-btn shrink-0"
+                            data-icon="true"
+                            data-variant="danger-ghost"
+                            title={t("Remove API Key")}
+                        >
+                            <Trash2 size={14} strokeWidth={1.75} />
+                        </button>
+                    )}
+                </div>
 
-                {hasStoredKey ? (
-                    <button
-                        onClick={handleFetchModels}
-                        disabled={isFetching}
-                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-border-subtle flex items-center gap-2 shrink-0 ${isFetching
-                            ? 'bg-bg-input text-text-secondary'
-                            : 'bg-accent-primary/10 text-accent-primary border-accent-primary/20 hover:bg-accent-primary/20'
-                            }`}
-                    >
-                        {isFetching ? (
-                            <><Loader2 size={12} className="animate-spin" /> Fetching...</>
-                        ) : (
-                            <><RefreshCw size={12} /> Fetch Models</>
-                        )}
-                    </button>
-                ) : (
-                    // Placeholder span to perfectly balance flex-between if button isn't shown
-                    <span className="w-[110px]" />
-                )}
             </div>
 
-            {/* Error from test or fetch */}
-            {testError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">{testError}</p>}
-            {fetchError && <p className="text-[10px] text-red-400 mt-1.5 mb-2">Model fetch error: {fetchError}</p>}
+            {extraControls}
 
+            {/* Second row: Test leads, MODELS beside it — the arrangement these two had
+                before the redesign. Costs 40px against putting Test after the trash on
+                one row, and buys back the left-edge alignment that made Test read as the
+                start of an action row rather than the tail of the credential row. */}
+            {hasStoredKey && (
+                <div className="aip-provider-row">
+                    <button
+                        onClick={onTestConnection}
+                        disabled={testStatus === 'testing'}
+                        className="aip-btn shrink-0"
+                        data-tone={testStatus === 'success' ? 'ok' : testStatus === 'error' ? 'danger' : undefined}
+                        title={testError || t('Test Connection')}
+                    >
+                        {testStatus === 'testing' ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</> :
+                            testStatus === 'success' ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</> :
+                                testStatus === 'error' ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</> :
+                                    <>{t('Test Connection')}</>}
+                    </button>
 
+                    {/* Beside the key field, not under it. >= 1, not > 1: this is the only
+                        discovery entry point, so gating it on "more than one model" left the
+                        three 1-preset providers unable to fetch anything at all. */}
+                    {!isDisabled && onToggleModel && selectableModels && selectableModels.length >= 1 && (
+                        <AipModelList
+                            // Without this every cloud card defaulted to `optIn`
+                            // false, so OpenRouter's empty allow-list would have
+                            // read as "All 444" in the summary and un-ticking the
+                            // last model would have re-enabled the whole gateway.
+                            optIn={isOptInModelProvider(providerId)}
+                            models={selectableModels}
+                            enabled={enabledModels || []}
+                            onToggle={onToggleModel}
+                            onReset={onResetModels || (() => {})}
+                            defaultId={selectedModel || preferredModel}
+                            onSetDefault={onSetDefaultModel}
+                            error={modelSaveError ? 'save-failed' : null}
+                            refreshing={isFetching}
+                            onRefresh={handleFetchModels}
+                            onFirstOpen={() => {
+                                if (hasStoredKey && !hasCatalog) handleFetchModels();
+                            }}
+                        />
+                    )}
+                </div>
+            )}
+
+            {/* One note line, and only when something is actually wrong. */}
+            {/* A refused key write outranks the others: it means the key the user
+                just typed was NOT stored, which every other note assumes it was. */}
+            {(keyWriteError || testError || fetchError) && (
+                <p className="aip-meta aip-danger-fg aip-provider-note" role="alert">
+                    {keyWriteError || testError || `${t('Model fetch error:')} ${fetchError}`}
+                </p>
+            )}
         </div>
     );
 };

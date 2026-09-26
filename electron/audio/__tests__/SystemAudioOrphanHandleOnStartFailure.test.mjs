@@ -35,7 +35,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import Module from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron/audio');
@@ -94,7 +94,7 @@ Module._load = function patched(request, _parent, _isMain) {
     return origLoad.apply(this, arguments);
 };
 
-const { SystemAudioCapture } = await import(path.join(distRoot, 'SystemAudioCapture.js'));
+const { SystemAudioCapture } = await import(pathToFileURL(path.join(distRoot, 'SystemAudioCapture.js')).href);
 
 function flushSetImmediate() {
     return new Promise((r) => setImmediate(r));

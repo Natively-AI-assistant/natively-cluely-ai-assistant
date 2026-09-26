@@ -1,0 +1,166 @@
+{
+ "passages": [
+  "Because esbuild emits one bundle per entry point, a module imported by two entries is INLINED into both. A singleton held in a module-level variable therefore exists twice at runtime. Anchoring it on globalThis is the fix.",
+  "System audio capture on macOS uses a PRIVATE CoreAudio aggregate device. It remains enumerable in-process, so it poisons the microphone picker unless it is filtered out by uid.",
+  "keytar provides secure storage on macOS through the Keychain. On Windows the same capability is Credential Manager, reached through a different native binding.",
+  "Bundle sizes are tracked per release. The renderer bundle grew after the settings redesign, which is expected because the panel ships its own icon set.",
+  "Reranking decides the ORDER of candidates that embedding retrieval already found. The single seam is ModeHybridRetriever, and a partial ranking is rejected wholesale because an unscored candidate would sink below every candidate the reranker never saw.",
+  "Code signing a macOS build needs a Developer ID certificate and the hardened runtime, then notarization before the app can be distributed outside the store.",
+  "Embedding retrieval finds the candidate set by cosine similarity in vector space. Recall at k saturates quickly and is the wrong metric for judging a reranker.",
+  "CommandOrControl is used wherever an action means the same thing on both platforms; explicit Command or Control appears only when the behaviour differs on purpose.",
+  "esbuild is used for the main process because it is fast enough to run on every save. Its output goes to dist-electron and is not minified in development.",
+  "On macOS global shortcuts require Accessibility permission, and the app prompts for it the first time a chord is registered.",
+  "The overlay is THREE windows: a fixed-height shell plus a pill and a toggle as auxiliaries, welded together with setParentWindow so they follow moves atomically.",
+  "The audio pipeline resamples to 16 kHz mono before transcription, since every speech provider in use expects that format.",
+  "The embedding catalogue records dimensions per model, and models that support several widths list all of them.",
+  "On Windows the equivalent of system audio capture is WASAPI loopback, which needs its own device enumeration path and shares none of the aggregate-device behaviour.",
+  "The overlay is positioned relative to the active display, and it is repositioned when the display arrangement changes.",
+  "Entry points are declared in the build script. Adding one means adding it there and to the packaging file list, or the new bundle ships without being loaded.",
+  "better-sqlite3 stores the meeting database. Queries are synchronous, which is why long scans are moved off the main thread.",
+  "Audio devices are re-enumerated when the system reports a configuration change, because a headset connecting mid-meeting must appear without a restart.",
+  "The verify-native-arch step checks the compiled architecture of the native binaries before a commit lands, so an x64 build never ships inside an arm64 package.",
+  "Vite builds the renderer into a single index.html plus hashed asset chunks. Chunks over 1500 kB raise a build warning, which is advisory and does not fail the build.",
+  "Notarization is asynchronous. The build waits for the ticket and staples it, so the first launch does not need a network round trip.",
+  "Windows signing uses a different certificate and does not involve notarization at all; SmartScreen reputation builds up separately over time.",
+  "Entitlements are declared in a plist alongside the build configuration. Adding one that the certificate does not authorise makes signing fail loudly.",
+  "An embedding width is MEASURED by probing the provider, never assumed: a guessed width stamps a wrong space key over real vectors, and every later search silently misses.",
+  "Re-embedding runs when the space key changes, and it is bounded so a large knowledge base cannot spend the whole session re-indexing.",
+  "Without a provisioning profile, AMFI kills a signed and notarized macOS application at launch with POSIX error 163, and produces no crash report at all.",
+  "Window opacity is animated on hover, and the timeout that drives it is shared, so it must be flushed rather than cleared when the window hides.",
+  "Overlay content is rendered by the same Vite bundle as the settings window, with routing deciding which surface mounts.",
+  "Native modules are unpacked from the asar archive at package time, because a .node file cannot be dlopened from inside an archive.",
+  "The overlay stays on top of other windows and is excluded from screen capture, so a shared screen does not show it.",
+  "Global shortcuts on Windows go through RegisterHotKey, which can SILENTLY drop a registration. The application then appears to leak the chord to whatever window has focus.",
+  "Rerankers can be run locally or through a hosted provider. The hosted path sends the query and the candidate text, and nothing else leaves the machine.",
+  "Transparent always-on-top windows behave differently across macOS Spaces and Windows virtual desktops, so neither window level nor click-through maps across the two.",
+  "A native module built for plain Node fails to load under Electron with ERR_DLOPEN_FAILED and a NODE_MODULE_VERSION mismatch. They must be rebuilt against the Electron ABI during postinstall.",
+  "The reranker catalogue lists ten models with pinned revisions and per-file digests, so a download that resumes cannot mix bytes from two revisions.",
+  "Voyage embeds queries and documents differently, so it is never something a user ends up on by accident.",
+  "Embedding providers are tried in order and the first available one wins, unless the user pinned a provider in manual mode.",
+  "A cross-encoder scores one query-passage pair at a time, which is why its cost is linear in the number of candidates rather than constant.",
+  "Microphone permission on macOS is requested the first time capture starts. Denying it leaves the app running with transcription disabled rather than crashing.",
+  "Shortcuts are configurable per action. A chord already claimed by the system is rejected at registration time with a message naming the conflict."
+ ],
+ "queries": [
+  {
+   "q": "Why does one singleton end up existing twice while the app is running?",
+   "gold": 0,
+   "topic": "bundling"
+  },
+  {
+   "q": "What is the error when a native binding was compiled for the wrong runtime?",
+   "gold": 33,
+   "topic": "native-modules"
+  },
+  {
+   "q": "Why does the microphone list show a device the user never added?",
+   "gold": 1,
+   "topic": "audio-macos"
+  },
+  {
+   "q": "A signed and notarized Mac build dies instantly with no crash report \u2014 what is happening?",
+   "gold": 25,
+   "topic": "signing"
+  },
+  {
+   "q": "After cosine similarity has already produced the candidate set, what determines their final order?",
+   "gold": 4,
+   "topic": "reranking"
+  },
+  {
+   "q": "Why does a keyboard chord sometimes reach the wrong application on Windows?",
+   "gold": 30,
+   "topic": "shortcuts"
+  },
+  {
+   "q": "How many windows make up the overlay and what holds them together when it moves?",
+   "gold": 10,
+   "topic": "overlay"
+  },
+  {
+   "q": "Why is an embedding vector width probed rather than read from a table?",
+   "gold": 23,
+   "topic": "embedding-width"
+  },
+  {
+   "q": "duplicate instance of a shared module across build outputs",
+   "gold": 0,
+   "topic": "bundling"
+  },
+  {
+   "q": "module-level state and entry points, what goes wrong",
+   "gold": 0,
+   "topic": "bundling"
+  },
+  {
+   "q": "dlopen failure after installing dependencies",
+   "gold": 33,
+   "topic": "native-modules"
+  },
+  {
+   "q": "binding compiled somewhere else, what does it say on load",
+   "gold": 33,
+   "topic": "native-modules"
+  },
+  {
+   "q": "aggregate device showing up where it should not",
+   "gold": 1,
+   "topic": "audio-macos"
+  },
+  {
+   "q": "unexpected entry in the capture device list on a Mac",
+   "gold": 1,
+   "topic": "audio-macos"
+  },
+  {
+   "q": "hardened runtime and entitlements but it will not start",
+   "gold": 25,
+   "topic": "signing"
+  },
+  {
+   "q": "process killed by the OS immediately, nothing logged",
+   "gold": 25,
+   "topic": "signing"
+  },
+  {
+   "q": "what changes the sequence of results after retrieval",
+   "gold": 4,
+   "topic": "reranking"
+  },
+  {
+   "q": "ordering stage that runs once, and what happens if it half-answers",
+   "gold": 4,
+   "topic": "reranking"
+  },
+  {
+   "q": "hotkey registration that quietly does not take",
+   "gold": 30,
+   "topic": "shortcuts"
+  },
+  {
+   "q": "chord going to the wrong window",
+   "gold": 30,
+   "topic": "shortcuts"
+  },
+  {
+   "q": "how the floating pieces stay together when dragged",
+   "gold": 10,
+   "topic": "overlay"
+  },
+  {
+   "q": "parenting of the auxiliary windows",
+   "gold": 10,
+   "topic": "overlay"
+  },
+  {
+   "q": "vector size discovered instead of declared, and why",
+   "gold": 23,
+   "topic": "embedding-width"
+  },
+  {
+   "q": "wrong dimensions written into the index",
+   "gold": 23,
+   "topic": "embedding-width"
+  }
+ ]
+}

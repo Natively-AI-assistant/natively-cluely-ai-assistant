@@ -25,6 +25,14 @@
  *       cleaned partial directly.
  *     - First interim emit ~400–600ms after speech starts.
  *
+ *   Nemotron 3.5 ASR Streaming path (genuinely chunked, cache-aware RNNT):
+ *     - Tick every 560ms after 560ms of audio — NOT a tunable polling rate
+ *       like the profiles above; 560ms (8960 samples @ 16kHz) is the fixed
+ *       chunk size the ONNX export itself was built around.
+ *     - Skip LA-2 — same rationale as Moonshine: the worker's per-chunk
+ *       greedy RNNT decode is already stable.
+ *     - First interim emit ~560ms after speech starts.
+ *
  *   When VAD closes the segment (or hits MAX_SEGMENT_MS for a soft commit):
  *     - Run a final pass on the full segment
  *     - Emit { isFinal: true, confidence: 0.9 }
@@ -37,10 +45,68 @@ import { resampleToF32 } from './whisper/audioResampler';
 import { VadProcessor } from './whisper/vadProcessor';
 import { filterHallucination } from './whisper/hallucinationFilter';
 import { configureTransformersCache } from './whisper/modelManager';
-import { modelPreloader } from './whisper/modelPreloader';
+import { clearLoadSentinel, modelPreloader, writeLoadSentinel } from './whisper/modelPreloader';
 import { buildWorkerInitMessage } from './whisper/inferenceConfig';
 import { resolveWhisperWorkerPath } from './whisper/workerPathResolver';
 import type { WorkerOutMessage } from './whisper/types';
+import { acquireOnnxSlotWithin, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../utils/onnxThreadConfig';
+
+/**
+ * Cold-start deadline for the local model worker's `ready`. Live-reproduced
+ * 2026-09-11: the second per-channel parakeet worker on a memory-constrained
+ * Mac logged "Loading …" and then nothing, for minutes — every VAD segment
+ * queued in pendingAudio, the channel transcribed nothing, and the only
+ * symptom was "No speech detected". Env-overridable so tests can shorten it.
+ */
+const WORKER_READY_TIMEOUT_MS = (() => {
+    const n = Number(process.env.NATIVELY_LOCAL_STT_READY_TIMEOUT_MS);
+    return Number.isFinite(n) && n > 0 ? n : 120_000;
+})();
+/** Log once at this point so a slow (but progressing) load is visible in the log. */
+const WORKER_SLOW_LOAD_WARN_MS = 30_000;
+
+/**
+ * Marker main.ts uses to classify a local-STT start failure as TERMINAL
+ * (state 'failed', message shown) instead of a retryable network blip that
+ * leaves the channel on "STT reconnecting" forever — nothing restarts a
+ * LocalWhisperSTT instance mid-meeting.
+ */
+export const LOCAL_STT_UNAVAILABLE_CODE = 'local_stt_unavailable';
+function markLocalSttUnavailable(err: unknown): Error {
+    const e = err instanceof Error ? err : new Error(String(err));
+    (e as any).code = LOCAL_STT_UNAVAILABLE_CODE;
+    return e;
+}
+
+/**
+ * The ONNX memory floor refused this start. TERMINAL, like the other start
+ * failures above: the instance tears itself down and nothing restarts it, so a
+ * bare Error (which main.ts files as retryable) left the overlay on
+ * "STT reconnecting" for the whole meeting with nothing reconnecting
+ * (live-reproduced 2026-09-21 on both channels).
+ *
+ * Wording is deliberately OS-neutral and network-free: this runs identically on
+ * macOS and Windows, and a local engine has no connection to check. It must keep
+ * the phrase "insufficient available memory" (pinned by
+ * LocalWhisperSpawnFailTeardown2026_07_10) and must NOT contain "unavailable",
+ * which sttErrorMapper titles "Service Unavailable ... Trying to reconnect".
+ */
+function localSttMemoryRefusal(): Error {
+    const heapGB = (process.memoryUsage().heapUsed / 1024 ** 3).toFixed(1);
+    return markLocalSttUnavailable(new Error(
+        `Local STT could not start: insufficient available memory (under ${getMinFreeGBForOnnxSession()}GB free, app heap ${heapGB}GB). ` +
+        `Close other apps to free memory, choose a smaller local model, or use a cloud STT provider.`,
+    ));
+}
+import { resolveNemotronLangId } from './whisper/nemotron/languageTable';
+import { acquireSharedNemotronWorker } from './whisper/nemotron/sharedWorkerRegistry';
+// The engine's fixed audio window. Imported rather than duplicated as a local
+// literal so the streaming gate can never drift out of sync with the value
+// NemotronEngine.pushAudio() actually buffers against. melFrontend has no
+// eager imports (transformers is loaded lazily inside it), so pulling this
+// constant in costs nothing at main-process startup.
+import { CHUNK_SAMPLES as NEMOTRON_CHUNK_SAMPLES } from './whisper/nemotron/melFrontend';
+import { RECOGNITION_LANGUAGES } from '../config/languages';
 
 export class LocalWhisperSTT extends EventEmitter {
     private readonly modelId: string;
@@ -81,8 +147,22 @@ export class LocalWhisperSTT extends EventEmitter {
     // when both LocalWhisperSTT instances run the same model.
     private channelLabel = '';
     private worker: Worker | null = null;
+    // Cold-start readiness deadline — see WORKER_READY_TIMEOUT_MS.
+    private workerReadyTimer: NodeJS.Timeout | null = null;
+    // Bumped by every spawn and every stop(): a slot wait that settles after
+    // stop() (or after a restart) must neither spawn an orphan worker nor
+    // tear down the NEXT session with its stale rejection.
+    private spawnGeneration = 0;
+    private workerSlowLoadTimer: NodeJS.Timeout | null = null;
+    private workerSpawnedAt = 0;
     private vad: VadProcessor | null = null;
     private isActive = false;
+    // Cross-loader ONNX gate slot. Acquired in spawnWorker() before posting
+    // init; released in worker error/exit handlers so other ONNX consumers
+    // (LocalReranker / LocalEmbeddingProvider) can take
+    // the slot promptly. Whisper uses priority 'high' so its streaming loop
+    // acquires before queued normal-priority consumers.
+    private slotRelease: (() => void) | null = null;
     private taskCounter = 0;
     private workerReady = false;
     private isDrainingFinals = false;
@@ -90,7 +170,62 @@ export class LocalWhisperSTT extends EventEmitter {
     // Pending audio waiting for the worker to become ready. Always finals —
     // streaming partials are never queued (they're best-effort and only fire
     // while a segment is open AND the worker is ready).
-    private pendingAudio: Float32Array[] = [];
+    private pendingAudio: Array<{ audio: Float32Array; nemotronReset: boolean }> = [];
+    /** Workers whose termination WE requested — their non-zero exit is not a crash. */
+    private expectedWorkerExits = new WeakSet<Worker>();
+
+    // nemotron-rnnt only: how many samples of the CURRENT open VAD segment have
+    // already been sent to the (stateful) worker engine. Reset to 0 at every
+    // segment boundary (see dispatchFinal). Always 0 for every other model,
+    // which ignores this field entirely and keeps sending the full cumulative
+    // buffer every tick, as before.
+    private nemotronSentSamples = 0;
+    private readonly isNemotronModel: boolean;
+
+    // Dual-channel Nemotron only. The channel identity this instance
+    // registered with the shared worker (see
+    // ./whisper/nemotron/sharedWorkerRegistry.ts) — reuses `channelLabel`
+    // ('mic'/'system', set via setChannel() by main.ts right after
+    // construction for every STT provider including Nemotron). Falls back to
+    // a generated id if channelLabel is ever empty (defensive — real app
+    // flow always sets it before start(), confirmed via main.ts's
+    // createSTTProvider()). Used both to route worker messages to the
+    // correct engine/chain and to filter incoming worker messages that
+    // belong to the OTHER channel sharing this same worker (see
+    // attachWorkerListeners below).
+    private nemotronChannelId: string | null = null;
+    // The registry's release() for this channel — decrements its refcount on
+    // the shared worker; the worker itself only actually terminates once
+    // every channel has released. Null for every non-Nemotron model (those
+    // never call acquireSharedNemotronWorker at all).
+    private nemotronWorkerRelease: (() => void) | null = null;
+
+    // Dual-channel Nemotron only. The EXACT handler function references this
+    // instance attached to the (possibly SHARED) worker via attachWorkerListeners(),
+    // so beginWorkerTermination() can remove ONLY this instance's own listeners
+    // via worker.off(event, handler) — never removeAllListeners(), which would
+    // also strip the other channel's listeners and sharedWorkerRegistry.ts's
+    // own listener off the same shared Worker object. Null for every
+    // non-Nemotron model (those workers are never shared, so removeAllListeners
+    // remains correct and simpler for them).
+    private nemotronMessageHandler: ((msg: WorkerOutMessage) => void) | null = null;
+    private nemotronErrorHandler: ((err: Error) => void) | null = null;
+    private nemotronExitHandler: ((code: number) => void) | null = null;
+
+    // nemotron-rnnt only: resolved NVIDIA PROMPT_DICTIONARY lang_id (see
+    // ./whisper/nemotron/languageTable.ts), derived from `this.language` via
+    // resolveAndApplyNemotronLanguage(). Defaults to 0 — the same value
+    // NemotronEngine's own DEFAULT_LANG_ID falls back to (English,
+    // task-11-fix1-report.md) — so an instance that's never had its language
+    // explicitly (re)resolved still matches the engine's built-in default,
+    // not an arbitrary sentinel. Ignored entirely by every other model.
+    private nemotronLangId = 0;
+    // Last langId actually pushed to the CURRENT worker, so
+    // maybePushNemotronLangToWorker only posts on real change (same
+    // "only on change" convention as contextPromptSentToWorker /
+    // maybePushPromptToWorker). Reset to null in beginWorkerTermination —
+    // a future worker starts without this state applied and must be re-sent.
+    private nemotronLangIdSentToWorker: number | null = null;
 
     // Gap-flush: ensures a segment closes even if Rust SilenceSuppressor
     // stops sending audio before VAD's hangover completes.
@@ -100,6 +235,14 @@ export class LocalWhisperSTT extends EventEmitter {
     // before we terminate it. Tracked so rapid stop/start cycles or app quit
     // don't pin the event loop with stale termination timers.
     private workerTerminateTimer: ReturnType<typeof setTimeout> | null = null;
+    /** F-205: bounds the "keep the worker alive to drain finals" path in
+     *  stop(). Every other release path is worker-reply-driven, so a worker
+     *  that never replies (hung ONNX inference) would otherwise leak both the
+     *  worker AND the shared ONNX semaphore slot for the rest of the session. */
+    private drainWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
+    /** Upper bound on the post-stop final drain. Generous relative to a normal
+     *  whisper pass; this exists only to catch a wedged worker. */
+    private static readonly DRAIN_WATCHDOG_MS = 15_000;
 
     // Streaming inference loop state.
     // Self-chaining setTimeout (not setInterval) so the delay can adapt at
@@ -113,6 +256,8 @@ export class LocalWhisperSTT extends EventEmitter {
     private readonly skipAgreement: boolean;
     private static readonly STREAMING_INTERVAL_MAX_MS = 12000;
     private static readonly MAX_SEGMENT_MS = 14000;       // soft-commit before VAD's 15s hard-flush
+    /** How long a cold start may wait for a shared ONNX session before failing loudly. */
+    private static readonly ONNX_SLOT_WAIT_MS = 20_000;
     // Backoff: count consecutive ticks where we couldn't dispatch (worker
     // busy or no open segment with enough audio). After 3 in a row, double
     // the next delay; reset to base on a successful dispatch.
@@ -134,10 +279,14 @@ export class LocalWhisperSTT extends EventEmitter {
     private lastEmittedText = '';
     private streamingTaskInFlight = false;
     private streamingTaskId: string | null = null;
+    /** Log-throttle state for a deterministic worker error repeating per audio window. */
+    private lastWorkerErrorMessage: string | null = null;
+    private repeatedWorkerErrorCount = 0;
 
     constructor(modelId: string) {
         super();
         this.modelId = modelId;
+        this.isNemotronModel = LocalWhisperSTT.isNemotronModelId(modelId);
         configureTransformersCache();
 
         // Tune the streaming loop for this specific model's characteristics.
@@ -155,6 +304,10 @@ export class LocalWhisperSTT extends EventEmitter {
         console.log(`[LocalWhisperSTT] streaming profile for ${modelId}: interval=${profile.intervalMs}ms minAudio=${profile.minAudioMs}ms skipAgreement=${profile.skipAgreement}`);
     }
 
+    private static isNemotronModelId(modelId: string): boolean {
+        return modelId.toLowerCase().includes('nemotron');
+    }
+
     /**
      * Per-model streaming-loop profile. Faster, more aggressive parameters
      * for streaming-class models (Moonshine) — they finish each pass in
@@ -170,12 +323,46 @@ export class LocalWhisperSTT extends EventEmitter {
         if (modelId.toLowerCase().includes('moonshine')) {
             return { intervalMs: 750, minAudioMs: 400, skipAgreement: true };
         }
+        // Nemotron 3.5 ASR Streaming (sessionLayout: 'nemotron-rnnt' in
+        // MODEL_CATALOG) — the ONLY model in this catalog with genuinely
+        // chunked streaming inference: the ONNX export itself processes
+        // audio in fixed 8960-sample (560ms @ 16kHz) chunks with cross-call
+        // cache state (NemotronEngine.pushAudio, worker-side). Unlike
+        // Moonshine's 750ms figure (a tunable polling rate chosen for
+        // measured first-partial latency), 560ms here is NOT tunable — it's
+        // dictated by the export's chunk size, so intervalMs/minAudioMs are
+        // both pinned to it rather than picked independently. Skips
+        // LocalAgreement-2 for the same reason as Moonshine: the worker's
+        // per-chunk greedy RNNT decode is already stable, so there's no
+        // ambiguous partial to stabilize across two passes.
+        //
+        // NOTE: `minAudioMs` is ADVISORY for this model — streamingTick() gates
+        // Nemotron on the pending DELTA reaching one whole CHUNK_SAMPLES window
+        // instead, because the generic duration gate measures the whole segment
+        // while the payload is only the new tail. It is kept equal to the chunk
+        // duration so the two agree, but changing it here will NOT change
+        // dispatch cadence; change the gate in streamingTick(). `intervalMs`
+        // remains live — it is how often the gate is re-evaluated.
+        if (LocalWhisperSTT.isNemotronModelId(modelId)) {
+            // intervalMs is HALF the chunk duration, not equal to it. The tick
+            // only decides whether a whole chunk is pending; polling at exactly
+            // the chunk duration means a chunk that completes just after a tick
+            // waits a further full 560ms before dispatch — up to 1120ms of
+            // audio sitting idle before inference starts. Polling at 280ms
+            // halves that worst case. Ticks that find less than a chunk are
+            // free (one peek and a subtraction) and no longer count as stalls,
+            // so a faster poll costs nothing.
+            return { intervalMs: 280, minAudioMs: 560, skipAgreement: true };
+        }
         return { intervalMs: 1500, minAudioMs: 800, skipAgreement: false };
     }
 
     setSampleRate(rate: number): void { this.inputSampleRate = rate; }
     setAudioChannelCount(_count: number): void {}
-    setRecognitionLanguage(key: string): void { this.language = key || 'auto'; }
+    setRecognitionLanguage(key: string): void {
+        this.language = key || 'auto';
+        if (this.isNemotronModel) this.resolveAndApplyNemotronLanguage();
+    }
     setCredentials(_credPath: string): void {}
 
     /**
@@ -208,19 +395,121 @@ export class LocalWhisperSTT extends EventEmitter {
         this.contextPromptSentToWorker = this.contextPrompt;
     }
 
+    /**
+     * nemotron-rnnt only: resolves `this.language` (the app's internal
+     * settings key, e.g. 'english-us' / 'french' / 'auto' — see
+     * electron/config/languages.ts's RECOGNITION_LANGUAGES, keyed by that
+     * same `code` field, not raw BCP-47) to its BCP-47 locale, then to a
+     * NVIDIA PROMPT_DICTIONARY lang_id via resolveNemotronLangId(). Called
+     * from setRecognitionLanguage() whenever the language changes (including
+     * at construction time — createSTTProvider() in main.ts calls
+     * setRecognitionLanguage() immediately after `new LocalWhisperSTT(...)`,
+     * before start() or any listener is attached).
+     *
+     * 'auto' → English, not fail-closed: 'auto' IS a real, user-selectable
+     * RECOGNITION_LANGUAGES entry ("Auto Detect") — the language table's own
+     * doc comment claiming this app "never sends Nemotron literal auto" was
+     * wrong, corrected here. Nemotron has no real auto-detect mode (its
+     * lang_id conditioning requires one explicit locale per session), so
+     * this follows the SAME precedent AppState.setRecognitionLanguage
+     * already applies for every other non-NativelyProSTT provider (main.ts:
+     * "'auto' is only meaningful for NativelyProSTT — other providers fall
+     * back to en-US"). This normalization must also live HERE, not only at
+     * that call site, because createSTTProvider() (main.ts) calls
+     * setRecognitionLanguage() with the RAW persisted value at construction
+     * time — that particular call site does NOT go through
+     * AppState.setRecognitionLanguage's own 'auto' normalization. Without
+     * this, any user who previously picked "Auto Detect" would hit the
+     * fail-closed path below on every app launch while on the Nemotron
+     * model — surfacing as a disruptive "reconnecting"/eventually "failed"
+     * STT status (main.ts's stt.on('error', ...) treats any non-auth/quota
+     * error as retryable-then-fatal after 5 occurrences), not a one-time
+     * settings notice.
+     *
+     * Fail-closed (per the design doc's error-handling section) for
+     * everything else unmapped: any of the 21 non-"transcription-ready"
+     * locales, or a RECOGNITION_LANGUAGES key with no BCP-47 mapping at all
+     * — does NOT silently fall back to English. `nemotronLangId` is left at
+     * whatever it last successfully resolved to (defaulting to 0/English,
+     * matching NemotronEngine's own DEFAULT_LANG_ID, until the first
+     * successful resolution), and an 'error' is surfaced via the same event
+     * this class already uses for other unrecoverable-config problems (e.g.
+     * spawnWorker's ONNX-slot failure path, the streaming-watchdog path
+     * above).
+     */
+    private resolveAndApplyNemotronLanguage(): void {
+        const attemptedKey = this.language;
+        const effectiveKey = attemptedKey === 'auto' ? 'english-us' : attemptedKey;
+        const bcp47 = RECOGNITION_LANGUAGES[effectiveKey]?.bcp47;
+        const langId = bcp47 ? resolveNemotronLangId(bcp47) : null;
+        if (langId === null) {
+            // Deferred via setImmediate, not emitted synchronously: this
+            // method can run during construction, synchronously inside
+            // setRecognitionLanguage(), BEFORE createSTTProvider() (main.ts)
+            // has wired an 'error' listener on the returned instance — a
+            // synchronous emit here with no listener yet attached would
+            // throw per Node's EventEmitter contract (unhandled 'error'
+            // event) and crash STT provider creation outright. Deferring one
+            // tick lets the caller's synchronous listener-wiring finish
+            // first, matching how every other 'error' emit in this class is
+            // already reached only via an async callback (worker message,
+            // timer, promise rejection) scheduled well after construction.
+            const keptLangId = this.nemotronLangId;
+            setImmediate(() => {
+                this.emit('error', new Error(
+                    `Nemotron STT: recognition language "${attemptedKey}"` +
+                    (bcp47 ? ` (resolved locale "${bcp47}")` : ' (no BCP-47 mapping found)') +
+                    ' is not in the transcription-ready set — keeping the previous Nemotron ' +
+                    `language (lang_id=${keptLangId}) rather than silently falling back to English.`,
+                ));
+            });
+            return;
+        }
+        this.nemotronLangId = langId;
+        this.maybePushNemotronLangToWorker();
+    }
+
+    private maybePushNemotronLangToWorker(): void {
+        if (!this.worker || !this.workerReady) return; // pushed in flushPending after ready
+        if (this.nemotronLangId === this.nemotronLangIdSentToWorker) return;
+        this.worker.postMessage({ type: 'setLanguage', langId: this.nemotronLangId, channelId: this.nemotronChannelId });
+        this.nemotronLangIdSentToWorker = this.nemotronLangId;
+    }
+
     start(): void {
         if (this.isActive) return;
         this.isDrainingFinals = false;
         this.drainingFinalsInFlight = 0;
         this.isActive = true;
         this.vad = new VadProcessor();
-        this.spawnWorker();
+        this.spawnWorker().catch((err) => {
+            // Gate refusal or worker spawn failure (e.g. insufficient memory for
+            // the ONNX session). There is NO retry path, so we must NOT leave a
+            // live streaming loop + VAD churning with worker=null — that silently
+            // drops every audio segment (dispatchFinal early-returns on !worker)
+            // and leaks a self-chaining 12s streaming timer for the whole session.
+            // Tear the instance back down to a clean inactive no-op (write() then
+            // no-ops on !isActive/!vad) and surface the error so the supervisor
+            // can fall back to cloud STT.
+            console.error('[LocalWhisperSTT] spawnWorker failed:', err);
+            this.stopStreamingLoop();
+            if (this.gapFlushTimer) {
+                clearTimeout(this.gapFlushTimer);
+                this.gapFlushTimer = null;
+            }
+            this.vad = null;
+            this.isActive = false;
+            this.workerReady = false;
+            this.emit('error', err instanceof Error ? err : new Error(String(err)));
+        });
         this.startStreamingLoop();
     }
 
     stop(): void {
         if (!this.isActive) return;
         this.isActive = false;
+        this.spawnGeneration++;
+        this.clearWorkerReadyDeadline();
 
         this.stopStreamingLoop();
         if (this.gapFlushTimer) {
@@ -252,7 +541,30 @@ export class LocalWhisperSTT extends EventEmitter {
         const w = this.worker;
         if (w) {
             const shouldKeepWorkerForFinals = this.isDrainingFinals && (this.pendingAudio.length > 0 || this.drainingFinalsInFlight > 0);
-            if (shouldKeepWorkerForFinals) return;
+            if (shouldKeepWorkerForFinals) {
+                // F-205: bound the drain. The release paths from here on are
+                // all worker-reply-driven ('result'/'error'/flushPending), and
+                // dispatchFinal() clears the streaming watchdog — so a worker
+                // wedged inside ONNX inference would keep this.slotRelease
+                // held forever. acquireOnnxSlot is an unbounded semaphore with
+                // no timeout, so the NEXT meeting's spawnWorker would await it
+                // for the rest of the app session with no 'error' emitted and
+                // no banner, taking the local embedder/reranker/intent
+                // classifier down with it.
+                if (this.drainWatchdogTimer) clearTimeout(this.drainWatchdogTimer);
+                const dt = setTimeout(() => {
+                    this.drainWatchdogTimer = null;
+                    if (this.worker !== w) return; // drain completed normally
+                    console.warn(
+                        `[LocalWhisperSTT] Final drain did not complete within ${LocalWhisperSTT.DRAIN_WATCHDOG_MS}ms — ` +
+                        `terminating the worker and releasing the shared ONNX slot.`,
+                    );
+                    this.beginWorkerTermination(w);
+                }, LocalWhisperSTT.DRAIN_WATCHDOG_MS);
+                (dt as any).unref?.();
+                this.drainWatchdogTimer = dt;
+                return;
+            }
             this.beginWorkerTermination(w);
         }
     }
@@ -297,10 +609,18 @@ export class LocalWhisperSTT extends EventEmitter {
         }, LocalWhisperSTT.GAP_FLUSH_MS);
     }
 
-    finalize(): void {
-        if (!this.isActive || !this.vad) return;
+    /**
+     * Flush the open VAD segment as a final. Returns true when a final is now
+     * IN FLIGHT (flushed here, or still queued behind a loading worker) — the
+     * Answer/Stop tail wait uses it to keep the recording gate open for the
+     * seconds a local model needs, instead of the short grace it gives a
+     * channel with nothing pending.
+     */
+    finalize(): boolean {
+        if (!this.isActive || !this.vad) return false;
         const segs = this.vad.flush();
         segs.forEach(s => this.dispatchFinal(s.samples));
+        return segs.length > 0 || this.pendingAudio.length > 0;
     }
 
     /* ──────────────── Streaming inference loop ──────────────── */
@@ -354,6 +674,15 @@ export class LocalWhisperSTT extends EventEmitter {
             this.streamingTaskId = null;
             this.streamingStallCount = 0;
             this.streamingNextDelayMs = this.streamingIntervalBaseMs;
+            // nemotron-rnnt only: the wedged dispatch's samples never reached
+            // (or never returned from) the engine, so nemotronSentSamples now
+            // overcounts what the engine actually has. Unlike the cumulative
+            // path (self-healing by construction — it always resends
+            // everything), the delta path needs an explicit rewind: reset the
+            // cursor so the NEXT tick resends the full open segment with
+            // nemotronReset:true, forcing a clean NemotronEngine.reset() +
+            // full re-decode instead of silently gapping the lost audio.
+            if (this.isNemotronModel) this.nemotronSentSamples = 0;
             this.emit('error', new Error(
                 `Local Whisper streaming task ${stuckTaskId ?? '?'} did not return within ${LocalWhisperSTT.STREAMING_WATCHDOG_MS}ms — worker likely stuck, unblocking next tick.`
             ));
@@ -379,7 +708,51 @@ export class LocalWhisperSTT extends EventEmitter {
         if (this.streamingTaskInFlight) { this.recordStreamingStall(); return; }
 
         const open = this.vad.peekOpenSegment();
-        if (!open || open.durationMs < this.streamingMinAudioMs) {
+        if (!open) {
+            this.recordStreamingStall();
+            return;
+        }
+        // Nemotron gates on the DELTA, not the segment duration.
+        //
+        // The generic gate below compares open.durationMs (the WHOLE open
+        // segment) against streamingMinAudioMs, which is right for every other
+        // model because they re-send the whole segment every tick. Nemotron
+        // sends only what's new since the cursor, so the two quantities are
+        // different — and once the segment passes 560ms the generic gate is
+        // permanently satisfied, firing ticks with whatever sub-chunk sliver
+        // has accrued.
+        //
+        // The engine consumes audio in fixed NEMOTRON_CHUNK_SAMPLES windows and
+        // buffers anything short of one, so a sliver dispatch does literally no
+        // work: it returns zero chunks and zero token ids, yet still occupies
+        // streamingTaskInFlight for a full worker round-trip that blocks the
+        // next dispatch. Measured against the real model on a 2.46s fixture:
+        //
+        //   560ms deltas (aligned)   tick 2 -> "Quick brown"          (1120ms)
+        //   540ms deltas (sliver)    tick 3 -> "Quick brown"          (1620ms)
+        //   300ms deltas (sliver)    tick 4 -> "Quick brown"          (1200ms)
+        //                            ...and 4 of 9 ticks did no work at all.
+        //
+        // Gating on the delta makes every dispatch process at least one whole
+        // chunk, which is what produces incremental partial text.
+        if (this.isNemotronModel) {
+            if (open.samples.length - this.nemotronSentSamples < NEMOTRON_CHUNK_SAMPLES) {
+                // NOT a stall — deliberately does not call recordStreamingStall().
+                //
+                // A stall means "nothing useful is happening" (worker busy, no
+                // speech) and earns exponential backoff up to
+                // STREAMING_INTERVAL_MAX_MS. Mid-utterance, "the delta hasn't
+                // reached a chunk boundary yet" is the NORMAL state for most
+                // ticks — the tick rate is deliberately faster than the chunk
+                // duration so a completed chunk is picked up promptly. Counting
+                // those as stalls would back the loop off to 1120ms, 2240ms,
+                // 4480ms... while the user is still talking, which is the exact
+                // opposite of what the audio is telling us. Genuine silence is
+                // already caught by the isInSpeech() check above, which does
+                // still record a stall.
+                return;
+            }
+        } else if (open.durationMs < this.streamingMinAudioMs) {
             this.recordStreamingStall();
             return;
         }
@@ -391,10 +764,42 @@ export class LocalWhisperSTT extends EventEmitter {
         this.streamingTaskInFlight = true;
         const taskId = `s${++this.taskCounter}`;
         this.streamingTaskId = taskId;
-        const copy = open.samples.slice();
+        // Pinned to the ArrayBuffer-backed generic (not the wider default
+        // Float32Array<ArrayBufferLike>) so `.buffer` stays assignable to
+        // Worker.postMessage's `Transferable` transfer-list type — `.slice()`
+        // always creates a fresh ArrayBuffer, never a SharedArrayBuffer.
+        let copy: Float32Array<ArrayBuffer>;
+        let nemotronReset = false;
+        if (this.isNemotronModel) {
+            // Send only what's new since the last tick, truncated to a WHOLE
+            // number of engine chunks. The remainder stays behind the cursor
+            // rather than being shipped as a sliver the engine would just
+            // buffer — it goes out with the next aligned tick, or (if the
+            // segment closes first) with dispatchFinal, whose own
+            // `audio.slice(nemotronSentSamples)` picks up exactly the samples
+            // this loop never sent, and flush() zero-pads that tail.
+            nemotronReset = this.nemotronSentSamples === 0;
+            const pending = open.samples.length - this.nemotronSentSamples;
+            const aligned = Math.floor(pending / NEMOTRON_CHUNK_SAMPLES) * NEMOTRON_CHUNK_SAMPLES;
+            copy = open.samples.slice(this.nemotronSentSamples, this.nemotronSentSamples + aligned);
+            this.nemotronSentSamples += aligned;
+        } else {
+            copy = open.samples.slice();
+        }
+        // Logged BEFORE arming, deliberately: LocalWhisperStuckWorker.test.mjs
+        // asserts armStreamingWatchdog() and worker.postMessage sit within 200
+        // characters of each other, as a proxy for "both on the same dispatch
+        // path". Putting this between them breaks that proximity check without
+        // changing behaviour, so it goes above instead.
+        if (this.isNemotronModel) {
+            console.log(
+                `[LocalWhisperSTT/${this.channelLabel}] → transcribe ${taskId}: ${copy.length} samples ` +
+                `(${Math.round((copy.length / 16000) * 1000)}ms delta, segment=${Math.round(open.durationMs)}ms, reset=${nemotronReset})`,
+            );
+        }
         this.armStreamingWatchdog();
         this.worker.postMessage(
-            { type: 'transcribe', taskId, audio: copy, language: this.language, streaming: true },
+            { type: 'transcribe', taskId, audio: copy, language: this.language, streaming: true, nemotronReset, channelId: this.nemotronChannelId },
             [copy.buffer]
         );
     }
@@ -428,6 +833,24 @@ export class LocalWhisperSTT extends EventEmitter {
         this.streamingNextDelayMs = this.streamingIntervalBaseMs;
 
         const cleaned = filterHallucination(text);
+        if (this.isNemotronModel) {
+            // Mirrors the `← result` log so the partial path is no longer the
+            // one silent leg. Distinguishes engine-returned-nothing from
+            // filtered from deduped from actually emitted — the four outcomes
+            // that all looked identical as `first-partial: n=0`.
+            const raw = text ?? '';
+            const verdict = raw.length === 0
+                ? 'ENGINE RETURNED EMPTY'
+                : !cleaned
+                    ? 'DROPPED BY filterHallucination'
+                    : cleaned === this.lastEmittedText
+                        ? 'DEDUPED (identical to previous partial)'
+                        : 'EMITTED';
+            console.log(
+                `[LocalWhisperSTT/${this.channelLabel}] ~ partial: raw=${raw.length}ch ` +
+                `${raw.length > 0 ? JSON.stringify(raw.slice(0, 80)) : ''} → ${verdict}`,
+            );
+        }
         if (!cleaned) return;
 
         // Streaming-class models (Moonshine) produce stable, deterministic
@@ -555,14 +978,41 @@ export class LocalWhisperSTT extends EventEmitter {
         this.clearStreamingWatchdog();
         this.streamingTaskInFlight = false;
 
+        let outgoing = audio;
+        let nemotronReset = false;
+        if (this.isNemotronModel) {
+            // `audio` is the segment's FULL samples (VAD hands over the whole
+            // closed segment here, not just the tail). Only the part beyond
+            // what streaming ticks already sent is new. This also covers a
+            // segment that closed before any streaming tick fired (short
+            // utterance): nemotronSentSamples is still 0, so the whole segment
+            // goes out as the delta, exactly as if it were one big chunk.
+            nemotronReset = this.nemotronSentSamples === 0;
+            outgoing = audio.length > this.nemotronSentSamples
+                ? audio.slice(this.nemotronSentSamples)
+                : new Float32Array(0);
+            // Segment boundary — the NEXT segment (or a soft-committed
+            // continuation of this one) starts from a clean cursor regardless
+            // of how much of THIS segment was streamed.
+            this.nemotronSentSamples = 0;
+        }
+
         if (!this.workerReady) {
             const MAX_PENDING = 500;
+            const item = { audio: outgoing.slice(), nemotronReset };
             if (this.pendingAudio.length < MAX_PENDING) {
-                this.pendingAudio.push(audio.slice());
+                this.pendingAudio.push(item);
             } else {
                 console.warn('[LocalWhisperSTT] Pending queue full — dropping oldest segment');
-                this.pendingAudio.shift();
-                this.pendingAudio.push(audio.slice());
+                const dropped = this.pendingAudio.shift();
+                if (dropped?.nemotronReset && this.pendingAudio.length > 0) {
+                    // Don't lose the segment-boundary reset signal just because
+                    // its original item got dropped for capacity — carry it
+                    // forward onto the new head so the engine still resets
+                    // before replaying the backlog.
+                    this.pendingAudio[0].nemotronReset = true;
+                }
+                this.pendingAudio.push(item);
             }
             return;
         }
@@ -570,43 +1020,270 @@ export class LocalWhisperSTT extends EventEmitter {
         if (this.isDrainingFinals) {
             this.drainingFinalsInFlight++;
         }
-        this.sendTranscribe(audio, false);
+        this.sendTranscribe(outgoing, false, nemotronReset);
     }
 
-    private sendTranscribe(audio: Float32Array, streaming: boolean): void {
+    private sendTranscribe(audio: Float32Array, streaming: boolean, nemotronReset: boolean = false): void {
         if (!this.worker) return;
         const taskId = `${streaming ? 's' : 't'}${++this.taskCounter}`;
         const copy = audio.slice();
         this.worker.postMessage(
-            { type: 'transcribe', taskId, audio: copy, language: this.language, streaming },
+            { type: 'transcribe', taskId, audio: copy, language: this.language, streaming, nemotronReset, channelId: this.nemotronChannelId },
             [copy.buffer]
         );
     }
 
     /* ──────────────── Worker lifecycle ──────────────── */
 
-    private spawnWorker(): void {
+    private async spawnWorker(): Promise<void> {
+        if (this.isNemotronModel) {
+            // Dual-channel Nemotron: route through the shared-worker registry
+            // instead of the warm-preload / cold-spawn / direct acquireOnnxSlot
+            // path below. The registry decides cold-start vs join and owns
+            // the ONE weight:3 ONNX slot acquisition for however many
+            // channels end up sharing this model — LocalWhisperSTT no longer
+            // calls acquireOnnxSlot directly for Nemotron. modelPreloader's
+            // warm-worker path is also skipped entirely for Nemotron (see
+            // modelPreloader.preload's own Nemotron guard) so there is never
+            // a warm worker to take here in the first place.
+            if (!hasEnoughMemoryForOnnxSession()) throw localSttMemoryRefusal();
+            const channelId = this.channelLabel || `nemotron-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            this.nemotronChannelId = channelId;
+            const initMsg = buildWorkerInitMessage(this.modelId);
+            const workerPath = resolveWhisperWorkerPath();
+            console.log(`[LocalWhisperSTT] Acquiring shared Nemotron worker for channel "${channelId}"`);
+            writeLoadSentinel(this.modelId);
+            let worker: Worker;
+            let release: () => void;
+            try {
+                ({ worker, release } = await acquireSharedNemotronWorker(
+                    this.modelId,
+                    channelId,
+                    initMsg.executionProviders ?? ['cpu'],
+                    initMsg.cacheDir,
+                    workerPath,
+                ));
+            } catch (err: any) {
+                // (2026-08-14 code review, two CONFIRMED findings.)
+                //
+                // 1. Clear the crash sentinel on ANY JS-level rejection. The
+                //    sentinel exists to catch NATIVE aborts that kill the
+                //    whole process before any catch can run — in that case
+                //    nothing executes here and the sentinel correctly
+                //    survives for next launch's poisoned-load recovery. But
+                //    if this catch IS running, the app is alive and handling
+                //    the failure gracefully (slot timeout, model mismatch,
+                //    download/init error) — leaving the sentinel behind made
+                //    the NEXT launch silently reset the user's model choice
+                //    to tiny.en and show a false "recovered from a crash"
+                //    notice, precisely when a user restarts after seeing a
+                //    soft STT failure.
+                clearLoadSentinel(this.modelId);
+                // 2. The corrupt-model purge lived only in this instance's
+                //    worker 'message' handler — which is attached AFTER this
+                //    await. A Nemotron init failure travels through the
+                //    registry's own listener as a pendingReady rejection and
+                //    lands HERE instead, so the purge was unreachable: a
+                //    corrupt-but-nonzero download stayed "installed" forever
+                //    (isNemotronModelCached only checks size > 0) and every
+                //    meeting start failed identically. Mirror the
+                //    message-handler path's FULL structure — including the
+                //    symbol-error guard: a macOS-12 dylib symbol failure is
+                //    an environment problem, not corrupt files, and must
+                //    never delete a perfectly good download.
+                const message = err?.message ?? String(err);
+                if (message.includes('Failed to load model')) {
+                    const isOnnxSymbolError = message.includes('Symbol not found')
+                        || message.includes('__ZNSt3__18to_charsEPcS0_d')
+                        || message.includes('libonnxruntime');
+                    if (!isOnnxSymbolError) {
+                        try {
+                            const { isCorruptModelError, purgeCorruptModel } = require('./whisper/modelManager');
+                            if (isCorruptModelError(message)) {
+                                purgeCorruptModel(this.modelId, message);
+                            }
+                        } catch (purgeErr) {
+                            console.error('[LocalWhisperSTT] Corrupt-model purge failed:', purgeErr);
+                        }
+                    }
+                }
+                throw err;
+            }
+            clearLoadSentinel(this.modelId);
+            this.worker = worker;
+            this.nemotronWorkerRelease = release;
+            // acquireSharedNemotronWorker only resolves once THIS channel's
+            // own real `ready` has arrived (whether via a fresh cold-start or
+            // by joining an already-loaded worker) — safe to mark ready
+            // immediately, same as the warm-worker path below.
+            this.workerReady = true;
+            this.attachWorkerListeners();
+            this.flushPending();
+            return;
+        }
+
         const warm = modelPreloader.takeWarmWorker(this.modelId);
         if (warm) {
             console.log(`[LocalWhisperSTT] Using preloaded warm worker for ${this.modelId}`);
             this.worker = warm;
             this.workerReady = true;
+            // Inherit the slot release the preloader acquired. Both preloader
+            // and our local listeners will call this — it's a no-op the
+            // second time.
+            this.slotRelease = (warm as any).__slotRelease ?? null;
             this.attachWorkerListeners();
             this.flushPending();
-        } else {
-            console.log(`[LocalWhisperSTT] Cold-starting worker for ${this.modelId}`);
-            const workerPath = resolveWhisperWorkerPath();
-            this.worker = new Worker(workerPath);
-            this.attachWorkerListeners();
-            this.worker.postMessage(buildWorkerInitMessage(this.modelId));
+            return;
         }
+
+        // Cold path. Acquire the shared ONNX slot at HIGH priority — Whisper
+        // is latency-critical (~750ms real-time streaming) and would deadlock
+        // behind a queued embedding batch.
+        if (!hasEnoughMemoryForOnnxSession()) throw localSttMemoryRefusal();
+
+        // Bounded: an unbounded wait here was a silent dead channel — the local
+        // embedding + reranker workers hold the whole default gate (cap 2) for
+        // the app lifetime, so this never resolved and nothing was logged.
+        // The rejection propagates to start()'s spawnWorker catch, which tears
+        // the instance down and emits 'error' so main shows an STT failure.
+        const generation = ++this.spawnGeneration;
+        // A preload that is still loading (or warm for a model this channel
+        // cannot take) must not hold the slot this LIVE channel needs.
+        modelPreloader.yieldUnclaimedWorkerIfStarving();
+        let slotRelease: () => void;
+        try {
+            slotRelease = await acquireOnnxSlotWithin(
+                'high',
+                1,
+                LocalWhisperSTT.ONNX_SLOT_WAIT_MS,
+                `LocalWhisperSTT/${this.channelLabel}`,
+            );
+        } catch (err) {
+            // A rejection that lands after stop() / a restart belongs to a
+            // session that no longer exists — swallowing it is correct; the
+            // live session has its own wait.
+            if (generation !== this.spawnGeneration || !this.isActive) return;
+            throw markLocalSttUnavailable(err);
+        }
+        if (generation !== this.spawnGeneration || !this.isActive) {
+            // stop() ran while we waited: hand the slot straight back instead
+            // of spawning a worker nothing will ever stop.
+            slotRelease();
+            return;
+        }
+        this.slotRelease = slotRelease;
+
+        console.log(`[LocalWhisperSTT] Cold-starting worker for ${this.modelId}`);
+        const workerPath = resolveWhisperWorkerPath();
+        writeLoadSentinel(this.modelId);
+        this.worker = new Worker(workerPath);
+        this.attachWorkerListeners();
+        this.worker.postMessage(buildWorkerInitMessage(this.modelId));
+        this.armWorkerReadyDeadline();
+    }
+
+    private armWorkerReadyDeadline(): void {
+        this.workerSpawnedAt = Date.now();
+        this.scheduleWorkerReadyTimers();
+    }
+
+    /** (Re)schedules the deadline without touching workerSpawnedAt — a worker
+     *  'progress' message proves the load is alive, so the deadline restarts. */
+    private scheduleWorkerReadyTimers(): void {
+        this.clearWorkerReadyDeadline();
+        const label = this.channelLabel || 'stt';
+        this.workerSlowLoadTimer = setTimeout(() => {
+            this.workerSlowLoadTimer = null;
+            if (this.workerReady || !this.isActive) return;
+            console.warn(
+                `[LocalWhisperSTT/${label}] worker for ${this.modelId} still loading after ${WORKER_SLOW_LOAD_WARN_MS / 1000}s — ` +
+                `${this.pendingAudio.length} segment(s) queued, nothing transcribed yet on this channel`,
+            );
+        }, WORKER_SLOW_LOAD_WARN_MS);
+        (this.workerSlowLoadTimer as any).unref?.();
+        this.workerReadyTimer = setTimeout(() => {
+            this.workerReadyTimer = null;
+            if (this.workerReady || !this.isActive) return;
+            const waitedMs = Date.now() - this.workerSpawnedAt;
+            const queued = this.pendingAudio.length;
+            console.error(
+                `[LocalWhisperSTT/${label}] worker for ${this.modelId} not ready after ${waitedMs}ms — giving up on this channel ` +
+                `(${queued} queued segment(s) dropped)`,
+            );
+            // Same clean teardown as start()'s spawnWorker catch: no live VAD or
+            // streaming loop may outlive a worker that will never answer.
+            this.stopStreamingLoop();
+            if (this.gapFlushTimer) {
+                clearTimeout(this.gapFlushTimer);
+                this.gapFlushTimer = null;
+            }
+            this.vad = null;
+            this.isActive = false;
+            this.pendingAudio = [];
+            const w = this.worker;
+            if (w) this.beginWorkerTermination(w);
+            // A graceful give-up is not a native crash: leave the sentinel in
+            // place and the next launch would "recover" by silently resetting
+            // the user's model to the fallback.
+            clearLoadSentinel(this.modelId);
+            // It IS a load failure, though: keep the next launch from preloading
+            // a model that just took longer than the whole deadline. This used to
+            // happen by accident (terminate() exits non-zero and every non-zero
+            // exit was recorded); requested exits are no longer recorded, so say
+            // it here on purpose.
+            modelPreloader.recordLoadFailure(this.modelId);
+            this.emit('error', markLocalSttUnavailable(new Error(
+                `Local STT model ${this.modelId} did not finish loading within ${Math.round(WORKER_READY_TIMEOUT_MS / 1000)}s ` +
+                `on the ${label} channel — nothing from this channel was transcribed. ` +
+                `Choose a smaller local model or a cloud STT provider.`,
+            )));
+        }, WORKER_READY_TIMEOUT_MS);
+        (this.workerReadyTimer as any).unref?.();
+    }
+
+    private clearWorkerReadyDeadline(): void {
+        if (this.workerReadyTimer) { clearTimeout(this.workerReadyTimer); this.workerReadyTimer = null; }
+        if (this.workerSlowLoadTimer) { clearTimeout(this.workerSlowLoadTimer); this.workerSlowLoadTimer = null; }
     }
 
     private attachWorkerListeners(): void {
         if (!this.worker) return;
+        const attachedWorker = this.worker;
 
-        this.worker.on('message', (msg: WorkerOutMessage) => {
+        const messageHandler = (msg: WorkerOutMessage) => {
+            // Dual-channel Nemotron: this worker may be SHARED with another
+            // LocalWhisperSTT instance (the other audio channel). Every
+            // Nemotron-relevant message carries a channelId (see
+            // whisperWorker.ts) — filter out anything that doesn't match
+            // THIS instance's channel before any further processing, so the
+            // two instances never react to each other's ready/progress/
+            // partial/result/error. This is an ADDITIONAL, earlier layer on
+            // top of the existing taskId-based filtering below (which stays,
+            // unchanged, as its own correct check) — not a replacement for
+            // it. Messages with no channelId at all (every non-Nemotron
+            // model's messages) pass through untouched.
+            if (this.isNemotronModel) {
+                const msgChannelId = (msg as any).channelId;
+                if (msgChannelId !== undefined && msgChannelId !== this.nemotronChannelId) {
+                    return;
+                }
+            }
+            if ((msg as any).type === 'progress') {
+                // The load is alive (per-file download / parse progress) —
+                // a slow but progressing init must not be killed by the deadline.
+                if (!this.workerReady && this.workerReadyTimer) this.scheduleWorkerReadyTimers();
+                return;
+            }
             if (msg.type === 'ready') {
+                clearLoadSentinel(this.modelId);
+                this.clearWorkerReadyDeadline();
+                if (this.workerSpawnedAt > 0) {
+                    console.log(
+                        `[LocalWhisperSTT/${this.channelLabel || 'stt'}] worker ready in ${Date.now() - this.workerSpawnedAt}ms ` +
+                        `(${this.pendingAudio.length} queued segment(s) flushing)`,
+                    );
+                    this.workerSpawnedAt = 0;
+                }
                 this.workerReady = true;
                 this.flushPending();
                 return;
@@ -629,6 +1306,17 @@ export class LocalWhisperSTT extends EventEmitter {
                 this.handleStreamingPartial(msg.text);
             } else if (msg.type === 'result') {
                 const text = filterHallucination(msg.text);
+                if (this.isNemotronModel) {
+                    // Distinguishes the three silent outcomes this path had no
+                    // way to tell apart: engine returned nothing, engine returned
+                    // text that filterHallucination then dropped, or a real emit.
+                    const raw = msg.text ?? '';
+                    console.log(
+                        `[LocalWhisperSTT/${this.channelLabel}] ← result: raw=${raw.length}ch ` +
+                        `${raw.length === 0 ? '(ENGINE RETURNED EMPTY)' : JSON.stringify(raw.slice(0, 80))} ` +
+                        `→ ${text ? 'EMITTED' : raw.length > 0 ? 'DROPPED BY filterHallucination' : 'nothing to emit'}`,
+                    );
+                }
                 if (text) {
                     if (this.segmentOpenedAt > 0) {
                         const dt = performance.now() - this.segmentOpenedAt;
@@ -649,7 +1337,29 @@ export class LocalWhisperSTT extends EventEmitter {
                     }
                 }
             } else if (msg.type === 'error') {
-                console.error('[LocalWhisperSTT] Worker error:', msg.message);
+                // Deduplicate an identical, repeating failure. The streaming loop
+                // re-dispatches once per audio window, so a DETERMINISTIC worker
+                // error (a bad decoder option, a corrupt model file) is re-raised
+                // every ~1.5s: the 2026-08-12 log carried 10,183 byte-identical
+                // ERROR lines in one day, which buries every other diagnostic in
+                // the file. Log the first few verbatim, then only every 100th
+                // with a running count. Behaviour is unchanged — this throttles
+                // the LOG, never the transcription.
+                if (msg.message === this.lastWorkerErrorMessage) {
+                    this.repeatedWorkerErrorCount++;
+                    if (this.repeatedWorkerErrorCount <= 3) {
+                        console.error('[LocalWhisperSTT] Worker error:', msg.message);
+                    } else if (this.repeatedWorkerErrorCount % 100 === 0) {
+                        console.error(
+                            `[LocalWhisperSTT] Worker error (repeated ${this.repeatedWorkerErrorCount}× — identical, likely deterministic):`,
+                            msg.message,
+                        );
+                    }
+                } else {
+                    this.lastWorkerErrorMessage = msg.message;
+                    this.repeatedWorkerErrorCount = 1;
+                    console.error('[LocalWhisperSTT] Worker error:', msg.message);
+                }
                 if (this.isDrainingFinals && msg.taskId?.startsWith('t')) {
                     this.drainingFinalsInFlight = Math.max(0, this.drainingFinalsInFlight - 1);
                     if (this.drainingFinalsInFlight === 0 && this.worker) {
@@ -664,28 +1374,90 @@ export class LocalWhisperSTT extends EventEmitter {
                     // Worker is free again; reset backoff so next tick is prompt.
                     this.streamingStallCount = 0;
                     this.streamingNextDelayMs = this.streamingIntervalBaseMs;
+                    // nemotron-rnnt only: same rewind as the watchdog path
+                    // above — this dispatch's samples never landed, so the
+                    // cursor would otherwise overcount what the engine has.
+                    if (this.isNemotronModel) this.nemotronSentSamples = 0;
                 }
                 if (msg.message.includes('Failed to load model')) {
                     const isOnnxSymbolError = msg.message.includes('Symbol not found')
                         || msg.message.includes('__ZNSt3__18to_charsEPcS0_d')
                         || msg.message.includes('libonnxruntime');
-                    this.emit('error', new Error(
+
+                    // The files are present but unreadable — almost always a
+                    // truncated download that isModelCached waved through on its
+                    // `size > 0` check. Remove them so the cache check stops
+                    // reporting the model as installed and the next Install
+                    // actually re-fetches. Without this the state is permanent:
+                    // cached-but-corrupt reads as cached forever.
+                    let purged = false;
+                    if (!isOnnxSymbolError) {
+                        try {
+                            const { isCorruptModelError, purgeCorruptModel } = require('./whisper/modelManager');
+                            if (isCorruptModelError(msg.message)) {
+                                purged = purgeCorruptModel(this.modelId, msg.message);
+                            }
+                        } catch (e) {
+                            console.error('[LocalWhisperSTT] Corrupt-model purge failed:', e);
+                        }
+                    }
+
+                    // TERMINAL, all three: nothing restarts a LocalWhisperSTT, and each
+                    // message tells the user what to do. Emitted as a bare Error this was
+                    // filed by main under "retryable" and the overlay read "STT
+                    // reconnecting" for the rest of the meeting (reproduced 2026-09-21 with
+                    // a profile whose selected model was missing, then purged).
+                    this.emit('error', markLocalSttUnavailable(new Error(
                         isOnnxSymbolError
                             ? 'Local Whisper is not supported on macOS 12 (Monterey) or earlier. Please upgrade to macOS 13 Ventura or later, or use a cloud STT provider.'
-                            : 'Local Whisper model not found. Please download a model in Settings → Audio.'
-                    ));
+                            // The old copy said "model not found" for this case, which was
+                            // wrong twice over: the files were there, and it pointed the
+                            // user at a download that silently no-opped because the model
+                            // still counted as cached.
+                            : purged
+                                ? 'The local model files were incomplete and have been removed. Please reinstall the model in Settings → Audio.'
+                                : 'Local Whisper model not found. Please download a model in Settings → Audio.'
+                    )));
                 }
             }
-        });
+        };
+        this.worker.on('message', messageHandler);
 
-        this.worker.on('error', (err) => {
+        const errorHandler = (err: Error) => {
+            // A worker that died during load must not also fire the ready
+            // deadline 120s later against a dead handle.
+            this.clearWorkerReadyDeadline();
             // Reset all in-flight streaming state so a dead worker can never
             // permanently pin streamingTaskInFlight=true (which would freeze
             // the loop — symptom: transcription stops after 3-4 questions).
             this.clearStreamingWatchdog();
             this.streamingTaskInFlight = false;
             this.streamingTaskId = null;
+            // nemotron-rnnt only: same delta-cursor rewind as the watchdog
+            // force-clear and streaming-task-error paths. Audio dispatched to
+            // a now-dead worker never reached the engine — a stale cursor
+            // would make the segment's eventual final dispatch a mis-sliced
+            // tail-only delta with nemotronReset:false. (2026-08-14 review.)
+            if (this.isNemotronModel) this.nemotronSentSamples = 0;
+            // Free the shared ONNX gate slot — Whisper's session is gone.
+            if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
+            // Dual-channel Nemotron: the registry's OWN 'error' listener
+            // (attached once, when the shared worker was cold-started) is
+            // what actually resets registry state + releases the real ONNX
+            // slot on a genuine crash — it fires independently of this
+            // listener (Node supports multiple listeners per event). Null
+            // this out purely so a later stop()/beginWorkerTermination on
+            // this now-dead instance doesn't try to act on a stale release
+            // reference; releaseChannel() is idempotent/stale-safe regardless.
+            this.nemotronWorkerRelease = null;
             this.workerReady = false;
+            // Symmetric with the exit handler below: a worker `error` is
+            // followed by a non-zero `exit` in node:worker_threads, so the
+            // exit handler also calls recordLoadFailure. Calling here too is
+            // belt-and-braces for the theoretical error-without-exit case
+            // (e.g. a hard native abort that races the parent). Idempotent
+            // because recordLoadFailure only sets a map expiry, never clears.
+            modelPreloader.recordLoadFailure(this.modelId);
             const isOnnxSymbolError = err.message.includes('Symbol not found')
                 || err.message.includes('to_chars')
                 || err.message.includes('libonnxruntime');
@@ -696,47 +1468,152 @@ export class LocalWhisperSTT extends EventEmitter {
             } else {
                 this.emit('error', err);
             }
-        });
+        };
+        this.worker.on('error', errorHandler);
 
         // 'exit' fires whenever the worker terminates (voluntarily or not),
         // including the 'error' path above. If the worker is gone, the
         // streaming loop must be unblocked — otherwise streamingTaskInFlight
         // stays true and the next tick silently stalls forever.
-        this.worker.on('exit', (code) => {
-            if (code === 0) return; // clean shutdown
+        // A termination we asked for is not a crash. node:worker_threads exits with
+        // code 1 for ANY terminate(), so every clean stop() used to be recorded as a
+        // model LOAD FAILURE (persisted 5-minute preload cooldown; live-reproduced
+        // 2026-09-21). It also fires up to 5s late, when `this.slotRelease` /
+        // `workerReady` / the ready deadline may already belong to the session that
+        // REPLACED this worker — so a requested exit touches no instance state at
+        // all; beginWorkerTermination already did this worker's cleanup.
+        const exitHandler = (code: number) => {
+            if (this.expectedWorkerExits.has(attachedWorker)) return;
+            this.clearWorkerReadyDeadline();
+            if (code === 0) {
+                clearLoadSentinel(this.modelId);
+                return; // clean shutdown
+            }
+            modelPreloader.recordLoadFailure(this.modelId);
             this.clearStreamingWatchdog();
+            if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
+            // See the matching comment in the 'error' handler above — the
+            // registry's own 'exit' listener handles the real cleanup.
+            this.nemotronWorkerRelease = null;
             const hadInFlight = this.streamingTaskInFlight;
             this.streamingTaskInFlight = false;
             this.streamingTaskId = null;
             this.workerReady = false;
-            if (hadInFlight) {
-                this.emit('error', new Error(
-                    `Local Whisper worker exited unexpectedly (code=${code}) — transcription stream has been unblocked.`
-                ));
+            // Same delta-cursor rewind as the 'error' handler above — a
+            // dead worker means dispatched-but-unprocessed audio, and a
+            // stale cursor mis-slices the segment's final dispatch.
+            if (this.isNemotronModel) this.nemotronSentSamples = 0;
+            // A LIVE session just lost its worker, and nothing restarts one. This
+            // used to surface only `if (hadInFlight)`: a worker that died while idle
+            // (between utterances) emitted NOTHING, `worker` kept pointing at the
+            // dead handle with workerReady=false, and every later segment queued in
+            // pendingAudio for a 'ready' that could never come — 0 transcripts and 0
+            // errors for the rest of the meeting (reproduced 2026-09-21: three full
+            // utterances, 110s, silence). Tear down to the same clean inactive no-op
+            // as the other terminal paths and say so, terminally: "reconnecting"
+            // would be a lie here too.
+            if (this.isActive) {
+                const label = this.channelLabel || 'stt';
+                this.stopStreamingLoop();
+                if (this.gapFlushTimer) {
+                    clearTimeout(this.gapFlushTimer);
+                    this.gapFlushTimer = null;
+                }
+                this.vad = null;
+                this.isActive = false;
+                this.pendingAudio = [];
+                this.worker = null;
+                console.error(`[LocalWhisperSTT/${label}] worker exited unexpectedly (code=${code}, inFlight=${hadInFlight}) — channel stopped`);
+                this.emit('error', markLocalSttUnavailable(new Error(
+                    `The local STT engine stopped unexpectedly on the ${label} channel (worker exited unexpectedly, code=${code}) — ` +
+                    `nothing further will be transcribed on it. End and restart the meeting; if it keeps happening, ` +
+                    `choose a smaller local model or use a cloud STT provider.`,
+                )));
             }
-        });
+        };
+        this.worker.on('exit', exitHandler);
+
+        // Dual-channel Nemotron only: stash the exact function references so
+        // beginWorkerTermination() can remove ONLY these three via
+        // worker.off(), never removeAllListeners() — this worker may be
+        // SHARED with another LocalWhisperSTT instance and
+        // sharedWorkerRegistry.ts's own listener, all attached to the same
+        // object. Non-Nemotron workers are never shared, so they don't need
+        // this bookkeeping.
+        if (this.isNemotronModel) {
+            this.nemotronMessageHandler = messageHandler;
+            this.nemotronErrorHandler = errorHandler;
+            this.nemotronExitHandler = exitHandler;
+        }
     }
 
     private flushPending(): void {
-        // Push the cached prompt to the worker FIRST so the queued transcribes
-        // see the bias on their initial run (worker honors the latest cached
-        // prompt for whichever transcribe arrives next).
+        // Push the cached prompt AND (nemotron-rnnt only) the resolved
+        // lang_id to the worker FIRST so the queued transcribes see both on
+        // their initial run (worker honors the latest cached prompt / lang_id
+        // for whichever transcribe/pushAudio arrives next).
         this.maybePushPromptToWorker();
+        this.maybePushNemotronLangToWorker();
         const queued = this.pendingAudio.splice(0);
-        queued.forEach(audio => this.sendTranscribe(audio, false));
+        queued.forEach(({ audio, nemotronReset }) => this.sendTranscribe(audio, false, nemotronReset));
         if (this.isDrainingFinals && queued.length === 0 && this.drainingFinalsInFlight === 0 && this.worker) {
             this.beginWorkerTermination(this.worker);
         }
     }
 
     private beginWorkerTermination(w: Worker): void {
+        this.clearWorkerReadyDeadline();
         this.worker = null;
         this.workerReady = false;
         this.isDrainingFinals = false;
         this.drainingFinalsInFlight = 0;
+        // Free the shared ONNX gate slot on clean shutdown — the session's
+        // BFCArena is being torn down with the worker, so the slot can go.
+        if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
         // Reset the sent-prompt tracker: a future spawnWorker call will get a
         // fresh worker with empty cache, so we must re-push on next ready.
         this.contextPromptSentToWorker = '';
+        // F-205: the drain is over (normally or by watchdog) — cancel the bound.
+        if (this.drainWatchdogTimer) { clearTimeout(this.drainWatchdogTimer); this.drainWatchdogTimer = null; }
+        // Same reasoning for nemotron-rnnt's lang_id: a fresh worker's
+        // NemotronEngine starts at its own DEFAULT_LANG_ID (0/English), not
+        // whatever this instance last resolved — must re-push on next ready.
+        this.nemotronLangIdSentToWorker = null;
+
+        if (this.isNemotronModel) {
+            // The shared worker may OUTLIVE this instance — the other channel
+            // can still be actively using it (see sharedWorkerRegistry.ts's
+            // refcount), and sharedWorkerRegistry.ts's OWN listener is also
+            // attached directly to this same Worker object. removeAllListeners
+            // is indiscriminate — it would strip the SURVIVING channel's
+            // handlers (silently killing its transcription) AND the
+            // registry's own 'message' listener (hanging every future
+            // acquireSharedNemotronWorker join on this worker, since nothing
+            // is left to resolve its `ready` wait) AND leave zero 'error'
+            // listeners on the Worker object for a future real crash, which
+            // Node's EventEmitter contract turns into an unhandled throw.
+            // So: remove ONLY the exact handler references THIS instance
+            // itself attached in attachWorkerListeners(), via worker.off()
+            // (== removeListener), never removeAllListeners(), for this
+            // shared-worker case.
+            if (this.nemotronMessageHandler) { w.off('message', this.nemotronMessageHandler); this.nemotronMessageHandler = null; }
+            if (this.nemotronErrorHandler) { w.off('error', this.nemotronErrorHandler); this.nemotronErrorHandler = null; }
+            if (this.nemotronExitHandler) { w.off('exit', this.nemotronExitHandler); this.nemotronExitHandler = null; }
+            //
+            // No terminate()-after-a-timer here, unlike the non-Nemotron path
+            // below: release() itself decides synchronously whether the
+            // underlying worker actually terminates (refcount reaches 0) or
+            // just loses this one channel — there's nothing to defer.
+            if (this.nemotronWorkerRelease) { this.nemotronWorkerRelease(); this.nemotronWorkerRelease = null; }
+            this.nemotronChannelId = null;
+            return;
+        }
+
+        // Non-Nemotron: this worker is never shared with another
+        // LocalWhisperSTT instance or the registry, so indiscriminate
+        // removal is correct and simplest here — unchanged from before this
+        // fix.
+        this.expectedWorkerExits.add(w);
         w.removeAllListeners('message');
         w.removeAllListeners('error');
         if (this.workerTerminateTimer) clearTimeout(this.workerTerminateTimer);

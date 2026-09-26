@@ -32,7 +32,7 @@ function buildAtoms(kind, chunkIndex = 0, start = 0) {
   };
   if (kind === 'standup') return { ...common, actionItems: [], modeSpecificFindings: { 'Progress since last sync': ['Frontend shipped the onboarding fix'] } };
   if (kind === 'long') return { ...common, decisions: [{ text: `Decision from ${chunkIndex === 0 ? 'early' : chunkIndex === 1 ? 'middle' : 'late'} meeting segment`, evidence, confidence: 'high' }], actionItems: [{ text: `Follow up from chunk ${chunkIndex}`, owner: 'Ari', explicitness: 'explicit', evidence, confidence: 'high' }] };
-  if (kind === 'sales') return { ...common, decisions: [{ text: 'Pilot scope moves forward with security review', evidence, confidence: 'high' }], actionItems: [{ text: 'send the SOC2 packet', owner: 'Me', deadline: 'Friday', sourceTimestamp: start, explicitness: 'explicit', evidence, confidence: 'high' }], risks: [{ text: 'Procurement may delay rollout', severity: 'medium', evidence }], modeSpecificFindings: { 'Pain points': ['Manual QA reporting takes two days each week'], 'Objections': ['Security review is required before pilot'], 'Buying signals': ['Customer asked for pilot pricing'] } };
+  if (kind === 'sales') return { ...common, decisions: [{ text: 'Pilot scope moves forward with security review', evidence, confidence: 'high' }], actionItems: [{ text: 'send the SOC2 packet', owner: 'Me', deadline: 'Friday', sourceTimestamp: start, explicitness: 'explicit', evidence, confidence: 'high' }], risks: [{ text: 'Procurement may delay rollout', severity: 'medium', evidence }], modeSpecificFindings: { 'Pain points': ['Manual QA reporting takes two days each week'], 'Objections': ['Security review is required before pilot'], 'Buying signals': ['Customer asked for pilot pricing'], 'Next steps': ['Send the pilot agreement by Friday'] } };
   if (kind === 'recruiting') return { ...common, modeSpecificFindings: { 'Candidate profile': ['Candidate has five years of React and Node experience'], 'Strengths': ['Clear product sense'], 'Concerns': ['Limited enterprise experience'], 'Compensation / logistics': ['Available in four weeks'] }, actionItems: [{ text: 'schedule the technical screen', owner: 'Recruiter', explicitness: 'explicit', evidence, confidence: 'high' }] };
   if (kind === 'technical') return { ...common, modeSpecificFindings: { 'Problem discussed': ['Cache invalidation problem'], 'Approach': ['Used LRU map plus doubly linked list'], 'Complexity': ['O(1) get and put'], 'Hiring signal': ['Strong debugging, medium system design'] }, openQuestions: [{ text: 'Can the candidate handle distributed cache design?', status: 'open', evidence }] };
   if (kind === 'lecture') return { ...common, modeSpecificFindings: { 'Core concepts': ['Bayes theorem updates prior probability'], 'Definitions': ['Posterior equals likelihood times prior normalized'], 'Questions to review': ['When should priors be updated?'] }, openQuestions: [{ text: 'When should priors be updated?', status: 'open', evidence }] };
@@ -81,7 +81,27 @@ test('sales call surfaces actionability, objections, risks, and follow-up', () =
   // Follow-up draft is now produced by FollowUpDraftGenerator (Phase 8), not the reducer.
   // The reducer's deterministic body builder must still surface the action/decision content.
   const body = buildFollowUpBody(summary.decisions, summary.actionItems);
-  assert.match(body, /SOC2 packet|Decisions confirmed|Next steps/i);
+  assert.match(body, /Decisions confirmed:/);
+  // INCLUDE_NEXT_STEPS is false (MeetingSummaryReducer.ts) — the action-item list and its
+  // "Next steps:" label are suppressed in the deterministic body.
+  assert.equal(/next steps:/i.test(body), false, `next-steps block leaked into the fallback body: ${body}`);
+  assert.equal(/SOC2 packet/i.test(body), false, `action item leaked into the fallback body: ${body}`);
+});
+
+// INCLUDE_NEXT_STEPS is false (MeetingSummaryReducer.ts): a "Next steps" note section
+// declared by the mode template must be dropped from the generated notes even when the
+// extractor produced findings for it — so it also never reaches the follow-up draft
+// inputs or any recipe built from `summary.sections`.
+test('next-steps note sections are suppressed while INCLUDE_NEXT_STEPS is false', () => {
+  const summary = reduceCase('sales', [seg('Customer', 'Security review is required before pilot.', 1)], 'sales',
+    [{ title: 'Pain points' }, { title: 'Objections' }, { title: 'Buying signals' }, { title: 'Next steps' }]);
+  assert.ok(summary.sections.some(s => s.title === 'Objections'), 'other mode sections must survive');
+  assert.equal(summary.sections.some(s => /next\s*steps?/i.test(s.title)), false,
+    `next-steps section survived: ${JSON.stringify(summary.sections.map(s => s.title))}`);
+  assert.equal(/pilot agreement/i.test(JSON.stringify(summary.sections)), false,
+    'next-steps bullets leaked into another section');
+  // The underlying action items are untouched — only the labelled block is suppressed.
+  assert.ok(summary.actionItems.length > 0);
 });
 
 test('recruiting call uses recruiting-specific sections', () => {

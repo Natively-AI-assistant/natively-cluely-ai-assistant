@@ -1,0 +1,67 @@
+# id: TEAM-S
+# title: Mobile daily standup, release 4.12.0 branch cut moved
+# S0: Me — Dana Whitfield, Mobile Team Lead, Stridewell
+# S1: Ravi Menon, iOS Engineer, Stridewell
+# S2: Katya Novak, Android Engineer, Stridewell
+# S3: Theo Brandt, Backend Engineer, Stridewell
+# S4: Joan Adeyemi, QA Engineer, Stridewell
+S0: Morning everyone. Okay, let's keep this tight, we've got the release planning sync right after at 10.
+S3: Before we start, has anyone else noticed the coffee machine on the third floor is just dispensing hot brown water now?
+S2: It's been doing that since Friday. I think it's decided it wants to be a tea machine.
+S1: I filed a ticket with facilities. Priority critical, obviously.
+S0: Ha. Okay. Quick reminder, we're on 4.12.0 and the plan is still to cut the release branch Wednesday. Ravi, you want to go first?
+S1: Sure. Yesterday I finished MOB-1423, the, uh, the workout timer drifting when the app goes to the background on iOS. That's merged.
+S1: Root cause was we were trusting the display link timer instead of wall clock time, so after like ten minutes in the background you'd lose 20 or 30 seconds.
+S1: Today I'm picking up MOB-1431, the push notification deep link that opens the wrong screen. No blockers on my side yet.
+S0: Great. Is 1423 in the latest TestFlight build?
+S1: Yes, it went out in build 318 last night.
+S0: Okay. Katya?
+S2: Yeah, so yesterday I was mostly on the crash spike from the Android 4.11.2 rollout. The crash rate on that version is sitting at 8 percent.
+S3: Eight percent? We'd all be on fire right now.
+S2: Sorry, no, I misspoke, it's 0.8 percent. Zero point eight. Still roughly double our usual baseline, which is around 0.4.
+S2: It's almost all one crash, a null pointer in the heart rate sync service on Samsung devices running Android 14. That's MOB-1440.
+S2: Today I'm writing the fix for 1440 and I, um, I hope to have a PR up by this afternoon.
+S0: Is that going into 4.12 or do we need a hotfix?
+S2: I was thinking maybe we ship a 4.11.3 hotfix just for that crash.
+S4: Honestly a separate hotfix means a second full regression pass. I'd rather it just ride along with 4.12.
+S0: Yeah, let's not decide on a hotfix yet. If 1440 lands in time it goes in 4.12, and we look at the crash numbers again Thursday.
+S2: Okay, works for me. Also, related, I want to talk about whether we even keep supporting Android 9. It's like 3 percent of our users and it's a lot of the weird crashes.
+S0: That's a bigger conversation. Let's take that offline, I don't want to eat the whole standup with it.
+S2: Fair enough.
+S0: Theo?
+S3: Yep. Yesterday I got the new workout history endpoint deployed to staging. p95 latency went from about 4 seconds down to 1.9 seconds, so that's a nice win.
+S3: Mostly from paginating the query to 50 workouts per page instead of loading the whole history. I'd still like to load test it before it goes to prod.
+S0: Nice. Is the pagination change backwards compatible with the 4.11 clients?
+S3: Yes, old clients just get the first page by default, so nothing breaks.
+S3: Today I'm on the token refresh changes for the Apple sign-in flow. And that's where my blocker is.
+S3: I need the platform team to add the new client secret to the production vault, and I don't have write access. Jon on platform said he'd look at it, but that was Friday.
+S4: Jon, not Joan, to be clear. I don't have vault access either.
+S3: Ha, yes, Jon with no A.
+S0: Okay, I'll escalate that. I'll ping Jon and his manager directly, and I'll get you an answer by noon today.
+S3: Thanks. Without that secret the Apple sign-in fix can't go into 4.12 at all.
+S0: Understood. Joan, you're up.
+S4: So yesterday I ran the regression suite against build 318. 142 test cases, 9 failures. Most of them are the known onboarding flakiness, but 2 are real bugs.
+S4: One is the deep link thing Ravi just picked up, and the other is Android offline mode not syncing saved routes.
+S4: Today I'm triaging the rest of the failures and writing up tickets.
+S4: I'm also borrowing two Pixel devices from the design team since our Pixel 8 in the device lab won't hold a charge anymore.
+S1: Just a heads up, 318 is already stale. CI produced build 321 about an hour ago, and it has the offline sync fix Katya merged last night.
+S4: Oh, okay. Then I'll rerun everything on 321 instead, no point filing tickets against 318.
+S0: Good catch. Now, about the branch cut. Joan, realistically, can you get a full regression pass done by tomorrow?
+S4: Not a full one. Maybe 60 percent of it. And Theo's blocker isn't resolved, and Katya's crash fix isn't in yet.
+S1: Could we still cut Wednesday and just cherry-pick the late fixes onto the branch?
+S2: I'd rather not. Cherry-picking last time is how we lost the analytics fix in 4.10.
+S0: Yeah. Okay, decision: we cut the release branch Thursday instead of Wednesday. Thursday at 2pm. App Store and Play Store submission stays on Monday.
+S3: Thursday 2pm, got it.
+S0: Joan, action item for you, full regression pass on build 321, results posted in the release channel by Wednesday 5pm.
+S4: Wednesday 5pm, yep. Got it, Dana.
+S0: One more thing. Ravi, I know you just picked up 1431, but I need you on the App Store screenshots and release notes for 4.12, since you did them last time.
+S0: Katya, can you take 1431 after 1440? It's mostly shared routing logic anyway.
+S2: Uh, yeah, I can take it. It'll be tomorrow though.
+S1: That's fine, I'll hand it over with my notes. I only got as far as reproducing it on an iPhone 13.
+S0: Great, so 1431 is Katya's now.
+S4: Should we also feature flag the new onboarding off if it's still flaky?
+S0: Maybe. Let's see what the rerun on 321 says before we start talking about flags.
+S3: Can I just add, the Android 9 question does affect backend too, we keep an old auth path alive just for those clients.
+S0: Noted, that goes into the offline chat as well. I'll find a time for it, but not today.
+S1: And someone should really do something about that coffee machine before Thursday, or the branch cut isn't happening.
+S0: Ha. Okay, thanks everyone. Theo, you'll hear from me by noon. See you all in the planning sync.

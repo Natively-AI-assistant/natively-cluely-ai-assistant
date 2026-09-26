@@ -1,0 +1,169 @@
+{
+ "blind_id": "S-0bb30721",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 39585,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 10494,
+  "candidatesTokenCount": 917,
+  "totalTokenCount": 16103,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 10494
+   }
+  ],
+  "thoughtsTokenCount": 4692,
+  "serviceTier": "standard"
+ },
+ "fact_count": 29,
+ "evaluation": {
+  "factual_accuracy": 8,
+  "important_information_retention": 10,
+  "hallucination_control": 10,
+  "action_item_retention": 8,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 10,
+  "entity_retention": 10,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 8,
+  "structure": 4,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "A sentence in the Summary section is cut off mid-word ('won't be ')."
+  ],
+  "missing_important_information": [],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [
+   "Load testing the workout history endpoint before prod (Theo's wish, not assigned)"
+  ],
+  "distractors_included": [
+   "Jokes about the third-floor coffee machine dispensing hot brown water and a facilities ticket",
+   "Cherry-picking lost the analytics fix in 4.10"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "contradicted"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "missing"
+   },
+   {
+    "id": "F26",
+    "status": "missing"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture all critical and important information accurately, including numbers, timelines, and assignments. However, they suffer from severe structural and conciseness issues. The same facts are repeated across numerous redundant sections (Overview, Summary, Progress, Decisions, Blockers, Dependencies, Follow-up needed, Action items, Risks, etc.). The summary contains a cut-off sentence due to a generation error. Additionally, Theo's preference to load test the workout history endpoint is incorrectly listed as an assigned action item, and distractors like the coffee machine joke and the 4.10 analytics fix are included."
+ }
+}

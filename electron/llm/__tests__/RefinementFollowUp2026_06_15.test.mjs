@@ -28,6 +28,14 @@ describe('isRefinementFollowUp — edits that operate on the prior answer', () =
     'Simplify that.',
     'Make it less formal.',
     'The final version please.',
+    // 2026-09-11: plain-language rephrase shapes
+    'in simple words',
+    'In plain English please.',
+    'dumb it down',
+    'eli5',
+    'simply put?',
+    'tl;dr',
+    'as a one-liner',
     'In one sentence.',
     'As bullets.',
   ];

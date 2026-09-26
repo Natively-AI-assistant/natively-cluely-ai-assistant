@@ -47,7 +47,11 @@ test('model-changed call sites use the targeted helper', () => {
   assert.ok(/this\.sendModelChanged\s*\(\s*defaultModel\s*\)/.test(meetingStopRegion), 'BUG: meeting-stop default model revert must use targeted model-changed dispatch.');
   assert.ok(!/BrowserWindow\.getAllWindows\s*\(\s*\)[\s\S]*model-changed/.test(meetingStopRegion), 'BUG: meeting-stop model-changed must not broadcast to every BrowserWindow.');
 
-  for (const needle of ['set-natively-api-key', "safeHandle('set-model'", "safeHandle('set-default-model'"]) {
+  // Anchored on the handler registration: the bare channel name also appears in
+  // the doc comment of the trial runtime-sync helper above it, whose window
+  // holds broadcastCredentialsChanged() (an intentional all-window send) and
+  // the words 'model-changed', which read as a broadcast of model-changed.
+  for (const needle of ["safeHandle('set-natively-api-key'", "safeHandle('set-model'", "safeHandle('set-default-model'"]) {
     const region = extractRegion(ipcSource, needle, 2_000);
     assert.ok(/appState\.sendModelChanged\s*\(/.test(region), `BUG: ${needle} must use targeted model-changed dispatch.`);
     assert.ok(!/BrowserWindow\.getAllWindows\s*\(\s*\)[\s\S]*model-changed/.test(region), `BUG: ${needle} must not broadcast model-changed to every BrowserWindow.`);

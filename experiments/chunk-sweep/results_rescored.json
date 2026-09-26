@@ -1,0 +1,3656 @@
+[
+  {
+    "size": 150,
+    "chunks": 136,
+    "recall_at_12": 25,
+    "budget_survival": 25,
+    "e2e": {
+      "gemini:gemini-2.5-flash": {
+        "correct": 25,
+        "refusals": 0,
+        "false_refusals": 0
+      },
+      "deepseek:deepseek-v4-flash": {
+        "correct": 25,
+        "refusals": 0,
+        "false_refusals": 0
+      }
+    },
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "per_question": [
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is IDK-FSC-{workOrderId}-{revision}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "IDK-FSC-{workOrderId}-{revision}"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with a policy of 6 attempts with a backoff multiplier of 2.5."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "6 attempts with a backoff multiplier of 2.5."
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named fsc-sync-dlq-workorders for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc-sync-dlq-workorders"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 450 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "450 ms"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fsc_sync_lag_seconds metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc_sync_lag_seconds"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is LL-{invoiceNumber}-{fiscalPeriod}-v2."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LL-{invoiceNumber}-{fiscalPeriod}-v2"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 4 attempts with a backoff multiplier of 3.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LedgerLink uses 4 attempts with a backoff multiplier of 3.0."
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named ledgerlink-dlq-journal-entries for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink-dlq-journal-entries"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 900 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "900 ms"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the ledgerlink_posting_failures_total metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink_posting_failures_total"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is FB-{vehicleVin}-{sequenceNumber}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "FB-{vehicleVin}-{sequenceNumber}"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with 8 attempts with a backoff multiplier of 1.7."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "FleetBridge uses 8 attempts with a backoff multiplier of 1.7."
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the FleetBridge integration is named fleetbridge-dlq-position-events."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge-dlq-position-events"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 250 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 250 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fleetbridge_gps_gap_ratio metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge_gps_gap_ratio"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is SM-{sku}-{warehouseCode}-{mutationUlid}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "SM-{sku}-{warehouseCode}-{mutationUlid}"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 5 attempts with a backoff multiplier of 2.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "StockMesh uses 5 attempts with a backoff multiplier of 2.0."
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the StockMesh integration is named stockmesh-dlq-stock-mutations."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "stockmesh-dlq-stock-mutations"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 600 ms for the end-to-end path."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 600 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the stockmesh_oversell_incidents_total metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "stockmesh_oversell_incidents_total"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is CPC-{appointmentGuid}-{hl7MessageControlId}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "CPC-{appointmentGuid}-{hl7MessageControlId}"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 3 attempts with a backoff multiplier of 4.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "CarePoint Connect uses 3 attempts with a backoff multiplier of 4.0."
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the CarePoint Connect integration is named carepoint-dlq-adt-messages."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint-dlq-adt-messages"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 1200 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "CarePoint Connect tracks a p95 latency SLO of 1200 ms for the end-to-end path."
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the carepoint_hl7_reject_rate metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint_hl7_reject_rate"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "size": 300,
+    "chunks": 66,
+    "recall_at_12": 25,
+    "budget_survival": 25,
+    "e2e": {
+      "gemini:gemini-2.5-flash": {
+        "correct": 25,
+        "refusals": 0,
+        "false_refusals": 0
+      },
+      "deepseek:deepseek-v4-flash": {
+        "correct": 25,
+        "refusals": 0,
+        "false_refusals": 0
+      }
+    },
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "per_question": [
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is IDK-FSC-{workOrderId}-{revision}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "IDK-FSC-{workOrderId}-{revision}"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 6 attempts with a backoff multiplier of 2.5."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "6 attempts with a backoff multiplier of 2.5."
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named fsc-sync-dlq-workorders for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc-sync-dlq-workorders"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 450 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "450 ms"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fsc_sync_lag_seconds metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc_sync_lag_seconds"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is LL-{invoiceNumber}-{fiscalPeriod}-v2."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LL-{invoiceNumber}-{fiscalPeriod}-v2"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 4 attempts with a backoff multiplier of 3.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LedgerLink uses 4 attempts with a backoff multiplier of 3.0."
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named ledgerlink-dlq-journal-entries for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink-dlq-journal-entries"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 900 ms for the end-to-end path."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The LedgerLink project has a p95 latency SLO of 900 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the ledgerlink_posting_failures_total metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink_posting_failures_total"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is FB-{vehicleVin}-{sequenceNumber}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "FB-{vehicleVin}-{sequenceNumber}"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with a policy of 8 attempts with a backoff multiplier of 1.7."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "FleetBridge uses 8 attempts with a backoff multiplier of 1.7."
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the FleetBridge integration is named fleetbridge-dlq-position-events."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge-dlq-position-events"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 250 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "250 ms"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fleetbridge_gps_gap_ratio metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge_gps_gap_ratio"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is SM-{sku}-{warehouseCode}-{mutationUlid}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "SM-{sku}-{warehouseCode}-{mutationUlid}"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 5 attempts with a backoff multiplier of 2.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "5 attempts with a backoff multiplier of 2.0."
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named stockmesh-dlq-stock-mutations for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "stockmesh-dlq-stock-mutations"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 600 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The StockMesh project has a p95 latency SLO of 600 ms."
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the stockmesh_oversell_incidents_total metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "stockmesh_oversell_incidents_total"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is CPC-{appointmentGuid}-{hl7MessageControlId}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "CPC-{appointmentGuid}-{hl7MessageControlId}"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "CarePoint Connect uses a policy of 3 attempts with a backoff multiplier of 4.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "CarePoint Connect uses 3 retry attempts with a backoff multiplier of 4.0."
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint-dlq-adt-messages"
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint-dlq-adt-messages"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 1200 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The p95 latency SLO is 1200 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the carepoint_hl7_reject_rate metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint_hl7_reject_rate"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "size": 512,
+    "chunks": 35,
+    "recall_at_12": 25,
+    "budget_survival": 25,
+    "e2e": {
+      "gemini:gemini-2.5-flash": {
+        "correct": 25,
+        "refusals": 0,
+        "false_refusals": 0
+      },
+      "deepseek:deepseek-v4-flash": {
+        "correct": 25,
+        "refusals": 0,
+        "false_refusals": 0
+      }
+    },
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "per_question": [
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is IDK-FSC-{workOrderId}-{revision}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is IDK-FSC-{workOrderId}-{revision}."
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with 6 attempts with a backoff multiplier of 2.5."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The policy is 6 attempts with a backoff multiplier of 2.5."
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named fsc-sync-dlq-workorders for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc-sync-dlq-workorders"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 450 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "450 ms"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fsc_sync_lag_seconds metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc_sync_lag_seconds"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is LL-{invoiceNumber}-{fiscalPeriod}-v2."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LL-{invoiceNumber}-{fiscalPeriod}-v2"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 4 attempts with a backoff multiplier of 3.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LedgerLink uses 4 attempts with a backoff multiplier of 3.0."
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the LedgerLink integration is named ledgerlink-dlq-journal-entries."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink-dlq-journal-entries"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 900 ms for the end-to-end path."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "900 ms"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the ledgerlink_posting_failures_total metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink_posting_failures_total"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is FB-{vehicleVin}-{sequenceNumber}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "FB-{vehicleVin}-{sequenceNumber}"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with 8 attempts with a backoff multiplier of 1.7."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "FleetBridge uses 8 attempts with a backoff multiplier of 1.7."
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named fleetbridge-dlq-position-events for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge-dlq-position-events"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 250 ms for the end-to-end path"
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "250 ms"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fleetbridge_gps_gap_ratio metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge_gps_gap_ratio"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is SM-{sku}-{warehouseCode}-{mutationUlid}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "SM-{sku}-{warehouseCode}-{mutationUlid}"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 5 attempts with a backoff multiplier of 2.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The policy is 5 attempts with a backoff multiplier of 2.0."
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the StockMesh integration is named stockmesh-dlq-stock-mutations."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "stockmesh-dlq-stock-mutations"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 600 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "StockMesh has a p95 latency SLO of 600 ms for the end-to-end path."
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the stockmesh_oversell_incidents_total metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "stockmesh_oversell_incidents_total"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is CPC-{appointmentGuid}-{hl7MessageControlId}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "CPC-{appointmentGuid}-{hl7MessageControlId}"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with a policy of 3 attempts with a backoff multiplier of 4.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "CarePoint Connect uses 3 attempts with a backoff multiplier of 4.0."
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named carepoint-dlq-adt-messages for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint-dlq-adt-messages"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 1200 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "1200 ms"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the carepoint_hl7_reject_rate metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint_hl7_reject_rate"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "size": 800,
+    "chunks": 30,
+    "recall_at_12": 25,
+    "budget_survival": 25,
+    "e2e": {
+      "gemini:gemini-2.5-flash": {
+        "correct": 25,
+        "refusals": 0,
+        "false_refusals": 0
+      },
+      "deepseek:deepseek-v4-flash": {
+        "correct": 25,
+        "refusals": 0,
+        "false_refusals": 0
+      }
+    },
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "per_question": [
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is IDK-FSC-{workOrderId}-{revision}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "IDK-FSC-{workOrderId}-{revision}"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 6 attempts with a backoff multiplier of 2.5."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "6 attempts with a backoff multiplier of 2.5."
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named fsc-sync-dlq-workorders for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc-sync-dlq-workorders"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 450 ms for the end-to-end path."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "450 ms"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fsc_sync_lag_seconds metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc_sync_lag_seconds"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is LL-{invoiceNumber}-{fiscalPeriod}-v2."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LL-{invoiceNumber}-{fiscalPeriod}-v2"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LedgerLink uses a policy of 4 attempts with a backoff multiplier of 3.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LedgerLink uses 4 attempts with a backoff multiplier of 3.0."
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the LedgerLink integration is named ledgerlink-dlq-journal-entries."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink-dlq-journal-entries"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 900 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 900 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the ledgerlink_posting_failures_total metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink_posting_failures_total"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is FB-{vehicleVin}-{sequenceNumber}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is FB-{vehicleVin}-{sequenceNumber}."
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with 8 attempts and a backoff multiplier of 1.7."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "FleetBridge uses 8 attempts with a backoff multiplier of 1.7."
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named fleetbridge-dlq-position-events for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge-dlq-position-events"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 250 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "250 ms"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fleetbridge_gps_gap_ratio metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge_gps_gap_ratio"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is SM-{sku}-{warehouseCode}-{mutationUlid}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "SM-{sku}-{warehouseCode}-{mutationUlid}"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The policy is 5 attempts with a backoff multiplier of 2.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "StockMesh uses 5 retry attempts with a backoff multiplier of 2.0."
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the StockMesh integration is named stockmesh-dlq-stock-mutations."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "stockmesh-dlq-stock-mutations"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 600 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The StockMesh project tracks a p95 latency SLO of **600 ms** for the end-to-end path."
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the stockmesh_oversell_incidents_total metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "stockmesh_oversell_incidents_total"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is CPC-{appointmentGuid}-{hl7MessageControlId}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is CPC-{appointmentGuid}-{hl7MessageControlId}."
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The policy is 3 attempts with a backoff multiplier of 4.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "CarePoint Connect uses 3 attempts with a backoff multiplier of 4.0."
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the CarePoint Connect integration is named carepoint-dlq-adt-messages."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint-dlq-adt-messages"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 1200 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "1200 ms"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the carepoint_hl7_reject_rate metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint_hl7_reject_rate"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "size": 1250,
+    "chunks": 15,
+    "recall_at_12": 25,
+    "budget_survival": 25,
+    "e2e": {
+      "gemini:gemini-2.5-flash": {
+        "correct": 25,
+        "refusals": 0,
+        "false_refusals": 0
+      },
+      "deepseek:deepseek-v4-flash": {
+        "correct": 25,
+        "refusals": 0,
+        "false_refusals": 0
+      }
+    },
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "per_question": [
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is IDK-FSC-{workOrderId}-{revision}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "IDK-FSC-{workOrderId}-{revision}"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 6 attempts with a backoff multiplier of 2.5."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The policy is 6 attempts with a backoff multiplier of 2.5."
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named fsc-sync-dlq-workorders for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc-sync-dlq-workorders"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 450 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 450 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fsc_sync_lag_seconds metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc_sync_lag_seconds"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is LL-{invoiceNumber}-{fiscalPeriod}-v2."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LL-{invoiceNumber}-{fiscalPeriod}-v2"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with a policy of 4 attempts with a backoff multiplier of 3.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The policy is 4 attempts with a backoff multiplier of 3.0."
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the LedgerLink integration is named ledgerlink-dlq-journal-entries."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink-dlq-journal-entries"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 900 ms for the end-to-end path."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 900 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the ledgerlink_posting_failures_total metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink_posting_failures_total"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is FB-{vehicleVin}-{sequenceNumber}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "FB-{vehicleVin}-{sequenceNumber}"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with 8 attempts and a backoff multiplier of 1.7."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "8 attempts with a backoff multiplier of 1.7."
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the FleetBridge integration is named fleetbridge-dlq-position-events."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge-dlq-position-events"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 250 ms for the end-to-end path"
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "250 ms"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fleetbridge_gps_gap_ratio metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge_gps_gap_ratio"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is SM-{sku}-{warehouseCode}-{mutationUlid}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "SM-{sku}-{warehouseCode}-{mutationUlid}"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with a policy of 5 attempts with a backoff multiplier of 2.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "5 attempts with a backoff multiplier of 2.0."
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named stockmesh-dlq-stock-mutations for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "stockmesh-dlq-stock-mutations"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 600 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The p95 latency SLO for StockMesh is 600 ms."
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the stockmesh_oversell_incidents_total metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "stockmesh_oversell_incidents_total"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is CPC-{appointmentGuid}-{hl7MessageControlId}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "CPC-{appointmentGuid}-{hl7MessageControlId}"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with \"3 attempts with a backoff multiplier of 4.0\"."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "3 attempts with a backoff multiplier of 4.0."
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue is named carepoint-dlq-adt-messages."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint-dlq-adt-messages"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 1200 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "1200 ms"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the carepoint_hl7_reject_rate metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint_hl7_reject_rate"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "size": 2000,
+    "chunks": 10,
+    "recall_at_12": 25,
+    "budget_survival": 24,
+    "e2e": {
+      "gemini:gemini-2.5-flash": {
+        "correct": 24,
+        "refusals": 1,
+        "false_refusals": 0
+      },
+      "deepseek:deepseek-v4-flash": {
+        "correct": 24,
+        "refusals": 1,
+        "false_refusals": 0
+      }
+    },
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "per_question": [
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is IDK-FSC-{workOrderId}-{revision}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "IDK-FSC-{workOrderId}-{revision}"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 6 attempts with a backoff multiplier of 2.5."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The policy is 6 attempts with a backoff multiplier of 2.5."
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named fsc-sync-dlq-workorders for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc-sync-dlq-workorders"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 450 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 450 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fsc_sync_lag_seconds metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc_sync_lag_seconds"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is LL-{invoiceNumber}-{fiscalPeriod}-v2."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LL-{invoiceNumber}-{fiscalPeriod}-v2"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 4 attempts with a backoff multiplier of 3.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LedgerLink uses 4 attempts with a backoff multiplier of 3.0."
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named ledgerlink-dlq-journal-entries for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink-dlq-journal-entries"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 900 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The p95 latency SLO is 900 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the ledgerlink_posting_failures_total metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink_posting_failures_total"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is FB-{vehicleVin}-{sequenceNumber}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "FB-{vehicleVin}-{sequenceNumber}"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The policy is 8 attempts with a backoff multiplier of 1.7."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "FleetBridge uses 8 attempts with a backoff multiplier of 1.7."
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the FleetBridge integration is named fleetbridge-dlq-position-events."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge-dlq-position-events"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 250 ms for the end-to-end path."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "p95 latency SLO of 250 ms"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fleetbridge_gps_gap_ratio metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge_gps_gap_ratio"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is SM-{sku}-{warehouseCode}-{mutationUlid}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "SM-{sku}-{warehouseCode}-{mutationUlid}"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 5 attempts with a backoff multiplier of 2.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "StockMesh uses 5 attempts with a backoff multiplier of 2.0."
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the StockMesh integration is named stockmesh-dlq-stock-mutations."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "stockmesh-dlq-stock-mutations"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": false,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": false,
+            "refused": true,
+            "false_refusal": false,
+            "answer_head": "I could not find that in the retrieved sections"
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": false,
+            "refused": true,
+            "false_refusal": false,
+            "answer_head": "I could not find that in the retrieved sections"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the stockmesh_oversell_incidents_total metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "stockmesh_oversell_incidents_total"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is CPC-{appointmentGuid}-{hl7MessageControlId}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "CPC-{appointmentGuid}-{hl7MessageControlId}"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 3 attempts with a backoff multiplier of 4.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "CarePoint Connect uses 3 attempts with a backoff multiplier of 4.0."
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named carepoint-dlq-adt-messages for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint-dlq-adt-messages"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 1200 ms for the end-to-end path."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "p95 latency SLO of 1200 ms"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the carepoint_hl7_reject_rate metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint_hl7_reject_rate"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "size": 2500,
+    "chunks": 8,
+    "recall_at_12": 25,
+    "budget_survival": 22,
+    "e2e": {
+      "gemini:gemini-2.5-flash": {
+        "correct": 22,
+        "refusals": 3,
+        "false_refusals": 0
+      },
+      "deepseek:deepseek-v4-flash": {
+        "correct": 22,
+        "refusals": 3,
+        "false_refusals": 0
+      }
+    },
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "per_question": [
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is IDK-FSC-{workOrderId}-{revision}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "IDK-FSC-{workOrderId}-{revision}"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 6 attempts with a backoff multiplier of 2.5."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "FieldServe-CRM Sync uses 6 retry attempts with a backoff multiplier of 2.5."
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the FieldServe-CRM Sync integration is named fsc-sync-dlq-workorders."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc-sync-dlq-workorders"
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 450 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 450 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          }
+        }
+      },
+      {
+        "project": "FieldServe-CRM Sync",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fsc_sync_lag_seconds metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fsc_sync_lag_seconds"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is LL-{invoiceNumber}-{fiscalPeriod}-v2."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LL-{invoiceNumber}-{fiscalPeriod}-v2"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 4 attempts with a backoff multiplier of 3.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "LedgerLink uses 4 retry attempts with a backoff multiplier of 3.0."
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named ledgerlink-dlq-journal-entries for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink-dlq-journal-entries"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": false,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": false,
+            "refused": true,
+            "false_refusal": false,
+            "answer_head": "I could not find that in the retrieved sections"
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": false,
+            "refused": true,
+            "false_refusal": false,
+            "answer_head": "I could not find that in the retrieved sections"
+          }
+        }
+      },
+      {
+        "project": "LedgerLink",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the ledgerlink_posting_failures_total metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "ledgerlink_posting_failures_total"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is FB-{vehicleVin}-{sequenceNumber}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "FB-{vehicleVin}-{sequenceNumber}"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 8 attempts with a backoff multiplier of 1.7."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "FleetBridge uses 8 retry attempts with a backoff multiplier of 1.7."
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named fleetbridge-dlq-position-events for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge-dlq-position-events"
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 250 ms for the end-to-end path."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 250 ms for the end-to-end path."
+          }
+        }
+      },
+      {
+        "project": "FleetBridge",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the fleetbridge_gps_gap_ratio metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "fleetbridge_gps_gap_ratio"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is SM-{sku}-{warehouseCode}-{mutationUlid}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "SM-{sku}-{warehouseCode}-{mutationUlid}"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with 5 attempts with a backoff multiplier of 2.0."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "StockMesh retries transient failures with exponential backoff and full jitter; the policy is 5 attempts with a backoff multiplier of 2.0."
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The dead-letter queue on the StockMesh integration is named stockmesh-dlq-stock-mutations."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "stockmesh-dlq-stock-mutations"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": false,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": false,
+            "refused": true,
+            "false_refusal": false,
+            "answer_head": "I could not find that in the retrieved sections"
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": false,
+            "refused": true,
+            "false_refusal": false,
+            "answer_head": "I could not find that in the retrieved sections"
+          }
+        }
+      },
+      {
+        "project": "StockMesh",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": false,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": false,
+            "refused": true,
+            "false_refusal": false,
+            "answer_head": "I could not find that in the retrieved sections"
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": false,
+            "refused": true,
+            "false_refusal": false,
+            "answer_head": "I could not find that in the retrieved sections"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "idempotency key format",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The idempotency key format is CPC-{appointmentGuid}-{hl7MessageControlId}."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "CPC-{appointmentGuid}-{hl7MessageControlId}"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "retry policy",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with \"3 attempts with a backoff multiplier of 4.0\"."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "Transient failures are retried with exponential backoff and full jitter; the policy is 3 attempts with a backoff multiplier of 4.0."
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "dead-letter queue",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "After the retry budget is exhausted, the event is parked on a dead-letter queue named carepoint-dlq-adt-messages for manual or automated reprocessing."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint-dlq-adt-messages"
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "p95 SLO",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "We track a p95 latency SLO of 1200 ms for the end-to-end path."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "p95 latency SLO of 1200 ms for the end-to-end path, measured from source commit to visible effect in the target system."
+          }
+        }
+      },
+      {
+        "project": "CarePoint Connect",
+        "kind": "monitoring metric",
+        "recall": true,
+        "survived": true,
+        "models": {
+          "gemini:gemini-2.5-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "The primary health signal is the carepoint_hl7_reject_rate metric."
+          },
+          "deepseek:deepseek-v4-flash": {
+            "correct": true,
+            "refused": false,
+            "false_refusal": false,
+            "answer_head": "carepoint_hl7_reject_rate"
+          }
+        }
+      }
+    ]
+  }
+]

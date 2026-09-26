@@ -1,10 +1,37 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { execFileSync } from 'node:child_process'
 import { version } from './package.json'
 
 // Inject version so the React frontend can read it via import.meta.env.VITE_APP_VERSION
 process.env.VITE_APP_VERSION = version;
+
+// Bake source provenance into the renderer. Packaged apps cannot rely on a
+// `.git` directory being present at runtime, so the commit must be resolved at
+// build time (CI may provide an explicit SHA when building from an archive).
+const explicitBuildCommit = process.env.NATIVELY_BUILD_COMMIT || process.env.GITHUB_SHA;
+let buildCommit = explicitBuildCommit?.trim() || 'unknown';
+if (buildCommit === 'unknown') {
+    try {
+        buildCommit = execFileSync('git', ['rev-parse', '--verify', 'HEAD'], {
+            cwd: __dirname,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+        const dirty = execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], {
+            cwd: __dirname,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+        if (dirty) buildCommit = `${buildCommit}-dirty`;
+    } catch {
+        // Source archives without Git metadata remain explicitly "unknown".
+    }
+}
+process.env.VITE_BUILD_COMMIT = buildCommit.startsWith('unknown')
+    ? buildCommit
+    : `${buildCommit.slice(0, 12)}${buildCommit.endsWith('-dirty') ? '-dirty' : ''}`;
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -16,8 +43,15 @@ export default defineConfig({
             "@hooks": path.resolve(__dirname, "./src/hooks"),
             "@config": path.resolve(__dirname, "./src/config"),
         },
+        // TS/TSX must win over .mjs/.js so an unqualified import of a basename with
+        // both a source and a stale/stub sibling always resolves to the real source.
+        extensions: ['.mts', '.ts', '.tsx', '.mjs', '.js', '.jsx', '.json'],
     },
     server: {
+        // Windows often resolves `localhost` to ::1 while Vite binds IPv6-only,
+        // which leaves wait-on and Electron unable to connect. Pin IPv4 loopback
+        // so npm start can actually reach the dev server on both platforms.
+        host: '127.0.0.1',
         port: 5180,
         watch: {
             ignored: [
@@ -25,16 +59,76 @@ export default defineConfig({
                 '**/.code-review-graph/**',
                 '**/dist-electron/**',
                 '**/release/**',
+                // Browser extension has its own esbuild pipeline
+                // (natively-browser/esbuild.config.mjs) — its .html is NOT a
+                // Vite entry. Without this, Vite auto-discovers
+                // natively-browser/src/popup.html on startup and fails because
+                // the script tag references popup.js, which lives in src/ as
+                // popup.ts and is bundled separately to natively-browser/dist/.
+                '**/natively-browser/**',
             ],
         },
     },
     build: {
-        chunkSizeWarningLimit: 1000,
+        // Electron ships these assets locally; our production budget is based on
+        // gzip size (<500kB for the main chunk), while Vite warns on raw minified
+        // bytes. Keep the threshold aligned with the current deliberate split so
+        // real regressions still surface without blocking release builds on noise.
+        chunkSizeWarningLimit: 1500,
         rollupOptions: {
+            // Pin the entry to the app's index.html so Vite doesn't auto-
+            // discover natively-browser/src/popup.html (extension builds via
+            // esbuild, not Vite — see natively-browser/esbuild.config.mjs).
+            input: path.resolve(__dirname, 'index.html'),
             output: {
+                // Manual vendor splits — keep the main bundle below ~500kB
+                // gzipped. The previous `vendor` and `ui` chunks lumped
+                // framer-motion with React and bundled the entire Radix +
+                // lucide surface together, producing a single ~2.4 MB
+                // entry. Splitting react from animation libs and editor/
+                // markdown stacks gives the browser cache a much finer
+                // re-use story — a settings-page tweak no longer invalidates
+                // the giant React vendor chunk. Entries are matched by
+                // substring against the import path.
+                //
+                // media-vendor was REMOVED as a manual chunk (2026-09-03).
+                // tesseract.js / three / qrcode / jspdf have no static importer
+                // anywhere in src, so forcing them into a named chunk only gave
+                // Rollup somewhere to park Vite's `\0vite/preload-helper` —
+                // which made the ENTRY statically import 382 kB of media
+                // libraries, modulepreloaded by every window. Left unlisted,
+                // they land in whichever dynamic chunk actually pulls them.
+                //
+                // util-vendor is separate for the opposite reason: clsx,
+                // tailwind-merge and cva ARE imported by nearly every
+                // component, so they must not ride along with heavy libs.
                 manualChunks: {
-                    vendor: ['react', 'react-dom', 'framer-motion'],
-                    ui: ['lucide-react', '@radix-ui/react-dialog', '@radix-ui/react-toast']
+                    'react-vendor': ['react', 'react-dom', 'scheduler'],
+                    'animation-vendor': ['framer-motion'],
+                    'icon-vendor': ['lucide-react', 'react-icons'],
+                    'radix-vendor': [
+                        '@radix-ui/react-dialog',
+                        '@radix-ui/react-toast',
+                    ],
+                    'markdown-vendor': [
+                        'react-markdown',
+                        'remark-gfm',
+                        'remark-math',
+                        'rehype-katex',
+                        'katex',
+                        'react-syntax-highlighter',
+                        'marked',
+                    ],
+                    'util-vendor': [
+                        'tailwind-merge',
+                        'clsx',
+                        'class-variance-authority',
+                    ],
+                    'data-vendor': [
+                        '@tanstack/react-query',
+                        '@huggingface/transformers',
+                        'axios',
+                    ],
                 }
             }
         }

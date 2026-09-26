@@ -1,0 +1,394 @@
+{
+ "blind_id": "S-0b36cf5e",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 84920,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 32821,
+  "candidatesTokenCount": 2747,
+  "totalTokenCount": 45715,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 32821
+   }
+  ],
+  "thoughtsTokenCount": 10147,
+  "serviceTier": "standard"
+ },
+ "fact_count": 82,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 7,
+  "hallucination_control": 6,
+  "action_item_retention": 9,
+  "decision_retention": 5,
+  "speaker_attribution": 5,
+  "numeric_accuracy": 8,
+  "entity_retention": 8,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 8,
+  "structure": 4,
+  "conciseness": 3,
+  "readability": 4,
+  "overall_summary_quality": 5,
+  "critical_errors": [
+   "The notes contradict themselves regarding the Redis failure question, correctly summarizing the candidate's answer in one section but hallucinating in the Open Questions section that 'the chunk ends before he answers.'",
+   "The notes include LLM chunking artifacts (e.g., 'No compensation... details were covered in this chunk').",
+   "The notes completely fail to identify the hiring manager, Priya Raman, by name."
+  ],
+  "missing_important_information": [
+   "Priya Raman's name and role as Engineering Manager",
+   "The Payments Platform team size of seven engineers",
+   "Tessellate's blameless postmortem culture"
+  ],
+  "hallucinated_information": [
+   "Marcus was asked what should happen if Redis goes down while enforcing the processor's global rate limit, but the chunk ends before he answers.",
+   "No compensation expectations, notice period, start-date availability, visa status, or other employment constraints were stated in this chunk.",
+   "No compensation, notice period, availability, location, visa, or interview-timeline details were covered in this chunk.",
+   "No compensation, location, visa, notice-period, or general availability information was provided in this chunk."
+  ],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [
+   "The instant-payout launch would proceed with a $5,000-per-payout cap for six weeks and only for merchants with more than one year of history.",
+   "Ledger mismatch checks should page a human and should never automatically correct ledger data.",
+   "The historical instant-payout launch proceeded with a $5,000 per-payout cap for six weeks and was limited to merchants with more than one year of tenure..."
+  ],
+  "distractors_included": [
+   "LLM chunking artifacts ('in this chunk')",
+   "Extreme repetition of the same facts across the Overview, Summary, Candidate profile, Role fit, Strengths, Concerns, and other sections."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "missing"
+   },
+   {
+    "id": "F02",
+    "status": "partial"
+   },
+   {
+    "id": "F03",
+    "status": "missing"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "partial"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "partial"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "partial"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "partial"
+   },
+   {
+    "id": "F19",
+    "status": "partial"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "partial"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "partial"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "partial"
+   },
+   {
+    "id": "F32",
+    "status": "partial"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "partial"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "partial"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "partial"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "partial"
+   },
+   {
+    "id": "F46",
+    "status": "partial"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "missing"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "partial"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "missing"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "partial"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "partial"
+   },
+   {
+    "id": "F66",
+    "status": "partial"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "missing"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "partial"
+   },
+   {
+    "id": "F71",
+    "status": "partial"
+   },
+   {
+    "id": "F72",
+    "status": "partial"
+   },
+   {
+    "id": "F73",
+    "status": "partial"
+   },
+   {
+    "id": "F74",
+    "status": "present"
+   },
+   {
+    "id": "F75",
+    "status": "present"
+   },
+   {
+    "id": "F76",
+    "status": "present"
+   },
+   {
+    "id": "F77",
+    "status": "present"
+   },
+   {
+    "id": "F78",
+    "status": "present"
+   },
+   {
+    "id": "F79",
+    "status": "present"
+   },
+   {
+    "id": "F80",
+    "status": "present"
+   },
+   {
+    "id": "F81",
+    "status": "present"
+   },
+   {
+    "id": "F82",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a vast amount of technical detail and accurately reflect the candidate's background, system design answers, and the debrief conclusions. However, the notes suffer from severe structural and formatting issues. They are extremely repetitive, stating the same facts across multiple sections. They include LLM chunking artifacts (e.g., 'No compensation... details were covered in this chunk') and hallucinate that the transcript ended before the candidate could answer a question about Redis failure, contradicting another section that correctly captures his answer. Furthermore, the 'Decisions' section incorrectly lists the candidate's historical project decisions and personal design philosophies as decisions made during this meeting. Finally, the notes completely fail to identify the hiring manager, Priya Raman, by name."
+ }
+}

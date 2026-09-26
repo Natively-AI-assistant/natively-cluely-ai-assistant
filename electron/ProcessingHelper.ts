@@ -23,8 +23,10 @@ export class ProcessingHelper {
   constructor(appState: AppState) {
     this.appState = appState
 
-    // Check if user wants to use Ollama
-    const useOllama = process.env.USE_OLLAMA === "true"
+    // Check if user wants to use Ollama. DEVELOPMENT ONLY, like the key reads
+    // below — see that comment for why a packaged build must not consult
+    // process.env here.
+    const useOllama = !app.isPackaged && process.env.USE_OLLAMA === "true"
     const ollamaModel = process.env.OLLAMA_MODEL // Don't set default here, let LLMHelper auto-detect
     const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434"
 
@@ -32,19 +34,31 @@ export class ProcessingHelper {
       // console.log("[ProcessingHelper] Initializing with Ollama")
       this.llmHelper = new LLMHelper(undefined, true, ollamaModel, ollamaUrl)
     } else {
-      // Try environment first (for development)
-      let apiKey = process.env.GEMINI_API_KEY
-      let groqApiKey = process.env.GROQ_API_KEY
-      let openaiApiKey = process.env.OPENAI_API_KEY
-      let claudeApiKey = process.env.CLAUDE_API_KEY
-      let deepseekApiKey = process.env.DEEPSEEK_API_KEY
+      // Try environment first — DEVELOPMENT ONLY. A packaged build must not
+      // consult process.env here: loadStoredCredentials() (called right after
+      // app.whenReady(), see main.ts) is the sole source of truth once
+      // CredentialsManager is ready, mirroring the app.isPackaged gate in
+      // CredentialsManager.storedOrEnv. Without this gate, a packaged build
+      // would resurrect a key the user cleared in Settings (CredentialsManager
+      // correctly returns undefined, but the env-derived key set here stays
+      // live because loadStoredCredentials only overrides truthy keys), and on
+      // Windows a stray *_API_KEY inherited from another tool's user-level env
+      // var would silently become an active credential. See
+      // CredentialEnvFallbackScope2026_09_08.test.mjs for the other half of
+      // this bug class.
+      let apiKey = app.isPackaged ? undefined : process.env.GEMINI_API_KEY
+      let groqApiKey = app.isPackaged ? undefined : process.env.GROQ_API_KEY
+      let openaiApiKey = app.isPackaged ? undefined : process.env.OPENAI_API_KEY
+      let claudeApiKey = app.isPackaged ? undefined : process.env.CLAUDE_API_KEY
+      let deepseekApiKey = app.isPackaged ? undefined : process.env.DEEPSEEK_API_KEY
+      let nvidiaNimApiKey = app.isPackaged ? undefined : process.env.NVIDIA_NIM_API_KEY
 
       // Allow initializing without key (will be loaded in loadStoredCredentials or via Settings)
       if (!apiKey) {
-        console.warn("[ProcessingHelper] GEMINI_API_KEY not found in env. Will try CredentialsManager after ready.")
+        console.warn("[ProcessingHelper] GEMINI_API_KEY not found in env (or running packaged). Will try CredentialsManager after ready.")
       }
 
-      this.llmHelper = new LLMHelper(apiKey, false, undefined, undefined, groqApiKey, openaiApiKey, claudeApiKey, deepseekApiKey)
+      this.llmHelper = new LLMHelper(apiKey, false, undefined, undefined, groqApiKey, openaiApiKey, claudeApiKey, deepseekApiKey, nvidiaNimApiKey)
     }
   }
 
@@ -60,6 +74,9 @@ export class ProcessingHelper {
     const openaiKey = credManager.getOpenaiApiKey();
     const claudeKey = credManager.getClaudeApiKey();
     const deepseekKey = credManager.getDeepseekApiKey();
+    const nvidiaNimKey = credManager.getNvidiaNimApiKey();
+    const openrouterKey = credManager.getOpenrouterApiKey();
+    const fluxionKey = credManager.getFluxionApiKey();
 
     if (geminiKey) {
       console.log("[ProcessingHelper] Loading stored Gemini API Key from CredentialsManager");
@@ -85,11 +102,31 @@ export class ProcessingHelper {
       console.log("[ProcessingHelper] Loading stored DeepSeek API Key from CredentialsManager");
       this.llmHelper.setDeepseekApiKey(deepseekKey);
     }
+    if (nvidiaNimKey) this.llmHelper.setNvidiaNimApiKey(nvidiaNimKey);
+    // Hydrated here rather than through the constructor: this ONE key may already
+    // be on disk because the user configured OpenRouter embeddings or reranking,
+    // long before the AI Providers card existed. Loading it at boot is what makes
+    // chat work for them without re-entering anything.
+    if (openrouterKey) this.llmHelper.setOpenrouterApiKey(openrouterKey);
+    // The protocol must be hydrated WITH the key: setFluxionConfig builds one
+    // client per protocol, so passing the key alone would silently rebuild an
+    // 'openai' client for a user whose group is Anthropic and turn every boot
+    // into a wrong-endpoint failure.
+    if (fluxionKey) this.llmHelper.setFluxionConfig(fluxionKey, credManager.getFluxionProtocol());
 
     const litellmBaseURL = credManager.getLitellmBaseURL();
     if (litellmBaseURL) {
       console.log("[ProcessingHelper] Loading stored LiteLLM config from CredentialsManager");
       this.llmHelper.setLitellmConfig(credManager.getLitellmApiKey() || '', litellmBaseURL, credManager.getLitellmMaxTokens());
+    }
+
+    // Without this the client is never constructed at startup, so a user who
+    // configured 9Router in a previous session has a selected model that
+    // dispatches to nothing until they re-save the card.
+    const ninerouterBaseURL = credManager.getNinerouterBaseURL();
+    if (ninerouterBaseURL) {
+      console.log("[ProcessingHelper] Loading stored 9Router config from CredentialsManager");
+      this.llmHelper.setNinerouterConfig(credManager.getNinerouterApiKey() || '', ninerouterBaseURL, credManager.getNinerouterMaxTokens(), credManager.getNinerouterThinking() || null);
     }
 
     const nativelyKey = credManager.getNativelyApiKey();
@@ -106,13 +143,18 @@ export class ProcessingHelper {
     // This fixes "RAG unavailable" in production where process.env is empty
     const ragManager = this.appState.getRAGManager();
     if (ragManager) {
+      // buildEmbeddingConfig(), NOT a hand-written object. This used to pass
+      // `{ openaiKey, geminiKey, providerDataScopes }` and nothing else, and it
+      // runs AFTER the correct startup init — so it clobbered that config and
+      // silently dropped nativelyApiKey, ollamaUrl, every model/dims field and,
+      // fatally, the user's embeddingMode/embeddingProvider selection. Settings
+      // could read {mode:'manual', provider:'natively'} while the pipeline
+      // resolved gemini, which is what made choosing a model appear to do
+      // nothing. A hand-maintained field list is the defect; the builder is the
+      // single place that knows how to assemble this.
       console.log("[ProcessingHelper] Initializing RAGManager embeddings with available keys");
-      ragManager.initializeEmbeddings({
-          openaiKey: openaiKey || undefined,
-          geminiKey: geminiKey || undefined,
-          // ollamaUrl is not fetched in CredentialsManager yet by default, but we pass these keys
-          providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
-      });
+      const { buildEmbeddingConfig } = require('./rag/embeddingConfigIdentity');
+      ragManager.initializeEmbeddings(buildEmbeddingConfig());
 
       // CRITICAL: Retry pending embeddings now that we have a key
       // This ensures any meetings that failed or were queued during startup get processed

@@ -154,12 +154,12 @@ const structPreamble = (code: string, usesList: boolean, usesTree: boolean): str
   if (usesList && !modelList) parts.push(`static class ListNode { int val; ListNode next; ListNode(int x){ val=x; } }`);
   if (usesTree && !modelTree) parts.push(`static class TreeNode { int val; TreeNode left; TreeNode right; TreeNode(int x){ val=x; } }`);
   if (usesList) {
-    parts.push(`static ListNode __natBuildList(int[] a){ ListNode d=new ListNode(0); ListNode t=d; for(int x: a){ t.next=new ListNode(x); t=t.next; } return d.next; }`);
-    parts.push(`static void __natEmitList(StringBuilder sb, ListNode h){ sb.append("["); boolean f=true; while(h!=null){ if(!f)sb.append(","); sb.append(h.val); f=false; h=h.next; } sb.append("]"); }`);
+    parts.push(`ListNode __natBuildList(int[] a){ ListNode d=new ListNode(0); ListNode t=d; for(int x: a){ t.next=new ListNode(x); t=t.next; } return d.next; }`);
+    parts.push(`void __natEmitList(StringBuilder sb, ListNode h){ sb.append("["); boolean f=true; while(h!=null){ if(!f)sb.append(","); sb.append(h.val); f=false; h=h.next; } sb.append("]"); }`);
   }
   if (usesTree) {
-    parts.push(`static TreeNode __natBuildTree(Integer[] a){ if(a.length==0||a[0]==null) return null; TreeNode root=new TreeNode(a[0]); java.util.Queue<TreeNode> q=new java.util.LinkedList<>(); q.add(root); int i=1; while(i<a.length&&!q.isEmpty()){ TreeNode n=q.poll(); if(i<a.length){ if(a[i]!=null){ n.left=new TreeNode(a[i]); q.add(n.left);} i++; } if(i<a.length){ if(a[i]!=null){ n.right=new TreeNode(a[i]); q.add(n.right);} i++; } } return root; }`);
-    parts.push(`static void __natEmitTree(StringBuilder sb, TreeNode root){ java.util.List<String> out=new java.util.ArrayList<>(); java.util.Queue<TreeNode> q=new java.util.LinkedList<>(); if(root!=null)q.add(root); while(!q.isEmpty()){ TreeNode n=q.poll(); if(n==null)out.add("null"); else { out.add(String.valueOf(n.val)); q.add(n.left); q.add(n.right);} } int e=out.size(); while(e>0&&out.get(e-1).equals("null"))e--; sb.append("["); for(int k=0;k<e;k++){ if(k>0)sb.append(","); sb.append(out.get(k)); } sb.append("]"); }`);
+    parts.push(`TreeNode __natBuildTree(Integer[] a){ if(a.length==0||a[0]==null) return null; TreeNode root=new TreeNode(a[0]); java.util.Queue<TreeNode> q=new java.util.LinkedList<>(); q.add(root); int i=1; while(i<a.length&&!q.isEmpty()){ TreeNode n=q.poll(); if(i<a.length){ if(a[i]!=null){ n.left=new TreeNode(a[i]); q.add(n.left);} i++; } if(i<a.length){ if(a[i]!=null){ n.right=new TreeNode(a[i]); q.add(n.right);} i++; } } return root; }`);
+    parts.push(`void __natEmitTree(StringBuilder sb, TreeNode root){ java.util.List<String> out=new java.util.ArrayList<>(); java.util.Queue<TreeNode> q=new java.util.LinkedList<>(); if(root!=null)q.add(root); while(!q.isEmpty()){ TreeNode n=q.poll(); if(n==null)out.add("null"); else { out.add(String.valueOf(n.val)); q.add(n.left); q.add(n.right);} } int e=out.size(); while(e>0&&out.get(e-1).equals("null"))e--; sb.append("["); for(int k=0;k<e;k++){ if(k>0)sb.append(","); sb.append(out.get(k)); } sb.append("]"); }`);
   }
   return parts.join('\n  ');
 };
@@ -188,6 +188,25 @@ export const buildJavaProgram = (code: string, entry: string, tc: TestCase): str
   const usesTree = sig.returnType === 'treenode' || sig.params.includes('treenode');
   const preamble = structPreamble(code, usesList, usesTree);
 
+  // The harness runs from an INSTANCE, not from main().
+  //
+  // The model's `class Solution` is spliced in as a nested class, and a nested
+  // class is an INNER class unless declared static — so `new Solution()` from a
+  // static context does not compile:
+  //   error: non-static variable this cannot be referenced from a static context
+  // EVERY Java verification failed at compile time on this. The synthesized
+  // ListNode/TreeNode above sidestep it by being explicitly `static`, which is
+  // exactly why the bug only ever hit the model's own class and never the
+  // scaffolding around it.
+  //
+  // main() therefore delegates straight to an instance method: an enclosing
+  // `this` exists there, so inner classes instantiate normally and the model's
+  // source is left byte-for-byte untouched. The alternative — regex-inserting
+  // `static` into arbitrary generated code — is far more fragile.
+  //
+  // The struct helpers are instance methods for the same reason: when the model
+  // supplies its OWN ListNode/TreeNode, that class is inner too, and a static
+  // helper could not name it.
   return `import java.util.*;
 
 public class Main {
@@ -195,9 +214,11 @@ public class Main {
 
   ${code}
 
-  static void __natEmitStr(StringBuilder sb, String s){ sb.append('"'); for(char c: s.toCharArray()){ if(c=='"'||c=='\\\\') sb.append('\\\\'); sb.append(c);} sb.append('"'); }
+  void __natEmitStr(StringBuilder sb, String s){ sb.append('"'); for(char c: s.toCharArray()){ if(c=='"'||c=='\\\\') sb.append('\\\\'); sb.append(c);} sb.append('"'); }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) { new Main().__natRun(); }
+
+  void __natRun() {
     try {
 ${decls.join('\n')}
       ${JAVA_DECL[sig.returnType] === 'void' ? '' : ''}var __res = new Solution().${entry}(${callArgs.join(', ')});

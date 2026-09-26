@@ -19,9 +19,9 @@ cd "$(dirname "$0")/.."
 if [ -f .env ]; then
   while IFS='=' read -r _k _v; do
     [ -z "$_k" ] && continue
-    # only the provider keys we care about, and only if currently unset/empty
+    # only the keys we care about, and only if currently unset/empty
     case "$_k" in
-      GEMINI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|GROQ_API_KEY) ;;
+      GEMINI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|GROQ_API_KEY|OPENAI_API_BASE|LITELLM_BASE_URL) ;;
       *) continue ;;
     esac
     if [ -z "${!_k:-}" ]; then
@@ -29,7 +29,7 @@ if [ -f .env ]; then
       _v="${_v%\"}"; _v="${_v#\"}"; _v="${_v%\'}"; _v="${_v#\'}"
       export "$_k=$_v"
     fi
-  done < <(grep -E '^(GEMINI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|GROQ_API_KEY)=' .env || true)
+  done < <(grep -E '^(GEMINI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|GROQ_API_KEY|OPENAI_API_BASE|LITELLM_BASE_URL)=' .env || true)
 fi
 
 # Resolve a python3 that ACTUALLY has the `hindsight` package. A machine can have several

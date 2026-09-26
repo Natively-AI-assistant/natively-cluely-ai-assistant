@@ -1,0 +1,252 @@
+
+=== chunk size target: 150 tokens ===
+  136 chunks (median ~138 tok, max 165 tok)
+    [http 429] retrying in 2s ...
+    embedded 25/136 new (RETRIEVAL_DOCUMENT)
+    embedded 50/136 new (RETRIEVAL_DOCUMENT)
+    embedded 75/136 new (RETRIEVAL_DOCUMENT)
+    embedded 100/136 new (RETRIEVAL_DOCUMENT)
+    embedded 125/136 new (RETRIEVAL_DOCUMENT)
+    embedded 136/136 new (RETRIEVAL_DOCUMENT)
+    embedded 25/25 new (RETRIEVAL_QUERY)
+  [FieldServe-CRM Sync / idempotency key format] recall=1 survived=1
+  [FieldServe-CRM Sync / retry policy] recall=1 survived=1
+  [FieldServe-CRM Sync / dead-letter queue] recall=1 survived=1
+  [FieldServe-CRM Sync / p95 SLO] recall=1 survived=1
+  [FieldServe-CRM Sync / monitoring metric] recall=1 survived=1
+  [LedgerLink / idempotency key format] recall=1 survived=1
+  [LedgerLink / retry policy] recall=1 survived=1
+  [LedgerLink / dead-letter queue] recall=1 survived=1
+  [LedgerLink / p95 SLO] recall=1 survived=1
+  [LedgerLink / monitoring metric] recall=1 survived=1
+  [FleetBridge / idempotency key format] recall=1 survived=1
+  [FleetBridge / retry policy] recall=1 survived=1
+  [FleetBridge / dead-letter queue] recall=1 survived=1
+  [FleetBridge / p95 SLO] recall=1 survived=1
+  [FleetBridge / monitoring metric] recall=1 survived=1
+  [StockMesh / idempotency key format] recall=1 survived=1
+  [StockMesh / retry policy] recall=1 survived=1
+  [StockMesh / dead-letter queue] recall=1 survived=1
+  [StockMesh / p95 SLO] recall=1 survived=1
+  [StockMesh / monitoring metric] recall=1 survived=1
+  [CarePoint Connect / idempotency key format] recall=1 survived=1
+  [CarePoint Connect / retry policy] recall=1 survived=1
+  [CarePoint Connect / dead-letter queue] recall=1 survived=1
+  [CarePoint Connect / p95 SLO] recall=1 survived=1
+  [CarePoint Connect / monitoring metric] recall=1 survived=1
+    embedded 5/5 new (RETRIEVAL_QUERY)
+    embedded 5/5 new (RETRIEVAL_QUERY)
+  recall@12 25/25 | budget-survival 25/25 | continuity plain 5/5 anchored 5/5
+  e2e[gemini:gemini-2.5-flash]: correct 25/25, refusals 0 (false: 0)
+  e2e[deepseek:deepseek-v4-flash]: correct 23/25, refusals 0 (false: 0)
+
+=== chunk size target: 300 tokens ===
+  66 chunks (median ~275 tok, max 310 tok)
+    embedded 25/66 new (RETRIEVAL_DOCUMENT)
+    embedded 50/66 new (RETRIEVAL_DOCUMENT)
+    embedded 66/66 new (RETRIEVAL_DOCUMENT)
+  [FieldServe-CRM Sync / idempotency key format] recall=1 survived=1
+  [FieldServe-CRM Sync / retry policy] recall=1 survived=1
+  [FieldServe-CRM Sync / dead-letter queue] recall=1 survived=1
+  [FieldServe-CRM Sync / p95 SLO] recall=1 survived=1
+  [FieldServe-CRM Sync / monitoring metric] recall=1 survived=1
+  [LedgerLink / idempotency key format] recall=1 survived=1
+  [LedgerLink / retry policy] recall=1 survived=1
+  [LedgerLink / dead-letter queue] recall=1 survived=1
+  [LedgerLink / p95 SLO] recall=1 survived=1
+  [LedgerLink / monitoring metric] recall=1 survived=1
+  [FleetBridge / idempotency key format] recall=1 survived=1
+  [FleetBridge / retry policy] recall=1 survived=1
+  [FleetBridge / dead-letter queue] recall=1 survived=1
+  [FleetBridge / p95 SLO] recall=1 survived=1
+  [FleetBridge / monitoring metric] recall=1 survived=1
+  [StockMesh / idempotency key format] recall=1 survived=1
+  [StockMesh / retry policy] recall=1 survived=1
+  [StockMesh / dead-letter queue] recall=1 survived=1
+  [StockMesh / p95 SLO] recall=1 survived=1
+  [StockMesh / monitoring metric] recall=1 survived=1
+  [CarePoint Connect / idempotency key format] recall=1 survived=1
+  [CarePoint Connect / retry policy] recall=1 survived=1
+  [CarePoint Connect / dead-letter queue] recall=1 survived=1
+  [CarePoint Connect / p95 SLO] recall=1 survived=1
+  [CarePoint Connect / monitoring metric] recall=1 survived=1
+  recall@12 25/25 | budget-survival 25/25 | continuity plain 5/5 anchored 5/5
+  e2e[gemini:gemini-2.5-flash]: correct 25/25, refusals 0 (false: 0)
+  e2e[deepseek:deepseek-v4-flash]: correct 21/25, refusals 0 (false: 0)
+
+=== chunk size target: 512 tokens ===
+  35 chunks (median ~534 tok, max 564 tok)
+    [http 429] retrying in 2s ...
+    embedded 25/35 new (RETRIEVAL_DOCUMENT)
+    embedded 35/35 new (RETRIEVAL_DOCUMENT)
+  [FieldServe-CRM Sync / idempotency key format] recall=1 survived=1
+  [FieldServe-CRM Sync / retry policy] recall=1 survived=1
+  [FieldServe-CRM Sync / dead-letter queue] recall=1 survived=1
+  [FieldServe-CRM Sync / p95 SLO] recall=1 survived=1
+  [FieldServe-CRM Sync / monitoring metric] recall=1 survived=1
+  [LedgerLink / idempotency key format] recall=1 survived=1
+  [LedgerLink / retry policy] recall=1 survived=1
+  [LedgerLink / dead-letter queue] recall=1 survived=1
+  [LedgerLink / p95 SLO] recall=1 survived=1
+  [LedgerLink / monitoring metric] recall=1 survived=1
+  [FleetBridge / idempotency key format] recall=1 survived=1
+  [FleetBridge / retry policy] recall=1 survived=1
+  [FleetBridge / dead-letter queue] recall=1 survived=1
+  [FleetBridge / p95 SLO] recall=1 survived=1
+  [FleetBridge / monitoring metric] recall=1 survived=1
+  [StockMesh / idempotency key format] recall=1 survived=1
+  [StockMesh / retry policy] recall=1 survived=1
+  [StockMesh / dead-letter queue] recall=1 survived=1
+  [StockMesh / p95 SLO] recall=1 survived=1
+  [StockMesh / monitoring metric] recall=1 survived=1
+  [CarePoint Connect / idempotency key format] recall=1 survived=1
+  [CarePoint Connect / retry policy] recall=1 survived=1
+  [CarePoint Connect / dead-letter queue] recall=1 survived=1
+  [CarePoint Connect / p95 SLO] recall=1 survived=1
+  [CarePoint Connect / monitoring metric] recall=1 survived=1
+  recall@12 25/25 | budget-survival 25/25 | continuity plain 5/5 anchored 5/5
+  e2e[gemini:gemini-2.5-flash]: correct 25/25, refusals 0 (false: 0)
+  e2e[deepseek:deepseek-v4-flash]: correct 21/25, refusals 0 (false: 0)
+
+=== chunk size target: 800 tokens ===
+  30 chunks (median ~549 tok, max 576 tok)
+    embedded 25/30 new (RETRIEVAL_DOCUMENT)
+    embedded 30/30 new (RETRIEVAL_DOCUMENT)
+  [FieldServe-CRM Sync / idempotency key format] recall=1 survived=1
+  [FieldServe-CRM Sync / retry policy] recall=1 survived=1
+  [FieldServe-CRM Sync / dead-letter queue] recall=1 survived=1
+  [FieldServe-CRM Sync / p95 SLO] recall=1 survived=1
+  [FieldServe-CRM Sync / monitoring metric] recall=1 survived=1
+  [LedgerLink / idempotency key format] recall=1 survived=1
+  [LedgerLink / retry policy] recall=1 survived=1
+  [LedgerLink / dead-letter queue] recall=1 survived=1
+  [LedgerLink / p95 SLO] recall=1 survived=1
+  [LedgerLink / monitoring metric] recall=1 survived=1
+  [FleetBridge / idempotency key format] recall=1 survived=1
+  [FleetBridge / retry policy] recall=1 survived=1
+  [FleetBridge / dead-letter queue] recall=1 survived=1
+  [FleetBridge / p95 SLO] recall=1 survived=1
+  [FleetBridge / monitoring metric] recall=1 survived=1
+  [StockMesh / idempotency key format] recall=1 survived=1
+  [StockMesh / retry policy] recall=1 survived=1
+  [StockMesh / dead-letter queue] recall=1 survived=1
+  [StockMesh / p95 SLO] recall=1 survived=1
+  [StockMesh / monitoring metric] recall=1 survived=1
+  [CarePoint Connect / idempotency key format] recall=1 survived=1
+  [CarePoint Connect / retry policy] recall=1 survived=1
+  [CarePoint Connect / dead-letter queue] recall=1 survived=1
+  [CarePoint Connect / p95 SLO] recall=1 survived=1
+  [CarePoint Connect / monitoring metric] recall=1 survived=1
+  recall@12 25/25 | budget-survival 25/25 | continuity plain 5/5 anchored 5/5
+  e2e[gemini:gemini-2.5-flash]: correct 24/25, refusals 0 (false: 0)
+  e2e[deepseek:deepseek-v4-flash]: correct 20/25, refusals 0 (false: 0)
+
+=== chunk size target: 1250 tokens ===
+  15 chunks (median ~1092 tok, max 1138 tok)
+    embedded 15/15 new (RETRIEVAL_DOCUMENT)
+  [FieldServe-CRM Sync / idempotency key format] recall=1 survived=1
+  [FieldServe-CRM Sync / retry policy] recall=1 survived=1
+  [FieldServe-CRM Sync / dead-letter queue] recall=1 survived=1
+  [FieldServe-CRM Sync / p95 SLO] recall=1 survived=1
+  [FieldServe-CRM Sync / monitoring metric] recall=1 survived=1
+  [LedgerLink / idempotency key format] recall=1 survived=1
+  [LedgerLink / retry policy] recall=1 survived=1
+  [LedgerLink / dead-letter queue] recall=1 survived=1
+  [LedgerLink / p95 SLO] recall=1 survived=1
+  [LedgerLink / monitoring metric] recall=1 survived=1
+  [FleetBridge / idempotency key format] recall=1 survived=1
+  [FleetBridge / retry policy] recall=1 survived=1
+  [FleetBridge / dead-letter queue] recall=1 survived=1
+  [FleetBridge / p95 SLO] recall=1 survived=1
+  [FleetBridge / monitoring metric] recall=1 survived=1
+  [StockMesh / idempotency key format] recall=1 survived=1
+  [StockMesh / retry policy] recall=1 survived=1
+  [StockMesh / dead-letter queue] recall=1 survived=1
+  [StockMesh / p95 SLO] recall=1 survived=1
+  [StockMesh / monitoring metric] recall=1 survived=1
+  [CarePoint Connect / idempotency key format] recall=1 survived=1
+  [CarePoint Connect / retry policy] recall=1 survived=1
+  [CarePoint Connect / dead-letter queue] recall=1 survived=1
+  [CarePoint Connect / p95 SLO] recall=1 survived=1
+  [CarePoint Connect / monitoring metric] recall=1 survived=1
+  recall@12 25/25 | budget-survival 25/25 | continuity plain 5/5 anchored 5/5
+  e2e[gemini:gemini-2.5-flash]: correct 24/25, refusals 0 (false: 0)
+  e2e[deepseek:deepseek-v4-flash]: correct 22/25, refusals 0 (false: 0)
+
+=== chunk size target: 2000 tokens ===
+  10 chunks (median ~1654 tok, max 1665 tok)
+    embedded 10/10 new (RETRIEVAL_DOCUMENT)
+  [FieldServe-CRM Sync / idempotency key format] recall=1 survived=1
+  [FieldServe-CRM Sync / retry policy] recall=1 survived=1
+  [FieldServe-CRM Sync / dead-letter queue] recall=1 survived=1
+  [FieldServe-CRM Sync / p95 SLO] recall=1 survived=1
+  [FieldServe-CRM Sync / monitoring metric] recall=1 survived=1
+  [LedgerLink / idempotency key format] recall=1 survived=1
+  [LedgerLink / retry policy] recall=1 survived=1
+    [net err: HTTPSConnectionPool(host='api.deepseek.com', port=443): Read timed out.] retrying in 2s ...
+  [LedgerLink / dead-letter queue] recall=1 survived=1
+  [LedgerLink / p95 SLO] recall=1 survived=1
+  [LedgerLink / monitoring metric] recall=1 survived=1
+  [FleetBridge / idempotency key format] recall=1 survived=1
+  [FleetBridge / retry policy] recall=1 survived=1
+  [FleetBridge / dead-letter queue] recall=1 survived=1
+  [FleetBridge / p95 SLO] recall=1 survived=1
+  [FleetBridge / monitoring metric] recall=1 survived=1
+  [StockMesh / idempotency key format] recall=1 survived=1
+  [StockMesh / retry policy] recall=1 survived=1
+  [StockMesh / dead-letter queue] recall=1 survived=1
+  [StockMesh / p95 SLO] recall=1 survived=0
+  [StockMesh / monitoring metric] recall=1 survived=1
+  [CarePoint Connect / idempotency key format] recall=1 survived=1
+  [CarePoint Connect / retry policy] recall=1 survived=1
+  [CarePoint Connect / dead-letter queue] recall=1 survived=1
+  [CarePoint Connect / p95 SLO] recall=1 survived=1
+  [CarePoint Connect / monitoring metric] recall=1 survived=1
+  recall@12 25/25 | budget-survival 24/25 | continuity plain 5/5 anchored 5/5
+  e2e[gemini:gemini-2.5-flash]: correct 24/25, refusals 1 (false: 0)
+  e2e[deepseek:deepseek-v4-flash]: correct 23/25, refusals 1 (false: 0)
+
+=== chunk size target: 2500 tokens ===
+  8 chunks (median ~2187 tok, max 2217 tok)
+    embedded 8/8 new (RETRIEVAL_DOCUMENT)
+  [FieldServe-CRM Sync / idempotency key format] recall=1 survived=1
+  [FieldServe-CRM Sync / retry policy] recall=1 survived=1
+  [FieldServe-CRM Sync / dead-letter queue] recall=1 survived=1
+  [FieldServe-CRM Sync / p95 SLO] recall=1 survived=1
+  [FieldServe-CRM Sync / monitoring metric] recall=1 survived=1
+  [LedgerLink / idempotency key format] recall=1 survived=1
+  [LedgerLink / retry policy] recall=1 survived=1
+  [LedgerLink / dead-letter queue] recall=1 survived=1
+  [LedgerLink / p95 SLO] recall=1 survived=0
+  [LedgerLink / monitoring metric] recall=1 survived=1
+  [FleetBridge / idempotency key format] recall=1 survived=1
+  [FleetBridge / retry policy] recall=1 survived=1
+  [FleetBridge / dead-letter queue] recall=1 survived=1
+  [FleetBridge / p95 SLO] recall=1 survived=1
+  [FleetBridge / monitoring metric] recall=1 survived=1
+  [StockMesh / idempotency key format] recall=1 survived=1
+  [StockMesh / retry policy] recall=1 survived=1
+  [StockMesh / dead-letter queue] recall=1 survived=1
+  [StockMesh / p95 SLO] recall=1 survived=0
+  [StockMesh / monitoring metric] recall=1 survived=0
+  [CarePoint Connect / idempotency key format] recall=1 survived=1
+  [CarePoint Connect / retry policy] recall=1 survived=1
+  [CarePoint Connect / dead-letter queue] recall=1 survived=1
+  [CarePoint Connect / p95 SLO] recall=1 survived=1
+  [CarePoint Connect / monitoring metric] recall=1 survived=1
+  recall@12 25/25 | budget-survival 22/25 | continuity plain 5/5 anchored 5/5
+  e2e[gemini:gemini-2.5-flash]: correct 22/25, refusals 3 (false: 0)
+  e2e[deepseek:deepseek-v4-flash]: correct 19/25, refusals 3 (false: 0)
+
+
+================ SWEEP RESULTS ================
+ size chunks recall@12 survival cont.plain cont.anch | gemini:gemini-2.5-flash correct/refusals(false) | deepseek:deepseek-v4-flash correct/refusals(false)
+  150    136      25/25     25/25        5/5       5/5 | 25/25 0(0) | 23/25 0(0)
+  300     66      25/25     25/25        5/5       5/5 | 25/25 0(0) | 21/25 0(0)
+  512     35      25/25     25/25        5/5       5/5 | 25/25 0(0) | 21/25 0(0)
+  800     30      25/25     25/25        5/5       5/5 | 24/25 0(0) | 20/25 0(0)
+ 1250     15      25/25     25/25        5/5       5/5 | 24/25 0(0) | 22/25 0(0)
+ 2000     10      25/25     24/25        5/5       5/5 | 24/25 1(0) | 23/25 1(0)
+ 2500      8      25/25     22/25        5/5       5/5 | 22/25 3(0) | 19/25 3(0)
+
+results written to /Users/evin/natively-cluely-ai-assistant/experiments/chunk-sweep/results.json

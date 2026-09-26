@@ -1,0 +1,1110 @@
+{
+  "id": "INT-M",
+  "category": "interview",
+  "natively_mode": "looking-for-work",
+  "length_bucket": "medium",
+  "speakers": [
+    {
+      "label": "S0",
+      "shown_to_model_as": "Me",
+      "name": "Maya Okafor",
+      "role": "Senior Product Designer (job candidate)",
+      "org": "Brightlane Insurance"
+    },
+    {
+      "label": "S1",
+      "shown_to_model_as": "Speaker 1",
+      "name": "Theo Lindqvist",
+      "role": "Senior Recruiter",
+      "org": "Corvella Health"
+    },
+    {
+      "label": "S2",
+      "shown_to_model_as": "Speaker 2",
+      "name": "Dana Whitfield",
+      "role": "Director of Product Design (hiring manager)",
+      "org": "Corvella Health"
+    }
+  ],
+  "context": "A roughly 25 minute recruiter phone screen in which Corvella Health recruiter Theo Lindqvist pitches a Senior Product Designer role to candidate Maya Okafor, covering company, role, compensation, logistics and interview process. Near the end Theo patches in hiring manager Dana Whitfield for a few minutes, who changes one interview stage before dropping off.",
+  "facts": [
+    {
+      "id": "F01",
+      "type": "entity",
+      "importance": "critical",
+      "statement": "Corvella Health builds care coordination software for home health agencies; its main product is Corvella Connect, which handles clinicians' schedules, routes, visit notes and medication reconciliation and syncs to the agency and physician.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        18,
+        19
+      ],
+      "notes": null
+    },
+    {
+      "id": "F02",
+      "type": "entity",
+      "importance": "important",
+      "statement": "Corvella Connect has a clinician mobile app and an agency web console; a payer portal has just been started and is early.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        21
+      ],
+      "notes": null
+    },
+    {
+      "id": "F03",
+      "type": "number",
+      "importance": "important",
+      "statement": "Corvella is used by about 340 home health agencies, mostly in the Mountain West and Midwest.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        22
+      ],
+      "notes": null
+    },
+    {
+      "id": "F04",
+      "type": "number",
+      "importance": "critical",
+      "statement": "Corvella is Series B, having closed a $42 million round in March led by Harborline Ventures.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        24
+      ],
+      "notes": null
+    },
+    {
+      "id": "F05",
+      "type": "number",
+      "importance": "minor",
+      "statement": "The Series B money is mostly going into product and engineering hiring.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        24
+      ],
+      "notes": null
+    },
+    {
+      "id": "F06",
+      "type": "number",
+      "importance": "critical",
+      "statement": "Corvella has about 215 employees (crossed 215 last month).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        80
+      ],
+      "notes": "supersedes the 180 figure stated at line 24"
+    },
+    {
+      "id": "F07",
+      "type": "person",
+      "importance": "important",
+      "statement": "Theo Lindqvist is a senior recruiter at Corvella Health and ran the screen.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        8
+      ],
+      "notes": null
+    },
+    {
+      "id": "F08",
+      "type": "entity",
+      "importance": "critical",
+      "statement": "The role is Senior Product Designer, which maps to Corvella's P4 level.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        28,
+        131
+      ],
+      "notes": null
+    },
+    {
+      "id": "F09",
+      "type": "entity",
+      "importance": "critical",
+      "statement": "The role sits on the Clinician Experience team, which owns the mobile app nurses use in the field.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        28
+      ],
+      "notes": null
+    },
+    {
+      "id": "F10",
+      "type": "person",
+      "importance": "critical",
+      "statement": "The role reports to Dana Whitfield, Director of Product Design, who is the hiring manager.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        29,
+        115
+      ],
+      "notes": null
+    },
+    {
+      "id": "F11",
+      "type": "entity",
+      "importance": "important",
+      "statement": "The Clinician Experience team currently has two other designers, a PM, and about 7 engineers.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        29
+      ],
+      "notes": null
+    },
+    {
+      "id": "F12",
+      "type": "background",
+      "importance": "important",
+      "statement": "The team's big project for next year is rebuilding the visit documentation flow; nurses currently spend about 40 minutes after every shift catching up on notes, a burnout driver.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        31
+      ],
+      "notes": null
+    },
+    {
+      "id": "F13",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "The clinician app must work offline in low-signal areas and sync later.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        33
+      ],
+      "notes": null
+    },
+    {
+      "id": "F14",
+      "type": "number",
+      "importance": "important",
+      "statement": "Dana's first-year success measure for the hire is cutting post-shift documentation time in half, from roughly 40 minutes to 20.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        67
+      ],
+      "notes": null
+    },
+    {
+      "id": "F15",
+      "type": "background",
+      "importance": "important",
+      "statement": "Maya Okafor has about five years as a product designer, starting with about two years at Denver agency Northpaw Studio.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        38
+      ],
+      "notes": null
+    },
+    {
+      "id": "F16",
+      "type": "background",
+      "importance": "important",
+      "statement": "Maya has spent the last three years at Brightlane Insurance as a senior product designer on the claims team.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        39
+      ],
+      "notes": null
+    },
+    {
+      "id": "F17",
+      "type": "example",
+      "importance": "important",
+      "statement": "Maya's mobile claims redesign cut auto claim filing time from about 11 minutes to a median of about 4 minutes and raised mobile completion 22% in the first quarter after launch.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        41,
+        42
+      ],
+      "notes": null
+    },
+    {
+      "id": "F18",
+      "type": "background",
+      "importance": "important",
+      "statement": "Maya was lead designer on the claims redesign (with one other designer, a researcher and the PM) and ran about 30 usability sessions.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        44
+      ],
+      "notes": null
+    },
+    {
+      "id": "F19",
+      "type": "background",
+      "importance": "important",
+      "statement": "Maya's motivation: her mother has been a home health nurse for about twenty years, so a role focused on nurses' documentation resonates.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        49
+      ],
+      "notes": null
+    },
+    {
+      "id": "F20",
+      "type": "preference",
+      "importance": "important",
+      "statement": "Brightlane is moving everyone to three days a week in office starting January, and Maya prefers remote work.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        53
+      ],
+      "notes": null
+    },
+    {
+      "id": "F21",
+      "type": "preference",
+      "importance": "minor",
+      "statement": "Maya wants to work closely with research and engineering rather than handing designs over the wall.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        55
+      ],
+      "notes": null
+    },
+    {
+      "id": "F22",
+      "type": "logistics",
+      "importance": "minor",
+      "statement": "Onboarding includes two or three ride-alongs with nurses in the first month; engineers also go on ride-alongs.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        56,
+        58
+      ],
+      "notes": null
+    },
+    {
+      "id": "F23",
+      "type": "entity",
+      "importance": "minor",
+      "statement": "Corvella has eleven designers across product and no dedicated design system team; it is a shared guild informally run by staff designer Donna Park.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        60
+      ],
+      "notes": null
+    },
+    {
+      "id": "F24",
+      "type": "entity",
+      "importance": "minor",
+      "statement": "Corvella has one full-time UX researcher, Keiko, shared across the product org; designers run many of their own studies.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        65
+      ],
+      "notes": null
+    },
+    {
+      "id": "F25",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "The role is hybrid, not fully remote: 2 days a week in the Denver office, Tuesdays and Thursdays for the Clinician Experience team.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        71
+      ],
+      "notes": "corrects Maya's assumption at line 53 that the role is fully remote"
+    },
+    {
+      "id": "F26",
+      "type": "commitment",
+      "importance": "minor",
+      "statement": "Theo said he will get the 'remote-friendly' wording in the job posting fixed.",
+      "owner": "Theo Lindqvist",
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        73
+      ],
+      "notes": null
+    },
+    {
+      "id": "F27",
+      "type": "logistics",
+      "importance": "important",
+      "statement": "The Denver office is in LoDo near Union Station.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        77
+      ],
+      "notes": null
+    },
+    {
+      "id": "F28",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "Employees must be based in Colorado and keep core hours of 10am to 3pm Mountain time.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        78
+      ],
+      "notes": null
+    },
+    {
+      "id": "F29",
+      "type": "number",
+      "importance": "critical",
+      "statement": "The base salary band for Senior Product Designer (P4) is $148,000 to $172,000.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        131
+      ],
+      "notes": "supersedes the $128,000-$146,000 band at line 82, which was the P3 band"
+    },
+    {
+      "id": "F30",
+      "type": "number",
+      "importance": "critical",
+      "statement": "Maya's target base salary is about $165,000, which Theo noted as within the band.",
+      "owner": "Maya Okafor",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        134,
+        135
+      ],
+      "notes": "supersedes her initial $155,000 at line 85"
+    },
+    {
+      "id": "F31",
+      "type": "number",
+      "importance": "important",
+      "statement": "The annual bonus target is 10% of base, tied to company goals.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        88
+      ],
+      "notes": null
+    },
+    {
+      "id": "F32",
+      "type": "number",
+      "importance": "minor",
+      "statement": "Last year the bonus paid out at 100% of target.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        88
+      ],
+      "notes": null
+    },
+    {
+      "id": "F33",
+      "type": "number",
+      "importance": "critical",
+      "statement": "The standard equity grant at this level is 12,000 stock options with four-year vesting and a one-year cliff.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        89
+      ],
+      "notes": null
+    },
+    {
+      "id": "F34",
+      "type": "number",
+      "importance": "important",
+      "statement": "The option strike price is based on the last 409A, about $3.10 a share, but a new 409A is coming after the round.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        89
+      ],
+      "notes": null
+    },
+    {
+      "id": "F35",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Equity refresh grants are tied to annual performance reviews in February; exact refresh amounts vary.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        91
+      ],
+      "notes": null
+    },
+    {
+      "id": "F36",
+      "type": "number",
+      "importance": "important",
+      "statement": "Benefits: company covers 90% of premiums for the employee and 70% for dependents; 401k with a 4% match.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        93
+      ],
+      "notes": null
+    },
+    {
+      "id": "F37",
+      "type": "number",
+      "importance": "important",
+      "statement": "PTO is unlimited with a mandatory minimum of 15 days.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        93
+      ],
+      "notes": null
+    },
+    {
+      "id": "F38",
+      "type": "background",
+      "importance": "critical",
+      "statement": "Maya is on an H-1B through Brightlane and needs a transfer; Corvella supports H-1B transfers.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        98,
+        99
+      ],
+      "notes": null
+    },
+    {
+      "id": "F39",
+      "type": "logistics",
+      "importance": "minor",
+      "statement": "Corvella uses an outside immigration firm for H-1B transfers.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        99
+      ],
+      "notes": null
+    },
+    {
+      "id": "F40",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "Maya's notice period at Brightlane is three weeks.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        104,
+        175
+      ],
+      "notes": "corrects 'two weeks' said at the start of line 104"
+    },
+    {
+      "id": "F41",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "Maya has a pre-booked, non-negotiable trip to Lisbon for her sister's wedding from October 9 through October 19.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        106
+      ],
+      "notes": null
+    },
+    {
+      "id": "F42",
+      "type": "logistics",
+      "importance": "important",
+      "statement": "The process has four stages total; the recruiter screen is stage one.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        112,
+        149
+      ],
+      "notes": null
+    },
+    {
+      "id": "F43",
+      "type": "definition",
+      "importance": "important",
+      "statement": "Stage two is a 45 minute interview with hiring manager Dana Whitfield.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        113,
+        171
+      ],
+      "notes": null
+    },
+    {
+      "id": "F44",
+      "type": "person",
+      "importance": "important",
+      "statement": "Donna Park is a Staff Product Designer on the team, distinct from Dana Whitfield (the hiring manager).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        115,
+        116
+      ],
+      "notes": null
+    },
+    {
+      "id": "F45",
+      "type": "definition",
+      "importance": "important",
+      "statement": "Stage four is the final loop of three sessions: a 60 minute design critique with Donna, a 45 minute cross-functional interview with the PM and engineering lead, and a 30 minute values conversation with someone outside product.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        119,
+        171
+      ],
+      "notes": null
+    },
+    {
+      "id": "F46",
+      "type": "logistics",
+      "importance": "important",
+      "statement": "The final loop is usually held in person at the Denver office.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        121
+      ],
+      "notes": null
+    },
+    {
+      "id": "F47",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "Dana dropped the take-home exercise; stage three is now a 60 minute portfolio review where Maya presents two case studies to Dana, Donna Park and PM Luis Ferrante.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        150,
+        151,
+        171
+      ],
+      "notes": "supersedes the 4-hour take-home stage at line 118"
+    },
+    {
+      "id": "F48",
+      "type": "decision",
+      "importance": "important",
+      "statement": "Maya may redact NDA-covered numbers and screens from her Brightlane work in the portfolio review.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        152,
+        153
+      ],
+      "notes": null
+    },
+    {
+      "id": "F49",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Maya will send her portfolio link and the two case studies she wants to present to Theo by Friday the 25th.",
+      "owner": "Maya Okafor",
+      "deadline": "Friday the 25th",
+      "position": "late",
+      "lines": [
+        155,
+        156,
+        158,
+        179
+      ],
+      "notes": null
+    },
+    {
+      "id": "F50",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Maya will send Theo her availability for the next two weeks by Thursday, to pass to Dana for her interview.",
+      "owner": "Maya Okafor",
+      "deadline": "Thursday",
+      "position": "late",
+      "lines": [
+        179,
+        180
+      ],
+      "notes": null
+    },
+    {
+      "id": "F51",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Dana Whitfield will send the calendar invite for her hiring manager interview herself.",
+      "owner": "Dana Whitfield",
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        113,
+        159,
+        160,
+        181
+      ],
+      "notes": "owner changed from Theo (line 113) to Dana (line 159)"
+    },
+    {
+      "id": "F52",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Theo will send Maya the benefits guide PDF by end of day today.",
+      "owner": "Theo Lindqvist",
+      "deadline": "end of day today",
+      "position": "middle",
+      "lines": [
+        95,
+        181
+      ],
+      "notes": null
+    },
+    {
+      "id": "F53",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Theo will send calendar invites for the portfolio review and the final loop once dates are locked.",
+      "owner": "Theo Lindqvist",
+      "deadline": "once dates are locked",
+      "position": "late",
+      "lines": [
+        181
+      ],
+      "notes": null
+    },
+    {
+      "id": "F54",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "The whole team is at an offsite the week of November 9.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        161
+      ],
+      "notes": null
+    },
+    {
+      "id": "F55",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "Plan: Dana's interview next week and the portfolio review the week of October 5, before Maya leaves on the 9th.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        172
+      ],
+      "notes": null
+    },
+    {
+      "id": "F56",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "The final loop will be on October 21 or 22, after Maya returns (she prefers not the 20th since she lands on the 19th).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        173,
+        174
+      ],
+      "notes": null
+    },
+    {
+      "id": "F57",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "The team aims to make a hiring decision by October 23.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        174
+      ],
+      "notes": "implicit supersession of the October 16 target at line 124"
+    },
+    {
+      "id": "F58",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "The target start date is November 16, accounting for three weeks notice, the H-1B transfer paperwork and the November 9 offsite; Maya agreed.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        176,
+        177
+      ],
+      "notes": "implicit supersession of the November 2 start at line 124"
+    },
+    {
+      "id": "F59",
+      "type": "caveat",
+      "importance": "minor",
+      "statement": "Maya would forfeit her Brightlane annual bonus if she leaves before March.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        136
+      ],
+      "notes": null
+    },
+    {
+      "id": "F60",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Corvella's HR manager left last month, so ownership of the premium processing question in people ops is unclear.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        187
+      ],
+      "notes": null
+    },
+    {
+      "id": "F61",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Theo describes Dana as direct, holding weekly one on ones and protecting the team's research time.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        191
+      ],
+      "notes": null
+    }
+  ],
+  "corrections": [
+    {
+      "id": "C01",
+      "what": "Company headcount",
+      "initial_value": "about 180 people",
+      "initial_line": 24,
+      "final_value": "about 215 people",
+      "final_line": 80,
+      "explicit": true,
+      "fact_id": "F06"
+    },
+    {
+      "id": "C02",
+      "what": "Base salary band for the role",
+      "initial_value": "$128,000 to $146,000 (actually the P3 band)",
+      "initial_line": 82,
+      "final_value": "$148,000 to $172,000 (P4 band)",
+      "final_line": 131,
+      "explicit": true,
+      "fact_id": "F29"
+    },
+    {
+      "id": "C03",
+      "what": "Maya's target base salary",
+      "initial_value": "$155,000",
+      "initial_line": 85,
+      "final_value": "$165,000",
+      "final_line": 134,
+      "explicit": true,
+      "fact_id": "F30"
+    },
+    {
+      "id": "C04",
+      "what": "Maya's notice period",
+      "initial_value": "two weeks",
+      "initial_line": 104,
+      "final_value": "three weeks",
+      "final_line": 104,
+      "explicit": true,
+      "fact_id": "F40"
+    },
+    {
+      "id": "C05",
+      "what": "Interview stage three",
+      "initial_value": "4-hour take-home design exercise, 5 days to complete",
+      "initial_line": 118,
+      "final_value": "60 minute portfolio review presenting two case studies",
+      "final_line": 151,
+      "explicit": true,
+      "fact_id": "F47"
+    },
+    {
+      "id": "C06",
+      "what": "Hiring decision target date",
+      "initial_value": "October 16",
+      "initial_line": 124,
+      "final_value": "October 23",
+      "final_line": 174,
+      "explicit": false,
+      "fact_id": "F57"
+    },
+    {
+      "id": "C07",
+      "what": "Target start date",
+      "initial_value": "November 2",
+      "initial_line": 124,
+      "final_value": "November 16",
+      "final_line": 176,
+      "explicit": false,
+      "fact_id": "F58"
+    },
+    {
+      "id": "C08",
+      "what": "Owner of the hiring manager interview calendar invite",
+      "initial_value": "Theo Lindqvist",
+      "initial_line": 113,
+      "final_value": "Dana Whitfield",
+      "final_line": 159,
+      "explicit": true,
+      "fact_id": "F51"
+    },
+    {
+      "id": "C09",
+      "what": "Work arrangement",
+      "initial_value": "fully remote (Maya's assumption from the posting)",
+      "initial_line": 53,
+      "final_value": "hybrid, 2 days a week in the Denver office (Tue/Thu)",
+      "final_line": 71,
+      "explicit": true,
+      "fact_id": "F25"
+    }
+  ],
+  "not_decisions": [
+    {
+      "statement": "Considering Maya for a possible Design Lead role on the payer portal team in Q1 (not approved, no promises)",
+      "lines": [
+        127
+      ]
+    },
+    {
+      "statement": "A sign-on bonus to offset Maya's forfeited Brightlane bonus (floated, not committed; deferred to offer stage)",
+      "lines": [
+        137
+      ]
+    },
+    {
+      "statement": "Having new hires come into the office a third day per week during their first month for onboarding (Dana thinking out loud, not decided)",
+      "lines": [
+        163
+      ]
+    },
+    {
+      "statement": "Moving the team's office days from Tuesday/Thursday to Monday/Wednesday next year (up in the air)",
+      "lines": [
+        165
+      ]
+    },
+    {
+      "statement": "Doing the final loop virtually instead of in person (requested by Maya, no answer)",
+      "lines": [
+        122,
+        184
+      ]
+    },
+    {
+      "statement": "A chat between Maya and one of the team's designers (offered as an idea; Maya will think about it)",
+      "lines": [
+        193,
+        194
+      ]
+    }
+  ],
+  "distractors": [
+    {
+      "statement": "Theo's dog Biscuit barking at the mail carrier and Maya's cat on her keyboard",
+      "lines": [
+        10,
+        11
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Small talk about snow in Boulder and rain in Denver",
+      "lines": [
+        13,
+        14
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Joke about Figma files with hundreds of layers named Rectangle",
+      "lines": [
+        61,
+        62
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Theo's Lisbon pastry recommendation in Belem",
+      "lines": [
+        109,
+        110
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Joke that Slack autocomplete confuses Dana and Donna internally",
+      "lines": [
+        117
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "The false assumption that the role is fully remote",
+      "lines": [
+        53
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "Headcount of about 180",
+      "lines": [
+        24
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Salary band $128,000 to $146,000",
+      "lines": [
+        82
+      ],
+      "why": "superseded value (P3 band quoted by mistake)"
+    },
+    {
+      "statement": "Maya's initial $155,000 target",
+      "lines": [
+        85,
+        133
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Notice period of two weeks",
+      "lines": [
+        104
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "The 4-hour take-home design exercise with 5 days to complete",
+      "lines": [
+        118
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Decision by October 16 and start on November 2",
+      "lines": [
+        124
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Maya's confusion that Donna is the hiring manager",
+      "lines": [
+        114
+      ],
+      "why": "false assumption later corrected (similar names Dana/Donna)"
+    },
+    {
+      "statement": "Brightlane claims numbers (11 to 4 minutes, 22%) are Maya's past-job metrics, not Corvella facts",
+      "lines": [
+        41,
+        42
+      ],
+      "why": "irrelevant to Corvella role details"
+    }
+  ],
+  "open_questions_at_end": [
+    "Whether the final loop can be done virtually instead of in person at the Denver office",
+    "Whether Corvella covers H-1B premium processing, and who in people ops owns that question",
+    "Whether an offer would use the old 409A strike price (~$3.10) or the new post-round 409A",
+    "Whether a sign-on bonus will be offered to offset Maya's forfeited Brightlane bonus",
+    "Whether new hires will be asked to come in a third office day during their first month",
+    "Whether the team's office days move from Tuesday/Thursday to Monday/Wednesday next year",
+    "Whether Maya will be considered for the possible payer portal Design Lead role"
+  ],
+  "summary_must_include": [
+    "Senior Product Designer (P4) on Clinician Experience, reporting to Dana Whitfield (F08, F09, F10)",
+    "Corvella Health: Series B, $42M, ~215 people, Corvella Connect for home health agencies (F04, F06, F01)",
+    "Hybrid 2 days/week in Denver (Tue/Thu), not fully remote (F25)",
+    "Corrected band $148k-$172k and Maya's revised $165k target (F29, F30)",
+    "Equity 12,000 options 4yr/1yr cliff, 10% bonus (F33, F31)",
+    "Take-home replaced by 60-min portfolio review (F47)",
+    "Constraints: H-1B transfer, 3 weeks notice, Lisbon trip Oct 9-19 (F38, F40, F41)",
+    "Decision by Oct 23, start Nov 16 (F57, F58)",
+    "Maya: portfolio + 2 case studies to Theo by Fri 25th; availability by Thursday (F49, F50)",
+    "Theo: benefits PDF by EOD; Dana sends her own interview invite (F52, F51)",
+    "Open questions: virtual final loop, H-1B premium processing, 409A strike, sign-on bonus"
+  ]
+}

@@ -265,3 +265,27 @@ describe('Phase 11 (2026-06-15) — getLastCodingTurn: coding follow-up inherita
     assert.equal(svc.getLastCodingTurn('nope'), null);
   });
 });
+
+describe('Answer-pipeline-rebuild Phase 3 (2026-07-28) — mode-switch clears conversation memory, mirroring BUG-MODE-BLEEDING', () => {
+  test('a bare/refinement follow-up after a mode switch does NOT recall the prior mode\'s turn', () => {
+    // Reproduces the mechanism live-confirmed by reading modes:set-active
+    // (ipcHandlers.ts): mode is a global (ModesManager singleton) switch, and
+    // the per-turn `mode` field recorded here is never checked back on read
+    // — so without clearAllSessions() on switch, resolveSameSession would
+    // recall a DIFFERENT mode's prior answer (e.g. a document-grounded
+    // mode's reference-file-derived content) into a mode with no
+    // authorization to see it.
+    const svc = new ConversationMemoryService();
+    recordTurn(svc, 7, 'summarize the uploaded thesis', 'The thesis proposes a novel reconciliation pipeline architecture.', 'document-grounded-thesis-review', 1000);
+    // Sanity: before the switch, the follow-up DOES recall the doc-grounded turn.
+    assert.ok(resolve(svc, 7, 'why?'), 'before a mode switch, the prior turn is recallable (establishes the baseline)');
+
+    // modes:set-active calls clearAllSessions() as part of its handler.
+    svc.clearAllSessions();
+
+    // After switching modes, the same follow-up in the new mode must not
+    // resurrect the old mode's answer.
+    assert.equal(resolve(svc, 7, 'why?'), null, 'a follow-up in a new mode must not recall a prior, different mode\'s turn');
+    assert.equal(svc.getLastAssistantAnswer('7'), null);
+  });
+});

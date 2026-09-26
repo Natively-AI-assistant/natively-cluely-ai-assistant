@@ -1,0 +1,162 @@
+{
+ "blind_id": "S-12e87ac8",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 28411,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 9402,
+  "candidatesTokenCount": 885,
+  "totalTokenCount": 13345,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 9402
+   }
+  ],
+  "thoughtsTokenCount": 3058,
+  "serviceTier": "standard"
+ },
+ "fact_count": 28,
+ "evaluation": {
+  "factual_accuracy": 9,
+  "important_information_retention": 8,
+  "hallucination_control": 10,
+  "action_item_retention": 9,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 9,
+  "entity_retention": 10,
+  "timeline_accuracy": 9,
+  "conclusion_accuracy": 10,
+  "structure": 10,
+  "conciseness": 7,
+  "readability": 9,
+  "overall_summary_quality": 9,
+  "critical_errors": [],
+  "missing_important_information": [
+   "Lumenstack Pro includes 2TB of ingest with overage at $0.40/GB.",
+   "Cartograph only includes 500GB of ingest, meaning Harrow would pay overage from day one.",
+   "Daniel offered an alternative 12-month term at a 12% discount."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "partial"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "partial"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "partial"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "partial"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "missing"
+   }
+  ],
+  "rationale": "The notes are highly accurate and capture all final decisions, action items, and next steps perfectly without any hallucinations. However, they omit important context regarding the data ingest limits (2TB for Lumenstack vs 500GB for Cartograph) and overage costs, which formed the core of Daniel's counter-argument to the competitor's pricing. Additionally, the notes suffer from significant repetition, restating the exact same contract terms (54 seats, 24 months, 18% discount, annual upfront, net 45, Oct 15) across seven different sections."
+ }
+}

@@ -1,0 +1,309 @@
+{
+ "blind_id": "S-4235d888",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 56523,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 21298,
+  "candidatesTokenCount": 2105,
+  "totalTokenCount": 29747,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 21298
+   }
+  ],
+  "thoughtsTokenCount": 6344,
+  "serviceTier": "standard"
+ },
+ "fact_count": 61,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 8,
+  "hallucination_control": 9,
+  "action_item_retention": 9,
+  "decision_retention": 9,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 3,
+  "entity_retention": 9,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 4,
+  "structure": 3,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Repeatedly reports the superseded $128k-$146k salary band and Maya's superseded $155k target as current facts, risks, and action items, contradicting the actual final values.",
+   "The Summary section contains a cut-off sentence ('presented a $128K–$14')."
+  ],
+  "missing_important_information": [
+   "Dana's success metric of cutting documentation time from 40 to 20 minutes (only mentions the 40 minutes).",
+   "Dana's interview is 45 minutes and scheduled for next week."
+  ],
+  "hallucinated_information": [
+   "States 'Benefits were asked about at the end of the chunk but not yet answered' when benefits were fully discussed during the call."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "Base salary band for the role is $128,000 to $146,000."
+   },
+   {
+    "correction_id": "C03",
+    "reported": "Maya's target base is around $155,000."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The call ended on friendly personal terms, with Maya asking Theo to say hi to Biscuit and Theo asking her to say hi to her cat."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "partial"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "contradicted"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "partial"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "partial"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "partial"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "partial"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a large amount of information from the transcript but suffer from severe structural and factual issues. The most critical error is the repeated inclusion of the superseded salary band ($128k-$146k) and Maya's initial target ($155k) as current facts, risks, and action items, even though the notes also mention the correction elsewhere. This creates massive contradictions and false conclusions. Additionally, the notes are extremely repetitive, listing the same action items and facts three or four times across different sections, and the Summary section contains a cut-off sentence."
+ }
+}

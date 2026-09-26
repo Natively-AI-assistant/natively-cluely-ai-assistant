@@ -15,7 +15,9 @@ export type DetectableTemplateType =
   | 'team-meet'
   | 'looking-for-work'
   | 'technical-interview'
-  | 'lecture';
+  | 'lecture'
+  | 'seminar'
+  | 'call-center';
 
 export interface ModeDetectionInput {
   transcript: TranscriptSegment[];
@@ -67,6 +69,21 @@ const SIGNALS: Record<Exclude<DetectableTemplateType, 'general'>, Array<{ re: Re
     { re: /\b(action item|owner|next step|status update|since last sync)\b/i, w: 1, label: 'sync' },
     { re: /\b(team|we shipped|in progress|on track|at risk)\b/i, w: 1, label: 'team status' },
   ],
+  // Seminar and Call Center (2026-09-17) were added to the app as built-ins without
+  // being added here, so a thesis talk scored Lecture and a support call scored
+  // Team Meet. Seminar keys on the PRESENTER-of-research vocabulary a classroom
+  // lecture does not use; generic words ("slides", "results") are left out so a
+  // lecture with slides stays a lecture.
+  seminar: [
+    { re: /\b(seminar|thesis|dissertation|viva|defen[cs]e of my|my research|research paper|paper presentation)\b/i, w: 2, label: 'research talk' },
+    { re: /\b(methodology|limitations?|future work|literature review|hypothesis|research questions?)\b/i, w: 1, label: 'research' },
+    { re: /\b(thank you for attending|any questions from the audience|q ?& ?a|panel)\b/i, w: 1, label: 'audience' },
+  ],
+  'call-center': [
+    { re: /\b(thank you for calling|thanks for calling|customer (support|service|care)|help ?desk|support (line|team|agent))\b/i, w: 2, label: 'support greeting' },
+    { re: /\b(escalat(e|ed|ing|ion)|tier ?[123]|call you back|callback|case number|ticket number)\b/i, w: 2, label: 'escalation' },
+    { re: /\b(refund|replacement|warranty|serial number|account number|troubleshoot(ing)?|proof of purchase)\b/i, w: 1, label: 'support issue' },
+  ],
   'looking-for-work': [
     { re: /\b(tell me about yourself|why do you want|your experience|walk me through)\b/i, w: 2, label: 'interviewee' },
     { re: /\b(this role|the team|the company|the position|interview process)\b/i, w: 1, label: 'opportunity' },
@@ -78,12 +95,14 @@ const TITLE_HINTS: Array<{ re: RegExp; type: DetectableTemplateType; w: number }
   { re: /\b(sales|demo|discovery|pipeline|prospect)\b/i, type: 'sales', w: 3 },
   { re: /\b(interview|screen|candidate|recruit)\b/i, type: 'recruiting', w: 2 },
   { re: /\b(standup|stand-up|sprint|sync|retro|planning|1:1|one on one|team)\b/i, type: 'team-meet', w: 3 },
-  { re: /\b(lecture|class|seminar|course|tutorial)\b/i, type: 'lecture', w: 3 },
+  { re: /\b(lecture|class|course|tutorial)\b/i, type: 'lecture', w: 3 },
+  { re: /\b(seminar|thesis|dissertation|viva|defen[cs]e|colloquium)\b/i, type: 'seminar', w: 3 },
+  { re: /\b(support call|customer call|call cent(er|re)|help ?desk|ticket|case #?\d+)\b/i, type: 'call-center', w: 3 },
   { re: /\b(coding|technical|system design|whiteboard)\b/i, type: 'technical-interview', w: 3 },
 ];
 
 function emptyScores(): Record<DetectableTemplateType, number> {
-  return { general: 0, sales: 0, recruiting: 0, 'team-meet': 0, 'looking-for-work': 0, 'technical-interview': 0, lecture: 0 };
+  return { general: 0, sales: 0, recruiting: 0, 'team-meet': 0, 'looking-for-work': 0, 'technical-interview': 0, lecture: 0, seminar: 0, 'call-center': 0 };
 }
 
 export class MeetingModeDetector {

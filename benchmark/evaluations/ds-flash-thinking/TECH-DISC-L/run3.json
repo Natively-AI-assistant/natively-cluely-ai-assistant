@@ -1,0 +1,343 @@
+{
+ "blind_id": "S-8e0ed257",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 65934,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 39265,
+  "candidatesTokenCount": 2397,
+  "totalTokenCount": 50107,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 39265
+   }
+  ],
+  "thoughtsTokenCount": 8445,
+  "serviceTier": "standard"
+ },
+ "fact_count": 69,
+ "evaluation": {
+  "factual_accuracy": 7,
+  "important_information_retention": 10,
+  "hallucination_control": 8,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 10,
+  "entity_retention": 10,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 7,
+  "structure": 2,
+  "conciseness": 1,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Included a cancelled action item (Ravi's Kafka spike plan) in the final Action Items list.",
+   "Included an overturned decision (migrating to Kafka) in the final Decisions list.",
+   "Listed non-actionable events and milestones (e.g., Code freeze, Open enrollment, Joaquin returning from leave) as Action Items."
+  ],
+  "missing_important_information": [],
+  "hallucinated_information": [
+   "Listed 'Code freeze for peak season', 'Open enrollment starts', 'Joaquin returns from parental leave', 'RabbitMQ inter-node TLS auditor finding remediation due date', and 'Change freeze' as action items."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C08",
+    "reported": "Tentative direction set to migrate the notification pipeline to Kafka on Amazon MSK before the October 23 freeze."
+   },
+   {
+    "correction_id": "C11",
+    "reported": "Ravi: Ravi to write a two-week spike plan for the Kafka consumer — a prototype of notif-worker reading from MSK with the retry topics. (deadline: Monday)"
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Tentative direction set to migrate the notification pipeline to Kafka on Amazon MSK before the October 23 freeze."
+  ],
+  "distractors_included": [
+   "Ravi cited a QCon San Francisco talk from a food delivery company...",
+   "Grace joined about 20 minutes late and asked whether Tuesday or the April SSO incident was the worst of the year; Pam answered April was worse for employees, Tuesday worse for patients.",
+   "Ravi joked about grieving the cancelled Kafka spike and about carrying Sam's burden; Pam joked about putting them both in the dead letter queue."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture every single fact from the transcript, resulting in perfect information retention. However, the notes suffer from severe structural and conciseness issues. The model generated massive, duplicated sections (e.g., 'Action items' and 'Action items (structured)'), resulting in extreme repetition and poor readability. Furthermore, the notes include cancelled action items (Ravi's Kafka spike) and overturned decisions (migrating to Kafka) in the final structured lists, creating internal contradictions. It also hallucinates non-actionable events (e.g., 'Code freeze', 'Joaquin returns from parental leave') as action items. These flaws make the notes highly bloated and confusing despite their factual completeness."
+ }
+}

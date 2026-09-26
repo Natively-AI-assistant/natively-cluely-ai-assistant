@@ -44,7 +44,7 @@ import assert from 'node:assert/strict';
 import Module from 'node:module';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron/audio');
@@ -107,7 +107,7 @@ Module._load = function patched(request, _parent, _isMain) {
     return origLoad.apply(this, arguments);
 };
 
-const { MicrophoneCapture } = await import(path.join(distRoot, 'MicrophoneCapture.js'));
+const { MicrophoneCapture } = await import(pathToFileURL(path.join(distRoot, 'MicrophoneCapture.js')).href);
 
 // Resolve any in-flight native stop()s, then flush microtasks/setImmediate.
 async function releaseNativeStops() {
@@ -183,8 +183,8 @@ function extractMethodBody(methodName) {
     return mainSource.slice(start, i - 1);
 }
 
-const endMeetingBody = extractMethodBody('endMeeting');
-const startMeetingBody = extractMethodBody('startMeeting');
+const endMeetingBody = extractMethodBody('endMeetingTransition');
+const startMeetingBody = extractMethodBody('startMeetingTransition');
 
 test('endMeeting NULLS both capture fields synchronously (forces serialized recreate path)', () => {
     assert.ok(

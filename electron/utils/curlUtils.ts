@@ -8,6 +8,14 @@ export interface CurlValidationResult {
     json?: any;
 }
 
+// Placeholder rules live in one dependency-free module shared with the renderer
+// and the IPC boundary — see curlPlaceholderPolicy for why.
+import {
+    TEXT_PLACEHOLDER_RE,
+    placeholderReachesTheWire,
+    explainMissingPlaceholder,
+} from './curlPlaceholderPolicy';
+
 /**
  * Validates if the cURL command is parseable and contains required variables
  */
@@ -23,13 +31,29 @@ export const validateCurl = (curl: string): CurlValidationResult => {
     try {
         const json = curl2Json(curl);
 
-        // Ensure {{TEXT}} is present so we can inject the prompt
-        // We check the raw string for the placeholder because it might be in url, header, or body
-        if (!curl.includes("{{TEXT}}")) {
+        // Ensure {{TEXT}} is present so we can inject the prompt.
+        // We check the raw string for the placeholder because it might be in url, header, or body.
+        // Spacing is tolerated to match deepVariableReplacer, which substitutes
+        // `{{ TEXT }}` as readily as `{{TEXT}}`.
+        if (!TEXT_PLACEHOLDER_RE.test(curl)) {
             return {
                 isValid: false,
                 message: "Your cURL must contain {{TEXT}} placeholder for the prompt."
             };
+        }
+
+        // A body that isn't valid JSON does not fail loudly: curl2Json returns
+        // `data: {}` for it, so the placeholders vanish and the request goes out
+        // as an empty POST with the prompt silently dropped. The usual cause is
+        // an unquoted placeholder — `{"prompt": {{TEXT}}}` instead of
+        // `{"prompt": "{{TEXT}}"}`. Catch it here, where the user can still fix
+        // the template, rather than at dispatch where nothing acts on it.
+        if (!placeholderReachesTheWire(json)) {
+            // The placeholder survived the raw string but not the parse. Which of
+            // the two causes it was, and the copy for each, is decided in one
+            // place — see curlPlaceholderPolicy for why (this logic used to be
+            // written out three times, which is how it drifted).
+            return { isValid: false, message: explainMissingPlaceholder(json) };
         }
 
         return { isValid: true, json };
@@ -48,8 +72,23 @@ export function deepVariableReplacer(
     if (typeof node === "string") {
         let result = node;
         for (const [key, value] of Object.entries(variables)) {
-            // Global replace of {{KEY}}
-            result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
+            // Global replace of {{KEY}}, tolerating inner whitespace.
+            //
+            // `\s*` is load-bearing, not cosmetic: customProviderSupportsVision
+            // accepts `{{ IMAGE_BASE64 }}` as proof the template can carry an
+            // image, so a template written that way was admitted to the vision
+            // chain and then shipped the LITERAL string `{{ IMAGE_BASE64 }}` as
+            // its image field. Detection and substitution have to agree on the
+            // same shape. validateCurl accepts the spaced {{ TEXT }} for the
+            // same reason.
+            //
+            // The replacement is a FUNCTION, not the raw string. As a string,
+            // `$&`, "$`", `$'` and `$1` are replacement PATTERNS, so a prompt
+            // asking what `$&` means in sed rewrote itself to contain
+            // `{{TEXT}}`, and "$`" spliced in preceding payload text. The
+            // function form takes the value literally. Base64 is unaffected
+            // (no `$` in the alphabet); prompts and context were not.
+            result = result.replace(new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "g"), () => value);
         }
         return result;
     }
@@ -64,6 +103,51 @@ export function deepVariableReplacer(
         return newNode;
     }
     return node;
+}
+
+/**
+ * Substitute template variables into the three surfaces an executor sends,
+ * escaping each for the surface it lands on.
+ *
+ * WHY THIS EXISTS (2026-09-04): the values must NOT be pre-escaped for the body
+ * — curl2Json parses `-d` into an object and axios serializes it, so escaping
+ * there produced double escaping (`\"` and `\n` reaching the model literally).
+ * That fix was right, but it was applied to one `variables` object shared by all
+ * three surfaces, and the URL and headers are not JSON-serialized by anything:
+ *
+ *   • A header value cannot contain CR/LF. Node throws ERR_INVALID_CHAR and the
+ *     turn dies — and a template with `{{TEXT}}` in an auth or metadata header
+ *     is a common gateway pattern, so any multi-line prompt killed it. Left
+ *     unescaped it is also textbook CRLF header injection.
+ *   • A URL silently DROPS a raw newline (`?q=a b\nc` → `?q=a%20bc`, verified),
+ *     so the prompt is corrupted rather than rejected.
+ *
+ * Each surface therefore gets the variables escaped its own way, and the body
+ * keeps the raw values it correctly wants.
+ */
+export function applyCurlVariables(
+    config: { url?: any; header?: any; data?: any },
+    variables: Record<string, string>,
+): { url: any; headers: any; data: any } {
+    // Header values: strip characters a header cannot carry. Removing rather
+    // than encoding is right — a header is not a percent-encoded surface, and a
+    // prompt's newlines carry no meaning to a gateway reading it as one value.
+    const forHeaders: Record<string, string> = {};
+    for (const [k, v] of Object.entries(variables)) {
+        forHeaders[k] = String(v ?? '').replace(/[\u0000-\u001F\u007F]/g, ' ');
+    }
+    // URL: percent-encode. The placeholder virtually always sits in a query
+    // value, and an unencoded `&`, `#` or space rewrites the request shape.
+    const forUrl: Record<string, string> = {};
+    for (const [k, v] of Object.entries(variables)) {
+        forUrl[k] = encodeURIComponent(String(v ?? ''));
+    }
+    return {
+        url: deepVariableReplacer(config.url, forUrl),
+        headers: deepVariableReplacer(config.header || {}, forHeaders),
+        // Raw — see above. The serializer escapes this one.
+        data: deepVariableReplacer(config.data || {}, variables),
+    };
 }
 
 /**
@@ -192,16 +276,28 @@ export function validateUrlForSsrf(urlString: string): { isValid: boolean; reaso
     }
 
     const hostname = url.hostname.toLowerCase();
+    const bareHostname = hostname.replace(/^\[/, '').replace(/\]$/, '');
 
     // Block localhost variants (the entire 127.0.0.0/8 range is loopback, not
     // just 127.0.0.1 — e.g. 127.0.0.2 also routes to the local machine).
-    if (hostname === 'localhost' || hostname.startsWith('127.') || hostname === '::1' || hostname === '0.0.0.0') {
+    if (hostname === 'localhost' || hostname.startsWith('127.') || bareHostname === '::1' || hostname === '0.0.0.0') {
         return { isValid: false, reason: 'Loopback addresses are not allowed' };
     }
 
-    // Block link-local (169.254.x.x)
-    if (hostname.startsWith('169.254.')) {
+    // Reject non-dotted numeric hostnames before DNS/canonicalization tricks can
+    // reinterpret them as IPv4 (e.g. https://2130706433/ → 127.0.0.1 in some stacks).
+    if (/^(?:0x[0-9a-f]+|\d+)$/i.test(bareHostname)) {
+        return { isValid: false, reason: 'Encoded IP hostnames are not allowed' };
+    }
+
+    // Block link-local IPv4 (169.254.x.x) and IPv6 (fe80::/10).
+    if (hostname.startsWith('169.254.') || /^fe[89ab][0-9a-f]*:/i.test(bareHostname)) {
         return { isValid: false, reason: 'Link-local addresses are not allowed' };
+    }
+
+    // Block IPv6 unique-local/private (fc00::/7 — fc* and fd*).
+    if (/^f[cd][0-9a-f]*:/i.test(bareHostname)) {
+        return { isValid: false, reason: 'Private IPv6 networks are not allowed' };
     }
 
     // Block private network ranges
@@ -235,6 +331,127 @@ export function validateUrlForSsrf(urlString: string): { isValid: boolean; reaso
     }
 
     return { isValid: true };
+}
+
+/**
+ * SECURITY: cloud/container METADATA endpoints, which are never a legitimate
+ * LLM host.
+ *
+ * This is deliberately NOT validateUrlForSsrf. That function blocks loopback
+ * and all of RFC-1918 — exactly the hosts a custom provider exists to reach
+ * (Ollama on 127.0.0.1, LM Studio on the LAN, llama.cpp on localhost), which is
+ * why it was removed from chatWithCurl rather than copied into the two live
+ * executors. The classic SSRF threat model also does not transfer: the URL is
+ * the local user's own configuration in a desktop app running with their own
+ * privileges, so reaching an internal host grants no access they did not
+ * already have, and exfiltration to a PUBLIC attacker host — the real risk in a
+ * pasted-cURL scenario — was never something that function blocked.
+ *
+ * What remains worth refusing is the narrow set of link-local metadata
+ * addresses: they hand out ambient cloud credentials, they are unreachable by
+ * design from a normal desktop, and nobody serves a model on them. Blocking
+ * them costs no legitimate configuration.
+ *
+ * SCOPE, stated honestly because the previous docblock over-promised: this
+ * matches the ADDRESS a URL literally names, after normalisation. It does NOT
+ * resolve DNS, so a hostname that resolves to a metadata address still passes —
+ * closing that would need a lookup on every request plus a TOCTOU-prone
+ * re-check at connect time, which is not what this narrow guard is for. It is a
+ * guard against the obvious literal, not a general SSRF control.
+ *
+ * Returns a reason string when the host is refused, or null when it is fine.
+ */
+const METADATA_REASON = 'cloud metadata endpoints are not valid model hosts';
+
+/**
+ * The dotted-quad an address-shaped hostname denotes, or null.
+ *
+ * `URL` already folds the octal and integer spellings of an IPv4 literal
+ * (`0251.0376.0251.0376`, `2852039166`) down to dotted-quad — verified — so the
+ * only form left to fold is IPv6-mapped IPv4. Node prints that in its compressed
+ * hex form: `http://[::ffff:169.254.169.254]` arrives as `::ffff:a9fe:a9fe`,
+ * which matched none of the literals this function used to compare against and
+ * so walked straight past it (code review, 2026-09-04).
+ */
+function ipv4FromHostname(host: string): string | null {
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return host;
+    const mapped = /^::ffff:(.+)$/i.exec(host);
+    if (!mapped) return null;
+    const rest = mapped[1];
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(rest)) return rest;          // ::ffff:169.254.169.254
+    const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(rest);    // ::ffff:a9fe:a9fe
+    if (!hex) return null;
+    const n = (parseInt(hex[1], 16) << 16) | parseInt(hex[2], 16);
+    return [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff].join('.');
+}
+
+export function blockedInfrastructureHost(urlString: string): string | null {
+    let host: string;
+    try {
+        host = new URL(urlString).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    } catch {
+        return null; // not a URL we can classify; the request will fail on its own
+    }
+
+    // GCP's DNS aliases.
+    if (host === 'metadata.google.internal' || host === 'metadata') return METADATA_REASON;
+    // AWS IPv6 IMDS.
+    if (host === 'fd00:ec2::254') return METADATA_REASON;
+
+    const ipv4 = ipv4FromHostname(host);
+    if (!ipv4) return null;
+
+    // The whole link-local /16, not the two literals it used to name. AWS/Azure/
+    // GCP IMDS (169.254.169.254) and ECS task metadata (169.254.170.2) both live
+    // here, the block is autoconfiguration-only, and nothing serves a model on
+    // it — so the wider net costs no legitimate configuration and cannot be
+    // stepped around by picking a neighbouring address.
+    if (/^169\.254\./.test(ipv4)) return METADATA_REASON;
+    // Providers whose metadata service sits outside link-local.
+    if (ipv4 === '100.100.100.200') return METADATA_REASON; // Alibaba Cloud
+    if (ipv4 === '192.0.0.192') return METADATA_REASON;     // Oracle Cloud
+
+    return null;
+}
+
+/**
+ * SECURITY: Validates an STT provider "region" slug before it is interpolated
+ * into a provider endpoint hostname (Azure / IBM Watson).
+ *
+ * The region is renderer-supplied and is placed *directly into the host* of the
+ * outbound, API-key-bearing request, e.g.
+ *   https://${region}.stt.speech.microsoft.com/...
+ *   https://api.${region}.speech-to-text.watson.cloud.ibm.com/...
+ * Without validation a value like `evil.com/x#` or `foo.attacker.net` would
+ * redirect the key to an attacker-controlled host (SSRF + credential exfil).
+ *
+ * Real Azure/IBM regions are short lowercase slugs (letters, digits, hyphen),
+ * e.g. `eastus`, `westeurope`, `us-south`, `eu-gb`. We allow exactly that shape.
+ * Empty is allowed (callers fall back to a hardcoded default region).
+ */
+export function isValidSttRegion(region: unknown): boolean {
+    if (region === undefined || region === null || region === '') return true;
+    if (typeof region !== 'string') return false;
+    // 1–40 chars, lowercase alphanumerics and single hyphens only. No dots,
+    // slashes, `@`, `#`, whitespace, or uppercase — anything that could break
+    // out of the host label or introduce credentials/paths into the URL.
+    return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(region) && region.length <= 40;
+}
+
+/**
+ * SECURITY: Validates a user-supplied OpenAI-compatible STT base URL.
+ *
+ * Reuses validateUrlForSsrf so a renderer cannot point the STT upload (which
+ * carries the user's OpenAI key) at a loopback/private/non-HTTPS host. Empty is
+ * allowed (falls back to https://api.openai.com). Returns a normalized result
+ * shaped like the other validators in this module.
+ */
+export function validateSttBaseUrl(url: unknown): { isValid: boolean; reason?: string } {
+    if (url === undefined || url === null || url === '') return { isValid: true };
+    if (typeof url !== 'string') return { isValid: false, reason: 'Base URL must be a string' };
+    const trimmed = url.trim();
+    if (trimmed === '') return { isValid: true };
+    return validateUrlForSsrf(trimmed);
 }
 
 /**
@@ -361,4 +578,41 @@ export function getByPath(obj: any, path: string): any {
         .replace(/\]/g, "")
         .split(".")
         .reduce((o, k) => (o || {})[k], obj);
+}
+
+/**
+ * OpenAI Structured Outputs / JSON Schema mode still serializes message.content as a
+ * JSON-encoded string rather than auto-flattening it, so a responsePath pointed at
+ * that field extracts raw JSON text (e.g. '{"bullet_points": ["a", "b"]}') instead of
+ * the intended array. Detect that shape and render it as text; returns null if the
+ * string isn't JSON or doesn't match a recognizable list shape, so the caller can
+ * fall back to the raw string untouched.
+ */
+export function flattenStructuredJsonAnswer(answer: string): string | null {
+    let parsed: any;
+    try {
+        parsed = JSON.parse(answer);
+    } catch {
+        return null;
+    }
+
+    const toBulletList = (items: any[]): string =>
+        items.map(item => `- ${typeof item === 'string' ? item : JSON.stringify(item)}`).join('\n');
+
+    if (Array.isArray(parsed)) {
+        return toBulletList(parsed);
+    }
+
+    if (parsed && typeof parsed === 'object') {
+        const arrayValues = Object.values(parsed).filter(v => Array.isArray(v)) as any[][];
+        if (arrayValues.length === 1) {
+            return toBulletList(arrayValues[0]);
+        }
+        const keys = Object.keys(parsed);
+        if (keys.length === 1 && typeof parsed[keys[0]] === 'string') {
+            return parsed[keys[0]];
+        }
+    }
+
+    return null;
 }

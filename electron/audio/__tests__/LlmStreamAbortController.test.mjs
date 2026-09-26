@@ -74,10 +74,18 @@ function extractBalancedBody(src, signatureRe, label) {
 // LLMHelper.streamChat — the public generator that gates yields on abort.
 // ---------------------------------------------------------------------------
 
+// The gate lives in `_streamChatTracked`, NOT in `streamChat`.
+//
+// c2ad3133 added streamChatWithOutcome so a caller can tell a truncated answer
+// from a complete one. Both public entry points now delegate to the private
+// `_streamChatTracked`, which owns the single for-await loop — so `streamChat`'s
+// own body is one `yield*` line and pinning it asserted nothing. Retargeted to
+// where the loop actually is; the invariant itself is unchanged and was verified
+// to still hold before this locator moved.
 const streamChatBody = extractBalancedBody(
     llmHelperSrc,
-    /public\s+async\s*\*\s*streamChat\s*\(/,
-    'LLMHelper.streamChat',
+    /private\s+async\s*\*\s*_streamChatTracked\s*\(/,
+    'LLMHelper._streamChatTracked',
 );
 
 test('streamChat extracts trailing arg as AbortSignal via args[args.length - 1] and instanceof check', () => {
@@ -87,13 +95,24 @@ test('streamChat extracts trailing arg as AbortSignal via args[args.length - 1] 
     // (extraDataScopes, options objects) could accidentally have an `aborted`
     // shape and either crash on access or be misclassified as a never-aborted
     // signal.
+    // Two acceptable extractions, and the second SUBSUMES the first:
+    //   args[args.length - 1]                          — trailing arg only
+    //   args.find(a => a instanceof AbortSignal)       — any position
+    // The implementation moved to `find` when streamChatWithOutcome was added,
+    // which is strictly stronger: it still catches the trailing signal every
+    // existing caller passes, and additionally survives a future parameter being
+    // appended after it — the exact drift that would have silently disabled
+    // cancellation under the positional form. What must never regress is that the
+    // signal is located AND narrowed with `instanceof`, so both are asserted.
     const hasLastArgLookup = /args\s*\[\s*args\.length\s*-\s*1\s*\]/.test(streamChatBody);
+    const hasSignalSearch = /args\s*\.\s*find\s*\(/.test(streamChatBody);
     const hasInstanceOfCheck = /instanceof\s+AbortSignal/.test(streamChatBody);
     assert.ok(
-        hasLastArgLookup,
-        'BUG: streamChat must extract the trailing positional arg via args[args.length - 1]. ' +
-        'Without this, callers that pass an AbortSignal as the variadic trailing arg cannot ' +
-        'cancel the generator, and supersession-discarded tokens keep streaming from the provider.',
+        hasLastArgLookup || hasSignalSearch,
+        'BUG: the streaming generator must locate the AbortSignal among its variadic args — ' +
+        'either args[args.length - 1] or args.find(a => a instanceof AbortSignal). Without it, ' +
+        'callers that pass an AbortSignal cannot cancel the generator, and supersession-discarded ' +
+        'tokens keep streaming from the provider.',
     );
     assert.ok(
         hasInstanceOfCheck,
@@ -137,9 +156,21 @@ test('streamChat gates each yield with `if (abortSignal?.aborted) return;` BEFOR
     // statement inside the loop body. Match the actual yield statement
     // (yield followed by an identifier/call expression) rather than the
     // substring "yield " which also appears in comments above the loop.
-    const gateIdx = streamChatBody.search(gatePattern);
-    const yieldStmtRe = /(^|\n)\s*yield\s+\w/;
-    const yieldMatch = yieldStmtRe.exec(streamChatBody);
+    // Comment-stripped, and the yield need not start its line.
+    //
+    // The old anchor was /(^|\n)\s*yield\s+\w/ — a yield at the START of a
+    // line. The dash-reducer work made every yield conditional
+    // (`if (held) yield dashReducer.reduce(held);`), so the anchor stopped
+    // matching and this guard began FAILING rather than checking: the abort
+    // gate was present and correctly ordered the whole time.
+    //
+    // Line position was only ever a proxy for "not inside a comment", which is
+    // what the original comment here says it was guarding against. Stripping
+    // comments states that directly and survives the next reformat.
+    const code = streamChatBody.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const gateIdx = code.search(gatePattern);
+    const yieldStmtRe = /\byield\s+\w/;
+    const yieldMatch = yieldStmtRe.exec(code);
     assert.ok(gateIdx >= 0, 'abort gate not found');
     assert.ok(yieldMatch, 'yield statement not found in streamChat body');
     assert.ok(
@@ -173,9 +204,19 @@ test('ipcHandlers tracks active gemini chat streams by sender id', () => {
 });
 
 test('gemini-chat-stream handler supersedes only the current sender and passes signal to streamChat', () => {
-    const handlerStart = ipcHandlersSrc.indexOf("'gemini-chat-stream'");
-    assert.ok(handlerStart >= 0, "could not locate 'gemini-chat-stream' safeHandle registration");
-    const handlerRegion = ipcHandlersSrc.slice(handlerStart, handlerStart + 12_000);
+    // Anchor on the HANDLER, not on the safeHandle registration string.
+    // The body was extracted into a named `_geminiChatStreamHandler` (so the
+    // phone-chat path can reuse it), which left the registration as a one-line
+    // reference thousands of lines BELOW the implementation. Slicing forward from
+    // the registration therefore scanned the stop-handler and unrelated code, and
+    // every assertion below it silently described code it was not looking at.
+    const handlerStart = ipcHandlersSrc.search(/const\s+_geminiChatStreamHandler\s*=/);
+    assert.ok(handlerStart >= 0, 'could not locate the _geminiChatStreamHandler implementation');
+    // The window is a search bound, not a contract. At 40_000 it failed FALSELY on
+    // 2026-09-21: the first supersession check had drifted to +40,555 as the V3
+    // call above it grew (real-time prompt channel, query rewriter) — the handler
+    // was correct, the slice just stopped 555 chars short of it.
+    const handlerRegion = ipcHandlersSrc.slice(handlerStart, handlerStart + 80_000);
 
     assert.ok(
         /const\s+senderId\s*=\s*event\.sender\.id/.test(handlerRegion),
@@ -197,9 +238,13 @@ test('gemini-chat-stream handler supersedes only the current sender and passes s
         /_chatStreamsBySender\.get\s*\(\s*senderId\s*\)\?\.streamId\s*!==\s*myStreamId/.test(handlerRegion),
         'BUG: supersession checks must compare against the current sender stream id, not a global active stream id.',
     );
+    // `streamChat` OR `streamChatWithOutcome` — the handler moved to the latter so
+    // a truncated answer can be kept out of session history, and both funnel into
+    // the same `_streamChatTracked` generator this file pins above. What matters
+    // is that the per-request signal reaches it; the entry point's name does not.
     assert.ok(
-        /llmHelper\.streamChat\s*\([\s\S]*?myController\.signal\s*,?\s*\)/.test(handlerRegion),
-        'BUG: gemini-chat-stream handler must pass myController.signal to llmHelper.streamChat.',
+        /llmHelper\.streamChat(?:WithOutcome)?\s*\([\s\S]*?myController\.signal\s*,?\s*/.test(handlerRegion),
+        'BUG: gemini-chat-stream handler must pass myController.signal to the llmHelper streaming entry point.',
     );
 });
 

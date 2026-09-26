@@ -1,0 +1,348 @@
+# id: CASUAL-M
+# title: Three friends catch up and plan Maya's 30th birthday cabin weekend
+# S0: Me — Dan Okafor, product designer, Brightline Studio (friend, on mic)
+# S1: Priya Nair, ER nurse, St. Anne's Hospital (friend)
+# S2: Tom Reyes, financial analyst, between jobs (Pellmark to Halvorsen Logistics) (friend)
+S1: Hello? Dan, can you hear me? Your face is frozen.
+S0: Yeah, I can hear you, Priya. Give me a sec, my wifi is being dramatic.
+S0: Okay, is that any better?
+S1: Much better. Tom's still joining, I think.
+S2: I'm here, I'm here. Sorry, the dog next door was losing its mind.
+S0: Tom! Look at you. Is that a beard?
+S2: It's a vacation beard. Well, a between-jobs beard.
+S1: It's a choice, Tom. It's definitely a choice.
+S2: Thank you, Priya, always so supportive.
+S0: Wait, between jobs? Did I miss something?
+S2: Oh, I didn't tell you? I quit Pellmark. My last day there is October 9th.
+S2: And I start at Halvorsen Logistics on Monday, November 2nd. Senior financial analyst.
+S0: Dude, congrats! That's huge. Halvorsen, the shipping people?
+S2: The shipping people. Trucks, warehouses, very glamorous spreadsheets.
+S1: I told you he'd tell you himself if you waited long enough.
+S2: So I've basically got three weeks of doing nothing in October. Which is actually relevant to tonight.
+S0: Right, the trip. Okay, but first, Priya, where is the puppy? I was promised a puppy.
+S1: Hold on. Waffles, come here. Come here, buddy.
+S1: Okay, he's here, he's chewing my sleeve. Say hi, Waffles.
+S2: Oh my god, those ears.
+S0: That is an absurdly cute beagle. How old is he now?
+S1: Eleven weeks. He has already eaten two phone chargers and one of my work clogs.
+S2: One clog? What happened to the other one?
+S1: The other one is fine, which somehow makes it worse. I now own one clog.
+S0: That's the most nurse sentence I've ever heard.
+S2: Is he house trained yet?
+S1: He is, um, he is on a journey. We had a good day on Thursday. One good day.
+S0: One good day is a start.
+S1: We start puppy class next Saturday. The trainer is this terrifying woman called Brenda who used to train police dogs.
+S2: Waffles is going to get arrested.
+S1: Waffles is going to get expelled. He bit the vet's stethoscope on Monday. Just walked up and bit it.
+S0: Honestly, respect. Nobody likes the cold stethoscope.
+S1: Okay, okay. Waffles, go lie down. Go on. Good boy.
+S0: So did you guys watch the Harbor Lights finale?
+S2: Don't. I'm two episodes behind.
+S1: I watched it and I'm still angry about it.
+S0: Angry? I thought it was perfect.
+S1: Perfect? They killed off Marguerite in like forty seconds, Dan. Forty seconds. After three seasons.
+S0: That's the point though, it's supposed to be sudden. That's how it actually happens.
+S2: I said don't! I literally just said I'm two episodes behind.
+S1: Sorry Tom. Nobody died. Everyone lives happily ever after on a boat.
+S2: Great, now I know someone died.
+S0: Harper Lights has always done this though. Remember the lighthouse episode in season two?
+S1: The lighthouse episode was different, that was earned. This was lazy.
+S0: To be fair, you've known Marguerite was going to die since season one. Everyone knew.
+S1: Knowing it and watching it happen in forty seconds are different things.
+S2: Can we stop saying forty seconds?
+S0: Okay, spoiler zone closed. Let's do Maya stuff before we forget, or before Waffles eats Priya's laptop.
+S1: Yes. Okay. So, Maya turns 30 on Wednesday, October 21st.
+S1: And the plan is still a cabin weekend, right? Three nights?
+S0: Three nights. I've been looking at two places.
+S0: One is up at Hollins Ridge, the other one is at Birchwater Lake.
+S2: Hollins Ridge is far, isn't it? That's where we went for Priya's thing.
+S0: Hollins Ridge is like four and a half hours. Birchwater is about three.
+S1: Please. I am not sitting in a car for four and a half hours again. Tom played the same album the whole way last time.
+S2: It was a great album.
+S1: It was one album, Tom. Nine times.
+S0: And the heater broke on the second night and we all slept in our coats.
+S2: That was a character-building trip. Maya still talks about it.
+S1: Maya still talks about it because she was the only one who brought a proper sleeping bag. She was smug for a year.
+S0: She's always been the most organized of us. Since, what, freshman year? She had a color-coded calendar in the dorm.
+S2: She color-coded my calendar once. Without asking. It was actually really helpful.
+S1: That's so Maya. Okay, focus.
+S0: Birchwater also has a hot tub. The place is called Heron Point Cabin. Three bedrooms, sleeps six, right on the water.
+S2: Hot tub wins. Birchwater. Done.
+S1: Agreed. Birchwater Lake, Heron Point. I love the name.
+S0: Okay, Birchwater it is. It's listed on Hearthstay.
+S0: For dates, I was thinking Friday, October 16th to Monday the 19th. So the weekend before her birthday.
+S2: Works for me, obviously, I have no job.
+S1: I think that works. Let me check my rota later, but I think so.
+S0: Cool. So the total for three nights with all the fees is $1,040.
+S2: Okay, and how many of us are paying? Maya's not paying, right?
+S1: No, Maya obviously doesn't pay, it's her birthday.
+S0: Right. So it's me, Priya, Tom, and Mia said she's probably in.
+S2: Mia from your book club, Priya? Or Mia from Maya's work?
+S1: Mia Chen. From book club. Maya's work Mia moved to London, remember?
+S2: There are too many Mias. And a Maya. It's a lot for me.
+S1: One Mia, Tom. One relevant Mia. Mia Chen.
+S2: So four of us paying. That's, uh, $260 each.
+S0: Hold on, let me look at the page again, something looks off.
+S0: No wait, the total is $1,140, not $1,040. I missed the cleaning fee. It's $325 a night plus fees.
+S2: Ugh. Okay, $1,140 split four ways is $285 each.
+S1: $285 is fine. Still cheaper than a hotel in the city.
+S1: Oh, and I can book it. I have like $150 of Hearthstay credit from when they cancelled my Lisbon thing.
+S0: Oh nice, yeah, Priya, you book it then.
+S1: Also, quick question. Can Waffles come? I'm pretty sure it said pet friendly when I filtered the search.
+S2: A puppy in a hot tub. I'm in.
+S0: I don't remember seeing that, but I'll double check.
+S1: He'd be so good. He'd sleep the whole time.
+S2: He ate a clog, Priya.
+S1: Half a pair of clogs. It's different.
+S0: Hey, did anyone else go to the Wanderers game on Tuesday? Tom, you played, right?
+S2: We don't talk about Tuesday.
+S1: What was the score?
+S2: Six-two. We lost six-two. Our keeper was on a stag do in Prague.
+S0: Who was in goal then?
+S2: Me. For the second half. I let in four.
+S1: Tom, you're like five foot eight.
+S2: I'm five nine and I have a great spirit.
+S0: Great spirit, six goals.
+S2: Four were mine. Two were before I went in. Please get the details right.
+S0: Is the keeper back next week at least?
+S2: He says so. He also said he'd be back last week.
+S1: Did you guys at least watch the proper football after? The big match on Sunday?
+S2: I watched the first half and then fell asleep on the couch. Woke up at the post-match interviews.
+S0: I had it on in the background while I was doing laundry. There was a penalty that I'm still not sure was a penalty.
+S2: It wasn't. I didn't see it, but it wasn't.
+S1: How can you know that if you were asleep?
+S2: Because I know that referee. Not personally. Spiritually.
+S0: Tom has a spiritual feud with a referee now.
+S1: Speaking of getting details right, Dan, how is the reorg thing going at work?
+S0: Oh god. Graham has now scheduled a meeting to plan the meeting about the reorg.
+S2: A pre-meeting.
+S0: A pre-meeting. With a deck. Twenty-two slides. I counted.
+S1: What's even in twenty-two slides?
+S0: Mostly boxes with arrows between them. There's a slide that just says "Alignment" in huge letters.
+S2: That's every finance deck I've ever made, to be honest.
+S1: At least you get to sit down. I did a twelve and a half hour shift yesterday and we were three nurses short.
+S0: That's brutal, Priya.
+S1: It's fine. It's not fine. It's fine.
+S2: Is it fine?
+S1: No. But I'm moving to day shifts in November, so there's light at the end.
+S0: Okay, back to Maya. What's the plan for food? Are we cooking the whole time?
+S2: Oh, what if we got a private chef for the Saturday night? For the actual birthday dinner.
+S1: Ooh. That's kind of fancy.
+S2: My cousin did one for his anniversary. Guy comes in, cooks five courses, does all the dishes.
+S0: How much is that?
+S2: I think his was around $600 for the night.
+S1: $600? On top of the cabin?
+S0: That's another $150 each, even with four people.
+S2: Yeah, okay, when you say it out loud it sounds a bit insane.
+S1: Let me think about it though. It is her 30th.
+S0: Let's park it for now.
+S2: By the way, Maya's vegetarian, right? So a chef would need to do veggie stuff anyway.
+S1: No, that's Mia. Mia is the vegetarian.
+S2: Oh. Maya and Mia. I always do that. Every single time.
+S1: Maya is celiac. She's strictly gluten-free, like properly, it's not a preference thing.
+S0: Yeah, remember she got really sick at her cousin's wedding from the cake.
+S2: Okay. Maya gluten-free, Mia vegetarian. I'm writing that on my hand.
+S1: And it really matters, because cross-contamination is a real thing for her. Separate toaster, separate chopping board, all of it.
+S0: Someone should check if there's a decent grocery store near the cabin that stocks gluten-free stuff.
+S2: Good idea. Someone should.
+S1: Someone. Great. Very helpful.
+S0: Okay, let me pull up the listing properly, I want to check the pet thing.
+S2: While he does that, Priya, was Marguerite actually killed or is it one of those fake-outs?
+S1: I thought you were two episodes behind.
+S2: I'm curious now. You ruined it for me, so you owe me.
+S1: I'm not telling you. Watch it. It's forty minutes.
+S2: Forty minutes, forty seconds, everything with this show is forty.
+S1: Did you hear they might not even renew it for a fourth season?
+S0: No way. It's the best thing on right now.
+S1: That's what I read. Apparently the ratings dropped after season two when they moved it to Thursdays.
+S2: Good. Then I don't have to catch up.
+S0: You're two episodes away from the end, Tom. That's like an hour and a half.
+S2: An hour and a half I could spend sleeping through football.
+S0: Okay, bad news. Heron Point says no pets. It's in the house rules, and there's a $250 fee if they find pet hair.
+S1: What? No. The filter said pet friendly.
+S0: I think the filter was picking up the pet-friendly trails nearby or something. The house rules say no pets of any kind.
+S1: Ugh. Okay. Sorry, Waffles. You're not coming.
+S2: He'll survive. He'll eat a charger in your honor.
+S1: My sister Anjali can probably take him that weekend. I'll ask her.
+S0: Okay, good.
+S1: Also, more bad news, from me this time. I just checked my rota.
+S1: I'm on nights the weekend of the 16th. Friday, Saturday and Sunday. And I can't swap, I've already swapped twice this month.
+S2: Oh no.
+S0: Okay, so what about the weekend after? Friday the 23rd to Monday the 26th?
+S1: Let me look. The 23rd, the 23rd... yes, I'm off that whole weekend.
+S2: That's after her actual birthday though.
+S0: It's only two days after. That's fine, it's still her birthday week.
+S1: Honestly I think she'd prefer it after. She has a big work presentation that Friday, the 16th, anyway.
+S0: Let me check the cabin for those dates.
+S0: Okay, Heron Point is open the 23rd to the 26th. Same price, $1,140 total.
+S2: Great. So we're moving it to the 23rd.
+S1: Yes. October 23rd to the 26th. Sorry guys.
+S0: Don't apologize, it's your job. Literally.
+S2: Also, I will say, having thought about it, the chef thing is too much. $600 is basically half the cabin.
+S1: Yeah, you're right. Let's not do the chef.
+S0: Agreed. No chef. We cook.
+S2: I'll make Saturday dinner. I do a gluten-free lasagna that is honestly better than the normal one.
+S1: You made that for my birthday, it was good.
+S2: It was great. Say great.
+S1: It was great, Tom.
+S0: What about the cake? We could order one from Crumb and Kettle, they do gluten-free.
+S1: Maybe. Their gluten-free one was a bit dry last time though. We could also just bake one up there.
+S2: Nobody on this call can bake. Let's be honest with ourselves.
+S0: Okay, cake is a maybe. Let's think about it.
+S0: What about kayaks? There's a place on Birchwater that rents them, like $45 per person for a half day.
+S1: In late October? The water will be freezing.
+S2: You don't go in the water, Priya, that's the whole idea of a kayak.
+S1: I will fall in. You know I'll fall in. I fell off a pedal boat.
+S0: Let's leave kayaks as a maybe. We can decide when we're up there.
+S2: How's the apartment hunt going, Dan? Did the landlord actually do it?
+S0: He did it. Rent's going up $200 a month when the lease renews in January.
+S1: $200? For that kitchen?
+S0: For that kitchen. The oven has two temperatures, off and volcano.
+S2: Are you going to move?
+S0: I'm looking. There's a place near the river but it's a fourth floor walk-up.
+S1: You'd get legs like a mountain goat though.
+S0: That's the one upside. I've been looking at maybe six listings a night, it's become a hobby.
+S2: Apartment hunting as a hobby is the saddest thing I've heard today.
+S0: Sadder than one clog?
+S1: Leave my clog out of this.
+S2: How was the interview process at Halvorsen, by the way? I never told you guys the full story.
+S0: Go on then.
+S2: Five rounds. Five. The last one was a case study where they gave me a warehouse budget and forty minutes.
+S1: Forty again! It's following you.
+S2: And halfway through my laptop died. So I did the rest of it on a whiteboard, with a marker that was also dying.
+S0: And they still hired you. That's actually impressive.
+S2: I think they hired me because I didn't cry. That was the bar.
+S1: Oh, that reminds me, a guy came into the ER on Tuesday who had glued his hand to a ladder.
+S0: How do you glue your hand to a ladder?
+S1: He was fixing the ladder. With the glue. While standing on the ladder.
+S2: I have so many questions and I don't want any of the answers.
+S1: He was very calm about it. He asked if we could save the ladder.
+S0: Did you save the ladder?
+S1: We did not save the ladder. The ladder stayed in the ambulance bay for like three hours.
+S1: Hey, so, small problem on the booking side. I'm just on Hearthstay now.
+S1: My credit expired on September 1st. It's just gone.
+S2: Classic.
+S1: And my card got flagged the last time I booked something, so it's a whole thing. Dan, can you book it instead?
+S0: Yeah, sure. I'll book it. I get points on my card anyway.
+S1: Thank you. You're the booking guy now.
+S0: I'm the booking guy.
+S2: So the deposit, when is that due?
+S0: I think it's by the end of the month. I'll check.
+S2: Okay. And for the car, I can rent something. I have all the time in the world.
+S0: That'd be amazing. Something big enough for five, in case Mia comes.
+S2: I'll get a seven-seater. Ridgeway has SUVs for like $64 a day.
+S1: What time are we leaving on the Friday?
+S2: I'll pick everyone up at like 8.
+S1: 8 a.m.? Tom.
+S2: Early start, more lake time.
+S0: Let's figure out timing later.
+S1: And the gift. What are we thinking?
+S0: I was thinking $50 each for a group gift.
+S2: Fine with me.
+S1: Ooh, what about that Polaroid camera she keeps sending us pictures of?
+S0: The green one? That's a great idea.
+S1: I'll look up the price in a sec.
+S2: Okay, can we take a break from logistics for one second? I need to show you something.
+S0: Is it the beard again?
+S2: No. It's my new desk setup. For the new job. Look. Two monitors.
+S1: Tom, don't you work from the office?
+S2: Hybrid! Two days from home. Halvorsen is hybrid.
+S0: Nice. Very corporate.
+S2: I'm a corporate man now. November 2nd, the new Tom begins.
+S1: The new Tom still can't keep goal.
+S2: Low blow. Very low.
+S0: Did they give you a signing thing or anything?
+S2: No signing bonus, but they're paying for a certification. The CFA level two, if I want it.
+S1: Look at you. A real adult.
+S2: I have two monitors and a beard. I'm basically forty.
+S1: Oh, wait. Mia just texted me back. Hang on.
+S1: Okay. She says she can't do the 23rd. Her cousin's wedding is on Saturday the 24th, in Portland.
+S0: Oh no. Can she come for part of it?
+S1: She says maybe the Sunday, but she's not sure. She'll let us know.
+S2: So we're back to three people paying?
+S0: For now, yeah. $1,140 split between me, Priya and Tom is $380 each.
+S1: $380. Oof. Okay. It's fine, it's Maya.
+S0: And if Mia does confirm, it goes back down to $285 each.
+S2: Somebody needs to get a real answer from Mia though, we can't wait forever.
+S1: I'll ask her. I'll get a proper yes or no from her by Sunday.
+S0: Okay, Priya's on Mia. By Sunday.
+S0: And I'm on the listing now to check the deposit.
+S0: So it's not the end of the month. The deposit is due by Friday, September 25th. After that the hold on our dates drops.
+S2: The 25th. That's this Friday.
+S0: Yeah. It's 50%, so $570.
+S0: I'll pay the whole $570 on my card, and you two just send me $190 each.
+S1: $190. I can Venmo you tonight.
+S2: I'll send mine by Wednesday.
+S0: Wednesday the 23rd is fine. I'll book it before Friday, probably tomorrow.
+S2: And the other half?
+S0: The other $570 gets charged automatically two weeks before check-in.
+S2: Future Tom's problem. Future Tom has a salary.
+S1: Okay, now the big thing. I've been waiting all call for this. Jonah called me yesterday.
+S2: Jonah, her brother Jonah?
+S1: Yes. He wants to fly in from Denver and surprise her.
+S0: No way. That's amazing.
+S1: He lands Saturday the 24th, in the afternoon. He wants to walk in right before dinner.
+S2: Oh, she's going to cry. She's going to absolutely lose it.
+S1: But this has to stay completely secret. Maya thinks it's just the four of us having a quiet weekend.
+S0: Okay, so nobody say anything in the birthday group chat. That chat has Maya in it.
+S2: Right. Should we make a separate chat?
+S1: I already did. It's called Operation Heron. I'll add you both after this call.
+S2: Operation Heron. Love it.
+S0: Nothing about Jonah anywhere except Operation Heron. Not even jokes.
+S2: Especially not jokes. I know myself.
+S0: Remember when Tom told Priya about her own surprise party? While she was standing next to him?
+S2: That was one time. And in my defense, I thought she already knew.
+S1: I was holding the balloons, Tom. I thought they were for someone else.
+S0: Jonah hasn't seen Maya since the summer before last, right? When he moved to Denver?
+S1: Yeah, about fourteen months. She keeps saying she misses him. That's why this is so perfect.
+S1: And don't like any of his posts or anything. She notices everything.
+S0: How is Jonah getting from the airport to the cabin though? Birchwater is like three hours from the airport.
+S1: I don't know yet. He said he'd figure it out.
+S2: We only have the one car and it'll be sitting at the lake.
+S0: Let's come back to that one.
+S2: Okay, back to the car then. I'll book the Ridgeway SUV by October 1st.
+S1: And please, not 8 a.m.
+S0: What if we leave at like 9:30? Maya is not a morning person. If we show up at 8 she'll cancel her own birthday.
+S2: Fine, 9:30. Where from?
+S1: My place? I'm on Calloway Street, it's in the middle for everyone.
+S0: Yeah, Priya's place. So Tom picks up the SUV, then we all meet at Priya's on Calloway at 9:30 on Friday the 23rd.
+S2: And I'll grab Maya on the way there, she's two streets over from me.
+S1: Perfect. 9:30 at my place, Friday.
+S2: Actually, should we just drive separately? Like, I take the SUV and Dan takes his car, in case people want to leave at different times?
+S0: My car's making that noise again. I don't trust it for three hours each way.
+S1: And it's more fun together. One car.
+S2: Fair enough. One car.
+S1: What's the weather like up there in late October anyway?
+S0: The forecast obviously doesn't go that far, but it's usually around fifty during the day and near freezing at night.
+S2: Perfect hot tub weather.
+S1: Pack layers. Real layers. Not your fleece with the hole in it, Tom.
+S2: The fleece is vintage.
+S0: The fleece is from a charity 5K in 2019.
+S1: Oh, I found the Polaroid. The green one is $179.
+S0: $179 is more than $150. So $50 each doesn't cover it.
+S2: Let's just do $60 each then. $180 total, that covers it.
+S1: $60 each. Done. And if Mia comes, she can do the card and flowers or something.
+S0: Who's buying it?
+S1: I'll buy it. I'll order it by October 16th so it definitely arrives in time.
+S0: Great. Priya's on the gift, by the 16th, and we each send her $60.
+S2: Random thought. Since I'm unemployed, what if we did four nights? Stay till Tuesday?
+S1: I can't do Tuesday, I'm back on shift Tuesday morning.
+S0: And that's another $325 plus. Let's keep it at three nights.
+S2: Worth asking.
+S2: Someone should make a playlist for the drive. Not me.
+S1: Definitely not you. Not after the album.
+S0: Someone. We'll see.
+S2: Okay, let me just say it all back so I don't mess it up. Birchwater Lake, Heron Point, Friday the 23rd to Monday the 26th.
+S0: Right. And I'm booking it and paying the $570 deposit before Friday.
+S2: And I'm getting the SUV, and we meet at Priya's at 9:30. And no dogs.
+S1: No dogs. And Maya is gluten-free, and Mia is the vegetarian.
+S2: Maya gluten-free, Mia vegetarian. See, it's still on my hand.
+S0: And not a word about Jonah outside Operation Heron.
+S2: What Jonah? I don't know a Jonah.
+S1: Okay, so open things. Mia, obviously. And how Jonah actually gets to the cabin.
+S2: And kayaks. Kayaks are still a maybe.
+S0: And the grocery thing. Nobody's actually checked for a gluten-free store near Birchwater.
+S1: Right. Let's sort all that in Operation Heron.
+S2: Okay, I have to go, the dog next door is at it again.
+S0: Bye guys. Priya, don't forget the $190.
+S1: Tonight! I promise. Bye!

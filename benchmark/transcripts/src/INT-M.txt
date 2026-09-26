@@ -1,0 +1,198 @@
+# id: INT-M
+# title: Corvella Health recruiter screen, Senior Product Designer (Clinician Experience)
+# S0: Me — Maya Okafor, Senior Product Designer (job candidate), Brightlane Insurance
+# S1: Theo Lindqvist, Senior Recruiter, Corvella Health
+# S2: Dana Whitfield, Director of Product Design (hiring manager), Corvella Health
+S1: Hi, is this Maya?
+S0: Yes, this is Maya. Hi!
+S1: Hey Maya, this is Theo Lindqvist, I'm a senior recruiter over at Corvella Health. Is now still a good time?
+S0: Yeah, now's perfect. I just grabbed a coffee so I'm, uh, fully ready.
+S1: Love that. Sorry in advance, if you hear barking in the background, that's Biscuit. He has very strong opinions about the mail carrier.
+S0: Ha, no worries at all. My cat mostly just sits on my keyboard, so we're even.
+S1: Honestly the cat is more disruptive, the dog is just louder. So you're up in Boulder, right? Did you guys get that snow last night?
+S0: We did, like an inch on the grass and then it was 70 degrees by noon. Classic Colorado September.
+S1: Classic. Down in Denver it just rained, and I had already put the patio furniture away, so of course.
+S0: Of course.
+S1: Okay, so the plan for today. This is about a 30 minute call. I'll tell you a bit about Corvella and the role, I'd love to hear about your background and what you're looking for, then we'll talk comp and logistics, and then process and next steps. Sound good?
+S0: Sounds great.
+S1: Cool. So Corvella, we build care coordination software for home health agencies. The main product is called Corvella Connect.
+S1: Basically when a nurse or a physical therapist goes out to a patient's home, Connect handles their schedule, the route, the visit notes, the medication reconciliation, and then it syncs everything back to the agency and to the patient's physician.
+S0: Okay, so it's both a mobile app for the clinicians and some kind of back office tool for the agency?
+S1: Exactly. There's the clinician mobile app, and then there's the agency web console, which is where the schedulers and the clinical managers live. And we just started on a payer portal too, but that's pretty early.
+S1: We're used by about 340 home health agencies right now, mostly in the Mountain West and the Midwest.
+S0: Nice. And what stage is the company at?
+S1: We're Series B. We closed a $42 million round back in March, led by Harborline Ventures, and that's mostly going into product and engineering hiring. We're about 180 people total.
+S0: Got it. That's a good size, like, not tiny, not huge.
+S1: Yeah, it still feels like a startup, you'll know everyone in product by name in a couple weeks, but we're not, you know, running payroll out of a spreadsheet anymore.
+S0: That's reassuring.
+S1: So, the role itself. The title is Senior Product Designer, which internally maps to our P4 level. It sits on the Clinician Experience team, which owns the mobile app the nurses use in the field.
+S1: You'd be reporting to Dana Whitfield, she's our Director of Product Design. The team right now is two other designers, a PM, and about 7 engineers.
+S0: Okay. And the focus would be mostly the mobile app, then?
+S1: Mostly mobile, yeah. The big project for next year is rebuilding the visit documentation flow, because right now nurses are spending, Dana told me, something like 40 minutes after every shift catching up on notes, and that's a big burnout driver for them.
+S0: Oh, yeah, that's a real problem. That's actually a big part of why I applied, but I'll get to that.
+S1: Yeah, please do. And there's a lot of offline stuff too, because half these patients live out in places with one bar of signal, so the app has to work without a connection and sync later.
+S0: Oh, that's a fun constraint. Like, conflict resolution when two people edit the same visit record?
+S1: Exactly that, and I'm going to stop there before I say something technically wrong, because the engineers will absolutely correct me.
+S0: Ha, fair.
+S1: Okay, so, tell me about yourself. Walk me through your background.
+S0: Sure. So I've been a product designer for about five years. I started at a small agency in Denver called Northpaw Studio, I was there about two years doing mostly web and mobile work for, um, a bunch of different clients, a lot of retail and a couple of fintech apps.
+S0: And then for the last three years I've been at Brightlane Insurance, where I'm a senior product designer on the claims team.
+S1: And what does that look like day to day?
+S0: So my biggest project was redesigning the mobile claims flow. When I joined, filing an auto claim in the app took people on average about 11 minutes, and a lot of people just gave up and called the phone line instead.
+S0: We rebuilt it around photo capture and, like, progressive questions, so you only see what's relevant to your accident, and we got the median time down to about 4 minutes. Mobile completion went up 22% in the first quarter after launch.
+S1: That's a great outcome. Were you leading that?
+S0: I was the lead designer on it, yeah. I worked with one other designer, a researcher, and the PM. I ran most of the usability testing too, we did something like 30 sessions across the whole project.
+S1: Nice. And the other designer, were you kind of mentoring them?
+S0: Yeah, she was a junior designer when she joined, so a lot of pairing and crit sessions. She's, uh, she's great now, she just got promoted actually.
+S1: Love that. Okay, and why are you looking now? Why Corvella?
+S0: Honestly, a couple things. The claims work was great, but insurance is, uh, it's a lot of designing around the company telling people no.
+S0: And my mom has been a home health nurse for like twenty years. I've watched her sit at the kitchen table at 9pm doing her charting, so when I saw a role literally about the nurses' documentation experience, it kind of jumped out at me.
+S1: Oh wow, that's a very direct connection.
+S0: Yeah, and I've already gotten her opinions on your app, which, I will spare you.
+S1: Ha, please don't spare me, or actually, maybe save that for Dana, she would love it.
+S0: And the other piece is, Brightlane just announced everyone's going back in office three days a week starting in January, and I really prefer remote, so the fact that this role is fully remote was a big draw for me too.
+S1: Got it, yeah, that makes sense. What kind of team setup are you hoping for?
+S0: I like being really close to research and engineering. At Brightlane there's a lot of handoff, like design throws things over the wall and then we find out three months later what shipped. I'd like to be in the room earlier.
+S1: That's very much how the Clinician Experience team works. The engineers actually go on ride-alongs, like they'll go out with nurses on visits for a day.
+S0: Oh, that's cool. Do the designers do that too?
+S1: Everybody does, it's part of onboarding. You'd probably do two or three ride-alongs in your first month.
+S0: Okay, I love that. And what does the design org look like overall? Is there a design system team?
+S1: So there are eleven designers total across product, and there's no dedicated design system team yet, it's kind of a shared guild. Donna Park, who's a staff designer, sort of runs it informally.
+S0: Got it. I've been in the shared guild situation. Usually it means someone's fig ma file has four hundred layers named Rectangle.
+S1: Ha, I have heard that exact complaint, word for word, I think from Donna.
+S0: Ha, then we'll get along.
+S0: And is there a research team, or do designers run their own studies?
+S1: There's one full-time UX researcher, Keiko, who's shared across the whole product org, so designers do a lot of their own interviews and testing, and Keiko kind of coaches and reviews the plans.
+S0: Okay, that's pretty similar to what I do now, so that's comfortable.
+S1: And just so you have it, Dana said the way she'd measure success for this hire in the first year is basically getting that post-shift documentation time down. She threw out a goal of cutting it in half, from roughly 40 minutes to 20.
+S0: Oh, I like that there's an actual number attached. That's a very concrete problem.
+S1: Okay, so let's talk logistics, and, oh, wait, actually, I need to go back to something you said earlier. You mentioned the role being fully remote.
+S0: Yeah?
+S1: So I'm sorry if the posting was unclear, but it's not fully remote. It's hybrid, 2 days a week in our Denver office. The Clinician Experience team does Tuesdays and Thursdays in person.
+S0: Oh. Okay. The posting said remote-friendly, so I just assumed.
+S1: Yeah, that's on us, we've gotten that feedback before. I think remote-friendly was supposed to mean flexible on the other days. I'll get the wording fixed.
+S0: No, that's okay. I mean, Boulder to Denver is doable, especially for 2 days. It's like 40 minutes if 36 isn't a disaster.
+S1: Which it always is.
+S0: Which it always is. Where's the office?
+S1: We're in LoDo, right by Union Station, so if you take the bus in from Boulder it's pretty easy.
+S1: And for the other three days you can work from wherever, but we do ask people to be based in Colorado and to keep core hours of 10am to 3pm Mountain time.
+S0: That's fine, I'm not going anywhere.
+S1: Oh, and one correction on my side while I'm at it. I said we're about 180 people. That was before the Series B hiring push, we actually crossed 215 people last month. I keep using the old slide.
+S0: Ha, fair, it's hard to keep up when you're growing.
+S1: Okay, so let's talk comp. The base salary band for this role is $128,000 to $146,000.
+S0: Okay.
+S1: And, you know, I'm not going to ask about your current salary, we don't do that, but I'd love to know what you're targeting so we're not wasting each other's time.
+S0: Sure, I appreciate that. I'm targeting a base of around $155,000.
+S1: Okay, so that's a bit above the top of that band. Not necessarily a dealbreaker, let me note it and we can come back to it.
+S0: Yeah, and I'm open on how it's structured, the total package matters to me.
+S1: Right. So on top of base, there's an annual bonus with a target of 10% of base, tied to company goals. Last year it paid out at 100% of target.
+S1: And equity. At this level the standard grant is 12,000 stock options, four year vesting with a one year cliff. The strike price is based on the last 409A, which was about $3.10 a share, but there's a new 409A coming after the round, so that could move.
+S0: Okay. Is there any refresh on equity, or is it just the initial grant?
+S1: There are refresh grants tied to performance reviews, which happen once a year in February. I don't have exact numbers on refreshes, those vary.
+S0: Got it. And benefits?
+S1: Medical, dental, vision, the company covers 90% of premiums for you and 70% for dependents. 401k with a 4% match. And unlimited PTO, which I know everyone is skeptical about, but we have a minimum of 15 days that people actually have to take.
+S0: Oh, a minimum, that's nice. That's different.
+S1: Yeah, our CEO burned out at her last company and made it a whole thing. I'll send you the full benefits guide, it's a PDF with all the plan details.
+S0: That'd be great.
+S1: Okay, a couple of quick eligibility questions. Are you authorized to work in the US, and will you need sponsorship now or in the future?
+S0: So I'm on an H-1B right now, through Brightlane. So I'd need a transfer.
+S1: Okay, that's fine. We do support H-1B transfers, we've done a handful this year, we use an outside immigration firm for it.
+S0: Oh, good. That's always the scary question.
+S1: Yeah, no, totally. The one thing I don't know offhand is whether we cover premium processing for the transfer. Somebody on the people ops side would have to confirm that.
+S0: Okay.
+S1: And what's your notice period at Brightlane?
+S0: It's two weeks. Oh, wait, no, sorry. It's three weeks. They changed it for senior staff in my last contract. So three weeks.
+S1: Three weeks, got it.
+S0: And one other thing I should flag now. I have a trip booked, my sister is getting married in Lisbon, and I'm away from October 9th through October 19th. That one's non-negotiable, I'm in the wedding.
+S1: Oh, congrats to your sister! And Lisbon, oh man. Have you been before?
+S0: No, first time.
+S1: Okay, you have to go to the pastry place in Belem, the one with the huge line out front. It is worth the line. I went for a friend's birthday and gained like five pounds in a week.
+S0: Noted, I'll pack stretchy pants.
+S1: Exactly. Okay, I'll keep those dates in mind. Let me walk you through the process.
+S1: So there are four stages total, and this call is stage one.
+S1: Stage two is a 45 minute conversation with the hiring manager, Dana. I'll send you the calendar invite for that one once I have your availability.
+S0: Sorry, just so I have it right. Donna is the hiring manager?
+S1: Dana. D-A-N-A, Dana Whitfield. It's confusing because Donna Park, the staff designer I mentioned, is also on the team, and you'd meet her later. Dana is the director you'd report to.
+S0: Dana is the manager, Donna is the staff designer. Got it.
+S1: Honestly it confuses us internally too, Slack autocomplete has caused some incidents.
+S1: Stage three is a take-home design exercise. It's scoped to about 4 hours, and you get 5 days to do it.
+S1: And stage four is the final loop, which is three sessions. A 60 minute design critique with Donna, a 45 minute cross-functional interview with the PM and the engineering lead, and a 30 minute values conversation with someone outside of product.
+S0: And is the final loop in person?
+S1: Usually, yeah, at the Denver office.
+S0: Would it be possible to do it virtually? Just because taking a full day off to drive down is harder to hide from my current job.
+S1: Totally fair question. I'm not sure. It's been in person for most people. Let me not promise anything on that.
+S1: In terms of timeline, the team wants to move pretty quickly. The goal is to make a decision by October 16th, and they'd love someone to start November 2nd.
+S0: Hm. Okay, so with my trip, October 9th to the 19th, that's going to be tight.
+S1: Yeah, I see that. Let me think about how we sequence it, we'll come back to it.
+S1: Oh, and one thing I wanted to mention. It's not really part of this process, but we're probably opening a Design Lead role on the payer portal side, maybe in Q1. Based on how you led the claims redesign, I could see you being considered for something like that down the line. No promises, it's not even approved yet.
+S0: Oh, interesting. I'd be open to hearing about it, but I'm really interested in the clinician side specifically, for, you know, the reasons I said.
+S1: Totally, that makes sense, just planting a seed.
+S1: Okay, oh, no. Hold on. I'm looking at my notes, and I have to correct something. The band I gave you earlier, $128,000 to $146,000, that's the P3 band, that's for Product Designer, the level below. I pulled up the wrong row.
+S1: The Senior Product Designer band, P4, is $148,000 to $172,000. Sorry about that, that's a pretty big miss on my part.
+S0: Oh, okay, that changes things. That's good to know.
+S1: So your $155,000 would be comfortably inside the band.
+S0: Right. Honestly, knowing that, and knowing it's 2 days in the office now, which is a commute I wasn't planning for, I'd want to revise my number to be closer to $165,000.
+S1: That's fair, and that's still within the band. I'll put $165,000 in my notes as your target.
+S0: Thank you. And one more thing on comp. If I leave before March, I'd be walking away from my Brightlane annual bonus.
+S1: Yeah, that's something we could maybe look at with a sign-on bonus, I've seen that done here, but I can't commit to it, that's really a conversation for the offer stage.
+S0: Okay, fair enough.
+S1: Actually, you know what, Dana just messaged me that she's between meetings. Would you mind if I patch her in for a few minutes? She said she wanted to say hi if she could.
+S0: Oh, sure, yeah, of course.
+S1: Okay, one second, adding her now.
+S2: Hi! Is this Maya? This is Dana.
+S0: Hi Dana, yes. Nice to meet you.
+S2: Nice to meet you too. Sorry for the ambush, I've only got a few minutes. Theo's been messaging me that you did the Brightlane claims redesign.
+S0: Guilty, yeah.
+S2: I actually read the case study on your site, the photo capture flow. The way you handled the, um, the partial damage photos was really thoughtful.
+S0: Oh, thank you. That part took about six rounds of testing.
+S2: It shows. Okay, Theo, did you go through the process with her?
+S1: I did, I walked her through the four stages.
+S2: Okay, so one change I want to make, and Theo, I know I'm springing this on you. I want to drop the take-home. We've been getting feedback that it's too much unpaid work, and honestly, for someone at Maya's level I learn way more from a portfolio review.
+S2: So instead of the take-home, stage three would be a 60 minute portfolio review. You'd present two case studies to a panel, that's me, Donna Park, and our PM on the team, Luis Ferrante.
+S0: Oh, that's great, I much prefer that. One question, though. The Brightlane claims work is under NDA. Is it okay if I redact some of the numbers and screens?
+S2: Yeah, redacted is totally fine. We care about your process and how you think, not their loss ratios.
+S0: Ha, okay, good.
+S2: Could you send over your portfolio link and the two case studies you'd want to present by this Friday? So I can prep the panel.
+S0: Yes, I can have those over by Friday the 25th. Should I send them to you?
+S1: Send them to me, and I'll get them to Dana and the panel.
+S0: Okay, to Theo, by Friday the 25th.
+S2: And Theo, for my hiring manager interview, I'll send that invite myself. My calendar is a disaster this month and it's easier if I just find the slot.
+S1: Oh, okay, sure. I was going to send that one, but yeah, it's yours.
+S2: Also, Theo mentioned there's some timing stuff. Just so you both know, the whole team is at our offsite the week of November 9th, so starting on the 2nd would mean your second week is an offsite, which is kind of a rough way to start.
+S0: That's good to know.
+S2: And one more thing, and this is me thinking out loud, nothing decided. We've talked about having new folks come in a third day a week during their first month, just for onboarding. I just don't want it to be a surprise if it comes up.
+S0: Okay, noted.
+S2: And a heads up, the team might move our office days from Tuesday Thursday to Monday Wednesday next year. That's still up in the air too.
+S2: Okay, I have to run to my next thing. Maya, really nice to meet you, I'm looking forward to talking properly.
+S0: You too, thanks Dana.
+S2: Bye! Bye Theo.
+S1: Okay, she's gone. So, as you can tell, Dana moves fast.
+S0: Ha, I like it, honestly.
+S1: So with that change, the updated stages are, stage two is Dana's 45 minute interview, stage three is the 60 minute portfolio review, and stage four is the final loop, same as before.
+S1: Now, sequencing around your trip. If Dana's interview happens next week, and the portfolio review is the week of October 5th, before you leave on the 9th, then we can do the final loop the week you get back.
+S0: That works. I land on the 19th, though, so I'd rather not do it on the 20th if possible. The 21st or 22nd would be fine.
+S1: Okay, the 21st or 22nd for the final loop. Then the team would aim to make a decision by October 23rd.
+S0: And the start date, with my three weeks notice?
+S1: Yeah, so if we got an offer out around the 23rd, three weeks notice, plus the H-1B transfer paperwork, and then Dana's point about the offsite, November 16th makes the most sense.
+S0: November 16th works for me.
+S1: Great. Okay, let me recap action items so we're on the same page.
+S1: On your side, the portfolio link and two case studies to me by Friday the 25th. And could you send me your availability for the next two weeks by Thursday? I'll pass that along to Dana for her interview.
+S0: Yep, availability by Thursday, portfolio by Friday.
+S1: On my side, I'll send you the benefits guide PDF by end of day today. And I'll send the calendar invites for the portfolio review and the final loop once we lock the dates. Dana's sending her own invite.
+S0: Perfect.
+S1: Okay, what questions do you have for me?
+S0: A few. Do you know yet if the final loop could be virtual?
+S1: I don't, honestly. It hasn't come up much. No answer yet.
+S0: Okay. And the premium processing for the H-1B, who would I ask about that?
+S1: That's people ops, but I genuinely don't know who owns it right now. Our HR manager left last month so it's kind of in between people. Someone will need to look into it.
+S0: Okay. And last one, on the equity. Would an offer use the old 409A strike price or the new one?
+S1: Good question. That depends on when the new valuation comes back, so I can't say yet.
+S0: Okay. Oh, actually, one more that's not logistics. What's Dana like as a manager?
+S1: She's very direct, in a good way. She does weekly one on ones, she'll tell you in the moment if a design isn't working, and she really protects the team's research time. People who've moved to her team from other groups tend to stay.
+S0: That's great to hear, that's exactly what I'm looking for.
+S1: And if you want to hear it from someone who isn't a recruiter, I'm happy to set up a quick chat with one of the designers on the team at some point, no pressure, just an idea.
+S0: Maybe, yeah, let me think about it after I talk to Dana.
+S0: Okay, that's everything for now.
+S1: Great. Maya, this was really fun. And say hi to your cat for me.
+S0: Ha, I will. Say hi to Biscuit. Thanks Theo, talk soon.
+S1: Talk soon, bye!

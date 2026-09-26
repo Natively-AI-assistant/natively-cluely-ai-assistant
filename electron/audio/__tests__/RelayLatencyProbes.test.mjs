@@ -10,11 +10,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron/audio');
-const rs = await import(path.join(distRoot, 'relaySession.js'));
+const rs = await import(pathToFileURL(path.join(distRoot, 'relaySession.js')).href);
 const {
   deriveHealthUrl,
   refreshRelayLatencyProbes,

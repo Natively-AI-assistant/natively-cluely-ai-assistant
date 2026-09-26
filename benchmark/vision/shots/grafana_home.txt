@@ -1,0 +1,61 @@
+Grafana
+Starred
+Dashboards
+Explore
+Drilldown
+AI
+Alerts & IRM
+Machine learning
+Testing & synthetics
+Observability
+Connections
+More apps
+Administration
+Dashboards
+Examples
+Grafana Play Home
+Search...
+⌘+k
+Sign in
+Edit
+Welcome to Grafana Play
+Grafana Cloud
+Community Resources
+Learning
+Journeys
+Webinars and Videos
+Support Forum
+Upcoming Meetups
+🧪 What is Grafana Play?
+Play is a sandbox for testing and learning Grafana that runs on Grafana Cloud.
+Find interactive demos, explore how Grafana works, and see what you can build.
+When you're ready to create your own dashboards,
+get started fast with the free
+tier of Grafana
+Cloud
+,
+our fully managed observability stack.
+🏆 Dashboard of the Month
+F1 Driver
+Championship Points
+Keep up with the Formula 1 season in Grafana. See how the championship standings change after each race,
+compare
+teammates, track driver momentum, and explore points gaps and team performance throughout the season.
+🌟 Meet the creator
+Ari Lloyd
+Technical Support Engineer
+🌟 Featured Grafana Contributor
+Celestina Amadi
+Cloud Engineer | Grafana Champion
+Celestina
+is a Cloud Engineer at Moniepoint Group and a Grafana Champion who graduated from the first Emerging Grafana
+Champions program.
+She also organizes
+Grafana & Friends Nigeria
+,
+a meetup community that brings people together to learn about open source monitoring, observability, Grafana,
+and related technologies.
+Sep 14
+Digital Experience Monitoring with Grafana Cloud: Session Replay, synthetic checks, and faster investigations
+When something breaks in production, the questions that matter most are also the toughest to answer from metrics alone: who was affected, what did they actually see, and is this worth waking someone up for? Answering those questions requires a fuller picture of the issue and its impact on your users.
+Sep 10

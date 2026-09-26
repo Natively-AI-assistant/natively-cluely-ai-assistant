@@ -1,0 +1,77 @@
+{
+ "benchmark_id": "natively-summary-models-2026-09-17",
+ "runs_per_pair": 3,
+ "configs": [
+  {
+   "id": "ds-flash-prod",
+   "label": "DeepSeek V4.1 Flash - current Natively config (thinking disabled)",
+   "provider": "deepseek",
+   "model": "deepseek-v4-flash",
+   "thinking": "production",
+   "thinking_mode": "disabled (explicit thinking:{type:'disabled'} from buildDeepSeekBody)",
+   "reasoning_effort": null,
+   "port": 18701,
+   "primary": true
+  },
+  {
+   "id": "ds-flash-migrated",
+   "label": "DeepSeek V4.1 Flash via the migrated id 'deepseek-flash' (thinking disabled)",
+   "provider": "deepseek",
+   "model": "deepseek-flash",
+   "thinking": "production",
+   "thinking_mode": "disabled (explicit thinking:{type:'disabled'} from buildDeepSeekBody)",
+   "reasoning_effort": null,
+   "port": 18711,
+   "primary": false
+  }
+ ],
+ "pricing_usd_per_million": {
+  "source_checked": "2026-09-17",
+  "deepseek-flash": {
+   "source": "https://api-docs.deepseek.com/quick_start/pricing/",
+   "peak": {
+    "input_cache_miss": 0.3,
+    "input_cache_hit": 0.006,
+    "output": 1.2
+   },
+   "off_peak": {
+    "input_cache_miss": 0.15,
+    "input_cache_hit": 0.003,
+    "output": 0.6
+   },
+   "peak_windows_utc": "Mon-Fri 01:00-04:00 and 06:00-10:00",
+   "reasoning_billing": "reasoning tokens are part of completion_tokens (billed as output)"
+  },
+  "gpt-5.6-luna": {
+   "source": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+   "input": 0.2,
+   "cached_input": 0.02,
+   "output": 1.2,
+   "reasoning_billing": "reasoning tokens billed as output (included in output_tokens)"
+  }
+ },
+ "production_deadlines_ms": {
+  "server_undici_headers_timeout": 30000,
+  "server_extraction_deepseek_cap": 45000,
+  "server_general_deepseek_cap": 10000,
+  "electron_extraction_fetch_timeout": 60000,
+  "electron_note_call_fetch_timeout": 30000
+ },
+ "benchmark_deadline_overrides": {
+  "why": "Deadlines are lifted so every configuration's output is measured instead of being replaced by a production fallback model. Compliance with the real production deadlines is computed per call and reported separately.",
+  "server_env": {
+   "DEEPSEEK_TIMEOUT_MS": "1800000",
+   "DEEPSEEK_TTFT_CAP_MS": "1800000",
+   "AI_ROUTE_BUDGET_MS": "3600000",
+   "EXTRACTION_DEEPSEEK_TIMEOUT_MS": "1800000",
+   "EXTRACTION_ROUTE_BUDGET_MS": "3600000"
+  },
+  "electron_timeout_ms": 1800000
+ },
+ "migration_regression": {
+  "date": "2026-09-17",
+  "baseline_config": "ds-flash-prod",
+  "baseline_model_id": "deepseek-v4-flash",
+  "note": "Only natively-api's DEEPSEEK_MODEL changed (deepseek-v4-flash -> deepseek-flash). Same bundle, prompts, corpus and deadline overrides as the main benchmark."
+ }
+}

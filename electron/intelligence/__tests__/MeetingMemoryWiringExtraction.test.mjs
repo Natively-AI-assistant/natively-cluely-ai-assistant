@@ -18,13 +18,15 @@ import { MeetingMemoryService } from '../../../dist-electron/electron/intelligen
 
 // Realistic sales-call transcript in the EXACT shape MeetingPersistence passes as
 // `data.transcript` → buildMeetingRecord({ segments }): TranscriptSegment = {speaker,text,timestamp}.
+// Defect B (2026-08-01): fixtures now carry origin:'stt' — the shape the real STT seam
+// writes and the ONLY provenance meeting-memory extraction mines. Assertions unchanged.
 const SALES_TRANSCRIPT = [
-  { speaker: 'them', text: 'Thanks for hopping on. What is your pricing for the enterprise tier?', timestamp: 1000 },
-  { speaker: 'me', text: 'Happy to walk through it. I will send over a detailed quote by end of day.', timestamp: 2000 },
-  { speaker: 'them', text: 'Does the platform integrate with Redis for caching at our scale?', timestamp: 3000 },
-  { speaker: 'me', text: 'Yes, we run Redis and Postgres under the hood and it handles sharding cleanly.', timestamp: 4000 },
-  { speaker: 'them', text: 'Great. We decided to start a pilot next week with the Acme Technologies team.', timestamp: 5000 },
-  { speaker: 'me', text: 'Perfect, we will set up the pilot environment and follow up with onboarding docs.', timestamp: 6000 },
+  { speaker: 'them', text: 'Thanks for hopping on. What is your pricing for the enterprise tier?', timestamp: 1000, origin: 'stt' },
+  { speaker: 'me', text: 'Happy to walk through it. I will send over a detailed quote by end of day.', timestamp: 2000, origin: 'stt' },
+  { speaker: 'them', text: 'Does the platform integrate with Redis for caching at our scale?', timestamp: 3000, origin: 'stt' },
+  { speaker: 'me', text: 'Yes, we run Redis and Postgres under the hood and it handles sharding cleanly.', timestamp: 4000, origin: 'stt' },
+  { speaker: 'them', text: 'Great. We decided to start a pilot next week with the Acme Technologies team.', timestamp: 5000, origin: 'stt' },
+  { speaker: 'me', text: 'Perfect, we will set up the pilot environment and follow up with onboarding docs.', timestamp: 6000, origin: 'stt' },
 ];
 
 // The EXACT projection electron/MeetingPersistence.ts performs at the wiring site. Keeping

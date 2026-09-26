@@ -15,7 +15,7 @@ const { MeetingModeDetector } = await load('MeetingModeDetector.js');
 const { SpeakerLabelService } = await load('SpeakerLabelService.js');
 const { CrossMeetingRecall, priorFromDetailedSummary } = await load('CrossMeetingRecall.js');
 const { FollowUpDraftGenerator, followUpTypeForMode } = await load('FollowUpDraftGenerator.js');
-const { generateStructured, extractJsonObject } = await load('generateStructured.js');
+const { generateStructured, extractJsonObject, NOTE_CALL_TIMEOUT_MS } = await load('generateStructured.js');
 const { MeetingSummarySchemaValidator } = await load('MeetingSummarySchemaValidator.js');
 const { MeetingSummaryReducer } = await load('MeetingSummaryReducer.js');
 const { SectionPromptCompiler, deterministicSectionInstruction } = await load('SectionPromptCompiler.js');
@@ -129,6 +129,47 @@ test('mode detector uses calendar title as a signal', () => {
   const t = [seg('a', 'ok lets start', 0)];
   const r = new MeetingModeDetector().detect({ transcript: t, calendarTitle: 'Weekly Team Standup' });
   assert.equal(r.templateType, 'team-meet');
+});
+
+// 2026-09-17: Seminar and Call Center shipped as built-ins but the detector only
+// knew seven templates, and routed the word "seminar" to Lecture. A thesis talk
+// scored Lecture at exactly the 0.5 the Meeting Details banner shows at, so a
+// Seminar meeting offered "Regenerate notes as Lecture"; a support call scored
+// Team Meet on "ticket".
+test('mode detector flags a thesis seminar as seminar, not lecture', () => {
+  const t = [
+    seg('me', 'Welcome everyone to this seminar. Today I am presenting my thesis research.', 0),
+    seg('me', 'This seminar covers my MSc thesis on urban pollinator corridors.', 1000),
+    seg('them', 'Thanks for the talk. How many sites did you survey?', 2000),
+    seg('me', 'Fourteen sites. My thesis compared corridor sites and controls. One limitation is we did not measure yield.', 3000),
+    seg('them', 'What would the next phase of the research look like?', 4000),
+    seg('me', 'Future work is extending the study. Thank you for attending the seminar.', 5000),
+  ];
+  const r = new MeetingModeDetector().detect({ transcript: t, calendarTitle: 'Thesis seminar: pollinator corridors' });
+  assert.equal(r.templateType, 'seminar');
+  assert.ok(r.confidence >= 0.5, `confidence ${r.confidence}`);
+});
+
+test('mode detector flags a customer support call as call-center, not team-meet', () => {
+  const t = [
+    seg('me', 'Thank you for calling Acme support, how can I help?', 0),
+    seg('them', 'My router keeps dropping wifi, I need help with my account.', 1000),
+    seg('me', 'Let me open a ticket. Can you read me your serial number?', 2000),
+    seg('them', 'It is XR-9 4471. Can I get a refund?', 3000),
+    seg('me', 'I will escalate to Tier 2 support, they will call you back.', 4000),
+  ];
+  const r = new MeetingModeDetector().detect({ transcript: t, calendarTitle: 'Customer support call' });
+  assert.equal(r.templateType, 'call-center');
+  assert.ok(r.confidence >= 0.5, `confidence ${r.confidence}`);
+});
+
+test('mode detector still flags a classroom lecture as lecture', () => {
+  const t = [
+    seg('them', 'Today we\'ll cover chapter four. This lecture is on the fundamental theorem of calculus.', 0),
+    seg('them', 'Write down this definition and the formula, it will be on the exam.', 1000),
+  ];
+  const r = new MeetingModeDetector().detect({ transcript: t, calendarTitle: 'MATH 101 lecture' });
+  assert.equal(r.templateType, 'lecture');
 });
 
 // ── Speaker labels ───────────────────────────────────────────────────────────
@@ -269,7 +310,11 @@ test('follow-up generator falls back deterministically and maps mode→type', as
     mode: 'team-meet',
   });
   assert.equal(draft.type, 'project_update');
-  assert.match(draft.body, /retention proposal|Decisions confirmed|Next steps/i);
+  assert.match(draft.body, /Decisions:\n- Use PostHog/);
+  // INCLUDE_NEXT_STEPS is false (MeetingSummaryReducer.ts): the deterministic body must
+  // render the decisions block and NOTHING resembling a next-steps / action-item list.
+  assert.equal(/next steps/i.test(draft.body), false, `next-steps block leaked into the fallback body: ${draft.body}`);
+  assert.equal(/retention proposal/i.test(draft.body), false, `action item leaked into the fallback body: ${draft.body}`);
   assert.deepEqual(draft.basedOnDecisionIds, ['d1']);
 });
 
@@ -283,6 +328,121 @@ test('follow-up generator uses LLM body when valid', async () => {
   assert.equal(draft.type, 'email');
   assert.match(draft.body, /PostHog/);
   assert.equal(draft.subject, 'Sync recap');
+});
+
+// ── Follow-up generator quality gates (regression suite for the senior review) ─
+// These tests are intentionally narrow: each one locks in a single user-visible
+// behaviour that the senior review found missing or breakable.
+
+// Fix 2: only ChunkSummaryGenerator's extraction call had its timeout raised past the
+// 8s default. FollowUpDraftGenerator.generate() must pass the shared NOTE_CALL_TIMEOUT_MS
+// (30s) via callOpts — timeout ONLY, never purpose:'extraction' (that route is
+// benchmarked for structured extraction, not drafting prose).
+test('follow-up generator passes the raised NOTE_CALL_TIMEOUT_MS to the LLM call, without purpose:extraction', async () => {
+  const captured = [];
+  const llm = {
+    generateMeetingSummary: async (systemPrompt, context, groq, opts) => {
+      captured.push(opts);
+      return '{"subject":"Sync recap","body":"Thanks all. We chose PostHog."}';
+    },
+  };
+  const gen = new FollowUpDraftGenerator(llm);
+  await gen.generate({
+    summary: { overview: 'x', decisions: [{ id: 'd1', text: 'Use PostHog', confidence: 'high' }], actionItems: [], openQuestions: [], tldr: [], whatChanged: [] },
+    mode: 'sales',
+  });
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0]?.timeoutMs, NOTE_CALL_TIMEOUT_MS, `expected timeoutMs ${NOTE_CALL_TIMEOUT_MS}, got ${JSON.stringify(captured[0])}`);
+  assert.equal(captured[0]?.purpose, undefined, 'follow-up drafting must NOT be routed to purpose:extraction');
+});
+
+test('follow-up: rejects LLM subject with placeholder syntax and falls back to a grounded one', async () => {
+  // A model that emits {first name} / [Name] must not see it persisted; the gate
+  // strips placeholder syntax, then falls back to subjectFromContent(title).
+  const llm = fakeLLM(['{"subject":"Hi {first name}, following up","body":"Thanks for your time today, we landed on PostHog for analytics."}']);
+  const gen = new FollowUpDraftGenerator(llm);
+  const draft = await gen.generate({
+    summary: {
+      title: 'Acme Q3 renewal kickoff',
+      overview: 'Renewal conversation covering PostHog selection.',
+      tldr: ['Chose PostHog for analytics'],
+      whatChanged: [],
+      decisions: [{ id: 'd1', text: 'Use PostHog', confidence: 'high' }],
+      actionItems: [],
+      openQuestions: [],
+      risks: [],
+      sections: [],
+    },
+    mode: 'general',
+  });
+  assert.equal(draft.type, 'email');
+  // Placeholder syntax must not appear in the persisted subject.
+  assert.equal(/[{}\[\]]/.test(draft.subject || ''), false, `subject leaked placeholder syntax: ${draft.subject}`);
+  // The deterministic fallback subject is grounded in the title.
+  assert.match(draft.subject || '', /Acme Q3 renewal kickoff/);
+});
+
+test('follow-up: rejects LLM subject with zero overlap to the notes (hallucinated topics list)', async () => {
+  // Classic small-model regression: subject like "Mentions of PostHog, retention, Friday"
+  // when the notes don't mention "Friday" — must be rejected.
+  const llm = fakeLLM(['{"subject":"Mentions of bananas, quokkas, and prisms","body":"Thanks for your time today, we landed on PostHog for analytics."}']);
+  const gen = new FollowUpDraftGenerator(llm);
+  const draft = await gen.generate({
+    summary: {
+      title: 'Acme analytics review',
+      overview: 'Reviewed analytics stack.',
+      tldr: ['Chose PostHog'],
+      whatChanged: [],
+      decisions: [{ id: 'd1', text: 'Use PostHog', confidence: 'high' }],
+      actionItems: [],
+      openQuestions: [],
+      risks: [],
+      sections: [],
+    },
+    mode: 'general',
+  });
+  assert.match(draft.subject || '', /Acme analytics review/, 'should fall back to title-derived subject');
+});
+
+test('follow-up: subjectFromContent rejects generic titles and prefers a real tldr', async () => {
+  const gen = new FollowUpDraftGenerator(fakeLLM([]));
+  // No usable title, no usable tldr/overview → falls back to a non-broken string.
+  const draft1 = await gen.generate({
+    summary: { title: 'Meeting Notes', overview: '', tldr: [], whatChanged: [], decisions: [], actionItems: [], openQuestions: [], risks: [], sections: [] },
+    mode: 'general',
+  });
+  assert.notEqual(draft1.subject, 'Follow-up: Meeting follow-up', 'generic title must not pass through verbatim');
+  assert.equal(/Meeting Notes/.test(draft1.subject || ''), false, 'generic "Meeting Notes" title must not leak into subject');
+  // A substantive tldr drives the subject.
+  const draft2 = await gen.generate({
+    summary: { title: '', tldr: ['We agreed to pilot the new onboarding flow across two regions.'], whatChanged: [], decisions: [], actionItems: [], openQuestions: [], risks: [], sections: [] },
+    mode: 'general',
+  });
+  assert.match(draft2.subject || '', /onboarding flow/);
+});
+
+test('follow-up: recruiter fallback never renders decisions (would leak no-go to candidate)', async () => {
+  // The deterministic fallback must not include a "decisions" block for recruiting,
+  // because negative-hiring decisions would be sent to the candidate.
+  const { MeetingSummaryReducer } = await load('MeetingSummaryReducer.js');
+  const body = MeetingSummaryReducer.buildFollowUpBody
+    ? MeetingSummaryReducer.buildFollowUpBody(
+        [{ id: 'd1', text: 'No-go: weak systems design experience', confidence: 'high' }],
+        [{ id: 'a1', text: 'Schedule onsite', owner: 'Taylor', deadline: 'Fri', explicitness: 'explicit', confidence: 'high' }],
+        'recruiting'
+      )
+    : (await load('MeetingSummaryReducer.js')).buildFollowUpBody(
+        [{ id: 'd1', text: 'No-go: weak systems design experience', confidence: 'high' }],
+        [{ id: 'a1', text: 'Schedule onsite', owner: 'Taylor', deadline: 'Fri', explicitness: 'explicit', confidence: 'high' }],
+        'recruiting'
+      );
+  assert.equal(/no-go|no go|systems design/i.test(body), false, 'recruiter fallback leaked a negative decision to the candidate');
+  // INCLUDE_NEXT_STEPS is false: recruiting renders neither a decisions block (by design,
+  // it would leak the no-go) nor a next-steps block, so the emptiness guard must fire and
+  // produce the honest closing line rather than a salutation-plus-sign-off husk.
+  assert.equal(/what happens next/i.test(body), false, `next-steps block leaked into the recruiter fallback: ${body}`);
+  assert.equal(/Schedule onsite/i.test(body), false, `action item leaked into the recruiter fallback: ${body}`);
+  assert.match(body, /we'll be in touch about next steps soon/i);
 });
 
 // ── Long-meeting: no truncation, chunk coverage ──────────────────────────────
@@ -503,4 +663,106 @@ test('normalizer: without speakerId, channel mapping is unchanged (back-compat)'
   const normalized = new TranscriptNormalizer().normalize(t);
   assert.equal(normalized.segments[0].speakerId, 'speaker_1');
   assert.equal(normalized.segments[0].speaker, 'Speaker 1');
+});
+
+// ── Follow-up draft: plain-text email shape for every mode (2026-08-26) ─────────
+// A real Technical Interview run produced a labelled "**Problem:** / **Approach:** /
+// **Signal:**" report with markdown bold and a sentence narrating that "No hiring
+// signal was discussed" — unusable as an email. These tests lock in: every mode's
+// prompt asks for a salutation + sign-off (not labelled report sections), a uniform
+// no-markdown rule, a no-absence-statements rule, and that both INCLUDE_NEXT_STEPS
+// branches carry the full STRICT RULES block.
+
+function capturingLLM(response) {
+  const captured = [];
+  return {
+    llm: { generateMeetingSummary: async (systemPrompt) => { captured.push(systemPrompt); return response; } },
+    captured,
+  };
+}
+
+const ALL_MEETING_MODES = ['general', 'sales', 'recruiting', 'team-meet', 'looking-for-work', 'technical-interview', 'lecture'];
+
+test('follow-up: technical-interview and lecture prompts ask for a salutation + sign-off, not labelled report sections', async () => {
+  for (const mode of ['technical-interview', 'lecture']) {
+    const { llm, captured } = capturingLLM('{"body":"Hi team, thanks for the session. Overall it went well."}');
+    const gen = new FollowUpDraftGenerator(llm);
+    await gen.generate({
+      summary: {
+        title: 'Session recap',
+        overview: 'Covered the main topic in depth.',
+        tldr: ['Discussed the core topic'],
+        decisions: [], actionItems: [], openQuestions: [], whatChanged: [], risks: [], sections: [],
+      },
+      mode,
+    });
+    const prompt = captured[0];
+    assert.ok(prompt, `no prompt captured for mode ${mode}`);
+    assert.match(prompt, /[Ss]alutation/, `${mode} prompt must still discuss a salutation`);
+    assert.match(prompt, /[Ss]ign-?off/, `${mode} prompt must still discuss a sign-off`);
+    // Must NOT be told "No salutation" / "No sign-off" anymore.
+    assert.equal(/No salutation/i.test(prompt), false, `${mode} prompt still says "No salutation": ${prompt}`);
+    assert.equal(/No sign-off/i.test(prompt), false, `${mode} prompt still says "No sign-off": ${prompt}`);
+    // Must NOT mandate the old labelled-block structures.
+    assert.equal(/"Problem:"/.test(prompt), false, `${mode} prompt still mandates a "Problem:" block`);
+    assert.equal(/"Approach:"/.test(prompt), false, `${mode} prompt still mandates an "Approach:" block`);
+    assert.equal(/"Signal:"/.test(prompt), false, `${mode} prompt still mandates a "Signal:" block`);
+    assert.equal(/"Key concepts:"/.test(prompt), false, `${mode} prompt still mandates a "Key concepts:" block`);
+    assert.equal(/"To remember:"/.test(prompt), false, `${mode} prompt still mandates a "To remember:" block`);
+    assert.equal(/"To review:"/.test(prompt), false, `${mode} prompt still mandates a "To review:" block`);
+  }
+});
+
+test('follow-up: every mode\'s prompt carries the no-markdown rule and the no-absence-statements rule', async () => {
+  for (const mode of ALL_MEETING_MODES) {
+    const { llm, captured } = capturingLLM('{"subject":"s","body":"Hi, thanks for the time today. We covered the main topic."}');
+    const gen = new FollowUpDraftGenerator(llm);
+    await gen.generate({
+      summary: {
+        title: 'Recap',
+        overview: 'Covered the main topic.',
+        tldr: ['Covered the main topic'],
+        decisions: [{ id: 'd1', text: 'Proceed', confidence: 'high' }],
+        actionItems: [], openQuestions: [], whatChanged: [], risks: [], sections: [],
+      },
+      mode,
+    });
+    const prompt = captured[0];
+    assert.ok(prompt, `no prompt captured for mode ${mode}`);
+    assert.match(prompt, /markdown/i, `${mode} prompt missing the no-markdown rule`);
+    assert.match(prompt, /\*\*bold\*\*/, `${mode} prompt missing the **bold** example in the no-markdown rule`);
+    assert.match(prompt, /NOT discussed, decided, or covered/, `${mode} prompt missing the no-absence-statements rule`);
+  }
+});
+
+test('follow-up: both INCLUDE_NEXT_STEPS branches carry the full STRICT RULES block (ternary-drop regression guard)', async () => {
+  // Exercise the prompt as actually built (INCLUDE_NEXT_STEPS is a module-level
+  // constant in MeetingSummaryReducer.ts, currently false) and assert every shared
+  // STRICT RULE survives — this is the branch a prior bug silently emptied.
+  const { llm, captured } = capturingLLM('{"subject":"s","body":"Hi, thanks for the time today. We covered the main topic."}');
+  const gen = new FollowUpDraftGenerator(llm);
+  await gen.generate({
+    summary: {
+      title: 'Recap', overview: 'Covered the main topic.', tldr: ['Covered the main topic'],
+      decisions: [{ id: 'd1', text: 'Proceed', confidence: 'high' }],
+      actionItems: [], openQuestions: [], whatChanged: [], risks: [], sections: [],
+    },
+    mode: 'general',
+  });
+  const prompt = captured[0];
+  const sharedRuleMarkers = [
+    /Ground everything in the notes/,
+    /Be specific to THIS meeting/,
+    /Match the salutation and sign-off/,
+    /NEVER emit placeholder syntax/,
+    /markdown/i,
+    /NOT discussed, decided, or covered/,
+    /Keep it tight and copy-paste ready/,
+    /Do not mention transcripts, AI, summaries/,
+  ];
+  for (const marker of sharedRuleMarkers) {
+    assert.match(prompt, marker, `STRICT RULES block missing ${marker} in the active INCLUDE_NEXT_STEPS branch: ${prompt}`);
+  }
+  // The branch-specific next-steps rule must also be present (whichever branch is active).
+  assert.match(prompt, /next-steps|next steps/i, 'branch-specific next-steps rule missing entirely');
 });

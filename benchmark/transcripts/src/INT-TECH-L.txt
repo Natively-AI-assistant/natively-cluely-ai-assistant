@@ -1,0 +1,379 @@
+# id: INT-TECH-L
+# title: Senior Backend Engineer technical interview, Payments Platform, with debrief
+# S0: Me — Priya Raman, Engineering Manager, Payments Platform, Tessellate Pay
+# S1: Marcus Oyelaran, Senior Software Engineer (candidate), Quillbank
+# S2: Alex Brandt, Staff Engineer, Payments Platform, Tessellate Pay
+S1: Hi, hello? Can you hear me?
+S0: Yes, I can hear you. Hi, you must be Marcus.
+S1: That's me. Hi. Sorry, my camera took a second, it decided to update right when I clicked the link.
+S0: Of course it did. That's the law. Welcome, thanks for making the time this afternoon.
+S1: Thanks for having me. Is this Priya?
+S0: Yes, Priya Raman. I'm the engineering manager for the Payments Platform team here at Tessellate Pay.
+S1: Great, nice to meet you properly. Diane mentioned you'd be running this one.
+S0: Yeah, Diane's been great, she's the recruiter on this role. So quick heads up on the format.
+S0: We've got about 50 minutes. There's supposed to be a second interviewer, Alex, one of our staff engineers, but he's running a few minutes behind. He'll jump in when he can.
+S1: No problem at all.
+S0: So, the plan is, a bit about you and your background, then a technical design discussion, which is the bulk of it, then some behavioural stuff, and then logistics and your questions at the end.
+S1: Sounds good.
+S0: Before we start, how's your week going? You're in Ontario, right?
+S1: Yeah, I'm in Hamilton. The week's been, uh, fine. It's raining sideways here, which is very on brand for September.
+S0: It's the same in Toronto. I biked in this morning and I'm still regretting it.
+S1: Brave. I would have taken the GO train and complained the whole time.
+S0: Honestly, that's the smarter move. Okay, so let's start. Tell me a bit about yourself and how you got to where you are.
+S1: Sure. So, I'm currently a senior software engineer at Quillbank. I work on the payments orchestration team there.
+S1: Before Quillbank I was at Ferrow for about two and a half years, and before that I did internships and some research work while I was finishing my master's.
+S1: All in, I've got about 8 years of experience building backend systems, mostly distributed stuff, mostly in, you know, money-adjacent domains.
+S0: Okay. And what's the stack look like at Quillbank?
+S1: At Quillbank it's mostly Go. The orchestration services are all Go, running on Kubernetes, we use Postgres as the main store and Kafka for pretty much all the async flows.
+S1: At Ferrow it was Kotlin, JVM services, a lot of Kafka there too, and Flink later on.
+S0: Nice. So that overlaps a lot with us. Our newer services are Go, and the ledger itself is still a Kotlin service we're, um, slowly migrating.
+S1: Yeah, I saw that in the job posting. The Kotlin to Go migration part actually caught my eye.
+S0: Good, we'll come back to it. Walk me through Quillbank. When did you join and what do you own?
+S1: I joined Quillbank in April 2023. I started on the payouts team, and then about a year in I moved to payments orchestration.
+S1: What I own now is basically the layer that sits between our product APIs and the external payment processors. So retries, routing between processors, idempotency, the state machine for a payment.
+S0: How many processors are you routing across?
+S1: Three right now. We had four but we dropped one last year because their settlement files were, uh, let's say creatively formatted.
+S0: Creatively formatted. I love that.
+S1: One of them used a different date format depending on the day of the week. I'm not even joking.
+S0: Oh no. Okay. And the team size there?
+S1: Orchestration is six engineers plus me, and there's an EM and a PM we share with the payouts team.
+S0: And Ferrow, what were you doing there?
+S1: So I joined Ferrow in September 2020 and left in March 2023. I was a backend engineer and then a senior engineer by the end.
+S1: Most of my time was on streaming pipelines, moving event data from the product services into the warehouse and into some near real time dashboards.
+S0: Got it. And before that, the internships and research?
+S1: Yeah, so during my master's at McMaster I was a research assistant in a distributed systems lab for about a year, working on consensus protocols, mostly simulation work, nothing that ever went near production.
+S1: And I did two internships, one at a logistics company called Routeway, and one at a small insurance startup that doesn't exist anymore.
+S0: Doesn't exist anymore as in acquired or as in...
+S1: As in the other thing. Good snacks though.
+S0: That's usually how it goes. Okay, so let me just do the math on that. You said 8 years, but Ferrow from 2020 and Quillbank since 2023, that's more like six years?
+S1: Yes, sorry, that's fair, I should be more precise. It's 6 years professional, full time. The other 2 years are the internships and the research assistant role.
+S1: I tend to lump it together because the research work was pretty hands-on, but for leveling purposes, 6 years professional is the accurate number.
+S0: Totally fine, I just like having it straight for the packet. Six professional plus two of internships and research.
+S1: Exactly.
+S0: And what made you start looking? You've been at Quillbank what, three and a half years?
+S1: About three and a half, yeah. Honestly, Quillbank has been good to me. But orchestration is fairly mature now, most of the work is incremental.
+S1: And the thing I keep finding most interesting is the ledger side, the source of truth for money. At Quillbank that's owned by a different org, and I've been sort of peeking over the fence for two years.
+S0: That's a pretty common story. The ledger is the part everybody wants to touch and nobody wants to be paged for.
+S1: Ha. I've been paged for the orchestration layer enough that I think I've built some immunity.
+S0: We'll see if that survives our on-call. Okay, and in terms of languages, if I asked you to rank Go and Kotlin, where are you strongest?
+S1: Go, today, by a decent margin. I've written Go every day for three years. Kotlin I was very comfortable with at Ferrow but I'd need a couple of weeks to warm back up on things like coroutines.
+S0: And Postgres specifically? Like, are you the person who reads query plans, or the person who asks someone else to?
+S1: I'm the one who reads them, for better or worse. I did a fair amount of work on partitioning and on locking behavior at Quillbank. We had a period where advisory locks were being misused and I spent a very long week untangling that.
+S0: Advisory locks being misused. That's a whole genre of horror story.
+S1: It is. The short version is someone was taking an advisory lock keyed on a hash that collided across two unrelated tables.
+S0: Oof. Okay, and Kubernetes, how deep do you go there?
+S1: I'm comfortable as a service owner. Writing deployments, tuning resource requests, debugging why a pod is getting OOM killed. I'm not a cluster operator, we have a platform team for that.
+S0: That's roughly the split we have too. We run on EKS and there's an infra team that owns the clusters.
+S1: Makes sense.
+S0: So, Marcus, I'm going to set up the design question now, and if Alex joins partway through I'll catch him up.
+S1: Sure.
+S0: So the prompt is, we want you to design a payment ledger. Specifically a ledger service that records money movement for merchants, and the key requirement is that it has to be idempotent.
+S0: Clients, meaning our internal services, will call it to record things like a charge, a refund, a payout, and those clients retry. Sometimes aggressively.
+S0: So you should assume the same request can arrive more than once, possibly concurrently. Start wherever you like.
+S1: Okay. Can I ask some clarifying questions first?
+S0: Please.
+S1: Roughly what volume are we talking about? Like order of magnitude for writes per second.
+S0: Let's say peak of about 3,000 ledger writes per second, average more like 800.
+S1: And is it double-entry? Like, does every movement have to balance?
+S0: Yes, double-entry. Every transaction has to net to zero across its entries.
+S1: Okay. And the consumers of the ledger, do they need balances in real time, or is some lag acceptable?
+S0: Good question. For authorizing a payout, we need a balance that's accurate. For dashboards, a few seconds of lag is fine.
+S1: Got it. And multi-currency?
+S0: Yes, but you can assume no FX inside the ledger. A transaction is single currency.
+S1: Perfect, that makes life easier.
+S1: So I'll start with the data model, because for a ledger I think everything falls out of that.
+S1: At the core you'd have accounts, a transactions table, and an entries table. A transaction is the logical movement, and it has two or more entries, each one a debit or a credit against an account.
+S1: The entries are append-only. You never update or delete an entry. If something's wrong you post a reversing transaction.
+S0: Okay.
+S1: And on the transactions table, the client supplies an idempotency key. I'd put a unique constraint on the idempotency key scoped to the client, so like client ID plus key.
+S2: Hey, sorry, sorry. Hi everyone. Can you hear me?
+S0: Hey, yes, we can hear you. Marcus, this is Alex.
+S2: Hi Marcus, I'm Alex Brandt, I'm a staff engineer on Payments Platform. I'm so sorry I'm late, I was stuck in an incident review that ran over and then the meeting room booking system kicked me out of the room.
+S1: No worries at all, nice to meet you.
+S0: The booking system strikes again.
+S2: It literally put a sign on the door saying the room was reserved for "Quarterly Vibes Sync". I don't know whose meeting that is.
+S0: That's marketing. Don't ask.
+S2: Noted. Okay, where are we?
+S0: Quick catch-up. Marcus has been at Quillbank since April 2023 on payments orchestration, Go, Postgres, Kafka. Before that Ferrow. 6 years professional plus a couple of years of internships and research.
+S0: We're on the ledger design question. He's laid out accounts, transactions, append-only entries, and a unique constraint on client plus idempotency key.
+S2: Great, thanks. Oh, Ferrow, nice. So you were on their payments team? I know a couple of people from Ferrow payments, they're basically our main competitor in the SMB space.
+S1: Ah, actually no, I was on the data team at Ferrow, not payments. Data platform. I worked a lot with the payments team's event streams, but I never owned any of their services.
+S2: Oh, got it, my mistake. I think I saw Ferrow and just filled in the rest.
+S1: Easy mistake, half of LinkedIn thinks the same thing. My old manager there, Alex Kowalczyk, used to get messages from recruiters asking about payments roles too.
+S2: Another Alex. We're everywhere.
+S1: You really are. Different Alex, though, he's now at some climate startup, I think.
+S0: Okay, back to the ledger. Marcus, you were on the idempotency key.
+S1: Right. So the unique constraint on client ID and idempotency key is the actual enforcement mechanism. Everything else is optimization.
+S1: The flow on a write is, you open a Postgres transaction, you try to insert the transaction row with the key. If it succeeds, you insert the entries, check they balance, update balances, and commit.
+S1: If the insert hits a unique violation, it means we've seen this key before, so you look up the existing transaction and return its result.
+S2: What if the second request has the same key but a different payload? Like, a different amount.
+S1: Good one. So I'd store a hash of the request body alongside the key. On a conflict, if the stored hash matches the new request, you return the original response. If it doesn't match, that's a client bug, and you return a 422, like an idempotency key reuse error. You never silently return the old result for a different request.
+S2: Okay, good. And how long do you keep the keys?
+S1: I'd want to keep them at least as long as the longest retry window of any client. At Quillbank one of our processors retries webhooks for up to 72 hours, so we kept idempotency records for 7 days.
+S1: For a ledger, honestly, the transaction row itself is permanent, so the key is effectively kept forever. The question is more about the fast-path cache, if you have one.
+S2: Fair. Do you have a cache?
+S1: I'd start without one. The unique index lookup in Postgres is cheap. I'd only add a Redis layer in front if we saw the conflict path showing up in latency.
+S0: What about two identical requests arriving at exactly the same time? Both in flight.
+S1: So both try the insert. Postgres will block the second insert on the unique index until the first transaction commits or rolls back.
+S1: If the first commits, the second gets a unique violation, reads the committed row, returns the same result. If the first rolls back, the second one's insert succeeds and it just proceeds normally.
+S0: So you're leaning on the database for serialization there.
+S1: Yes, deliberately. It's the one place I really don't want to be clever.
+S2: I like that answer. Okay, balances. You said you update balances in the same transaction. How, exactly?
+S1: So there's an account balances table, one row per account and currency, with the balance and a version number.
+S1: When you post a transaction, for each account touched, you do a select for update on the balance row, apply the delta, bump the version.
+S1: And, importantly, you lock the rows in a consistent order, like sorted by account ID, so two transactions touching the same pair of accounts don't deadlock.
+S2: At 3,000 writes a second, what's the problem with that?
+S1: Hot accounts. Something like a platform fee account or a big merchant's settlement account shows up in a huge fraction of transactions, and now everything is serialized on that one row lock.
+S2: So what do you do?
+S1: A couple of options. One is you don't maintain a running balance synchronously for hot accounts. You just insert entries and compute the balance from the entries plus periodic snapshots.
+S1: Another option people use is splitting a hot account into sub-accounts, like shards, and the logical balance is the sum. That works but it makes overdraft checks harder.
+S2: Which one would you pick for the fee account?
+S1: For a fee account, which only ever receives money and never needs an overdraft check, I'd do the first one. Append entries, no synchronous balance, snapshot every few seconds.
+S1: For a merchant account where we need to authorize payouts against the balance, I'd keep the synchronous locked balance, because correctness matters more than throughput there.
+S2: Okay, that's a good distinction.
+S0: Let's talk about getting data out. Downstream services need to know when something posted. How do they find out?
+S1: So this is where Kafka comes in. The naive approach is, commit to Postgres and then publish an event to Kafka.
+S1: The problem is if the service crashes between the commit and the publish, the event is lost, and if you publish first and then the commit fails, you've announced something that never happened.
+S0: Right.
+S1: So I'd use a transactional outbox. In the same Postgres transaction as the entries, you insert a row into an outbox table. Then a separate relay process reads the outbox and publishes to Kafka, and marks rows as sent.
+S2: And what delivery guarantee does that give you?
+S1: So with Kafka's idempotent producer and transactions turned on, you get exactly-once. The relay publishes inside a Kafka transaction, consumers read committed, and you get exactly-once delivery end to end.
+S2: End to end? Walk me through that. What happens if the relay publishes the batch, the Kafka transaction commits, and then the relay crashes before it marks the outbox rows as sent in Postgres?
+S1: Um. Then on restart it would read those rows again and publish them again.
+S2: So?
+S1: So, yeah, you're right. That's a duplicate. Kafka transactions give you exactly-once for read-process-write inside Kafka, but the moment one side of it is Postgres, it's not end to end.
+S1: Let me restate that properly. The outbox relay is at-least-once. Every event will be published at least once, possibly more.
+S1: And the way you get effectively-once behavior is on the consumer side, by making consumers idempotent, keyed on the ledger transaction ID. So the event carries the transaction ID and every consumer dedupes on it.
+S2: Okay. That's the answer I was looking for. People say exactly-once a lot.
+S1: It's like a unicorn. Everyone's heard of it, nobody's seen one outside of a Kafka to Kafka pipeline.
+S2: I'm stealing that.
+S0: Marcus, what about ordering? Does a consumer care about the order of events for the same account?
+S1: For balance-derived stuff, yes. I'd use the account ID as the partition key so events for one account land on the same partition in order.
+S1: But a transaction touches multiple accounts, so I'd publish one event per transaction keyed by, hmm, probably the primary merchant account, and have consumers that need strict per-account ordering use the entry sequence number instead of relying on Kafka order.
+S2: The entry sequence being what?
+S1: A monotonically increasing sequence per account, assigned under the balance row lock. So a consumer can detect gaps.
+S2: Nice. Okay.
+S0: Let me widen the scope a bit. Say a payout requires calling an external processor. The ledger records the payout, and something has to actually move the money. Where do retries live, and what happens when the processor times out?
+S1: So I'd keep the external call out of the ledger service itself. The ledger records intent and outcome. A separate payout worker does the processor call.
+S1: The payout goes through states. Something like created, then submitted, then either succeeded, failed, or unknown.
+S1: When you create the payout, the ledger posts a transaction that moves funds from the merchant's available balance into a pending payouts account. So the money is reserved and can't be double spent.
+S0: And the timeout?
+S1: The timeout is the dangerous one. If the processor times out, you genuinely don't know whether the money moved. So the payout goes to unknown, not failed.
+S1: You must not release the reserved funds, and you must not blindly retry with a new request, because that's how you pay someone twice.
+S2: So what do you do instead?
+S1: Two things. First, you retry with the same idempotency key to the processor, assuming the processor supports idempotency keys, which the good ones do. If they return the original result, you're done.
+S1: Second, for the cases where that doesn't resolve it, there's a reconciliation job. It pulls the processor's settlement file or status API and matches against payouts in unknown, and then either posts the success or releases the funds.
+S2: How long can something sit in unknown?
+S1: Depends on the processor. For the ones with a status API, minutes. For the ones where you only get a daily settlement file, up to a day or so. You'd want an alert if anything sits in unknown longer than, say, 24 hours.
+S0: What's the retry policy on the processor call itself?
+S1: Exponential backoff with jitter, capped. Like start at 200 milliseconds, double each time, cap at maybe 30 seconds, and a maximum number of attempts, after which it goes to unknown and reconciliation picks it up.
+S1: And a circuit breaker per processor, so if one processor is having a bad day you stop hammering them and, where it's allowed, route to another one.
+S0: Related question. Processors rate limit us. Say one of them gives us a hard cap of 200 requests per second across all our workers. How do you enforce that?
+S1: So it has to be a global limit, not per worker, because the workers autoscale. I'd do a token bucket in Redis, with the refill and take done atomically in a Lua script.
+S1: Each worker takes a token before the call. If there's no token, it waits a short time or re-queues the job instead of calling.
+S0: What if Redis goes down?
+S1: Then you fail, um, you have to decide. I would not fail open on a processor limit because getting throttled or banned by a processor is worse than being slow. So I'd fall back to a conservative local limit per worker, like the global limit divided by the max worker count.
+S2: That's reasonable. Slightly under-utilizes, but it's safe.
+S1: Right, it's a degraded mode, not the normal path.
+S2: Okay, one more failure mode on the ledger itself. Postgres primary fails over. What's at risk?
+S1: So if you're on synchronous replication, committed transactions survive failover, and the main risk is the window where clients get errors and retry. Which is fine, because they retry with the same idempotency key.
+S1: If replication is asynchronous, you can lose the last few committed transactions. That's the scary one for a ledger, because you might have told a client "success" and then the transaction is gone.
+S2: And we're asynchronous today, for what it's worth.
+S1: Then I'd want to know that very explicitly. At minimum, the outbox and downstream consumers could re-post the lost transactions, and the reconciliation would catch mismatches. But I'd push for synchronous replication to at least one standby for the ledger specifically.
+S2: That's, uh, an active debate internally. Let's say you'd fit right in.
+S0: Okay, I'm going to move us on because I want to leave time for other things. Marcus, that was a really good discussion.
+S1: Thanks, that was fun, honestly. Apart from the unicorn moment.
+S0: Let's talk about a real incident. Tell us about a production incident you were involved in, what happened, what you did, and what changed afterwards.
+S1: Sure. So the one that comes to mind is from March 2025 at Quillbank. It was a duplicate payouts incident.
+S1: One of our processors, I'll just call them the processor, had a latency spike. Their p99 went from about 400 milliseconds to over 9 seconds.
+S1: Our payout workers were timing out and retrying, which is expected. The problem was that a refactor two weeks earlier had moved the idempotency key generation inside the retry loop.
+S2: Oh no.
+S1: Yeah. So every retry was a new idempotency key, so from the processor's point of view every retry was a brand new payout.
+S0: How bad did it get?
+S1: We sent 1,412 duplicate payouts before we stopped it. The total value was about 2.3 million dollars.
+S2: Wow.
+S1: It took 38 minutes from the first duplicate to detection. We didn't catch it from our own alerting, a merchant's finance person emailed support saying they'd received the same payout three times.
+S0: And what was your role?
+S1: I led the incident. Well, let me be precise, because I think it matters. I was the secondary on call. The primary was the incident commander for the first 20 minutes and I was doing comms and digging through logs.
+S1: About 20 minutes in, the primary had to hand off because they were the only person who could do the processor escalation call, so I took over as incident commander from there to the end.
+S0: That's a helpful distinction, thank you.
+S1: So once I had it, the first thing we did was flip the kill switch on payouts for that processor, which stopped the bleeding. Then we rolled back the refactor, and we got the processor on a call to cancel whatever was still in flight.
+S1: We managed to cancel some that hadn't settled. For the rest, we worked with the merchants to recover the funds.
+S2: How much did you end up recovering?
+S1: Within two weeks we'd recovered everything except about 41,000 dollars, which the company ended up writing off.
+S0: And after?
+S1: I wrote the postmortem. The fixes were, the idempotency key is now derived deterministically from the payout ID, so it's physically impossible to generate a new one per attempt.
+S1: We added a lint rule and a test that asserts the key is stable across retries. And we added a reconciliation alert that compares outgoing payout volume per merchant against the ledger in near real time.
+S1: With that alert, we ran a game day six weeks later that simulated the same bug, and detection time was under 5 minutes.
+S2: Did you own the follow-up actions or just the write-up?
+S1: The write-up and two of the five actions, the key derivation and the alert. The lint rule and the processor escalation runbook were owned by other folks. I tracked all of them to completion though.
+S2: Okay.
+S0: What would you have done differently, looking back?
+S1: The refactor was reviewed by two people, including me, actually. I approved it. So honestly, I missed it.
+S1: What I'd do differently is, I'd have insisted that anything touching the retry path has a test that runs the retry path. The tests at the time only covered the happy path.
+S0: I appreciate you saying that you approved it. A lot of people leave that part out.
+S1: It's in the postmortem, so it'd be a bit silly to leave it out here.
+S2: Can I sneak in a couple of technical follow-ups before we go to behavioural? I missed the first ten minutes, so I want to make sure I get my questions in.
+S0: Go for it, we've got a bit of room.
+S2: So, how do you test a ledger? Not unit tests for the handlers, I mean how do you convince yourself the money is right.
+S1: I think about it in terms of invariants. The two big ones are, every transaction's entries sum to zero per currency, and every account's balance equals its last snapshot plus the entries posted since.
+S1: In tests, I like property-based testing for that. You generate random sequences of charges, refunds, payouts, including duplicates and concurrent retries, run them against a real post gress in a container, and assert the invariants hold at the end.
+S1: And in production you run the same invariant checks as a job. At Quillbank the orchestration side had a nightly checker, and I'd want something more frequent for a ledger, like hourly over the last day of data.
+S2: What happens when the checker finds a mismatch at 3am?
+S1: It should page, but it should never auto-correct. A human looks at it. Auto-correcting a ledger is how you turn one bug into two.
+S2: Agreed. Okay, the second one is about the migration Priya mentioned. We're moving the ledger from the Kotlin service to Go. If you were running dual writes, how would you know the new one is right?
+S1: Shadow mode first. The old service stays the source of truth, the new one receives the same requests, and a comparator diffs the resulting entries and balances.
+S1: I'd define a target diff rate before starting, like under 0.01% of transactions, and every diff gets categorized, because most of them will be boring stuff like rounding or timestamp precision, and one of them will be the real bug.
+S1: And you only flip reads for a transaction type once its diffs have been at zero for, say, two weeks.
+S2: What's the rounding thing you've seen?
+S1: Oh, the JVM BigDecimal versus a Go decimal library with a different default rounding mode. Half-even versus half-up. It's one cent on maybe one in ten thousand transactions, and it's absolutely maddening to find.
+S2: Yeah, we, uh, may have met that one.
+S0: Sorry, Alex, your Slack is going off like a slot machine, is that the incident review?
+S2: It's the incident review people asking where I went. I'll mute it. They can review the incident without me for half an hour.
+S0: That's the spirit. Marcus, sorry, internal chaos.
+S1: No, it's reassuring, honestly. Every company has a meeting that eats the next meeting.
+S0: Last technical thing from me. You mentioned you're not a cluster operator. If a Go service in Kubernetes started getting OOM killed after a deploy, walk me through what you'd check, quickly.
+S1: First, did the memory limit change in the deploy, or did the code change. Then I'd look at the container memory graphs versus the Go heap metrics, because if the heap is flat and the container memory climbs, it's often not the heap at all.
+S1: Could be goroutine leaks, each one holds a stack, or it could be cgo or a big buffer. And I'd check whether GOMEMLIMIT is set, because a lot of services are running without it and the garbage collector has no idea the container has a limit.
+S0: Good. That last one bit us last year.
+S1: It bites everyone once.
+S0: Okay, let's switch to a couple of behavioural questions. Tell me about a time you had a real disagreement with someone at work, and how it got resolved.
+S1: Sure. So last year at Quillbank our product manager, Rohan, wanted to launch instant payouts for a set of merchants. The business case was solid, merchants really wanted it.
+S1: My concern was that instant payouts would go out before our reconciliation ran, and at that point, remember, this was after the duplicate payouts incident, so I was, um, pretty sensitive to anything that moved money faster than we could check it.
+S1: Rohan's position was that we'd been talking about reconciliation improvements for months and the launch shouldn't wait on it. And he wasn't wrong that we'd been slow.
+S0: So what happened?
+S1: It got a bit tense in a planning meeting, honestly. I said something like "we are not shipping this," which was not my finest phrasing.
+S1: Afterwards I went and talked to him one on one, and we tried to figure out what risk he was willing to accept and what I was actually afraid of.
+S1: The compromise was that we launched instant payouts with a cap of 5,000 dollars per payout for the first 6 weeks, and only for merchants who'd been with us more than a year. And I committed to shipping the near real time reconciliation alert during those 6 weeks.
+S2: Did you ship it in time?
+S1: We shipped it in week five, and they lifted the cap in week seven. Rohan and I actually get along really well now. He still brings up "we are not shipping this" at team dinners though.
+S0: As he should. Okay, a failure. Something that didn't go well where you were responsible.
+S1: So at Ferrow I led a migration of our batch pipeline from Spark to Flink. I estimated it at 3 months. It took 7.
+S1: The main mistake was I planned it as one big cutover. I didn't break it into milestones that delivered anything on their own, so for months we had nothing to show and two pipelines to run.
+S1: My manager at the time, Alex, the other Alex, sat me down around month five and basically asked, what's the smallest piece of this you could turn off the old system for next week.
+S1: That reframed it. We ended up migrating one event type at a time, and the last four months went much better than the first three. But the overrun was on me.
+S0: What do you do differently now?
+S1: Now any project over a month, I plan in slices that can each be shipped and switched on independently. And I put the first one on the calendar within two weeks, even if it's tiny.
+S2: I'm guessing the Spark to Flink thing is why you know Flink state backends better than you'd like.
+S1: Oh, I know RocksDB compaction settings better than any human should.
+S0: Okay, two more quick ones. What would you say are your biggest strengths as an engineer?
+S1: I think the biggest one is debugging production systems. When something's on fire and it doesn't make sense, I'm calm and pretty methodical about narrowing it down.
+S1: The second is writing. I write clear design docs, and at Quillbank people use a couple of my docs as templates for how to write a design review.
+S0: And a weakness?
+S1: The honest one is I tend to take too much on myself. When something's important, my instinct is to just do it rather than delegate it, and at a senior level that doesn't scale and it doesn't grow other people.
+S1: What I'm doing about it is, this year I've paired a mid-level engineer on every project I lead, and I've made myself write down which pieces I'm explicitly not going to touch.
+S0: That's a real answer, thank you.
+S0: Okay, let me tell you a bit about the role and the team, and then we'll get into logistics. The role is Senior Backend Engineer on Payments Platform, and it's leveled at L5 in our framework.
+S0: The team owns the ledger, the payout orchestration, and the processor integrations. It's six engineers today, plus me as the manager.
+S2: Seven, actually. Ines starts on Monday.
+S0: Oh, right, yes, sorry. Seven engineers including Ines, who starts on Monday. I keep forgetting because she's not in the standup yet.
+S1: So I'd be the eighth.
+S0: You'd be the eighth, yes.
+S0: On-call is a weekly rotation with a primary and a secondary. Realistically you'd be primary about one week in seven, and secondary one week in seven.
+S1: How noisy is it?
+S2: It's gotten a lot better. Last quarter we averaged about 4 pages a week, and most of those are business hours. Maybe one overnight page every couple of weeks.
+S0: And there's an on-call stipend, 400 dollars per week when you're primary.
+S1: Okay, that's reasonable.
+S0: In terms of work location, we're hybrid. The expectation is two days a week in our Toronto office, Tuesdays and Thursdays.
+S1: From Hamilton that's about an hour each way on the GO. Is there any flexibility, like, one day a week?
+S0: The policy is two days. Exceptions go through Dan, our VP of engineering, and I'll be honest, he doesn't grant many. I wouldn't count on it.
+S1: That's fair. Two days works, I was just asking. I did the commute for a while at Ferrow.
+S0: Good. And on work authorization, your resume mentions an open work permit. Would you need any sponsorship?
+S1: Ah, that's an older version of the resume, sorry. I became a permanent resident in July, so no sponsorship needed.
+S0: Oh, congratulations. That's a big one.
+S1: Thanks, it was a long process. The paperwork alone could have been its own distributed systems problem.
+S0: Okay, compensation. Diane will go into detail later, but I like to make sure we're not wildly apart. What are you looking for?
+S1: I'm looking for somewhere around 240.
+S0: Okay. So 240 base would be above what we have for this level, so let me make sure I understand. Is that base?
+S1: Sorry, no, that's total comp. Base, I'm looking for around 190. The 240 was base plus bonus plus equity annualized.
+S0: Got it, that's much closer. So the base band for L5 is 170,000 to 200,000 Canadian. On top of that there's a 10% target bonus, and an equity grant that's typically around 150,000 over four years.
+S1: Okay, that's in range for me. For context, my base at Quillbank is 176,000.
+S0: That's helpful. So 190 base is within the band. No promises today, obviously, but we're not far apart.
+S1: Sounds good.
+S0: And notice period, what are we looking at?
+S1: Four weeks. My contract says four weeks.
+S0: Okay, so if things moved quickly, a start somewhere around mid-October is plausible?
+S1: Roughly, yeah, depending on when an offer lands.
+S0: Great. Okay, let's give you some time. What questions do you have for us?
+S1: A few. First, what would the first 90 days look like for this role?
+S0: Honestly, most of it would be the ledger migration. We call it Project Tally. It's moving the ledger off the Kotlin service, which internally everyone calls Abacus, onto a new Go service.
+S0: The first month would be onboarding, getting on the on-call shadow rotation, and then you'd pick up one of the Tally workstreams. We're targeting the Tally cutover for Q2 2027.
+S1: And is that a big bang cutover, or incremental?
+S2: Incremental. Dual writes and shadow reads, one transaction type at a time. We learned from someone's Spark to Flink migration.
+S1: Ha. Glad my suffering was useful.
+S1: Second question, what's the biggest piece of technical debt on the team right now?
+S2: I'd say two things. One is Abacus itself, it's a Kotlin monolith that nobody on the current team wrote.
+S2: The other is what we touched on earlier. The ledger database is one Postgres primary with asynchronous replicas, and at peak the primary is sitting around 70% CPU. So both failover risk and headroom.
+S1: That's, um, a fun combination.
+S2: That's one word for it.
+S1: Third, how do you handle incidents and postmortems? Is it genuinely blameless?
+S0: It's blameless, and we mean it. Every sev one and sev two gets a written postmortem within five business days, and we review action items weekly in the team sync until they're closed.
+S2: And the incident commander role rotates, it's not always the most senior person. We think people should practice it before they need it.
+S1: I like that a lot. That would have helped us in March 2025.
+S1: And last one, what do the next steps look like, if this goes well?
+S0: So there's a final round. It's four sessions: a system design deep dive, a coding session, a cross-functional conversation with our product lead, and a conversation with Dan, our VP of engineering.
+S0: Diane will coordinate scheduling. And there may be a take-home, we'll let you know.
+S1: Great. Oh, actually, one thing I should correct. On the notice period, I said four weeks, and that's what the contract says, but realistically it's going to be 6 weeks.
+S1: I've got an equity vest at Quillbank on November 15th. It's about 22,000 dollars, and I'd really rather not walk away from it.
+S0: Totally understandable. So realistically, six weeks.
+S1: Yes. So I'd plan for my last day to be just after the vest, and start on Monday, November 23rd.
+S0: November 23rd. Okay, I've noted that. We can have a conversation later about whether there's anything we can do about the vest, but no promises.
+S1: Of course. I appreciate it.
+S2: Can I ask one quick follow-up before we let you go? When you said consumers dedupe on the transaction ID, where would that dedupe state live for a consumer that writes to, say, a search index?
+S1: If the sink supports it, I'd write with the transaction ID as the document ID so the write itself is idempotent, an upsert. If the sink can't do that, a dedupe table in the consumer's own database, written in the same transaction as the side effect, where possible.
+S2: And where it's not possible?
+S1: Then you accept at-least-once and make the side effect harmless to repeat, or you're back to reconciliation. There's no free lunch.
+S2: Good. Thanks.
+S0: Alright, Marcus, thank you so much. This was great. Diane will be in touch in the next few days.
+S1: Thank you both, I really enjoyed it. And Alex, good luck with the Quarterly Vibes Sync.
+S2: Ha, thanks. Take care.
+S1: Bye.
+S0: Okay, he's gone. Alex, thanks for jumping in, and sorry about the room.
+S2: Not your fault. So, what did you think?
+S0: You first. You're the one who's going to work with him every day.
+S2: Honestly, I liked him a lot. The failure mode stuff was really strong. The unknown state for processor timeouts, not releasing the reserved funds, the point about not auto-correcting the ledger. That's exactly how I'd want someone on this team to think.
+S2: And the incident story had real numbers in it. 1,412 duplicates, 38 minutes to detect, under 5 after the fix. And he volunteered that he'd approved the PR. People don't do that.
+S0: Agreed on the incident story. He was also careful about separating secondary on call from incident commander, which I appreciated.
+S2: I'd even say, and I'm just floating this, he might be closer to staff than senior. The way he reasoned about hot accounts and the migration comparator was staff-ish.
+S0: I don't think I'm there. I'd push back a bit on that.
+S0: The exactly-once thing bothers me more than it bothers you. He stated end-to-end exactly-once with a lot of confidence, and it took you walking him through the crash to get him to at-least-once.
+S2: Sure, but he got there in about ten seconds and then gave the right answer, idempotent consumers keyed on the transaction ID. And his follow-up on sink dedupe was good.
+S0: He recovered well, I agree. But for someone who'll own ledger consistency, I want to see him find the boundary himself, not after being led to it.
+S0: And for staff specifically, I didn't hear much about influence beyond his own team. The Rohan story was one PM, one compromise. That's senior-level scope.
+S2: That's fair. The cross-team thing I don't have a strong signal on either way.
+S0: Also, small thing, but he said 8 years at the start and it was really 6. He corrected it immediately when I asked, so I'm not holding it against him, but I noticed it.
+S2: I think that's just how people count internships. I wouldn't read into it.
+S0: Probably. What did you see as weaknesses?
+S2: He was a bit hand-wavy on event ordering for transactions that touch multiple accounts. Partition by the primary merchant account plus a per-account sequence is fine, but he didn't really think through the consumer side.
+S0: And for me, his answers ran long. The Flink story especially. Strong communicator, clear, but he needs to get to the point faster in a design review.
+S2: The self-stated weakness was taking too much on himself. That lines up with the incident story too, honestly, he tracked all five actions himself.
+S0: Yeah. Okay, so where are we? I'm a yes to the final round. Not a yes to an offer yet.
+S2: I'm a strong yes to the final round.
+S0: Then let's advance him to the final round. And the named concern we want the final round to probe is consistency boundaries, whether he can reason about where guarantees stop across Postgres, Kafka and the processors without being prompted.
+S2: Agreed. And maybe secondary, the cross-team influence thing, since that's what decides senior versus staff.
+S0: Fine, secondary. So, for the system design deep dive, I'll put together the design follow-up and send it to him as a pre-read.
+S2: Actually, let me own that. I'm going to run the deep dive anyway, and I want to design it around the async replication failover case, so he has to find the consistency boundary himself.
+S0: Even better. So Alex owns the system design follow-up. When can you get it to him?
+S2: I can have the prompt ready and sent through Diane by Friday. So the 25th.
+S0: Friday the 25th, good. And I'll email Diane today to kick off scheduling the final round. I'd like it to happen the week of October 5th.
+S2: That works for me. I'm out October 1st and 2nd anyway.
+S0: Now, the take-home. Our standard process has one for senior backend.
+S2: I'd honestly skip it for him. He's clearly shipped real systems, and the deep dive gives us more signal than a take-home would.
+S0: I'm sympathetic, but skipping it needs Dan's sign-off, and we did it for the last candidate and got a bit of grief. I don't want to decide that today.
+S2: Fair enough. Can you ask Dan?
+S0: I'll raise it with him, but let's leave it open for now.
+S0: I also wondered about adding a pairing session on the Abacus code, like a real Kotlin debugging exercise.
+S2: I'd rather not. Four sessions is already a long loop, and a fifth one on a Kotlin monolith he's never seen feels like hazing.
+S0: Ha, okay. Fair, let's not do that.
+S2: And the staff question?
+S0: Let's not change the level now. The role is L5. If the final round shows staff-level scope, we can revisit it then, but I'm not agreeing to that today.
+S2: Okay, I can live with that.
+S0: The other thing is the vest. He's walking away from about 22,000 on November 15th if he leaves early, so a start date of November 23rd makes sense.
+S2: Could we do a sign-on bonus to cover it and get him earlier?
+S0: Maybe. Someone should check with the comp team whether there's any room for a sign-on bonus at L5 this cycle. I genuinely don't know.
+S2: Not it.
+S0: Noted, not you. Okay, and scorecards, let's both get ours in by end of day tomorrow, Wednesday, before we start anchoring on each other's take.
+S2: Deal. I'll write mine tonight while the unicorn is fresh.
+S0: Please don't put the unicorn in the scorecard.
+S2: No promises. Okay, I have to go back and apologize to the incident review.
+S0: Go. Thanks, Alex.

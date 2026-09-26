@@ -1,0 +1,349 @@
+{
+ "blind_id": "S-3de94e51",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 78396,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 34588,
+  "candidatesTokenCount": 2460,
+  "totalTokenCount": 46151,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 34588
+   }
+  ],
+  "thoughtsTokenCount": 9103,
+  "serviceTier": "standard"
+ },
+ "fact_count": 69,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 8,
+  "hallucination_control": 7,
+  "action_item_retention": 9,
+  "decision_retention": 7,
+  "speaker_attribution": 8,
+  "numeric_accuracy": 7,
+  "entity_retention": 9,
+  "timeline_accuracy": 6,
+  "conclusion_accuracy": 7,
+  "structure": 2,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Joaquin's return date is hallucinated as October 21st instead of September 21st.",
+   "The notes contain duplicated sections (Action items, Decisions, Open questions, Risks) with contradictory information (e.g., listing Ravi as owning the RabbitMQ upgrade in one bullet, and Pam in another; listing the Kafka spike as an action item, and then cancelled).",
+   "The notes list 'The team tentatively converged on migrating the notification pipeline to Amazon MSK' as a Decision, and then later list 'Kafka on MSK is rejected' as a Decision."
+  ],
+  "missing_important_information": [
+   "The date of the outage (September 8th).",
+   "The first alert firing at 14:19 on queue depth 50,000."
+  ],
+  "hallucinated_information": [
+   "Joaquin returning on October 21st (transcript says September 21st)."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C08",
+    "reported": "The team tentatively converged on migrating the notification pipeline to Amazon MSK before the October 23 code freeze."
+   },
+   {
+    "correction_id": "C09",
+    "reported": "Ravi will upgrade RabbitMQ and migrate notifications.v2 to quorum queues with delivery limit five by October 9th."
+   },
+   {
+    "correction_id": "C11",
+    "reported": "Ravi will prepare a two-week spike plan for a notif-worker prototype reading from MSK with retry topics."
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "The team tentatively converged on migrating the notification pipeline to Amazon MSK before the October 23 code freeze.",
+   "Ravi will prepare a two-week spike plan for a notif-worker prototype reading from MSK with retry topics."
+  ],
+  "distractors_included": [
+   "A cut-off sentence in the 'What changed' section: 'prefetch OOMs, excessive autoscaling, the disabled DLQ, and missing canary coverage ampli'"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "missing"
+   },
+   {
+    "id": "F02",
+    "status": "partial"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "missing"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "partial"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "partial"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "partial"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "missing"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "partial"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "contradicted"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "missing"
+   },
+   {
+    "id": "F62",
+    "status": "missing"
+   },
+   {
+    "id": "F63",
+    "status": "missing"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a high percentage of the important information, action items, and decisions. However, the output suffers from a severe structural failure, generating duplicated sections (e.g., 'Action items' and 'Action items (structured)') that contain contradictory information. For example, the notes list Ravi as owning the RabbitMQ upgrade in one bullet and Pam in another, and list the Kafka spike as an action item before later stating it was cancelled. Additionally, there is a hallucination regarding Joaquin's return date (October 21st instead of September 21st). The extreme repetition and internal contradictions make the notes highly confusing and poorly formatted."
+ }
+}

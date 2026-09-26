@@ -1,0 +1,1364 @@
+{
+  "id": "TEAM-M",
+  "category": "team_meeting",
+  "natively_mode": "team-meet",
+  "length_bucket": "long",
+  "speakers": [
+    {
+      "label": "S0",
+      "shown_to_model_as": "Me",
+      "name": "Dana Okafor",
+      "role": "Engineering Manager",
+      "org": "Tallyport"
+    },
+    {
+      "label": "S1",
+      "shown_to_model_as": "Speaker 1",
+      "name": "Rohan Mehta",
+      "role": "Senior Product Manager",
+      "org": "Tallyport"
+    },
+    {
+      "label": "S2",
+      "shown_to_model_as": "Speaker 2",
+      "name": "Ines Castillo",
+      "role": "Product Designer",
+      "org": "Tallyport"
+    },
+    {
+      "label": "S3",
+      "shown_to_model_as": "Speaker 3",
+      "name": "Viktor Salo",
+      "role": "Senior Backend Engineer",
+      "org": "Tallyport"
+    },
+    {
+      "label": "S4",
+      "shown_to_model_as": "Speaker 4",
+      "name": "Maya Lindqvist",
+      "role": "QA and Release Engineer",
+      "org": "Tallyport"
+    },
+    {
+      "label": "S5",
+      "shown_to_model_as": "Speaker 5",
+      "name": "Joel Brennan",
+      "role": "Customer Success Lead",
+      "org": "Tallyport"
+    }
+  ],
+  "context": "Weekly launch-readiness meeting at Tallyport, a fictional B2B SaaS company, for the usage-based billing v2 launch, run by engineering manager Dana Okafor on Thursday, September 17. The product, design, backend and QA leads go through workstream status, argue about the launch date and plan the staged rollout. A customer success lead joins partway through to escalate an overbilled customer.",
+  "facts": [
+    {
+      "id": "F01",
+      "type": "background",
+      "importance": "important",
+      "statement": "The meeting is the weekly launch-readiness check for usage-based billing v2, held on Thursday, September 17.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        21,
+        22
+      ]
+    },
+    {
+      "id": "F02",
+      "type": "logistics",
+      "importance": "minor",
+      "statement": "Dana set the agenda: workstream status (backend, QA/release, design), the launch date, a customer escalation from Joel of customer success, the staged rollout plan, legal and enablement, then actions and wrap-up.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        26,
+        27,
+        28,
+        29,
+        30
+      ]
+    },
+    {
+      "id": "F03",
+      "type": "number",
+      "importance": "important",
+      "statement": "Tuesday's metering load test sustained 42,000 events per second for two hours against a committed target of 30,000 events per second.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        34,
+        35
+      ]
+    },
+    {
+      "id": "F04",
+      "type": "number",
+      "importance": "minor",
+      "statement": "Kafka consumer lag stayed at or below about 9 seconds during the load test, which ran with 48 partitions (increased from 24).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        37,
+        39
+      ],
+      "notes": "Kafka mis-transcribed as 'Cafca' on line 37"
+    },
+    {
+      "id": "F05",
+      "type": "number",
+      "importance": "important",
+      "statement": "Unit test coverage is 81% for the rating engine and 67% for the metering service; the metering number is low mainly because the replay tooling is barely tested.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        42
+      ]
+    },
+    {
+      "id": "F06",
+      "type": "risk",
+      "importance": "important",
+      "statement": "Maya flagged the replay tooling, which is how wrongly rated usage gets re-rated during an incident, as a risk because it has only 12 tests; Dana noted it as a risk without resolving it.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        118,
+        119,
+        120,
+        123
+      ]
+    },
+    {
+      "id": "F07",
+      "type": "decision",
+      "importance": "important",
+      "statement": "Rating rounds half-even at the invoice line item rather than per event; Priyanka in finance signed off on Monday, and customers may pay a few cents less than on v1.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        45,
+        47
+      ]
+    },
+    {
+      "id": "F08",
+      "type": "number",
+      "importance": "critical",
+      "statement": "Invoice preview p95 latency on large accounts (over about 2 million metered events per billing period, about 60 accounts) is currently 1.4 seconds.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        49,
+        51,
+        212
+      ]
+    },
+    {
+      "id": "F09",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "The launch bar for invoice preview latency is 1.2 seconds p95 on large accounts, to be reached by caching per-meter subtotals, replacing the earlier 800 millisecond target.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        213,
+        215,
+        216,
+        219
+      ],
+      "notes": "supersedes the 800 ms target on line 49 (implicit correction, C03)"
+    },
+    {
+      "id": "F10",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Viktor will finish the per-meter subtotal caching for invoice preview latency by September 30.",
+      "owner": "Viktor",
+      "deadline": "by the 30th (September 30)",
+      "position": "middle",
+      "lines": [
+        215,
+        402
+      ]
+    },
+    {
+      "id": "F11",
+      "type": "decision",
+      "importance": "important",
+      "statement": "Full hourly pre-aggregation for invoice preview goes on the backlog with no committed date and is not a launch requirement.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        52,
+        221
+      ]
+    },
+    {
+      "id": "F12",
+      "type": "risk",
+      "importance": "critical",
+      "statement": "The dedup bug: usage events are deduplicated only within a 5-minute window, so any client retry after 5 minutes is counted twice.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        59
+      ]
+    },
+    {
+      "id": "F13",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Viktor will merge the dedup fix, which uses client-supplied idempotency keys kept for 24 hours, by Friday, September 25.",
+      "owner": "Viktor",
+      "deadline": "Friday, September 25",
+      "position": "early",
+      "lines": [
+        60,
+        69,
+        401
+      ]
+    },
+    {
+      "id": "F14",
+      "type": "background",
+      "importance": "minor",
+      "statement": "The Node and Python SDKs already send idempotency keys, the Go SDK gets them next week, the Java SDK work has not started, and many customers call the raw HTTP API without any SDK.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        62,
+        63
+      ]
+    },
+    {
+      "id": "F15",
+      "type": "open_question",
+      "importance": "important",
+      "statement": "What happens to requests that arrive without an idempotency key is undecided. They currently fall back to the 5-minute window, and Viktor wants to measure keyless beta traffic before choosing an approach.",
+      "owner": "Viktor",
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        65,
+        67,
+        428
+      ]
+    },
+    {
+      "id": "F16",
+      "type": "risk",
+      "importance": "critical",
+      "statement": "Blocker: the Payments Platform team must ship idempotency support on the ledger write API (version 3.4) for invoice line items. Version 3.3 covers only payments, so without 3.4 a retry could still double-post a line item.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        71,
+        72,
+        74
+      ]
+    },
+    {
+      "id": "F17",
+      "type": "person",
+      "importance": "critical",
+      "statement": "The Payments Platform contact is Sunil Varghese, who said they are targeting (not committing to) September 29 for ledger 3.4.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        76,
+        77,
+        78
+      ]
+    },
+    {
+      "id": "F18",
+      "type": "number",
+      "importance": "critical",
+      "statement": "Open bugs as of the meeting: 2 Sev-1, 7 P1, 23 P2, 41 P3.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        87,
+        89
+      ],
+      "notes": "P1 count corrected from 9 to 7 (C01)"
+    },
+    {
+      "id": "F19",
+      "type": "entity",
+      "importance": "important",
+      "statement": "The two Sev-1s are the dedup double count and a proration bug where usage from before a mid-cycle plan switch is rated at the new plan's price. Viktor owns both.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        84,
+        85,
+        86
+      ]
+    },
+    {
+      "id": "F20",
+      "type": "number",
+      "importance": "minor",
+      "statement": "Four of the P1s are customer-visible, mostly CSV export formatting plus the usage chart showing UTC dates.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        91
+      ]
+    },
+    {
+      "id": "F21",
+      "type": "decision",
+      "importance": "minor",
+      "statement": "The usage chart will use the account's billing time zone, not the viewer's browser time zone, so it matches the invoice at month boundaries.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        93
+      ]
+    },
+    {
+      "id": "F22",
+      "type": "number",
+      "importance": "minor",
+      "statement": "The regression suite has 1,312 tests (about 140 added this sprint) and a 96.4% pass rate on last night's run. Failures are mostly proration cases plus three flaky JPY currency-rounding tests, likely caused by a shared fixture.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        96,
+        97,
+        99
+      ]
+    },
+    {
+      "id": "F23",
+      "type": "risk",
+      "importance": "minor",
+      "statement": "staging-eu was down for two days after the event store disk filled up. The retention job still isn't running, so it may fill again in about three weeks, around launch, and Maya is chasing an infra ticket.",
+      "owner": "Maya",
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        102,
+        104,
+        105,
+        106
+      ]
+    },
+    {
+      "id": "F24",
+      "type": "number",
+      "importance": "important",
+      "statement": "The v1-to-v2 migration dry run has been done on 3 of 12 shards, averaging 38 minutes per shard with zero reconciliation mismatches.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        107,
+        108
+      ]
+    },
+    {
+      "id": "F25",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Maya owns writing the migration runbook, due Monday, September 28, with a brain-dump session from Viktor tomorrow at 2.",
+      "owner": "Maya",
+      "deadline": "Monday, September 28",
+      "position": "middle",
+      "lines": [
+        249,
+        250,
+        251,
+        255,
+        405
+      ],
+      "notes": "owner changed from Viktor (C04)"
+    },
+    {
+      "id": "F26",
+      "type": "number",
+      "importance": "minor",
+      "statement": "The usage dashboard is done in Figma and about 90% built; the export button and the per-meter drill-down remain.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        129,
+        130
+      ]
+    },
+    {
+      "id": "F27",
+      "type": "decision",
+      "importance": "important",
+      "statement": "Launch export is CSV only; Excel/XLSX export is deferred to later.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        131,
+        133,
+        134
+      ]
+    },
+    {
+      "id": "F28",
+      "type": "number",
+      "importance": "minor",
+      "statement": "The dashboard accessibility audit found 2 color-contrast issues on the chart legend, both fixed; the invoice PDF was not audited.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        135,
+        137
+      ]
+    },
+    {
+      "id": "F29",
+      "type": "open_question",
+      "importance": "critical",
+      "statement": "The dashboard empty state is undecided between Option A (greyed-out sample data with a banner, favored by Rohan) and Option B (no fake data, a setup checklist, favored by Ines).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        142,
+        143,
+        144,
+        154,
+        161,
+        422
+      ]
+    },
+    {
+      "id": "F30",
+      "type": "pain_point",
+      "importance": "minor",
+      "statement": "During the beta, 3 of the 14 customers screenshotted the dashboard for their finance team, which is why Ines worries sample data would be mistaken for real numbers.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        145
+      ]
+    },
+    {
+      "id": "F31",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Ines will show both empty-state variants in usability sessions with 5 customers on Tuesday and Wednesday next week and share results on Thursday, September 24.",
+      "owner": "Ines",
+      "deadline": "Thursday, September 24",
+      "position": "middle",
+      "lines": [
+        158,
+        160,
+        407
+      ]
+    },
+    {
+      "id": "F32",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "The launch webinar is scheduled for October 7 and was planned around the old October 6 roadmap date.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        181,
+        232
+      ]
+    },
+    {
+      "id": "F33",
+      "type": "background",
+      "importance": "important",
+      "statement": "Rohan's argument for launching sooner: sales expects about 25-30 new usage-tier contracts in October, and invoicing them on v1 needs manual adjustments of about 4 hours per contract per month (about 100 hours a month).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        183,
+        185,
+        186
+      ]
+    },
+    {
+      "id": "F34",
+      "type": "preference",
+      "importance": "important",
+      "statement": "Viktor wanted to launch October 20 to get two full weeks of end-to-end ledger integration testing after Sunil's release.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        191
+      ]
+    },
+    {
+      "id": "F35",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "Maya's QA minimum for launch: both Sev-1s closed, full regression green except known flakes, all 12 shards dry run and one rollback drill, which takes about ten working days after the ledger change lands (Tuesday, October 13 if it lands September 29).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        205,
+        206,
+        208
+      ]
+    },
+    {
+      "id": "F36",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "The new launch date is Wednesday, October 14.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        227,
+        230
+      ],
+      "notes": "supersedes the October 6 roadmap date (C02)"
+    },
+    {
+      "id": "F37",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "Tripwire: if Payments Platform has not shipped ledger 3.4 to production by Friday, October 2, the launch automatically moves to October 20 without another meeting.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        229,
+        230,
+        421
+      ]
+    },
+    {
+      "id": "F38",
+      "type": "decision",
+      "importance": "important",
+      "statement": "Dana rejected turning on early access for beta customers on October 7 as a soft launch.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        235,
+        236,
+        237
+      ]
+    },
+    {
+      "id": "F39",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Rohan will talk to Carla in marketing about whether the webinar moves (e.g. to October 15) or stays on October 7 as a preview, and report back by tomorrow.",
+      "owner": "Rohan",
+      "deadline": "tomorrow (September 18)",
+      "position": "middle",
+      "lines": [
+        234,
+        238,
+        409
+      ]
+    },
+    {
+      "id": "F40",
+      "type": "decision",
+      "importance": "important",
+      "statement": "Contracts signed between October 1 and 14 go on v1 with manual adjustments and migrate during the rollout; Rohan will give finance ops a heads-up. Which cohort they join is undecided and left for Maya's rollout plan.",
+      "owner": "Rohan",
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        239,
+        240,
+        243
+      ]
+    },
+    {
+      "id": "F41",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "For go/no-go, a Sev-1 counts as closed only when verified in staging with a regression test that fails on the old code (merged alone doesn't count). This goes into the go/no-go checklist.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        252,
+        253,
+        254
+      ]
+    },
+    {
+      "id": "F42",
+      "type": "entity",
+      "importance": "critical",
+      "statement": "The escalated customer is Kestrel Logistics, a freight company and beta participant with $410,000 ARR, one of Tallyport's top ten accounts.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        260,
+        263
+      ]
+    },
+    {
+      "id": "F43",
+      "type": "entity",
+      "importance": "important",
+      "statement": "Kestrel Health is a separate, unrelated beta account (about $95,000) that is happy with the dashboard. It is not the escalated customer and may join Ines's usability sessions.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        262,
+        301,
+        302
+      ]
+    },
+    {
+      "id": "F44",
+      "type": "number",
+      "importance": "critical",
+      "statement": "Kestrel Logistics was overbilled $18,240 (confirmed by finance) on its August v2 usage invoice. Its shipment-tracking service retries API calls after about 8 minutes, outside the 5-minute dedup window, so those calls were counted twice, mostly August 28-31.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        266,
+        268,
+        269,
+        270
+      ]
+    },
+    {
+      "id": "F45",
+      "type": "number",
+      "importance": "minor",
+      "statement": "Kestrel Logistics' August usage invoice was about $61,000, and only the API-call meter of its shipment-tracking subsidiary was affected. The invoice is unpaid and on hold, so a credit against it is needed, not a refund.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        272,
+        274,
+        277
+      ]
+    },
+    {
+      "id": "F46",
+      "type": "pain_point",
+      "importance": "important",
+      "statement": "Kestrel Logistics renews on November 1, and its VP of finance, Oksana Reyes, wrote that they cannot move the full account to usage billing until they trust the meter.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        278,
+        279
+      ]
+    },
+    {
+      "id": "F47",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Joel will draft the $18,240 credit memo for Kestrel Logistics and get finance approval by Monday, September 21.",
+      "owner": "Joel",
+      "deadline": "Monday, September 21",
+      "position": "middle",
+      "lines": [
+        292
+      ]
+    },
+    {
+      "id": "F48",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Viktor drafts the technical root cause for Kestrel Logistics and sends it to Dana by Monday, September 21. Dana turns it into a customer-readable version and sends it to Joel by Tuesday, September 22.",
+      "owner": "Dana",
+      "deadline": "Viktor to Dana by Monday Sept 21; Dana to Joel by Tuesday Sept 22",
+      "position": "middle",
+      "lines": [
+        288,
+        289,
+        290,
+        403,
+        413
+      ]
+    },
+    {
+      "id": "F49",
+      "type": "commitment",
+      "importance": "important",
+      "statement": "Dana will join Joel's call with Kestrel Logistics on Wednesday, September 23.",
+      "owner": "Dana",
+      "deadline": "Wednesday, September 23",
+      "position": "middle",
+      "lines": [
+        289,
+        290,
+        413
+      ]
+    },
+    {
+      "id": "F50",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "Kestrel Logistics is excluded from the automatic rollout and will be migrated manually on a date it chooses, after the fix is verified on its data; Maya will exclude it from the cohorts.",
+      "owner": "Maya",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        297,
+        298,
+        299,
+        406
+      ]
+    },
+    {
+      "id": "F51",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Current rollout state: 0% of production on the new flag, apart from Tallyport's own internal account (dogfooding at 100% for three weeks) and the 14 beta accounts, which are about 1.8% of 780 eligible accounts.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        310,
+        311
+      ]
+    },
+    {
+      "id": "F52",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "The first rollout stage on October 14 is 5% of eligible accounts (about 39) for the first 48 hours, and every account in that cohort is reconciled against v1 shadow rating before expanding.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        318,
+        319,
+        323,
+        324
+      ],
+      "notes": "reverses the earlier 10% first stage (C05)"
+    },
+    {
+      "id": "F53",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "If reconciliation is clean, the rollout goes to 25% on Monday, October 19 (not expanding on a Friday), 50% on October 21, and 100% on Monday, October 26.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        326,
+        327
+      ]
+    },
+    {
+      "id": "F54",
+      "type": "decision",
+      "importance": "important",
+      "statement": "The first 5% cohort excludes accounts with over 2 million events; large accounts join at the 25% stage.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        330,
+        331
+      ]
+    },
+    {
+      "id": "F55",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "Pause trigger: if any account's v2 total differs from its shadow v1 total by more than 0.5% (excluding known rounding differences), the rollout pauses for investigation rather than rolling back automatically.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        334
+      ]
+    },
+    {
+      "id": "F56",
+      "type": "definition",
+      "importance": "minor",
+      "statement": "v1 keeps rating accounts in shadow mode for 30 days after they move, so rolling back means flipping the feature flag.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        322,
+        335
+      ]
+    },
+    {
+      "id": "F57",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Maya owns a rollback drill on Thursday, October 8, in staging, with the full migration on all 12 shards.",
+      "owner": "Maya",
+      "deadline": "Thursday, October 8",
+      "position": "late",
+      "lines": [
+        336,
+        337,
+        405
+      ]
+    },
+    {
+      "id": "F58",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "The go/no-go meeting is Monday, October 12, with the same group plus Joel; Rohan sends the invite.",
+      "owner": "Rohan",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        339,
+        340,
+        409
+      ]
+    },
+    {
+      "id": "F59",
+      "type": "decision",
+      "importance": "important",
+      "statement": "Billing services are under a change freeze from October 12 through 16. The tax team's Canadian GST change queued for the 13th must move (to the 19th) unless it can't wait, and Maya tells the tax team today.",
+      "owner": "Maya",
+      "deadline": "today",
+      "position": "late",
+      "lines": [
+        341,
+        342,
+        343,
+        344,
+        345,
+        411
+      ]
+    },
+    {
+      "id": "F60",
+      "type": "commitment",
+      "importance": "important",
+      "statement": "Launch-week on-call pairs a backend engineer with a billing support person for the 48-hour window. Viktor takes the first 24 hours, and Dana will ask Lukas Brandt (backend, not Lucas from data) to cover the second 24.",
+      "owner": "Dana",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        346,
+        347,
+        348,
+        350
+      ]
+    },
+    {
+      "id": "F61",
+      "type": "caveat",
+      "importance": "critical",
+      "statement": "Legal review is NOT done. Only the privacy review (the security team's DPIA for storing raw usage events) is approved. The legal review of the order form addendum is still open with Joelle Park and blocks the launch.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        358,
+        361,
+        362,
+        363,
+        365
+      ],
+      "notes": "corrects Rohan's false assumption on line 355"
+    },
+    {
+      "id": "F62",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Rohan will follow up with Joelle Park so the legal review is done by September 30, the ten-business-day SLA from its September 16 submission. He'll ping her today and again on the 28th, and Dana wants to know by October 1 if it slips.",
+      "owner": "Rohan",
+      "deadline": "September 30",
+      "position": "late",
+      "lines": [
+        366,
+        367,
+        368,
+        409
+      ]
+    },
+    {
+      "id": "F63",
+      "type": "definition",
+      "importance": "minor",
+      "statement": "The order form addendum covers overage billing, disputes over metered usage and a 30-day window to contest a usage charge, and must be attached to any contract signed on usage tiers.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        364
+      ]
+    },
+    {
+      "id": "F64",
+      "type": "requirement",
+      "importance": "minor",
+      "statement": "Legal review sign-off (explicitly the legal review, not the privacy review) is added to the go/no-go checklist.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        369,
+        370
+      ]
+    },
+    {
+      "id": "F65",
+      "type": "logistics",
+      "importance": "minor",
+      "statement": "The sales deck is updated, and the pricing page copy is with marketing to go live on launch day. Rohan will run a one-hour recorded sales training on October 9.",
+      "owner": "Rohan",
+      "deadline": "October 9",
+      "position": "late",
+      "lines": [
+        371,
+        372,
+        409
+      ]
+    },
+    {
+      "id": "F66",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Rohan will email the 14 beta customers, who were told October 6, about the new date by Tuesday, September 22. Kestrel Logistics is excluded because Joel's call covers it.",
+      "owner": "Rohan",
+      "deadline": "Tuesday, September 22",
+      "position": "late",
+      "lines": [
+        378,
+        379,
+        380,
+        381,
+        410
+      ]
+    },
+    {
+      "id": "F67",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "The roughly six help center articles on reading invoices must be updated before October 14, because invoice line items are now grouped by meter instead of date, but nobody was assigned. Dana wants a name by next week.",
+      "owner": null,
+      "deadline": "before October 14",
+      "position": "late",
+      "lines": [
+        387,
+        388,
+        390,
+        391,
+        422
+      ],
+      "notes": "vague 'someone should' item with no owner"
+    },
+    {
+      "id": "F68",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Someone should check whether the Salesforce sync handles fractional usage quantities (e.g. 12.5 units), since it may cast to integers and commissions depend on it. No owner was assigned, and the sync may have been orphaned in the re-org.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        392,
+        393,
+        394,
+        395,
+        396,
+        422
+      ],
+      "notes": "vague 'someone should' item with no owner"
+    },
+    {
+      "id": "F69",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Dana will escalate the ledger 3.4 dependency with Sunil Varghese and his manager Grace Obi to get a committed date by Monday. Viktor keeps the technical integration work.",
+      "owner": "Dana",
+      "deadline": "Monday (September 21)",
+      "position": "late",
+      "lines": [
+        414,
+        415,
+        416,
+        418
+      ]
+    },
+    {
+      "id": "F70",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "The next checkpoint is Thursday, September 24 at 10:30. Ines brings usability results, Viktor the dedup fix status and Maya the runbook draft.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        433,
+        434,
+        435,
+        436
+      ],
+      "notes": "time moved from 10 to 10:30 (C06)"
+    },
+    {
+      "id": "F71",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Viktor will write the shadow-rating reconciliation script (about half a day of work) by October 7, before the rollback drill.",
+      "owner": "Viktor",
+      "deadline": "October 7",
+      "position": "late",
+      "lines": [
+        322,
+        403,
+        404
+      ]
+    },
+    {
+      "id": "F72",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Maya will update the performance test threshold for invoice preview to 1.2 seconds.",
+      "owner": "Maya",
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        219,
+        405
+      ]
+    }
+  ],
+  "corrections": [
+    {
+      "id": "C01",
+      "what": "Open P1 bug count",
+      "initial_value": "9 P1s",
+      "initial_line": 82,
+      "final_value": "7 P1s (two closed this morning)",
+      "final_line": 87,
+      "explicit": true,
+      "fact_id": "F18"
+    },
+    {
+      "id": "C02",
+      "what": "Launch date",
+      "initial_value": "October 6 (roadmap date)",
+      "initial_line": 23,
+      "final_value": "Wednesday, October 14 (moves automatically to October 20 if ledger 3.4 isn't in production by October 2)",
+      "final_line": 227,
+      "explicit": true,
+      "fact_id": "F36"
+    },
+    {
+      "id": "C03",
+      "what": "Invoice preview p95 latency target for large accounts",
+      "initial_value": "800 milliseconds",
+      "initial_line": 49,
+      "final_value": "1.2 seconds",
+      "final_line": 216,
+      "explicit": false,
+      "fact_id": "F09"
+    },
+    {
+      "id": "C04",
+      "what": "Owner of the migration runbook",
+      "initial_value": "Viktor",
+      "initial_line": 114,
+      "final_value": "Maya",
+      "final_line": 251,
+      "explicit": true,
+      "fact_id": "F25"
+    },
+    {
+      "id": "C05",
+      "what": "First staged rollout stage",
+      "initial_value": "10% of eligible accounts on October 14",
+      "initial_line": 244,
+      "final_value": "5% of eligible accounts for the first 48 hours, reconciled against v1 shadow rating before expanding",
+      "final_line": 324,
+      "explicit": true,
+      "fact_id": "F52"
+    },
+    {
+      "id": "C06",
+      "what": "Next checkpoint time on September 24",
+      "initial_value": "10 (same time as this meeting)",
+      "initial_line": 433,
+      "final_value": "10:30",
+      "final_line": 436,
+      "explicit": true,
+      "fact_id": "F70"
+    }
+  ],
+  "not_decisions": [
+    {
+      "statement": "Dropping invoice preview from GA entirely (Viktor floated it; Rohan and Ines objected, and preview stays in)",
+      "lines": [
+        54,
+        55,
+        56,
+        375
+      ]
+    },
+    {
+      "statement": "Hiding invoice preview for the roughly 60 large accounts at launch",
+      "lines": [
+        53,
+        54
+      ]
+    },
+    {
+      "statement": "Hashing the payload server-side as the fallback dedup key when no idempotency key is sent (floated and left undecided)",
+      "lines": [
+        65,
+        67
+      ]
+    },
+    {
+      "statement": "Empty-state Option A (sample data), Option B (setup checklist), or a middle option with a preview thumbnail; nothing was decided",
+      "lines": [
+        142,
+        143,
+        151,
+        153,
+        161
+      ]
+    },
+    {
+      "statement": "Launching on October 13 (Maya's earliest testing-complete date) or October 20 (Viktor's proposal); October 20 applies only if the October 2 tripwire triggers",
+      "lines": [
+        191,
+        209,
+        210,
+        226,
+        229
+      ]
+    },
+    {
+      "statement": "Early access soft launch for beta customers on October 7 (explicitly rejected)",
+      "lines": [
+        235,
+        237
+      ]
+    },
+    {
+      "statement": "Moving the webinar to October 15 versus keeping October 7 as a preview (pending Rohan's conversation with Carla)",
+      "lines": [
+        234,
+        238
+      ]
+    },
+    {
+      "statement": "Putting the October contracts in the first rollout cohort (Viktor suggested it, Maya preferred 25%, and it was left undecided)",
+      "lines": [
+        241,
+        242,
+        243
+      ]
+    },
+    {
+      "statement": "A free month for Kestrel Logistics as a goodwill gesture (not decided; Joel may raise it with his director)",
+      "lines": [
+        293,
+        294,
+        295
+      ]
+    },
+    {
+      "statement": "Including a couple of large accounts in the first 5% cohort (Rohan's suggestion, rejected)",
+      "lines": [
+        329,
+        331
+      ]
+    },
+    {
+      "statement": "Posting a status page notice about the invoice format change (Viktor objected; Rohan withdrew it)",
+      "lines": [
+        382,
+        383,
+        384
+      ]
+    },
+    {
+      "statement": "Excel/XLSX export at launch (deferred)",
+      "lines": [
+        131,
+        134
+      ]
+    }
+  ],
+  "distractors": [
+    {
+      "statement": "Ines is on train wifi and her audio cuts out in a tunnel",
+      "lines": [
+        10,
+        124,
+        125,
+        127
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Maya's headset switches mics and later dies, so she rejoins by phone",
+      "lines": [
+        14,
+        16,
+        351,
+        353,
+        440
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Small talk about the all-hands and the expense tool",
+      "lines": [
+        19,
+        20
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Office move tangent: crates sealed by October 1, move on October 2 to the 4th floor of the Harlow building, espresso machine on the 6th floor, parking permit waitlist of about 40",
+      "lines": [
+        164,
+        166,
+        168,
+        171,
+        174,
+        177,
+        178,
+        429
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "'Someone should ask facilities' whether monitors move, explicitly not a launch item",
+      "lines": [
+        175
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Assumption that legal review is done, when only the privacy review was approved",
+      "lines": [
+        355,
+        357
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "Dana confuses Kestrel Health with Kestrel Logistics",
+      "lines": [
+        261,
+        262
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "Viktor's guess that the legal mix-up was Joelle (legal) vs Joel (customer success); Rohan says that's not it",
+      "lines": [
+        359,
+        360
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "Lukas Brandt (backend) vs Lucas on the data team",
+      "lines": [
+        349,
+        350
+      ],
+      "why": "similar names"
+    },
+    {
+      "statement": "Rohan's assumption that ledger idempotency was already in 3.3",
+      "lines": [
+        73,
+        74
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "Competitor Meterbase launched usage analytics in August and had a billing outage in its first week",
+      "lines": [
+        196,
+        197
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "October 6 launch date, 10% first stage, 800 ms target, 9 P1s, meeting at 10",
+      "lines": [
+        23,
+        244,
+        49,
+        82,
+        433
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Kafka partition cost of a couple hundred dollars a month",
+      "lines": [
+        41
+      ],
+      "why": "irrelevant"
+    }
+  ],
+  "open_questions_at_end": [
+    "Will Payments Platform actually ship ledger 3.4 by September 29? (The launch moves to October 20 if it isn't in production by October 2)",
+    "Should the empty state be Option A (sample data) or Option B (setup checklist)?",
+    "Does the October 7 webinar move or stay as a preview?",
+    "Who owns updating the help center invoice articles?",
+    "Who owns the Salesforce sync, and does it handle fractional quantities?",
+    "Will Kestrel Logistics renew, and should they get anything beyond the $18,240 credit?",
+    "What happens with test coverage for the replay tooling?",
+    "What should the dedup fallback be for requests without an idempotency key?"
+  ],
+  "summary_must_include": [
+    "Launch moved from October 6 to Wednesday October 14, with an automatic slip to October 20 if ledger 3.4 isn't in production by October 2 (F36, F37)",
+    "Blocker: Payments Platform ledger API 3.4 idempotency, contact Sunil Varghese, targeting September 29; Dana escalating with Grace Obi (F16, F17, F69)",
+    "Bug status: 2 Sev-1 (dedup double count, proration), 7 P1, 23 P2, 41 P3 (F18, F19)",
+    "Dedup fix with idempotency keys merged by September 25 (Viktor) (F12, F13)",
+    "Kestrel Logistics escalation: $410,000 ARR, overbilled $18,240; credit memo by Sept 21 (Joel), root cause to Joel by Sept 22, call Sept 23; excluded from automatic rollout (F42, F44, F47, F48, F50)",
+    "Rollout starts at 5% for the first 48 hours with shadow reconciliation (reversed from 10%), then 25% Oct 19, 50% Oct 21, 100% Oct 26 (F52, F53)",
+    "Rollback drill October 8 (Maya); go/no-go meeting October 12 (F57, F58)",
+    "Legal review of the order form addendum NOT done (only the privacy review is); Rohan chasing Joelle Park for September 30 (F61, F62)",
+    "Migration runbook now owned by Maya, due September 28; dry run done on 3 of 12 shards (F24, F25)",
+    "Invoice preview p95 launch bar is 1.2 seconds (currently 1.4 seconds) (F08, F09)",
+    "Empty state (sample data vs checklist) undecided; usability results on September 24 (F29, F31)",
+    "Help center update and Salesforce fractional-quantity check have no owner; next checkpoint Thursday September 24 at 10:30 (F67, F68, F70)"
+  ]
+}

@@ -1,0 +1,80 @@
+[
+ {
+  "file": "tiny.txt",
+  "chars": 4966,
+  "tokens": 1000,
+  "uploadMs": 13,
+  "indexMs": 2006,
+  "firstProgressMs": 2,
+  "status": "ready",
+  "chunks": 4,
+  "embedded": 4,
+  "retrieval": "6/6",
+  "retrievalP50": 1363
+ },
+ {
+  "file": "small.txt",
+  "chars": 20932,
+  "tokens": 5000,
+  "uploadMs": 9,
+  "indexMs": 2009,
+  "firstProgressMs": 1,
+  "status": "ready",
+  "chunks": 14,
+  "embedded": 14,
+  "retrieval": "6/6",
+  "retrievalP50": 1394
+ },
+ {
+  "file": "medium.txt",
+  "chars": 40773,
+  "tokens": 10000,
+  "uploadMs": 8,
+  "indexMs": 3013,
+  "firstProgressMs": 1,
+  "status": "ready",
+  "chunks": 27,
+  "embedded": 27,
+  "retrieval": "6/6",
+  "retrievalP50": 1463
+ },
+ {
+  "file": "large.txt",
+  "chars": 100554,
+  "tokens": 25000,
+  "uploadMs": 21,
+  "indexMs": 6038,
+  "firstProgressMs": 2,
+  "status": "ready",
+  "chunks": 65,
+  "embedded": 65,
+  "retrieval": "6/6",
+  "retrievalP50": 1470
+ },
+ {
+  "file": "xlarge.txt",
+  "chars": 201095,
+  "tokens": 50000,
+  "uploadMs": 34,
+  "indexMs": 10069,
+  "firstProgressMs": 2,
+  "status": "ready",
+  "chunks": 131,
+  "embedded": 131,
+  "retrieval": "6/6",
+  "retrievalP50": 1454
+ },
+ {
+  "file": "huge.txt",
+  "chars": 400533,
+  "tokens": 100000,
+  "uploadMs": 46,
+  "indexMs": 26169,
+  "firstProgressMs": 2,
+  "status": "ready",
+  "chunks": 261,
+  "embedded": 261,
+  "retrieval": "6/6",
+  "retrievalP50": 1722
+ }
+]

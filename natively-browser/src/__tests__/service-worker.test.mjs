@@ -130,3 +130,23 @@ describe('parsePairingString', () => {
     assert.equal(parsePairingString('4123:has spaces and !!! chars here xx'), null);
   });
 });
+
+// 2026-08-18: hotkey capture on an ungranted site used to dead-end (desktop
+// falls back to a screenshot; the grant needs a user gesture the hotkey can't
+// provide). The SW now nudges via the toolbar badge — pin the pure mapping.
+describe('badgeForCaptureOutcome', () => {
+  test('needs-host-permission → badge with a grant call-to-action', async () => {
+    const { badgeForCaptureOutcome } = await import(pathToFileURL(modPath).href);
+    const b = badgeForCaptureOutcome('needs-host-permission');
+    assert.ok(b);
+    assert.equal(b.text, '!');
+    assert.match(b.title, /Capture once/i);
+  });
+
+  test('non-user-fixable outcomes get no badge', async () => {
+    const { badgeForCaptureOutcome } = await import(pathToFileURL(modPath).href);
+    for (const kind of ['success', 'error', 'unauthorized', 'no-session', 'timeout']) {
+      assert.equal(badgeForCaptureOutcome(kind), null, kind);
+    }
+  });
+});

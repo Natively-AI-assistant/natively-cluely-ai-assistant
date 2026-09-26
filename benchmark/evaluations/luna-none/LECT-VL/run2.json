@@ -1,0 +1,440 @@
+{
+ "blind_id": "S-3132ff0f",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 81569,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 53857,
+  "candidatesTokenCount": 3097,
+  "totalTokenCount": 66325,
+  "cachedContentTokenCount": 36800,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 53857
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 36800
+   }
+  ],
+  "thoughtsTokenCount": 9371,
+  "serviceTier": "standard"
+ },
+ "fact_count": 90,
+ "evaluation": {
+  "factual_accuracy": 5,
+  "important_information_retention": 8,
+  "hallucination_control": 5,
+  "action_item_retention": 7,
+  "decision_retention": 9,
+  "speaker_attribution": 8,
+  "numeric_accuracy": 7,
+  "entity_retention": 9,
+  "timeline_accuracy": 6,
+  "conclusion_accuracy": 8,
+  "structure": 2,
+  "conciseness": 1,
+  "readability": 2,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "The notes contradict themselves regarding the Homework 4 deadline, correctly stating Monday, October 12th in the Overview and Decisions, but incorrectly listing the superseded Friday, October 9th deadline in the Action Items.",
+   "The notes hallucinate numerous 'Open questions' that were explicitly answered during the lecture (e.g., 'What exact time will the midterm review session take place?', 'Why is a committed entry different from an applied entry?')."
+  ],
+  "missing_important_information": [
+   "Students have 5 late days for the whole semester, with at most 2 usable on any single assignment.",
+   "Kofi's office hours moved to Thursdays 3-5pm in Whitaker 214.",
+   "Professor Castellanos's Thursday office hours are cancelled; she is holding extra office hours Wednesday 3-4:30pm in Whitaker 318.",
+   "Thursday's guest lecture on Byzantine fault tolerance will be given by Dr. Joanne Whitfield.",
+   "The current-term commitment rule and the Figure 8 scenario will explicitly be on the midterm."
+  ],
+  "hallucinated_information": [
+   "What exact time will the midterm review session take place? [open]",
+   "How should consensus provide progress despite crash, delay, duplication, reordering, and partition failures while FLP rules out guaranteed termination in a fully asynchronous system? [open]",
+   "Why do people commonly use odd-sized clusters rather than even-sized clusters? [open]",
+   "How exactly do lastLogIndex and lastLogTerm constrain voting in the later safety section? [open]",
+   "How does the election restriction ensure that overwriting follower log entries cannot overwrite committed entries? [open]",
+   "Why is a committed entry different from an applied entry? [open]",
+   "What happens to B's term-3 entry at index 6 after C becomes leader? [open]",
+   "How should Raft handle snapshots beyond replaying the log from the beginning after restart? [open]"
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C01",
+    "reported": "Complete Homework 4, implementing Raft leader election and heartbeats in the Go skeleton, by Friday, October 9 at 11:59pm."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The lecture used a broken single-node espresso machine as an analogy for a system with no replicas or failover.",
+   "The coffee cart was jokingly described as a Byzantine failure because it claims to be coffee but is not coffee.",
+   "The Twelve Angry Men jury illustrates an n-out-of-n quorum: unanimity is safe but loses liveness if one juror is unavailable."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "contradicted"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "missing"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "missing"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "missing"
+   },
+   {
+    "id": "F14",
+    "status": "missing"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "partial"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "partial"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "missing"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   },
+   {
+    "id": "F73",
+    "status": "present"
+   },
+   {
+    "id": "F74",
+    "status": "present"
+   },
+   {
+    "id": "F75",
+    "status": "present"
+   },
+   {
+    "id": "F76",
+    "status": "present"
+   },
+   {
+    "id": "F77",
+    "status": "present"
+   },
+   {
+    "id": "F78",
+    "status": "present"
+   },
+   {
+    "id": "F79",
+    "status": "present"
+   },
+   {
+    "id": "F80",
+    "status": "present"
+   },
+   {
+    "id": "F81",
+    "status": "present"
+   },
+   {
+    "id": "F82",
+    "status": "present"
+   },
+   {
+    "id": "F83",
+    "status": "present"
+   },
+   {
+    "id": "F84",
+    "status": "partial"
+   },
+   {
+    "id": "F85",
+    "status": "present"
+   },
+   {
+    "id": "F86",
+    "status": "present"
+   },
+   {
+    "id": "F87",
+    "status": "present"
+   },
+   {
+    "id": "F88",
+    "status": "present"
+   },
+   {
+    "id": "F89",
+    "status": "present"
+   },
+   {
+    "id": "F90",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a vast amount of technical detail but suffer from catastrophic structural and conciseness failures. The same facts are repeated endlessly across 15 overlapping sections (e.g., 'Core concepts', 'Definitions', 'Examples', 'Formulas / steps', 'Things to memorize', 'Confusing points', 'Questions to review', 'Study summary'). This makes the document nearly unreadable. Furthermore, there is a critical contradiction regarding the Homework 4 deadline, which is correctly stated as Monday in the overview but incorrectly listed as the superseded Friday deadline in the action items. The notes also hallucinate numerous 'open questions' that were explicitly answered during the lecture."
+ }
+}

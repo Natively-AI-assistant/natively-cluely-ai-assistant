@@ -9,6 +9,8 @@
 //
 // No I/O, no LLM. Inspects an error object and/or the produced text.
 
+import { redactSecretsOnly } from '../utils/redactForLog';
+
 export type ProviderErrorKind =
   | 'rate_limit'        // 429 / RESOURCE_EXHAUSTED / "rate limit"
   | 'auth'              // 401 / 403 / API_KEY / permission
@@ -33,7 +35,7 @@ export interface ProviderErrorClassification {
 // A content-free clarification stall the model emits when it's confused/degraded.
 // MUST stay in sync with IntelligenceEngine's "Could you repeat that?" fallback and
 // the benchmark's stall quarantine.
-const STALL_RE = /^(?:\s*)(?:could you (?:please )?repeat|can you repeat|i(?:'m| am)? (?:sorry,? )?(?:i )?(?:didn'?t|did not) (?:catch|hear|get)|sorry,? (?:could|can) you|i want to make sure i (?:address|understand)|please (?:repeat|clarify|rephrase)|what (?:was|did) (?:the|you))/i;
+const STALL_RE = /^(?:\s*)(?:i couldn'?t generate an answer|the answer(?: about [^.]{1,60})? didn'?t come through|no answer came back|could you (?:please )?repeat|can you repeat|i(?:'m| am)? (?:sorry,? )?(?:i )?(?:didn'?t|did not) (?:catch|hear|get)|sorry,? (?:could|can) you|i want to make sure i (?:address|understand)|please (?:repeat|clarify|rephrase)|what (?:was|did) (?:the|you))/i;
 
 /** Is `text` a content-free clarification stall (not a real answer)? */
 export function isClarificationStall(text: string | null | undefined): boolean {
@@ -131,4 +133,83 @@ export function classifyProviderError(err: any, text?: string): ProviderErrorCla
   if (isClarificationStall(t)) return { kind: 'stall', isOutage: true, retryable: true, code: 'stall' };
 
   return { kind: 'none', isOutage: false, retryable: false, code: 'ok' };
+}
+
+/**
+ * The user-facing line for a PROVIDER failure on the What-To-Answer path, or
+ * null when the error is not a provider failure (2026-09-07).
+ *
+ * The engine's catch used to return the graceful "Could you repeat that?"
+ * retry for EVERY error — including a dead API key, a 429 and a network
+ * outage — so a provider problem read as the app not having heard the
+ * question. WhatToAnswerLLM already distinguishes those for its own stream
+ * failures; this is the same distinction, made once, for the engine's outer
+ * catch. Timeouts and empty streams keep the graceful retry: those already
+ * have their own deadline fallbacks and the retry wording is honest there.
+ */
+export function providerFailureUserMessage(err: unknown): string | null {
+  if (!err) return null;
+  const rejection = providerRejectionUserMessage(err);
+  if (rejection) return rejection;
+  const c = classifyProviderError(err);
+  const msg = String((err as { message?: unknown })?.message ?? err ?? '').toLowerCase();
+  const status = statusOf(err);
+  // The classifier's server/network buckets are deliberately broad for outage
+  // SCORING; for a user-facing claim require a concrete transport signal, so a
+  // plain programming error keeps the graceful retry instead of blaming the
+  // provider.
+  const transportSignal = status >= 500
+    || /\b5\d\d\b|internal server error|bad gateway|overloaded|unavailable|capacity|enotfound|econnreset|econnrefused|eai_again|etimedout|socket hang up|network|dns\b|fetch failed/.test(msg);
+  switch (c.kind) {
+    case 'auth':
+      return "I couldn't reach the AI provider — this looks like an API key or permission issue. Check your API keys / plan in Settings and try again.";
+    case 'rate_limit':
+      return 'The AI provider is rate-limiting requests right now. Give it a moment and try again.';
+    case 'overloaded':
+    case 'server_error':
+    case 'network':
+      return transportSignal
+        ? "The AI provider is unreachable or overloaded right now, so I couldn't generate an answer. Try again in a moment."
+        : null;
+    default:
+      return null;
+  }
+}
+
+// A request the provider refuses PERMANENTLY for this account/model: a model the
+// plan does not include, a model id that does not exist, a parameter value the
+// model rejects. Retrying cannot succeed, so the provider's own explanation is
+// the answer (issue #543: a ChatGPT-plan Codex user pressed "What to answer"
+// and saw "could you ask that once more?" while the backend was saying
+// "The '<model>' model is not supported when using Codex with a ChatGPT account").
+const PROVIDER_REJECTION_RE = /\bmodels?\b[^\n]{0,120}?\b(?:is not supported|not supported|is not available|not available|is not found|not found|does not exist|is not enabled|unsupported)\b|\bunsupported (?:value|parameter|model)\b|\bmodel_not_found\b|\binvalid[_ ]model\b/i;
+
+/** Fixed start of the rejection line, so downstream guards can recognise it
+ *  as a provider error (shown, never stored as session history). */
+export const PROVIDER_REJECTION_PREFIX = 'The AI provider rejected this request: ';
+
+const PROVIDER_REJECTION_DETAIL_MAX = 240;
+
+/**
+ * The user-facing line for a permanent provider rejection, or null. Auth and
+ * rate-limit failures keep their own lines (providerFailureUserMessage).
+ */
+export function providerRejectionUserMessage(err: unknown): string | null {
+  if (!err) return null;
+  const raw = String((err as { message?: unknown })?.message ?? err ?? '');
+  if (!PROVIDER_REJECTION_RE.test(raw)) return null;
+  const kind = classifyProviderError(err).kind;
+  if (kind === 'auth' || kind === 'rate_limit') return null;
+  let detail = String(redactSecretsOnly(raw.replace(/\s+/g, ' ').trim()));
+  if (detail.length > PROVIDER_REJECTION_DETAIL_MAX) {
+    detail = `${detail.slice(0, PROVIDER_REJECTION_DETAIL_MAX).trimEnd()}…`;
+  } else if (!/[.!?]$/.test(detail)) {
+    detail += '.';
+  }
+  return `${PROVIDER_REJECTION_PREFIX}${detail} Choose a different model in Settings → AI Providers.`;
+}
+
+/** Is `text` a line produced by providerRejectionUserMessage? */
+export function isProviderRejectionLine(text: string | null | undefined): boolean {
+  return (text || '').trim().startsWith(PROVIDER_REJECTION_PREFIX);
 }

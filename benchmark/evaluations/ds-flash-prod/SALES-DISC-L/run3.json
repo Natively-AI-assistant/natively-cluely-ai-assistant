@@ -1,0 +1,342 @@
+{
+ "blind_id": "S-fd1d61fa",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 62678,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 37418,
+  "candidatesTokenCount": 2253,
+  "totalTokenCount": 47269,
+  "cachedContentTokenCount": 24515,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 37418
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24515
+   }
+  ],
+  "thoughtsTokenCount": 7598,
+  "serviceTier": "standard"
+ },
+ "fact_count": 67,
+ "evaluation": {
+  "factual_accuracy": 7,
+  "important_information_retention": 9,
+  "hallucination_control": 8,
+  "action_item_retention": 9,
+  "decision_retention": 9,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 7,
+  "entity_retention": 9,
+  "timeline_accuracy": 7,
+  "conclusion_accuracy": 8,
+  "structure": 6,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 5,
+  "critical_errors": [
+   "Reporting superseded values as current facts in the context sections."
+  ],
+  "missing_important_information": [],
+  "hallucinated_information": [
+   "Listing 'What exact Zendesk plan is Harbourline on?' as an open question (this was definitively answered as Zendesk Support Professional on the call).",
+   "Stating that Speaker 3 'handles renewals as part of her role' (she just happened to be in the contracts system for a different renewal)."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C01",
+    "reported": "The team has about 120 agents split between Columbus and a Rotterdam site"
+   },
+   {
+    "correction_id": "C03",
+    "reported": "Target go-live is around October 15 to allow two weeks to settle before the November 1 change freeze."
+   },
+   {
+    "correction_id": "C04",
+    "reported": "The Queuewise contract is believed to end December 31, giving a couple months of overlap with the new solution."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The customer's team references a possible Lyon hub and a possible Rotterdam offsite in June as part of its business context.",
+   "A 100-seat year-one rollout would still be $46,800 and over the $40,000 threshold"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "partial"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "partial"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "partial"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "partial"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "partial"
+   },
+   {
+    "id": "F58",
+    "status": "partial"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "partial"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "partial"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost all of the important information from the transcript, resulting in high retention scores. However, the notes suffer from severe bloat and repetition, with the same facts repeated across multiple sections (Overview, Summary, Account Context, Pain Points, etc.), which drastically lowers the conciseness and readability scores. Additionally, the notes report several superseded values (e.g., 120 agents, October 15 go-live, December 31 contract end) as current facts in the context sections, which negatively impacts factual, numeric, and timeline accuracy."
+ }
+}

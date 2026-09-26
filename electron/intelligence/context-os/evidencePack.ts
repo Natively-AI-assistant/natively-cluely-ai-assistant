@@ -1,0 +1,193 @@
+// electron/intelligence/context-os/evidencePack.ts
+//
+// Context OS (Phase 1) — typed evidence. Every piece of retrieved material
+// becomes an EvidenceItem with source kind, source id, authority, trust level
+// and provenance pointer, so validators and the prompt renderer can reason
+// about WHERE a fact came from instead of consuming an opaque string block.
+//
+// Distinct from the OKF-only `RetrievalEvidencePack`
+// (electron/services/knowledge/RetrievalEvidencePack.ts): that one carries OKF
+// retrieval tiers for the false-refusal repair gate. This EvidencePack is the
+// cross-source, contract-scoped answer-time pack; Phase 4's orchestrator can
+// wrap OKF results INTO EvidenceItems.
+
+import type {
+  EvidenceAuthority,
+  RequestedProperty,
+  SourceKind,
+  SourceOwner,
+  TrustLevel,
+} from './types';
+import type { EvidenceSufficiency } from './evidenceSufficiency';
+
+export interface EvidencePointer {
+  page?: number;
+  section?: string;
+  timestampMs?: number;
+  cardId?: string;
+  chunkId?: string;
+  fileId?: string;
+  meetingId?: string;
+  claimId?: string;
+  speaker?: string;
+}
+
+export interface EvidenceItem {
+  evidenceId: string;
+  sourceKind: SourceKind;
+  sourceId: string;
+  sourceOwner: SourceOwner;
+  authority: EvidenceAuthority;
+  trustLevel: TrustLevel | string;
+  text: string;
+  pointer?: EvidencePointer;
+  supports: {
+    entity?: string;
+    property: RequestedProperty;
+    value?: string;
+  };
+  score: {
+    lexical?: number;
+    vector?: number;
+    rerank?: number;
+    propertyMatch?: number;
+    final: number;
+  };
+  reasonIncluded: string;
+}
+
+export type EvidenceRejectionReason =
+  | 'forbidden_source'
+  | 'referent_only'
+  | 'property_mismatch'
+  | 'low_confidence'
+  | 'wrong_entity'
+  | 'stale'
+  | 'unverified_memory';
+
+export interface RejectedEvidenceItem {
+  sourceKind: SourceKind;
+  sourceId?: string;
+  /** Short preview only — never the full content (privacy-safe traces). */
+  textPreview?: string;
+  reason: EvidenceRejectionReason;
+}
+
+export type AnswerPolicy =
+  | 'answer'
+  | 'answer_with_uncertainty'
+  | 'refuse_insufficient_evidence'
+  | 'ask_clarification';
+
+export interface EvidenceConflict {
+  leftEvidenceId: string;
+  rightEvidenceId: string;
+  conflictType: string;
+  resolution: string;
+}
+
+export interface EvidenceCoverage {
+  hasDirectEvidence: boolean;
+  propertySatisfied: boolean;
+  entityMatched: boolean;
+  sourceOwnerSatisfied: boolean;
+  confidence: number;
+}
+
+export interface EvidenceSelection {
+  candidateEvidenceIds: string[];
+  selectedEvidenceIds: string[];
+  excludedEvidenceIds: string[];
+  strategy: 'smallest_sufficient_set';
+}
+
+export interface EvidenceResolverMetadata {
+  strategy: string;
+  attemptedSources: SourceKind[];
+  retrievedSources: SourceKind[];
+}
+
+/**
+ * RC9 (Phase 6 Slice 4, context-rebuild, 2026-07-25, target arch §5): WHY a
+ * pack's `items` is empty — distinguishes a genuine no-match from an
+ * embedding-provider outage or a policy-forbidden turn, none of which
+ * should be reported to the user identically ("I don't have that
+ * information" is honest for `no_match`, misleading for
+ * `embedding_provider_down`). Only meaningful when `items.length === 0`.
+ */
+export type ZeroEvidenceReason =
+  | 'no_match'                 // genuinely nothing scored above threshold
+  | 'embedding_provider_down'  // RC9: distinguish outage from no-match
+  | 'not_permitted_by_policy'  // CanonicalTurn/isLayerAllowed forbids every candidate source
+  | 'no_sources_configured';   // e.g. no résumé uploaded at all
+
+export interface EvidencePack {
+  /**
+   * Stable identity for THIS pack instance (Phase 6/M4). The exact pack used for
+   * generation must be the exact pack used for post-generation validation —
+   * `packId` lets a validator assert it is checking the same evidence the answer
+   * was produced from, instead of a re-fetched block.
+   *
+   * MANDATORY as of Phase 6 Slice 4 (context-rebuild, 2026-07-25, item 5) —
+   * every real construction site was audited and already supplies it (via
+   * `emptyEvidencePack()` or the `${turnId}:pack:${n}` convention); one gap
+   * found and fixed during this audit (`ProfileEvidenceService.ts`'s second
+   * return path).
+   */
+  packId: string;
+  /** Regeneration lineage: an expanded pack increments version + links parent. */
+  version?: number;
+  parentPackId?: string;
+  turnId: string;
+  sourceOwner: SourceOwner;
+  requestedProperty: RequestedProperty;
+  items: EvidenceItem[];
+  rejected: RejectedEvidenceItem[];
+  coverage: EvidenceCoverage;
+  sufficiency?: EvidenceSufficiency;
+  selection?: EvidenceSelection;
+  resolver?: EvidenceResolverMetadata;
+  conflicts: EvidenceConflict[];
+  answerPolicy: AnswerPolicy;
+  /** RC9 — see ZeroEvidenceReason above. Only meaningful when `items` is empty. */
+  zeroEvidenceReason?: ZeroEvidenceReason;
+}
+
+// ── Small pure helpers ───────────────────────────────────────────────────────
+
+/** Only items that may actually be cited as fact. */
+export function evidenceOnlyItems(pack: Pick<EvidencePack, 'items'>): EvidenceItem[] {
+  return pack.items.filter((i) => i.authority === 'evidence');
+}
+
+/** A privacy-safe preview for rejected-item traces (first 80 chars). */
+export function previewText(text: string | undefined | null, max = 80): string {
+  return String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+/** An empty pack for a turn whose answer policy is decided without retrieval. */
+export function emptyEvidencePack(input: {
+  turnId: string;
+  sourceOwner: SourceOwner;
+  requestedProperty: RequestedProperty;
+  answerPolicy: AnswerPolicy;
+}): EvidencePack {
+  return {
+    packId: `${input.turnId}:pack:1:empty`,
+    version: 1,
+    turnId: input.turnId,
+    sourceOwner: input.sourceOwner,
+    requestedProperty: input.requestedProperty,
+    items: [],
+    rejected: [],
+    coverage: {
+      hasDirectEvidence: false,
+      propertySatisfied: false,
+      entityMatched: false,
+      sourceOwnerSatisfied: false,
+      confidence: 0,
+    },
+    conflicts: [],
+    answerPolicy: input.answerPolicy,
+  };
+}

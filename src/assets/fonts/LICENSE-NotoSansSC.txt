@@ -1,0 +1,4 @@
+NotoSansSC-Regular.ttf is a subset (common GB2312 Chinese + Latin) of
+Noto Sans SC, Copyright 2014-2021 Adobe (http://www.adobe.com/), licensed
+under the SIL Open Font License, Version 1.1 (http://scripts.sil.org/OFL).
+Subset generated with fonttools/pyftsubset for embedding in exported PDFs.

@@ -1,0 +1,81 @@
+{
+  "id": "SALES-S",
+  "category": "sales",
+  "natively_mode": "sales",
+  "length_bucket": "short",
+  "speakers": [
+    {"label": "S0", "shown_to_model_as": "Me", "name": "Daniel Okafor", "role": "Account Executive", "org": "Lumenstack"},
+    {"label": "S1", "shown_to_model_as": "Speaker 1", "name": "Renata Voss", "role": "Procurement Manager", "org": "Harrow Freight"},
+    {"label": "S2", "shown_to_model_as": "Speaker 2", "name": "Tomasz Brennan", "role": "Director of Engineering", "org": "Harrow Freight"}
+  ],
+  "context": "A short pricing and negotiation follow-up call between Daniel Okafor, an Account Executive at the data-observability vendor Lumenstack, and Harrow Freight's procurement manager Renata Voss, with engineering director Tomasz Brennan joining partway through. They revisit the Lumenstack Pro proposal, negotiate discount, term, seat count, payment terms and start date, and agree next steps toward contract signature.",
+  "facts": [
+    {"id": "F01", "type": "number", "importance": "important", "statement": "The Lumenstack Pro plan list price is $38 per seat per month.", "owner": null, "deadline": null, "position": "early", "lines": [12], "notes": null},
+    {"id": "F02", "type": "number", "importance": "minor", "statement": "Lumenstack Pro includes 2 terabytes of monitored data ingest per month; overage is billed at $0.40 per gigabyte.", "owner": null, "deadline": null, "position": "early", "lines": [12, 13], "notes": null},
+    {"id": "F03", "type": "background", "importance": "minor", "statement": "Harrow Freight currently ingests about 1.3 terabytes per month, within the included 2 TB.", "owner": null, "deadline": null, "position": "early", "lines": [13, 19], "notes": null},
+    {"id": "F04", "type": "objection", "importance": "critical", "statement": "Renata asked for a lower price, citing a competing quote from Cartograph at $29 per seat per month.", "owner": null, "deadline": null, "position": "early", "lines": [15, 16], "notes": null},
+    {"id": "F05", "type": "background", "importance": "minor", "statement": "Renata believes Cartograph meters ingest separately with about 500 GB included (she said she would have to double check); Daniel argued Harrow would pay Cartograph overage from day one.", "owner": null, "deadline": null, "position": "early", "lines": [18, 19], "notes": "Renata unsure"},
+    {"id": "F06", "type": "number", "importance": "important", "statement": "Daniel's discount is tied to term: 12% off list ($33.44 per seat) on a 12-month term, or 18% off ($31.16 per seat per month, locked for the term) on a 24-month term.", "owner": "Daniel Okafor", "deadline": null, "position": "early", "lines": [20, 22, 30], "notes": null},
+    {"id": "F07", "type": "number", "importance": "critical", "statement": "The deal is for 54 seats.", "owner": null, "deadline": null, "position": "middle", "lines": [24, 25, 27], "notes": "supersedes 45 seats in the original proposal (C01)"},
+    {"id": "F08", "type": "background", "importance": "minor", "statement": "The 54 seats are 38 data engineers plus 16 analytics staff on call for dashboards.", "owner": null, "deadline": null, "position": "middle", "lines": [26], "notes": null},
+    {"id": "F09", "type": "decision", "importance": "critical", "statement": "Harrow Freight agreed to a 24-month contract term (up from the proposed 12 months), with Tomasz comfortable from the engineering side.", "owner": null, "deadline": null, "position": "middle", "lines": [31, 35], "notes": "supersedes 12-month term (C02)"},
+    {"id": "F10", "type": "decision", "importance": "critical", "statement": "The agreed price is 18% off list, $31.16 per seat per month, for 54 seats over 24 months (roughly $20,190 per year).", "owner": null, "deadline": null, "position": "middle", "lines": [35, 36], "notes": null},
+    {"id": "F11", "type": "background", "importance": "minor", "statement": "Tomasz expects migrating off Harrow's homegrown alerting to take a quarter.", "owner": null, "deadline": null, "position": "middle", "lines": [31], "notes": null},
+    {"id": "F12", "type": "requirement", "importance": "important", "statement": "Snowflake and dbt connectors are the integrations Harrow cares about; Daniel confirmed both (plus Airflow) are included in Pro, and only the mainframe connector costs extra.", "owner": null, "deadline": null, "position": "middle", "lines": [32, 33], "notes": null},
+    {"id": "F13", "type": "caveat", "importance": "important", "statement": "Daniel said the 18% discount requires annual upfront billing; quarterly billing would reduce the discount to around 15%, and finance will not allow quarterly at 18%.", "owner": null, "deadline": null, "position": "middle", "lines": [38, 40], "notes": null},
+    {"id": "F14", "type": "decision", "importance": "critical", "statement": "Payment terms settled as annual upfront billing, invoiced once each year, on net 45 terms.", "owner": null, "deadline": null, "position": "middle", "lines": [41, 42, 43], "notes": "supersedes Harrow's standard quarterly in arrears (C04)"},
+    {"id": "F15", "type": "timeline", "importance": "critical", "statement": "The contract start date is October 15th.", "owner": null, "deadline": null, "position": "late", "lines": [46, 47, 55], "notes": "supersedes October 1st (C03)"},
+    {"id": "F16", "type": "risk", "importance": "important", "statement": "October 1st was dropped because it is the week of Harrow's data center cutover.", "owner": null, "deadline": null, "position": "late", "lines": [44], "notes": null},
+    {"id": "F17", "type": "requirement", "importance": "critical", "statement": "Harrow's security team requires a completed security questionnaire (SIG Lite) before legal will sign, plus Lumenstack's DPA and latest SOC 2 Type II report; Tomasz called it a blocker.", "owner": null, "deadline": null, "position": "late", "lines": [48, 49], "notes": null},
+    {"id": "F18", "type": "action_item", "importance": "critical", "statement": "Daniel will send the completed SIG Lite questionnaire, the DPA and the SOC 2 Type II report.", "owner": "Daniel Okafor", "deadline": "by Friday", "position": "late", "lines": [50], "notes": null},
+    {"id": "F19", "type": "action_item", "importance": "critical", "statement": "Daniel will send a revised order form reflecting 54 seats, 24 months, 18% off, annual upfront, net 45 and an October 15th start.", "owner": "Daniel Okafor", "deadline": "Thursday end of day", "position": "late", "lines": [55], "notes": null},
+    {"id": "F20", "type": "action_item", "importance": "important", "statement": "Renata will route the revised order form to Harrow's legal team, where Joan Park handles vendor contracts and usually turns reviews around in five business days.", "owner": "Renata Voss", "deadline": null, "position": "late", "lines": [56], "notes": "once order form received"},
+    {"id": "F21", "type": "action_item", "importance": "important", "statement": "Tomasz will have Harrow's security team review the SIG Lite as soon as it arrives so it does not hold up legal.", "owner": "Tomasz Brennan", "deadline": "as soon as it lands", "position": "late", "lines": [57], "notes": null},
+    {"id": "F22", "type": "number", "importance": "important", "statement": "Renata asked for the onboarding package, listed at $6,000 in the proposal, to be included free; this was NOT agreed.", "owner": null, "deadline": null, "position": "late", "lines": [51, 53], "notes": "floated, not decided"},
+    {"id": "F23", "type": "action_item", "importance": "important", "statement": "Daniel will ask his manager, Jon, whether the free onboarding package is possible given the deal is already at 18% off.", "owner": "Daniel Okafor", "deadline": null, "position": "late", "lines": [53, 54, 55], "notes": "Jon (Daniel's manager) is distinct from Joan Park (Harrow legal)"},
+    {"id": "F24", "type": "background", "importance": "minor", "statement": "Harrow may add around 10 more seats in the spring if a new BI team is approved.", "owner": null, "deadline": null, "position": "late", "lines": [59], "notes": "possible, not committed"},
+    {"id": "F25", "type": "open_question", "importance": "critical", "statement": "Unresolved: whether seats added mid-term would get the same 18% rate or be charged at list price.", "owner": null, "deadline": null, "position": "late", "lines": [60, 61], "notes": null},
+    {"id": "F26", "type": "action_item", "importance": "important", "statement": "Daniel will raise the mid-term seat pricing question with Lumenstack's deal desk today and mention it in the order-form email, but cannot promise an answer by Thursday.", "owner": "Daniel Okafor", "deadline": "raise today; answer not promised by Thursday", "position": "late", "lines": [61, 63], "notes": null},
+    {"id": "F27", "type": "background", "importance": "minor", "statement": "Renata needs to justify the price difference versus Cartograph to Harrow's CFO.", "owner": null, "deadline": null, "position": "early", "lines": [16], "notes": null},
+    {"id": "F28", "type": "logistics", "importance": "minor", "statement": "Tomasz joined partway through the call after a sprint review ran over.", "owner": null, "deadline": null, "position": "middle", "lines": [10, 28], "notes": null}
+  ],
+  "corrections": [
+    {"id": "C01", "what": "seat count", "initial_value": "45 seats", "initial_line": 14, "final_value": "54 seats (digits flipped in Harrow's headcount)", "final_line": 24, "explicit": true, "fact_id": "F07"},
+    {"id": "C02", "what": "contract term", "initial_value": "12 months", "initial_line": 14, "final_value": "24 months", "final_line": 35, "explicit": false, "fact_id": "F09"},
+    {"id": "C03", "what": "start date", "initial_value": "October 1st", "initial_line": 44, "final_value": "October 15th", "final_line": 46, "explicit": true, "fact_id": "F15"},
+    {"id": "C04", "what": "payment terms", "initial_value": "quarterly in arrears (Harrow's standard)", "initial_line": 37, "final_value": "annual upfront, net 45", "final_line": 42, "explicit": false, "fact_id": "F14"}
+  ],
+  "not_decisions": [
+    {"statement": "Free onboarding package (listed at $6,000) - requested, Daniel will ask his manager, not agreed", "lines": [51, 53]},
+    {"statement": "12% discount on a 12-month term - offered but not chosen", "lines": [20, 30]},
+    {"statement": "Quarterly billing at around 15% discount - mentioned but not chosen", "lines": [38]},
+    {"statement": "Quarterly in advance billing at 18% - requested by Renata and rejected by Daniel", "lines": [39, 40]},
+    {"statement": "Adding about 10 seats in the spring - possible only if the BI team is approved", "lines": [59]}
+  ],
+  "distractors": [
+    {"statement": "Renata was late because she was stuck behind a delivery truck in a parking garage", "lines": [8], "why": "irrelevant"},
+    {"statement": "Renata's bathroom renovation tiles are three weeks late", "lines": [9, 10], "why": "irrelevant"},
+    {"statement": "45 seats in the original proposal", "lines": [14], "why": "superseded value"},
+    {"statement": "October 1st start date", "lines": [44], "why": "superseded value"},
+    {"statement": "Net 30 payment terms", "lines": [41], "why": "rejected in favour of net 45"},
+    {"statement": "38 data engineers (same number as the $38 list price)", "lines": [26], "why": "similar-looking number"},
+    {"statement": "Jon (Daniel's manager) vs Joan Park (Harrow legal)", "lines": [53, 56], "why": "similar-sounding names"},
+    {"statement": "Harrow retired its mainframe two years ago; mainframe connector costs extra", "lines": [33, 34], "why": "irrelevant"},
+    {"statement": "Tomasz has a cutover dry run at three", "lines": [65], "why": "irrelevant"}
+  ],
+  "open_questions_at_end": [
+    "Will seats added mid-term (e.g. ~10 in the spring) get the 18% rate or be at list price? Daniel is checking with the deal desk.",
+    "Will Lumenstack include the $6,000 onboarding package free? Daniel is asking his manager Jon."
+  ],
+  "summary_must_include": [
+    "Competitor Cartograph quoted $29/seat/month vs $38 list (F04, F01)",
+    "Seat count corrected from 45 to 54 (F07)",
+    "24-month term agreed at 18% off, $31.16/seat/month (F09, F10)",
+    "Annual upfront billing on net 45 (F14)",
+    "Start date October 15th, not October 1st (F15)",
+    "Security questionnaire (SIG Lite), DPA and SOC 2 Type II required; Daniel sends by Friday (F17, F18)",
+    "Daniel sends revised order form by Thursday EOD; Renata routes to legal (Joan Park) (F19, F20)",
+    "Free $6,000 onboarding package requested but not agreed; Daniel to ask manager (F22, F23)",
+    "Open: mid-term seat add pricing (F25, F26)"
+  ]
+}

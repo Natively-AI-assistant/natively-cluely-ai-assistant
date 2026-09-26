@@ -74,6 +74,35 @@ export interface WhatToAnswerRequestSnapshot {
   /** The generation id for this request. Stamped onto every emitted live token so
    *  the renderer can reject tokens from a superseded answer (#3). */
   readonly generationId: number;
+  /** CONTEXT INTELLIGENCE V3 (Phase 6): when present, this composed prompt DRIVES
+   *  the provider call verbatim — system and user both — and the legacy
+   *  assembly's output strings are not sent. Populated only when the V3 flag is
+   *  on and the bridge produced a decision; absent → legacy assembly, byte-for-
+   *  byte unchanged. Carried on the snapshot rather than a new parameter so the
+   *  13-argument generateStream signature does not grow again, and so the prompt
+   *  is FROZEN with the rest of the t0 decision (#6): a mode switch mid-flight
+   *  cannot produce a prompt the plan never saw. */
+  readonly v3Prompt?: {
+    readonly system: string;
+    readonly user: string;
+    /**
+     * The evidence block this prompt was composed from — what the model was
+     * actually given, as opposed to what a later retrieval happens to return.
+     *
+     * Added 2026-08-28 for the post-stream doc-grounded validator, which used
+     * to re-retrieve through the LEGACY path and judge a V3-grounded answer
+     * against a different evidence set, overwriting a correct answer with the
+     * canonical refusal when the two disagreed. Empty string means the turn
+     * genuinely had no evidence.
+     */
+    readonly evidenceBlock?: string;
+  };
+  /** Context OS (H1): when present AND `contextOsEvidencePackEnabled`, the typed
+   *  EvidencePack GOVERNS the WTA factual prompt — the raw mode block is replaced
+   *  by the rendered contract + evidence pack and the candidate_profile factual
+   *  block is suppressed. Opaque (`unknown`) to avoid a cross-module type cycle;
+   *  WhatToAnswerLLM narrows it at the use site. Absent → legacy assembly. */
+  readonly contextOsGeneration?: unknown;
 }
 
 /** Minimal interface for the bits of ModesManager the snapshot reads. Keeps this

@@ -1,0 +1,350 @@
+{
+ "blind_id": "S-879105cd",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 57359,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 31207,
+  "candidatesTokenCount": 1795,
+  "totalTokenCount": 39167,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 31207
+   }
+  ],
+  "thoughtsTokenCount": 6165,
+  "serviceTier": "standard"
+ },
+ "fact_count": 72,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 3,
+  "hallucination_control": 6,
+  "action_item_retention": 4,
+  "decision_retention": 4,
+  "speaker_attribution": 6,
+  "numeric_accuracy": 5,
+  "entity_retention": 4,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 4,
+  "structure": 6,
+  "conciseness": 3,
+  "readability": 4,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Contradicted the rollout decision by stating the 5% cohort and shadow reconciliation were left unresolved, when Dana explicitly decided to start at 5% for 48 hours with shadow reconciliation.",
+   "Failed to include the legal review blocking the launch and Rohan's action item to chase Joelle Park.",
+   "Failed to include the rollback drill on October 8 and the go/no-go meeting on October 12.",
+   "Failed to include Dana's escalation of the ledger dependency with Grace Obi."
+  ],
+  "missing_important_information": [
+   "The legal review of the order form addendum is not done and blocks the launch.",
+   "Maya owns a rollback drill on October 8.",
+   "The go/no-go meeting is scheduled for October 12.",
+   "A change freeze on billing services is in effect from October 12 to 16.",
+   "Dana will escalate the ledger dependency with Grace Obi.",
+   "Ines will test the empty state variants in usability sessions.",
+   "The help center updates and Salesforce sync fractional quantity check have no owners.",
+   "The context for the 'three-day option' (invoice preview latency caching vs. full pre-aggregation)."
+  ],
+  "hallucinated_information": [
+   "The notes repeatedly state 'A shorter three-day option was preferred over ten days, provided the decision is written down' without any context about invoice preview latency or caching, rendering the statement meaningless."
+  ],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "missing"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "missing"
+   },
+   {
+    "id": "F04",
+    "status": "missing"
+   },
+   {
+    "id": "F05",
+    "status": "missing"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "missing"
+   },
+   {
+    "id": "F08",
+    "status": "missing"
+   },
+   {
+    "id": "F09",
+    "status": "partial"
+   },
+   {
+    "id": "F10",
+    "status": "missing"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "missing"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "partial"
+   },
+   {
+    "id": "F17",
+    "status": "partial"
+   },
+   {
+    "id": "F18",
+    "status": "partial"
+   },
+   {
+    "id": "F19",
+    "status": "partial"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "missing"
+   },
+   {
+    "id": "F22",
+    "status": "missing"
+   },
+   {
+    "id": "F23",
+    "status": "missing"
+   },
+   {
+    "id": "F24",
+    "status": "missing"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "missing"
+   },
+   {
+    "id": "F27",
+    "status": "missing"
+   },
+   {
+    "id": "F28",
+    "status": "missing"
+   },
+   {
+    "id": "F29",
+    "status": "missing"
+   },
+   {
+    "id": "F30",
+    "status": "missing"
+   },
+   {
+    "id": "F31",
+    "status": "partial"
+   },
+   {
+    "id": "F32",
+    "status": "partial"
+   },
+   {
+    "id": "F33",
+    "status": "partial"
+   },
+   {
+    "id": "F34",
+    "status": "missing"
+   },
+   {
+    "id": "F35",
+    "status": "missing"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "partial"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "partial"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "contradicted"
+   },
+   {
+    "id": "F53",
+    "status": "contradicted"
+   },
+   {
+    "id": "F54",
+    "status": "missing"
+   },
+   {
+    "id": "F55",
+    "status": "missing"
+   },
+   {
+    "id": "F56",
+    "status": "missing"
+   },
+   {
+    "id": "F57",
+    "status": "missing"
+   },
+   {
+    "id": "F58",
+    "status": "missing"
+   },
+   {
+    "id": "F59",
+    "status": "missing"
+   },
+   {
+    "id": "F60",
+    "status": "missing"
+   },
+   {
+    "id": "F61",
+    "status": "missing"
+   },
+   {
+    "id": "F62",
+    "status": "missing"
+   },
+   {
+    "id": "F63",
+    "status": "missing"
+   },
+   {
+    "id": "F64",
+    "status": "missing"
+   },
+   {
+    "id": "F65",
+    "status": "missing"
+   },
+   {
+    "id": "F66",
+    "status": "missing"
+   },
+   {
+    "id": "F67",
+    "status": "missing"
+   },
+   {
+    "id": "F68",
+    "status": "missing"
+   },
+   {
+    "id": "F69",
+    "status": "missing"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "missing"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes suffer from severe omissions, missing the entire discussion on the legal review blocker, the rollback drill, the go/no-go meeting, the change freeze, the empty state usability sessions, and the help center/Salesforce sync open questions. Furthermore, they explicitly contradict the transcript by stating the 5% rollout cohort was left unresolved, when Dana clearly decided on it. The notes are also highly repetitive, repeating the same garbled sentence about a 'three-day option' multiple times without context."
+ }
+}

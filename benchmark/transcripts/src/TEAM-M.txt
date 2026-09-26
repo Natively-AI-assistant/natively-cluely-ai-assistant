@@ -1,0 +1,441 @@
+# id: TEAM-M
+# title: Usage-Based Billing v2 weekly launch readiness
+# S0: Me — Dana Okafor, Engineering Manager, Tallyport
+# S1: Rohan Mehta, Senior Product Manager, Tallyport
+# S2: Ines Castillo, Product Designer, Tallyport
+# S3: Viktor Salo, Senior Backend Engineer, Tallyport
+# S4: Maya Lindqvist, QA and Release Engineer, Tallyport
+# S5: Joel Brennan, Customer Success Lead, Tallyport
+S0: Okay, I think we have most people. Rohan, Viktor, Maya. Ines, are you on?
+S2: Yeah, I'm here. Sorry, I'm on the train wifi, so if I cut out just, um, yell at me.
+S1: Train wifi for a launch readiness meeting. Bold choice.
+S2: It's the only forty-five minutes I have free today, so you get what you get.
+S3: Morning everyone.
+S4: Hey. Dana, can you hear me? My headset's been doing a weird thing all morning.
+S0: I can hear you, Maya. A little quiet but fine.
+S4: Okay, good. It keeps switching over to the laptop mic whenever I move my head.
+S3: Just don't move your head for forty-five minutes. Easy.
+S4: Thank you, Viktor, very helpful.
+S1: Did everyone survive the all-hands yesterday? That Q and A went on forever.
+S3: I left after the part about the new expense tool. I've accepted that I'll never understand the expense tool.
+S0: Okay, let's get going, because we have a lot. This is the weekly readiness check for usage-based billing v2.
+S0: It's Thursday the 17th, and we're, what, a little under three weeks out from the date on the roadmap.
+S1: Nineteen days to October 6th. Not that I'm counting.
+S3: He's counting.
+S1: I have a countdown widget. It's fine. It's healthy.
+S0: Let me set the agenda first so we don't spend the whole thing on the date, because I know that's where this ends up.
+S0: One, status per workstream. Viktor on backend, Maya on QA and release, Ines on the dashboard and design side.
+S0: Two, the launch date itself. Rohan, you and Viktor both messaged me about it last night, so we'll have that out properly.
+S0: Three, Joel from customer success is joining around the half hour for a customer escalation. He has a hard stop, so we'll pull him in whenever he arrives.
+S0: Four, the staged rollout plan. Five, legal and enablement. And then actions and wrap.
+S1: Can we do the date before status? Because honestly the status kind of... no, actually, status informs the date. Ignore me.
+S0: Yeah, status first. Viktor, go ahead.
+S3: Okay. Backend. The short version is the metering pipeline is in good shape, the rating engine is mostly in good shape, and invoice preview is the problem child.
+S3: On metering, we ran the load test on Tuesday against the staging cluster. Sustained ingestion was 42,000 events per second for two hours.
+S3: The target we committed to in the design doc was 30,000 events per second, so we're comfortably over.
+S1: That's great.
+S3: It is great. Consumer lag in Cafca never went above about 9 seconds during the test, which, uh, I'll take.
+S0: And that's with the new partition count?
+S3: That's with 48 partitions, yeah. We bumped it from 24 last sprint.
+S0: Any cost impact from that?
+S3: Not really. The brokers were already over-provisioned. Infra said it's maybe a couple hundred dollars a month, rounding error.
+S3: Rating engine, unit test coverage is at 81%. The metering service is lower, it's at 67%, and that's mostly because the replay tooling has basically no tests.
+S4: Which I will be bringing up in my section, just so everyone knows.
+S3: I know. I know you will.
+S3: Also on rating, we settled the rounding question with finance. We round at the invoice line item, half-even, not per event. Priyanka in finance signed off on that on Monday.
+S1: Is that going to change anybody's numbers versus v1?
+S3: By cents, on a handful of accounts. v1 was rounding per event, which was actually slightly wrong in our favor. So if anything customers pay a few cents less.
+S1: I'll take customers paying a few cents less over a support ticket about rounding.
+S3: Okay, invoice preview. So p95 latency for generating the preview on a large account is 1.4 seconds right now. Our target is 800 milliseconds.
+S0: What counts as a large account here?
+S3: Anything over about 2 million metered events in the billing period. There's around 60 accounts like that today.
+S3: The problem is the preview aggregates on read. It walks every event in the period. We could pre-aggregate hourly, but that's a real chunk of work, probably a week and a half for me.
+S1: Can we just... not show the preview for those 60 accounts at launch?
+S3: I mean, we could. I floated that in the channel last week, actually I floated dropping preview from GA entirely, and people hated it.
+S1: I hated it. The preview is literally the thing on slide three of the pitch deck.
+S2: I also hated it, for the record. The whole dashboard layout assumes it's there.
+S0: Okay, let's park the preview question for the date discussion, because it's really a date question. What else, Viktor?
+S3: Two more things. One is the dedup bug, which I think is what Joel's coming for, so I'll keep it short.
+S3: Our dedup window on incoming usage events is 5 minutes. If a customer's client retries a request after that window, we count the event twice.
+S3: The fix is to use client-supplied idempotency keys and keep them for 24 hours, instead of relying on a time window. I've got a PR up, it's maybe 70% done.
+S1: Wait, client-supplied means the customer has to send the key. Do our SDKs even do that?
+S3: Good question. The Node and Python SDKs already send one, as of the release two weeks ago. The Go SDK gets it next week.
+S3: The Java SDK hasn't been started. And a lot of customers just call the raw HTTP API with no SDK at all.
+S0: So what happens for a request with no key?
+S3: Right now, it falls back to the 5-minute window. I floated hashing the payload server-side as a fallback key, but that breaks for customers who legitimately send identical events, like two identical page views in the same second.
+S4: That's going to be a fun one to test.
+S3: So I don't want to decide the no-key fallback today. I'd like to look at the beta traffic first and see how many requests actually arrive without a key.
+S0: Okay, that's fine. When is the main fix done done? Merged, not "works on my machine".
+S3: I can have it merged by next Friday, the 25th.
+S0: Okay. And the second thing?
+S3: The second thing is the blocker. We need the Payments Platform team to ship idempotency support on the ledger write API. That's their version 3.4.
+S3: Without that, even if our side dedups properly, a retry from our posting worker into the ledger can still double-post an invoice line item.
+S1: I thought that was already in 3.3.
+S3: 3.3 has it for payments, not for invoice line items. It's a separate endpoint, and it's the one we use.
+S0: Who are we talking to over there?
+S3: Sunil Varghese. He's been really responsive, to be fair to him. He told me on Monday they're targeting September 29th.
+S0: Targeting or committed?
+S3: He said targeting. Which, you know, in Payments Platform language...
+S1: Means October.
+S3: I did not say that. Please nobody quote me to Sunil.
+S0: Okay, I'll come back to that at the end, because I want a clear owner on chasing it. Maya, QA and release.
+S4: Okay. So bug counts as of this morning. We have 2 Sev-1s open, 9 P1s, 23 P2s, and 41 P3s.
+S0: What are the two Sev-1s?
+S4: One is the dedup double count Viktor just described. The other one is proration.
+S4: If a customer switches plans mid-cycle, the usage from before the switch gets rated at the new plan's price instead of the old plan's price.
+S3: That one's mine too. The fix is basically one line. It's the testing around it that's annoying.
+S4: Oh, sorry, I need to correct myself. It's 7 P1s, not 9. Two got closed this morning, I was reading from yesterday's export.
+S0: Seven P1s. Okay, that's better.
+S4: Yeah. So, 2 Sev-1, 7 P1, 23 P2, 41 P3.
+S1: Are any of the P1s customer-visible?
+S4: Four of them are. Mostly CSV export formatting and one where the usage chart shows UTC dates for customers in other time zones.
+S2: The time zone one is on my list too. The front end team has it.
+S2: We decided the chart should use the account's billing time zone, not the viewer's browser, because the invoice uses the billing time zone. Otherwise the chart and the invoice disagree at the month boundary.
+S1: Yeah, that one bit a beta customer in Sydney. Their August chart had a day of September in it.
+S4: It's a P1 because it makes the numbers look wrong, even though the invoice itself is right.
+S4: Regression suite is at 1,312 tests. We added about 140 this sprint. The pass rate on last night's run was 96.4%.
+S4: The failures are mostly the proration cases, plus three flaky ones in currency rounding.
+S1: Are the flaky ones real, or flaky flaky?
+S4: Flaky flaky, I think. They only fail on JPY, which has zero decimal places, and only when the test runs right after the EUR suite. So probably a shared fixture.
+S3: That's a shared fixture. I'd bet lunch on it.
+S4: I'll take that bet, because if it's a real bug I'm getting a very nice lunch.
+S4: The other thing that hurt us this sprint is staging-eu was down for two days last week. The disk filled up on the event store, so the EU currency suites didn't run Wednesday or Thursday.
+S0: Is that fixed properly, or just cleaned up?
+S4: Cleaned up. Infra added an alert at 80% disk, but the retention job that's supposed to trim it still isn't running. So, you know, it'll fill up again in about three weeks.
+S3: Which is right around launch. Great.
+S4: I've got a ticket open with infra. I'll keep chasing it.
+S4: Then the migration dry run. We have to move existing subscriptions from the v1 rating tables to v2. We've done the dry run on 3 of 12 shards.
+S4: The three went fine. Average of 38 minutes per shard, and zero mismatches on the reconciliation check.
+S0: And the other nine?
+S4: That's the thing. The dry run is really manual right now. There's no runbook. It's all in Viktor's head and a Slack thread.
+S3: It's in a Slack thread and a Google doc, for the record.
+S4: A Google doc where step 4 says, and I'm reading it, "do the thing from Tuesday".
+S3: Okay. That's fair. That's a fair hit.
+S0: Alright, we need a real runbook for the migration before anyone touches the other nine shards. Viktor, can you own that? You know it best.
+S3: Yeah, I can own it. When do we need it by?
+S0: Let's say Monday the 28th, so there's time to do the remaining shards before any go/no-go.
+S3: Okay. Runbook by the 28th.
+S4: And just to finish my section, the replay tooling. That's what I'm most worried about, because replay is our recovery story if we rate something wrong.
+S4: If we rate a batch wrong in production, replay is how we re-rate it. And it has, Viktor, what, like, nothing?
+S3: It has 12 tests. They're good tests.
+S4: Twelve tests, for the thing we'd be running during an incident.
+S3: Twelve very good tests.
+S0: Okay, noted as a risk. I don't want to solve it right now. Ines, you're up. Ines?
+S2: Can you- can you hear- I think it's-
+S0: You're cutting out, Ines. You sound very robotic.
+S1: She's become one with the train.
+S2: Sorry, we went through a tunnel. Is this any better?
+S0: Much better. Go ahead.
+S2: Okay, design. The usage dashboard is done in Figma and it's about 90% built. The front end team says what's left is the export button and the drill-down by meter.
+S2: The drill-down is the thing where you click on, say, API calls, and it breaks it down by endpoint or by sub-account.
+S2: On export, a couple of beta customers asked for Excel instead of CSV. I'd rather not add XLSX for launch, it's another library and another set of formatting bugs.
+S1: Two customers asked, or two customers asked loudly?
+S2: One loudly, one politely. I'd say CSV only at launch, and we revisit if more people ask.
+S0: Okay, CSV only for launch. Excel goes on the later list.
+S2: We ran the accessibility audit last week. There were 2 issues, both color contrast on the chart legend, and both are already fixed.
+S1: Nice. Did the audit look at the invoice PDF too, or just the dashboard?
+S2: Just the dashboard. The PDF is generated by the billing service, so I'm not sure who'd even own that audit.
+S3: The PDF template is ours, technically, but nobody's touched it in two years.
+S2: Okay, that's probably a separate conversation. The thing I actually want to talk about today is the empty state, because I don't think we agree on it.
+S1: We don't.
+S2: So when a new customer first turns on usage billing, they have zero events. The dashboard is just empty. Blank charts.
+S2: Option A is we show sample data, greyed out, with a banner that says "this is what your dashboard will look like once you start sending usage".
+S2: Option B is no fake data at all, just a setup checklist. Connect your SDK, send a test event, set your price per unit.
+S1: I like A, because it sells the feature. You see the charts, you get it immediately.
+S2: But in the beta, 3 of the 14 customers screenshotted the dashboard and sent it to their finance team. If it's sample data, somebody is going to screenshot fake numbers.
+S3: Oh, that's a good point. Finance people will absolutely think it's real.
+S1: That's what the banner is for.
+S2: Nobody reads banners, Rohan.
+S1: I read banners.
+S2: You wrote the banner copy. That doesn't count.
+S0: Is there a middle option? Like the checklist, with a small preview thumbnail of a populated dashboard?
+S2: Maybe. I honestly think that ends up being a worse version of both, but I could mock it up.
+S1: I don't want to hold anything up on this. Can we just ship A and see what happens?
+S2: I'd rather not ship something that we already suspect will generate support tickets.
+S4: From a testing side, B is less work, for what it's worth. Sample data has to be kept in sync with every chart change.
+S1: That's an argument for B from the person who doesn't have to sell it.
+S0: Okay, we're not going to solve this in the meeting. Ines, can you put both in front of real customers?
+S2: Yeah. I have usability sessions with 5 customers next week anyway. I can show both variants, A and B, and see which one people understand.
+S0: When would you have results?
+S2: The sessions are Tuesday and Wednesday, so Thursday the 24th I could share something.
+S0: Good. So the empty state is still open, and we look at the session results on the 24th.
+S1: Fine. Still team A.
+S2: Noted. Very noted.
+S3: Unrelated, but is everyone's desk getting packed by the movers, or are we doing our own?
+S0: Oh, the move. I think we pack our own stuff. Facilities said the crates arrive Monday.
+S4: We pack our own, and the crates have to be sealed by October 1st, because the actual move is the 2nd.
+S1: Is it true there's no espresso machine on the new floor?
+S3: There is an espresso machine. It's just on the 6th floor, and we're on the 4th.
+S1: So, basically, there's no espresso machine.
+S2: You could take the stairs, Rohan. It's two floors.
+S1: I'm a product manager. I don't take stairs, I take stakeholders.
+S3: That's terrible.
+S0: Okay, that one's going in the retro doc.
+S4: Are the monitors moving with us, or are we getting new ones in the Harlow building?
+S0: I genuinely don't know. Someone should ask facilities. Not a launch thing, though.
+S3: The Harlow building has better parking, at least.
+S1: Only if you get a permit, and the waitlist is something like 40 people.
+S2: I'm on the waitlist. I'm number 31. I'll get a spot sometime in 2028.
+S0: Okay. Back to the launch, before we lose another ten minutes to parking.
+S0: So, the date. Rohan, make your case.
+S1: Okay. October 6th has been the date on the roadmap since June. Marketing built the launch webinar around it, and the webinar is October 7th.
+S1: Sales has been telling prospects that usage billing is live in early October. Some of that is in writing, in proposals.
+S1: And there's the Q4 pricing change. New contracts from October 1st are being written with usage tiers. If v2 isn't live, those customers get invoiced on v1 with manual adjustments.
+S0: How many contracts are we talking about?
+S1: Sales thinks about 25 new contracts in October. Maybe 30.
+S1: And finance ops says a manual adjustment is about 4 hours per contract per month. So that's a hundred hours of spreadsheet work, every month we're late.
+S3: Can I respond?
+S0: Go ahead.
+S3: So, we have 2 Sev-1s, and one of them is literally customers getting overbilled. We have nine shards of migration that haven't been dry run.
+S3: And we depend on Payments Platform shipping on the 29th, which leaves us one week of buffer before the 6th, and that's if they're on time.
+S3: I want October 20th. That gives us two full weeks after Sunil's release to test the ledger integration end to end.
+S1: Two weeks is a lot of buffer.
+S3: It's not buffer if they slip. At that point it's just the schedule.
+S1: But October 20th means the webinar is announcing something that isn't live yet. That's awkward in front of 400 registered people.
+S3: A hundred hours of spreadsheet work is less awkward than re-rating a month of bad invoices. That's way more than a hundred hours.
+S1: I get that. I'm just also looking at the market. Meterbase launched their usage analytics thing in August, and two of the deals Sales lost last quarter mentioned them.
+S3: Meterbase also had a billing outage in their first week. I read the postmortem. I'd rather not write one of those.
+S1: Okay, that's a decent point.
+S0: Let me ask it differently. Rohan, what's the actual cost if we're a week late, not two? Is there a cliff somewhere?
+S1: Not a cliff, really. The webinar is the only fixed thing. The contracts are painful but they're linear, it's hours per week.
+S0: And Viktor, what's the actual risk if we launch on the 6th and Payments is on time?
+S3: Then we'd have five working days to test the ledger integration, and Maya just said she needs ten. So we'd be cutting the rollback drill or the migration dry runs. Probably both.
+S4: Can I add the QA view?
+S0: Please.
+S4: From my side, the minimum is: both Sev-1s closed, the full regression green except the known flakes, all 12 shards dry run, and one rollback drill.
+S4: If the ledger change lands on the 29th, I need about ten working days after that to do all of it properly.
+S0: Ten working days from the 29th is...
+S4: Tuesday, October 13th.
+S1: Okay, so why not the 13th?
+S3: Because that's zero days of slack. Anything goes sideways and we're launching untested.
+S0: What about the preview latency? Viktor, if we launch before the pre-aggregation work, where do we land?
+S3: At 1.4 seconds p95 on the big accounts. Same as today.
+S1: Honestly, the preview loads async. It's a spinner in a side panel. Is 800 milliseconds even the right target? I'm pretty sure I copied that number from the invoice list page spec.
+S2: From a UX standpoint, anything under about a second and a quarter feels fine for a side panel that fills in after the page loads. 1.4 is borderline.
+S3: If I do a smaller fix, just caching the per-meter subtotals, I think I can get it to about 1.1, maybe 1.2. That's two or three days, not a week and a half.
+S0: So 1.2 seconds p95 on the big accounts. Everyone okay with that as the bar for launch?
+S1: Yes.
+S2: Yes.
+S4: As long as it's written down somewhere, yes. I'll update the perf test threshold to 1.2 seconds.
+S3: Fine by me. I'd much rather do three days than ten.
+S0: And the full hourly pre-aggregation, we put that in the backlog. I'm not committing to when, just that it's not a launch requirement.
+S3: Works for me.
+S0: Okay. So here's where I'm landing on the date.
+S0: October 6th isn't realistic. We have two open Sev-1s and a dependency that hasn't shipped. I'm not launching billing on "targeting".
+S1: I hear that. I don't like it, but I hear it.
+S0: But I also don't think October 20th is necessary, if the dependency lands on time.
+S0: So the new launch date is Wednesday, October 14th. Not the 13th, because I don't want to launch on the same day Maya finishes testing.
+S3: I can live with the 14th, if there's a rule for what happens when Payments slips.
+S0: Yes. If Payments Platform hasn't shipped ledger 3.4 to production by Friday, October 2nd, the launch automatically moves to October 20th. No second meeting about it.
+S1: Okay. I don't love it, but okay. October 14th, with the October 2nd tripwire.
+S4: I like the tripwire. It means I don't have to be the bad guy on October 5th.
+S1: So what do I do about the webinar on the 7th?
+S0: What are the options?
+S1: I could ask marketing to move it to the 15th. Or keep it on the 7th and pitch it as a preview.
+S3: Or keep the 7th and turn on early access for the beta customers that day, as, like, a soft launch.
+S1: I actually floated that to Carla already. She liked it. But it's basically launching on the 7th with extra steps.
+S0: Yeah, I don't want an early access launch on the 7th. That's the same risk with a different name. We're not doing that.
+S1: Fine. I'll talk to Carla about whether the webinar moves or stays on the 7th as a preview. I'll let you know by tomorrow.
+S0: And the October contracts. Between the 1st and the 14th, they go on v1 with manual adjustments, and they get migrated during the rollout like everybody else?
+S1: That's the only option, really. I'll give finance ops a heads-up so they can plan the hours. It's about two weeks of contracts, so maybe a dozen of them.
+S3: Can we at least make those accounts part of the first cohort? They're new, they're small, and they're the ones costing finance ops time.
+S4: They'd have almost no usage history, so reconciliation would be meaningless for them. I'd rather they go in at 25%.
+S0: Let's not decide cohort membership for those yet. Maya, look at it when you write the plan.
+S0: Okay. And on the rollout, since we're already here, we'll do the usual staged approach. First stage is 10% of eligible accounts on the 14th.
+S4: 10% on day one. Okay, I'll build the rollout plan around that.
+S0: We'll go through the rest of the rollout plan after Joel's item.
+S3: Dana, one thing before Joel gets here. If I'm doing the dedup fix, the proration fix, the latency caching, and working with Sunil on the ledger integration, I can't also write the runbook by the 28th.
+S3: Something has to give, and I'd rather it not be the Sev-1s.
+S0: Yeah, that's fair. Maya, can you take the migration runbook? Viktor pairs with you for an hour to do a brain dump.
+S4: Yeah, I can take it. Honestly, I'd rather, because I'm the one who has to follow it at 2 a.m.
+S0: Okay. The migration runbook moves to Maya, still due the 28th. Viktor does a brain dump session with her.
+S1: Can I ask what "Sev-1s closed" means for the launch criteria? Closed as in merged, or closed as in verified in staging?
+S4: Verified in staging, with a regression test that fails on the old code. Merged doesn't count.
+S0: Agreed. Verified with a failing-first test. Let's write that into the go/no-go checklist.
+S3: Let's do the brain dump tomorrow at 2.
+S4: Works for me. Bring the Google doc. And the Slack thread. And whatever Tuesday was.
+S3: I'll bring Tuesday.
+S5: Hey, sorry, is this the billing v2 meeting? I think I'm a few minutes late.
+S0: You're right on time, Joel. We just finished the date discussion. Go ahead.
+S5: Thanks. I'll be quick, I have a QBR at twenty past. This is about Kestrel Logistics.
+S0: Kestrel, the one that's been in the beta since August? They've been really positive, right?
+S5: No, that's Kestrel Health. Different account. Kestrel Health is the happy one. They're about a $95,000 account and they love the dashboard.
+S5: Kestrel Logistics is the freight company. $410,000 ARR, one of our top ten accounts. They're in the beta too, but they joined later, mid August.
+S0: Sorry, yes. Too many Kestrels.
+S5: Everyone does it. Their own CFO mixed them up on a call once, and they're not even related companies.
+S5: So. Kestrel Logistics got their first v2 usage invoice for the August period, and they were overbilled. Their controller caught it.
+S3: Let me guess. Retries.
+S5: Yeah. Their shipment tracking service retries API calls after about 8 minutes when a carrier times out, and every one of those got counted twice. Mostly August 28th through the 31st.
+S3: That's exactly the 5-minute window bug. 8 minutes is outside the window, so every retry is a new event.
+S5: The overbilling is $18,240. Finance confirmed that number yesterday.
+S1: Ouch.
+S5: For context, their total usage invoice for August was about $61,000. So it's not a rounding error, it's almost a third of the bill.
+S0: Did it affect all their meters, or just API calls?
+S5: Just API calls. They have three subsidiaries with separate meters, and it's all in the one that does shipment tracking. The warehouse and the fleet subsidiaries were fine.
+S3: That fits. The tracking service is the only one with the long retry.
+S0: Has the invoice actually been paid, or is it still open?
+S5: Still open. They put it on hold, which honestly is the best case. We don't need to issue a refund, just a credit against the open invoice.
+S5: And the context is, their renewal is November 1st. Their VP of finance, Oksana Reyes, emailed their account exec and me.
+S5: And she said, I'm quoting, "we cannot move our full account to usage billing until we trust the meter".
+S0: That's fair, honestly. I wouldn't either.
+S5: It is fair. So what I need from this group is three things. A credit, a root cause they can actually read, and confidence the fix is in before they're migrated for real.
+S0: The fix, Viktor has in progress, merged by September 25th.
+S3: Yeah, the idempotency keys. It fixes exactly this pattern, retries at any delay up to 24 hours.
+S5: Okay, good. Can someone write up the root cause? Customer-readable. Not a postmortem with stack traces in it.
+S3: I can write the technical part, but I really shouldn't be the one writing a letter to a customer.
+S1: Agreed. Nobody wants Viktor writing to customers.
+S3: Rude, but correct.
+S0: Viktor drafts the technical explanation, and I'll turn it into the customer version. Joel, when do you need it?
+S5: I'm on a call with them on Wednesday the 23rd. So by Tuesday the 22nd, ideally in the morning.
+S0: Okay, I'll have it to you by the 22nd, and I'll join the call on the 23rd if that helps.
+S5: That would help a lot. They'll want to hear from an engineering person, not just me.
+S5: On the credit, I'll draft the credit memo for the $18,240 and get it through finance. I think I can get approval by Monday the 21st.
+S1: Should we throw in a free month on top? Like a goodwill gesture, before the renewal?
+S5: I thought about that. A month on a $410,000 account is over thirty thousand dollars, and finance will push back hard. I'd rather not decide that today.
+S0: Yeah, let's not decide that here. Joel, raise it with your director if you think it's needed.
+S5: Yeah, I'll think about it. It might depend on how the call goes.
+S5: Last thing. They asked if they can pick their own migration date, instead of being in a random rollout group.
+S4: We can exclude an account from the flag cohorts and turn it on manually. That's easy on our side.
+S0: Then yes. Kestrel Logistics is excluded from the automatic rollout, and we migrate them on a date they choose, after the fix is verified on their data.
+S5: Perfect. That's the part that'll actually land with Oksana.
+S2: Joel, quick one. Is Kestrel Health okay being in my usability sessions next week? They're on the list.
+S5: Kestrel Health, yes, totally fine. Just please don't put Kestrel Logistics in a usability session right now.
+S2: Wasn't planning to.
+S5: Okay, I have to jump. Thank you, this was way faster than I expected.
+S0: Thanks, Joel. Tell them we'll see them on the 23rd.
+S5: Will do. Bye all.
+S1: Poor Joel. That's a rough week for him.
+S0: It's a rough week for us too. Honestly, that invoice is the exact scenario I'm worried about at scale.
+S0: Okay, rollout plan. Maya, you had a draft?
+S4: Yeah. So right now, production is at 0% on the new flag, except our own internal Tallyport account, which has been dogfooding at 100% for three weeks, and the 14 beta accounts.
+S1: Which is about 1.8% of the 780 eligible accounts.
+S4: Right. And then the plan was October 14th, 10% of eligible accounts, like Dana said. Then 25%, 50%, and 100% by the end of October.
+S4: But I want to push back on the 10%, now that I've heard the Kestrel thing.
+S0: Go on.
+S4: 10% of 780 is 78 accounts. If there's another metering bug like the retry one, we're sending bad invoices to 78 customers.
+S4: And the invoice doesn't generate until the first bill run after they're flipped, so we wouldn't see it on day one.
+S3: Well, we'd see it earlier than that in the preview totals, if anyone looks. But I take the point.
+S4: I'd rather start at 5% and hold for 48 hours, and in those 48 hours we reconcile every account in that cohort against v1 shadow rating before we go any wider.
+S1: 5% is 39 accounts. That's a pretty small launch.
+S4: It's a staged rollout, Rohan. It's supposed to be small.
+S0: Viktor, can we actually reconcile against shadow rating?
+S3: Yeah. v1 keeps rating in shadow mode for 30 days after an account moves over. We can diff the totals per account. That's a script, maybe half a day.
+S0: Okay. I'm reversing what I said earlier. We're not starting at 10%.
+S0: The first stage is 5% of eligible accounts for the first 48 hours, with a reconciliation against v1 shadow rating before we expand.
+S1: And after the 48 hours?
+S4: If reconciliation is clean, 25% on Monday, October 19th. I don't want to expand on a Friday.
+S4: Then 50% on the 21st, and 100% on Monday, October 26th.
+S3: Should the 5% include any of the 60 big accounts? Because that's where the preview latency risk is.
+S1: I'd include a couple. Otherwise we don't learn anything about the big ones until 25%.
+S4: I'd rather the first cohort be boring. Small and mid-size accounts on monthly billing.
+S0: I'm with Maya. The first 5% excludes accounts over 2 million events. The big accounts come in at the 25% stage.
+S1: Okay.
+S0: What's the pause trigger?
+S4: Any account where the v2 total differs from the shadow v1 total by more than 0.5%, excluding the known rounding differences, we pause the rollout. We don't roll back automatically. We pause and look.
+S3: And rolling back itself is just flipping the flag. v1 still has everything for those 30 days.
+S4: Right, which is why I want a rollback drill before launch. I'd like to do that on Thursday, October 8th, in staging, with the full migration on all 12 shards.
+S0: Okay. Rollback drill on October 8th, Maya owns it.
+S4: Yep.
+S0: And the go/no-go meeting. Let's put that on Monday, October 12th. Same group, plus Joel.
+S1: I'll send the invite.
+S4: Two more rollout things. First, I want a change freeze on the billing services from October 12th through the 16th. Nothing else ships to billing that week unless it's a fix for v2.
+S3: The tax team has a small change queued for the 13th. Something about Canadian GST on credits.
+S4: Then they move it to the 19th, or they convince me it can't wait.
+S0: Agreed. Change freeze on billing, October 12th to 16th. Maya, you'll tell the tax team?
+S4: I'll tell them today.
+S4: Second, launch-week on-call. I want a backend engineer and a billing support person on call together for the 48-hour window, not just the normal rotation.
+S3: I'll take the first 24 hours. I'd rather be on call for my own bugs.
+S0: And we'll find someone for the second 24. I'll ask Lukas, he did the v1 migration.
+S1: Lukas on the payments side or Lucas on the data team?
+S0: Lukas Brandt, backend. Not Lucas from data. Good catch.
+S4: Sorry, can you hear me? My headset just died, I'm on my phone now.
+S0: We can hear you. You sound like you're in a bathroom, but we can hear you.
+S4: I'm in a phone booth. Close enough.
+S0: Okay, legal and enablement. Rohan?
+S1: So, legal is done, which is nice. We got the sign-off last week.
+S4: Wait, which sign-off? I thought what came back last week was the privacy review.
+S1: It was the... legal review. The one Joelle's team does.
+S4: No, I'm pretty sure what came back was the privacy review from the security team. The DPIA for storing raw usage events. That one's approved.
+S3: Joelle is legal, Joel is customer success. Maybe that's the mix-up?
+S1: Ha. No, that's not it. Hang on, let me check my email.
+S1: Okay. Yeah, Maya's right. The email from last Thursday is the privacy review, and it's approved.
+S1: The legal review of the order form addendum is still open with Joelle Park. It's in her queue.
+S0: So legal isn't done. What's the addendum actually for?
+S1: The new usage terms. How overage billing works, how disputes on metered usage work, and the 30-day window to contest a usage charge. Any contract signed on usage tiers needs it attached.
+S0: Then that's launch-blocking. When does Joelle think she'll finish?
+S1: Her team's SLA is ten business days, and it went in on the 16th, so September 30th at the latest.
+S0: Rohan, can you follow up with Joelle and make sure it's done by the 30th? If it isn't, I want to know on October 1st, not October 13th.
+S1: Yes. I'll ping her today and then again on the 28th.
+S4: And can we add legal sign-off to the go/no-go checklist? Explicitly, the legal review, not the privacy one.
+S0: Yes. Add it.
+S1: On enablement. The sales deck is updated. The pricing page copy is with marketing, and it goes live on launch day.
+S1: I'm also running a sales training session on October 9th, an hour, recorded, for the reps who have usage-tier deals in flight.
+S2: Does the pricing page mention the preview?
+S1: It does. Which is why I was so twitchy about dropping it.
+S3: We're not dropping it. It's staying, at 1.2 seconds.
+S1: I know. I'm just saying. I have trauma.
+S0: What about the beta customers? They've all been told October 6th, right?
+S1: All 14 of them, yeah. It was in the August beta newsletter.
+S0: Then they need to hear about the 14th from us before they hear it from a sales rep. Can you email them?
+S1: Yes. I'll send the beta group an update by Tuesday the 22nd. Except Kestrel Logistics, Joel should handle that one.
+S0: Agreed, Joel's call on the 23rd covers them.
+S1: Should we also put a notice on the status page about the invoice format change?
+S3: The status page is for incidents. I'd really rather not put product announcements on it.
+S1: Fair. Forget I said it. In-app banner maybe.
+S2: Nobody reads banners.
+S1: I walked into that one.
+S4: What about the help center? The invoice PDF format changes. Line items are grouped by meter now instead of by date. Customers are going to open tickets.
+S1: Yeah, someone should update the help center articles on reading your invoice. There are like six of them.
+S0: Is that support or docs?
+S1: I think docs, but docs is two people, and they're both on the API reference for v2 right now.
+S0: Okay. That needs to happen before the 14th. I'm not going to assign it in this meeting, but it needs a name by next week.
+S3: And someone should check whether the Salesforce sync handles fractional quantities. Usage can be 12.5 units now, and I'm pretty sure the sync casts to integers.
+S1: Oh. That could be bad for sales reporting. Commissions run off that sync.
+S0: Does anybody know who owns the Salesforce sync these days?
+S4: It used to be the integrations team, but I think it got orphaned in the re-org.
+S0: Okay. Then that's an open question for now.
+S2: Sorry, I lost the last minute or so. Did I miss anything for design?
+S0: No, you're fine. Mostly help center and Salesforce. Nothing for you.
+S2: Great.
+S0: Okay, let me run through actions, since we're almost at time.
+S0: Viktor. The dedup fix with the idempotency keys, merged by Friday, September 25th. The proration Sev-1 as well, same date?
+S3: Proration by the 25th, yes. And the caching for the preview latency by the 30th.
+S0: Plus the shadow reconciliation script for the rollout. And the technical root cause for Kestrel Logistics to me by Monday the 21st, so I can turn it around for Joel by the 22nd.
+S3: Monday, yep. The script I'll have by October 7th, before the drill.
+S0: Maya. The migration runbook by the 28th, which you took over from Viktor. The perf threshold change to 1.2 seconds. The rollout plan with 5% for the first 48 hours. And the rollback drill on October 8th.
+S4: Got it. And I'll exclude Kestrel Logistics from the rollout cohorts.
+S0: Right, thank you. Ines, both empty-state variants in the usability sessions, results on the 24th.
+S2: Yes.
+S0: Rohan. The webinar decision with Carla by tomorrow. Follow up with Joelle Park so the legal review is done by September 30th. The go/no-go invite for October 12th. And the sales training on the 9th.
+S1: Yep, got all of those. Plus the beta customer email by the 22nd.
+S0: Right, the beta email. And Maya, the change freeze note to the tax team.
+S4: Already typing it.
+S0: And me. The customer version of the root cause to Joel by the 22nd, and the Kestrel Logistics call on the 23rd.
+S0: And I'll escalate the ledger 3.4 dependency with Sunil and his manager. What's her name...
+S3: Grace Obi.
+S0: Grace. I'll get a committed date out of them by Monday.
+S1: Wait, wasn't the ledger thing Viktor's?
+S0: Viktor's doing the technical integration with Sunil. The schedule chase is mine. I want Viktor writing code, not sending status emails.
+S3: Thank you. Genuinely.
+S0: Okay, open questions, so they're in one place.
+S0: Whether Payments Platform actually ships ledger 3.4 by the 29th, and remember the October 2nd tripwire.
+S0: Empty state, A or B. Whether the webinar moves off the 7th. Who owns the help center update. And who owns the Salesforce sync question.
+S1: And whether Kestrel Logistics renews, I guess. That's not really ours, but it kind of is.
+S0: It kind of is. And whether we give them anything beyond the credit.
+S4: Also, not to be that person, but we never said what happens with the replay tooling coverage.
+S0: You're right. That's open too. Viktor and I will talk about it Monday, but I don't have an answer today.
+S3: I'll bring a list of what the 12 tests don't cover. It's a long list.
+S3: Same with the no-key fallback for the dedup. I still need to see how much beta traffic comes in without an idempotency key before I pick an approach.
+S3: Also, small thing, but the October 2nd tripwire is the same day as the office move. Just saying, nobody's going to be at a desk that day.
+S4: I'll have my laptop on a moving crate. It'll be fine.
+S0: The tripwire doesn't need a desk. Either Sunil's release is in production that day or it isn't. I'll check it from wherever my crates are.
+S1: From the 6th floor, next to the espresso machine.
+S0: Next checkpoint is same time next Thursday, September 24th, at 10.
+S0: Ines brings the usability results, Viktor brings the dedup fix status, and Maya brings the runbook draft.
+S2: Can we make it 10:30 instead of 10? I have a wrap-up with the research team right before.
+S0: Sure. 10:30 on the 24th.
+S1: Okay. And for the record, I'm still team A.
+S2: Bye, Rohan.
+S3: Thanks all. Someone please save me a spot near the espresso machine on the 6th floor.
+S4: Bye. My headset died but I survived, so that's a win.
+S0: Thanks, everyone.

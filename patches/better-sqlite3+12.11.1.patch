@@ -1,0 +1,12 @@
+diff --git a/node_modules/better-sqlite3/package.json b/node_modules/better-sqlite3/package.json
+index ac51cca..14832d3 100644
+--- a/node_modules/better-sqlite3/package.json
++++ b/node_modules/better-sqlite3/package.json
+@@ -38,6 +38,7 @@
+     "sqlite3": "^5.1.6"
+   },
+   "scripts": {
++    "preinstall": "node ../../scripts/verify-native-arch.js || (echo '[nativeArch] better-sqlite3 install BLOCKED: arch mismatch (see fix above)' && exit 1)",
+     "install": "prebuild-install || node-gyp rebuild --release",
+     "build-release": "node-gyp rebuild --release",
+     "build-debug": "node-gyp rebuild --debug",

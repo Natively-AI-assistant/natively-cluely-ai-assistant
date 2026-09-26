@@ -1,59 +1,141 @@
 // src/components/onboarding/BrowserExtensionToaster.tsx
 //
-// Skills: ui-ux-pro-max · ui-design-system · frontend-design
-//
-// Claymorphic "install the browser extension" nudge.
+// "Install the browser extension" invitation.
 // Shown ONCE per install/update to v2.8.0+ when the Natively browser
-// extension is not yet connected. Indigo accent to differentiate from
-// the violet trial and coral support toasters.
+// extension is not yet connected.
 //
-// Self-contained: no props. Gates via toasterGating + a permanent
-// localStorage dismiss flag. Auto-dismisses silently the moment the
-// extension connects while visible.
+// Presentational: the onboarding orchestrator decides when it opens
+// (OrchestratedToasterHost); this component owns the permanent dismiss flag
+// and auto-dismisses silently the moment the extension connects.
+//
+// It pours out of, and back into, the bottom of the window like every other
+// popup (GenieModal), warping one picture of itself the way macOS does.
 //
 // Chrome Web Store URL canonical source: src/components/settings/HelpSettings.tsx
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { X, ArrowRight } from 'lucide-react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { isToasterAllowed, markToasterAsShown } from '../../lib/toasterGating';
-import { BrowserExtensionIcon } from './BrowserExtensionIcon';
+import chromeArt from '../../assets/cards/chrome.jpg';
+import { GenieModal } from '../ui/GenieModal';
 
-const DISMISS_KEY         = 'natively_ext_connect_dismissed_v1';
-const TOASTER_ID          = 'extension_connect';
-const STARTUP_DELAY_MS    = 12_000;   // trial is 10s; support is 10s
-const MIN_VERSION         = '2.8.0';
+const DISMISS_KEY = 'natively_ext_connect_dismissed_v1';
+const MIN_VERSION = '2.8.0';
 
 // Canonical Chrome Web Store URL (also in HelpSettings.tsx).
 const CHROME_STORE_URL =
   'https://chromewebstore.google.com/detail/lmhgnkbjnelmciecjkleaomjpejcgaln?utm_source=item-share-cb';
 
-// ─── Design tokens ────────────────────────────────────────────
-const T = {
-  font:   '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-  indigo: '#6366F1',
-  indigoB:'#4F46E5',
-  indigoD:'#4338CA',
-  indigoG:'rgba(99,102,241,0.35)',
-  indigo2:'rgba(99,102,241,0.14)',
+/*
+  ── Composition ─────────────────────────────────────────────────────────────
+
+  Two panes: the words on a flat ground on the left, the image in its own
+  inset panel on the right. Nothing crosses between them, so the type never
+  needs a scrim and the image is shown whole.
+
+  The column has three tiers, separated by space rather than by rules:
+
+    statement   eyebrow, headline, one sentence of support
+    evidence    three stacked figures
+    action      the CTA and its quiet alternative, pinned to the bottom
+*/
+
+// ─── Tokens ────────────────────────────────────────────────────
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
+
+/*
+  Ink for the dark ground (#1C1C1E). The type sits on flat colour rather than
+  a photograph, so it needs no scrim, but it does have to clear AA on its own.
+  Measured, not estimated:
+
+    strong  #F2F2F4   15.2:1
+    body    0.66       8.0:1
+    quiet   0.52       5.4:1    eyebrow, figure labels
+    faint   0.48       4.9:1    the decline, which is a control
+*/
+const INK_DARK = {
+  strong: '#F2F2F4',
+  body:   'rgba(255,255,255,0.66)',
+  quiet:  'rgba(255,255,255,0.52)',
+  faint:  'rgba(255,255,255,0.48)',
 };
 
-const STAGGER = { hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.1 } } };
-const ITEM    = {
-  hidden: { opacity: 0, y: 14, filter: 'blur(4px)' },
-  show:   { opacity: 1, y: 0,  filter: 'blur(0px)', transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] as any } },
+/*
+  Ink for the light ground. Not black: a faint blue cast keeps it in the same
+  temperature as the image panel, so the two halves read as one card.
+
+  Measured against #F7F8FC, not eyeballed (white only raises these):
+
+    strong  #0B1020   17.8:1
+    body    0.68      6.5:1
+    quiet   0.66      6.0:1    eyebrow, and the words after each figure
+    faint   0.58      4.6:1    the decline, which is a CONTROL and so has to
+                               clear 4.5:1 even while staying the quietest
+                               thing on the card
+
+  The alphas are higher than the dark set's for the same roles. That is not a
+  mistake: dark text loses contrast against a light ground far faster than
+  light text loses it against a dark one, so the same visual weight costs more
+  opacity here.
+*/
+const INK_LIGHT = {
+  strong: '#0B1020',
+  body:   'rgba(11,16,32,0.68)',
+  quiet:  'rgba(11,16,32,0.66)',
+  faint:  'rgba(11,16,32,0.58)',
 };
 
-// ─── Custom hero icon: simplified browser frame with extension piece ──
-// Reads instantly as "browser extension" — the affordance Chrome itself uses
-// for extension install UI. Avoids the generic-Puzzle / AI-piece metaphor.
-// (Imported from BrowserExtensionIcon so PhoneMirrorSettings can reuse it.)
-const BrowserExtensionHeroIcon: React.FC<{ size?: number }> = ({ size = 64 }) => (
-  <BrowserExtensionIcon color={T.indigo} size={size} />
-);
+// One curve for every eased property on the card, so all motion shares a
+// temperament. Strong ease-out: movement lands early, then drifts.
+const EASE_CSS = 'cubic-bezier(0.23, 1, 0.32, 1)';
+const EASE_FM  = [0.23, 1, 0.32, 1] as const;
+
+// Panel zoom. The image pushes in under the pointer while the type holds
+// still; the difference between the two is the whole effect. It is allowed
+// to be slow because it is an image breathing, not a control answering a
+// click, and the card is only ever seen once.
+const PLATE_ZOOM     = 0.05;
+const PLATE_ZOOM_IN  = 1100;
+const PLATE_ZOOM_OUT = 700;
+
+// CTA. Inside the band where a hover still feels attached to the pointer.
+// The exit is quicker than the entrance: the user deciding may take its
+// time, the system letting go should not.
+const CTA_IN  = 420;
+const CTA_OUT = 280;
+
+// Close ink on the light image panel (#E6E8EE). Rest clears the 3:1 that
+// WCAG 1.4.11 asks of a control (3.97:1); at 0.34 it was 2.17:1.
+// The card's drop shadow, shared with the stand-in that carries it mid-genie.
+const SHADOW_LIGHT = '0 30px 70px -28px rgba(16,24,40,0.40)';
+const SHADOW_DARK  = '0 40px 90px -30px rgba(0,0,0,0.85)';
+
+const CLOSE_LIGHT = { rest: 'rgba(11,16,32,0.55)', hover: 'rgba(11,16,32,0.92)' };
+
+// Entrance: once the card has poured out, the column arrives tier by tier.
+const STAGGER = { hidden: {}, show: { transition: { staggerChildren: 0.04, delayChildren: 0.3 } } };
+const ITEM = {
+  hidden: { opacity: 0, y: 12, filter: 'blur(3px)' },
+  show:   { opacity: 1, y: 0,  filter: 'blur(0px)', transition: { duration: 0.5, ease: EASE_FM as any } },
+};
+const ITEM_REDUCED = {
+  hidden: { opacity: 0 },
+  show:   { opacity: 1, transition: { duration: 0.3 } },
+};
+
+/*
+  Each figure is stacked: numeral above, one word or two below,
+  three columns. Stacked, the numerals line up as a row of their own and read
+  first, which is the point of leading with them.
+*/
+const FIGURES_STACKED: { value: string; label: string }[] = [
+  { value: '3×',  label: 'Faster' },
+  { value: '90%', label: 'Fewer Tokens' },
+  { value: '0',   label: 'Screenshots' },
+];
 
 // Tiny inline semver compare (only major.minor.patch).
-function versionGte(a: string, b: string): boolean {
+export function versionGte(a: string, b: string = MIN_VERSION): boolean {
   const pa = a.split('.').map(n => parseInt(n, 10));
   const pb = b.split('.').map(n => parseInt(n, 10));
   for (let i = 0; i < 3; i++) {
@@ -65,88 +147,82 @@ function versionGte(a: string, b: string): boolean {
   return true;
 }
 
-export const BrowserExtensionToaster: React.FC = () => {
-  const [visible, setVisible]     = useState(false);
-  const [opening, setOpening]     = useState(false);
+interface Props {
+  isOpen:    boolean;
+  onDismiss: () => void;
+  onSkip?:   () => void;
+}
+
+export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss, onSkip }) => {
+  const [opening, setOpening]       = useState(false);
+  const [plateHover, setPlateHover] = useState(false);
+  const [ctaActive, setCtaActive]   = useState(false);
+  const [ctaPressed, setCtaPressed] = useState(false);
   const reduced = useReducedMotion() ?? false;
   const isLight = useResolvedTheme() === 'light';
-  const statusUnsubRef = useRef<(() => void) | null>(null);
-  const timerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const INK = isLight ? INK_LIGHT : INK_DARK;
 
-  // Color tokens (verbatim TrialPromoToaster pattern).
-  const t1 = isLight ? '#111111' : '#FFFFFF';
-  const t2 = isLight ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.85)';
-  const t3 = isLight ? 'rgba(0,0,0,0.58)' : 'rgba(255,255,255,0.5)';
-  const t4 = isLight ? 'rgba(0,0,0,0.38)' : 'rgba(255,255,255,0.28)';
-  const rule = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.08)';
-  const glass = isLight ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.02)';
+  // Test hook: ?extToaster=force bypasses the orchestrator and shows immediately.
+  const testForceShow = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('extToaster') === 'force';
 
-  // ─── Trigger logic ──────────────────────────────────────────
+  // Starts closed, so the first thing the card does is pour out.
+  const [visible, setVisible] = useState(false);
   useEffect(() => {
-    // 0. TEST HOOK: ?extToaster=force in the URL bypasses ALL gating
-    //    (permanent-dismiss flag, version gate, central gating, connection
-    //    check, startup delay) and shows the toaster immediately.
-    //    Also clears the dismiss flag + cooldown so re-renders are clean.
-    //    Usage: append `?extToaster=force` to the launcher / overlay URL.
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('extToaster') === 'force') {
-        try {
-          localStorage.removeItem(DISMISS_KEY);
-          localStorage.removeItem('last_shown_time_extension_connect');
-          localStorage.removeItem('last_shown_opens_extension_connect');
-          sessionStorage.removeItem('natively_session_toaster_shown');
-        } catch { /* ignore */ }
-        setVisible(true);
-        return;
-      }
-    }
+    setVisible(isOpen || testForceShow);
+  }, [isOpen, testForceShow]);
 
-    // 1. Skip if permanently dismissed
-    if (localStorage.getItem(DISMISS_KEY)) return;
-
-    // 2. Skip if app version is below 2.8.0
-    const appVer = (import.meta.env.VITE_APP_VERSION as string | undefined) || '';
-    if (appVer && appVer !== 'unknown' && !versionGte(appVer, MIN_VERSION)) return;
-
-    // 3. Honor central gating (session + 24h/5-opens cooldown)
-    if (!isToasterAllowed(TOASTER_ID)) return;
-
-    // 4. Query phone-mirror state — skip if extension already connected.
-    let cancelled = false;
-    const queryAndSchedule = async () => {
-      try {
-        const info = await window.electronAPI?.phoneMirrorGetInfo?.();
-        if (cancelled) return;
-        if (!info || info.extensionConnected) return;
-      } catch {
-        // Phone Mirror service not ready yet — silently skip this session.
-        return;
-      }
-      if (cancelled) return;
-
-      timerRef.current = setTimeout(() => {
-        if (cancelled) return;
-        setVisible(true);
-        markToasterAsShown(TOASTER_ID);
-      }, STARTUP_DELAY_MS);
-    };
-    queryAndSchedule();
-
-    // 5. Auto-dismiss silently the moment the extension connects.
-    if (window.electronAPI?.onPhoneMirrorStatus) {
-      statusUnsubRef.current = window.electronAPI?.onPhoneMirrorStatus(info => {
-        if (info?.extensionConnected) handleDismissSilently();
-      });
-    }
-
-    return () => {
-      cancelled = true;
-      if (timerRef.current) clearTimeout(timerRef.current);
-      statusUnsubRef.current?.();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // The orchestrator unmounts this the moment it hears "dismissed", so every
+  // way out closes the card first (the genie) and reports from onClosed.
+  const afterCloseRef = useRef<(() => void) | null>(null);
+  const closeThen = useCallback((after: () => void) => {
+    if (afterCloseRef.current) return;
+    afterCloseRef.current = after;
+    setVisible(false);
   }, []);
+
+  // ─── Dismiss handlers ───────────────────────────────────────
+  // The permanent flag is written at once, not after the exit, so quitting
+  // mid-animation still counts as a dismiss.
+  const persistDismiss = () => {
+    try { localStorage.setItem(DISMISS_KEY, '1'); } catch { /* ignore */ }
+  };
+
+  const handlePermanentDismiss = useCallback(() => {
+    persistDismiss();
+    closeThen(onDismiss);
+  }, [closeThen, onDismiss]);
+
+  const handleNotNow = () => {
+    persistDismiss();
+    closeThen(() => { onDismiss(); onSkip?.(); });
+  };
+
+  const handleInstall = async () => {
+    if (opening) return;
+    try {
+      setOpening(true);
+      await window.electronAPI?.openExternal?.(CHROME_STORE_URL);
+    } catch (e) {
+      console.warn('[BrowserExtensionToaster] openExternal failed:', e);
+    } finally {
+      // Close now; the user is in the Chrome store. Not a permanent
+      // dismiss, so they can return next launch if they didn't install.
+      closeThen(() => onDismiss());
+    }
+  };
+
+  // ─── Auto-dismiss when the extension connects ──────────────
+  useEffect(() => {
+    if (!isOpen || testForceShow) return;
+    const unsub = window.electronAPI?.onPhoneMirrorStatus?.(info => {
+      if (info?.extensionConnected) {
+        persistDismiss();
+        closeThen(onDismiss);
+      }
+    });
+    return () => { unsub?.(); };
+  }, [isOpen, testForceShow, onDismiss, closeThen]);
 
   // ─── Escape key ─────────────────────────────────────────────
   useEffect(() => {
@@ -156,277 +232,270 @@ export const BrowserExtensionToaster: React.FC = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, handlePermanentDismiss]);
+
+  // Reset transient interaction state whenever the card closes. `opening`
+  // stays set through the close, so a picture of the card opening the store
+  // is never kept for the next open.
+  useEffect(() => {
+    if (!visible) { setPlateHover(false); setCtaActive(false); setCtaPressed(false); }
   }, [visible]);
 
-  // ─── Dismiss handlers ───────────────────────────────────────
-  const handleDismissSilently = () => {
-    setVisible(false);
-    if (timerRef.current) clearTimeout(timerRef.current);
-  };
-
-  const handlePermanentDismiss = () => {
-    try { localStorage.setItem(DISMISS_KEY, '1'); } catch { /* ignore */ }
-    setVisible(false);
-  };
-
-  const handleInstall = async () => {
-    try {
-      setOpening(true);
-      await window.electronAPI?.openExternal?.(CHROME_STORE_URL);
-    } catch (e) {
-      console.warn('[BrowserExtensionToaster] openExternal failed:', e);
-    } finally {
-      // Close immediately — user is in Chrome store now. Don't permanently
-      // dismiss so they can return next launch if they didn't install.
-      setVisible(false);
-    }
-  };
-
-  if (!visible) return null;
+  const item = reduced ? ITEM_REDUCED : ITEM;
+  const ctaDur = ctaActive ? CTA_IN : CTA_OUT;
 
   return (
-    <AnimatePresence>
-      {/* Backdrop */}
-      <motion.div
-        key="ext-backdrop"
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        transition={{ duration: 0.24 }}
-        style={{
-          position: 'fixed', inset: 0, zIndex: 9998,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: isLight ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.82)',
-          backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-        } as React.CSSProperties}
-        onClick={e => { if (e.target === e.currentTarget) handlePermanentDismiss(); }}
-      >
-        {/* Outer wrapper — neutral 1px border, no gradient, no animation */}
+    <GenieModal
+      open={visible}
+      label="BrowserExtensionToaster"
+      // A picture of the card opening the store is never one the next open shows.
+      keepPictures={!opening}
+      zIndex={9998}
+      onBackdropClick={handlePermanentDismiss}
+      onClosed={() => { const after = afterCloseRef.current; afterCloseRef.current = null; after?.(); }}
+      // Dims, never blurs: frosting the whole launcher behind the card left it
+      // unreadable (see 3a9901ae4, which set this for every onboarding scrim).
+      backdropStyle={{ background: isLight ? 'rgba(10,10,18,0.30)' : 'rgba(0,0,0,0.80)' }}
+      padding={16}
+      wrapStyle={{ width: '600px', maxWidth: '100%' }}
+      cardStyle={{
+        background: isLight ? '#F7F8FC' : '#1C1C1E',
+        /*
+          The edge inverts with the ground: a light hairline on the dark
+          card, a shadow on the light one, so the card sits on the app in
+          both themes rather than glowing against it in one.
+        */
+        boxShadow: isLight
+          ? 'inset 0 0 0 1px rgba(11,16,32,0.10),'
+            + ' inset 0 1px 0 rgba(255,255,255,0.80), ' + SHADOW_LIGHT
+          : 'inset 0 0 0 1px rgba(255,255,255,0.08),'
+          + ' inset 0 1px 0 rgba(255,255,255,0.06), ' + SHADOW_DARK,
+        fontFamily: FONT,
+        WebkitFontSmoothing: 'antialiased',
+      } as React.CSSProperties}
+      cardProps={{
+        role: 'dialog',
+        'aria-modal': true,
+        'aria-labelledby': 'ext-toast-title',
+        'aria-describedby': 'ext-toast-desc',
+        onPointerEnter: e => { if (!reduced && e.pointerType === 'mouse') setPlateHover(true); },
+        onPointerLeave: () => setPlateHover(false),
+      }}
+      shadow={isLight ? SHADOW_LIGHT : SHADOW_DARK}
+      radius={20}
+    >
+      {/*
+        ── SPLIT ─────────────────────────────────────────────────────
+
+        Two panes instead of a photograph with a caption. The type sits
+        on flat colour, so it needs no scrim and reads at full contrast;
+        the image sits in its own inset panel, so it is shown whole
+        rather than fading out under the text.
+
+        The panel is inset 8px from the card's top, right and bottom
+        edges with its own radius. That gap is what makes it read as a
+        separate object held inside the card rather than a second
+        column bleeding to the edge.
+
+        One layout for both themes. Only the ground and the ink
+        change; the image panel is the same object in each, because it
+        is a light photograph either way.
+      */}
+      <div style={{ display: 'flex', alignItems: 'stretch', minHeight: '440px' }}>
         <motion.div
-          key="ext-card"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="ext-toast-title"
-          initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.93, y: 22, filter: 'blur(10px)' }}
-          animate={reduced ? { opacity: 1 } : { opacity: 1, scale: 1,    y: 0,  filter: 'blur(0px)' }}
-          exit={   reduced ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 14, filter: 'blur(4px)', transition: { duration: 0.15 } }}
-          transition={{ type: 'spring', stiffness: 290, damping: 25, mass: 0.82 }}
+          // The genie pours the card out whole; a stagger on top of
+          // it would bring the content in twice. Reduced motion has
+          // no genie, so the column still arrives tier by tier.
+          variants={STAGGER} initial={reduced ? 'hidden' : false} animate="show"
           style={{
-            borderRadius: '24px',
-            border: isLight ? '1px solid rgba(0,0,0,0.08)' : '1px solid rgba(255,255,255,0.10)',
-            boxShadow: isLight
-              ? '0 32px 64px -16px rgba(0,0,0,0.14), 0 8px 32px -8px rgba(0,0,0,0.06)'
-              : '0 48px 120px -20px rgba(0,0,0,0.92)',
+            position: 'relative', zIndex: 2,
+            flex: '1 1 58%', minWidth: 0,
+            padding: '40px 28px 34px 40px',
+            display: 'flex', flexDirection: 'column',
           }}
         >
-          {/* Inner card */}
-          <div style={{
-            position: 'relative', width: '440px', borderRadius: '22px', overflow: 'hidden',
-            background: isLight
-              ? 'linear-gradient(155deg, #FAFAFD 0%, #FFFFFF 100%)'
-              : 'linear-gradient(155deg, #181A24 0%, #101116 100%)',
-            fontFamily: T.font,
+          <motion.div variants={item} style={{
+            fontSize: '12px', fontWeight: 500, letterSpacing: '-0.005em',
+            color: INK.quiet, margin: '0 0 22px',
           }}>
-            {/* Catch-light */}
-            <div aria-hidden style={{
-              position: 'absolute', top: 0, left: 0, right: 0, height: '1px',
-              background: isLight ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.12)',
-              pointerEvents: 'none', zIndex: 5,
-            }} />
+            Natively for Chrome
+          </motion.div>
 
-            {/* SVG noise grain */}
-            <div aria-hidden style={{
-              position: 'absolute', inset: 0, borderRadius: '22px', pointerEvents: 'none', zIndex: 4,
-              opacity: isLight ? 0.012 : 0.024, mixBlendMode: 'overlay',
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E")`,
-              backgroundSize: '180px 180px',
-            }} />
+          {/*
+            Light weight at display size. At 44px a 300 weight holds its
+            shape and reads as confident rather than loud; the same line
+            in semibold would compete with the image for attention.
+            Tracking closes up as size rises.
+          */}
+          <motion.h2 variants={item} id="ext-toast-title" style={{
+            fontSize: '44px', fontWeight: 300,
+            letterSpacing: '-0.035em', lineHeight: 1.02,
+            margin: '0 0 20px', color: INK.strong,
+          }}>
+            Skip the
+            <br />
+            Screenshot.
+          </motion.h2>
 
-            <div style={{ padding: '28px 24px 26px', position: 'relative', zIndex: 6 }}>
-              {/* Header — no border, just spacing (more open, less dialog-like) */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', fontSize: '10px', fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: t3 }}>
-                  <BrowserExtensionIcon color={T.indigo} size={13} />
-                  Browser Extension
-                </span>
-                <button onClick={handlePermanentDismiss}
-                  aria-label="Dismiss browser extension invitation"
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    width: '26px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: '50%', opacity: 0.35, padding: 0, transition: 'opacity 150ms, background 150ms',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; e.currentTarget.style.background = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.08)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.opacity = '0.35'; e.currentTarget.style.background = 'transparent'; }}>
-                  <X size={13} strokeWidth={2.2} color={isLight ? '#000' : '#fff'} />
-                </button>
+          <motion.p variants={item} id="ext-toast-desc" style={{
+            fontSize: '13.5px', lineHeight: 1.55, letterSpacing: '-0.008em',
+            color: INK.body, margin: 0, maxWidth: '300px',
+            textWrap: 'pretty',
+          } as React.CSSProperties}>
+            The page you are on goes straight to the assistant, so every
+            answer starts with the full context and none of the copying.
+          </motion.p>
+
+          <motion.dl variants={item} style={{
+            display: 'grid', gridTemplateColumns: 'repeat(3, auto)',
+            justifyContent: 'start', columnGap: '34px',
+            margin: '30px 0 0', padding: 0,
+          }}>
+            {FIGURES_STACKED.map(({ value, label }) => (
+              <div key={value}>
+                <dt style={{
+                  fontSize: '24px', fontWeight: 600, letterSpacing: '-0.03em',
+                  color: INK.strong, lineHeight: 1,
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {value}
+                </dt>
+                <dd style={{
+                  margin: '7px 0 0', fontSize: '12px', fontWeight: 500,
+                  letterSpacing: '-0.004em', color: INK.quiet, lineHeight: 1.2,
+                }}>
+                  {label}
+                </dd>
               </div>
+            ))}
+          </motion.dl>
 
-              <motion.div variants={STAGGER} initial="hidden" animate="show" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {/* Hero — custom browser-frame SVG, clean (no surrounding glow) */}
-                <motion.div variants={ITEM} style={{ textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
-                  <BrowserExtensionHeroIcon size={72} />
-                </motion.div>
+          {/* marginTop: auto pins the action row to the bottom of the
+              column however short the copy above it runs. */}
+          <motion.div variants={item} style={{
+            marginTop: 'auto', paddingTop: '34px',
+            display: 'flex', alignItems: 'center', gap: '22px', flexWrap: 'wrap',
+          }}>
+            {/*
+              Outlined, not filled. On a flat card a filled button is the
+              strongest object on the page and pulls the eye off the
+              image; a hairline outline says "button" at a fraction of the
+              weight. Hover is three quiet channels on one curve: the
+              outline and label brighten, a faint fill arrives, and the
+              arrow travels 3px. Press compresses the whole thing.
+            */}
+            <button
+              type="button"
+              onClick={handleInstall}
+              disabled={opening}
+              onPointerEnter={e => { if (e.pointerType === 'mouse') setCtaActive(true); }}
+              onPointerLeave={() => { setCtaActive(false); setCtaPressed(false); }}
+              onPointerDown={() => setCtaPressed(true)}
+              onPointerUp={() => setCtaPressed(false)}
+              onFocus={e => { if (e.currentTarget.matches(':focus-visible')) setCtaActive(true); }}
+              onBlur={() => setCtaActive(false)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                padding: '9px 14px',
+                borderRadius: '9px',
+                border: `1px solid ${isLight
+                  ? (ctaActive ? 'rgba(11,16,32,0.46)' : 'rgba(11,16,32,0.22)')
+                  : (ctaActive ? 'rgba(255,255,255,0.44)' : 'rgba(255,255,255,0.24)')}`,
+                background: isLight
+                  ? (ctaActive ? 'rgba(11,16,32,0.04)' : 'rgba(11,16,32,0)')
+                  : (ctaActive ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0)'),
+                outline: 'none',
+                cursor: opening ? 'progress' : 'pointer',
+                fontFamily: FONT,
+                fontSize: '13px', fontWeight: 500, letterSpacing: '-0.01em',
+                color: ctaActive ? INK.strong : (isLight ? 'rgba(11,16,32,0.84)' : 'rgba(255,255,255,0.88)'),
+                opacity: opening ? 0.55 : 1,
+                transform: ctaPressed && !reduced ? 'scale(0.97)' : 'none',
+                transition:
+                  `border-color ${ctaDur}ms ${EASE_CSS}, background-color ${ctaDur}ms ${EASE_CSS},`
+                  + ` color ${ctaDur}ms ${EASE_CSS}, opacity 200ms ${EASE_CSS}, transform 120ms ${EASE_CSS}`,
+              }}
+            >
+              <span>{opening ? 'Opening Chrome Web Store' : 'Add to Chrome'}</span>
+              <ArrowRight
+                size={14} strokeWidth={1.9} aria-hidden
+                style={{
+                  flex: 'none',
+                  transform: ctaActive && !reduced ? 'translateX(3px)' : 'translateX(0)',
+                  transition: `transform ${ctaDur}ms ${EASE_CSS}`,
+                }}
+              />
+            </button>
 
-                <motion.div variants={ITEM} style={{ textAlign: 'center' }}>
-                  <h2 id="ext-toast-title" style={{
-                    fontSize: '24px', fontWeight: 750, letterSpacing: '-0.025em', lineHeight: 1.2,
-                    color: t1, margin: '0 0 8px', fontFamily: T.font,
-                  }}>
-                    Faster answers. Fewer tokens.
-                  </h2>
-                  <p style={{
-                    fontSize: '13px', lineHeight: 1.66, color: t3,
-                    margin: '0 auto 16px', maxWidth: '340px', fontFamily: T.font,
-                  }}>
-                    The browser extension sends the active tab straight to the assistant — no screenshots, no copy-paste. Responses come back ~3× faster and use a fraction of the tokens.
-                  </p>
-
-                  {/* Benefit chips */}
-                  <div style={{
-                    display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px',
-                    maxWidth: '380px', margin: '0 auto',
-                  }}>
-                    {[
-                      { label: '~3× faster',  sub: 'responses' },
-                      { label: '−90% tokens', sub: 'per turn' },
-                      { label: 'Auto-detect', sub: 'coding pages' },
-                    ].map(({ label, sub }) => (
-                      <div key={label} style={{
-                        position: 'relative', overflow: 'hidden',
-                        padding: '9px 6px',
-                        borderRadius: '12px',
-                        background: isLight
-                          ? 'linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(255,255,255,0.7) 100%)'
-                          : 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(15,23,42,0.5) 100%)',
-                        border: isLight
-                          ? '1px solid rgba(99,102,241,0.14)'
-                          : '1px solid rgba(99,102,241,0.22)',
-                        boxShadow: isLight
-                          ? 'inset 0 1px 0 rgba(255,255,255,0.7)'
-                          : 'inset 0 1px 0 rgba(255,255,255,0.06)',
-                        textAlign: 'center',
-                      }}>
-                        {/* Specular gloss sheen overlay — claymorphic depth */}
-                        <span style={{
-                          position: 'absolute', inset: 0, borderRadius: 'inherit',
-                          background: isLight
-                            ? 'linear-gradient(135deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.01) 50%, rgba(0,0,0,0.02) 100%)'
-                            : 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.01) 50%, rgba(0,0,0,0.06) 100%)',
-                          pointerEvents: 'none', zIndex: 1,
-                        }} />
-                        <div style={{ position: 'relative', zIndex: 2, fontSize: '11.5px', fontWeight: 750, color: t1, letterSpacing: '-0.01em', fontFamily: T.font, lineHeight: 1.2 }}>{label}</div>
-                        <div style={{ position: 'relative', zIndex: 2, fontSize: '9px', fontWeight: 600, color: t3, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '3px', fontFamily: T.font }}>{sub}</div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-
-                {/* CTAs */}
-                <motion.div variants={ITEM} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <IndigoCTA
-                    label={opening ? 'Opening Chrome Store…' : 'Install on Chrome'}
-                    onClick={handleInstall}
-                    disabled={opening}
-                    reduced={reduced}
-                  />
-
-                  <button onClick={handlePermanentDismiss}
-                    aria-label="Dismiss browser extension invitation"
-                    style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      fontSize: '11px', fontWeight: 700, letterSpacing: '0.18em',
-                      textTransform: 'uppercase', color: t4, padding: '4px 0',
-                      width: '100%', textAlign: 'center', transition: 'color 150ms',
-                      fontFamily: T.font,
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.color = t3)}
-                    onMouseLeave={e => (e.currentTarget.style.color = t4)}
-                  >
-                    I don't want to
-                  </button>
-                </motion.div>
-              </motion.div>
-            </div>
-          </div>
+            <button
+              type="button"
+              onClick={handleNotNow}
+              style={{
+                background: 'none', border: 0, padding: '9px 0',
+                cursor: 'pointer', fontFamily: FONT,
+                fontSize: '13px', fontWeight: 500, letterSpacing: '-0.008em',
+                color: INK.faint,
+                transition: `color 200ms ${EASE_CSS}`,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = INK.body)}
+              onMouseLeave={e => (e.currentTarget.style.color = INK.faint)}
+              onFocus={e => (e.currentTarget.style.color = INK.body)}
+              onBlur={e => (e.currentTarget.style.color = INK.faint)}
+            >
+              Not now
+            </button>
+          </motion.div>
         </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-};
 
-// ─── Indigo CTA (jelly clay, mirrors VioletCTA from TrialPromoToaster) ───
-const IndigoCTA: React.FC<{ label: string; onClick: () => void; disabled: boolean; reduced: boolean }> = ({
-  label, onClick, disabled, reduced,
-}) => {
-  const [hovered, setHovered] = useState(false);
-  const isLight = useResolvedTheme() === 'light';
+        <div style={{ flex: '0 0 40%', padding: '8px 8px 8px 0', display: 'flex' }}>
+          <div style={{
+            position: 'relative', flex: 1,
+            borderRadius: '14px', overflow: 'hidden',
+            background: '#E6E8EE',
+            boxShadow: isLight ? 'inset 0 0 0 1px rgba(11,16,32,0.07)' : 'none',
+          }}>
+            {/* The image. A slow push-in scoped to the panel, so the
+                Chrome mark breathes while the column holds still. */}
+            <div aria-hidden style={{
+              position: 'absolute', inset: 0,
+              backgroundImage: `url(${chromeArt})`,
+              backgroundSize: 'cover',
+              backgroundPosition: '92% 50%',
+              transform: plateHover ? `scale(${1 + PLATE_ZOOM})` : 'scale(1)',
+              transformOrigin: '70% 50%',
+              transition: reduced
+                ? undefined
+                : `transform ${plateHover ? PLATE_ZOOM_IN : PLATE_ZOOM_OUT}ms ${EASE_CSS}`,
+              willChange: reduced ? undefined : 'transform',
+              pointerEvents: 'none',
+            }} />
 
-  return (
-    <motion.button
-      onClick={onClick}
-      disabled={disabled}
-      onHoverStart={() => setHovered(true)}
-      onHoverEnd={() => setHovered(false)}
-      whileHover={reduced || disabled ? {} : { scale: 1.015, y: -1 }}
-      whileTap={{ scale: 0.985 }}
-      aria-label="Install Natively browser extension on Chrome"
-      style={{
-        position: 'relative', width: '100%', height: '48px', overflow: 'hidden',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        paddingLeft: '22px', paddingRight: '22px', borderRadius: '15px', border: 'none',
-        background: disabled
-          ? 'rgba(99,102,241,0.3)'
-          : 'linear-gradient(135deg, #6366F1 0%, #4F46E5 50%, #4338CA 100%)',
-        boxShadow: disabled
-          ? 'none'
-          : isLight
-            ? 'inset 0 4px 5px rgba(255,255,255,0.6), inset 0 -4px 5px rgba(0,0,0,0.15), 0 8px 22px rgba(79,70,229,0.28)'
-            : 'inset 0 4px 5px rgba(255,255,255,0.22), inset 0 -5px 6px rgba(0,0,0,0.45), 0 10px 30px rgba(99,102,241,0.4)',
-        cursor: disabled ? 'wait' : 'pointer', fontFamily: T.font, outline: 'none',
-        opacity: disabled ? 0.7 : 1,
-      }}
-    >
-      {/* 3D Jelly Gloss Highlight overlay */}
-      {!disabled && (
-        <span style={{
-          position: 'absolute', top: '2px', left: '8px', right: '8px', height: '35%',
-          borderRadius: '9999px', background: 'linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.05) 100%)',
-          filter: 'blur(0.3px)', pointerEvents: 'none', zIndex: 4,
-        }} />
-      )}
-
-      {/* Shimmer */}
-      {!reduced && !disabled && (
-        <motion.div aria-hidden
-          style={{
-            position: 'absolute', inset: 0, pointerEvents: 'none',
-            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 50%, transparent 100%)',
-            transform: 'skewX(-14deg)', zIndex: 2,
-          }}
-          animate={{ x: ['-130%', '230%'] }}
-          transition={{ duration: 1.8, ease: 'easeInOut', repeat: Infinity, repeatDelay: 5.5 }}
-        />
-      )}
-
-      <span style={{ position: 'relative', zIndex: 3, fontSize: '13.5px', fontWeight: 750, color: '#fff', letterSpacing: '-0.015em' }}>
-        {label}
-      </span>
-
-      {/* Trailing icon */}
-      {!disabled && (
-        <div style={{
-          position: 'absolute', right: '10px', top: '50%', zIndex: 3,
-          width: '30px', height: '30px', borderRadius: '50%',
-          background: 'rgba(255,255,255,0.16)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2), 0 2px 4px rgba(0,0,0,0.06)',
-          transition: 'transform 200ms ease',
-          transform: hovered ? 'translateY(-50%) scale(1.05) translateX(2px)' : 'translateY(-50%) scale(1) translateX(0)',
-        }}>
-          <ArrowRight size={14} strokeWidth={2.4} color="#fff" />
+            {/* Close sits on the image panel, which is light in both
+                themes, so its ink is dark in both. */}
+            <button
+              type="button"
+              onClick={handlePermanentDismiss}
+              aria-label="Close"
+              style={{
+                position: 'absolute', top: '8px', right: '8px', zIndex: 2,
+                width: '30px', height: '30px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: 0, cursor: 'pointer',
+                background: 'none', border: 0, borderRadius: '8px',
+                color: CLOSE_LIGHT.rest,
+                transition: `color 180ms ${EASE_CSS}, transform 160ms ${EASE_CSS}`,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = CLOSE_LIGHT.hover; }}
+              onMouseLeave={e => { e.currentTarget.style.color = CLOSE_LIGHT.rest; e.currentTarget.style.transform = 'scale(1)'; }}
+              onMouseDown={e => { e.currentTarget.style.transform = 'scale(0.92)'; }}
+              onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+            >
+              <X size={14} strokeWidth={2} color="currentColor" />
+            </button>
+          </div>
         </div>
-      )}
-    </motion.button>
+      </div>
+    </GenieModal>
   );
 };
 

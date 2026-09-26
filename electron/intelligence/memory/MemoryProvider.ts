@@ -39,6 +39,13 @@ export interface RecallOptions {
   /** Hard timeout in ms (live: 300–800; global: 2000–5000). */
   timeoutMs: number;
   maxResults?: number;
+  /**
+   * Also return where each memory came from (tags, date). OFF by default
+   * and asked for ONLY by the Launcher's memory search: the live-answer recall renders
+   * tags into its provenance block (context-os/hindsightEvidence), so turning this on
+   * there would change answer prompts.
+   */
+  includeProvenance?: boolean;
 }
 
 export interface RecalledMemory {
@@ -46,6 +53,8 @@ export interface RecalledMemory {
   score?: number;
   source?: string;
   tags?: string[];
+  /** Only with includeProvenance: when the fact happened or was mentioned (ISO). */
+  date?: string;
 }
 
 export interface MemoryProvider {

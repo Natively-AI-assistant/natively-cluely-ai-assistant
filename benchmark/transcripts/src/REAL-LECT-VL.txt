@@ -1,0 +1,809 @@
+# id: REAL-LECT-VL
+# title: IPPCR 2015: Conceptual Approach to Survival Analysis
+# source: https://www.youtube.com/watch?v=dYorCZaF8ag (NIH VideoCast, human-authored English captions)
+# S1: lecturer / audience (captions have no diarization)
+S1: I'm dr. Laura lee johnson. I'm at the united states food and drug administration.
+S1: Some people call this time to event analysis.
+S1: I'll probably call it survival. That event may not just be death of the it can be a lot of other things.
+S1: I'm going to be honest with you.
+S1: This lecture of all the lectures that we go through, especially the statistical epidemiology ones, this one is probably the most difficult.
+S1: A lot of classes, if you're getting a master's or Ph.D., and this was the topic covered, this would be toward the end of your course work in a master's, might be in the second or third year of a Ph.D.
+S1: Program. We're going to cover a lot in 90 minutes.
+S1: You may need to rewatch this video a couple times.
+S1: I don't want anyone to be worried or scared.
+S1: What we cover is not going to make or break you on the exam.
+S1: The goal is everybody takes another step or two forward trying to understand the ideas and tissues so when you're reading a manuscript, when you're proof reading somebody's protocol, if you're on an institutional review board, something like that, that you have an idea what
+S1: may MAKEfá 3 or not make sense answer you can ask questions, or know that you need to find a statistician WHO specializes in this area to ask additional questions.
+S1: Again, is the standard disclaimer. Our objectives.
+S1: We're going to talk about some nitty gritty, but this is very conceptual.
+S1: To give you some vocabulary that gets used, and some of the saturdayical methods.
+S1: These are the -- statistical methods.
+S1: By the end of the evening you should understand how to interpret a Kaplan Meier graph and what that means.
+S1: We're going to talk about Cox models, how to interpret these covariates that you may see spinning out of the machines when you try to do analyses, and also, understand some of the basic assumptions.
+S1: And when you don't meet those assumptions, some of the things that can go wrong.
+S1: So I'm going back to one of the early examples that I gave and talk about mother infant HIV transmission.
+S1: So this orange fall example was worked out by dennis dixon WHO worked on a lot of studies and sat on their data safety monitoring board.
+S1: Dizzy dove dean was able to slow the progression of HIV in adults with advanced disease.
+S1: They powered this study to detect a 33% transmission rate.
+S1: So they wanted to go from 30% to 20% transmission.
+S1: How do you figure out transmission rates?
+S1: Well, realistically, you need to counts the number of babies that are born that eventually sero convert.
+S1: So it's really the number of events that you're calculating, then you have to have the total number of interest.
+S1: So when you're developing these sample sizes, kind of have to back into this.
+S1: Also account for dropouts and loss to follow-up.
+S1: So the data monitoring board met twice a year to monitor the safety, and then if I remember in our lecture when we were talking about different types of randomized designs, I talked about one that was called a group sequential design.
+S1: And this is when you do an efficacy review, part way through your study, but not at the end of the study.
+S1: So these are typically preplanned reviews, and this case that first efficacy review took place february of 1994.
+S1: And was supposed to include mothers that have been enrolled up to december, 1993 and their babies.
+S1: And what these folks looked at on that monitoring committee was this Kaplan Meier curve.
+S1: Set of curves on this graph.
+S1: So there is a p value, comes from a log rank test that we'll talk about in a half hour.
+S1: But the probability of transmission was on the y axis, going from 0 to 40%.
+S1: And the number of weeks was along the x axis.
+S1: And what they do -- haul io notice down here below is how many babies were in the placebo group verses the zidovudine group.
+S1: If their mothers were receiving one or the other.
+S1: This is part way through, we don't have full information at 72 weeks on all the babies.
+S1: Sometimes they died for other causes.
+S1: Sometimes they were loss to follow-up.
+S1: Sometimes they just aren't that old yet.
+S1: What you've gained doing a survival analysis is something called censoring.
+S1: So I can follow these infants up until the time as much information as I have on them, and use that as part of the analysis.
+S1: If that infant is only 24 weeks old, but still hasn't sero converted, I can use that information in my analysis.
+S1: What happened, when they looked at compared the 72 week data, you'll notice on placebo they thought they see a 30% rate which isn't excluded by the confidence interval here.
+S1: They saw lower. It's used to common.
+S1: We joke one of the best times you get medical is in a clinical trial.
+S1: People are healthier once they enroll in our trials.
+S1: I had -- one that we were looking at people following until death.
+S1: One of the criteria, you had to be 6 months before death.
+S1: We were still following people 18, 24 months ratter.
+S1: They weren't dying. Good for them but from a study standpoint there are some issues there.
+S1: Anyways, zidovudine, we thought this is going to drop 30%, 20%.
+S1: This first interim analysis, 8.3% transmission rate was a pretty tight confidence interval on it.
+S1: So what do you do? Maybe we were doing randomization, perhaps the demographics were different between the babies.
+S1: Maybe the data is not as clean as you thought.
+S1: There are a lot of other issues that could be going on here, not all of which the Kaplan meiers curves will be able to tell US.
+S1: What the dsmb did, they went pack to the study team and said please check all these following items, get back in touch with US.
+S1: So -- this is my -- in two different things that I have to prepare.
+S1: So what are those curves telling US?
+S1: What is it event? When you have time to event analysis or survival analysis, you're outcome variable is not a single value, really.
+S1: You have an volunteer, in this case, mother infant HIV transmission.
+S1: Which really is baby testing positive.
+S1: And at that point in time kind of hard with some of the assays, so you had to have analogy also for figuring out what was really positive.
+S1: -- analogy also. Then where is the time origin?
+S1: Does it start at birth. Typically we see both of these at 0, then they would build up.
+S1: Every one should be 0 transmissions at the beginning, that doesn't always happen.
+S1: But again there are ways to handle this that we'll discuss.
+S1: To have an event, a time origin, you have a time scale.
+S1: Infant, there are a lot of things that kill infants.
+S1: We measure that in weeks. And then you have to define the time at which the event occurs.
+S1: I'm not watching you and magically know the moment you sero convert.
+S1: I have a testing setup, and you're coming in at certain points in time.
+S1: So sometimes you have things that are intraval measured, like I know that you weren't positive at 12 weeks brew you are positive at 24 weeks, so you sero converted somewhere in there.
+S1: Or it might be that I can do a more continuous measurement, like time at death, we pretty much know the exact date that you died.
+S1: It depends where you are. But usually.
+S1: So what is that capon meyer curve doing?
+S1: It's one way to estimate vile or in this case a transmission of HIV.
+S1: It's nice, simple, you can compute these by hand.
+S1: You can do this on a napkin.
+S1: You can have stratification factors. That graph they basically stratified based on study arm.
+S1: I could have done it by boys and girls, within a study arm I could have had a lot of different curbs on there.
+S1: The problem is there is no sensible interpretation for competing risk.
+S1: So what's a competing risk? I'll give you a joke example later on but a competing risk is basically how do you not get transmission of HIV?
+S1: Well, if your infant dies of a do I rial infection at 6 weeks you don't know if they're going to sero convert at 24 weeks.
+S1: That's a competing weeks. Because you have one event you're no longer ought risk for the other event.
+S1: It just can't happen. If you die of cancer, you can't die of a heart attack.
+S1: This is the reason you'll see people get all cost mortality when they're really looking at survival mature you can't look at covariates.
+S1: I can stratify but the Cox model will be richer.
+S1: I can put continuous variables and multiple variables in there.
+S1: Eventually, if I have a bunch of stratification factors, I may only have 3 or 4 people in each curve.
+S1: That's not enough to have a robust curve t Kaplan Meier, though, that is a lot of benefits.
+S1: It's a work horse for US, time to event unless.
+S1: If you look through journals, we use it in animal science, a lot of places.
+S1: You will see these curves. But again, this is what they got to look at on the ds and m and had to make a decision based on them.
+S1: Eventually after they got more information you'll hear more about this a little bit more from pamela shah.
+S1: When she talked about data monering.
+S1: The dsmb recommended stopping after very careful review of toxicity, transmission rates, et cetera.
+S1: They talked to trial leaders, negative agreed to stopping the studies.
+S1: Zidovudine was provided to everybody in the control group.
+S1: The united states public health service modified their national guidelines as did many groups independent various other countries around the world.
+S1: That's a little bit of an example how we use Kaplan Meier, in part of the decision that it might inform.
+S1: So why do we even use survival analysis?
+S1: Let's say you have a new cancer treatment.
+S1: I want to know if it extends a person's life five months longer than the current treatment.
+S1: Survival is all about events and when they happen.
+S1: So it might be death. So once you're dead, you're dead.
+S1: In general. Could be infections. So an infection may come, you may never get an infection.
+S1: You may get a recurring infection.
+S1: You have to figure out if you cleared the last infection or is this a rand new one?
+S1: Might be a myocardium infarction, might be hospitalizations, you couldcould be recurrence of cancer after treatment.
+S1: But some things may never come.
+S1: There is an idea if I wait long enough, which some parents may say, if I wait long enough my child will get married.
+S1: That may not actually happen. The idea again was survival analysis, if I wait wrong enough we will all die.
+S1: With soccer goals, it may be a long time before I score a goal even with nobody around me.
+S1: But a light bulb fails, computer crashes, engineering all of this work on a very regular basis, they call it failure analysis.
+S1: They call it a little bit different but they have different names.
+S1: Same he canism. That cap relation meyer paper was originally a page and a half.
+S1: And it was because you had people from 2 different disciplines, one of them, the nearing scientist WHO wrote basically the same paper, submitted it to the journal of american statistical association.
+S1: The editor said work together, give US one paper.
+S1: Don't -- we're not publishing both of these.
+S1: But another place where this comes up is a balloon filling with air, when does it burst?
+S1: Not in time but measured by the milliliters of air.
+S1: Sometimes in quality control you're also using these types of measures.
+S1: So what about hypertension? A lot of times I get asked why don't you just do a logistic regression?
+S1: At five years, are these two groups different, yes or no.
+S1: How many events do they have?
+S1: You're done. But that doesn't put in all that research information you found from censoring.
+S1: So I think john powers talked a little bit about trying to -- when do you do your measurement.
+S1: Let's say you have something that you think reduces flew symptoms.
+S1: One drug works in 3 days you've resolved your symptoms.
+S1: The other one, at 7 days you revolved your symptoms.
+S1: You want the 3 day drug.
+S1: If your measurement is at 10 days both look the same.
+S1: So realistically, even at 7 days they're going to both look the same.
+S1: Realistically, what survival analysis lets US do is as wrong as we're measuring for events on a fairly frequent time scale, we can peculiar up those nuances that -- their trajectory.
+S1: For people WHO are censored, we peculiar this information up -- pick this information up and use it.
+S1: So realistically, we want to follow people.
+S1: How many people have events? How many people die and when?
+S1: What intervention lowers blood pressure but then maybe 20 years people die, two years before a person WHO didn't take that intervention or medicine.
+S1: Do we want to know that?
+S1: Have we accomplished our goal by lowering their hypertension?
+S1: These are the types of questions that we have to ask.
+S1: It's not usually what you see in your phase 3 trials but what the epidemiologists start to look at.
+S1: It's also a story behind the Cox 2 inhibitors.
+S1: Now it's starting to be on several years ago.
+S1: What happened, the short-term studies, you were not seeing additional deaths when people were taking this class of drugs.
+S1: In fact, the curves, the hazardous functions, they crossed.
+S1: And so I DON'TxD SEEINGñr the Kaplan Meier, you wouldn't have picked up that there was a problem starting around 12-18 months.
+S1: So what I'm asked about a lot is people with lower blood pressure, bmi, body mass index, they eat blueberries, they all live longer.
+S1: This usually comes from an observational study.
+S1: Systems you see similar change in the outcome when you randomize a study, sometimes not.
+S1: These are the types of elements that many times we to the start to work in and develop, analyses that will use survival analysis.
+S1: Again, sometimes we are going to have an event based on a surrogate, so not on a direct measure of the event.
+S1: Something that we think will help predict the event.
+S1: It's actually very hard to develop those types of variables.
+S1: So what is survival? Survival is the type of analysis that deals with making inference about the event rates.
+S1: So you want to look at the rate at some time t, and what you're looking at is the rate among those people at risk, at that time t.
+S1: You want to look at median survival.
+S1: Not mean survival. So first red flag.
+S1: If someone talks about mean survival, they have to have measured the event on everything in their study.
+S1: So all the animals, all the people, all the whatever.
+S1: Everybody must have had an event that was measured in time.
+S1: Or they don't know what they're doing.
+S1: You have two options there. Median survival is what's typically talked about because usually in our studies, not every one had the event.
+S1: So now we're going to talk about how to measure time and event and some about the survival and hazard functions.
+S1: So what's a model? This is your basic linear regression model, a basic linear model.
+S1: Why is the outcome or response variable?
+S1: This beta not is the point where your line is going to cross if all these expressways are a zero, called -- Xs here a 0.
+S1: Betee one is going to talk about the relationship that x1, the covariate has with the outcome variable y.
+S1: X1 describes -- beta 1 describes the relationship between x1 and y given all these variables in the model.
+S1: Beta p describes the relationship between the xp and y.
+S1: So if this was -- let's say your outcome is systolic outcome, the x might be they were on drug, placebo, yes or no.
+S1: Might be sex, age, a lot of variables that would explain their systolic leadership.
+S1: So survival is a very similar model.
+S1: The basic model used by all these survival functions.
+S1: There is a baseline hazard. Then we have exponential of the linear redress.
+S1: We talk about the coefficient. You might see the Xs called progress notic factors instead of covariance or response variables.
+S1: So survival time to event, pretty much the same thing.
+S1: If you talk to your center for cities control and prevention colleagues they wanted to talk about time to event.
+S1: Scientists in other parts of medicine like if you're around the NIH clinical center they're going to talk about survival even if your event isn't don't.
+S1: Your out come variable is the event time.
+S1: So we've talked about these events.
+S1: Could be an HIV positive test, AIDS defining event.
+S1: Mother infant HIV transmission. Systolic blood pressure or cholesterol goes below a certain cut point.
+S1: A lot of different things. So bmj, I think I sent copies of these articles.
+S1: If not you can look it up.
+S1: On bmj, october, 2009 there was a follow-up of the mist trial.
+S1: It looked at the incidence of pregnancy after a miss carriage.
+S1: They had randomized women to two differents to handle a spontaneous abortion.
+S1: Then they wanted to follow up to say okay, so originally they're looking at infections and other issues, whether they had to use a backup with the initial plan.
+S1: But then they said does it impact your first live birth after the index miscarriage.
+S1: Remember there are a lot of things that might impact that live birth.
+S1: If you had multi miscagers before.
+S1: How old are you, a lot of other issues.
+S1: What is our time note nation?
+S1: I talked about little t. Hear, little t is time access.
+S1: T equals 0 is your time origin, when I start looking for events.
+S1: I've started the stop watch. Capital t statisticians call a random outcome variable, the time that the event occurs.
+S1: So this little t lower case, the, baseline might be 0 months.
+S1: He then looking at 6, 2, 18, 24 months.
+S1: I want to do assessments then.
+S1: I'm going to talk about the probability that time of event, that capital t, is greater than or equal to my little time t.
+S1: So what is the probability that might time to event is greater than or equal to 6 months, 12 months, 18, 24 months.
+S1: Whenever you're trying to design a study and talk about tend point remember that orange fall example.
+S1: You have to define the event.
+S1: How? You can't just say mother infant transmission.
+S1: How do you actually define it?
+S1: What is the time origin? Sometimes if I have an oncology study the time of surgical resection or time of designation or the time and date they started chemotherapy.
+S1: What is the origin? When does the clock start ticking in this study?
+S1: If I'm talking about lunk carbon, year.
+S1: Flu is days or hours. So then what?
+S1: You need to know the time the event occurs.
+S1: You may or may not need to use covariates.
+S1: So I had a study that -- and we'll talk about it a little bit later, a herpes study.
+S1: Part of what we were looking at was time to when they had transmission rate next episode.
+S1: So the question was were we sure that they cleared the episode that we started with?
+S1: Could you to a logistic remission model?
+S1: That's just a yes or no outcome.
+S1: You could but you're going to lose a lot of information.
+S1: It won't be the focus of this lecture.
+S1: So what's this choice of time scale?
+S1: Typically, study time, you're going to use diagnosis or the team that people start treatment in clinical trials.
+S1: If you're doing occupational epidemiology, think about the nickel refinery example, many times it's time of first exposure.
+S1: You use angela, epidemiology if I'm trying to see how long you're going to live, typically your origin is the time of birth for the study subject.
+S1: Not as simple to figure out in some countries compared to others.
+S1: Treatment for cancer. Event might be death.
+S1: Time origin, might be date of surgery.
+S1: Scale, maybe you're going to measure in months.
+S1: Let's say it's pancreatic cancer mature the time from surgical treatment to death is what we're trying to measure.
+S1: And what we want to graphic is this probability of the time for surgical treatment to death being great you are than or equal to some generally step in time.
+S1: This is what we got for one of our pancreatic cancer studies.
+S1: We're measuring the proportion of people alive.
+S1: At surgery when they're enrolled in the study, everybody was alive.
+S1: And then over time, this line goes down.
+S1: Sometimes it's flat. But again, looking at death.
+S1: This line is always -- what we call mon tonically decreasing.
+S1: It's going down or staying flat.
+S1: It is not going back up.
+S1: So by 9 months we're down to, I think it was about 25%.
+S1: People that were still alive. So s of 9, survival at 9 months, is 25%.
+S1: Or .25. How do we say this?
+S1: You can say 25% is the probability, the time from surgical treatment to death is great irrelevant than 9 months or you can say 9 month post resection survival is 25%.
+S1: But again if I follow these patients longer enough, eventually they will have all died.
+S1: The vile function can be expressed a couple ways.
+S1: It might be the way I had the picture but sometimes we have that curve going up instead of down.
+S1: So you may say -- may want to plot the percent of people alive on the y axis or the people that had the event on the y axis.
+S1: Either way I still have a survival function.
+S1: Proportion of population still without the event by time t is what we're trying to measure.
+S1: Now, I say this in english, in words.
+S1: Like this are other ways we express it especially if we're trying to be nice and kind to the family.
+S1: So if your event equals death, scale is months, since you started treatment.
+S1: You might say that survival at time t if you're a statistician equals .3 at t equals 60.
+S1: Everybody else looks at the statistician and says what that that mean.
+S1: This means your five year survival probability is 30%.
+S1: 60 months is 5 years. Or you could say 70% of patients die within the first five years.
+S1: When you're advising a patient, I probably want to go for five year survival is 30%.
+S1: So what is the hazardous function?
+S1: Hazard function underlies all of this survival business.
+S1: With we look at what's called an incidence rate or my favorite out of europe, the force of mortality.
+S1: This is your instantaneous risks. These are all the little bits I'm adding up to make the curve.
+S1: The trick is, is the hazard constant or not?
+S1: This is your problem with the proportional hazards and a lot of assumptions that happen in survival analysis.
+S1: As we assume, your risk of death or risk of having the event in month one is the same as having the event in month 6 or month 25.
+S1: Month 60. That's not usually the case.
+S1: Think about it if you're a clinician, think about after having a myocardial infarction.
+S1: If you can live the first 30 days, just the first few, your chances of living are pretty good, longer term.
+S1: So a lot of times your risk of an event happening is much higher at certain points in time.
+S1: It may be that the risk goes down or up, but the idea is is it changing or not?
+S1: Depending which textbook you read you may see this upside down y or h of tt event rate at that time t, is what the hazard function is trying to measure.
+S1: This is your key function. But what's nice about it is that we use it and we can estimate it if we have censoring or something called truncation, we'll describe those in a few minutes.
+S1: So if I meant to describe the hazard function instead of the survival function, what I might say is land of t equals 1%, t equals 12 months.
+S1: That's my stat side. My now talking to my parents side, one year, so at 12 months, patients are dying at a rate of 1% per month.
+S1: So why is that? Because, again, that rate may change depending if I'm looking at months, years, days.
+S1: I may also say at one year, the chance of dying in the following month is 1%.
+S1: It might be that at a year-and-a-half, the chance of dying in the following month is 2%.
+S1: This lets you have a look at every tiny bit in time.
+S1: Also why scale maters. Here, the hazard function again, if I have 120,000 people die in one year, similar to have having 10,000 die in a month.
+S1: 2500 die in a week or 357 die in a day.
+S1: Instantaneous, moving one increment in time you must define what that encroachment unit is.
+S1: So I mentioned the herpes example.
+S1: And this was the recurrens of herpes lesions after treatment for a primary episode.
+S1: Event was recurrent. Again, you have to have well defined criteria for this.
+S1: Then we had to think about the time origin, how do you define the end of the primary episode?
+S1: Not as easy as you think.
+S1: It's not only you as a clinician defining the primary episode, really, these patients are at home.
+S1: You've got to get the people that are your study subjects to define the end of the primary episode also.
+S1: But first you have to lock all the doctors in arrogator make them decide how to define these two elements.
+S1: The time scale was fairly easy.
+S1: It was going to be months from end of primary episode.
+S1: But time from end of the primary episode to first recurrence is what we wanted to measure.
+S1: Again, these all elements that have to be well defined.
+S1: If you say I want to -- knock half a month off this, that could be measurement error.
+S1: Eventually when you're trying to decide not only this information, you need to think about what's a clinically important difference between study arms?
+S1: An example from the textbook for epidemiology looked at that toxin effect on lung cancer risk.
+S1: A famous study of occupational exposure at a nickel factory, they were looking back at their old records from the workplace, and saying okay, event was death from lung cancer, origin, estimated their first exposure time as beginning of employment at the refinery.
+S1: Well, since lung cancer takes decades to develop, typically, that was okay.
+S1: Like it might have been off by a little bit.
+S1: It was considered that was a reasonable way to define the origin.
+S1: This scale was years since the first exposure.
+S1: And time. Measuring first employed to death from lung cancer.
+S1: You want to look at population mortality, you have the event death, time origin, date of birth, the time scale, typically we measure in years.
+S1: We're looking at population mortality, and what we're going to measure is your age at death.
+S1: My favorite example was the volume of air a balloon can tolerate.
+S1: The event was the balloon bursting.
+S1: What we're measuring kind of, quote, unquote time, was the milliliter of air infused.
+S1: So how many milliliters of air had gone in.
+S1: It was in a special chamber so we had a fairly good idea how much air was in there.
+S1: The origin was supposed to be 0-milliliters of air tin balloon.
+S1: What we're looking at is the hilarities in the air when it burst.
+S1: So what are some of the unique features to survival analysis?
+S1: Some event is involved, whether it's marriage, balloons bursting, death, or HIV transmission or sero positivity.
+S1: Progression is along some dimension, typically time, until the event happens.
+S1: The length of progression is vary.
+S1: That's exactly what we want to measure.
+S1: If it doesn't vary at all you probably don't have to do this analysis.
+S1: The event may not happen while you're watching them.
+S1: That's one of the unique features that we have to put in here.
+S1: Sample size considerations. Again since the event may not happen for every one, we have to base our sam size on the number of events we expect to see.
+S1: We talked about this in the sample size lecture, also.
+S1: Covariates need to be considered. When I try to think about simple size, think about everything else you want to put in the model but also think about the implications of an having an event.
+S1: Are older people more or less likely to have an event.
+S1: What's your case mix you're going to see in your study subjects?ry trying to get people that have had higher exposure letters so they're more likely to have an event.
+S1: You'll see these cardiovascular studies, people WHO are already at a high risk of having a heart attack.
+S1: Those are the people I want in my study.
+S1: Because they're trying to ensure that they get a higher number of events.
+S1: I mentioned sensoring a little bit.
+S1: A lot of times people don't talk about truncation.
+S1: I think it's really important especially if you're doing randomized trials.
+S1: Truncation is bought entering a study.
+S1: Right truncation means you only sample the people WHO have an volunteer of interest.
+S1: Let's say you go to a cancer registry and get everybody out of there.
+S1: The problem with this is you're going to end up with an under-estimate.
+S1: Of your survival function. Why? Because people had to have their cancer actually recorded.
+S1: They may not be listed in the registry.
+S1: Maybe they went undesignated. Maybe they never got listed.
+S1: But then you're never going to observe them.
+S1: They're never going to be in your study.
+S1: This is your issue with right truncation.
+S1: Left truncation, short survival may be overlooked.
+S1: Ending up with weird estimates. Let's say I only enroll people 65 or older.
+S1: Cardiovascular health study is an example.
+S1: If I do that, people that died earlier are never in there.
+S1: So the short survivers, people that died before 65, I'm nerve watching them.
+S1: Maybe that matters, maybe. No. It depends when you're thinking about how to generalize the information, truncation matters.
+S1: They never made it to your study to look at and talk about.
+S1: What about census irrelevanting? Right referencing is -- censoring?
+S1: [Technical difficulties]. If I'm going to follow everybody, my study is 5 years, I'm shutting everything down because I need to do my data analysis.
+S1: A bunch of people haven't had the event, I censor then.
+S1: I say up until this point they did not have the event for the study.
+S1: But I know that they haven't had the event.
+S1: That's right censoring. Left censoring is a little different.
+S1: This is when my observed time is greater than the survival time but I know this subject exists.
+S1: And we'll talk about that in a few slides.
+S1: Here independence is key regardless whether you have trunk allegation or censoring -- truncation or censoring, the main assumption, all these analysis methods make is that it's independent of the outcome.
+S1: We'll talk more about that in the next hour.
+S1: So left truncation, this is talked about more in epidemiology.
+S1: In medical studies you control that entry.
+S1: You're doing aramized trial I should say, not all medical studies do.
+S1: You 0 out everything. At the time of designation, treatment, wherever you choose to do your randomization.
+S1: The key assumption with left truncation, people that enter the study at some time point t are a random sample of the population that's at risk at that time point.
+S1: So as long as this is a random sample off people that we're at risk for the event, you're okay.
+S1: That allows you to estimate this hazard function in a valid way.
+S1: That's part of this independence that gets talked about.
+S1: Basically, can you generalize your study sample.
+S1: Censoring. Censoring is when you have these incomplete observations, right?
+S1: Right censoring, everything deals with right censoring.
+S1: Doesn't matter. Kaplan Meier deals with right censoring just fine.
+S1: Left censoring isn't at easy. What's left censoring?
+S1: Let's say I want to go out and measure the age that people start smoking.
+S1: I start interviewing people at 12 years old.
+S1: The 12-year old says I already started smoking.
+S1: I'm a regular smoker. Doesn't know when he or she started smoking regularly.
+S1: Now, a lot of people will say your problem is your inclusion exclusion criteria.
+S1: You should have asked them at age 5 or 7.
+S1: This is an idea of left censoring.
+S1: I know the event occurred. This kid is in my study.
+S1: But the event occurred before I started watching him.
+S1: You had the same problem inside a meglo virus infection.
+S1: They were running a study of the incident.
+S1: They were bringing kids into the study, two subjects had been infected by enrollment.
+S1: So they go to enrollment, find out they're effected.
+S1: I know they had the event.
+S1: It was sometime before they hit my study.
+S1: So then you have to decide, well, do I count them?
+S1: Do I just exclude them and say if you already have the infection you're out, but what am I trying to measure?
+S1: By removing them or keeping them out of the study, does that keep me from having valid estimates of what I'm interested in?
+S1: Going back to right censoring, this issue of withdrawals.
+S1: For you to meet this independence assumption, withdrawing from the study has to be unrelated to subsequent risk of event.
+S1: Accidental death usually okay. But again the reason we will record all these adverse events is that maybe you say this person fell in front of the bus.
+S1: Well, if your new therapy causes people to have problems with their balance and they're likely to fall and have these issues, it may not be that independent as you might think.
+S1: Do you want to get information.
+S1: People used to say if they move out of the area, that is independent censoring.
+S1: Because people WHO are secure are unlikely to move.
+S1: That is not the case. I watch a lot of people move out of the country, go to different places for last ditch therapies.
+S1: You may not assume that I of independent censoring just because somebody moves.
+S1: You need to understand why they're moving, how that may be related to the event of interest.
+S1: A lot of times we tell our investigators you must keep tracking them.
+S1: Maybe they cannot show up every day for your study.
+S1: Many they can't even continue the treatment of interest.
+S1: Once they're in your study you want to keep tracking them, even if you're just trying to check in and make sure if they're alive or dead.
+S1: Or had your event or didn't.
+S1: What is right censoring? You'll see empty and solid circles.
+S1: A lot of times if you see a solid circle or solid symbol in the graph, that means somebody had the event.
+S1: The open circles means that they were censored.
+S1: So in this case we're enrolling patients from 0 to 6 months, and I just ordered a handful of them here.
+S1: And we followed them but the longest we were going to follow was to angela 24 months.
+S1: We are -- angela 24 months.
+S1: We're going to follow them up to 2 years.
+S1: These kids got to 24 months.
+S1: , they hadn't had the event.
+S1: We censored them. I knew from 6 to 24 months, patient 9 had not have an event.
+S1: This kid had been followed from 5 months to 24 months.
+S1: Never had the event. I want that information to be part of my analysis.
+S1: It's important to know that these kids never had the event.
+S1: So there are a lot of different types of censoring.
+S1: I talked about the main ones, right and left.
+S1: Sometimes they're called type one or type two.
+S1: Type one is when I'm going to follow everybody for the same amount of time.
+S1: Everybody is followed for one year.
+S1: Type two censoring might be I stopped observing when a set of events has occurred.
+S1: This happens in your engineering physical sciences group.
+S1: They're like well, okay, after four light bulbs failed we replace all of them.
+S1: You're sensing your other light bulbs, then there is random censorship.
+S1: More general than time one. This is what happens in your clinical studies.
+S1: We enroll people for a certain period of time and try to following them for a minimum period of time.
+S1: It varies. Depending when you enroll the amount of time I watch you will be different.
+S1: Capital t is our event time.
+S1: When you see a star next to it, that's your observation time so that that's going to be your event time, if they had an event, or the followup time if they were censored.
+S1: Your trick when you're using software.
+S1: Sometimes you have a failure indicator.
+S1: A lot of textbooks call this a delta.
+S1: Sometimes it's a censoring indicator. That's the exact opposite so you have to make sure which one your software pacsun going to use.
+S1: She WHO made this mistake once, has not made it again after.
+S1: So figure out if you're doing this in software you're supposed to put in a failure indicator and censoring indicater.
+S1: I'm going to say it again probably about 20 more times before we end today.
+S1: Key assumption for survival analysis is independent censoring.
+S1: If you do not have independent censoring you're going to have to figure out a way to set up a model to have independent sensoring or you'll have a lot of analysis and interpretation issues coming your way.
+S1: The idea of independent censoring is those people that are at risk at a certain time point in the study, any given time point in the study, are random samples of population at risk at that time point.
+S1: You have to do this all the way through the study group.
+S1: The assumption that you're trying to get here is that the has understood function can be estimated in a fair and unbiased valid way.
+S1: So if you don't have independent censoring you're going to have a bias estimate of the hazard function.
+S1: All the survival analyses are worthless.
+S1: Now, you can have independent censoring based with your covariate.
+S1: Censoring has to be independent within a given group.
+S1: It can depend on a variable in your model.
+S1: If you're using a Cox model, for example, let's say sensoring depends on age.
+S1: Depends on severity of disease. I can put that variable in my model.
+S1: And I'm okay. But does this mean among the people with similar values of that covariate x, censored subjects at similar risk of subsequent volunteers, as subjects with continued follow-up.
+S1: So it can be different. Censoring can be different in different study arms.
+S1: That's okay. We have a way to handle that.
+S1: An example. Five year follow-up. You have a bunch of patients WHO haven't died.
+S1: That's censoring. That was that simple example.
+S1: You have a bunch of patients, your event is death.
+S1: They haven't died. I censor them all.
+S1: I'm following the school group from age 5-25.
+S1: I talked about the kid WHO was smoking before I started watching them.
+S1: If I keep asking students when they start smoking and the answer is never, that's right censoring.
+S1: So I get to age 25, they still have never smoked.
+S1: I censor them, they haven't had the event of starting to smoke.
+S1: Early in a trial, older subjects aren't enrolled.
+S1: They get up through the study for a while.
+S1: They decide to start enrolling. They change their age limit on their execution exclusion criteria.
+S1: You've got a problem because the amount of time that those people could be on the study, not as long as all of the other folks on the study.
+S1: If I put age in my model, if I condition on age I'm okay.
+S1: I will have independent censoring given age.
+S1: If I don't condition on age the estimates will be biased, censusry is not independent.
+S1: All the risk sets are not representative of the greater population.
+S1: The cake away. Usually your time origin is time of enrollment or when the treatment of some sort begins.
+S1: The time access is the time that people are on study and right censoring the pretty common.
+S1: You're non randomized studies, time access a lot of times is age.
+S1: It can be@ [technical difficulties] I'm not going to see a cancer occurring because they all died of heart attacks.
+S1: So what am I supposed to say.
+S1: If and I have Kaplan Meier curve, how do I describe the hazard?
+S1: I would be describing the risk of cancer at time t, when the risk of death for an mi or any other reason doesn't exist.
+S1: That's not meaningful. What I want to say is the risk of cancer among those people at risk of cancer at that time.
+S1: So I'm going to kind of censor you in a way if you died from myocardial infarction.
+S1: If you died from a heart attack you were not at risk of having cancer.
+S1: So this is a fictitious example.
+S1: It's one that my friend craig came up with when we were trying to teach one day.
+S1: And craig grew up dear lake michigan and several parts of the world they do these things called pole lar bear plunges.
+S1: I grew up where this is warm so this strikes me as nuts.
+S1: This is where people might be on new year's day, they run into cold water or into water and come out.
+S1: Suppose dude raise money for action.
+S1: A lot of people do this.
+S1: So all of these numbers are made up to make an example.
+S1: Because it's easier than dealing with smoking and other he cans.
+S1: Polar bear plunge. You have this group of people and they start to do the polar bear plunge every year.
+S1: 3% of them die, from taking that dip on the first of january enlake michigan.
+S1: Where it's bitterly cold in jan, by the way.
+S1: 2% of males die from other causes than the polar bear plunge on an annual death rate.
+S1: 1% of females tidoctor all other -- die fr om all other causes.
+S1: These are annual death rates. I followed this group of people for ten years.
+S1: What I noticed is 25% of the women have died from taking a dip in lake michigan doing their polar bear plunge on the first of the year.
+S1: 24% of the men have died from taking a dip in lake michigan.
+S1: What are the headlines? Polar bear plunge kills women.
+S1: Not that it kills men. It's killing women.
+S1: You see these sensational headlines. I know it's only a 1% difference but still, you can see this happening, right?
+S1: Well, why does it happen? Because over a decade, 33.5% of women died from all other cautions, and 40% of the men died from all other causes.
+S1: There are more women to be harmed by the polar bear plunge than the men because over time, that male female ratio has changed.
+S1: When you have more women to harm you start getting these weird looking numbers.
+S1: People are always going to die of something.
+S1: Which means they cannot die of something else.
+S1: So if your event is being particular about some things, you need to think about what else is going to preclude that event from happening.
+S1: So, hard disease and smoking status, similar story.
+S1: Bottom line is to make inference about this observed hazard rate among subjects under observation at each time, you've got to figure out a way to interpret that event rate as if it's independent.
+S1: So what are some of the models?
+S1: We talked a little bit already about the Kaplan Meier.
+S1: Remember? It's our work horse, remember?
+S1: It said you could do it on a napkin.
+S1: I meant it. So how do you compute a Kaplan Meier?
+S1: I promised myself I was going to fix this bracket every time I give this lecture I notice it.
+S1: I always miss it when I'm updating my slides.
+S1: Anyway, Kaplan Meier is basic multiplification and subtraction.
+S1: We're going the multi ply a series of conditionsal probabilities.
+S1: Times 0, remember, nobody has our event yet.
+S1: Let's say we have 20% at risk for the event we're following, no event.
+S1: My estimated survival at.equals 0 is one.
+S1: T equals 5, 20 people were at risk.
+S1: Say 2 had an event. One minus 2 divided by 20.
+S1: So one minus the number of events divided by the number of people at risk, multipled by my previous survival estimate.
+S1: I come up with .9. So at 6 months let's say, time equals 6, I have 18 people at risk.
+S1: No, no event. That means if I do one minus 0 divided by 18, so I dropped the two people WHO had events out of my risk set times survival of .9 I'm holding flat at .9m now let's go toternal months, time equal ten.
+S1: I have 15 people at risk.
+S1: What happened. Partnership censored between month 6 and month 10.
+S1: That's what happened. My risk set has gotten smaller.
+S1: Those three people contributed at that time up until the time that they left the study.
+S1: One more event at ten months.
+S1: Now one minus, one over 15.
+S1: So those 3 people that were censored while I was counting them earlier, I stopped counting them now.
+S1: I still multiple it by my old survival of .9 and come up with a new survival at deny months of .84.
+S1: Let's go to 13 months. Risk set of 14.
+S1: Why? I had one event out of the 15.
+S1: That reduced it by 14. I had no new censoring.
+S1: 2 more events at 13 months.
+S1: This is one minus. 2 volunteers divided by 14 timed the previous survival estimate, equal .42.
+S1: So everybody can do this. You may of the not have -- you may not have known you could do this before third or fourth grade but you could have crated a capon mayor curve at a very young age.
+S1: If I had been a good statistician I would have it in my hatches to show the censoring.
+S1: These are confidence intervals so you can put these kind of confidence bans around the Kaplan Meier curve.
+S1: There is several ways to calculate them, all of through from the textbook.
+S1: What else do we know about Kaplan Meier?
+S1: One estimate of your survival time.
+S1: You use the same idea if you're looking at minus one survival.
+S1: If you put the high risk subjects entering the study early or late the kaplaner meyer curve will be not quite right.
+S1: Late, it will come down faster than it should have.
+S1: I don't have the later data for them.
+S1: Censored observations provide information about the risk of death or risk of any event when people are are on study.
+S1: If you see hash marks that's when people were censored.
+S1: Not all curbs have them. If you're good you put them on there.
+S1: What about Kaplan Meier? This is your only outcome in many models.
+S1: Again, you may have a different curve for different stratification variables, maybe more each intervention, maybe for age categories.
+S1: All you do is draw curbs, that's it.
+S1: It's quick, dirty. So how do you test it?
+S1: At any given point I can have this null therapeutics that my survival at some time point in group one verses two, many it's women, verses women.
+S1: Placebo verses my new intervention. Null relationships that they're equal.
+S1: Then I form a test statistician, z test so you base it on the normal if distribution, use my 2 survival estimates, divide it by the variants of those two survival estimates that I added together, take the square root.
+S1: The textbook will tell you how to calculate this if you really want to.
+S1: The problem is, what's a t?
+S1: Where do I draw that line?
+S1: At 72 weeks? Like the ds and b did for the zidovudine trial?
+S1: 24 weeks? 1 you're testing at one time pointed point, I'm not really using all the data.
+S1: You might be able to do a simple inference.
+S1: With you there are a lot of problems with this.
+S1: When you try to do these deeps of analyses, you think Kaplan Meier and the data from that, you can't have time dependent covariates.
+S1: You can't have a recurrent event.
+S1: Soccer goals, you might score 0 or 6.
+S1: I can't handle that in these simple models.
+S1: I can't handle competing risk volunteers either.
+S1: So we can use something called log rank statistics to event compare rates.
+S1: It will take into account the reticencering and trunks allegation but it will never take into account that time covariates, recurrent events, et cetera.
+S1: I have to think that -- log rank looks over all time points.
+S1: The log rank tests overall survival.
+S1: So it does I don't see all the data.
+S1: You just have no covariate. This is your problem.
+S1: You have to have two independent samples there the same population.
+S1: What it comes down to is compares the observed numbers of events to the expected number.
+S1: There is software to do it, a lot of different variations on the log rank test.
+S1: There are also a lot of assumptions.
+S1: So you get confounding. If you have confounding, which we talked about in the epilecture, you will not have accurate as a results in your log rank tests.
+S1: If your prognostic factors are not balanced between the treatment groups you will not have the correct result.
+S1: One reason that statisticians came up with minimization so some of these bias coin methods and other methods used for allocation, the different forms of -- so they could do a log rank test.
+S1: So just because you see a difference could just be biased.
+S1: This is nole a very useful test although its used a lot.
+S1: Sometimes in log rank you may feel more emphasis on he remember events, sometimes late.
+S1: Sometimes we do what's called a stratified log rank test.
+S1: We compare the data within each strata and perform a test.
+S1: Maybe i've stratified on all my prague notic factors, but what if it's continuous?
+S1: Do I have enough people to put he be the strata?
+S1: I'm going to lose power when I to this stratification.
+S1: Because now I'm performing a bunch of tests with much smaller sample sizes in each of them.
+S1: Again, all you get is a p value.
+S1: There is no system of the difference, no discussion that you don't understand how things relate.
+S1: You do a log rank test you get a p value.
+S1: That's all you get. You have Kaplan Meier and p value.
+S1: No joke, it may be enough.
+S1: In a lot of randomized studies it's reasonable and it will say the dsmb went band and did a bunch of Cox modeling to be sir.
+S1: But if the only thing you get is a log rank test and capon meyer, a lot of other things go wrong, you need to ask for more.
+S1: You're probably going to start asking for Cox models or a variation.
+S1: Now, realistically -- I'm not going to talk about when you have repeated events and a lot of issues like there.
+S1: There are many, many complications and dissertations written to event analysis.
+S1: What's lovely, in the 1940s they were coming up with caplon meyer.
+S1: In the 70s they're coming up with the early Cox modems.
+S1: What I like about -- models.
+S1: What I like, as medicine has improved, as people aren't just dying from cancer once, and we just count them, but now they're having recurrences, we have methods we have to develop to answer the appropriate question.
+S1: So looking at the history of survival analysis, also mirrors a lots about our history of medicine in many different fields.
+S1: We'll start with proportional hasers. This is your basic tox model.
+S1: Do not forget you must test the proportionality assumption.
+S1: So in proportional hasers, we have a basic model I showed earlier in the lecture.
+S1: You have a baseline hazard, regression coefficients, and what we call prague knows thing factors.
+S1: If beta equals 0, one of these coefficient wants equals 0 that translates to what the hazard ratio of one.
+S1: Soth means if you're comparing two different groups those two groups have the same survival experience.
+S1: So there is no difference, angela is not related to the hazards, or -- age is not related or whether they were on drug or placebo is not related to the hazards, et cetera.
+S1: Then we have the exponential of those coefficients, that's a relative rate or risk.
+S1: That will be associated with that proc gnostic factor, that covariate.
+S1: So what do you do? When you have models, you add covariates to your models.
+S1: You could stratify but I don't need to.
+S1: Any of those variables, I have thrown into my model.
+S1: I don't have to stratify anymore.
+S1: What I want to look at is to see if the change in the prognostic factor, a change in anyone of those Xs, what is the proportional change in the hazard?
+S1: I'm trying to see how each.
+S1: Xs characters the hazard function. Is there is saturdayical software.
+S1: You will not do this on a napkin, calculator or your phone.
+S1: I will be using software. But you can test the effects.
+S1: Just like lienier regression. Here I'm setting up hypothesis tests for ehr one of my coefficients m this is a framework for making inference.
+S1: If you're a statistician we call these semi parametric models, because that baseline hazards goes completesly unspecified.
+S1: You can recalculate it back if you want to.
+S1: For modeling standpoint it's unspecified. This is considered a multiplicitive model.
+S1: Here, the effectivity covariate is to m the hazard rate we by some factor.
+S1: If you're going to use proportional hazards at relative rate has been to be constant over time.
+S1: If it's not you have to model that rate over time.
+S1: So if the impact that age has on the hazard is different when you're 20 than when you're 60, I need to be -- that will bow changing how would you are.
+S1: I need to put that in my model.
+S1: If the impact of taking a Cox 2 INHIBITer on having a cardiovascular event is different, after taking that Cox 2 inhibitor for two months, reserves 18 or 24 months, I noticed to work that time element that you have been taking the Cox 2
+S1: inhibitor into my model. What's nice is that your general Cox model allows time dependent covariates and stratification factorens.
+S1: I don't have to just measure the weight at base loin.
+S1: I can put in your weight at a lot off times.
+S1: I can put in medication changes, a lot of things.
+S1: I have to have enough data on enough people in order to do it, so don't try to have a model with 16 covariates and only data on 20 people.
+S1: But again, I have this opportunity to have a really rich model to explain a lot of information.
+S1: I mentioned age. Earlier in a trial, older subjects are not enrolled, if age is not in the a Kaplan Meier, if I'm not going to stratify on age then my crkp capon meyer is biased.
+S1: All those older folks will bet censored earlier than the younger folks.
+S1: They just don't have enough time on study.
+S1: If I put age in the Cox model, i've conditions on age.
+S1: I have my independent censoring, everything is okay.
+S1: So one of you all was really smart one year, came up after and said if I follow everybody foreign year am I okay?
+S1: And I'm like not necessarily. Because your study may not be proportional by age to the population risk set.
+S1: They said why can't I oversample the older people later in the study to make the final study pro more portional?
+S1: Well, you could do that, but isn't it just easier to put age in your model?
+S1: Sometimes we don't have enough people to make a generalization.
+S1: We do that, oversample all the time.
+S1: But there are times to try to figure out what is the easier pathed forward to answer the relevant question.
+S1: I typically say modeling cannot save you from everything but it can sometimes help with a lot of things.
+S1: So what about testing for these proportional hazards?
+S1: What I want to do is have one model that doesn't extra time elements in it.
+S1: So my covariates are age and drug.
+S1: Then a second model, angela, drug, then -- age, drug, then I'm look at a beta, coefficientant.
+S1: When I have age times the nature log in time, then another coefficient with drug time is the national rolling time.
+S1: So I'm trying to see if the impact off age on the hazard function changes over time.
+S1: Woe use the natural log of time because of how the model is set up.
+S1: There are a couple different tests.
+S1: You can cue a walled test or a partial likelihood ratio test.
+S1: I'm going to compare the whole model.
+S1: I'm going through those 2 examples.
+S1: You can also do something called looking at shown feld residual knots.
+S1: There is discussion of that in various text books.
+S1: I'm not going to talk about it here but there is a lot of information online if you need to start hooking ate.
+S1: Here, my braving model in this case, i've drug, age, the coefficient wants, standard p value, 99% confidence interval.
+S1: When you put in the 2 elements with the natural log of time, enthis model, the p value for those coefficients, they were really big.
+S1: Nowhere near .05 and .01. Adoringadoring to the wild test I have snowflake then I did a ratio test, 2 degrees of freedom.
+S1: I put in two interaction terms.
+S1: Thepa value is .94. So according to -- these I can assume proportional hazards.
+S1: This next case we couldn't assume proportional hazards, I would say with the partial likelihood ratio test, I had a p value of .003.
+S1: So I knew I didn't have proportional hazards.
+S1: Then we we wanted to dig deeper and figure out well, where is the problem?
+S1: The hazard related to the drug was changing over time, turns out.
+S1: So age was not the issue.
+S1: If you look at the p values, the p value that is strikingly significant is the time time interaction.
+S1: Is the impact of the drug and how it impacts your event rate is changing over time.
+S1: So I have to put time in my model in this way.
+S1: So probably my curves, hazard functions are crossing.
+S1: This is going to be important in order to be able to give accurate information to doctors and patients.
+S1: What about time dependent survival curbs?
+S1: Sometimes when you look at these.
+S1: People have failed to account for a change in the exposure or tomato over time.
+S1: A lot of times they assume there is no change over time.
+S1: So think without anti-retroviral therapies. People are going off and on crewings all the time.
+S1: Maybe they don't go off ob a daily basis, but it will bow charactering, if you follow people 15, 10, 20 years, the drugs will character.
+S1: You want to account for that.
+S1: Stanford heart transplant study, a lot ofups I don't see this kate -- groups use this data.
+S1: This was end stage hard disease, beginning of transplant in the united states.
+S1: People were not responding to other therapies.
+S1: They're seeking a transplanter, well, there are a lot of reasons you may or may not get a transplant.
+S1: What they didn't take into account early in analysis was the time to transplant, not just the time to death of the you really had to break it up into two stakes as you evaluated the data.
+S1: Our tike home message, you have to choose the right message and test.
+S1: Kaplan Meier simple but potentially misleading.
+S1: Cox proportional hazards are our modern work horse, 40, 50 years old brew mod each.
+S1: You have to think if things are proportional.
+S1: A lot of people misuse this.
+S1: You may need to consider more general Cox models.
+S1: Time really matters. How you measure time and when you're measuring a is so important in these models.
+S1: Any changes in protocol, especially for inclusion exclusion criteria and how you're doing recruiting, this really matters.
+S1: You must take into account in the analysis if you fail to do so, you can have a large amount of misinterpretation of your model.
+S1: So I'm going through an example, then a few conclusions.
+S1: So this is an example and there are several different papers from 1981 in "the lancet" a couple of different papers in 85 and cochran review en2009 that go through the series and history of this treatment.
+S1: So the group that was dog the study wanted to look at a prospective cohort, randomized clinical study, evaluating survival of patients with liver cirrhosis.
+S1: They wanted to look at this new treatment against placebo.
+S1: There were a lot of conflicting reports.
+S1: One study appears to report a 2 year survival probability of .88, calculated with a Kaplan Meier.
+S1: That's our trial category. Data was collected at randomization.
+S1: We have lots of information on staging, all this other stuff.
+S1: We also have presence and absence of a siteys.
+S1: This is a pretty good indicator of their severity of liver seer rosis.
+S1: If you have of ten, when it got registered for the covariate, it was a 0.
+S1: So this is the model that they created.
+S1: When they used Cox regression instead of Kaplan Meier.
+S1: So when they put the data in from the randomized trial they saw the coefficient negative .135 associated with the covar 2009 that said treatment equals one, placebo equals 0.
+S1: 1.773 pro them bullpen time, coefficient of .346 with this covariate.
+S1: And second minus ten. This is your model.
+S1: This is what I jus sard before how we were codling the Xs.
+S1: Jury first two covariates are categorical.
+S1: The second one is continuous. And what is this baseline hazard?
+S1: Here you could say your event rate at time t in the palestine arm for patients -- or subjects without asighties, so they have placebo, this is equal to 0 without, equal to 0.
+S1: Pro thrombin time of 1 seconded.
+S1: One way you could threat it.
+S1: If I use this model and corporal information what is the relative rate of guests two years post randomization effort a subject in this trial WHO received the new treatment, x1ialed 1.
+S1: Xa equals 1. Pro thrombin, just one.
+S1: Now, we can calculate this, basically all this other stuff is the steam.
+S1: I need to look at the exponential negative of .135.
+S1: This is the math. You don't have to do the math.
+S1: For those that question my calculation, here is the math.
+S1: But the idea here, puns I have [technical difficulties].
+S1: It's cause there is an algorithm like this behind it, just plugging in the numbers and giving it to you.
+S1: But what you need to figure out, as I said, two years.
+S1: What about 3 years? If you have proportional hazards, that relative rate doesn't vary over time.
+S1: At the years they were all previously described, that relative risk, that's always the same.
+S1: You can work with out for lot of different subject comparisons.
+S1: Publish lots of papers and apps.
+S1: But the problem with this study was that physicians were initially very reluctant to enter patients with asighties into the trial because of potential toxicity concerns.
+S1: Now I have patients that are sicker that weren't enmy trial at the beginning of the trial.
+S1: They were allowed in to the trials.
+S1: Nothing said to excrude them. By the doctors were deciding not to actually approach them to be in the study.
+S1: Anniversary about a year and a half, people get more comfortable, recruitment was more representative of our clinical population.
+S1: What happens to your validity as a Kaplan Meier estimator?
+S1: Your referencing is not independent here, they didn't do a stratified analysis based on asighties, yes or no.
+S1: Nothing like that. They published a Kaplan Meier estimate.
+S1: Larger time points the risk set didn't include study subjects or any patients really with asighties, they weren't recruited early enough.
+S1: They got censured yearly. You didn't recruit them, I couldn't follow them for five years if they hadn't been in a study for five years.
+S1: There were still patients but it wasn't an appropriate risk force.
+S1: The hazardous bias is too small.
+S1: So your survival estimate was too large.
+S1: For the population. What if? If the first participant entered into the study and they could have been followed for four years, I'm enrolling for three years, you can be on the study for one year or up to 4.
+S1: If I follow enrollment to the end of the study or enroll my asighties patients until a year-and-a-half, those patients can only be on study from one year up to 2.5 years inch if I don't have that correct population risk set for any of
+S1: my time points after 2.5 years.
+S1: So again, asighties had a worse prognosis, so that mattered.
+S1: If I crews a Cox model I am not dooms.
+S1: I don't have a correctionering problem.
+S1: Now I have independent censoring. At least with respect to asighties.
+S1: So my sensory is considered independent, all that's required for consistencity of the partial likelihood estimator.
+S1: Nerd, the coefficients are correct. When you try to interpret the relative risk you'll get the right answer.
+S1: So in our conclusions for tonight, survival analysis deals with inference on event rates mature the rate at some time point t, the rate those are at risk.
+S1: We look at median survival. Survival, what is the amount of time where 50% of your people have had the event?
+S1: Not mean survival. You want to look at mean time to event, everybody must have had the event.
+S1: Cox regression, a general sense, is your most robust method.
+S1: I say that because people just keep tweaking it to match what they need.
+S1: Kaplan Meier curves. I see people try to use them all the time.
+S1: But that's part of what my job is, to say well, here is some of the competing risks and how are you going to analyze with this?
+S1: How will you interpret your analysis?
+S1: So your survival analysis can handle right censoring, left strongation.
+S1: It may not in every form handle recurrent events and competing risks.
+S1: If you get recurrent events you have to make sure you have a fancier survival model.
+S1: Risk sets are there to allow US to estimate the event.
+S1: Some people think I hate Kaplan Meier.
+S1: I can do it on an envelope or a napkin.
+S1: But you do have to understand if you have covariates, you can't use it.
+S1: At least not easily. And when you have competing risks, you don't have a a sensible interpretation.
+S1: Log rank, again, it's lovely because it's simple.
+S1: A lot of people love their p values.
+S1: But if you have time dependent covariates occur, competing risks, you can't use it.
+S1: You can't interpret it correctly. If you have imbalance in that table one information, early prognostic factors at baseline, probably will have a biased estimate.
+S1: The Cox model is very useful, gives you a framework for making inference about these covariates.
+S1: Granted, you have to have measured the covariates to put them in your model but it gives you a framework for using co variates.
+S1: We can explain this and interpret it.
+S1: Problem with Cox, it is hard to test the assumption.
+S1: By it is doable for many of them.
+S1: You have to figure out, do I have proportional hasers, do I not?
+S1: So just because I put covariates in the model, you have to make sure you have the right covariates in the model.
+S1: People move in and out of our research studies.
+S1: Tropation and censoring are really important.
+S1: Trunk allegation ra people entering the study, did you get the right people in the study.
+S1: Censoring is people are living the study or having the event or not having the event while you're watching them.
+S1: But above all, remember, analysis follows the design.
+S1: You will have clinical questions. Hypothesis come from those questions.
+S1: We have to design the studies to answer and test those hypothesis, we gather the samples to make sure that along that design that you'll have the data for the analysis to draw your conclusions.
+S1: So if a certain analysis doesn't help you answer that question, it doesn't allow you to test the hypothesis that's appropriate, doesn't match your protocol, you need a different analysis.
+S1: If you have any questions please post them to the board I think from the data of the original lecture, those boards are open for about 2 weeks.
+S1: Fill out your course evaluations, we actually do use those in trying to decide and make changes in the class each year.
+S1: If I have examples for me to add, a lot of these examples came from previous classmates of yours, please send them in.
+S1: And also, make sure that you send your questions, especially those of you WHO are watching these, online, to the separate board because he can only see my lectures, for example.
+S1: So you need to make sure the questions go to the right set of faculty.
+S1: Thank you very much. See you in mid december for a summary.
+S1: And you'll have several other lect ers in between.
+S1: I hope you enjoy them. Good night.

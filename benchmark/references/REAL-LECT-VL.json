@@ -1,0 +1,1568 @@
+{
+  "id": "REAL-LECT-VL",
+  "category": "lecture",
+  "natively_mode": "lecture",
+  "length_bucket": "very_long",
+  "speakers": [
+    {
+      "label": "S1",
+      "shown_to_model_as": "Speaker 1",
+      "name": "Laura Lee Johnson (lecturer) + audience",
+      "role": "lecturer",
+      "org": "FDA"
+    }
+  ],
+  "context": "Real 90-minute NIH Clinical Center IPPCR 2015 lecture, 'Conceptual Approach to Survival Analysis', by Dr. Laura Lee Johnson of the US FDA, from human-authored captions with no speaker diarization. It covers time-to-event vocabulary, censoring and truncation, survival and hazard functions, Kaplan-Meier, the log-rank test and Cox proportional hazards models, illustrated with trial examples (zidovudine HIV transmission, liver cirrhosis) and ends with conclusions and course logistics.",
+  "facts": [
+    {
+      "id": "F01",
+      "type": "background",
+      "importance": "important",
+      "statement": "Survival analysis is also called time-to-event analysis; the event need not be death and can be many other things.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        6,
+        7
+      ],
+      "notes": null
+    },
+    {
+      "id": "F02",
+      "type": "logistics",
+      "importance": "minor",
+      "statement": "The material is not going to make or break students on the exam; the goal is to understand the ideas well enough to read manuscripts/protocols, sit on an IRB, and know when to consult a specialist statistician.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        14,
+        15,
+        16
+      ],
+      "notes": null
+    },
+    {
+      "id": "F03",
+      "type": "background",
+      "importance": "important",
+      "statement": "Learning objectives: interpret a Kaplan-Meier graph, interpret Cox model covariates, and understand the basic assumptions and what goes wrong when they are not met.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        21,
+        22,
+        23
+      ],
+      "notes": null
+    },
+    {
+      "id": "F04",
+      "type": "example",
+      "importance": "important",
+      "statement": "Mother-infant HIV transmission trial (worked out by Dennis Dixon): zidovudine versus placebo, powered to detect a 33% reduction in transmission, from 30% to 20%.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        25,
+        27,
+        28
+      ],
+      "notes": "captions read '33% transmission rate'; 30% to 20% is a one-third reduction"
+    },
+    {
+      "id": "F05",
+      "type": "caveat",
+      "importance": "minor",
+      "statement": "Sample sizes for time-to-event studies are driven by the number of events, so you have to back into the total sample size and also account for dropouts and loss to follow-up.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        31,
+        32,
+        33
+      ],
+      "notes": null
+    },
+    {
+      "id": "F06",
+      "type": "example",
+      "importance": "important",
+      "statement": "The trial's DSMB met twice a year; it used a group sequential design with a preplanned interim efficacy review, the first in February 1994, including mothers enrolled up to December 1993.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        34,
+        35,
+        36,
+        37
+      ],
+      "notes": null
+    },
+    {
+      "id": "F07",
+      "type": "example",
+      "importance": "important",
+      "statement": "At the first interim analysis the DSMB looked at Kaplan-Meier curves of probability of transmission (y-axis 0-40%) versus weeks (x-axis), with a log-rank p value and numbers at risk per arm shown below.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        38,
+        40,
+        41,
+        42,
+        43
+      ],
+      "notes": null
+    },
+    {
+      "id": "F08",
+      "type": "example",
+      "importance": "important",
+      "statement": "At the first interim analysis the zidovudine arm showed an 8.3% transmission rate with a tight confidence interval, far lower than the expected 20%.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        60,
+        61
+      ],
+      "notes": null
+    },
+    {
+      "id": "F09",
+      "type": "conclusion",
+      "importance": "important",
+      "statement": "The DSMB recommended stopping the zidovudine trial after careful review of toxicity and transmission rates; zidovudine was provided to the control group and the US Public Health Service (and other countries) modified national guidelines.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        105,
+        106,
+        107,
+        108
+      ],
+      "notes": null
+    },
+    {
+      "id": "F10",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "Censoring lets you use partial follow-up information: e.g. an infant followed only to 24 weeks who has not seroconverted still contributes to the analysis.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        49,
+        50,
+        51
+      ],
+      "notes": null
+    },
+    {
+      "id": "F11",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Defining a time-to-event outcome requires an event definition, a time origin, a time scale, and the time at which the event occurs.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        68,
+        72,
+        76,
+        78,
+        213,
+        216,
+        217,
+        220
+      ],
+      "notes": null
+    },
+    {
+      "id": "F12",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Event times may be interval-measured (e.g. negative at 12 weeks, positive at 24 weeks) or measured more continuously (e.g. exact date of death).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        81,
+        82
+      ],
+      "notes": null
+    },
+    {
+      "id": "F13",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Kaplan-Meier is a simple estimator of survival that can be computed by hand (on a napkin) and can be stratified, e.g. by study arm or sex.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        85,
+        86,
+        87,
+        88,
+        89
+      ],
+      "notes": null
+    },
+    {
+      "id": "F14",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "A competing risk is an event that removes a subject from risk of the event of interest (e.g. an infant dying of another infection before it could seroconvert; if you die of cancer you cannot die of a heart attack), and Kaplan-Meier has no sensible interpretation under competing risks.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        90,
+        91,
+        92,
+        93,
+        94
+      ],
+      "notes": null
+    },
+    {
+      "id": "F15",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "Kaplan-Meier cannot handle covariates (only stratification), and with many stratification factors each curve may have only 3 or 4 people, too few for a robust curve; the Cox model is richer and takes continuous and multiple variables.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        95,
+        96,
+        97,
+        98,
+        99
+      ],
+      "notes": null
+    },
+    {
+      "id": "F16",
+      "type": "background",
+      "importance": "important",
+      "statement": "Survival analysis is used whenever the question is about events and when they happen: death, infections (possibly recurrent), myocardial infarction, hospitalizations, cancer recurrence; some events may never occur.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        113,
+        114,
+        115,
+        116,
+        118,
+        119
+      ],
+      "notes": null
+    },
+    {
+      "id": "F17",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Engineers use the same methods under the name failure analysis (light bulbs, computer crashes); the balloon example measures 'time' as milliliters of air until bursting, and quality control uses these measures too.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        123,
+        124,
+        129,
+        130,
+        131
+      ],
+      "notes": null
+    },
+    {
+      "id": "F18",
+      "type": "background",
+      "importance": "minor",
+      "statement": "The Kaplan-Meier paper was originally about a page and a half; two authors from different disciplines submitted essentially the same paper to JASA and the editor told them to combine into one paper.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        125,
+        126,
+        127,
+        128
+      ],
+      "notes": null
+    },
+    {
+      "id": "F19",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "A logistic regression at a fixed time (e.g. yes/no at five years) can be done but loses the information gained from censoring.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        132,
+        133,
+        134,
+        135,
+        225,
+        226,
+        227
+      ],
+      "notes": null
+    },
+    {
+      "id": "F20",
+      "type": "example",
+      "importance": "important",
+      "statement": "Flu example: if one drug resolves symptoms in 3 days and another in 7, measuring at 10 days (or even 7) makes them look the same; frequent measurement in survival analysis picks up those nuances.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143
+      ],
+      "notes": null
+    },
+    {
+      "id": "F21",
+      "type": "example",
+      "importance": "important",
+      "statement": "Cox-2 inhibitors: short-term studies showed no excess deaths, but the hazard functions crossed, and a problem starting around 12-18 months was missed.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        152,
+        154,
+        155,
+        156
+      ],
+      "notes": null
+    },
+    {
+      "id": "F22",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Survival analysis makes inference about event rates: the rate at time t among those still at risk at time t.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        164,
+        165,
+        767
+      ],
+      "notes": null
+    },
+    {
+      "id": "F23",
+      "type": "caveat",
+      "importance": "critical",
+      "statement": "Report median survival (the time by which 50% of subjects have had the event), not mean survival; mean survival requires every subject to have had the event, so reporting mean survival is a red flag.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        166,
+        167,
+        168,
+        170,
+        172,
+        768,
+        769
+      ],
+      "notes": null
+    },
+    {
+      "id": "F24",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "The basic survival (Cox-type) model is a baseline hazard multiplied by the exponential of a linear combination of covariates, which are often called prognostic factors.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        183,
+        184,
+        185,
+        616
+      ],
+      "notes": null
+    },
+    {
+      "id": "F25",
+      "type": "definition",
+      "importance": "important",
+      "statement": "Notation: lower-case t is the time axis with t=0 the time origin; capital T is the random variable for the time the event occurs.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        204,
+        205,
+        206
+      ],
+      "notes": null
+    },
+    {
+      "id": "F26",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "The survival function S(t) is the probability that the event time T is greater than or equal to t, i.e. the proportion of the population still without the event by time t.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        210,
+        211,
+        256
+      ],
+      "notes": null
+    },
+    {
+      "id": "F27",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Typical time origins: diagnosis or start of treatment in clinical trials; first exposure in occupational epidemiology; birth in studies of lifespan.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        230,
+        231,
+        232
+      ],
+      "notes": null
+    },
+    {
+      "id": "F28",
+      "type": "example",
+      "importance": "important",
+      "statement": "Pancreatic cancer example (event death, origin surgery, scale months): survival at 9 months was about 25%, i.e. 9-month post-resection survival is 25%.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        237,
+        239,
+        247,
+        248,
+        250
+      ],
+      "notes": null
+    },
+    {
+      "id": "F29",
+      "type": "concept",
+      "importance": "important",
+      "statement": "A survival curve is monotonically decreasing: it goes down or stays flat, never back up (it can also be plotted inverted as proportion with the event).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        244,
+        245,
+        246,
+        253,
+        254
+      ],
+      "notes": null
+    },
+    {
+      "id": "F30",
+      "type": "example",
+      "importance": "critical",
+      "statement": "S(t)=0.3 at t=60 months means five-year survival probability is 30%, equivalently 70% of patients die within five years; with patients, say 'five-year survival is 30%'.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        260,
+        262,
+        263,
+        264
+      ],
+      "notes": null
+    },
+    {
+      "id": "F31",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "The hazard function (incidence rate, 'force of mortality') is the instantaneous event rate at time t and underlies all of survival analysis.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        266,
+        267,
+        268,
+        277
+      ],
+      "notes": null
+    },
+    {
+      "id": "F32",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "Hazards are usually not constant over time (e.g. after a myocardial infarction, surviving the first 30 days makes longer-term survival much better).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        269,
+        271,
+        272,
+        273,
+        274,
+        275
+      ],
+      "notes": null
+    },
+    {
+      "id": "F33",
+      "type": "example",
+      "importance": "critical",
+      "statement": "Hazard example: lambda(t)=1% at t=12 months means at one year patients are dying at 1% per month; at a year and a half the chance of dying in the following month might be 2%.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        279,
+        280,
+        282,
+        283
+      ],
+      "notes": null
+    },
+    {
+      "id": "F34",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "Time scale matters for hazards: 120,000 deaths per year is similar to 10,000 per month, 2,500 per week, or 357 per day, so the time increment must be defined.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        285,
+        286,
+        287
+      ],
+      "notes": null
+    },
+    {
+      "id": "F35",
+      "type": "example",
+      "importance": "important",
+      "statement": "Herpes study: event was recurrence of lesions after a primary episode; time origin (end of primary episode) was hard to define and needed agreement among doctors and patients at home; time scale was months from end of primary episode.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        288,
+        289,
+        290,
+        291,
+        293,
+        294,
+        295,
+        297,
+        298
+      ],
+      "notes": null
+    },
+    {
+      "id": "F36",
+      "type": "example",
+      "importance": "minor",
+      "statement": "Nickel refinery study: event death from lung cancer, origin estimated as start of employment at the refinery (acceptable since lung cancer takes decades), scale years since first exposure.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        302,
+        303,
+        304,
+        306,
+        307
+      ],
+      "notes": null
+    },
+    {
+      "id": "F37",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Unique features of survival analysis: an event, progression along a dimension (usually time), variable length of progression, and the event may not happen while you are watching.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        319,
+        320,
+        321,
+        324
+      ],
+      "notes": null
+    },
+    {
+      "id": "F38",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "Sample size is based on the expected number of events, so studies (e.g. cardiovascular) enroll high-risk people to get enough events; covariates and case mix must be considered.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        326,
+        328,
+        330,
+        331,
+        333
+      ],
+      "notes": null
+    },
+    {
+      "id": "F39",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Truncation concerns entry into a study; right truncation means sampling only people who had the event (e.g. from a cancer registry), which leads to an underestimate of the survival function.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        337,
+        338,
+        339,
+        340,
+        341
+      ],
+      "notes": null
+    },
+    {
+      "id": "F40",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Left truncation (e.g. enrolling only people 65 or older, as in the Cardiovascular Health Study) means short survivors who died earlier are never observed.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        347,
+        348,
+        349,
+        350,
+        351
+      ],
+      "notes": null
+    },
+    {
+      "id": "F41",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Right censoring: subjects who have not had the event by the end of follow-up (e.g. study closes at 5 years) are censored; we know they had not had the event up to that point.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        355,
+        356,
+        357,
+        358,
+        359
+      ],
+      "notes": null
+    },
+    {
+      "id": "F42",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "Left censoring: the event occurred before observation began, e.g. a 12-year-old who already smokes regularly when first interviewed about age of starting smoking, or children already infected with cytomegalovirus at enrollment.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        376,
+        377,
+        378,
+        379,
+        383,
+        384,
+        385,
+        386,
+        388
+      ],
+      "notes": null
+    },
+    {
+      "id": "F43",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Kaplan-Meier (and essentially all methods) handle right censoring fine; left censoring is not as easy.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        374,
+        375,
+        376
+      ],
+      "notes": null
+    },
+    {
+      "id": "F44",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "The key assumption of survival analysis is independent censoring (and truncation independent of the outcome): subjects at risk at any time point are a random sample of the population at risk at that time.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        362,
+        368,
+        444,
+        446
+      ],
+      "notes": null
+    },
+    {
+      "id": "F45",
+      "type": "caveat",
+      "importance": "critical",
+      "statement": "Without independent censoring the hazard function estimate is biased and the survival analyses are worthless.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        448,
+        449,
+        450
+      ],
+      "notes": null
+    },
+    {
+      "id": "F46",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "Withdrawal must be unrelated to subsequent risk; even accidental death may not be independent (e.g. a therapy that impairs balance), and moving away is not automatically independent censoring (people move for last-ditch therapies).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        396,
+        397,
+        398,
+        400,
+        402,
+        403,
+        404
+      ],
+      "notes": null
+    },
+    {
+      "id": "F47",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "Investigators should keep tracking subjects who stop treatment or visits, at least checking whether they are alive or had the event.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        405,
+        406,
+        407,
+        408,
+        409
+      ],
+      "notes": null
+    },
+    {
+      "id": "F48",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "In survival plots, solid symbols usually mark events and open circles (or hash marks) mark censored observations.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        410,
+        411,
+        412,
+        555
+      ],
+      "notes": null
+    },
+    {
+      "id": "F49",
+      "type": "definition",
+      "importance": "important",
+      "statement": "Type I censoring: everyone followed for the same time; type II censoring: observation stops after a set number of events (engineering, e.g. light bulbs); random censoring (more general) is what happens in clinical studies with staggered enrollment.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        425,
+        426,
+        428,
+        429,
+        430,
+        431,
+        432,
+        433,
+        434
+      ],
+      "notes": null
+    },
+    {
+      "id": "F50",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "Software may expect a failure indicator (delta) or a censoring indicator, which are exact opposites, so check which one your software uses; T* denotes observed time (event or follow-up time).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        436,
+        438,
+        439,
+        440,
+        442
+      ],
+      "notes": null
+    },
+    {
+      "id": "F51",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "Censoring can depend on a covariate (e.g. age, severity) and still be independent given that covariate if the covariate is in the model, e.g. a Cox model; censoring may differ between study arms.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        451,
+        452,
+        453,
+        454,
+        455,
+        457,
+        458
+      ],
+      "notes": null
+    },
+    {
+      "id": "F52",
+      "type": "example",
+      "importance": "important",
+      "statement": "If older subjects are enrolled only later in a trial, they have less possible follow-up; conditioning on age gives independent censoring given age, otherwise estimates are biased.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        468,
+        470,
+        471,
+        472,
+        473,
+        474
+      ],
+      "notes": null
+    },
+    {
+      "id": "F53",
+      "type": "concept",
+      "importance": "important",
+      "statement": "With competing risks, the relevant hazard is the risk of the event (e.g. cancer) among those still at risk of it; people who died of a heart attack are no longer at risk of cancer.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        482,
+        483,
+        484,
+        485
+      ],
+      "notes": null
+    },
+    {
+      "id": "F54",
+      "type": "example",
+      "importance": "important",
+      "statement": "Fictitious polar bear plunge example (from her friend Craig): 3% die from the plunge each year, other-cause annual death rate is 2% for males and 1% for females, followed for ten years.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        487,
+        495,
+        496,
+        498,
+        499,
+        500
+      ],
+      "notes": "all numbers made up for illustration (line 493)"
+    },
+    {
+      "id": "F55",
+      "type": "example",
+      "importance": "important",
+      "statement": "After ten years 25% of women vs 24% of men died from the plunge, prompting a misleading 'plunge kills women' headline; the difference arises because 33.5% of women vs 40% of men died of other causes, leaving more women at risk.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        501,
+        502,
+        503,
+        506,
+        507
+      ],
+      "notes": null
+    },
+    {
+      "id": "F56",
+      "type": "conclusion",
+      "importance": "important",
+      "statement": "People always die of something, which precludes other events, so you must think about what else precludes the event of interest when interpreting event rates.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        509,
+        510,
+        511
+      ],
+      "notes": null
+    },
+    {
+      "id": "F57",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "Kaplan-Meier estimate is a product of conditional probabilities: S(t) = previous S times (1 - events at t / number at risk at t), starting at S(0)=1.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        521,
+        522,
+        525,
+        528
+      ],
+      "notes": null
+    },
+    {
+      "id": "F58",
+      "type": "example",
+      "importance": "important",
+      "statement": "Worked KM example: 20 at risk; at t=5, 2 events gives 1-2/20 = 0.9; at t=6, 18 at risk, no events, stays 0.9; at t=10, 15 at risk (3 censored between 6 and 10), 1 event gives 0.84.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        524,
+        526,
+        527,
+        529,
+        530,
+        531,
+        532,
+        535,
+        536,
+        537,
+        538
+      ],
+      "notes": "captions say '20%' at risk at line 524; means 20 people"
+    },
+    {
+      "id": "F59",
+      "type": "example",
+      "importance": "minor",
+      "statement": "Worked KM example final step: at 13 months, risk set 14, 2 events, 1 - 2/14 times previous survival, stated as .42.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        539,
+        540,
+        542,
+        543
+      ],
+      "notes": "transcript states .42; from the stated numbers .84 x (1-2/14) = .72 (likely caption/slide error)"
+    },
+    {
+      "id": "F60",
+      "type": "concept",
+      "importance": "important",
+      "statement": "Censored subjects contribute to the risk set until they leave the study and are then removed from it.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        534,
+        537,
+        554
+      ],
+      "notes": null
+    },
+    {
+      "id": "F61",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "If high-risk subjects enter the study early or late, the Kaplan-Meier curve will be biased (e.g. coming down faster than it should).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        551,
+        552
+      ],
+      "notes": null
+    },
+    {
+      "id": "F62",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "Comparing two KM curves with a z-test at a single time point requires choosing t arbitrarily and does not use all the data.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        561,
+        563,
+        565,
+        567,
+        568
+      ],
+      "notes": null
+    },
+    {
+      "id": "F63",
+      "type": "caveat",
+      "importance": "critical",
+      "statement": "Kaplan-Meier-based analyses cannot handle time-dependent covariates, recurrent events, or competing risks.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        571,
+        572,
+        575
+      ],
+      "notes": null
+    },
+    {
+      "id": "F64",
+      "type": "definition",
+      "importance": "critical",
+      "statement": "The log-rank test compares event rates over all time points by comparing observed to expected numbers of events; it accounts for censoring and truncation but not covariates, time-dependent covariates, or recurrent events.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        576,
+        577,
+        578,
+        579,
+        581,
+        583
+      ],
+      "notes": null
+    },
+    {
+      "id": "F65",
+      "type": "caveat",
+      "importance": "critical",
+      "statement": "Log-rank results are biased under confounding or when prognostic factors are imbalanced between groups; a log-rank test gives only a p value with no measure of the size of the difference.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        586,
+        587,
+        589,
+        598,
+        599,
+        600,
+        601
+      ],
+      "notes": null
+    },
+    {
+      "id": "F66",
+      "type": "concept",
+      "importance": "important",
+      "statement": "A stratified log-rank test compares within strata but loses power because each test uses a smaller sample, and continuous prognostic factors are hard to stratify.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        592,
+        593,
+        594,
+        596,
+        597
+      ],
+      "notes": null
+    },
+    {
+      "id": "F67",
+      "type": "conclusion",
+      "importance": "important",
+      "statement": "KM plus log-rank may be enough in many randomized studies, but if that is all you get and other things go wrong, ask for more, such as Cox models.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        602,
+        603,
+        604,
+        605
+      ],
+      "notes": null
+    },
+    {
+      "id": "F68",
+      "type": "background",
+      "importance": "minor",
+      "statement": "Kaplan-Meier dates from the 1940s and early Cox models from the '70s; methods evolved as medicine improved (e.g. recurrences), mirroring the history of medicine.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        608,
+        609,
+        611,
+        612
+      ],
+      "notes": null
+    },
+    {
+      "id": "F69",
+      "type": "caveat",
+      "importance": "critical",
+      "statement": "When using the Cox proportional hazards model you must test the proportionality assumption.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        613,
+        614,
+        704
+      ],
+      "notes": null
+    },
+    {
+      "id": "F70",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "In the Cox model a coefficient beta=0 corresponds to a hazard ratio of 1 (no difference in survival experience), and exp(beta) is the relative rate/risk associated with that prognostic factor.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        617,
+        618,
+        620,
+        621
+      ],
+      "notes": null
+    },
+    {
+      "id": "F71",
+      "type": "concept",
+      "importance": "critical",
+      "statement": "The Cox model is semiparametric (baseline hazard unspecified) and multiplicative: a covariate multiplies the hazard rate by some factor, and proportional hazards requires that relative rate to be constant over time.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        632,
+        634,
+        635,
+        636
+      ],
+      "notes": null
+    },
+    {
+      "id": "F72",
+      "type": "concept",
+      "importance": "important",
+      "statement": "The general Cox model allows time-dependent covariates (e.g. repeated weights, medication changes) and stratification, but needs enough data (not 16 covariates with 20 people).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        641,
+        642,
+        643,
+        644,
+        645
+      ],
+      "notes": null
+    },
+    {
+      "id": "F73",
+      "type": "concept",
+      "importance": "important",
+      "statement": "To test proportional hazards, fit a second model adding covariate x log(time) interactions and compare using a Wald test or partial likelihood ratio test; Schoenfeld residual plots are another option.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        661,
+        663,
+        664,
+        665,
+        666,
+        668,
+        671
+      ],
+      "notes": null
+    },
+    {
+      "id": "F74",
+      "type": "example",
+      "importance": "important",
+      "statement": "In one example, the likelihood ratio test for the two log-time interaction terms (2 degrees of freedom) gave p = .94, so proportional hazards could be assumed.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        676,
+        677,
+        678
+      ],
+      "notes": null
+    },
+    {
+      "id": "F75",
+      "type": "example",
+      "importance": "important",
+      "statement": "In a second example the partial likelihood ratio test gave p = .003, so proportional hazards failed; the drug x time interaction was significant (the drug's effect changed over time), not age, suggesting crossing hazards.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        679,
+        680,
+        682,
+        683,
+        684,
+        685,
+        687
+      ],
+      "notes": null
+    },
+    {
+      "id": "F76",
+      "type": "example",
+      "importance": "minor",
+      "statement": "Stanford heart transplant study: early analyses failed to account for time to transplant, which had to be separated from time to death.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        696,
+        697,
+        700
+      ],
+      "notes": null
+    },
+    {
+      "id": "F77",
+      "type": "conclusion",
+      "importance": "critical",
+      "statement": "Take-home: Kaplan-Meier is simple but potentially misleading; Cox proportional hazards is the modern workhorse but must be checked for proportionality and more general Cox models may be needed; how and when time is measured matters.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        701,
+        702,
+        703,
+        704,
+        706,
+        707
+      ],
+      "notes": null
+    },
+    {
+      "id": "F78",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "Changes in protocol, especially inclusion/exclusion criteria or recruitment, must be accounted for in the analysis or the model can be badly misinterpreted.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        708,
+        709
+      ],
+      "notes": null
+    },
+    {
+      "id": "F79",
+      "type": "example",
+      "importance": "important",
+      "statement": "Liver cirrhosis RCT (new treatment vs placebo; papers in The Lancet 1981, papers in '85, and a 2009 Cochrane review): one study reported a 2-year Kaplan-Meier survival probability of .88.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        711,
+        712,
+        713,
+        715
+      ],
+      "notes": null
+    },
+    {
+      "id": "F80",
+      "type": "example",
+      "importance": "important",
+      "statement": "In the cirrhosis Cox model the treatment covariate (treatment=1, placebo=0) had coefficient -0.135, so the relative rate for a treated subject is exp(-0.135); other covariates were ascites (presence/absence) and prothrombin time (continuous).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        718,
+        723,
+        724,
+        727,
+        728,
+        735
+      ],
+      "notes": "prothrombin/ascites coefficients (1.773, .346) are garbled in captions"
+    },
+    {
+      "id": "F81",
+      "type": "caveat",
+      "importance": "critical",
+      "statement": "In the cirrhosis trial physicians initially avoided enrolling patients with ascites (sicker, toxicity concerns) until about a year and a half in, so KM censoring was not independent: the hazard was biased too small and the survival estimate too large.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        745,
+        748,
+        749,
+        751,
+        753,
+        756,
+        757
+      ],
+      "notes": null
+    },
+    {
+      "id": "F82",
+      "type": "conclusion",
+      "importance": "important",
+      "statement": "Including ascites as a covariate in a Cox model restores independent censoring (with respect to ascites), so the coefficients and relative risks are correct.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        762,
+        764,
+        765,
+        766
+      ],
+      "notes": null
+    },
+    {
+      "id": "F83",
+      "type": "conclusion",
+      "importance": "critical",
+      "statement": "Cox regression is the most robust general method because it keeps being extended; it provides a framework for inference about covariates, though you must have measured the right covariates and its assumptions are hard (but often doable) to test.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        770,
+        771,
+        787,
+        788,
+        790,
+        791,
+        793
+      ],
+      "notes": null
+    },
+    {
+      "id": "F84",
+      "type": "conclusion",
+      "importance": "important",
+      "statement": "Survival analysis handles right censoring and left truncation, but not every form handles recurrent events and competing risks, which need fancier models.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        775,
+        776,
+        777
+      ],
+      "notes": null
+    },
+    {
+      "id": "F85",
+      "type": "conclusion",
+      "importance": "critical",
+      "statement": "Above all, analysis follows the design: clinical questions generate hypotheses, studies are designed to test them, and if an analysis does not answer the question or match the protocol you need a different analysis.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        798,
+        799,
+        800,
+        801
+      ],
+      "notes": null
+    },
+    {
+      "id": "F86",
+      "type": "logistics",
+      "importance": "important",
+      "statement": "Post questions to the discussion board, which stays open about 2 weeks after the lecture; online viewers must use the separate board for this faculty member.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        802,
+        805,
+        806
+      ],
+      "notes": null
+    },
+    {
+      "id": "F87",
+      "type": "logistics",
+      "importance": "minor",
+      "statement": "Students are asked to fill out course evaluations and send in examples; the lecturer returns in mid December for a summary, with several other lectures in between.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        803,
+        804,
+        807,
+        808
+      ],
+      "notes": null
+    }
+  ],
+  "corrections": [],
+  "not_decisions": [
+    {
+      "statement": "Using logistic regression on a yes/no outcome at a fixed time instead of survival analysis (possible but loses information; not the focus of the lecture)",
+      "lines": [
+        132,
+        225,
+        227,
+        228
+      ]
+    },
+    {
+      "statement": "Oversampling older subjects later in the study to fix the risk set (a past student's suggestion; lecturer says it is easier to put age in the model)",
+      "lines": [
+        652,
+        654,
+        655
+      ]
+    },
+    {
+      "statement": "Schoenfeld residual plots for testing proportional hazards (mentioned but explicitly not covered)",
+      "lines": [
+        671,
+        673
+      ]
+    },
+    {
+      "statement": "Methods for repeated/recurrent events (explicitly not covered)",
+      "lines": [
+        606
+      ]
+    }
+  ],
+  "distractors": [
+    {
+      "statement": "Joke that one of the best times to get medical care is in a clinical trial, and an anecdote about a study requiring patients within 6 months of death who were still alive 18-24 months later",
+      "lines": [
+        54,
+        56,
+        57,
+        58,
+        59
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Joke that some parents think if they wait long enough their child will get married; soccer goals taking a long time",
+      "lines": [
+        120,
+        122
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Lecturer notes she has promised herself to fix a bracket on her slide every time she gives the lecture",
+      "lines": [
+        519,
+        520
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Aside that the lecturer grew up somewhere warm so polar bear plunges strike her as nuts, and Lake Michigan is bitterly cold in January",
+      "lines": [
+        489,
+        497
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "The old belief that subjects moving out of the area is independent censoring",
+      "lines": [
+        400,
+        401
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "A past student's assumption that following everybody for one year makes censoring OK",
+      "lines": [
+        652,
+        653
+      ],
+      "why": "false assumption later corrected"
+    }
+  ],
+  "open_questions_at_end": [],
+  "summary_must_include": [
+    "survival/time-to-event analysis = inference on event rates among those at risk; event, origin, scale must be defined (F22, F11)",
+    "report median not mean survival (F23)",
+    "survival function S(t)=P(T>=t) and hazard = instantaneous event rate, with worked examples (F26, F31, F30)",
+    "right vs left censoring and truncation (F41, F42, F39, F40)",
+    "independent censoring is the key assumption; violation biases hazard and makes analyses worthless (F44, F45)",
+    "Kaplan-Meier: product of conditional probabilities, handles right censoring, no covariates/competing risks/recurrent events (F57, F63, F14)",
+    "log-rank test: all time points, observed vs expected, p value only, biased by confounding/imbalance (F64, F65)",
+    "Cox PH model: semiparametric, exp(beta)=relative rate, beta=0 -> HR 1, must test proportionality (log-time interaction, p=.94 vs p=.003) (F70, F71, F69, F73)",
+    "zidovudine HIV trial: 8.3% transmission at interim, trial stopped, guidelines changed (F08, F09)",
+    "cirrhosis/ascites example: delayed enrollment of sicker patients biased KM survival too high; Cox with ascites fixes it (F81, F82)",
+    "conclusions: Cox most robust; analysis follows the design (F83, F85)"
+  ]
+}

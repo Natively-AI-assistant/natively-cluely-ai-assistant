@@ -3,8 +3,8 @@
  * patch-electron-plist.js
  *
  * Patches the development Electron.app Info.plist to add the required
- * NSScreenCaptureUsageDescription, NSMicrophoneUsageDescription, and
- * NSAudioCaptureUsageDescription keys.
+ * NSScreenCaptureUsageDescription, NSMicrophoneUsageDescription,
+ * NSAudioCaptureUsageDescription, and NSSpeechRecognitionUsageDescription keys.
  *
  * Without NSScreenCaptureUsageDescription in the Info.plist, macOS silently
  * refuses to show the TCC screen recording permission prompt — or grants it
@@ -62,6 +62,18 @@ if (!content.includes('NSAudioCaptureUsageDescription')) {
   console.log('[patch-electron-plist] NSAudioCaptureUsageDescription already present — skipping.');
 }
 
+// Patch NSSpeechRecognitionUsageDescription for the Apple Speech provider.
+if (!content.includes('NSSpeechRecognitionUsageDescription')) {
+  content = content.replace(
+    '<key>NSMicrophoneUsageDescription</key>',
+    '<key>NSSpeechRecognitionUsageDescription</key>\n\t<string>Natively uses Apple Speech to transcribe meeting audio on your device.</string>\n\t<key>NSMicrophoneUsageDescription</key>'
+  );
+  modified = true;
+  console.log('[patch-electron-plist] Added NSSpeechRecognitionUsageDescription.');
+} else {
+  console.log('[patch-electron-plist] NSSpeechRecognitionUsageDescription already present — skipping.');
+}
+
 // Patch LSUIElement — make the dev Electron.app launch as an agent (no dock
 // tile at process spawn).
 //
@@ -77,10 +89,11 @@ if (!content.includes('NSAudioCaptureUsageDescription')) {
 // Scope: this only touches the DEV node_modules bundle. Packaged/signed builds
 // use their own production plist (package.json build.mac.extendInfo /
 // electron-builder.signed.cjs), which does NOT set LSUIElement — so packaged
-// builds still spawn as 'regular'. They rely instead on the runtime
-// accessory→regular activation-policy fix in electron/main.ts. If the dual-tile
-// bug ever resurfaces in a packaged build, mirroring LSUIElement into extendInfo
-// is the next lever (decide deliberately — it changes production launch).
+// builds still spawn as 'regular' and keep that single tile: main.ts no longer
+// flips the activation policy at startup (the old accessory→regular round-trip
+// was itself a duplicate-tile source — see electron/utils/macDockPolicy.ts).
+// Mirroring LSUIElement into extendInfo would also remove the brief launch tile
+// in undetectable mode (decide deliberately — it changes production launch).
 if (!content.includes('LSUIElement')) {
   content = content.replace(
     '<key>LSMinimumSystemVersion</key>',

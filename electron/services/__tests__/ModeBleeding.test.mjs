@@ -19,9 +19,38 @@ describe('BUG-MODE-BLEEDING: Async post-call summary mode snapshot', () => {
 
     // Extract only the stopMeeting function body
     const stopStart = source.indexOf('public async stopMeeting');
-    const returnIdx = source.indexOf('return meetingId;', stopStart);
-    const stopSource = source.slice(stopStart, returnIdx + 'return meetingId;'.length);
     assert.ok(stopStart >= 0, 'stopMeeting should exist');
+    // Brace-match the body instead of slicing to `return meetingId;`.
+    // stopMeeting's return shape changed to an object
+    // (`return { meetingId, memoryEligibleCount };`), so that literal no longer
+    // exists — indexOf returned -1, the slice collapsed to ~15 characters, and
+    // the suite reported that the processAndSaveMeeting call was MISSING when
+    // the whole ordering it checks was intact (snapshot at :115, main reset at
+    // :128, save at :159).
+    // The body brace is the first `{` at paren-depth 0 AND angle-depth 0.
+    // A plain indexOf('{') lands inside the RETURN TYPE —
+    // `Promise<{ meetingId: string; memoryEligibleCount: number } | null>` —
+    // and depth-matching then closes on that object type, truncating the slice.
+    let bodyStart = -1;
+    let parenD = 0;
+    let angleD = 0;
+    for (let k = stopStart; k < source.length; k++) {
+      const ch = source[k];
+      if (ch === '(') parenD++;
+      else if (ch === ')') parenD--;
+      else if (ch === '<') angleD++;
+      else if (ch === '>') angleD--;
+      else if (ch === '{' && parenD === 0 && angleD === 0) { bodyStart = k; break; }
+    }
+    assert.ok(bodyStart >= 0, 'could not locate the stopMeeting body brace');
+    let depth = 1;
+    let end = bodyStart + 1;
+    for (; end < source.length && depth > 0; end++) {
+      const ch = source[end];
+      if (ch === '{') depth++;
+      else if (ch === '}') depth--;
+    }
+    const stopSource = source.slice(stopStart, end);
 
     // The mode snapshot capture must occur BEFORE the MAIN session.reset() —
     // the one that runs after all snapshots and before the async background
@@ -140,6 +169,83 @@ describe('BUG-MODE-BLEEDING: Mode-context clearing on mode switch', () => {
       'IntelligenceManager must expose clearSessionContext() method');
     assert.ok(source.includes('this.session.clearSessionContext()'),
       'IntelligenceManager.clearSessionContext must delegate to session.clearSessionContext()');
+  });
+
+  // Answer-pipeline-rebuild Phase 3 (2026-07-28): same bug class, a second
+  // instance found alongside the original BUG-MODE-BLEEDING fix above —
+  // _manualConversationMemory (conversationMemoryV2's bare/refinement
+  // follow-up recall) records each turn's mode but never checks it back on
+  // read, so a follow-up in a NEW mode could recall a DIFFERENT mode's
+  // prior answer unless it's also cleared on switch.
+  test('modes:set-active IPC also clears _manualConversationMemory before calling setActiveMode', () => {
+    const sourcePath = path.resolve(__dirname, '../../ipcHandlers.ts');
+    const source = fs.readFileSync(sourcePath, 'utf8');
+
+    const handlerBody = sliceSafeHandleBlock(source, 'modes:set-active');
+
+    const clearConvMemIndex = handlerBody.indexOf('_manualConversationMemory.clearAllSessions()');
+    const setActiveIndex = handlerBody.indexOf('ModesManager.getInstance().setActiveMode');
+
+    assert.ok(clearConvMemIndex >= 0, '_manualConversationMemory.clearAllSessions() should be called in modes:set-active handler');
+    assert.ok(clearConvMemIndex < setActiveIndex,
+      `_manualConversationMemory.clearAllSessions() (index ${clearConvMemIndex}) must be called before setActiveMode (index ${setActiveIndex})`);
+  });
+
+  test('ConversationMemoryService has a clearAllSessions method', () => {
+    const sourcePath = path.resolve(__dirname, '../../intelligence/ConversationMemoryService.ts');
+    const source = fs.readFileSync(sourcePath, 'utf8');
+
+    assert.ok(source.includes('clearAllSessions(): void'),
+      'ConversationMemoryService must have a clearAllSessions() method');
+    assert.ok(source.includes('this.bySession.clear()'),
+      'clearAllSessions must clear the entire bySession map, not one session');
+  });
+
+  test('modes:set-active also clears _manualCodingState (sibling per-session store, same defense-in-depth)', () => {
+    const sourcePath = path.resolve(__dirname, '../../ipcHandlers.ts');
+    const source = fs.readFileSync(sourcePath, 'utf8');
+    const handlerBody = sliceSafeHandleBlock(source, 'modes:set-active');
+
+    assert.ok(handlerBody.includes('_manualCodingState.clearAllSessions()'),
+      '_manualCodingState.clearAllSessions() should be called in modes:set-active handler');
+  });
+
+  test('CodingConversationState has a clearAllSessions method', () => {
+    const sourcePath = path.resolve(__dirname, '../../intelligence/CodingConversationState.ts');
+    const source = fs.readFileSync(sourcePath, 'utf8');
+
+    assert.ok(source.includes('clearAllSessions(): void'),
+      'CodingConversationState must have a clearAllSessions() method');
+    assert.ok(source.includes('this.bySession.clear()'),
+      'clearAllSessions must clear the entire bySession map, not one session');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test 5: record-time race window — a mode switch mid-generation must not let
+// the OLD mode's answer be written back into conversation memory after
+// modes:set-active already cleared it (code-review finding, 2026-07-28).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('BUG-MODE-BLEEDING: record-time mode-consistency guard (closes the mid-stream-switch race)', () => {
+  test('the record() call is guarded by a live-vs-captured mode.id comparison', () => {
+    const sourcePath = path.resolve(__dirname, '../../ipcHandlers.ts');
+    const source = fs.readFileSync(sourcePath, 'utf8');
+
+    const recordCallIdx = source.indexOf('_manualConversationMemory.record({');
+    assert.ok(recordCallIdx >= 0, '_manualConversationMemory.record call should exist');
+
+    // The guard must be declared BEFORE the record() call and gate it.
+    const guardIdx = source.indexOf('liveModeIdAtRecord', 0);
+    assert.ok(guardIdx >= 0, 'a liveModeIdAtRecord guard variable should exist');
+    assert.ok(guardIdx < recordCallIdx, 'the guard must be computed before the record() call it protects');
+
+    // Must compare .id (not .templateType — see the guard's own comment for
+    // why templateType is insufficient: ModesManager.isCustomMode() collapses
+    // every custom mode's templateType to 'general').
+    const guardBlock = source.slice(guardIdx - 50, recordCallIdx + 50);
+    assert.match(guardBlock, /getActiveMode\(\)\?\.id/, 'the guard must read the LIVE mode by .id');
+    assert.match(guardBlock, /liveModeIdAtRecord === \(manualActiveMode\?\.id \?\? null\)/, 'the guard must compare against the CAPTURED mode by .id, not .templateType');
   });
 });
 

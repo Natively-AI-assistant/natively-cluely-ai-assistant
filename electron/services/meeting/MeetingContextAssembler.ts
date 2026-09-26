@@ -138,7 +138,7 @@ export class MeetingContextAssembler {
           const topics = summary.topics || [];
           const [polished, polishedOverview] = await Promise.all([
             summary.tldr.length > 0 ? polisher.polish(baseInputs) : Promise.resolve(null),
-            polisher.polishOverview({ ...baseInputs, briefs, topics }),
+            polisher.polishOverview({ ...baseInputs, briefs, topics, totalTokensEstimate: normalized.totalTokensEstimate }),
           ]);
           if (polished && polished.length > 0) summary.tldr = polished;
           if (polishedOverview) summary.overview = polishedOverview;

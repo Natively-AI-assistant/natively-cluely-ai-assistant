@@ -12,7 +12,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import Module from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -28,7 +28,7 @@ Module._load = function patched(request, _p, _m) {
   return origLoad.apply(this, arguments);
 };
 
-const { fnv1aBucket } = await import(path.join(distRoot, 'SettingsManager.js'));
+const { fnv1aBucket } = await import(pathToFileURL(path.join(distRoot, 'SettingsManager.js')).href);
 
 // Faithful re-implementation of the gate's documented precedence (mirrors
 // SettingsManager.isRegionalSttRelayEnabledForKey). The structural test below

@@ -1,0 +1,168 @@
+{
+ "blind_id": "S-9ef0b9e2",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 43354,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 9936,
+  "candidatesTokenCount": 1119,
+  "totalTokenCount": 16148,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 9936
+   }
+  ],
+  "thoughtsTokenCount": 5093,
+  "serviceTier": "standard"
+ },
+ "fact_count": 29,
+ "evaluation": {
+  "factual_accuracy": 9,
+  "important_information_retention": 9,
+  "hallucination_control": 9,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 10,
+  "entity_retention": 10,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 8,
+  "structure": 5,
+  "conciseness": 4,
+  "readability": 6,
+  "overall_summary_quality": 7,
+  "critical_errors": [
+   "Presented Theo's wish to load test the workout history endpoint as an assigned action item, which was not decided or assigned."
+  ],
+  "missing_important_information": [
+   "The root cause details for MOB-1423 (relying on the display link timer instead of wall clock time, losing 20-30 seconds)."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [
+   "Load testing the workout history endpoint before production release (presented as an action item for Theo)."
+  ],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "missing"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "partial"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "missing"
+   },
+   {
+    "id": "F25",
+    "status": "missing"
+   },
+   {
+    "id": "F26",
+    "status": "missing"
+   },
+   {
+    "id": "F27",
+    "status": "partial"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "partial"
+   }
+  ],
+  "rationale": "The notes capture almost all important information, decisions, and action items accurately. Numeric accuracy and timeline accuracy are flawless, with no superseded values reported. However, the notes suffer from severe repetition, with the same facts appearing in the Summary, Progress, Decisions, Risks, and structured lists, which heavily impacts conciseness and structure. Additionally, Theo's wish to load test the workout history endpoint is incorrectly presented as an assigned action item."
+ }
+}

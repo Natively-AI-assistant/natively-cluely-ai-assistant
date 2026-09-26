@@ -1,0 +1,106 @@
+[
+ {
+  "config_id": "luna-max",
+  "conversation_id": "CASUAL-M",
+  "run": "run1",
+  "reason": "provider_error",
+  "model_call_errors": 2,
+  "retry_attempted": false
+ },
+ {
+  "config_id": "luna-max",
+  "conversation_id": "CASUAL-M",
+  "run": "run3",
+  "reason": "provider_error",
+  "model_call_errors": 5,
+  "retry_attempted": false
+ },
+ {
+  "config_id": "luna-max",
+  "conversation_id": "REAL-LECT-L",
+  "run": "run1",
+  "reason": "provider_error",
+  "model_call_errors": 3,
+  "retry_attempted": false
+ },
+ {
+  "config_id": "luna-max",
+  "conversation_id": "REAL-LECT-L",
+  "run": "run3",
+  "reason": "provider_error",
+  "model_call_errors": 3,
+  "retry_attempted": false
+ },
+ {
+  "config_id": "luna-max",
+  "conversation_id": "REAL-LECT-VL",
+  "run": "run1",
+  "reason": "provider_error",
+  "model_call_errors": 2,
+  "retry_attempted": false
+ },
+ {
+  "config_id": "luna-max",
+  "conversation_id": "SALES-DISC-L",
+  "run": "run2",
+  "reason": "provider_error",
+  "model_call_errors": 6,
+  "retry_attempted": false
+ },
+ {
+  "config_id": "luna-max",
+  "conversation_id": "TEAM-M",
+  "run": "run1",
+  "reason": "provider_error",
+  "model_call_errors": 5,
+  "retry_attempted": false
+ },
+ {
+  "config_id": "luna-max",
+  "conversation_id": "TEAM-M",
+  "run": "run2",
+  "reason": "provider_error",
+  "model_call_errors": 3,
+  "retry_attempted": false
+ },
+ {
+  "config_id": "luna-max",
+  "conversation_id": "TEAM-M",
+  "run": "run3",
+  "reason": "no_summary",
+  "model_call_errors": 0,
+  "retry_attempted": false
+ },
+ {
+  "config_id": "luna-max",
+  "conversation_id": "TEAM-S",
+  "run": "run1",
+  "reason": "provider_error",
+  "model_call_errors": 2,
+  "retry_attempted": false
+ },
+ {
+  "config_id": "luna-max",
+  "conversation_id": "TEAM-S",
+  "run": "run3",
+  "reason": "provider_error",
+  "model_call_errors": 2,
+  "retry_attempted": false
+ },
+ {
+  "config_id": "luna-max",
+  "conversation_id": "TECH-DISC-L",
+  "run": "run1",
+  "reason": "provider_error",
+  "model_call_errors": 4,
+  "retry_attempted": false
+ },
+ {
+  "config_id": "luna-max",
+  "conversation_id": "TECH-DISC-L",
+  "run": "run3",
+  "reason": "provider_error",
+  "model_call_errors": 3,
+  "retry_attempted": false
+ }
+]

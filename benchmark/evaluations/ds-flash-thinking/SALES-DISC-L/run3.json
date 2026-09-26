@@ -1,0 +1,354 @@
+{
+ "blind_id": "S-6d4810f9",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 77827,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 38057,
+  "candidatesTokenCount": 2532,
+  "totalTokenCount": 49912,
+  "cachedContentTokenCount": 24516,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 38057
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24516
+   }
+  ],
+  "thoughtsTokenCount": 9323,
+  "serviceTier": "standard"
+ },
+ "fact_count": 67,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 9,
+  "hallucination_control": 7,
+  "action_item_retention": 9,
+  "decision_retention": 9,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 7,
+  "entity_retention": 9,
+  "timeline_accuracy": 7,
+  "conclusion_accuracy": 7,
+  "structure": 3,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "A summary bullet is cut off mid-word ('$50,000 year-one bu').",
+   "The follow-up draft is not an email draft, but a 40-bullet list that simply repeats the entire meeting notes.",
+   "Extreme duplication in the structured lists (e.g., the same action items and open questions are listed 2-4 times each).",
+   "Resolved questions (Queuewise end date, Zendesk plan) are hallucinated as Open Questions.",
+   "Superseded values (120 agents, Q4 go-live) are stated as current facts in the Account Context and Buying Signals sections."
+  ],
+  "missing_important_information": [
+   "Joan will check with procurement on the Queuewise notice terms (format, signatory, and whether a short extension is possible).",
+   "Routewell's model uses attachment metadata but does not analyze image content."
+  ],
+  "hallucinated_information": [
+   "The exact end date of the Queuewise contract is not certain — Harbourline believes it is December 31. [open] (This was resolved in the call to be August 31)",
+   "Which Zendesk Suite plan Harbourline is on was not known by Priya; Jon would need to confirm the exact plan. [open] (This was resolved in the call to be Zendesk Support Professional)"
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C01",
+    "reported": "The support team is about 120 agents split between Columbus and a Rotterdam site"
+   },
+   {
+    "correction_id": "C03",
+    "reported": "Harbourline's target is a Q4-ish go-live around October 15"
+   },
+   {
+    "correction_id": "C04",
+    "reported": "The exact end date of the Queuewise contract is not certain — Harbourline believes it is December 31. [open]"
+   },
+   {
+    "correction_id": "C02",
+    "reported": "Which Zendesk Suite plan Harbourline is on was not known by Priya; Jon would need to confirm the exact plan. [open]"
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Dana and the Harbourline team agreed the session would be mostly listening on Routewell's part...",
+   "Dana agreed to own and produce an integration plan with named tasks and hours for each side...",
+   "The proposed cutover plan is that Routewell replaces both Queuewise tagging and the cron sorter..."
+  ],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "missing"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "partial"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "partial"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "partial"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "missing"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture the vast majority of the important information and action items from the transcript. However, they suffer from severe structural and conciseness issues. The follow-up draft is a 40-bullet list that simply repeats the entire notes rather than acting as a usable email draft. The structured lists (Action Items, Open Questions) contain extreme duplication, listing the same items 2-4 times. Additionally, the notes hallucinate resolved questions (Queuewise end date, Zendesk plan) as open questions, and state superseded values (120 agents, Q4 go-live) as current facts in certain sections. A summary bullet is also cut off mid-word."
+ }
+}

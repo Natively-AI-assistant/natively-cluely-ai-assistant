@@ -70,23 +70,24 @@ test('validateAnswerStructure accepts complete coding answer', () => {
   assert.equal(result.hasComplexity, true);
 });
 
-test('validateAnswerStructure repairs unstructured coding answer', () => {
-  const result = validateAnswerStructure('coding_question_answer', 'Use a hash map. ```ts\nconst x = 1;\n```');
+test('validateAnswerStructure repairs unstructured dsa answer', () => {
+  // Six-section repair behavior now applies to dsa_question_answer only
+  // (named algorithm problems). coding_question_answer goes through the
+  // lighter impl validator that accepts any tagged code block.
+  const result = validateAnswerStructure('dsa_question_answer', 'Use a hash map. ```ts\nconst x = 1;\n```');
   assert.equal(result.ok, false);
   assert.ok(result.missingSections.includes('Approach'));
   assertCodingMarkdownContract(result.repaired ?? '');
 });
 
-test('classifyIntent prioritizes coding over generic example phrasing', async () => {
-  const prompts = [
-    'give me an example of a React component in TypeScript',
-    'can you give a concrete implementation of binary search in Python?',
-  ];
-
-  for (const prompt of prompts) {
-    const result = await classifyIntent(prompt, prompt, 0);
-    assert.equal(result.intent, 'coding', `${prompt} classified as ${result.intent}`);
-  }
+test('planAnswer routes example-phrased coding asks as coding without the deleted classifier tier (2026-09-05)', () => {
+  // The legacy regex tier caught this with `example of .* in .*`; its removal left
+  // the planner's `intent === 'coding'` arm permanently false. CODING_PATTERNS now
+  // carries the shape, with an object required so behavioral asks stay out.
+  const coding = planAnswer({ question: 'give me an example of a React component in TypeScript', transcriptContext: '', intentResult: { intent: 'general', confidence: 0.5 } });
+  assert.equal(coding.answerType, 'coding_question_answer');
+  const behavioral = planAnswer({ question: 'give me an example of a conflict in your last team and how you handled it', transcriptContext: '', intentResult: { intent: 'general', confidence: 0.5 } });
+  assert.notEqual(behavioral.answerType, 'coding_question_answer', 'a behavioral "example of ... in your ..." must not become code');
 });
 
 test('planAnswer classifies required odd/even manual prompts as coding answers', () => {
@@ -122,7 +123,8 @@ def is_even(number):
 
 The approach uses the modulo operator \`%\`.`;
 
-  const result = validateAnswerStructure('coding_question_answer', badOddEven);
+  // Six-section enforcement moved to dsa_question_answer.
+  const result = validateAnswerStructure('dsa_question_answer', badOddEven);
 
   assert.equal(result.ok, false);
   assert.ok(result.repaired, 'expected repaired markdown');
@@ -139,7 +141,7 @@ The approach uses the modulo operator \`%\`.`;
   assert.doesNotMatch(result.repaired ?? '', /I am Natively|I'm Natively|as an AI/i);
 });
 
-test('validateAnswerStructure requires deterministic markdown heading order for coding answers', () => {
+test('validateAnswerStructure requires deterministic markdown heading order for dsa answers', () => {
   const wrongOrder = `## Code
 
 \`\`\`python
@@ -167,10 +169,71 @@ Time Complexity: O(1). Space Complexity: O(1).
 
 - Negative numbers also work in Python.`;
 
-  const result = validateAnswerStructure('coding_question_answer', wrongOrder);
+  // Heading-order enforcement lives on dsa_question_answer only now.
+  const result = validateAnswerStructure('dsa_question_answer', wrongOrder);
 
   assert.equal(result.ok, false);
   assert.ok(result.missingSections.length === 0, 'all headings exist, failure should be ordering/start validation');
   assert.ok(result.repaired, 'wrong-order markdown should be repaired');
   assertCodingMarkdownContract(result.repaired ?? '');
+});
+
+// ── coding_question_answer (general implementation) path ────────────────────
+//
+// coding_question_answer now goes through validateImplAnswer (light validator):
+// any tagged code block passes. JSX/React content fenced with the wrong tag
+// (the canonical bug: model emits ```python on React code) is repaired to
+// ```tsx. There is NO six-section enforcement — that lives on
+// dsa_question_answer only.
+
+test('validateAnswerStructure accepts coding_question_answer with a tagged code block', () => {
+  const reactCode = `Here's a stopwatch component.
+
+\`\`\`tsx
+import React, { useState } from "react";
+
+export default function Stopwatch() {
+  const [elapsed, setElapsed] = useState(0);
+  return <div>{elapsed}</div>;
+}
+\`\`\`
+
+Uses useState to track elapsed time.`;
+
+  const result = validateAnswerStructure('coding_question_answer', reactCode);
+  assert.equal(result.ok, true);
+  assert.equal(result.hasCodeBlock, true);
+});
+
+test('validateAnswerStructure repairs coding_question_answer that misfenced JSX as python', () => {
+  const jsxAsPython = `\`\`\`python
+import React, { useState } from "react";
+
+export default function Stopwatch() {
+  const [elapsed, setElapsed] = useState(0);
+  return <div>{elapsed}</div>;
+}
+\`\`\``;
+
+  const result = validateAnswerStructure('coding_question_answer', jsxAsPython);
+  assert.equal(result.ok, false);
+  assert.ok(result.repaired, 'expected repaired fence tag');
+  // Fence tag flipped from python to tsx, body untouched.
+  assert.match(result.repaired ?? '', /```tsx\nimport React/);
+  assert.doesNotMatch(result.repaired ?? '', /```python\nimport React/);
+});
+
+test('validateAnswerStructure repairs coding_question_answer with JSX in untagged fence', () => {
+  // Empty fence tag is itself a fence problem — JSX content must be tagged
+  // tsx for the renderer. validateImplAnswer detects JSX content and rewrites
+  // the opening fence to ```tsx.
+  const jsxNoTag = `\`\`\`
+import React, { useState } from "react";
+function Stopwatch() { const [t] = useState(0); return <div>{t}</div>; }
+\`\`\``;
+
+  const result = validateAnswerStructure('coding_question_answer', jsxNoTag);
+  assert.equal(result.ok, false, 'JSX in untagged fence must trigger repair');
+  assert.ok(result.repaired, 'expected repaired fence tag');
+  assert.match(result.repaired ?? '', /```tsx\nimport React/);
 });

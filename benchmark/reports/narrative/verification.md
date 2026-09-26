@@ -1,0 +1,17 @@
+Checks the post-run checklist asked for, from `results/runs.jsonl` and the provider wire logs:
+- **Every run exists.** 11 conversations × 6 configs × 3 runs = 198 outputs, 0 crashes. **13 Luna max runs were excluded as infra failures.** The OpenAI account ran out of credits around 20:40 UTC (`429 You have no credits remaining`). The later natively-api breaker cool-down then routed the remaining calls away, as it would in production. These runs could not be retried because the account still has no credits. No other runs were excluded, and no retries were used.
+- **Intended model on every call.**
+  - Every DeepSeek response reported `model: deepseek-flash` (V4.1 Flash; the request sent the production id `deepseek-v4-flash`).
+  - Every OpenAI response reported `gpt-5.6-luna`.
+  - 2,047 model calls in total; 0 hit `finish_reason: length` or Responses `incomplete`.
+- **Reasoning configuration reached the provider.**
+  - Every Luna response echoed back the requested `reasoning.effort`.
+  - Every current-config DeepSeek call carried `thinking: {type: disabled}` and returned 0 reasoning tokens (0 total across 33 runs).
+  - The thinking diagnostic sent no `thinking` field and consumed 912,378 reasoning tokens across 33 runs.
+- **No silent provider fallback produced text.**
+  - Server-side, every non-candidate AI host was blocked and logged.
+  - "Runs with blocked server fallback" (2 for current DS, 1 each for Luna medium/none) are all the same mechanism. A chunk returned invalid JSON; the repair payload exceeded natively-api's 25,000-char DeepSeek gate; production would have sent that repair to Gemini. The call was blocked, the chunk dropped, and the loss is counted against that model.
+  - The "No Electron fallback" misses (31/33, 32/33) are the same 4 events cascading to the client's fallback rungs, which were also blocked.
+- **No hidden reasoning stored.** The shim deletes DeepSeek `reasoning_content` before natively-api sees it, and extracts only `output_text` from OpenAI. Only token counts are kept.
+- **No secrets in benchmark files.** 671 files were scanned against every value in both `.env` files (97 values, including each line of multi-line values): 0 matches. A separate key-shaped-pattern scan matched 5 times in 2 files (`outputs/ds-flash-thinking/SALES-DISC-L/run1.json` ×4, `reports/human-review/SALES-DISC-L.md` ×1). All 5 were inspected, and all are the summary text "the incumbent Zende**sk-Queue**wise…", not a key.
+- **Judge coverage.** 167 of the 185 selected runs were judged. The judge key's Gemini prepaid credits ran out during judging, and the last 18 runs (spread across configs; see "Judged runs") were left unjudged rather than scored by a different judge. Judge-to-judge noise (re-judging) could not be measured for the same reason.

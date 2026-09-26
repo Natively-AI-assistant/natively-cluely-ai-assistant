@@ -16,6 +16,31 @@ import type {
   RiskItem,
   TimelineItem,
 } from './types';
+import { SECTION_BULLET_CAP } from './MeetingSummaryV3';
+
+// ── "Next steps" suppression (2026-08-24, product decision) ───────────────────
+// The labelled "Next steps" block was judged redundant in generated meeting notes
+// and follow-up mail: it restates the action items that already appear in the
+// Action Items block / the mode's own sections, so every artefact ended with the
+// same list twice. It is switched OFF, not deleted.
+//
+// Flip INCLUDE_NEXT_STEPS back to true to restore it in this file. Matching
+// switches (flip all together) live in:
+//   electron/services/meeting/FollowUpDraftGenerator.ts   (LLM mail prompt + inputs)
+//   electron/services/post-call/PostCallWorkflow.ts        (post-call follow-up draft)
+//   src/components/MeetingDetails.tsx                      (renderer, incl. already-saved notes)
+//   electron/services/meeting/SummaryPolisher.ts           (Summary polish prompt + corpus,
+//     2026-08-25 — the unlabelled action-item line in buildSummary()'s own slot, above)
+export const INCLUDE_NEXT_STEPS: boolean = false;
+
+// Note-section titles that ARE the next-steps block, across the built-in mode
+// templates and user-authored sections: "Next steps", "Owners and next steps",
+// "Asks / next steps", "What happens next", "Recommended next step".
+export function isNextStepsSectionTitle(title: string | undefined | null): boolean {
+  const t = (title || '').trim();
+  if (!t) return false;
+  return /next\s*steps?\b/i.test(t) || /^what\s+happens\s+next\b/i.test(t);
+}
 
 export interface ReduceParams {
   title?: string;
@@ -37,17 +62,22 @@ export class MeetingSummaryReducer {
     const risks = assignIds(mergeSimilar(flatMap(atoms, atom => atom.risks), 'risk')) as RiskItem[];
     const topics = dedupeStrings(flatMap(atoms, atom => atom.topics)).slice(0, 20);
     const people = mergePeople(flatMap(atoms, atom => atom.people)).slice(0, 20);
-    const sections = buildSections(params.modeNoteSections || [], atoms);
+    const sectionWarnings: string[] = [];
+    const sections = buildSections(params.modeNoteSections || [], atoms, sectionWarnings);
     const timeline = buildTimeline(atoms, decisions, actionItems, risks);
     // "Summary" (rendered at the top of the notes) = outcome-first, grounded, no filler.
-    const tldr = buildSummary(decisions, actionItems, risks, atoms, sections);
+    const tldr = buildSummary(decisions, actionItems, risks, atoms, sections, params.modeTemplateType);
     const whatChanged = buildWhatChanged(atoms, decisions).slice(0, 6);
-    const overview = buildOverview(tldr, atoms, decisions);
+    const overview = buildOverview(tldr, atoms, decisions, sections, params.modeTemplateType, params.normalizedTranscript.totalTokensEstimate);
     const actionConfidence = deriveActionConfidence(actionItems);
     const transcriptCoverage = Math.max(0, Math.min(1, typeof params.transcriptCoverage === 'number' ? params.transcriptCoverage : (params.normalizedTranscript.totalChars > 0 ? 1 : 0)));
-    const warnings = [...params.normalizedTranscript.qualityWarnings];
+    // Order matters: sourceQuality.warnings is capped downstream (sanitizeStringArray keeps
+    // only the FIRST N and silently drops the rest — see MeetingSummaryV3.ts). A section-
+    // truncation warning is the rarest and highest-value signal (it says "notes content was
+    // deleted"), so it must never lose its slot to lower-value transcript/atom warnings in the
+    // exact giant-meeting scenario where truncation actually fires. Put it first.
     const atomWarnings = dedupeStrings(flatMap(atoms, atom => atom.sourceQualityWarnings || []));
-    warnings.push(...atomWarnings);
+    const warnings = [...sectionWarnings, ...atomWarnings, ...params.normalizedTranscript.qualityWarnings];
     if (atoms.length === 0) warnings.push('No summary atoms were produced; notes may be incomplete.');
 
     const generation: MeetingSummaryGenerationMeta = {
@@ -94,7 +124,16 @@ function flatMap<T>(atoms: ChunkMeetingAtoms[], mapper: (atom: ChunkMeetingAtoms
   return atoms.flatMap(mapper).filter(Boolean);
 }
 
-function buildSections(modeSections: MeetingModeSectionInput[], atoms: ChunkMeetingAtoms[]): MeetingNoteSection[] {
+// SECTION_BULLET_CAP is defined in MeetingSummaryV3.ts and reused here so this reducer-level
+// cap and the schema validator's cap (sanitizeSections -> sanitizeBullets, which runs on the
+// reduced summary immediately after this) can never drift apart. Realistic density is 5-12
+// findings per section per chunk; a well-covered section across 4-10 chunks can legitimately
+// reach ~120 bullets. This cap exists only to bound pathological input (a runaway chunk count
+// or a misbehaving extractor), not to trim a normal dense meeting — 500 is far above anything
+// the density contract should ever produce. If it ever fires, `buildSections` pushes a warning
+// into `warnings` (below) naming the section and the drop count, so truncation is never silent.
+
+function buildSections(modeSections: MeetingModeSectionInput[], atoms: ChunkMeetingAtoms[], warnings: string[]): MeetingNoteSection[] {
   const sectionMap = new Map<string, { title: string; bullets: NoteBullet[]; order: number }>();
   const titleCounts = new Map<string, number>();
   let orderCounter = 0;
@@ -122,17 +161,37 @@ function buildSections(modeSections: MeetingModeSectionInput[], atoms: ChunkMeet
       const section = sectionMap.get(id)!;
       for (const finding of findings) {
         const text = typeof finding === 'string' ? finding : finding?.text;
-        if (!text || section.bullets.some(b => similar(b.text, text))) continue;
+        if (!text) continue;
         const evidence = (finding && typeof finding === 'object') ? finding.evidence : undefined;
         const confidence = (finding && typeof finding === 'object' && finding.confidence) ? finding.confidence : 'medium';
+        // Keep the RICHER text, mirroring mergeSimilar: the old code dropped whichever
+        // finding arrived second, and chunk 0 always arrives first — so a terse early
+        // bullet permanently shadowed a more specific later one in this exact path.
+        const existing = section.bullets.find(b => similar(b.text, text));
+        if (existing) {
+          if (text.trim().length > (existing.text || '').trim().length) {
+            existing.text = text;
+          }
+          if (evidence?.length) existing.evidence = [...(existing.evidence || []), ...evidence].slice(0, 3);
+          continue;
+        }
         section.bullets.push({ id: `bullet_${crypto.randomUUID()}`, text, ...(evidence?.length ? { evidence } : {}), confidence });
       }
     }
   }
 
   return [...sectionMap.entries()]
-    .map(([id, section]) => ({ id, title: section.title, bullets: section.bullets.slice(0, 20), order: section.order }))
+    .map(([id, section]) => {
+      if (section.bullets.length > SECTION_BULLET_CAP) {
+        const dropped = section.bullets.length - SECTION_BULLET_CAP;
+        warnings.push(`Section "${section.title}" produced ${section.bullets.length} findings; kept the first ${SECTION_BULLET_CAP} chronologically and dropped ${dropped}.`);
+      }
+      return { id, title: section.title, bullets: section.bullets.slice(0, SECTION_BULLET_CAP), order: section.order };
+    })
     .filter(section => section.bullets.length > 0)
+    // Next-steps sections are suppressed at the source, so they never reach the
+    // notes, the follow-up draft inputs, or any recipe built from `sections`.
+    .filter(section => INCLUDE_NEXT_STEPS || !isNextStepsSectionTitle(section.title))
     .sort((a, b) => a.order - b.order);
 }
 
@@ -155,54 +214,202 @@ function buildWhatChanged(atoms: ChunkMeetingAtoms[], decisions: DecisionItem[])
   return dedupeStrings(candidates).slice(0, 6);
 }
 
+// The mode's DEFINING sections, in priority order — the content that makes this
+// mode's headline Summary read differently from every other mode's. buildSummary
+// leads with the first non-empty bullet from the first matching section, so a
+// technical interview's Summary opens with the hiring signal / problem, a
+// lecture's with its study summary, a sales call's with buying signals — not a
+// generic first-chunk brief. Titles must match TEMPLATE_NOTE_SECTIONS
+// (ModesManager.ts) — buildSections carries those titles into
+// summary.sections verbatim. Unknown/custom modes fall through to the generic
+// shape (their custom sections still render below).
+const MODE_HEADLINE_SECTIONS: Record<string, string[]> = {
+  'technical-interview': ['Hiring signal', 'Problem discussed', 'Approach'],
+  lecture: ['Study summary', 'Core concepts'],
+  sales: ['Buying signals', 'Pain points', 'Next steps'],
+  recruiting: ['Role fit', 'Candidate profile'],
+  'team-meet': ['Progress since last sync', 'Blockers'],
+  'looking-for-work': ['Role fit', 'Next steps'],
+  seminar: ['Answer from your files', 'Question'],
+  'call-center': ['Customer issue', 'Resolution'],
+};
+
+const CONFIDENCE_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
+const rankConfidence = (c?: string): number => CONFIDENCE_RANK[c || ''] ?? 1;
+
 // Outcome-first Summary, built deterministically from the already-grounded reduced content.
-// 3–5 lines: purpose → key decisions → most important next step → top risk (only if nothing
-// else carried the meeting). Zero new information. Returns [] (empty Summary) rather than
-// boilerplate when there is genuinely no grounded outcome — honest beats filler.
-function buildSummary(decisions: DecisionItem[], actionItems: ActionItem[], risks: RiskItem[], atoms: ChunkMeetingAtoms[], sections: MeetingNoteSection[]): string[] {
+// 3–5 lines: mode-defining lead → purpose → key decisions → high-severity risk. (The most
+// important next step was dropped from this slot 2026-08-25 — product decision, same
+// suppression as the labelled "Next steps" block; see INCLUDE_NEXT_STEPS above. Restoring
+// it is a one-line flag flip: gate the action-item push below on INCLUDE_NEXT_STEPS.)
+// Zero new information. Returns [] (empty Summary) rather than boilerplate when there is
+// genuinely no grounded outcome — honest beats filler.
+//
+// Selection quality (review 2026-08-23 — the previous version was a positional
+// grab: chunk 1's brief, the first 2 decisions CHronologically, actionItems[0],
+// risk only as filler — so a critical decision at minute 45, the 3rd action
+// item, or a high-severity mid-meeting risk never reached the headline even
+// though the pipeline had already computed confidence/severity for them):
+//   - decisions ranked by confidence (stable among equals, so chronology still
+//     breaks ties);
+//   - the next step prefers explicit over inferred, then confidence;
+//   - a HIGH-severity risk is always included, not just as filler;
+//   - the lead line comes from the active mode's defining section.
+function buildSummary(decisions: DecisionItem[], actionItems: ActionItem[], risks: RiskItem[], atoms: ChunkMeetingAtoms[], sections: MeetingNoteSection[], modeTemplateType?: string | null): string[] {
   const out: string[] = [];
-  const purpose = atoms.map(a => a.brief).find(Boolean) || sections.find(s => s.bullets.length)?.bullets[0]?.text;
+
+  // Mode-defining lead: the first non-empty bullet of the mode's top section.
+  const headlineTitles = MODE_HEADLINE_SECTIONS[modeTemplateType || ''] || [];
+  for (const title of headlineTitles) {
+    const sec = sections.find(sect => sect.title === title && sect.bullets.length > 0);
+    const bullet = sec?.bullets[0]?.text?.trim();
+    if (bullet) { out.push(bullet); break; }
+  }
+
+  const purpose = atoms.map(a => a.brief).find(Boolean) || sections.find(sect => sect.bullets.length)?.bullets[0]?.text;
   if (purpose) out.push(purpose);
-  out.push(...decisions.slice(0, 2).map(d => d.text));
-  const a = actionItems[0];
-  if (a) out.push(`${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` by ${a.deadline}` : ''}`);
-  if (out.length < 2 && risks[0]) out.push(risks[0].text);
+
+  const rankedDecisions = decisions
+    .map((d, i) => ({ d, i }))
+    .sort((x, y) => rankConfidence(x.d.confidence) - rankConfidence(y.d.confidence) || x.i - y.i);
+  out.push(...rankedDecisions.slice(0, 2).map(({ d }) => d.text));
+
+  const rankedActions = actionItems
+    .map((a, i) => ({ a, i }))
+    .sort((x, y) => (x.a.explicitness === 'explicit' ? 0 : 1) - (y.a.explicitness === 'explicit' ? 0 : 1)
+      || rankConfidence(x.a.confidence) - rankConfidence(y.a.confidence)
+      || x.i - y.i);
+  const a = rankedActions[0]?.a;
+  if (INCLUDE_NEXT_STEPS && a) out.push(`${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` by ${a.deadline}` : ''}`);
+
+  const highRisk = risks.find(r => r.severity === 'high');
+  if (highRisk) out.push(highRisk.text);
+  else if (out.length < 2 && risks[0]) out.push(risks[0].text);
+
   return dedupeStrings(out).slice(0, 5);
+}
+
+// ── Overview length band (2026-08-25, product decision) ───────────────────────
+// The Overview should scale with meeting length: roughly one paragraph for a short
+// meeting, up to 2-3 paragraphs for a long one, so the compressed summary can actually
+// carry "the entire meeting without losing anything important" instead of hard-capping at
+// a fixed word count regardless of how much happened. Measured baseline: a 48-minute,
+// ~11.8k-estimated-token, 5-chunk meeting produced a 161-word (~1 paragraph) V3 overview —
+// short of the 2-3 paragraphs wanted for a meeting that length.
+//
+// Signal: NormalizedTranscript.totalTokensEstimate (chars/4, see TranscriptNormalizer) is
+// already computed once per meeting and threaded through both call sites (buildOverview's
+// deterministic cap here, and SummaryPolisher.polishOverview's LLM prompt) — a cleaner,
+// more continuous signal than chunk count, which only reflects TranscriptChunker's own
+// size thresholds. Bands (word counts are the LLM prompt's target; the deterministic cap
+// below uses maxWords so it can absorb slightly more without ever exceeding it):
+//   short  (<= 3000 tokens,  ~12 min): ~120-180 words,  one paragraph
+//   medium (<= 8000 tokens,  ~32 min): ~200-300 words,  two paragraphs
+//   long   (>  8000 tokens):           ~300-450 words,  2-3 paragraphs
+export interface OverviewBand {
+  label: 'short' | 'medium' | 'long';
+  minWords: number;
+  maxWords: number;
+  targetWords: number;
+  paragraphs: string;
+}
+
+const OVERVIEW_SHORT_TOKEN_THRESHOLD = 3000;
+const OVERVIEW_MEDIUM_TOKEN_THRESHOLD = 8000;
+
+export function getOverviewBand(totalTokensEstimate: number): OverviewBand {
+  const tokens = typeof totalTokensEstimate === 'number' && totalTokensEstimate > 0 ? totalTokensEstimate : 0;
+  if (tokens <= OVERVIEW_SHORT_TOKEN_THRESHOLD) {
+    return { label: 'short', minWords: 120, maxWords: 180, targetWords: 150, paragraphs: 'one paragraph' };
+  }
+  if (tokens <= OVERVIEW_MEDIUM_TOKEN_THRESHOLD) {
+    return { label: 'medium', minWords: 200, maxWords: 300, targetWords: 250, paragraphs: '2 paragraphs' };
+  }
+  return { label: 'long', minWords: 300, maxWords: 450, targetWords: 380, paragraphs: '2-3 paragraphs' };
 }
 
 // Deterministic whole-meeting overview paragraph (fallback when LLM polish is off/unavailable).
 // Stitches the chunk briefs (the chronological arc of the meeting) into a paragraph, then
 // folds in the headline decisions so it reads as a quick recap of the ENTIRE meeting rather
-// than just the first two summary bullets. Capped to ~400 words.
-function buildOverview(summary: string[], atoms: ChunkMeetingAtoms[], decisions: DecisionItem[]): string {
+// than just the first two summary bullets. Capped to the length band's maxWords (see
+// getOverviewBand above) rather than a fixed 400, so a long meeting's deterministic
+// fallback isn't truncated to the same size as a short one's.
+function buildOverview(summary: string[], atoms: ChunkMeetingAtoms[], decisions: DecisionItem[], sections: MeetingNoteSection[] = [], modeTemplateType?: string | null, totalTokensEstimate?: number): string {
   const briefs = dedupeStrings(atoms.map(a => a.brief).filter(Boolean));
   const parts: string[] = [];
   if (briefs.length) parts.push(briefs.join(' '));
   else if (summary.length) parts.push(summary.join(' '));
-  const topDecisions = decisions.slice(0, 3).map(d => d.text);
+  // Confidence-ranked, mirroring buildSummary (review 2026-08-23).
+  const topDecisions = decisions
+    .map((d, i) => ({ d, i }))
+    .sort((x, y) => rankConfidence(x.d.confidence) - rankConfidence(y.d.confidence) || x.i - y.i)
+    .slice(0, 3).map(({ d }) => d.text);
   if (topDecisions.length) parts.push(`Key decisions: ${topDecisions.join('; ')}.`);
+  // Mode-defining close, so the overview paragraph also reads in the mode's
+  // own terms (a technical interview ends on the hiring signal, a lecture on
+  // its study summary) instead of always generic decisions.
+  const headlineTitles = MODE_HEADLINE_SECTIONS[modeTemplateType || ''] || [];
+  for (const title of headlineTitles) {
+    const sec = sections.find(sect => sect.title === title && sect.bullets.length > 0);
+    const bullet = sec?.bullets[0]?.text?.trim();
+    if (bullet && !parts.some(pp => pp.includes(bullet))) { parts.push(`${title}: ${bullet}`); break; }
+  }
   const text = parts.join(' ').replace(/\s+/g, ' ').trim();
   const words = text.split(/\s+/);
-  return words.length > 400 ? words.slice(0, 400).join(' ') : text;
+  const maxWords = getOverviewBand(totalTokensEstimate ?? 0).maxWords;
+  return words.length > maxWords ? words.slice(0, maxWords).join(' ') : text;
 }
 
 // Deterministic follow-up body (fallback used when the LLM follow-up generator is
 // unavailable or scope-denied). Kept exported so FollowUpDraftGenerator can reuse it.
-export function buildFollowUpBody(decisions: DecisionItem[], actionItems: ActionItem[]): string {
-  const lines = ['Hi team,', '', 'Thanks for the conversation.'];
-  if (decisions.length > 0) {
-    lines.push('', 'Decisions confirmed:', ...decisions.slice(0, 5).map(item => `- ${item.text}`));
+// Mode-aware: salutation, opening, section labels and sign-off match the meeting mode
+// so an offline draft still reads correctly for its audience (a sales prospect, a
+// candidate, an internal team, a study recap, etc.) rather than always "Hi team,".
+export function buildFollowUpBody(decisions: DecisionItem[], actionItems: ActionItem[], mode?: string | null): string {
+  // Per-mode scaffold: [salutation, opening, decisionsLabel, nextStepsLabel, emptyLine, signoff]
+  // A null salutation/sign-off means "omit" (study notes, interviewer feedback).
+  // `emptyNoNextSteps` overrides `empty` while INCLUDE_NEXT_STEPS is false: with the
+  // action-item block suppressed, "no decisions OR action items were captured" would be
+  // a false statement on a meeting that did produce action items — only the decisions
+  // block can be missing at that point. Modes whose `empty` line never mentions action
+  // items don't need an override.
+  const S: Record<string, { salutation: string | null; opening: string; decisionsLabel: string; nextStepsLabel: string; empty: string; emptyNoNextSteps?: string; signoff: string | null }> = {
+    general:              { salutation: 'Hi team,',            opening: 'Thanks for the conversation.',           decisionsLabel: 'Decisions confirmed:', nextStepsLabel: 'Next steps:',        empty: 'No explicit decisions or action items were captured.', emptyNoNextSteps: 'No explicit decisions were captured.', signoff: 'Best,' },
+    sales:                { salutation: 'Hi there,',           opening: 'Thanks for taking the time to meet today.', decisionsLabel: 'What we aligned on:',  nextStepsLabel: 'Next steps:',        empty: 'It was great connecting — I\'ll follow up with next steps shortly.', signoff: 'Best regards,' },
+    // Recruiting omits the decisions block from the deterministic fallback entirely:
+    // negative-hiring decisions or Concerns would be leaked to the candidate if rendered.
+    recruiting:           { salutation: 'Hi there,',           opening: 'Thank you for taking the time to speak with us today.', decisionsLabel: '',                       nextStepsLabel: 'What happens next:',  empty: 'Thanks again — we\'ll be in touch about next steps soon.', signoff: 'Best,' },
+    'team-meet':          { salutation: 'Hi team,',            opening: 'Quick recap from our sync:',             decisionsLabel: 'Decisions:',           nextStepsLabel: 'Owners & next steps:', empty: 'No decisions or action items were captured this time.', emptyNoNextSteps: 'No decisions were captured this time.', signoff: 'Thanks,' },
+    'looking-for-work':   { salutation: 'Dear interviewer,',   opening: 'Thank you for taking the time to speak with me today.', decisionsLabel: 'What we discussed:',   nextStepsLabel: 'Next steps:',        empty: 'Thank you again for the conversation — I really enjoyed it.', signoff: 'Best regards,' },
+    'technical-interview':{ salutation: null,                  opening: 'Interview debrief:',                     decisionsLabel: 'Assessment:',          nextStepsLabel: 'Recommended next step:', empty: 'No decisions were recorded during the session.', signoff: null },
+    lecture:              { salutation: null,                  opening: 'Study recap:',                           decisionsLabel: 'Key points:',          nextStepsLabel: 'To review:',         empty: 'No key points were captured.', signoff: null },
+  };
+  const p = (mode && S[mode]) || S.general;
+
+  const lines: string[] = [];
+  if (p.salutation) lines.push(p.salutation, '');
+  lines.push(p.opening);
+  // `rendered` tracks whether ANY substantive block made it into the body. With the
+  // next-steps block suppressed, "decisions.length === 0 && actionItems.length === 0"
+  // is no longer the right emptiness test: a meeting with action items but no
+  // decisions — and every recruiting draft, whose decisionsLabel is deliberately
+  // empty — would otherwise render as salutation + opening + sign-off and nothing else.
+  let rendered = false;
+  if (decisions.length > 0 && p.decisionsLabel) {
+    lines.push('', p.decisionsLabel, ...decisions.slice(0, 5).map(item => `- ${item.text}`));
+    rendered = true;
   }
-  if (actionItems.length > 0) {
-    lines.push('', 'Next steps:', ...actionItems.slice(0, 8).map(item => {
+  if (INCLUDE_NEXT_STEPS && actionItems.length > 0) {
+    lines.push('', p.nextStepsLabel, ...actionItems.slice(0, 8).map(item => {
       const owner = item.owner ? `${item.owner}: ` : '';
       const deadline = item.deadline ? ` by ${item.deadline}` : '';
       const inferred = item.explicitness === 'inferred' ? ' (inferred)' : '';
       return `- ${owner}${item.text}${deadline}${inferred}`;
     }));
+    rendered = true;
   }
-  if (decisions.length === 0 && actionItems.length === 0) lines.push('', 'No explicit decisions or action items were captured.');
-  lines.push('', 'Best,');
+  if (!rendered) lines.push('', (!INCLUDE_NEXT_STEPS && p.emptyNoNextSteps) || p.empty);
+  if (p.signoff) lines.push('', p.signoff);
   return lines.join('\n');
 }
 
@@ -247,7 +454,13 @@ function mergeSimilar<T extends { text: string; evidence?: any[] }>(items: T[], 
       merged.push({ ...item });
       continue;
     }
-    existing.evidence = [...(existing.evidence || []), ...(item.evidence || [])].slice(0, 4);
+    // Keep the RICHER text. The old code kept whichever arrived first, so a terse
+    // restatement could never be improved by a later, more specific one — and a terse
+    // EARLY bullet permanently shadowed the specific later version.
+    if ((item.text || '').trim().length > (existing.text || '').trim().length) {
+      existing.text = item.text;
+    }
+    existing.evidence = [...(existing.evidence || []), ...(item.evidence || [])].slice(0, 3);
     if (kind === 'action') {
       const e = existing as any;
       const i = item as any;
@@ -294,16 +507,51 @@ function dedupeStrings(values: string[]): string[] {
   return out;
 }
 
-function similar(a: string, b: string): boolean {
+// Two bullets are "the same point" only when they overlap SYMMETRICALLY and are of
+// comparable length.
+//
+// The previous rule was `shared / Math.min(aWords.size, bWords.size) >= 0.8` — pure subset
+// containment. Any short generic bullet whose words appear inside a longer specific one
+// scored 1.0, and because mergeSimilar keeps the FIRST-seen item, the specific text was
+// discarded outright. Reproduced 2026-08-24: "Ari will send the packet" swallowed "Ari will
+// send the SOC2 packet to procurement on Friday". That one function explained both "notes
+// are too thin" and "notes miss what mattered".
+//
+// Dice coefficient (2·shared / (|A|+|B|)) is symmetric, so containment alone cannot reach
+// 1.0. The length-ratio floor is the second guard: a bullet under 60% the length of another
+// is a DIFFERENT, less specific point however well its words are contained.
+//
+// THRESHOLD FLOOR — do not lower SIMILARITY_DICE_THRESHOLD below 0.8: for two word sets of
+// EQUAL size, Dice is algebraically identical to the old containment formula
+// (shared / min(|A|,|B|)), so on same-length pairs this rule is only as strict as the number
+// you pick here. Three chunk-scoped decisions that differ by a single distinguishing word —
+// "Decision from early meeting segment" / "...middle..." / "...late..." — score Dice 0.750.
+// They must NOT merge (merging them silently destroys chunk coverage, which is worse than
+// leaving a near-duplicate bullet — see the note on MUST_MERGE below), so the threshold must
+// sit above 0.75. This is locked at 0.8 by
+// `NotesQuality2026_08_24.test.mjs` → `MUST_STAY_DISTINCT` (the early/middle/late row) and by
+// `MeetingSummaryPipeline.test.mjs` → "long transcript chunker preserves early middle and late
+// coverage". Both thresholds below are otherwise locked by the tables in
+// NotesQuality2026_08_24.test.mjs — change one, run that suite.
+const SIMILARITY_DICE_THRESHOLD = 0.8;
+const SIMILARITY_LENGTH_RATIO_FLOOR = 0.6;
+
+export function similar(a: string, b: string): boolean {
   const na = normalize(a);
   const nb = normalize(b);
   if (!na || !nb) return false;
   if (na === nb) return true;
-  const aWords = new Set(na.split(' '));
-  const bWords = new Set(nb.split(' '));
-  const shared = [...aWords].filter(w => bWords.has(w)).length;
-  const smaller = Math.min(aWords.size, bWords.size) || 1;
-  return shared / smaller >= 0.8;
+  const aWords = new Set(na.split(' ').filter(Boolean));
+  const bWords = new Set(nb.split(' ').filter(Boolean));
+  if (aWords.size === 0 || bWords.size === 0) return false;
+
+  const lengthRatio = Math.min(aWords.size, bWords.size) / Math.max(aWords.size, bWords.size);
+  if (lengthRatio < SIMILARITY_LENGTH_RATIO_FLOOR) return false;
+
+  let shared = 0;
+  for (const word of aWords) if (bWords.has(word)) shared++;
+  const dice = (2 * shared) / (aWords.size + bWords.size);
+  return dice >= SIMILARITY_DICE_THRESHOLD;
 }
 
 function normalize(value: string): string {

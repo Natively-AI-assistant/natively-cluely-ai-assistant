@@ -22,24 +22,51 @@ export class OllamaBootstrap {
     }
   }
 
+  // PHASE-2C: log the "not installed" ENOENT at most ONCE per process. Repeated
+  // spawns on every fresh bootstrap (or every retry from ensureRunning) used
+  // to fill the user's log with the same noise. If the user later installs
+  // Ollama, the next call will re-attempt naturally because the gate is per-
+  // process-instance, not persisted to disk.
+  private static _loggedMissingOnce = false;
+  private static readonly MISSING_BACKOFF_MS = 60_000;
+  private static _lastMissingLogAt = 0;
+
   /**
    * Attempt to start the Ollama daemon via shell
    */
   async ensureOllamaRunning(): Promise<boolean> {
     if (await this.isOllamaRunning()) return true;
-    
+
+    // PHASE-2C: short-circuit if we recently logged "not installed" — no point
+    // spamming spawn attempts every few seconds.
+    const now = Date.now();
+    if (
+      OllamaBootstrap._loggedMissingOnce &&
+      now - OllamaBootstrap._lastMissingLogAt < OllamaBootstrap.MISSING_BACKOFF_MS
+    ) {
+      return false;
+    }
+
     // Try to start it
     try {
       const child = spawn('ollama', ['serve'], { detached: true, stdio: 'ignore' });
-      child.on('error', (err) => {
-        console.error('[OllamaBootstrap] Failed to spawn ollama (not installed?):', err);
+      child.on('error', (err: NodeJS.ErrnoException) => {
+        // Throttle: log the FIRST occurrence, then only every MISSING_BACKOFF_MS.
+        if (
+          !OllamaBootstrap._loggedMissingOnce ||
+          now - OllamaBootstrap._lastMissingLogAt >= OllamaBootstrap.MISSING_BACKOFF_MS
+        ) {
+          console.warn('[OllamaBootstrap] Ollama binary not on PATH; skipping spawn (this message is logged at most once per minute per process):', err?.code || err?.message || err);
+          OllamaBootstrap._loggedMissingOnce = true;
+          OllamaBootstrap._lastMissingLogAt = now;
+        }
       });
       child.unref();
     } catch (e) {
       console.error('[OllamaBootstrap] Synchronous error spawning ollama:', e);
       return false;
     }
-    
+
     // Wait up to 5 seconds for it to come up
     for (let i = 0; i < 10; i++) {
       await new Promise(r => setTimeout(r, 500));
@@ -131,42 +158,67 @@ export class OllamaBootstrap {
   /**
    * Full bootstrap sequence. Resumes from DB state.
    */
+  // In-memory single-flight guard, keyed by model. Deduplicates concurrent
+  // bootstrap() calls WITHIN a single process (e.g. a startup bootstrap racing a
+  // re-eval triggered by a settings change). Intentionally NOT persisted: a
+  // prior session killed mid-pull must be free to retry on the next launch, so
+  // we never key the guard off the DB's `in_progress` (which would wedge
+  // forever). Cleared in the finally block below.
+  private static inFlight = new Set<string>();
+
   async bootstrap(
     model = 'nomic-embed-text',
     onProgress: (status: string, percent: number) => void
   ): Promise<'not_running' | 'already_pulled' | 'pulled' | 'failed' | 'in_progress'> {
-    
-    const db = DatabaseManager.getInstance();
-    const status = db.getAppState('ollama_pull_status');
-    
-    if (status === 'complete') {
-        // Double check against daemon just in case user deleted it manually
-        const pulled = await this.isModelPulled(model);
-        if (pulled) return 'already_pulled';
-    }
 
-    const running = await this.ensureOllamaRunning();
-    if (!running) return 'not_running';
-
-    const pulled = await this.isModelPulled(model);
-    if (pulled) {
-        db.setAppState('ollama_pull_status', 'complete');
-        return 'already_pulled';
+    // Concurrency guard: if another bootstrap for this model is already running
+    // in this process, don't start a second pull (or a second kill-inducing
+    // ensureOllamaRunning). The caller treats 'in_progress' as a benign no-op.
+    if (OllamaBootstrap.inFlight.has(model)) {
+      return 'in_progress';
     }
+    // add() and ALL subsequent work — including the DB reads below — live inside
+    // the try so the finally always releases the guard. A throw between add()
+    // and the try (e.g. DatabaseManager.getInstance() failing before the DB is
+    // ready) would otherwise wedge `model` in the static Set for the process
+    // lifetime, permanently returning 'in_progress' for every later bootstrap.
+    OllamaBootstrap.inFlight.add(model);
 
     try {
-      db.setAppState('ollama_pull_status', 'in_progress');
-      onProgress('starting download', 0);
-      
-      await this.pullModel(model, onProgress);
-      
-      onProgress('ready', 100);
-      db.setAppState('ollama_pull_status', 'complete');
-      return 'pulled';
-    } catch (err: any) {
-      console.error('[OllamaBootstrap] Pull failed:', err.message);
-      db.setAppState('ollama_pull_status', 'failed');
-      return 'failed';
+      const db = DatabaseManager.getInstance();
+      const status = db.getAppState('ollama_pull_status');
+
+      if (status === 'complete') {
+          // Double check against daemon just in case user deleted it manually
+          const pulled = await this.isModelPulled(model);
+          if (pulled) return 'already_pulled';
+      }
+
+      const running = await this.ensureOllamaRunning();
+      if (!running) return 'not_running';
+
+      const pulled = await this.isModelPulled(model);
+      if (pulled) {
+          db.setAppState('ollama_pull_status', 'complete');
+          return 'already_pulled';
+      }
+
+      try {
+        db.setAppState('ollama_pull_status', 'in_progress');
+        onProgress('starting download', 0);
+
+        await this.pullModel(model, onProgress);
+
+        onProgress('ready', 100);
+        db.setAppState('ollama_pull_status', 'complete');
+        return 'pulled';
+      } catch (err: any) {
+        console.error('[OllamaBootstrap] Pull failed:', err.message);
+        db.setAppState('ollama_pull_status', 'failed');
+        return 'failed';
+      }
+    } finally {
+      OllamaBootstrap.inFlight.delete(model);
     }
   }
 }

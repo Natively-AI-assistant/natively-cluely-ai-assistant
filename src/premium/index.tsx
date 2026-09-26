@@ -18,7 +18,8 @@ const nullAdCampaigns = (
   _appStartTime?: number,
   _lastMeetingEndTime?: number | null,
   _isProcessingMeeting?: boolean,
-  _hasNativelyApi?: boolean
+  _hasNativelyApi?: boolean,
+  _enabled?: boolean,
 ) => ({
   activeAd: null as string | null,
   dismissAd: (_campaignId?: string) => {},
@@ -26,16 +27,8 @@ const nullAdCampaigns = (
 });
 
 // ─── Glob-import premium modules (empty {} when premium/ is absent) ──
-const _premiumModal = import.meta.glob<any>(
-  '../../premium/src/PremiumUpgradeModal.tsx',
-  { eager: true }
-);
 const _profileVis = import.meta.glob<any>(
   '../../premium/src/ProfileVisualizer.tsx',
-  { eager: true }
-);
-const _promoToaster = import.meta.glob<any>(
-  '../../premium/src/PremiumPromoToaster.tsx',
   { eager: true }
 );
 const _profileToaster = import.meta.glob<any>(
@@ -70,6 +63,10 @@ const _modesSettings = import.meta.glob<any>(
   '../../premium/src/ModesSettings.tsx',
   { eager: true }
 );
+const _roleInsight = import.meta.glob<any>(
+  '../../premium/src/RoleInsightPanel.tsx',
+  { eager: true }
+);
 
 // ─── Helper ──────────────────────────────────────────────────────────
 function get<T>(mods: Record<string, any>, name: string, fallback: T): T {
@@ -78,14 +75,8 @@ function get<T>(mods: Record<string, any>, name: string, fallback: T): T {
 }
 
 // ─── Exports (always safe to import) ─────────────────────────────────
-export const PremiumUpgradeModal: React.FC<any> =
-  get(_premiumModal, 'PremiumUpgradeModal', NullComponent);
-
 export const ProfileVisualizer: React.FC<any> =
   get(_profileVis, 'ProfileVisualizer', NullComponent);
-
-export const PremiumPromoToaster: React.FC<any> =
-  get(_promoToaster, 'PremiumPromoToaster', NullComponent);
 
 export const ProfileFeatureToaster: React.FC<any> =
   get(_profileToaster, 'ProfileFeatureToaster', NullComponent);
@@ -110,3 +101,6 @@ export const MaxUltraUpgradeToaster: React.FC<any> =
 
 export const ModesSettings: React.FC<any> =
   get(_modesSettings, 'default', NullComponent);
+
+export const RoleInsightPanel: React.FC<any> =
+  get(_roleInsight, 'RoleInsightPanel', NullComponent);

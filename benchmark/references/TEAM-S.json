@@ -1,0 +1,82 @@
+{
+  "id": "TEAM-S",
+  "category": "team_meeting",
+  "natively_mode": "team-meet",
+  "length_bucket": "short",
+  "speakers": [
+    {"label": "S0", "shown_to_model_as": "Me", "name": "Dana Whitfield", "role": "Mobile Team Lead", "org": "Stridewell"},
+    {"label": "S1", "shown_to_model_as": "Speaker 1", "name": "Ravi Menon", "role": "iOS Engineer", "org": "Stridewell"},
+    {"label": "S2", "shown_to_model_as": "Speaker 2", "name": "Katya Novak", "role": "Android Engineer", "org": "Stridewell"},
+    {"label": "S3", "shown_to_model_as": "Speaker 3", "name": "Theo Brandt", "role": "Backend Engineer", "org": "Stridewell"},
+    {"label": "S4", "shown_to_model_as": "Speaker 4", "name": "Joan Adeyemi", "role": "QA Engineer", "org": "Stridewell"}
+  ],
+  "context": "A short daily standup for Stridewell's mobile app team, run by team lead Dana Whitfield. The iOS, Android, backend and QA engineers give yesterday/today/blocker updates ahead of the 4.12.0 release, and the team moves the release branch cut and reassigns a ticket.",
+  "facts": [
+    {"id": "F01", "type": "background", "importance": "critical", "statement": "The release being prepared is version 4.12.0.", "owner": null, "deadline": null, "position": "early", "lines": [12], "notes": null},
+    {"id": "F02", "type": "decision", "importance": "critical", "statement": "Dana decided to cut the 4.12 release branch on Thursday at 2pm instead of Wednesday.", "owner": "Dana Whitfield", "deadline": "Thursday 2pm", "position": "late", "lines": [53, 54], "notes": "supersedes the Wednesday plan stated on line 12 (C02)"},
+    {"id": "F03", "type": "timeline", "importance": "important", "statement": "App Store and Play Store submission stays on Monday despite the branch cut moving.", "owner": null, "deadline": "Monday", "position": "late", "lines": [53], "notes": null},
+    {"id": "F04", "type": "action_item", "importance": "critical", "statement": "Joan will do a full regression pass on build 321 and post the results in the release channel by Wednesday 5pm.", "owner": "Joan Adeyemi", "deadline": "Wednesday 5pm", "position": "late", "lines": [55, 56], "notes": "target build superseded 318 -> 321 (C04)"},
+    {"id": "F05", "type": "action_item", "importance": "critical", "statement": "Dana will escalate Theo's vault blocker by pinging Jon on the platform team and his manager directly, and get Theo an answer by noon today.", "owner": "Dana Whitfield", "deadline": "noon today", "position": "middle", "lines": [40, 67], "notes": null},
+    {"id": "F06", "type": "pain_point", "importance": "critical", "statement": "Theo is blocked on the Apple sign-in token refresh work: he needs the platform team to add the new client secret to the production vault, he lacks write access, and Jon on platform said on Friday he would look at it.", "owner": null, "deadline": null, "position": "middle", "lines": [36, 37], "notes": "blocker needing another team"},
+    {"id": "F07", "type": "risk", "importance": "important", "statement": "Without the vault client secret, the Apple sign-in fix cannot go into 4.12 at all.", "owner": null, "deadline": null, "position": "middle", "lines": [41], "notes": null},
+    {"id": "F08", "type": "number", "importance": "critical", "statement": "The crash rate on the Android 4.11.2 rollout is 0.8%, roughly double the usual baseline of about 0.4%.", "owner": null, "deadline": null, "position": "early", "lines": [19, 21], "notes": "8% on line 19 was a misstatement, corrected on line 21 (C01)"},
+    {"id": "F09", "type": "pain_point", "importance": "important", "statement": "The Android crash spike is almost all one crash, MOB-1440: a null pointer in the heart rate sync service on Samsung devices running Android 14.", "owner": null, "deadline": null, "position": "early", "lines": [22], "notes": null},
+    {"id": "F10", "type": "commitment", "importance": "important", "statement": "Katya is writing the fix for MOB-1440 and hopes to have a PR up this afternoon.", "owner": "Katya Novak", "deadline": "this afternoon (hoped)", "position": "early", "lines": [23], "notes": null},
+    {"id": "F11", "type": "decision", "importance": "critical", "statement": "If the MOB-1440 fix lands in time it goes into 4.12; no hotfix decision was made and the crash numbers will be reviewed again Thursday.", "owner": null, "deadline": "Thursday", "position": "early", "lines": [27], "notes": "the 4.11.3 hotfix was floated but not decided"},
+    {"id": "F12", "type": "decision", "importance": "critical", "statement": "MOB-1431 (push notification deep link opening the wrong screen) was reassigned from Ravi to Katya, who will take it after MOB-1440, starting tomorrow.", "owner": "Katya Novak", "deadline": "starting tomorrow", "position": "late", "lines": [15, 58, 59, 61], "notes": "owner change Ravi -> Katya (C03)"},
+    {"id": "F13", "type": "action_item", "importance": "important", "statement": "Ravi is moved onto the App Store screenshots and release notes for 4.12, since he did them last time.", "owner": "Ravi Menon", "deadline": null, "position": "late", "lines": [57], "notes": null},
+    {"id": "F14", "type": "background", "importance": "important", "statement": "Ravi finished and merged MOB-1423, the iOS workout timer drifting when the app goes to the background.", "owner": "Ravi Menon", "deadline": null, "position": "early", "lines": [13], "notes": null},
+    {"id": "F15", "type": "definition", "importance": "minor", "statement": "MOB-1423's root cause was relying on the display link timer instead of wall clock time, losing 20 or 30 seconds after about ten minutes in the background.", "owner": null, "deadline": null, "position": "early", "lines": [14], "notes": null},
+    {"id": "F16", "type": "timeline", "importance": "minor", "statement": "The MOB-1423 fix went out in TestFlight build 318 last night.", "owner": null, "deadline": null, "position": "early", "lines": [17], "notes": null},
+    {"id": "F17", "type": "number", "importance": "important", "statement": "Theo deployed the new workout history endpoint to staging, cutting p95 latency from about 4 seconds to 1.9 seconds.", "owner": "Theo Brandt", "deadline": null, "position": "middle", "lines": [32], "notes": null},
+    {"id": "F18", "type": "definition", "importance": "minor", "statement": "The latency gain came mostly from paginating the query to 50 workouts per page, and the change is backwards compatible with 4.11 clients (they get the first page by default).", "owner": null, "deadline": null, "position": "middle", "lines": [33, 35], "notes": null},
+    {"id": "F19", "type": "preference", "importance": "minor", "statement": "Theo would still like to load test the workout history endpoint before it goes to production.", "owner": "Theo Brandt", "deadline": null, "position": "middle", "lines": [33], "notes": "stated as a wish, not a committed action"},
+    {"id": "F20", "type": "number", "importance": "important", "statement": "Joan's regression run on build 318 covered 142 test cases with 9 failures; most were known onboarding flakiness but 2 were real bugs: the MOB-1431 deep link issue and Android offline mode not syncing saved routes.", "owner": "Joan Adeyemi", "deadline": null, "position": "middle", "lines": [43, 44], "notes": null},
+    {"id": "F21", "type": "timeline", "importance": "important", "statement": "Build 321, produced by CI about an hour before the standup, is the latest build and includes Katya's offline sync fix, so Joan will rerun regression on 321 instead of filing tickets against 318.", "owner": "Joan Adeyemi", "deadline": null, "position": "middle", "lines": [47, 48], "notes": "supersedes 318 as latest build (C04)"},
+    {"id": "F22", "type": "risk", "importance": "important", "statement": "Joan could only complete about 60% of a full regression pass by tomorrow, and Theo's blocker and Katya's crash fix were still outstanding, which drove moving the branch cut.", "owner": null, "deadline": null, "position": "late", "lines": [49, 50], "notes": null},
+    {"id": "F23", "type": "open_question", "importance": "important", "statement": "Whether to keep supporting Android 9 (about 3% of users, source of many odd crashes, and it keeps an old backend auth path alive) was taken offline and not resolved.", "owner": null, "deadline": null, "position": "middle", "lines": [28, 29, 64, 65], "notes": "'take that offline' item, unresolved"},
+    {"id": "F24", "type": "commitment", "importance": "minor", "statement": "Dana said she will find a time for the offline Android 9 discussion, but not today; no time was set.", "owner": "Dana Whitfield", "deadline": null, "position": "late", "lines": [65], "notes": "vague, no deadline"},
+    {"id": "F25", "type": "person", "importance": "minor", "statement": "Jon on the platform team is a different person from Joan the QA engineer; Joan has no vault access.", "owner": null, "deadline": null, "position": "middle", "lines": [37, 38, 39], "notes": "similar-sounding names"},
+    {"id": "F26", "type": "logistics", "importance": "minor", "statement": "A release planning sync follows the standup at 10.", "owner": null, "deadline": null, "position": "early", "lines": [8, 67], "notes": null},
+    {"id": "F27", "type": "logistics", "importance": "minor", "statement": "Joan is borrowing two Pixel devices from the design team because the device lab's Pixel 8 won't hold a charge.", "owner": "Joan Adeyemi", "deadline": null, "position": "middle", "lines": [46], "notes": null},
+    {"id": "F28", "type": "open_question", "importance": "important", "statement": "Whether to feature-flag the new onboarding off was deferred until the regression rerun on build 321.", "owner": null, "deadline": null, "position": "late", "lines": [62, 63], "notes": "not decided"},
+    {"id": "F29", "type": "background", "importance": "minor", "statement": "Ravi had only reproduced MOB-1431 (on an iPhone 13) and will hand it over to Katya with his notes.", "owner": "Ravi Menon", "deadline": null, "position": "late", "lines": [60], "notes": null}
+  ],
+  "corrections": [
+    {"id": "C01", "what": "Android 4.11.2 crash rate", "initial_value": "8 percent", "initial_line": 19, "final_value": "0.8 percent", "final_line": 21, "explicit": true, "fact_id": "F08"},
+    {"id": "C02", "what": "Release branch cut day", "initial_value": "Wednesday", "initial_line": 12, "final_value": "Thursday at 2pm", "final_line": 53, "explicit": true, "fact_id": "F02"},
+    {"id": "C03", "what": "Owner of MOB-1431", "initial_value": "Ravi Menon", "initial_line": 15, "final_value": "Katya Novak", "final_line": 61, "explicit": true, "fact_id": "F12"},
+    {"id": "C04", "what": "Latest build / build targeted for regression", "initial_value": "build 318", "initial_line": 17, "final_value": "build 321", "final_line": 48, "explicit": false, "fact_id": "F21"}
+  ],
+  "not_decisions": [
+    {"statement": "Shipping a separate 4.11.3 hotfix for the MOB-1440 crash (floated by Katya; Dana explicitly declined to decide)", "lines": [25, 27]},
+    {"statement": "Cutting the branch Wednesday anyway and cherry-picking late fixes onto it (suggested by Ravi, rejected)", "lines": [51, 52]},
+    {"statement": "Feature-flagging the new onboarding off (suggested by Joan, deferred)", "lines": [62, 63]},
+    {"statement": "Dropping Android 9 support (raised by Katya, taken offline)", "lines": [28, 29]},
+    {"statement": "Load testing the workout history endpoint before prod (Theo's wish, not assigned)", "lines": [33]}
+  ],
+  "distractors": [
+    {"statement": "Jokes about the third-floor coffee machine dispensing hot brown water and a facilities ticket", "lines": [9, 10, 11, 66], "why": "irrelevant"},
+    {"statement": "Crash rate of 8 percent", "lines": [19, 20], "why": "superseded value"},
+    {"statement": "Plan to cut the release branch Wednesday", "lines": [12], "why": "superseded value"},
+    {"statement": "Build 318 as the latest build", "lines": [17, 43], "why": "superseded value"},
+    {"statement": "Jon (platform) vs Joan (QA) name confusion", "lines": [37, 38, 39], "why": "similar-sounding names"},
+    {"statement": "Cherry-picking lost the analytics fix in 4.10", "lines": [52], "why": "irrelevant historical aside"}
+  ],
+  "open_questions_at_end": [
+    "Whether Stridewell keeps supporting Android 9 (taken offline, no time set)",
+    "Whether the platform team adds the Apple sign-in client secret to the production vault in time for 4.12",
+    "Whether the MOB-1440 fix lands in time for 4.12 or a hotfix is needed (crash numbers reviewed Thursday)",
+    "Whether to feature-flag the new onboarding off, pending the build 321 rerun"
+  ],
+  "summary_must_include": [
+    "Release 4.12.0 branch cut moved to Thursday 2pm, store submission still Monday (F01, F02, F03)",
+    "Joan: full regression on build 321, results by Wednesday 5pm (F04, F21)",
+    "Theo blocked on platform team adding Apple sign-in client secret to the production vault; Dana escalating to Jon by noon today (F05, F06, F07)",
+    "Android 4.11.2 crash rate 0.8% (not 8%), mostly MOB-1440 on Samsung Android 14; fix goes into 4.12 if it lands, no hotfix decided (F08, F09, F11)",
+    "MOB-1431 reassigned from Ravi to Katya; Ravi on App Store screenshots and release notes (F12, F13)",
+    "Workout history endpoint on staging, p95 4s to 1.9s (F17)",
+    "Regression on build 318: 142 cases, 9 failures, 2 real bugs (F20)",
+    "Android 9 support question taken offline and unresolved (F23)"
+  ]
+}

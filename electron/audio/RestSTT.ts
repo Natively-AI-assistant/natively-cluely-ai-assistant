@@ -15,6 +15,7 @@ import { EventEmitter } from 'events';
 import axios from 'axios';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { isValidSttRegion } from '../utils/curlUtils';
 
 export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson';
 
@@ -148,8 +149,12 @@ export class RestSTT extends EventEmitter {
         super();
         this.provider = provider;
         this.apiKey = apiKey;
-        this.region = region;
-        this.config = PROVIDER_CONFIGS[provider](apiKey, region);
+        // SSRF guard (defense in depth): the region is interpolated into the
+        // Azure/IBM endpoint hostname. If a malformed region ever reaches this
+        // far (e.g. persisted before the IPC guard existed), drop it so the
+        // PROVIDER_CONFIGS default region is used instead of a poisoned host.
+        this.region = isValidSttRegion(region) ? region : undefined;
+        this.config = PROVIDER_CONFIGS[provider](apiKey, this.region);
         if (modelOverride) {
             this.config.model = modelOverride;
         }
@@ -246,8 +251,10 @@ export class RestSTT extends EventEmitter {
 
     /**
      * Called when the native SilenceSuppressor detects speech has ended.
-     * The internal Rust engine already applies a 150-200ms VAD hangover to avoid
-     * word-breaks, so we flush immediately without adding redundant TS debouncing.
+     * The native suppressor already holds a hangover before it reports the end
+     * (VAD_HANGOVER / speech_hangover: 600 ms system audio, 500 ms microphone —
+     * not the 150-200 ms this comment used to claim), so we flush immediately
+     * without adding redundant TS debouncing.
      */
     public notifySpeechEnded(): void {
         if (!this.isActive) return;

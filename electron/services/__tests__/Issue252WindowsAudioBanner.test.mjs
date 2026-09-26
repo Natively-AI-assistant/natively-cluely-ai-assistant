@@ -89,10 +89,30 @@ test('issue #252: Open Settings button does not unconditionally fire x-apple.sys
   // For kind=audio-capture-failure the action must open Natively's own
   // settings (toggleSettingsWindow / openSettingsTab) — not an OS URL.
   const stripped = ui.replace(/\s+/g, ' ');
-  const xAppleCount = (stripped.match(/x-apple\.systempreferences:/g) || []).length;
-  assert.ok(
-    xAppleCount <= 1,
-    'x-apple.systempreferences should appear at most once (only in the screen-recording branch)'
+
+  // Count is the wrong test. The banner legitimately has TWO macOS deep links
+  // now — a Microphone pane and a Screen-Recording pane — and "at most one"
+  // failed on the second being added, not on a Windows leak.
+  //
+  // The issue-#252 invariant is that NO x-apple URL can be reached off darwin.
+  // Both live in one `const deepLinkUrl = !isMac ? null : …` chain, so assert
+  // that: every occurrence must sit inside that guarded expression, and the
+  // expression must open with the !isMac bail. Adding a third pane keeps
+  // passing; moving one outside the guard fails.
+  const deepLinkMatch = stripped.match(/const deepLinkUrl = [\s\S]*?;/);
+  assert.ok(deepLinkMatch, 'the banner must build its OS deep link through a single deepLinkUrl expression');
+  assert.match(
+    deepLinkMatch[0],
+    /^const deepLinkUrl = !isMac \?\s*null\s*:/,
+    'deepLinkUrl must bail to null off darwin BEFORE any x-apple URL is selected'
+  );
+  const totalXApple = (stripped.match(/x-apple\.systempreferences:/g) || []).length;
+  const guardedXApple = (deepLinkMatch[0].match(/x-apple\.systempreferences:/g) || []).length;
+  assert.ok(totalXApple > 0, 'sanity: the macOS deep links should still exist');
+  assert.equal(
+    guardedXApple,
+    totalXApple,
+    'every x-apple.systempreferences URL must sit inside the !isMac-guarded deepLinkUrl expression'
   );
 
   // The banner JSX must include a JSX-level conditional keyed on the

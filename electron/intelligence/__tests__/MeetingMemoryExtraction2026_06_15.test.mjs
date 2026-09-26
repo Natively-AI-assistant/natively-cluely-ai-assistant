@@ -9,11 +9,13 @@ import assert from 'node:assert/strict';
 import { test, describe } from 'node:test';
 import { MeetingMemoryService } from '../../../dist-electron/electron/intelligence/MeetingMemoryService.js';
 
+// Defect B (2026-08-01): fixtures now carry origin:'stt' (the provenance the real STT
+// seam stamps) — extraction only mines spoken segments. Assertions unchanged.
 const SAMPLE = [
-  { speaker: 'Mark', text: 'Mark owns Redis migration by Friday.' },
-  { speaker: 'Anu', text: 'Anu owns landing page copy.' },
-  { speaker: 'Lead', text: 'Decision: beta launches next Tuesday.' },
-  { speaker: 'Lead', text: 'Risk: Deepgram cost may exceed budget.' },
+  { speaker: 'Mark', text: 'Mark owns Redis migration by Friday.', origin: 'stt' },
+  { speaker: 'Anu', text: 'Anu owns landing page copy.', origin: 'stt' },
+  { speaker: 'Lead', text: 'Decision: beta launches next Tuesday.', origin: 'stt' },
+  { speaker: 'Lead', text: 'Risk: Deepgram cost may exceed budget.', origin: 'stt' },
 ];
 
 describe('MeetingMemoryService — the task sample transcript extracts structured memory', () => {
@@ -61,7 +63,7 @@ describe('MeetingMemoryService — varied phrasings', () => {
   for (const c of cases) {
     test(`"${c.text}" → ${c.field}`, () => {
       const rec = new MeetingMemoryService().buildMeetingRecord({
-        meetingId: 'x', segments: [{ speaker: 'S', text: c.text }], startedAt: 0, endedAt: 1,
+        meetingId: 'x', segments: [{ speaker: 'S', text: c.text, origin: 'stt' }], startedAt: 0, endedAt: 1,
       });
       assert.match(rec[c.field].join(' | '), c.re, `expected ${c.field} to contain ${c.re}`);
     });

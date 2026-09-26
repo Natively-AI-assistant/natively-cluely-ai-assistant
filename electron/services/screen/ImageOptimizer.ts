@@ -99,9 +99,24 @@ function applyProviderTweaks(
 
 const DEFAULT_MAX_BYTES = 3.5 * 1024 * 1024; // 3.5 MB safety margin under most provider limits
 
+const MIME_BY_FORMAT: Record<'jpeg' | 'webp' | 'png', OptimizedImage['mimeType']> = {
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  png: 'image/png',
+};
+
 export class ImageOptimizer {
   private tempDir: string;
   private cache = new Map<string, OptimizedImage>();
+  /** Our own outputs, by absolute path — lets optimize() recognize its own work.
+   *  The REQUESTED quality rides along, and reuse requires an exact match.
+   *  Inequality is unsafe in both directions: reusing a lower-quality file for a
+   *  higher-quality request degrades the image, and reusing a higher-quality one
+   *  for a lower request ignores the size reduction the caller asked for. The
+   *  requested value is stored rather than the effective one, so an identical
+   *  repeat request still hits even when the size-cap retry lowered the actual
+   *  encode. */
+  private outputsByPath = new Map<string, { image: OptimizedImage; quality: number }>();
   // Files we own and may need to clean up. Keyed by cacheKey so we don't double-write.
   private ownedFiles = new Map<string, string>();
 
@@ -138,6 +153,33 @@ export class ImageOptimizer {
     if (cacheKey && this.cache.has(cacheKey)) {
       const cached = this.cache.get(cacheKey)!;
       return { ...cached, cacheHit: true };
+    }
+
+    // Re-encoding our OWN output is a second lossy pass over pixels that were
+    // already resized and compressed. It happens on a real path: the vision
+    // chain optimizes a screenshot, then hands `optimized.path` to
+    // executeCustomProvider, which optimizes it again. Return the existing file
+    // when it already satisfies what this call is asking for.
+    //
+    // `quality` is part of the comparison, not just size and container: without
+    // it a caller asking for a different quality silently received the earlier
+    // encode — degraded if they asked for more, oversized if they asked for less. And the file is stat'd first — a temp sweep or an external
+    // cleanup can remove it between calls, and returning a dead path would make
+    // getBase64() throw, sending every caller into its raw-read fallback and
+    // shipping the unoptimized multi-MB source. That failure mode is worse than
+    // the double encode this guard exists to avoid, so it must not be possible.
+    const priorKey = path.resolve(sourcePath);
+    const prior = this.outputsByPath.get(priorKey);
+    if (prior
+      && prior.image.mimeType === MIME_BY_FORMAT[format]
+      && Math.max(prior.image.width, prior.image.height) <= maxLongEdgePx
+      && prior.image.byteSize <= maxBytes
+      && prior.quality === quality) {
+      if (await this.fileExists(prior.image.path)) {
+        return { ...prior.image, cacheHit: true };
+      }
+      // Gone from disk — forget it and fall through to a real encode.
+      this.outputsByPath.delete(priorKey);
     }
 
     await this.ensureTempDir();
@@ -229,6 +271,11 @@ export class ImageOptimizer {
     if (cacheKey) {
       this.cache.set(cacheKey, result);
       this.ownedFiles.set(cacheKey, outPath);
+      // Only recorded alongside an ownedFiles entry. Recording unconditionally
+      // put files in the reuse map that cleanupAll() — which walks ownedFiles —
+      // would never delete, leaking exactly the temp files this class promises
+      // to sweep. Both real double-encode call sites pass a cacheKey.
+      this.outputsByPath.set(path.resolve(outPath), { image: result, quality });
     }
 
     return result;
@@ -274,6 +321,18 @@ export class ImageOptimizer {
         this.cache.delete(key);
       }
     }
+    // The file is gone; drop it from the double-encode guard so a later
+    // optimize() of that path re-encodes instead of handing back a dead path.
+    this.outputsByPath.delete(path.resolve(optimized.path));
+  }
+
+  private async fileExists(p: string): Promise<boolean> {
+    try {
+      await fs.stat(p);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -287,6 +346,7 @@ export class ImageOptimizer {
     await Promise.all(tasks);
     this.ownedFiles.clear();
     this.cache.clear();
+    this.outputsByPath.clear();
   }
 
   /**

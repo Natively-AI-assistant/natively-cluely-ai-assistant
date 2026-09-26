@@ -1,3 +1,6 @@
 [submodule "premium"]
 	path = premium
 	url = https://github.com/Natively-AI-assistant/natively-premium.git
+[submodule "natively-api"]
+	path = natively-api
+	url = https://github.com/evinjohnn/natively-api.git

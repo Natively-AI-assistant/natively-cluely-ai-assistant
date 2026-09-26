@@ -1,0 +1,394 @@
+{
+ "blind_id": "S-70b7bda8",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 69376,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 33107,
+  "candidatesTokenCount": 1956,
+  "totalTokenCount": 43176,
+  "cachedContentTokenCount": 24507,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 33107
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24507
+   }
+  ],
+  "thoughtsTokenCount": 8113,
+  "serviceTier": "standard"
+ },
+ "fact_count": 82,
+ "evaluation": {
+  "factual_accuracy": 7,
+  "important_information_retention": 8,
+  "hallucination_control": 8,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 10,
+  "entity_retention": 9,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 8,
+  "structure": 6,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 6,
+  "critical_errors": [
+   "Internal contradictions due to chunking artifacts (e.g., claiming the transcript 'does not yet show' how Marcus handles concurrent requests or conflicting payloads, but later correctly detailing his solutions).",
+   "Falsely claiming it remains 'unanswered' whether Marcus shipped the reconciliation alert within the six-week window, when he explicitly stated he shipped it in week five."
+  ],
+  "missing_important_information": [
+   "Priya Raman is the Engineering Manager running the interview.",
+   "Alex Brandt joined late because an incident review ran over and the room booking system kicked him out.",
+   "The Payments Platform team has seven engineers (including Ines) plus Priya, and owns the ledger, payout orchestration, and processor integrations.",
+   "Tessellate's blameless postmortem culture (written postmortem within 5 days, weekly review, rotating incident commander)."
+  ],
+  "hallucinated_information": [
+   "Claiming that whether Marcus shipped the near-real-time reconciliation alert within the six-week launch window 'remains unanswered'."
+  ],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Literal chunk processing artifacts included verbatim (e.g., 'No compensation expectations, notice period, availability date, visa status, or other employment constraints were covered in this chunk.' repeated multiple times).",
+   "Extreme repetition of the same facts across Candidate profile, Role fit, Strengths, Concerns, and other sections."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "missing"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "missing"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "partial"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "partial"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "partial"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "partial"
+   },
+   {
+    "id": "F22",
+    "status": "partial"
+   },
+   {
+    "id": "F23",
+    "status": "missing"
+   },
+   {
+    "id": "F24",
+    "status": "partial"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "contradicted"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "partial"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "missing"
+   },
+   {
+    "id": "F53",
+    "status": "missing"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "partial"
+   },
+   {
+    "id": "F66",
+    "status": "partial"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "missing"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   },
+   {
+    "id": "F73",
+    "status": "present"
+   },
+   {
+    "id": "F74",
+    "status": "present"
+   },
+   {
+    "id": "F75",
+    "status": "present"
+   },
+   {
+    "id": "F76",
+    "status": "present"
+   },
+   {
+    "id": "F77",
+    "status": "present"
+   },
+   {
+    "id": "F78",
+    "status": "present"
+   },
+   {
+    "id": "F79",
+    "status": "present"
+   },
+   {
+    "id": "F80",
+    "status": "present"
+   },
+   {
+    "id": "F81",
+    "status": "present"
+   },
+   {
+    "id": "F82",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a vast amount of detail from the interview, including the technical design, incident story, and logistics. However, the notes suffer from severe chunking artifacts, leading to massive repetition and internal contradictions. For example, the notes claim that the transcript 'does not yet show' how Marcus handles concurrent requests or conflicting payloads, but later correctly detail his solutions. Similarly, the notes claim it is 'unanswered' whether Marcus shipped the reconciliation alert in time, contradicting the transcript where he explicitly states he shipped it in week five. The inclusion of literal chunk processing notes significantly degrades conciseness and readability."
+ }
+}

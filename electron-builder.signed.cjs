@@ -44,8 +44,12 @@ process.env.NATIVELY_PRODUCTION_SIGN = '1';
 // Default to the user's stored notarytool keychain profile + Team ID. These are NOT
 // secrets (the profile name is a label; the Team ID is embedded in every signed binary).
 // The actual Apple credential lives only in the macOS keychain. Both are overridable.
-process.env.APPLE_KEYCHAIN_PROFILE = process.env.APPLE_KEYCHAIN_PROFILE || 'natively-notary';
-process.env.APPLE_TEAM_ID = process.env.APPLE_TEAM_ID || 'BJM29W3UQ6';
+// The literals live in scripts/lib/notary-defaults.cjs because these are applied at
+// CONFIG-LOAD time — minutes after scripts/preflight-notary.cjs runs. The preflight
+// has to validate the very profile this line selects, so both read one source.
+const { DEFAULT_KEYCHAIN_PROFILE, DEFAULT_TEAM_ID } = require('./scripts/lib/notary-defaults.cjs');
+process.env.APPLE_KEYCHAIN_PROFILE = process.env.APPLE_KEYCHAIN_PROFILE || DEFAULT_KEYCHAIN_PROFILE;
+process.env.APPLE_TEAM_ID = process.env.APPLE_TEAM_ID || DEFAULT_TEAM_ID;
 
 const base = require('./package.json').build;
 
@@ -64,6 +68,11 @@ module.exports = {
   extraMetadata: {
     ...(base.extraMetadata || {}),
     nativelySigned: true,
+    // NOTE: `keychainGroupEntitled` used to be baked here to prove the
+    // keychain-access-groups entitlement shipped. That entitlement was removed on
+    // 2026-08-19 — it is restricted/profile-requiring and, with no embedded
+    // provisioning profile, AMFI refused to exec the signed app at all. See
+    // build/entitlements.mac.plist.
   },
   // afterSign: notarize the .app via scripts/notarize.js, which adds STAPLE-RETRY
   // recovery for the Apple CDN ticket-propagation race (Error 65). We do NOT use

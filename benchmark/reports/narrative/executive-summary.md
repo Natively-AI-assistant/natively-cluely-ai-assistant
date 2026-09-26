@@ -1,0 +1,22 @@
+**No GPT-5.6 Luna configuration should replace DeepSeek V4.1 Flash for Natively summaries.** On the real Natively pipeline, every Luna effort level fails the stated requirement of being "significantly cheaper". Each is also more than twice as slow, and each non-max level retains measurably fewer facts.
+
+| | Current: DS V4.1 Flash, thinking off | Luna none | Luna low | Luna medium | Luna max |
+|---|---|---|---|---|---|
+| Cost per summary (cold cache, DS blended peak/off-peak) | **$0.0324** | $0.0486 (1.50×) | $0.0442 (1.37×) | $0.0499 (1.54×) | $0.2281 (7.05×) |
+| P50 / P90 end-to-end pipeline | **41 s / 62 s** | 98 s / 157 s | 95 s / 146 s | 107 s / 156 s | 598 s / 909 s |
+| Weighted fact retention (judge vs gold facts) | 93.1% | 87.4% | 86.7% | 87.5% | 96.1%* |
+| Paired Δ vs current [95% CI] | — | −5.8 pp [−9.8, −2.0] | −6.7 pp [−10.1, −3.1] | −6.0 pp [−9.3, −2.2] | +2.8 pp [−0.8, +7.3]* |
+| Runs that would breach a production deadline (→ Gemini fallback) | **0/33** | 33/33 | 33/33 | 33/33 | 20/20 |
+
+\*Luna max: 20 of 33 runs, because the OpenAI account ran out of credits mid-benchmark. Its paired Δ covers the 8 conversations it has. On the 8 conversations every configuration shares, the ordering is unchanged: none/low/medium are −3.8 to −4.9 pp and worse in 7 of 8 conversations; max is +2.8 pp.
+
+1. **Cost goes the wrong way.** Luna lists at $0.20 input and $1.20 output per million tokens. DeepSeek V4.1 Flash is $0.15/$0.60 off-peak and $0.30/$1.20 peak. The summary pipeline is output-heavy: ~28-30k visible output tokens per meeting, because chunk extraction emits dense JSON. Luna therefore costs about the same as DeepSeek's *peak* price and roughly 2× its off-peak price even at `none`. Reasoning adds more on top: `max` averaged 121k reasoning tokens per summary. *Caveat:* at OpenAI's half-price **Flex** tier ($0.10/$0.60, slower, occasionally unavailable; latency not measured here), Luna none/low/medium would be 0.68-0.77× the current cost. That is 23-32% cheaper at blended DeepSeek pricing, 7-17% cheaper than DeepSeek off-peak, with the same lower retention and even slower responses (see Actual Cost).
+2. **Latency.** Luna generated ~140-150 output tokens/s on large chunk calls; DeepSeek non-thinking generated ~320. Since output volume is similar, Luna none/low/medium land at 2.3-2.6× DeepSeek's end-to-end time. Luna max takes ~10 minutes per meeting. **No configuration, including the current one, meets the 8-15 s target.** The pipeline makes ~11 LLM calls, and extraction alone needs 20-35 s of generation for a long meeting on the fastest model.
+3. **Quality.** On gold-fact retention, Luna none/low/medium lose about 5-7 points to the current config, and the confidence intervals exclude zero. The losses concentrate on timeline (67-72% vs 87%), entities (73-78% vs 91%), numbers (82-88% vs 93%) and correction-heavy conversations. Luna max and DeepSeek-thinking retain slightly *more* than the current config (differences not statistically significant), at 7× and 1.9× the cost and 14× and 2.7× the latency.
+4. **DeepSeek thinking does not change the decision.** It adds +1.5 pp retention (CI includes zero) for 1.87× cost and 2.75× latency, and 29 of 33 runs breach production deadlines. The current `thinking: disabled` choice is correct for this workload.
+5. **Pipeline problems matter as much as the model choice.** The same issues hit every model:
+   - **Overview polish discarded.** The "no new tokens" polish gate throws away the LLM overview in 79-94% of runs, and the LLM summary in 30-70%. The rejected tokens are dominated by formatting variants of values the notes contain (possessives, thousands separators, decimals, hyphens), so users mostly see the mechanical fallback prose.
+   - **Superseded values survive.** Per-chunk map-reduce keeps corrected values (0.8-1.3 superseded values reported per summary, every model).
+   - **Epoch timestamps in the prompt.** The chunk prompt renders epoch timestamps as `TIME RANGE: 29824680:16 - …`, which DeepSeek once copied into JSON. The resulting repair payload then exceeded the 25k-char gate and would have been routed to Gemini.
+
+See "Requirements Screening" and "Failure Analysis" for detail. The overall 1-10 judge score is **not** a useful discriminator here: every configuration scores 4.5-5.2, dominated by model-independent duplication, "Speaker N" labels and superseded values. Use fact retention for decisions.

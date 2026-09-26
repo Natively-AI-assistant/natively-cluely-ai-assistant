@@ -18,6 +18,19 @@
 
 import type { LLMHelper } from '../../LLMHelper';
 
+// Shared timeout budget for the meeting-notes writing calls (prose polish, follow-up
+// drafts, title naming) — everything on this pipeline that is NOT the chunk-extraction
+// call. Those calls inherited the 8s default forever; on a real production run the
+// sibling extraction call (ChunkSummaryGenerator, raised to 60s/'extraction') finished a
+// 3.5k-char meeting in 7,996ms against the OLD 8,000ms cap — 4ms to spare. The
+// non-extraction calls observed 1.8-4.2s that same run, so 30s is >7x the slowest
+// observed call while still failing a stuck request well before it would stall the
+// meeting save for a full minute. Deliberately lower than the 60s extraction budget:
+// these are writing tasks (prose polish, drafting, naming), not the benchmarked
+// structured-extraction route, and should fail back to a cheaper provider sooner than
+// extraction does if something is actually wrong.
+export const NOTE_CALL_TIMEOUT_MS = 30000;
+
 export interface StructuredValidation<T> {
   ok: boolean;
   data?: T;
@@ -42,6 +55,8 @@ export interface GenerateStructuredOptions<T> {
   fallback?: () => T;
   /** Disable the one repair retry (default: enabled). */
   disableRepairRetry?: boolean;
+  /** Per-call routing/budget overrides passed straight to LLMHelper.generateMeetingSummary. */
+  callOpts?: { purpose?: 'extraction'; timeoutMs?: number };
 }
 
 export interface GenerateStructuredResult<T> {
@@ -85,7 +100,7 @@ export async function generateStructured<T>(opts: GenerateStructuredOptions<T>):
   // Attempt 1: primary generation.
   let raw = '';
   try {
-    raw = await opts.llmHelper.generateMeetingSummary(system, opts.userContent, system) || '';
+    raw = await opts.llmHelper.generateMeetingSummary(system, opts.userContent, system, opts.callOpts) || '';
   } catch (e) {
     raw = '';
   }
@@ -109,7 +124,7 @@ ${opts.jsonShapeHint}`;
     const repairUser = `Previous output to correct:\n${raw || '(empty)'}`;
     let repairRaw = '';
     try {
-      repairRaw = await opts.llmHelper.generateMeetingSummary(repairSystem, repairUser, repairSystem) || '';
+      repairRaw = await opts.llmHelper.generateMeetingSummary(repairSystem, repairUser, repairSystem, opts.callOpts) || '';
     } catch {
       repairRaw = '';
     }

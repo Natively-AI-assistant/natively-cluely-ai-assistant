@@ -146,10 +146,21 @@ describe('GeminiEmbeddingProvider constructor normalization agrees with embeddin
   });
 
   test('the v2 default space differs from the v1 legacy space (the headline guarantee, via the real provider)', () => {
-    const v2 = new GeminiEmbeddingProvider('key'); // defaults: gemini-embedding-2, 768
-    assert.equal(v2.space, 'gemini:gemini-embedding-2:768');
+    // Default width is now 3072 — gemini-embedding-2's own default. The
+    // guarantee is unchanged and in fact stronger: the space differs from the v1
+    // legacy row by BOTH model and width.
+    const v2 = new GeminiEmbeddingProvider('key'); // defaults: gemini-embedding-2, 3072
+    assert.equal(v2.space, 'gemini:gemini-embedding-2:3072');
     assert.notEqual(v2.space, legacySpaceForProvider('gemini', 768));
     assert.equal(legacySpaceForProvider('gemini', 768), 'gemini:gemini-embedding-001:768');
+  });
+
+  test('the same model at 768 and at 3072 are DIFFERENT spaces', () => {
+    // Width is part of the space, so raising the default re-indexes — which is
+    // the correct, visible consequence rather than a silent mismatch.
+    const wide = new GeminiEmbeddingProvider('key', 'gemini-embedding-2', 3072);
+    const narrow = new GeminiEmbeddingProvider('key', 'gemini-embedding-2', 768);
+    assert.notEqual(wide.space, narrow.space);
   });
 });
 

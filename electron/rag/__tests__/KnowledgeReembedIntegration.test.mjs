@@ -375,10 +375,21 @@ describe('KnowledgeOrchestrator.resolveQueryEmbedder space-gating (real compiled
     assert.ok(embedFnUsed, 'unknown active space → legacy dim check diverts 384-vs-768 to embedFn');
   });
 
-  test('no fastQueryEmbedFn → returns embedFn directly', () => {
+  test('no fastQueryEmbedFn → the resolved embedder delegates to embedFn', async () => {
+    // Reference equality no longer holds, and should not: resolveQueryEmbedder
+    // wraps whichever embedder it picks in a QUERY_EMBED_BUDGET_MS race that
+    // returns [] on timeout, so a slow or cold embedder cannot stall retrieval
+    // (and cannot feed a half-built vector into a cosine comparison). The
+    // invariant is WHICH embedder is chosen — with no fastQueryEmbedFn it must
+    // be embedFn — so assert delegation by calling it.
     const orch = makeOrch(db, { activeSpaceFn: () => 'x' });
-    const fn = async () => vec(0.4);
+    const expected = vec(0.4);
+    let called = 0;
+    const fn = async () => { called++; return expected; };
     orch.embedFn = fn;
-    assert.equal(orch.resolveQueryEmbedder(), fn);
+    const resolved = orch.resolveQueryEmbedder();
+    const out = await resolved('probe');
+    assert.equal(called, 1, 'the resolved embedder must call embedFn');
+    assert.deepEqual(out, expected, 'and must return its vector unchanged');
   });
 });

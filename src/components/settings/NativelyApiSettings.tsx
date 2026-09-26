@@ -2,52 +2,48 @@ import {
   AlertCircle,
   ArrowUpRight,
   Brain,
-  CalendarClock,
+  Check,
   CheckCircle,
-  Clock,
-  Info,
+  ChevronDown,
+  ChevronsRight,
+  Layers,
   Loader2,
   Mic,
   RefreshCw,
   Search,
-  Shield,
+  Sparkles,
   Trash2,
-  Zap,
 } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { NativelyLogoMark } from '../NativelyLogoMark';
+import { useT } from '../../i18n';
+import { motion, AnimatePresence, LayoutGroup, useReducedMotion } from 'framer-motion';
+import { AccordionSection, Disclosure } from '../ui/AccordionSection';
 import { FreeTrialModal } from '../trial/FreeTrialModal';
+import { useTrialRemaining } from '../trial/useTrialRemaining';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
-import { motion, AnimatePresence } from 'framer-motion';
+import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
+// Painted as a CSS mask, not rendered as an <img>: the asset is a white
+// monochrome glyph, so on the light theme's pale plaque an <img> would be
+// invisible. See `.natively-key-mark` in index.css.
+import nativelyLogo from '../../assets/logo.webp';
+import {
+  formatCompact, formatMeter, formatUsd, normalizeQuota, TRIAL_FALLBACK_LIMITS,
+  type NativelyQuota, type NativelyPlanLimits, type TrialUsage, type TrialLimits, type UsageMeter,
+} from '../../types/nativelyUsage';
 
 // ─── Types ───────────────────────────────────────────────────
-interface QuotaBucket {
-  used: number;
-  limit: number;
-  remaining: number;
-}
+// Shapes come from src/types/nativelyUsage.ts, which the preload bridge shares.
+// This file used to declare its own QuotaBucket/UsageData pair describing three
+// request-counted buckets; the product now meters five resources and shows four
+// categories, and a second local description of that is how the panel and the
+// server end up disagreeing about what a number means.
 interface UsageData {
   plan: string;
   member_since: string;
-  quota: {
-    transcription: QuotaBucket;
-    ai: QuotaBucket;
-    search: QuotaBucket;
-    resets_at: string;
-  };
+  quota: NativelyQuota;
+  /** The plan row the server enforced. Absent on a cache written by an older build. */
+  limits?: NativelyPlanLimits;
 }
-
-interface PricingProduct {
-  formattedPrice: string | null;
-  checkoutUrl: string;
-}
-
-const PLAN_IDS_ORDER = [
-  'natively_api_standard_monthly',
-  'natively_api_pro_monthly',
-  'natively_api_max_monthly',
-  'natively_api_ultra_monthly',
-] as const;
 
 const PLAN_STANDARD_URL = 'https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl';
 const PLAN_PRO_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA';
@@ -55,306 +51,544 @@ const PLAN_MAX_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM7JElX4Af6LNV
 const PLAN_ULTRA_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM7rC2kAb69TFKsZnUU';
 const MASKED_NATIVELY_KEY = '•'.repeat(24);
 
+// Last-known usage, remembered across tab switches AND app restarts.
+//
+// SettingsOverlay unmounts this component every time the user switches away
+// from Plans & Billing, so React state alone can't survive a re-visit; a
+// module-level variable covers that but dies with the renderer process, so the
+// first open after every app launch was a blank/loading state again. Persisting
+// it means the Usage card paints last-known numbers immediately and a silent
+// background revalidation swaps in fresh ones a moment later.
+//
+// Numbers shown from here are always stale by definition. That is acceptable
+// because they are replaced within a second and are never used for enforcement
+// — the server owns the real quota. The one case where stale is actively
+// WRONG rather than merely old is a cache written before the billing period
+// rolled over: those bars would show last period's consumption against this
+// period's allowance. `resets_at` makes that detectable, so an expired entry is
+// dropped rather than displayed.
+const USAGE_STORAGE_KEY = 'natively_api_usage_v1';
+
+function readUsageCache(): UsageData | null {
+  try {
+    const raw = localStorage.getItem(USAGE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Shape-check before trusting: a partial write would otherwise throw inside
+    // the render path when a meter reads `.used`/`.limit`.
+    //
+    // Checks the CANONICAL keys, which also does the version check for free: an
+    // entry written by a build that predates the resource model has
+    // transcription/ai/search and no `knowledge`, so it is dropped and refetched
+    // rather than rendering four categories from three request counters.
+    // Checks what every meter needs to RENDER, not the full canonical set: the
+    // stored object has already been through normalizeQuota, and reranking is
+    // legitimately absent when the entry was written against a server that
+    // never metered it. Requiring it here would throw away a perfectly usable
+    // cache on every launch.
+    const q = parsed?.quota;
+    if (!q?.ai || !q?.voice || !q?.research || typeof q.ai.percent !== 'number') return null;
+    const resets = Date.parse(parsed.quota.resets_at);
+    if (Number.isFinite(resets) && resets < Date.now()) return null;
+    return parsed as UsageData;
+  } catch {
+    return null;
+  }
+}
+
+let usageCache: UsageData | null = readUsageCache();
+
+function setUsageCache(next: UsageData | null): void {
+  usageCache = next;
+  try {
+    if (next) localStorage.setItem(USAGE_STORAGE_KEY, JSON.stringify(next));
+    else localStorage.removeItem(USAGE_STORAGE_KEY);
+  } catch {
+    // Storage unavailable or full — in-memory caching still works for this
+    // session, only the cross-restart benefit is lost.
+  }
+}
+
+// The plan chooser.
+//
+// `price` here is a FALLBACK, not the source of truth: the live figure comes
+// from GET /v1/plans via `planCatalog` below, keyed by `planKey`. Keeping a
+// literal means the chooser still renders something sensible offline or before
+// the catalog arrives; letting it be the only value is what allowed the prices
+// and allowances in this file to drift away from the ones actually charged.
 const PLANS = [
   {
     id: 'natively_api_standard_monthly',
     name: 'Standard',
+    planKey: 'standard',
     price: '$8',
     url: PLAN_STANDARD_URL,
     badgeText: 'Basic',
     includesPro: false,
-    description: 'Ideal for light individual users who want essential transcription and model usage.',
+    description: 'Essential transcription and AI requests for light, everyday use.',
     note: 'Does not include Natively Pro desktop app license. Custom API key usage is supported.',
+    // The qualitative ladder (light -> regular -> high -> continuous) stays: it
+    // is what a buyer skims. The EXACT allowances now render underneath it from
+    // GET /v1/plans — see PlanAllowances.
+    //
+    // Those figures used to be left out on the grounds that publishing them
+    // meant a copy change whenever the server retuned a limit. Fetching them
+    // removes that objection entirely, and the comment that used to sit here
+    // listing them "for reference" proves the point: every number in it (AI
+    // 500/1k/2k/3k, STT 200/500/1k/2k min, search 20/100/200/300) was wrong by
+    // the time anyone read it.
     features: [
-      '500 AI requests per month',
-      '200 minutes of Speech-to-Text',
-      '20 real-time web searches',
-      'Standard server priority & support',
-      'Full local API key support',
+      'Light everyday AI usage',
+      'Light transcription volume',
+      'Occasional web searches',
     ],
   },
   {
     id: 'natively_api_pro_monthly',
     name: 'Pro',
+    planKey: 'pro',
     price: '$15',
     url: PLAN_PRO_URL,
     badgeText: 'Recommended',
     includesPro: true,
-    description: 'Best for power users and professionals seeking full local productivity integrations.',
+    description: 'The full Natively Pro app plus API usage for daily work.',
     note: 'Includes a full Natively Pro desktop app license for the duration of subscription.',
     features: [
-      '1,000 AI requests per month',
-      '500 minutes of Speech-to-Text',
-      '100 real-time web searches',
-      'High-priority server request queue',
+      'Daily professional AI usage',
+      'Regular meeting transcription',
+      'Frequent web searches',
       'Full Natively Pro app features included',
     ],
   },
   {
     id: 'natively_api_max_monthly',
     name: 'Max',
+    planKey: 'max',
     price: '$25',
     url: PLAN_MAX_URL,
     badgeText: 'Best Value',
     includesPro: true,
-    description: 'Built for developers and teams using high volume text-to-speech and AI reasoning.',
+    description: 'Higher volume for developers and teams doing more each month.',
     note: 'Includes a full Natively Pro desktop app license for the duration of subscription.',
     features: [
-      '2,000 AI requests per month',
-      '1,000 minutes of Speech-to-Text',
-      '200 real-time web searches',
-      'High-priority server request queue',
+      'High-volume AI usage',
+      'Heavy meeting transcription',
+      'High-volume web searches',
       'Full Natively Pro app features included',
     ],
   },
   {
     id: 'natively_api_ultra_monthly',
     name: 'Ultra',
+    planKey: 'ultra',
     price: '$35',
     url: PLAN_ULTRA_URL,
     badgeText: 'Heavy Users',
     includesPro: true,
-    description: 'For heavy enterprise users, continuous screen understanding, and high-frequency meeting recording.',
+    description: 'For continuous recording and the heaviest daily usage.',
     note: 'Includes a full Natively Pro desktop app license for the duration of subscription.',
     features: [
-      '3,000 AI requests per month',
-      '2,000 minutes of Speech-to-Text',
-      '300 real-time web searches',
-      'Dedicated high-throughput queue',
+      'Maximum AI usage, all-day',
+      'Continuous recording & transcription',
+      'Maximum web searches',
       'Full Natively Pro app features included',
     ],
   },
 ] as const;
 
+// Picks a glyph for a feature row from the feature's OWN wording. The
+// references all use characterful, varied icons rather than one repeated
+// tick, and a per-row icon is what stops a feature list reading as a generic
+// bulleted list. This is presentation only — it classifies the existing
+// PLANS[].features strings and asserts nothing they do not already say.
+function pickFeatureIcon(feature: string) {
+    const f = feature.toLowerCase();
+    if (f.includes('transcription') || f.includes('recording')) return Mic;
+    if (f.includes('search')) return Search;
+    if (f.includes('pro app')) return Layers;
+    return Sparkles; // the AI-usage rows
+}
+
+// cardSlideLeftVariants / cardSlideRightVariants / cardCtaVariants were removed
+// here: the redesign replaced the two-column body (which carried them on the
+// left column, the features panel and the CTA block) with a mesh header +
+// single body, so nothing consumed them any more. Only the container-level
+// opacity crossfade between tiers survives.
+
+// Odometer price: each digit is a reel of 0-9 that rolls to its value. The
+// card body is keyed by plan, so this mounts fresh on every switch; it starts
+// on the previous plan's figure and rolls to the new one on the next frame.
+// The tens reel collapses to zero width for single-digit prices ($8).
+// Two reels cover whole dollars under $100 only; any other label (cents, $100+)
+// is shown as plain text rather than a reel parked between digits.
+const PRICE_DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+const PRICE_ROLL_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
+const reelDollars = (label: string): number | null => {
+  const m = /^\$(\d{1,2})$/.exec(label);
+  return m ? Number(m[1]) : null;
+};
+
+function RollingPrice({ price, from }: { price: string; from: string }) {
+  const reduceMotion = useReducedMotion();
+  const value = reelDollars(price);
+  const [shown, setShown] = useState(reduceMotion ? value : reelDollars(from) ?? value);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setShown(value));
+    return () => cancelAnimationFrame(id);
+  }, [value]);
+
+  if (value === null || shown === null) return <>{price}</>;
+  const tens = Math.floor(shown / 10);
+  const reel = (digit: number, delayMs: number) => (
+    <span style={{ display: 'inline-block', height: '1em', overflow: 'hidden' }}>
+      <span
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          transform: `translateY(${-digit}em)`,
+          transition: reduceMotion ? 'none' : `transform 620ms ${PRICE_ROLL_EASE} ${delayMs}ms`,
+        }}
+      >
+        {PRICE_DIGITS.map((d) => (
+          <span key={d} style={{ height: '1em' }}>{d}</span>
+        ))}
+      </span>
+    </span>
+  );
+
+  return (
+    <span role="img" aria-label={`$${value}`} style={{ display: 'inline-flex' }}>
+      <span aria-hidden="true">$</span>
+      <span
+        aria-hidden="true"
+        style={{
+          display: 'inline-block',
+          overflow: 'hidden',
+          width: tens ? '1ch' : 0,
+          opacity: tens ? 1 : 0,
+          transition: reduceMotion ? 'none' : `width 450ms ${PRICE_ROLL_EASE}, opacity 300ms`,
+        }}
+      >
+        {reel(tens, 0)}
+      </span>
+      <span aria-hidden="true">{reel(shown % 10, 40)}</span>
+    </span>
+  );
+}
+
+// Both tiers' text share one absolutely-positioned cell, so for as long as the
+// two fades overlap the card shows two sets of text. The outgoing tier leaves
+// on the quick clock (150ms) and the incoming one arrives on the tab pill's
+// (250ms smooth-out), the same clock the card's fill now cross-fades on. The
+// stagger that used to sit here had no child variants to act on.
 const cardContainerVariants = {
   enter: (_direction: number) => ({
     opacity: 0,
   }),
   center: {
     opacity: 1,
-    transition: {
-      staggerChildren: 0.07,
-      delayChildren: 0.02,
-    }
+    transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] as const },
   },
   exit: (_direction: number) => ({
     opacity: 0,
-    transition: {
-      staggerChildren: 0.03,
-      staggerDirection: -1 as const,
-    }
+    transition: { duration: 0.15, ease: 'easeInOut' as const },
   })
 };
 
-const cardSlideLeftVariants = {
-  enter: {
-    x: -12,
-    scale: 0.98,
-    opacity: 0,
-    filter: 'blur(1px)'
-  },
-  center: {
-    x: 0,
-    scale: 1,
-    opacity: 1,
-    filter: 'blur(0px)',
-    transition: {
-      x: { type: 'spring' as const, duration: 0.58, bounce: 0.04 },
-      scale: { type: 'spring' as const, duration: 0.58, bounce: 0.04 },
-      opacity: { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const },
-      filter: { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const }
-    }
-  },
-  exit: {
-    x: -8,
-    scale: 0.985,
-    opacity: 0,
-    filter: 'blur(1px)',
-    transition: {
-      x: { type: 'spring' as const, duration: 0.44, bounce: 0 },
-      scale: { type: 'spring' as const, duration: 0.44, bounce: 0 },
-      opacity: { duration: 0.22, ease: [0.32, 0.72, 0, 1] as const },
-      filter: { duration: 0.22, ease: [0.32, 0.72, 0, 1] as const }
-    }
-  }
-};
-
-const cardSlideRightVariants = {
-  enter: {
-    x: 12,
-    scale: 0.98,
-    opacity: 0,
-    filter: 'blur(1px)'
-  },
-  center: {
-    x: 0,
-    scale: 1,
-    opacity: 1,
-    filter: 'blur(0px)',
-    transition: {
-      x: { type: 'spring' as const, duration: 0.58, bounce: 0.04 },
-      scale: { type: 'spring' as const, duration: 0.58, bounce: 0.04 },
-      opacity: { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const },
-      filter: { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const }
-    }
-  },
-  exit: {
-    x: 8,
-    scale: 0.985,
-    opacity: 0,
-    filter: 'blur(1px)',
-    transition: {
-      x: { type: 'spring' as const, duration: 0.44, bounce: 0 },
-      scale: { type: 'spring' as const, duration: 0.44, bounce: 0 },
-      opacity: { duration: 0.22, ease: [0.32, 0.72, 0, 1] as const },
-      filter: { duration: 0.22, ease: [0.32, 0.72, 0, 1] as const }
-    }
-  }
-};
-
-const cardCtaVariants = {
-  enter: {
-    y: 6,
-    scale: 0.98,
-    opacity: 0
-  },
-  center: {
-    y: 0,
-    scale: 1,
-    opacity: 1,
-    transition: {
-      y: { type: 'spring' as const, duration: 0.58, bounce: 0.06 },
-      scale: { type: 'spring' as const, duration: 0.58, bounce: 0.06 },
-      opacity: { duration: 0.28, ease: [0.32, 0.72, 0, 1] as const }
-    }
-  },
-  exit: {
-    y: 4,
-    scale: 0.99,
-    opacity: 0,
-    transition: {
-      y: { type: 'spring' as const, duration: 0.44, bounce: 0 },
-      scale: { type: 'spring' as const, duration: 0.44, bounce: 0 },
-      opacity: { duration: 0.22, ease: [0.32, 0.72, 0, 1] as const }
-    }
-  }
-};
-
 // ─── Quota bar ───────────────────────────────────────────────
-function QuotaBar({
+// One bar colour for all three buckets. They used to be orchid / violet /
+// emerald, which made three neutral facts read as three different *kinds* of
+// thing and put a third and fourth hue on a surface that should carry one
+// accent. Colour here now means exactly one thing — amber = running low.
+/**
+ * One usage meter: label, a figure, and a bar.
+ *
+ * ── TWO READINGS, AND WHY BOTH EXIST ────────────────────────────────────────
+ *
+ * `percentOnly` shows "63%"; the default shows "4.1M / 6.5M · 63%".
+ *
+ * The pair answers "can I index this repo?", which a proportion cannot — that
+ * needs tokens remaining, not a fraction of an allowance. But it also prints the
+ * plan's exact allowance on screen, and on the monthly panel Evin does not want
+ * the entitlement spelled out; the percentage carries the same "am I running
+ * low?" signal without it.
+ *
+ * So the trial panel keeps the figures (a trial's allowance is public, and a
+ * trial user is precisely the person deciding whether a task will fit), and the
+ * monthly panel takes the percentage. The two never render together — trial and
+ * saved-key states are mutually exclusive in practice — so this is one style per
+ * screen, not two on one.
+ *
+ * Note this is the shape KnowledgeUsage's headline already had, so the monthly
+ * card is now internally consistent rather than one bare percentage among three
+ * used/limit pairs.
+ */
+function ResourceMeter({
   label,
   icon: Icon,
-  bucket,
-  barColor,
+  meter,
+  sub = false,
+  percentOnly = false,
 }: {
   label: string;
-  icon: React.ElementType;
-  bucket: QuotaBucket;
-  barColor: string;
+  icon?: React.ElementType;
+  meter: UsageMeter | undefined;
+  /** Rendered smaller and unlabelled by icon, for the Knowledge breakdown. */
+  sub?: boolean;
+  /** Show only the percentage, never the plan's allowance. */
+  percentOnly?: boolean;
 }) {
-  const pct = bucket.limit > 0 ? Math.min(100, (bucket.used / bucket.limit) * 100) : 0;
-  const isHigh = pct >= 80;
+  // An absent meter is not zero usage — it is a response this build does not
+  // understand, or one that has not arrived. Render nothing rather than a
+  // confident 0%.
+  if (!meter) return null;
+  const pct = Number.isFinite(meter.visual_percent) ? meter.visual_percent : 0;
+  // The REAL percentage drives the warning colour, so a meter that has gone
+  // past its limit reads as over rather than as exactly full.
+  const real = Number.isFinite(meter.percent) ? meter.percent : 0;
+  const isHigh = real >= 80;
+  const isOver = real > 100;
+  return (
+    <div className={sub ? 'space-y-1.5' : 'space-y-2'}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          {Icon && <Icon size={12} className="text-text-tertiary" strokeWidth={1.75} />}
+          <span className={`${sub ? 'text-[11px]' : 'text-[12px]'} text-text-secondary truncate`}>{label}</span>
+        </div>
+        <span
+          className={`${sub ? 'text-[11px]' : 'text-[12px]'} tabular-nums shrink-0 ${
+            isHigh ? 'text-amber-500 font-medium' : 'text-text-tertiary'
+          }`}
+        >
+          {/* An unmetered resource has no percentage to show, so it says
+              "Unlimited" in both readings rather than rendering an empty slot
+              or a misleading 0%. */}
+          {percentOnly ? (
+            meter.limit == null ? 'Unlimited' : `${Math.round(real)}%`
+          ) : (
+            <>
+              {formatMeter(meter)}
+              {meter.limit != null && (
+                <span className="opacity-60"> · {Math.round(real)}%</span>
+              )}
+            </>
+          )}
+        </span>
+      </div>
+      {/* `natively-meter-*` carries the material (see index.css). The colour
+          is a modifier rather than a Tailwind fill, because the hue drives the
+          specular's bloom as well as the body and the three have to move
+          together. */}
+      <div className={`${sub ? 'h-[4px]' : 'h-[6px]'} natively-meter-track`}>
+        <div
+          className={`natively-meter-fill transition-[width] duration-700 ease-out motion-reduce:transition-none ${
+            isOver ? 'natively-meter-fill--over' : isHigh ? 'natively-meter-fill--high' : ''
+          }`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Knowledge Usage: one meter over two.
+ *
+ * The headline is the server's `knowledge.percent`: an even 50/50 blend of the
+ * two halves' percentages, so each capability has equal say. It is NOT a ratio
+ * of summed tokens — reranker allowances are ~2.5x the embedding ones, so that
+ * would have read ~29% for a customer who had spent every embedding token.
+ *
+ * The blend has its own blind spot, which is why the warning colour reads
+ * `max_half_percent` instead: 100% embeddings with reranking untouched blends
+ * to a mid-range 50%, and since the halves are enforced independently that
+ * customer's indexing is already dead. The number says how much is used; the
+ * colour says whether anything is blocked. The breakdown below says which.
+ *
+ * The breakdown is a disclosure rather than two more top-level rows: embeddings
+ * and reranking are one product concept to the person paying for them, and
+ * promoting both to peers of "AI Usage" implies four independent things to
+ * budget instead of three.
+ */
+function KnowledgeUsage({ knowledge, percentOnly = false }: { knowledge: NativelyQuota['knowledge'] | undefined; percentOnly?: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!knowledge) return null;
+  const pct = Number.isFinite(knowledge.percent) ? knowledge.percent : 0;
+  // The WORST half drives the warning, the blend drives the number. They answer
+  // different questions: "how much have I used" vs "is anything already
+  // blocked". Embeddings at 100% with reranking untouched blends to 50%, and
+  // the halves are enforced independently — so indexing is dead while the
+  // headline reads mid-range. Colouring on the blend would hide exactly the
+  // state someone opens this panel to diagnose.
+  const worstHalf = Number.isFinite(knowledge.max_half_percent as number)
+    ? (knowledge.max_half_percent as number)
+    : pct;
+  const isHigh = worstHalf >= 80;
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon
-            size={12}
-            className={isHigh ? 'text-amber-400' : 'text-text-tertiary'}
-            strokeWidth={1.75}
-          />
-          <span className="text-[12px] text-text-secondary">{label}</span>
-        </div>
-        <span
-          className={`text-[12px] tabular-nums font-medium ${isHigh ? 'text-amber-400' : 'text-text-tertiary'}`}
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex items-center gap-2 min-w-0 cursor-pointer group"
         >
-          {bucket.used.toLocaleString()}
-          <span className="font-normal text-text-tertiary/60">
-            {' '}
-            / {bucket.limit.toLocaleString()}
+          <Layers size={12} className="text-text-tertiary" strokeWidth={1.75} />
+          <span className="text-[12px] text-text-secondary group-hover:text-text-primary transition-colors duration-150 motion-reduce:transition-none">
+            Knowledge Usage
           </span>
-        </span>
-      </div>
-      <div className="h-[5px] w-full bg-bg-input rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ease-out ${isHigh ? 'bg-amber-400' : barColor}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-// ─── Trial countdown (live, ticks every 500ms) ───────────────
-function TrialCountdown({ expiresAt }: { expiresAt: string }) {
-  const [remaining, setRemaining] = useState(() =>
-    Math.max(0, new Date(expiresAt).getTime() - Date.now()),
-  );
-  useEffect(() => {
-    const id = setInterval(() => {
-      setRemaining(Math.max(0, new Date(expiresAt).getTime() - Date.now()));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [expiresAt]);
-  const totalSec = Math.ceil(remaining / 1000);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  const isWarning = remaining < 2 * 60 * 1000;
-  return (
-    <div
-      className={`flex items-center gap-1 ${isWarning ? 'text-amber-400' : 'text-text-tertiary'}`}
-    >
-      <Clock size={11} strokeWidth={2} />
-      <span className="text-[11px] font-mono font-semibold tabular-nums">
-        {remaining === 0 ? 'Ended' : `${m}:${s.toString().padStart(2, '0')}`}
-      </span>
-    </div>
-  );
-}
-
-// ─── Trial usage pill ─────────────────────────────────────────
-function TrialUsagePill({
-  icon: Icon,
-  used,
-  limit,
-  label,
-  unit,
-}: {
-  icon: React.ElementType;
-  used: number;
-  limit: number;
-  label: string;
-  unit: string;
-}) {
-  const pct = Math.min(100, (used / limit) * 100);
-  const isHigh = pct >= 80;
-  return (
-    <div className="bg-bg-input rounded-[10px] px-3 py-2.5 space-y-2 border border-border-subtle">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <Icon
-            size={12}
+          <ChevronDown
+            size={11}
             strokeWidth={2}
-            className={isHigh ? 'text-amber-400' : 'text-text-tertiary'}
+            className={`text-text-tertiary transition-transform duration-200 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`}
           />
-          <span className="text-[10.5px] text-text-secondary font-medium">{label}</span>
-        </div>
+        </button>
         <span
-          className={`text-[12px] tabular-nums font-bold ${isHigh ? 'text-amber-400' : 'text-text-primary'}`}
+          className={`text-[12px] tabular-nums shrink-0 ${isHigh ? 'text-amber-500 font-medium' : 'text-text-tertiary'}`}
         >
-          {used}
-          <span className="text-[10px] font-medium text-text-tertiary">
-            /{limit}
-            {unit}
-          </span>
+          {Math.round(pct)}%
         </span>
       </div>
-      <div className="h-[4px] w-full bg-bg-surface rounded-full overflow-hidden">
+      <div className="h-[6px] natively-meter-track">
         <div
-          className={`h-full rounded-full transition-all duration-500 ${isHigh ? 'bg-amber-400' : 'bg-violet-500/70'}`}
-          style={{ width: `${pct}%` }}
+          className={`natively-meter-fill transition-[width] duration-700 ease-out motion-reduce:transition-none ${
+            worstHalf > 100 ? 'natively-meter-fill--over' : isHigh ? 'natively-meter-fill--high' : ''
+          }`}
+          style={{ width: `${Math.min(100, Math.max(0, knowledge.visual_percent ?? 0))}%` }}
         />
       </div>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="knowledge-detail"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: EASE_ENTER }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="pl-5 pt-1 space-y-2.5">
+              <ResourceMeter label="Embeddings" meter={knowledge.embedding} sub percentOnly={percentOnly} />
+              <ResourceMeter label="Reranking" meter={knowledge.reranker} sub percentOnly={percentOnly} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * The exact monthly allowances for one tier, in the product's own vocabulary.
+ *
+ * Renders NOTHING until the catalog arrives. That is the point of it being a
+ * fetch rather than a constant: an empty block is honest about not knowing,
+ * where a compiled-in table is confidently wrong the first time someone retunes
+ * a limit server-side. The qualitative feature list above still carries the
+ * card on its own if this never loads.
+ *
+ * Knowledge is shown as its two halves rather than a single figure — they are
+ * different units of work with different quotas, and "4M embedding + 10M
+ * reranker" is information a buyer can act on where a summed number is not.
+ */
+function PlanAllowances({ limits }: { limits: NativelyPlanLimits | undefined }) {
+  if (!limits) return null;
+  const rows: Array<[string, string]> = [
+    ['AI', `${formatCompact(limits.ai_tokens)} tokens`],
+    ['Voice', `${limits.transcription_minutes.toLocaleString('en-US')} min`],
+    ['Knowledge', `${formatCompact(limits.embedding_tokens)} + ${formatCompact(limits.reranker_tokens)} tokens`],
+    // Runs, not dollars (2026-09-21). The allowance is sold as a count of
+    // complete company researches; the dollar figure underneath is the credit
+    // budget that funds them and means nothing to a buyer on its own.
+    ['Research', limits.research_runs != null
+      ? `${limits.research_runs} company researches`
+      : `${formatUsd(limits.research_credits_usd)}`],
+  ];
+  return (
+    <div className="mt-3">
+      <div className="natively-api-body-rule h-px mb-2.5" />
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+        {rows.map(([label, value]) => (
+          <React.Fragment key={label}>
+            <dt className="natively-api-on-fill-dim text-[10px] leading-snug opacity-80">{label}</dt>
+            <dd className="natively-api-on-fill-dim text-[10px] leading-snug tabular-nums text-right">{value}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+// ─── Active trial card ───────────────────────────────────────
+// This card used to carry a three-up grid of usage meters — AI, Voice,
+// Research, each an icon, a label, a used-over-limit pair and a track. The
+// "Usage this trial" section at the foot of this panel renders THE SAME THREE
+// NUMBERS, forty pixels of scroll away, as ResourceMeter rows: the house row
+// idiom, with percentages, a Knowledge row, and a red over-limit state the
+// grid never had. Two renderings of one fact in two visual languages, and the
+// bespoke one was the weaker of the two.
+//
+// So the two surfaces split the trial's two resources instead of both trying
+// to show one of them: this card owns the TIME, and the usage table owns the
+// ALLOWANCE. Which also lets the clock stop being an 11px chip in the section
+// label and become the sentence the card is actually there to say.
+//
+// Anatomy is the offer card's, deliberately: one line of text on the left, one
+// compact control on the right, on the `natively-key-card` plaque. Two states
+// of one feature should not be two different shapes.
+function ActiveTrialCard({ expiresAt, onOptions }: { expiresAt: string; onOptions: () => void }) {
+  const { clock, ended, isWarning } = useTrialRemaining(expiresAt);
+  return (
+    <div>
+      <SectionLabel>Free trial active</SectionLabel>
+      <Card className="natively-key-card">
+        <div className="px-4 py-4">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[15px] font-medium text-text-primary tracking-[-0.01em]">
+                {ended ? (
+                  'Your free trial has ended'
+                ) : (
+                  <>
+                    {/* The clock is the only part that moves, so it is the
+                        only part that gets weight and colour. `tabular-nums`
+                        keeps the sentence from reflowing every second, which
+                        a proportional 4 -> 1 does at this size. Amber in the
+                        last two minutes: the same threshold and the same hue
+                        the usage rows use when an allowance runs low, so one
+                        colour means one thing across the panel. */}
+                    <span className={`tabular-nums ${isWarning ? 'text-amber-500' : ''}`}>{clock}</span>
+                    {' left in your free trial'}
+                  </>
+                )}
+              </p>
+              <p className="text-[12px] text-text-secondary mt-1 leading-snug">
+                {ended
+                  ? 'Add a key or choose a plan to keep going.'
+                  : 'Your usage so far is below.'}
+              </p>
+            </div>
+
+            {/* Same control as Activate and as Start free trial, in its
+                `secondary` state: an achromatic ghost at rest that takes the
+                READY material on hover — the periwinkle clay, the specular
+                inset, the lift and the glow (see .natively-key-cta in
+                index.css, where `secondary` joins the ready:hover selector
+                list rather than getting a copy of it).
+                Ghost at rest is deliberate: the plan list below is the primary
+                action on this screen, and two saturated pills in one viewport
+                is no hierarchy at all. */}
+            <button
+              onClick={onOptions}
+              data-state="secondary"
+              className="natively-key-cta shrink-0 h-9 px-5 flex items-center justify-center gap-1.5 text-[13px] font-medium select-none cursor-pointer"
+            >
+              See your options
+              <ArrowUpRight size={14} strokeWidth={2.2} />
+            </button>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -370,41 +604,126 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
   );
 }
 
+// ─── Section label ───────────────────────────────────────────
+// One small-caps label above each container, replacing the mixture of boxed
+// headers, inline titles and uppercase micro-labels this tab used to open
+// every section with.
+function SectionLabel({ children, aside }: { children: React.ReactNode; aside?: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 px-1 mb-2">
+      <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.07em]">
+        {children}
+      </p>
+      {aside}
+    </div>
+  );
+}
+
+// ─── Trial meter ─────────────────────────────────────────────
+// A trial's counters arrive as raw used/limit pairs from /v1/trial/status,
+// while ResourceMeter speaks the /v1/usage `UsageMeter` shape. This converts,
+// so both usage tables are literally the same component rather than a
+// look-alike written twice.
+//
+// `percent` is the real one and may exceed 100 (AI bills after a stream
+// completes); `visual_percent` is clamped, because a bar wider than its track
+// is a layout bug, not information. Same split the server applies for paid
+// plans — see buildResourceQuota in the API's lib/plans.js.
+function trialMeter(used: number, limit: number, unit: UsageMeter['unit']): UsageMeter {
+  const safeUsed = Number.isFinite(used) && used > 0 ? used : 0;
+  // A zero or missing limit would make percent Infinity/NaN and blank the row.
+  const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 0;
+  const percent = safeLimit > 0 ? (safeUsed / safeLimit) * 100 : 0;
+  return {
+    used: safeUsed,
+    limit: safeLimit > 0 ? safeLimit : null,
+    remaining: safeLimit > 0 ? Math.max(0, safeLimit - safeUsed) : null,
+    percent: Number(percent.toFixed(1)),
+    visual_percent: Math.min(100, Math.max(0, Number(percent.toFixed(1)))),
+    unit,
+  };
+}
+
+// ─── Price ───────────────────────────────────────────────────
+// The dominant element on a plan row: visibly larger and heavier than the
+// plan name (19px semibold vs 13px medium). It previously sat at 17px bold
+// against a 13px semibold name — near-parity, so nothing led.
+function Price({ amount, period }: { amount: string; period: string }) {
+  return (
+    <div className="flex items-baseline gap-1 shrink-0">
+      <span
+        className="text-[19px] font-semibold text-text-primary tabular-nums"
+        style={{ letterSpacing: '-0.025em' }}
+      >
+        {amount}
+      </span>
+      <span className="text-[11px] text-text-tertiary">{period}</span>
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────
 interface NativelyApiSettingsProps {
   initialIsSaved?: boolean;
+  /**
+   * Rendered between the Natively key card and the plan chooser. A slot exists
+   * because that seam is INSIDE this component, so a parent cannot reach it by
+   * reordering siblings. Used by PlansSettings to place the "Pro License
+   * Active" receipt directly under the credential box it relates to, rather
+   * than above the whole section or stranded below the pricing.
+   */
+  afterKeySection?: React.ReactNode;
 }
 
-export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initialIsSaved = false }) => {
-  const [apiKey, setApiKey] = useState(() => (initialIsSaved ? MASKED_NATIVELY_KEY : ''));
-  const [isSaved, setIsSaved] = useState(initialIsSaved);
-  const [isLoading, setIsLoading] = useState(!initialIsSaved);
+export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initialIsSaved = false, afterKeySection }) => {
+  const prefersReducedMotion = useReducedMotion();
+  const t = useT();
+  // `initialIsSaved` arrives ASYNCHRONOUSLY. SettingsOverlay seeds its own
+  // `hasNativelyKey` to false and only flips it after `getStoredCredentials()`
+  // resolves, so on every open of this tab the first render says "no key" even
+  // for a subscriber. That is what made the Usage section flash: `usageData`
+  // was correctly restored from `usageCache` on the very first render, but the
+  // card is gated on `isSaved && usageData`, so it stayed hidden until the
+  // credentials round-trip landed and then popped in. The plan chooser
+  // (`!isSaved && PlansCard`) flashed the other way for the same reason.
+  //
+  // A populated `usageCache` is itself proof a key was saved: it is only ever
+  // written from a successful quota fetch, and it is nulled on BOTH removal
+  // paths (`handleClear`, and the credentials effect when no key comes back).
+  // So seeding these three from the cache is sound, and it makes the first
+  // paint of a revisit identical to the last paint of the previous visit.
+  const cachedKeyKnown = !!usageCache;
+  const [apiKey, setApiKey] = useState(() => (initialIsSaved || cachedKeyKnown ? MASKED_NATIVELY_KEY : ''));
+  const [isSaved, setIsSaved] = useState(initialIsSaved || cachedKeyKnown);
+  const [isLoading, setIsLoading] = useState(!(initialIsSaved || cachedKeyKnown));
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The key saved and its plan includes Pro, but Pro could not be confirmed yet
+  // (server unwell). The main process keeps retrying; this just says so, instead
+  // of showing a plan card with no Pro and no explanation (support, 2026-09-22).
+  const [proNotice, setProNotice] = useState<string | null>(null);
+  // The retry succeeded in the background — the notice has done its job.
+  useEffect(() => {
+    const off = window.electronAPI?.onLicenseStatusChanged?.((d) => { if (d?.isPremium) setProNotice(null); });
+    return () => { off?.(); };
+  }, []);
   const [justSaved, setJustSaved] = useState(false);
-  const [usageData, setUsageData] = useState<UsageData | null>(null);
-  const [usageError, setUsageError] = useState<string | null>(null);
+  // Distinct from justSaved: a Dodo/Gumroad license key activates Pro but
+  // writes nothing to CredentialsManager — isSaved/fetchUsage must never
+  // fire for this branch, or the UI shows a "Connected" badge with an empty
+  // Usage card for a credential that was never actually stored.
+  const [justActivatedPro, setJustActivatedPro] = useState(false);
+  const [usageData, setUsageData] = useState<UsageData | null>(() => usageCache);
   const [isLoadingUsage, setIsLoadingUsage] = useState(false);
-  const [pricingProducts, setPricingProducts] = useState<Record<string, PricingProduct>>({});
+  const [planCatalog, setPlanCatalog] = useState<Record<string, NativelyPlanLimits> | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('natively_api_pro_monthly');
   const [prevPlanId, setPrevPlanId] = useState<string>('natively_api_pro_monthly');
-  const [hasUserSelected, setHasUserSelected] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
-
-  useEffect(() => {
-    if (hasUserSelected || isHovered) return;
-
-    const interval = setInterval(() => {
-      setSelectedPlanId(prev => {
-        setPrevPlanId(prev);
-        const currentIndex = PLAN_IDS_ORDER.indexOf(prev as any);
-        const nextIndex = currentIndex === -1 ? 1 : (currentIndex + 1) % PLAN_IDS_ORDER.length;
-        return PLAN_IDS_ORDER[nextIndex];
-      });
-    }, 4500);
-
-    return () => clearInterval(interval);
-  }, [hasUserSelected, isHovered]);
+  // Selection is purely manual now — the tier selector used to auto-rotate
+  // through Standard/Pro/Max/Ultra every 4.5s via setInterval, which reads
+  // fine as a marketing carousel but fights a "calm once loaded" settings
+  // page: content shifting under a user's cursor while they're trying to
+  // read is disorienting, and it recreates itself every time this tab is
+  // revisited (module state doesn't survive the SettingsOverlay unmount).
 
   const selectPlan = useCallback((newPlanId: string) => {
     setSelectedPlanId(prev => {
@@ -448,7 +767,9 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     expired: boolean;
     expiresAt: string;
     startedAt: string;
-    usage: { ai: number; stt_seconds: number; search: number };
+    usage: TrialUsage;
+    /** The trial's own allowances, from the server. Absent until /trial/status answers. */
+    limits?: TrialLimits;
   } | null>(null);
   // True while getLocalTrial is in flight — prevents the "start trial" card
   // from flashing before we know whether a trial token exists.
@@ -468,54 +789,74 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         } else {
           setApiKey('');
           setIsSaved(false);
+          setUsageCache(null);
           setUsageData(null);
-          setUsageError(null);
         }
       } catch (e) {
         console.error('[NativelyApi]', e);
+        // Unknown is not saved. `isSaved` now starts optimistically true when a
+        // persisted usage entry exists, so without this a keychain read failure
+        // would leave a masked key in the field with no way out: `handleSave`
+        // refuses any value containing '•', so the Activate button would
+        // silently no-op. Falling back to the empty state keeps the input
+        // usable.
+        setApiKey('');
+        setIsSaved(false);
       } finally {
         setIsLoading(false);
       }
     })();
   }, []);
 
-  const fetchUsage = useCallback(async () => {
-    setIsLoadingUsage(true);
-    setUsageError(null);
+  // `silent`: revalidate in the background without the loading spinner —
+  // used when the tab re-appears and we already have last-known numbers on
+  // screen. The manual Refresh button stays non-silent so an explicit click
+  // still shows explicit spinner feedback. Either way, a failure (no quota,
+  // inactive subscription, network error) just leaves the Usage card hidden
+  // — see the `isSaved && usageData` render gate below — rather than
+  // surfacing an error card, since a saved-but-not-a-valid-API-plan key is
+  // an expected state (e.g. it's actually a Pro-only license), not a fault.
+  const fetchUsage = useCallback(async (opts: { force?: boolean; silent?: boolean } = {}) => {
+    const { force = false, silent = false } = opts;
+    if (!silent) setIsLoadingUsage(true);
     try {
-      const r = await window.electronAPI.getNativelyUsage();
-      if (r.ok && r.quota) {
-        setUsageData(r as UsageData);
-      } else {
-        setUsageError(
-          r.error === 'subscription_inactive'
-            ? 'Subscription inactive — renew to restore access.'
-            : r.error === 'key_not_found'
-              ? 'Key not recognised by server.'
-              : r.error === 'invalid_key_format'
-                ? 'Invalid key format.'
-                : r.error === 'network_error' || r.error?.includes('fetch')
-                  ? 'Could not reach server.'
-                  : `Server error: ${r.error ?? 'unknown'}`,
-        );
+      const r = await window.electronAPI.getNativelyUsage(force);
+      // Normalized at the boundary, once, so every component below reads one
+      // shape — including when the server is a build older than this one.
+      const quota = r.ok ? normalizeQuota(r.quota) : null;
+      if (quota) {
+        const next = { ...r, quota } as UsageData;
+        setUsageCache(next);
+        setUsageData(next);
       }
     } catch {
-      setUsageError('Failed to load usage.');
+      // no-op — see comment above
     } finally {
-      setIsLoadingUsage(false);
+      if (!silent) setIsLoadingUsage(false);
     }
   }, []);
 
   useEffect(() => {
-    if (isSaved && !isLoading) fetchUsage();
+    if (!isSaved || isLoading) return;
+    // First-ever load in this session (no cache yet) shows the spinner and
+    // surfaces errors normally. A re-visit with cached numbers already on
+    // screen instead revalidates silently in the background — the whole
+    // point being the user never sees a loading state for data they've
+    // already seen once this session.
+    fetchUsage({ force: true, silent: !!usageCache });
   }, [isSaved, isLoading, fetchUsage]);
 
+  // The plan catalog — allowances and prices as the server enforces them.
+  //
+  // Unauthenticated and cached for 15 minutes in the main process, so this is
+  // cheap and runs whether or not a key is saved: the person who most needs to
+  // see what each tier includes is the one who has not bought yet.
   useEffect(() => {
-    window.electronAPI?.getNativelyPricing?.()
+    window.electronAPI?.getNativelyPlans?.()
       .then((res) => {
-        if (res?.ok && res.products) setPricingProducts(res.products);
+        if (res?.ok && res.plans) setPlanCatalog(res.plans);
       })
-      .catch(() => {});
+      .catch(() => { /* the cards fall back to their qualitative copy */ });
   }, []);
 
   // ── Trial init + polling ──────────────────────────────────
@@ -530,7 +871,11 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       expired: res.expired ?? false,
       expiresAt: res.expires_at ?? '',
       startedAt: res.started_at ?? '',
-      usage: res.usage ?? { ai: 0, stt_seconds: 0, search: 0 },
+      usage: res.usage ?? { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
+      // Carried rather than hardcoded: the pills below used to compare against
+      // literal 10 / 10m / 2, which is three numbers to miss when the trial is
+      // resized — and the AI one is now denominated in tokens, not requests.
+      limits: (res as { limits?: TrialLimits }).limits,
     });
     if (res.expired) {
       setShowTrialModal(true);
@@ -562,7 +907,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             expired: true,
             expiresAt: local.expiresAt ?? '',
             startedAt: local.startedAt ?? '',
-            usage: { ai: 0, stt_seconds: 0, search: 0 },
+            usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
           });
           setShowTrialModal(true);
           refreshTrial(); // updates usage counters in the modal
@@ -577,7 +922,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           expired: false,
           expiresAt: local.expiresAt ?? '',
           startedAt: local.startedAt ?? '',
-          usage: { ai: 0, stt_seconds: 0, search: 0 },
+          usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
         });
 
         // Fetch live usage + start 15s polling (was 30s — halved so counters
@@ -593,11 +938,40 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     };
   }, [refreshTrial]);
 
+  // Main ends the trial in two places this panel does not drive: storing a real
+  // Natively key (the purchase path, which can also be a key saved from the box
+  // above) and the BYOK exit. Without this the panel kept its own trialState and
+  // went on rendering "Free trial active" — with a live countdown — beside the
+  // key that had just superseded it.
+  useEffect(() => {
+    const off = window.electronAPI?.onTrialEnded?.(() => {
+      setTrialState(null);
+      setShowTrialModal(false);
+      if (trialPollRef.current) {
+        clearInterval(trialPollRef.current);
+        trialPollRef.current = null;
+      }
+    });
+    return () => off?.();
+  }, []);
+
   const handleStartTrial = async () => {
     setTrialLoading(true);
     setTrialError(null);
     try {
       const res = await window.electronAPI?.startTrial?.();
+      // A trial that started but could not be written to disk is the failure
+      // behind "I pressed Start and got nothing": the server has spent this
+      // machine's one-per-hwid row either way, so say what happened rather
+      // than showing a card that looks untouched. The trial IS live for this
+      // session; only a restart loses it, and pressing Start again from a
+      // healthy session re-issues the same one (the API is idempotent).
+      if (res?.ok && res.persisted === false) {
+        setTrialError(
+          'Trial started, but it could not be saved — your credential store is locked, so it will end when you quit. '
+          + 'Reopen the app with your keychain unlocked and press Start again to keep it.',
+        );
+      }
       if (!res?.ok) {
         if (res?.error === 'trial_ip_limit' || res?.error === 'trial_start_rate_limited') {
           localStorage.setItem('natively_trial_claimed', 'true');
@@ -606,12 +980,16 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             expired: true,
             expiresAt: '',
             startedAt: '',
-            usage: { ai: 0, stt_seconds: 0, search: 0 },
+            usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
           });
           return;
         }
+        // F-601 follow-up: `hardware_id_unavailable` had no mapping, so the raw
+        // snake_case code was shown to the user verbatim. It means the same thing
+        // to a user as invalid_hwid — the device ID could not be read — so it gets
+        // the same actionable message.
         const msg =
-          res?.error === 'invalid_hwid'
+          res?.error === 'invalid_hwid' || res?.error === 'hardware_id_unavailable'
             ? 'Could not read device ID. Restart the app and try again.'
             : res?.error || 'Could not start trial. Try again.';
         setTrialError(msg);
@@ -626,7 +1004,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           expired: true,
           expiresAt: '',
           startedAt: '',
-          usage: { ai: 0, stt_seconds: 0, search: 0 },
+          usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
         });
         return;
       }
@@ -652,18 +1030,43 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     await window.electronAPI?.endTrialByok?.();
   };
 
-  const handleTrialDone = () => {
-    setTrialState(null);
+  // Closing the options card is NOT the same as ending the trial. This cleared
+  // trialState unconditionally, so opening "See your options" on a live trial
+  // and closing it again wiped the active-trial card and its countdown — the
+  // trial read as ended on the spot, with minutes still on the clock. Only the
+  // deliberate BYOK exit ends anything; the modal reports which happened.
+  const handleTrialDone = (reason: 'byok' | 'dismissed' = 'byok') => {
+    if (reason === 'byok') setTrialState(null);
     setShowTrialModal(false);
   };
 
+  // Single box, two credential types. A Natively API key (`natively_sk_...`)
+  // is saved via CredentialsManager and already auto-activates Pro server-side
+  // when the plan qualifies (ipcHandlers.ts `set-natively-api-key`). Anything
+  // else is treated as a Dodo/Gumroad Pro license key and goes through
+  // licenseActivate instead — that path activates Pro but does NOT write an
+  // API credential, so it must stay on its own success state, never isSaved.
+  // Default to licenseActivate for anything that isn't the known API-key
+  // prefix, rather than trying to pattern-match the license-key shape — an
+  // API key misrouted to licenseActivate reproduces a known half-activation
+  // bug (Pro on, no credentials stored, no usage tracking), which is worse
+  // than a license key misrouted the other way.
   const handleSave = async () => {
-    if (!apiKey.trim() || apiKey.includes('•')) return;
+    const trimmed = apiKey.trim();
+    if (!trimmed || apiKey.includes('•')) return;
+    if (!trimmed.startsWith('natively_sk_')) {
+      return activateProLicense(trimmed);
+    }
     setIsSaving(true);
     setError(null);
     try {
-      const r = await window.electronAPI.setNativelyApiKey(apiKey.trim());
+      const r = await window.electronAPI.setNativelyApiKey(trimmed);
       if (r.success) {
+        setProNotice(
+          r.proPending
+            ? 'Key saved. We couldn’t confirm Natively Pro just now — the app will keep trying and turn it on automatically.'
+            : null,
+        );
         setApiKey('•'.repeat(24));
         setIsSaved(true);
         setJustSaved(true);
@@ -685,13 +1088,90 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     }
   };
 
-  const handleClear = () => {
+  const activateProLicense = async (key: string) => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      const r = await window.electronAPI?.licenseActivate?.(key);
+      if (r?.success) {
+        setApiKey('');
+        setJustActivatedPro(true);
+        setTimeout(() => setJustActivatedPro(false), 2500);
+        // Intentionally does not touch isSaved/fetchUsage — no API
+        // credential was written, so there is no usage to fetch and no
+        // "Connected" badge to show.
+      } else {
+        setError(r?.error || 'Activation failed. Please try again.');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Activation failed.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // The Usage card is the one region that CANNOT be put on a fixed schedule:
+  // its data comes from the network, so on activation `isSaved` flips, the plan
+  // chooser starts leaving, `fetchUsage` fires, and the quota lands some
+  // variable time later. A plain delay would fire before the data exists on a
+  // cold fetch and the card would then pop in with no animation at all.
+  //
+  // So the layout sequence stays driven by `isSaved`, and this card spends
+  // whatever is LEFT of its scheduled slot when its data actually arrives:
+  //   * warm `usageCache` (persisted across restarts) — elapsed ≈ 0, so it takes
+  //     the full 140ms and lands in its choreographed slot, crossing the
+  //     chooser's collapse exactly as designed;
+  //   * cold fetch at 800ms — the slot is long gone, delay clamps to 0, and it
+  //     animates in the instant the numbers land, which reads as "the data just
+  //     arrived" because that is what happened;
+  //   * fetch fails — nothing appears, per the existing decision at the render
+  //     gate below that a saved-but-planless key is an expected state.
+  // Same curve and duration in every case, so a slow network degrades to a late
+  // animation, never to a cut.
+  const usageArmedAtRef = useRef<number | null>(null);
+  if (isSaved) { if (usageArmedAtRef.current === null) usageArmedAtRef.current = performance.now(); }
+  else usageArmedAtRef.current = null;
+
+  const usageDelay = (slot: number) =>
+    usageArmedAtRef.current === null
+      ? 0
+      : Math.max(0, slot - (performance.now() - usageArmedAtRef.current) / 1000);
+
+  const clearingRef = useRef(false);
+
+  const handleClear = async () => {
+    if (clearingRef.current) return;
+    clearingRef.current = true;
+    const prevKey = apiKey;
+    // Optimistic ON PURPOSE, and it needs no spinner: unlike Deactivate — whose
+    // only visible effect was a card vanishing after an await, so the wait was
+    // dead air — this immediately moves four regions of the page. That layout
+    // change IS the feedback, and a spinner would only delay it.
+    //
+    // What was actually wrong here is that failure was unobservable. This call
+    // also revokes the bundled Pro licence (ipcHandlers.ts:6380), and it used to
+    // be fired un-awaited into `.catch(() => {})`. If it rejected, the key was
+    // still saved in main, Pro was still active, and the user was looking at a
+    // UI that had animated a removal which never happened.
+    //
+    // `usageData` is deliberately NOT cleared here — see the Usage card's
+    // AnimatePresence below, which cannot play an exit for a child whose data
+    // has already gone.
     setApiKey('');
     setIsSaved(false);
     setError(null);
-    setUsageData(null);
-    setUsageError(null);
-    window.electronAPI.setNativelyApiKey('').catch(() => {});
+    setUsageCache(null);
+    try {
+      await window.electronAPI.setNativelyApiKey('');
+    } catch (e: any) {
+      // The entrance/exit are declarative on `isSaved`, so the rollback animates
+      // back in on the same curves without any extra work.
+      setApiKey(prevKey);
+      setIsSaved(true);
+      setError(e?.message || 'Could not remove the key — it is still saved.');
+    } finally {
+      clearingRef.current = false;
+    }
   };
 
   const openExternal = (url: string) => {
@@ -715,33 +1195,29 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   };
 
   const PlansCard = (
-    <div 
-      className="space-y-4"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {/* Header and Value Proposition */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">
-            Choose a Plan
-          </p>
-          <span className="text-[10px] text-text-tertiary">
-            Pro, Max &amp; Ultra include Natively Pro app
-          </span>
-        </div>
-        <div className="w-full flex items-center justify-center py-2.5 rounded-xl border natively-api-header-promo-banner">
-          <span className="text-[11.5px] font-medium natively-api-header-promo-text">
-            Use code <span className="font-bold natively-api-header-promo-code">INSIDER20</span> for 20% off Pro, Max &amp; Ultra
-          </span>
-        </div>
-      </div>
+    // The hover handlers that used to live here only existed to pause a
+    // setInterval that auto-rotated the tier selector every 4.5s. That
+    // rotation is gone (it made the panel look like it was glitching
+    // mid-transition), so there is nothing left to pause.
+    <div className="space-y-3">
+      {/* Header. The "Pro, Max & Ultra include Natively Pro app" note that used
+          to sit opposite this label is gone: the tab header above the whole
+          section already states it, and each qualifying tier lists "Full
+          Natively Pro app features included" in its own feature rows. */}
+      <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">
+        Choose a Plan
+      </p>
 
       {/* Segmented control selector tab bar */}
-      <div className="natively-api-selector-bar grid grid-cols-4 relative p-1 bg-black/10 dark:bg-white/5 border border-white/5 rounded-2xl overflow-hidden mb-2">
+      <div
+        role="tablist"
+        aria-label="Natively API plan tier"
+        className="natively-api-selector-bar grid grid-cols-4 relative p-1 bg-black/10 dark:bg-white/5 border border-white/5 rounded-2xl overflow-hidden"
+      >
         {/* Active sliding pill */}
-        <div 
-          className="absolute top-0 bottom-0 left-0 w-1/4 p-1 transition-transform duration-220 ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform"
+        <div
+          aria-hidden="true"
+          className="natively-api-selector-pill-track absolute top-0 bottom-0 left-0 w-1/4 p-1 transition-transform duration-[220ms] ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform"
           style={{
             transform: `translate3d(${
               selectedPlanId === 'natively_api_standard_monthly' ? '0%' :
@@ -751,7 +1227,11 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             }, 0, 0)`
           }}
         >
-          <div className={`w-full h-full natively-api-selector-pill rounded-xl transition-all duration-300 ${
+          {/* No `transition-all` here: the fill/shadow crossfade is declared
+              in index.css against the exact properties that change, so a
+              tier switch never animates layout-affecting ones. The slide is
+              on the track wrapper above and is untouched. */}
+          <div className={`w-full h-full natively-api-selector-pill rounded-xl ${
             selectedPlanId === 'natively_api_standard_monthly' ? 'natively-api-selector-pill-standard' :
             selectedPlanId === 'natively_api_pro_monthly' ? 'natively-api-selector-pill-pro' :
             selectedPlanId === 'natively_api_max_monthly' ? 'natively-api-selector-pill-max' :
@@ -767,14 +1247,23 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           ] as const
         ).map((tab) => {
           const isSel = selectedPlanId === tab.id;
-          const liveProduct = pricingProducts[tab.id];
-          const displayPrice = liveProduct?.formattedPrice || tab.price;
+          // The price is the literal above, full stop. It used to prefer a
+          // `formattedPrice` from getNativelyPricing, whose /v1/pricing route
+          // was never built on the server — three months of a call that always
+          // 404'd and a fallback that always won. /v1/plans (planCatalog) is
+          // the live source that does exist, and it agrees with these figures.
+          const displayPrice = tab.price;
           return (
             <button
               key={tab.id}
+              type="button"
+              role="tab"
+              id={`natively-api-tab-${tab.id}`}
+              aria-selected={isSel}
+              aria-controls="natively-api-tabpanel"
+              tabIndex={isSel ? 0 : -1}
               onClick={() => {
                 selectPlan(tab.id);
-                setHasUserSelected(true);
               }}
               className={`natively-api-selector-tab ${isSel ? 'active' : ''}`}
             >
@@ -798,9 +1287,14 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         const direction = currentIndex >= prevIndex ? 1 : -1;
 
         const plan = PLANS.find((p) => p.id === selectedPlanId)!;
-        const liveProduct = pricingProducts[plan.id];
-        const price = liveProduct?.formattedPrice || plan.price;
-        const checkoutUrl = liveProduct?.checkoutUrl || plan.url;
+        const limits = planCatalog?.[plan.planKey];
+        const price = plan.price;
+        const prevPrice = PLANS.find((p) => p.id === prevPlanId)?.price ?? price;
+        // A verified-live Dodo link (all four checked 2026-09-08). These were
+        // the fallback behind getNativelyPricing; with that call removed they
+        // are simply the source, and changing a checkout link is now an app
+        // release. That was already the truth — it just looked otherwise.
+        const checkoutUrl = plan.url;
         const currentPlan = usageData?.plan?.toLowerCase();
         const rowPlan = plan.name.toLowerCase();
         const isActive =
@@ -808,15 +1302,29 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           (rowPlan === 'standard' && currentPlan === 'starter');
 
         return (
-          <div className="natively-api-details-wrapper relative w-full">
-            <div 
-              className={`natively-api-detail-card h-full w-full relative overflow-hidden natively-api-detail-card-${plan.name.toLowerCase()}`} 
+          <div
+            className="natively-api-details-wrapper relative w-full"
+            role="tabpanel"
+            id="natively-api-tabpanel"
+            aria-labelledby={`natively-api-tab-${plan.id}`}
+          >
+            {/* A plain surface, deliberately: no cursor spotlight, press scale or
+                hover bloom. The blueprint grid (::before) is always shown. */}
+            <div
+              className={`natively-api-detail-card h-full w-full relative overflow-hidden natively-api-detail-card-${plan.name.toLowerCase()}`}
               data-active={isActive ? "true" : "false"}
-              style={{
-                transition: 'background 280ms cubic-bezier(0.23, 1, 0.32, 1), border-color 280ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 280ms cubic-bezier(0.23, 1, 0.32, 1)'
-              }}
+              // No inline `transition` here on purpose. index.css already
+              // declares `transition: transform/box-shadow/border-color 180ms`
+              // with `!important` on `.natively-api-detail-card`, and an author
+              // !important declaration outranks a style-attribute one, so any
+              // inline transition string on this element is dead weight. It
+              // silently was for a long time: a 280ms value sat here doing
+              // nothing while the 180ms from CSS is what actually ran.
+              // `background-color` is in that list (250ms smooth-out), so the
+              // tier fill cross-fades on the tab pill's clock; the text
+              // crossfade is the AnimatePresence child below, a different element.
             >
-              <AnimatePresence custom={direction}>
+              <AnimatePresence custom={direction} initial={false}>
                 <motion.div
                   key={selectedPlanId}
                   custom={direction}
@@ -824,132 +1332,94 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  className="w-full h-full absolute top-0 left-0 p-6"
+                  className="w-full h-full absolute top-0 left-0 px-5 pt-4 pb-4"
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch relative z-10 h-full">
-                    {/* Left Column - Pricing & Actions */}
-                    <div className="flex flex-col justify-between">
-                      <motion.div variants={cardSlideLeftVariants}>
-                        {/* Badge & Inclusion Row */}
-                        <div className="flex items-center gap-2 mb-4 h-6">
-                          {plan.badgeText && (
-                            <span className={`natively-api-pricing-badge ${
-                              plan.name === 'Pro' 
-                                ? 'natively-api-pricing-badge-recommended natively-api-badge-text-recommended' 
-                                : plan.name === 'Max'
-                                  ? 'natively-api-pricing-badge-max natively-api-badge-text-max'
-                                  : plan.name === 'Ultra'
-                                    ? 'natively-api-pricing-badge-ultra natively-api-badge-text-ultra'
-                                    : 'natively-api-pricing-badge-standard natively-api-badge-text-standard'
-                            }`}>
-                              {plan.badgeText}
-                            </span>
-                          )}
-                          {plan.includesPro && (
-                            <span className="natively-api-pricing-badge natively-api-pricing-badge-emerald natively-api-badge-text-emerald select-none">
-                              + Pro App
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Plan Name */}
-                        <h4 className="text-[20px] font-bold text-text-primary tracking-tight">
-                          {plan.name} Tier
-                        </h4>
-
-                        {/* Price */}
-                        <div className="mt-3 flex items-baseline gap-1.5">
-                          <span className={`text-[34px] font-extrabold tracking-tight leading-none ${
-                            plan.name === 'Pro' 
-                              ? 'natively-api-price-pro' 
-                              : plan.name === 'Max'
-                                ? 'natively-api-price-max'
-                                : plan.name === 'Ultra'
-                                  ? 'natively-api-price-ultra'
-                                  : 'natively-api-price-standard'
-                          }`}>
-                            {price}
+                  {/* Two columns. The reference cards are single-column because
+                      they are ~300px wide; this one is 640px, and stacking
+                      name → description → price → features → CTA vertically
+                      there both wastes the width and forces the card ~80px
+                      taller. The reference's LOOK (quiet surface, one muted
+                      corner glow, saturation only on the CTA, low-contrast
+                      supporting text) is what matters and is preserved. */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 h-full">
+                    {/* Left: identity, price, action */}
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-1.5 h-5">
+                        {plan.badgeText && (
+                          <span className="natively-api-fill-pill inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-semibold uppercase tracking-wider">
+                            {plan.badgeText}
                           </span>
-                          <span className="text-[12px] font-medium text-text-tertiary">/ month</span>
-                        </div>
-                        <p className="text-[11.5px] text-text-secondary mt-2.5 leading-relaxed">
-                          {plan.description}
-                        </p>
-                      </motion.div>
+                        )}
+                      </div>
 
-                      {/* Action / Checkout section */}
-                      <motion.div className="mt-6 space-y-3" variants={cardCtaVariants}>
-                        <div 
-                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border natively-api-pricing-promo-wrapper"
-                          style={{ visibility: plan.includesPro ? 'visible' : 'hidden' }}
+                      <h4 className="natively-api-on-fill mt-2.5 text-[17px] font-bold tracking-tight leading-none">
+                        {plan.name}
+                      </h4>
+                      <p className="natively-api-on-fill-dim text-[11px] mt-1.5 leading-snug">
+                        {plan.description}
+                      </p>
+
+                      {/* The one piece of high-contrast type. No per-tier
+                          colour — that lives in the corner glow and the CTA. */}
+                      <div className="mt-3 flex items-baseline gap-1.5">
+                        <span
+                          className="natively-api-on-fill text-[38px] font-bold leading-none"
+                          style={{ fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.04em' }}
                         >
-                          <span className="text-[11px] font-medium natively-api-pricing-promo-text">
-                            Code <strong className="natively-api-pricing-promo-bold font-bold select-all">INSIDER20</strong> for 20% off
-                          </span>
-                        </div>
+                          <RollingPrice price={price} from={prevPrice} />
+                        </span>
+                        <span className="natively-api-on-fill-dim text-[12px] font-medium">/ month</span>
+                      </div>
 
-                        <div>
-                          {isActive ? (
-                            <div className="w-full natively-api-active-tag text-center py-3 rounded-full text-[13px] font-semibold select-none flex items-center justify-center">
-                              Active Plan
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                openExternal(checkoutUrl);
-                                setHasUserSelected(true);
-                              }}
-                              className={`natively-api-pricing-cta ${
-                                plan.name === 'Pro' 
-                                  ? 'natively-api-pricing-cta-pro' 
-                                  : plan.name === 'Max'
-                                    ? 'natively-api-pricing-cta-max'
-                                    : plan.name === 'Ultra'
-                                      ? 'natively-api-pricing-cta-ultra'
-                                      : 'natively-api-pricing-cta-neutral'
-                              }`}
-                            >
-                              Get Started with {plan.name} <ArrowUpRight size={14} strokeWidth={2.5} />
-                            </button>
-                          )}
-                        </div>
-                      </motion.div>
+                      <div className="mt-auto pt-3">
+                        {isActive ? (
+                          <div className="w-full natively-api-active-tag text-center rounded-full text-[12.5px] font-semibold select-none flex items-center justify-center">
+                            Active Plan
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              openExternal(checkoutUrl);
+                            }}
+                            className={`natively-api-pricing-cta ${
+                              plan.name === 'Pro'
+                                ? 'natively-api-pricing-cta-pro'
+                                : plan.name === 'Max'
+                                  ? 'natively-api-pricing-cta-max'
+                                  : plan.name === 'Ultra'
+                                    ? 'natively-api-pricing-cta-ultra'
+                                    : 'natively-api-pricing-cta-neutral'
+                            }`}
+                          >
+                            Get Started with {plan.name} <ArrowUpRight size={14} strokeWidth={2.5} />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Right Column - Features & Scope */}
-                    <motion.div 
-                      className="flex flex-col h-full natively-api-features-panel rounded-2xl p-5"
-                      variants={cardSlideRightVariants}
-                    >
-                      <p className="text-[10px] font-bold text-text-primary uppercase tracking-wider mb-4">
-                        What's Included
+                    {/* Right: what you get, all in low-contrast gray */}
+                    <div className="flex flex-col min-w-0">
+                      <p className="natively-api-on-fill-dim text-[9px] font-semibold uppercase tracking-[0.14em]">
+                        What's included
                       </p>
-                      <ul className="space-y-3 flex-1">
-                        {plan.features.map((feature, i) => (
-                          <li key={i} className="flex items-start gap-2.5 text-[12px] text-text-secondary leading-snug">
-                            <CheckCircle 
-                              size={13} 
-                              className={`shrink-0 mt-[1.5px] ${
-                                plan.name === 'Pro' 
-                                  ? 'natively-api-check-icon-pro' 
-                                  : plan.name === 'Max'
-                                    ? 'natively-api-check-icon-max'
-                                    : plan.name === 'Ultra'
-                                      ? 'natively-api-check-icon-ultra'
-                                      : 'natively-api-check-icon-standard'
-                              }`}
-                              strokeWidth={2.5} 
-                            />
-                            <span>{feature}</span>
-                          </li>
-                        ))}
+                      <div className="natively-api-body-rule h-px mt-2 mb-2.5" />
+                      <ul className="space-y-2">
+                        {plan.features.map((feature, i) => {
+                          const FeatureIcon = pickFeatureIcon(feature);
+                          return (
+                            <li key={i} className="natively-api-on-fill-dim flex items-center gap-2 text-[11px] leading-snug">
+                              <span className="natively-api-feature-badge shrink-0 w-[18px] h-[18px] rounded-full flex items-center justify-center">
+                                <FeatureIcon size={10} strokeWidth={2.2} />
+                              </span>
+                              <span className="min-w-0">{feature}</span>
+                            </li>
+                          );
+                        })}
                       </ul>
-                      <div className="mt-4 pt-4 border-t border-black/5 dark:border-white/5">
-                        <p className="text-[10.5px] text-text-tertiary leading-relaxed">
-                          {plan.note}
-                        </p>
-                      </div>
-                    </motion.div>
+                      <p className="natively-api-on-fill-dim mt-auto pt-3 text-[10px] leading-snug opacity-80">
+                        {plan.note}
+                      </p>
+                    </div>
                   </div>
                 </motion.div>
               </AnimatePresence>
@@ -958,107 +1428,44 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         );
       })()}
 
-      {/* AI quota note */}
-      <div className="flex items-start gap-2 px-3 py-2.5 bg-bg-input rounded-xl border border-border-subtle">
-        <Info size={11} className="text-text-tertiary shrink-0 mt-[1px]" strokeWidth={2} />
-        <p className="text-[11px] text-text-tertiary leading-relaxed">
-          AI requests include chat replies, meeting title &amp; summary generation, and embeddings
-          — not just manual messages.
-        </p>
-      </div>
     </div>
   );
 
   return (
-    <div className="space-y-4 animated fadeIn" data-interface-theme={interfaceTheme}>
-      {/* ── Page title ───────────────────────────────────── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-[15px] font-semibold text-text-primary tracking-[-0.01em]">
-            Natively API
-          </h3>
-          <p className="text-[12px] text-text-tertiary mt-0.5 leading-snug">
-            Managed transcription, AI &amp; search
-          </p>
-        </div>
-        {!isLoading && isSaved && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]" />
-            <span className="text-[10px] font-semibold text-emerald-500 tracking-wide">
-              {planLabel ?? 'Connected'}
-            </span>
-          </div>
-        )}
-      </div>
+    // LayoutGroup so the three regions below share one layout pass. See
+    // ../../lib/plansMotion for why this whole tab is FLIP rather than resizing.
+    <LayoutGroup>
+    <div className="space-y-6 animated fadeIn" data-interface-theme={interfaceTheme}>
+      {/* Page title intentionally omitted here — PlansSettings.tsx (the parent
+          tab wrapper) already renders "Plans & Billing" as the section header.
+          A second "Natively API / Managed transcription, AI & search" title
+          directly beneath it read as two stacked, near-duplicate headers.
+          The "Connected"/plan-name badge that used to live here moved down
+          into the "Natively key" card header, where it stays visible in
+          both the saved and unsaved states without its own header row. */}
 
       {/* ── Free Trial Modal (post-trial) ─────────────── */}
       {showTrialModal && trialState && (
-        <FreeTrialModal usage={trialState.usage} onByok={handleByok} onDone={handleTrialDone} />
+        <FreeTrialModal
+          usage={trialState.usage}
+          onByok={handleByok}
+          onDone={handleTrialDone}
+          // Set only while the trial is actually running. That turns the card
+          // from the post-trial eulogy into the options card the "See your
+          // options" button promises — and gives it a way to close that is not
+          // "end my trial". On the expired path it stays undefined, so that
+          // card is byte-for-byte what it was.
+          activeTrialExpiresAt={trialState.active ? trialState.expiresAt : undefined}
+        />
       )}
 
       {/* ── Active trial status card ──────────────────── */}
-      {trialState?.active &&
-        (() => {
-          const sttMin = (trialState.usage.stt_seconds / 60).toFixed(1);
-          return (
-            <Card className="shadow-sm border-violet-500/25">
-              <div className="px-5 pt-5 pb-5 space-y-4">
-                {/* Header — same layout as "Try Natively API free" start card */}
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-[11px] bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
-                    <NativelyLogoMark size={18} className="text-violet-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[13.5px] font-semibold text-text-primary tracking-tight">
-                        Free Trial Active
-                      </p>
-                      <TrialCountdown expiresAt={trialState.expiresAt} />
-                    </div>
-                    <p className="text-[10.5px] text-text-tertiary mt-1">
-                      {trialState.usage.ai} AI · {sttMin} min STT · {trialState.usage.search}{' '}
-                      searches used
-                    </p>
-                  </div>
-                </div>
-
-                {/* Usage pills */}
-                <div className="grid grid-cols-3 gap-2">
-                  <TrialUsagePill
-                    icon={Zap}
-                    used={trialState.usage.ai}
-                    limit={10}
-                    label="AI"
-                    unit=""
-                  />
-                  <TrialUsagePill
-                    icon={Mic}
-                    used={Math.round(trialState.usage.stt_seconds / 60)}
-                    limit={10}
-                    label="STT"
-                    unit="m"
-                  />
-                  <TrialUsagePill
-                    icon={Search}
-                    used={trialState.usage.search}
-                    limit={2}
-                    label="Search"
-                    unit=""
-                  />
-                </div>
-
-                {/* CTA */}
-                <button
-                  onClick={() => setShowTrialModal(true)}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-[9px] text-[12.5px] font-semibold bg-violet-600 hover:bg-violet-500 text-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] transition-all active:scale-[0.98] cursor-pointer"
-                >
-                  <ArrowUpRight size={13} strokeWidth={2.3} />
-                  Keep the momentum going
-                </button>
-              </div>
-            </Card>
-          );
-        })()}
+      {trialState?.active && (
+        <ActiveTrialCard
+          expiresAt={trialState.expiresAt}
+          onOptions={() => setShowTrialModal(true)}
+        />
+      )}
 
       {/* ── Free trial start card (no key, no active trial) ── */}
       {!isLoading &&
@@ -1075,445 +1482,479 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           }
 
           return (
-            <Card className="shadow-sm">
-              <div className="px-5 pt-5 pb-4 flex flex-col items-center justify-center text-center">
-                {/* Apple Promo Icon */}
-                <div className="w-[42px] h-[42px] mb-3 rounded-[12px] bg-bg-input border border-border-subtle shadow-[inset_0_1px_rgba(255,255,255,0.06),0_2px_8px_rgba(0,0,0,0.04)] flex items-center justify-center relative overflow-hidden">
-                  <NativelyLogoMark
-                    size={20}
-                    className={
-                      isClaimed ? 'text-text-tertiary' : 'text-text-primary drop-shadow-sm'
-                    }
-                  />
-                </div>
+            /* Built from this tab's OWN parts, not its own set. It used to be
+               the one container here with no section label, on a plain Card,
+               with a small right-aligned pill in flat `bg-accent-primary` —
+               the only unmaterialised saturated control on a screen where
+               every other CTA is clay (specular inset, darkened foot, lift on
+               hover). Beside the key plaque below and the pricing cards under
+               that, it read as a different product's component.
+               Now it is the key card's structure exactly: section label as the
+               heading, `natively-key-card` material, the brand mark on a 12px
+               explainer line, and one full-width `natively-key-cta`. Its own
+               ACTIVE state ("Free trial active", ~line 1301) already had this
+               shape; the two halves of one feature no longer disagree. */
+            <div>
+              <SectionLabel>Free trial</SectionLabel>
+              <Card className="natively-key-card">
+                <div className="px-4 py-4 space-y-3">
+                  {/* The ORIGINAL shape: offer on the left, one compact action
+                      on the right, a single row. It reads as an offer rather
+                      than as a form, and it keeps the card to the height of its
+                      own text — a full-width CTA under two short lines made a
+                      three-row block out of a one-line proposition.
+                      What is NOT reverted is the paint: the plaque material,
+                      the mark, the section label and the clay CTA all stay, so
+                      the shape is the old one and the language is this tab's.
+                      `items-center` because the button is the visual anchor of
+                      the row; `min-w-0 flex-1` on the text so a long
+                      translation wraps instead of shoving the button off. */}
+                  {/* No mark. The key card earns one — it is the card you go
+                      to to hand Natively a credential, and the logo is what
+                      tells you WHOSE key it wants. This card is an offer, its
+                      section label already says FREE TRIAL, and a second copy of
+                      the same logo two rows apart just repeated the brand at
+                      the reader. Losing it also puts the offer back on the
+                      card's own left edge, which is the shape this had
+                      originally. */}
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      {/* The OFFER, at title weight. This line spent one
+                          revision as `natively-key-sub` — the 12px muted role
+                          the key card uses for an explainer — which is right
+                          for "Activate with a key or a license" (a caption
+                          under a section label that already says NATIVELY KEY)
+                          and wrong here: FREE TRIAL does not tell you what you
+                          get, so this line is the heading, not a footnote, and
+                          it was disappearing.
+                          30 is a literal: the real duration is
+                          TrialLimits.duration_ms, which only arrives from
+                          /v1/trial/status once a trial EXISTS — there is
+                          nothing to read before you start one. Same reason the
+                          allowances come from TRIAL_FALLBACK_LIMITS. */}
+                      <p className="text-[15px] font-medium text-text-primary tracking-[-0.01em]">
+                        Try the Natively API free for 30 minutes
+                      </p>
+                      {/* Allowances at the description weight the rest of this
+                          tab uses for a card's second line, not the 11px
+                          tertiary of a footnote — they are what the reader
+                          compares against the plans below. Tabular figures so
+                          the digits line up with the usage and price rows. */}
+                      <p className="text-[12px] text-text-secondary mt-1 leading-snug tabular-nums">
+                        {formatCompact(TRIAL_FALLBACK_LIMITS.ai_tokens)} AI tokens
+                        {' · '}{TRIAL_FALLBACK_LIMITS.stt_minutes} min voice
+                        {/* "research", not "searches": that is what the usage
+                            pill, the usage table and the plan copy all call
+                            this meter. One name per meter. */}
+                        {' · '}{TRIAL_FALLBACK_LIMITS.search_requests} research
+                      </p>
+                    </div>
 
-                <h3 className="text-[14.5px] font-bold text-text-primary tracking-tight mb-1">
-                  Natively API. Try it free.
-                </h3>
-                <p className="text-[12px] text-text-secondary leading-snug px-4 mb-4">
-                  Experience managed text-to-speech, AI models, and real-time research without a
-                  subscription.
-                </p>
+                    {/* Same control as Activate — same class, same states on the
+                        same `data-state` attribute — just sized to its label
+                        instead of the card. `ready` is saturated only because
+                        Activate is idle until you type: one primary on screen,
+                        which is the rule this section already follows. */}
+                    <button
+                      onClick={handleStartTrial}
+                      disabled={trialLoading || isClaimed}
+                      data-state={trialLoading ? 'saving' : isClaimed ? 'idle' : 'ready'}
+                      className={`natively-key-cta shrink-0 h-9 px-5 text-[13px] font-medium select-none flex items-center justify-center gap-2 ${
+                        trialLoading ? 'cursor-wait' : isClaimed ? 'cursor-not-allowed' : 'cursor-pointer'
+                      }`}
+                    >
+                    {trialLoading ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin" /> Starting…
+                      </>
+                    ) : isClaimed ? (
+                      'Already claimed'
+                    ) : (
+                      'Start free trial'
+                    )}
+                    </button>
+                  </div>
 
-                {/* Clean limits grid container */}
-                <div className="flex items-center justify-center gap-3.5 mb-5 text-[11.5px] font-medium text-text-primary bg-bg-input px-3.5 py-2 rounded-[8px] border border-border-subtle shadow-[inset_0_1px_rgba(255,255,255,0.02)]">
-                  <div className="flex flex-col items-center gap-1">
-                    <Clock size={14} strokeWidth={2} className="text-blue-500" />
-                    <span>30 min</span>
-                  </div>
-                  <div className="w-px h-5 bg-border-subtle/80" />
-                  <div className="flex flex-col items-center gap-1">
-                    <Brain size={14} strokeWidth={2} className="text-violet-500" />
-                    <span>10 reqs</span>
-                  </div>
-                  <div className="w-px h-5 bg-border-subtle/80" />
-                  <div className="flex flex-col items-center gap-1">
-                    <Mic size={14} strokeWidth={2} className="text-emerald-500" />
-                    <span>10m STT</span>
-                  </div>
-                  <div className="w-px h-5 bg-border-subtle/80" />
-                  <div className="flex flex-col items-center gap-1">
-                    <Search size={14} strokeWidth={2} className="text-orange-500" />
-                    <span>2 searches</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleStartTrial}
-                  disabled={trialLoading || isClaimed}
-                  className={`w-full max-w-[240px] flex items-center justify-center gap-2 py-2 rounded-full text-[13px] font-bold shadow-[0_1px_3px_rgba(0,0,0,0.1)] transition-all ${
-                    isClaimed
-                      ? 'bg-bg-input text-text-tertiary border border-border-subtle cursor-not-allowed'
-                      : 'bg-text-primary hover:bg-text-primary/90 text-bg-primary active:scale-[0.98]'
-                  }`}
-                >
-                  {trialLoading ? (
-                    <>
-                      <Loader2 size={13} className="animate-spin" /> Starting trial…
-                    </>
-                  ) : isClaimed ? (
-                    'Trial Already Claimed'
-                  ) : (
-                    'Start 10-Minute Free Trial'
+                  {/* Error Handling */}
+                  {trialError && !isClaimed && (
+                    <div className="flex items-center gap-2">
+                      <AlertCircle size={13} className="text-[var(--text-danger)] shrink-0" strokeWidth={2} />
+                      <p className="text-[12px] text-[var(--text-danger)]">{trialError}</p>
+                    </div>
                   )}
-                </button>
-
-                {/* Error Handling */}
-                {trialError && !isClaimed && (
-                  <div className="flex items-center gap-1.5 px-3 py-2 mt-3 bg-red-500/10 border border-red-500/20 rounded-[8px]">
-                    <AlertCircle size={13} className="text-red-500 shrink-0" strokeWidth={2} />
-                    <p className="text-[11.5px] text-red-500 font-medium">{trialError}</p>
-                  </div>
-                )}
-
-                <p className="text-[10.5px] text-text-tertiary font-medium mt-3">
-                  No account needed — bound to this device.
-                </p>
-
-                <div className="w-[30px] h-px bg-border-subtle my-3" />
-
-                <p className="text-[11px] text-text-secondary font-medium">
-                  Already have an API key? Enter it below.
-                </p>
-              </div>
-            </Card>
+                </div>
+              </Card>
+            </div>
           );
         })()}
 
-      {/* ── Plans ────────────────────────────────────────── */}
-      {!isSaved && PlansCard}
-
-      {/* ── API Key card ─────────────────────────────────── */}
-      <Card>
-        {/* Card header */}
-        <div className="flex items-center gap-3 px-5 pt-5 pb-4">
-          {/* Tinted icon well — Apple style */}
-          <div className="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-500/20 flex items-center justify-center shrink-0">
-            <NativelyLogoMark size={18} className="text-blue-400" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">API Key</p>
-            <p className="text-[11px] text-text-tertiary leading-snug mt-0.5">
-              Your Natively API key from your subscription email
-            </p>
-          </div>
-        </div>
-
-        {/* Hairline divider */}
-        <div className="h-px bg-border-subtle mx-5" />
-
-        {/* Body */}
-        <div className="px-5 pt-4 pb-5 space-y-3">
-          {/* Label row */}
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">
-              Secret key
-            </span>
-            {isSaved && (
-              <button
-                onClick={handleClear}
-                className="flex items-center gap-1 text-[11px] text-red-400/80 hover:text-red-400 transition-colors duration-150 cursor-pointer"
-              >
-                <Trash2 size={11} strokeWidth={2} />
-                Remove
-              </button>
-            )}
-          </div>
-
-          {/* Input — with inset shadow for Apple depth */}
-          <input
-            type="text"
-            value={apiKey}
-            onChange={(e) => {
-              setApiKey(e.target.value);
-              setIsSaved(false);
-              setError(null);
-            }}
-            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-            placeholder="natively_api_..."
-            spellCheck={false}
-            autoComplete="off"
-            className={`w-full bg-bg-input border rounded-xl px-3.5 py-2.5 text-[13px] font-mono text-text-primary
-                            placeholder:text-text-tertiary/50 placeholder:font-sans placeholder:text-[13px]
-                            shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)]
-                            focus:outline-none transition-all duration-150
-                            ${
-                              error
-                                ? 'border-red-500/40 focus:border-red-500/60 focus:ring-1 focus:ring-red-500/20'
-                                : 'border-border-subtle focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/15'
-                            }`}
-          />
-
-          {/* Error */}
-          {error && (
-            <div className="flex items-center gap-2 px-3 py-2.5 bg-red-500/8 border border-red-500/15 rounded-xl text-[12px] text-red-400">
-              <AlertCircle size={13} className="shrink-0" />
-              {error}
-            </div>
-          )}
-
-          {/* Save button */}
-          <button
-            onClick={handleSave}
-            disabled={isSaving || !isDirty}
-            className={`w-full py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 select-none
-                            ${
-                              isSaving
-                                ? 'bg-button-primary-disabled-bg border border-button-primary-disabled-border text-button-primary-disabled-text cursor-wait'
-                                : justSaved
-                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-pointer'
-                                  : !isDirty
-                                    ? 'bg-button-primary-disabled-bg border border-button-primary-disabled-border text-button-primary-disabled-text cursor-default'
-                                    : 'bg-button-primary-bg hover:bg-button-primary-hover text-white shadow-sm active:scale-[0.99] cursor-pointer'
-                            }`}
-          >
-            {isSaving ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 size={13} className="animate-spin" />
-                Saving…
-              </span>
-            ) : justSaved ? (
-              <span className="flex items-center justify-center gap-2">
-                <CheckCircle size={13} />
-                Saved
-              </span>
-            ) : (
-              'Save key'
-            )}
-          </button>
-
-          {/* Hint */}
-          <p className="text-[11px] text-text-secondary leading-relaxed text-center">
-            Don't have a key?{' '}
-            <span
-              onClick={() => openExternal(PLAN_STANDARD_URL)}
-              className="text-blue-400 hover:text-blue-300 cursor-pointer transition-colors duration-150"
-            >
-              Subscribe to get one
-            </span>
-          </p>
-
-          {/* T&C consent */}
-          <p className="text-[10.5px] text-text-tertiary leading-relaxed text-center">
-            By saving your key, you agree to our{' '}
-            <span
-              onClick={() => openExternal('https://natively.software/nativelyapi/t&c')}
-              className="text-text-secondary hover:text-text-primary underline decoration-border-subtle underline-offset-[3px] cursor-pointer transition-colors"
-            >
-              Terms &amp; Conditions
-            </span>
-            .
-          </p>
-        </div>
-      </Card>
-
-      {/* ── Usage card (connected state) ─────────────────── */}
-      {isSaved && (
-        <Card>
-          {/* Header */}
-          <div className="flex items-center justify-between px-5 pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/20 flex items-center justify-center shrink-0">
-                {isLoadingUsage && !usageData ? (
-                  <Loader2 size={15} className="animate-spin text-violet-400" />
-                ) : (
-                  <CalendarClock size={15} className="text-violet-400" strokeWidth={1.75} />
-                )}
+      {/* ── Natively key card — one box for either credential type ────── */}
+      <div>
+        <SectionLabel
+          aside={
+            !isLoading && isSaved ? (
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-500">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  {planLabel ?? 'Connected'}
+                </span>
+                <button
+                  onClick={handleClear}
+                  className="flex items-center gap-1 text-[11px] text-text-tertiary hover:text-[var(--text-danger)] transition-colors duration-150 cursor-pointer motion-reduce:transition-none"
+                >
+                  <Trash2 size={11} strokeWidth={2} />
+                  Remove
+                </button>
               </div>
-              <div>
-                <p className="text-[13px] font-semibold text-text-primary">Usage this month</p>
-                {usageData && (
-                  <p className="text-[11px] text-text-tertiary mt-0.5">
-                    Resets {fmtDate(usageData.quota.resets_at)}
-                  </p>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={fetchUsage}
-              disabled={isLoadingUsage}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] text-text-tertiary
-                                hover:text-text-secondary hover:bg-bg-input transition-all duration-150
-                                disabled:opacity-40 cursor-pointer"
-            >
-              <RefreshCw
-                size={11}
-                className={isLoadingUsage ? 'animate-spin' : ''}
-                strokeWidth={2}
+            ) : undefined
+          }
+        >
+          Natively key
+        </SectionLabel>
+
+        {/* `natively-key-card` gives the flat box the same MATERIAL as the
+            rest of this tab — layered fill, specular top hairline, 24px
+            blueprint grid, raised floor shadow — without its COLOUR. The
+            plaque and its well are achromatic; the Activate button is the only
+            saturated thing in the section, and only once it has something to
+            act on. See the "tactile credential plaque" block in index.css. */}
+        <Card className="natively-key-card">
+          <div className="px-4 py-4 space-y-3">
+            {/* Says the quiet part out loud: one box, EITHER credential. The
+                placeholder alone was carrying that, and a placeholder
+                disappears the moment you type.
+
+                The mark sits ON this line rather than in a header of its own:
+                no squircle, no tinted well, no title + sub-label block. The
+                section label above is still the heading. */}
+            <div className="flex items-center gap-2.5">
+              <span
+                aria-hidden="true"
+                className="natively-key-mark"
+                style={{ ['--natively-key-mark-src' as string]: `url(${nativelyLogo})` } as React.CSSProperties}
               />
-              Refresh
+              <p className="natively-key-sub text-[12px] leading-snug">
+                Activate with a Natively API key or a Natively Pro license.
+              </p>
+            </div>
+
+            {/* The input is the subject of this card. It's now a pressed-in
+                well rather than a hairline box — same inset vocabulary as the
+                jelly controls, and it gives the credential somewhere to sit.
+
+                The placeholder names the two credential types instead of
+                showing the raw `natively_sk_` prefix. That prefix is real —
+                handleSave routes on it — but it is an implementation detail
+                the user has no reason to recognise, and pairing a literal
+                token against the plain-English "or your Pro license key" made
+                the two halves read as different KINDS of thing rather than as
+                two options for the same box. */}
+            <input
+              type="text"
+              value={apiKey}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                setIsSaved(false);
+                setError(null);
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              placeholder="Natively API key or Natively Pro license"
+              spellCheck={false}
+              autoComplete="off"
+              data-invalid={error ? 'true' : 'false'}
+              className="natively-key-input w-full px-3.5 h-11 text-[13px] font-mono text-text-primary
+                            placeholder:text-text-tertiary placeholder:font-sans"
+            />
+
+            {/* Error */}
+            {error && (
+              <div className="flex items-center gap-2 text-[12px] text-[var(--text-danger)]">
+                <AlertCircle size={13} className="shrink-0" />
+                {error}
+              </div>
+            )}
+
+            {/* Not an error: the key is saved, Pro is still being activated. */}
+            {!error && proNotice && (
+              <div className="flex items-start gap-2 text-[12px] text-[var(--text-secondary)]" role="status">
+                <AlertCircle size={13} className="shrink-0 mt-[2px]" />
+                {proNotice}
+              </div>
+            )}
+
+            {/* Save / Activate button. The disabled state used to be a
+                full-width saturated slab (`bg-legacy-action-disabled-bg`),
+                which made a control you cannot press the loudest element on
+                the card. It now recedes until there's something to submit.
+                The four states are unchanged — they're just projected onto a
+                `data-state` attribute so the paint (jelly clay on the accent
+                accent when ready, ghost when not, tinted chip on success)
+                lives in index.css next to the rest of the tab's material. */}
+            <button
+              onClick={handleSave}
+              disabled={isSaving || !isDirty}
+              data-state={
+                isSaving ? 'saving' : justSaved || justActivatedPro ? 'done' : !isDirty ? 'idle' : 'ready'
+              }
+              className={`natively-key-cta w-full h-10 text-[13px] font-medium select-none ${
+                isSaving
+                  ? 'cursor-wait'
+                  : justSaved || justActivatedPro
+                    ? 'cursor-pointer'
+                    : !isDirty
+                      ? 'cursor-default'
+                      : 'cursor-pointer'
+              }`}
+            >
+              {isSaving ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 size={13} className="animate-spin" />
+                  Activating…
+                </span>
+              ) : justSaved ? (
+                <span className="flex items-center justify-center gap-2">
+                  <CheckCircle size={13} />
+                  Saved
+                </span>
+              ) : justActivatedPro ? (
+                <span className="flex items-center justify-center gap-2">
+                  <CheckCircle size={13} />
+                  Pro activated
+                </span>
+              ) : (
+                'Activate'
+              )}
             </button>
           </div>
-
-          {usageError && !usageData && (
-            <div className="mx-5 mb-5 flex items-center gap-2 px-3 py-2.5 bg-red-500/8 border border-red-500/15 rounded-xl text-[12px] text-red-400">
-              <AlertCircle size={13} className="shrink-0" /> {usageError}
-            </div>
-          )}
-
-          {usageData && (
-            <>
-              {/* Stat strip */}
-              <div className="mx-5 mb-4 grid grid-cols-3 bg-bg-input border border-border-subtle rounded-2xl overflow-hidden divide-x divide-border-subtle">
-                {[
-                  {
-                    label: 'STT mins',
-                    value: usageData.quota.transcription.used,
-                    color: 'text-blue-400',
-                    glow: 'rgba(59,130,246,0.5)',
-                  },
-                  {
-                    label: 'AI calls',
-                    value: usageData.quota.ai.used,
-                    color: 'text-violet-400',
-                    glow: 'rgba(139,92,246,0.5)',
-                  },
-                  {
-                    label: 'Searches',
-                    value: usageData.quota.search.used,
-                    color: 'text-emerald-400',
-                    glow: 'rgba(16,185,129,0.5)',
-                  },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="flex flex-col items-center py-4 px-3 gap-1">
-                    <span
-                      className={`text-[22px] font-semibold tabular-nums tracking-tight leading-none ${color}`}
-                    >
-                      {value.toLocaleString()}
-                    </span>
-                    <span className="text-[10px] text-text-tertiary font-medium tracking-wide">
-                      {label}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Progress bars */}
-              <div className="px-5 pb-5 space-y-3.5">
-                <QuotaBar
-                  label="Transcription"
-                  icon={Mic}
-                  bucket={usageData.quota.transcription}
-                  barColor="bg-blue-500"
-                />
-                <QuotaBar
-                  label="AI requests"
-                  icon={Brain}
-                  bucket={usageData.quota.ai}
-                  barColor="bg-violet-500"
-                />
-                <QuotaBar
-                  label="Web searches"
-                  icon={Search}
-                  bucket={usageData.quota.search}
-                  barColor="bg-emerald-500"
-                />
-              </div>
-            </>
-          )}
         </Card>
+
+        {/* T&C footnote under the card. The "Don't have a key? Subscribe to get
+            one" prompt that used to lead this line is gone — the plan chooser
+            directly below is the same call to action, stated better. */}
+        <p className="text-[11px] text-text-tertiary leading-relaxed mt-2.5 px-1 text-center">
+          By activating, you agree to our{' '}
+          <span
+            onClick={() => openExternal('https://natively.software/nativelyapi/t&c')}
+            className="text-text-secondary hover:text-text-primary underline decoration-border-muted underline-offset-[3px] cursor-pointer transition-colors duration-150 motion-reduce:transition-none"
+          >
+            Terms &amp; Conditions
+          </span>
+          .
+        </p>
+      </div>
+
+      {afterKeySection}
+
+      {/* ── Plans ──────────────────────────────────────────
+          Leads the arrival sequence on key removal: it takes over the region
+          the Usage card and the "Change plan" accordion just vacated, so it is
+          the thing that answers "what replaced what I removed".
+          `y: -8` — it descends from the key card above that caused the change. */}
+      <AnimatePresence mode="popLayout" initial={false}>
+        {!isSaved && (
+          <motion.div
+            key="api-plans"
+            layout="position"
+            // width:100% is REQUIRED, not cosmetic: mode="popLayout" sets
+            // position:absolute on the exiting child, and without an explicit
+            // width it collapses to content width the instant it pops — a
+            // visible horizontal snap before the fade.
+            // `contain: layout` (never `paint` — these cards' 12-32px shadows
+            // paint outside their box and would be clipped) confines the
+            // invalidation of the two commit-pass layouts.
+            style={{ width: '100%', contain: 'layout' }}
+            // No `y` and no `height`. FLIP owns every pixel of vertical motion;
+            // a `y` on top of it composites a second translation, and a `height`
+            // is what made this choppy in the first place.
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={prefersReducedMotion ? { opacity: 0, transition: { duration: INK.out } } : { opacity: 0, scale: 0.985 }}
+            transition={
+              prefersReducedMotion
+                ? { layout: { duration: 0 }, default: { duration: INK.in, delay: BEAT } }
+                : {
+                  // `layout` defaults to a SPRING — name it or the house curves
+                  // are silently discarded.
+                  layout: { duration: SETTLE.activate, ease: EASE_ENTER },
+                  opacity: { duration: INK.in, ease: EASE_ENTER, delay: BEAT },
+                  default: { duration: INK.out, ease: EASE_LEAVE },
+                }
+            }
+          >
+            {PlansCard}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Usage card — only for a Natively API key with a confirmed  ── */}
+      {/* valid plan (usageData populated by a successful quota fetch). */}
+      {/* isSaved alone isn't enough: a saved-but-invalid/inactive key   */}
+      {/* has nothing usage-shaped to show, so the section stays hidden */}
+      {/* entirely rather than surfacing a card with an error in it.    */}
+      {/* Presence is gated on `isSaved` ALONE, and `usageData` is cleared from
+          this wrapper's onExitComplete rather than in handleClear. AnimatePresence
+          cannot play an exit for a child whose data has already vanished — nulling
+          both in the same tick made this unmount instantly no matter what it was
+          wrapped in. The inner guard keeps the null-safety for the case where a
+          saved key simply has no valid plan. */}
+      {/* ── Usage, for a TRIAL ────────────────────────────────────
+          A trial user never reached the section below: it is gated on
+          `usageData`, which comes from /v1/usage authenticated with a real
+          key, and a trial authenticates with `x-trial-token` against the
+          sentinel `__trial__` — so the whole usage table was simply absent
+          for exactly the people with the tightest allowances and the most
+          reason to watch them. The pills on the trial card show progress
+          bars; they do not show used-against-limit numbers.
+
+          Same ResourceMeter rows as the paid table, so the two read
+          identically. "this trial", not "this month": a trial does not
+          reset, it ends — the countdown for that is on the card above. */}
+      {trialState?.active && !trialState.expired && (
+        <div>
+          <SectionLabel>Usage this trial</SectionLabel>
+          <Card>
+            <div className="px-4 py-4 space-y-4">
+              <ResourceMeter label="AI Usage" icon={Brain} meter={trialMeter(trialState.usage.ai_tokens ?? 0, trialState.limits?.ai_tokens ?? TRIAL_FALLBACK_LIMITS.ai_tokens, 'tokens')} />
+              <ResourceMeter label="Voice Usage" icon={Mic} meter={trialMeter(Math.round(trialState.usage.stt_seconds / 60), trialState.limits?.stt_minutes ?? TRIAL_FALLBACK_LIMITS.stt_minutes, 'minutes')} />
+              <ResourceMeter label="Research" icon={Search} meter={trialMeter(trialState.usage.search, trialState.limits?.search_requests ?? TRIAL_FALLBACK_LIMITS.search_requests, 'requests')} />
+              {/* Knowledge only when the server actually reported it: an
+                  absent counter is an older API, not zero usage, and
+                  ResourceMeter's own rule is to render nothing rather than a
+                  confident 0%. */}
+              {trialState.usage.embedding_tokens !== undefined && trialState.limits?.embedding_tokens ? (
+                <ResourceMeter label="Knowledge Usage" icon={Layers} meter={trialMeter(trialState.usage.embedding_tokens, trialState.limits.embedding_tokens, 'tokens')} />
+              ) : null}
+            </div>
+          </Card>
+        </div>
       )}
 
-      {/* ── Plans ────────────────────────────────────────── */}
-      {isSaved && PlansCard}
-
-      {/* ── How it works ─────────────────────────────────── */}
-      <Card>
-        <div className="px-5 py-4">
-          <div className="flex items-center justify-between mb-3.5">
-            <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">
-              How it works
-            </p>
-            <button
-              onClick={() => openExternal('https://natively.software/pro')}
-              className="flex items-center gap-1 text-[10px] font-semibold text-blue-400 hover:text-blue-300 uppercase tracking-widest transition-colors cursor-pointer"
-            >
-              Watch Demo <ArrowUpRight size={10} strokeWidth={2} />
-            </button>
-          </div>
-          <div className="space-y-3">
-            {[
-              { step: '1', text: 'Subscribe above and complete checkout on Dodo Payments.' },
-              { step: '2', text: 'Your API key is emailed instantly to your inbox.' },
-              { step: '3', text: 'Paste it here — Natively handles the rest automatically.' },
-            ].map(({ step, text }) => (
-              <div key={step} className="flex items-start gap-3">
-                <div className="w-5 h-5 rounded-full bg-bg-input border border-border-subtle flex items-center justify-center text-[10px] font-bold text-text-tertiary shrink-0 mt-[1px]">
-                  {step}
-                </div>
-                <p className="text-[12px] text-text-secondary leading-relaxed">{text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Card>
-
-      {/* ── Refund Policy ────────────────────────────────── */}
-      <Card>
-        <div className="flex items-center gap-3 px-5 pt-5 pb-4">
-          <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0">
-            <Shield size={18} className="text-emerald-400" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">Refund Policy</p>
-            <p className="text-[11px] text-text-tertiary leading-snug mt-0.5">
-              24-hour refund window — voucher purchases are final sale
-            </p>
-          </div>
-        </div>
-
-        <div className="h-px bg-border-subtle mx-5" />
-
-        <div className="px-5 pt-4 pb-4">
-          <div className="space-y-3">
-            <div className="rounded-xl bg-bg-input/50 border border-border-subtle px-3.5 py-3">
-              <p className="text-[11.5px] text-text-secondary leading-relaxed">
-                <strong className="text-text-primary font-semibold">A quick heads-up:</strong>{' '}
-                Natively is built and maintained by a single developer and integrates a lot of
-                third-party services — AI providers, transcription engines, search APIs, payments,
-                OS-level audio &amp; screen capture. That gives the app a lot of capability, but the
-                surface area is wider than a typical closed-source product, and once in a while
-                something may not behave exactly as expected. If you run into something like that,
-                please <em>report it</em> rather than disputing the charge — we read every report
-                and fixes typically land in the next update.
-              </p>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="w-1.5 h-1.5 rounded-full bg-text-tertiary/40 shrink-0 mt-[6px]" />
-              <p className="text-[11.5px] text-text-secondary leading-relaxed">
-                Purchases made with a coupon, voucher, referral credit, or limited-time offer are{' '}
-                <strong className="text-text-primary font-semibold">final sale</strong> and not
-                eligible for refund.
-              </p>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="w-1.5 h-1.5 rounded-full bg-text-tertiary/40 shrink-0 mt-[6px]" />
-              <p className="text-[11.5px] text-text-secondary leading-relaxed">
-                To cancel your subscription, log in to the{' '}
-                <span
-                  onClick={() => openExternal('https://customer.dodopayments.com/')}
-                  className="text-blue-400 hover:text-blue-300 underline decoration-blue-400/40 underline-offset-[3px] cursor-pointer transition-colors"
+      <AnimatePresence mode="popLayout" initial={false} onExitComplete={() => setUsageData(null)}>
+      {isSaved && usageData && (
+        <motion.div
+          key="api-usage"
+          layout="position"
+          // width:100% is REQUIRED, not cosmetic: mode="popLayout" sets
+          // position:absolute on the exiting child, and without an explicit
+          // width it collapses to content width the instant it pops — a
+          // visible horizontal snap before the fade.
+          // `contain: layout` (never `paint` — these cards' 12-32px shadows
+          // paint outside their box and would be clipped) confines the
+          // invalidation of the two commit-pass layouts.
+          style={{ width: '100%', contain: 'layout' }}
+          // No `y` and no `height`. FLIP owns every pixel of vertical motion;
+          // a `y` on top of it composites a second translation, and a `height`
+          // is what made this choppy in the first place.
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={prefersReducedMotion ? { opacity: 0, transition: { duration: INK.out } } : { opacity: 0, scale: 0.985 }}
+          transition={
+            prefersReducedMotion
+              ? { layout: { duration: 0 }, default: { duration: INK.in, delay: usageDelay(BEAT) } }
+              : {
+                // `layout` defaults to a SPRING — name it or the house curves
+                // are silently discarded.
+                layout: { duration: SETTLE.activate, ease: EASE_ENTER },
+                opacity: { duration: INK.in, ease: EASE_ENTER, delay: usageDelay(BEAT) },
+                default: { duration: INK.out, ease: EASE_LEAVE },
+              }
+          }
+        >
+          <SectionLabel
+            aside={
+              <span className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] text-text-tertiary">
+                  Resets {fmtDate(usageData.quota.resets_at)}
+                </span>
+                <button
+                  onClick={() => fetchUsage({ force: true })}
+                  disabled={isLoadingUsage}
+                  title="Refresh"
+                  aria-label="Refresh usage"
+                  className="flex items-center justify-center w-5 h-5 rounded-md text-text-tertiary
+                                hover:text-text-secondary transition-colors duration-150 motion-reduce:transition-none
+                                disabled:opacity-40 cursor-pointer shrink-0"
                 >
-                  customer portal
-                </span>{' '}
-                to manage or cancel your plan.
-              </p>
-            </div>
-
-            <div className="h-px bg-border-subtle mt-4 mb-3" />
-
-            <p className="text-[11.5px] text-text-secondary leading-relaxed">
-              For everything else — the 24-hour refund window, subscription handling, taxes &amp;
-              fees, and your local consumer rights — please see our full{' '}
-              <span
-                onClick={() => openExternal('https://natively.software/refundpolicy')}
-                className="text-text-primary hover:text-text-secondary underline decoration-border-subtle underline-offset-[3px] cursor-pointer transition-colors"
-              >
-                Refund Policy
+                  <RefreshCw
+                    size={11}
+                    className={isLoadingUsage ? 'animate-spin' : ''}
+                    strokeWidth={2}
+                  />
+                </button>
               </span>
-              . To request a refund or ask a question, email{' '}
-              <span
-                onClick={() => openExternal('mailto:natively.contact@gmail.com')}
-                className="text-text-primary hover:text-text-secondary underline decoration-border-subtle underline-offset-[3px] cursor-pointer transition-colors"
-              >
-                natively.contact@gmail.com
-              </span>
-              .
-            </p>
+            }
+          >
+            Usage this month
+          </SectionLabel>
 
-            <div className="mt-3 px-3 py-2.5 rounded-xl bg-amber-500/6 border border-amber-500/15">
-              <p className="text-[11.5px] text-text-secondary leading-relaxed">
-                <strong className="text-text-primary font-semibold">A personal note:</strong>{' '}
-                Natively is built, maintained, and supported entirely by one person — in their free time.
-                Email replies may take a few days, and weekends (Sat &amp; Sun) are offline.
-                Your patience is genuinely appreciated.
-              </p>
+          <Card>
+            <div className="px-4 py-4 space-y-4">
+              {/* The four product categories, in the order they cost money.
+                  Names are the customer's, not the implementation's: "Voice
+                  Usage" rather than STT, "Research" rather than web searches.
+                  Every figure comes from the server response, so there is
+                  nothing in this file for a plan change to make stale.
+
+                  percentOnly: the monthly panel reports how much of the
+                  allowance is gone, not what the allowance IS. See ResourceMeter
+                  for why the trial panel above still shows the pair. */}
+              <ResourceMeter label="AI Usage" icon={Brain} meter={usageData.quota.ai} percentOnly />
+              <KnowledgeUsage knowledge={usageData.quota.knowledge} percentOnly />
+              <ResourceMeter label="Voice Usage" icon={Mic} meter={usageData.quota.voice} percentOnly />
+              <ResourceMeter label="Research" icon={Search} meter={usageData.quota.research} percentOnly />
             </div>
-          </div>
-        </div>
-      </Card>
+          </Card>
+        </motion.div>
+      )}
+      </AnimatePresence>
+
+      {/* ── Plans — already-subscribed users have already chosen a plan; ── */}
+      {/* collapse the chooser behind "Change plan" instead of always showing */}
+      {/* the full pricing selector at equal weight to Usage above it.        */}
+      <AnimatePresence mode="popLayout" initial={false}>
+        {isSaved && (
+          <motion.div
+            key="api-change-plan"
+            layout="position"
+            // width:100% is REQUIRED, not cosmetic: mode="popLayout" sets
+            // position:absolute on the exiting child, and without an explicit
+            // width it collapses to content width the instant it pops — a
+            // visible horizontal snap before the fade.
+            // `contain: layout` (never `paint` — these cards' 12-32px shadows
+            // paint outside their box and would be clipped) confines the
+            // invalidation of the two commit-pass layouts.
+            style={{ width: '100%', contain: 'layout' }}
+            // No `y` and no `height`. FLIP owns every pixel of vertical motion;
+            // a `y` on top of it composites a second translation, and a `height`
+            // is what made this choppy in the first place.
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={prefersReducedMotion ? { opacity: 0, transition: { duration: INK.out } } : { opacity: 0, scale: 0.985 }}
+            transition={
+              prefersReducedMotion
+                ? { layout: { duration: 0 }, default: { duration: INK.in, delay: BEAT } }
+                : {
+                  // `layout` defaults to a SPRING — name it or the house curves
+                  // are silently discarded.
+                  layout: { duration: SETTLE.activate, ease: EASE_ENTER },
+                  opacity: { duration: INK.in, ease: EASE_ENTER, delay: BEAT },
+                  default: { duration: INK.out, ease: EASE_LEAVE },
+                }
+            }
+          >
+            <AccordionSection
+              title="Change plan"
+              className="bg-bg-item-surface rounded-2xl border-border-subtle !mb-0"
+            >
+              {PlansCard}
+            </AccordionSection>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── How it works + Refund Policy — collapsed by default, this is ── */}
+      {/* reference material, not something read on every settings visit.  */}
     </div>
+    </LayoutGroup>
   );
 };

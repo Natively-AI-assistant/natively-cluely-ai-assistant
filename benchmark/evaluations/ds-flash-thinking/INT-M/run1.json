@@ -1,0 +1,315 @@
+{
+ "blind_id": "S-18682776",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 65175,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 21333,
+  "candidatesTokenCount": 2162,
+  "totalTokenCount": 30382,
+  "cachedContentTokenCount": 12234,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 21333
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 12234
+   }
+  ],
+  "thoughtsTokenCount": 6887,
+  "serviceTier": "standard"
+ },
+ "fact_count": 61,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 8,
+  "hallucination_control": 10,
+  "action_item_retention": 9,
+  "decision_retention": 7,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 4,
+  "entity_retention": 9,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 4,
+  "structure": 4,
+  "conciseness": 3,
+  "readability": 5,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "The notes present the superseded compensation values ($146k top of band and $155k target) as a final decision, a live open question, and a high risk, completely contradicting the corrected values ($148k-$172k band and $165k target) which are also mentioned in the notes."
+  ],
+  "missing_important_information": [
+   "Dana's success metric of cutting post-shift documentation time in half, from 40 minutes to 20.",
+   "The timeline plan to do Dana's interview next week and the portfolio review the week of October 5."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "How can the comp gap be closed when Maya is targeting $155k base and the band tops out at $146k? [open]"
+   },
+   {
+    "correction_id": "C03",
+    "reported": "[high] Compensation mismatch: Maya's $155k base target sits above the $146k top of the posted band."
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Theo agreed not to treat Maya's $155k target — above the $146k top of band — as a dealbreaker, and to note it and revisit comp later."
+  ],
+  "distractors_included": [
+   "Theo and Maya exchanged warm sign-offs, with Theo asking Maya to say hi to her cat and Maya reciprocating for Theo's pet Biscuit."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "missing"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "contradicted"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "partial"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "partial"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "missing"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture the vast majority of the transcript's facts but suffer from a critical failure in synthesizing corrections. The recruiter's initial mistake regarding the salary band and the candidate's initial target were explicitly corrected later in the call. However, the notes present the superseded values as a final decision, a live open question, and a 'high risk' compensation mismatch, directly contradicting other sections of the notes that state the correct values. Additionally, the notes are extremely repetitive, with the same facts (like the start date and the portfolio review) repeated up to seven times across the bloated template sections, and action items are duplicated."
+ }
+}

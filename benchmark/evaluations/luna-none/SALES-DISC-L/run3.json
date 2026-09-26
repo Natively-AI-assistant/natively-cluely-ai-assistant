@@ -1,0 +1,339 @@
+{
+ "blind_id": "S-c33bdaf8",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 68823,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 36737,
+  "candidatesTokenCount": 2240,
+  "totalTokenCount": 48112,
+  "cachedContentTokenCount": 24513,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 36737
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24513
+   }
+  ],
+  "thoughtsTokenCount": 9135,
+  "serviceTier": "standard"
+ },
+ "fact_count": 67,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 8,
+  "hallucination_control": 8,
+  "action_item_retention": 7,
+  "decision_retention": 9,
+  "speaker_attribution": 6,
+  "numeric_accuracy": 7,
+  "entity_retention": 9,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 8,
+  "structure": 5,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 5,
+  "critical_errors": [
+   "Superseded values (120 agents, October 15 go-live) are presented as facts in the Summary bullets.",
+   "Internal contradiction: The notes state the Zendesk plan is confirmed as Support Professional in the Decisions section, but list 'The exact Zendesk Suite plan in use remains to be confirmed by Jon' in the Open Questions section.",
+   "Misattribution and contradiction: The NDA action item is assigned to Speaker 1 in one bullet and to Jon in another."
+  ],
+  "missing_important_information": [
+   "Joan's action item to check with procurement on the Queuewise notice terms (format, signatory, short extension option) by April 30.",
+   "Dana's commitment to return the completed security questionnaire within five business days of receiving it."
+  ],
+  "hallucinated_information": [
+   "The exact Zendesk Suite plan in use remains to be confirmed by Jon. (This contradicts the transcript where Jon explicitly confirmed they are on Support Professional, not Suite)."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C01",
+    "reported": "Harbourline described a routing problem affecting 120 agents"
+   },
+   {
+    "correction_id": "C03",
+    "reported": "targeting an October 15 go-live"
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "partial"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "missing"
+   },
+   {
+    "id": "F29",
+    "status": "missing"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "partial"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "partial"
+   },
+   {
+    "id": "F58",
+    "status": "partial"
+   },
+   {
+    "id": "F59",
+    "status": "partial"
+   },
+   {
+    "id": "F60",
+    "status": "partial"
+   },
+   {
+    "id": "F61",
+    "status": "partial"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture the majority of the important information but suffer from extreme repetition and poor organization, particularly in the Action Items section where tasks are listed up to four times. The summary bullets incorrectly present superseded values (120 agents, October 15 go-live) as facts without noting they were later corrected. There are also internal contradictions, such as stating the Zendesk plan is confirmed as Support Professional in one section but listing it as an unconfirmed open question in another. Two important action items (Joan checking with procurement, Dana's 5-day questionnaire turnaround) are missing."
+ }
+}

@@ -1,0 +1,391 @@
+{
+ "blind_id": "S-33878cf8",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 63704,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 36193,
+  "candidatesTokenCount": 1850,
+  "totalTokenCount": 46136,
+  "cachedContentTokenCount": 24513,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 36193
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24513
+   }
+  ],
+  "thoughtsTokenCount": 8093,
+  "serviceTier": "standard"
+ },
+ "fact_count": 82,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 8,
+  "hallucination_control": 4,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 8,
+  "numeric_accuracy": 10,
+  "entity_retention": 8,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 9,
+  "structure": 8,
+  "conciseness": 6,
+  "readability": 7,
+  "overall_summary_quality": 6,
+  "critical_errors": [
+   "The notes contain severe processing artifacts, hallucinating that the 'chunk ends' or 'transcript ends' before Marcus answers about the reconciliation alert, concurrent duplicate requests, and Redis outage behavior. These statements contradict the transcript and the notes' own summaries elsewhere."
+  ],
+  "missing_important_information": [
+   "Priya Raman's name and role as Engineering Manager.",
+   "Alex Brandt's reason for joining late (incident review ran over and room booking system kicked him out).",
+   "Marcus's former manager at Ferrow, Alex Kowalczyk."
+  ],
+  "hallucinated_information": [
+   "The chunk ends before Marcus answers whether the committed reconciliation alert shipped within the six-week rollout.",
+   "The chunk ends after the data model and idempotency-key proposal, so handling of concurrent duplicate requests has not yet been assessed.",
+   "The transcript ends before Redis-outage behavior is defined."
+  ],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "missing"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "missing"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "partial"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "partial"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "missing"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "partial"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "partial"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   },
+   {
+    "id": "F73",
+    "status": "present"
+   },
+   {
+    "id": "F74",
+    "status": "present"
+   },
+   {
+    "id": "F75",
+    "status": "present"
+   },
+   {
+    "id": "F76",
+    "status": "present"
+   },
+   {
+    "id": "F77",
+    "status": "present"
+   },
+   {
+    "id": "F78",
+    "status": "present"
+   },
+   {
+    "id": "F79",
+    "status": "present"
+   },
+   {
+    "id": "F80",
+    "status": "present"
+   },
+   {
+    "id": "F81",
+    "status": "present"
+   },
+   {
+    "id": "F82",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes are highly comprehensive and capture almost all technical and logistical details accurately. However, they suffer from severe processing artifacts where the AI hallucinates that the 'chunk ends' or 'transcript ends' before certain topics were discussed (e.g., the reconciliation alert, concurrent duplicate requests, and Redis outage behavior). These artifacts directly contradict both the transcript and other sections of the notes where those exact topics are correctly summarized. Additionally, the notes are extremely repetitive, restating the same facts across multiple sections, and completely miss the name and role of the primary interviewer, Priya Raman."
+ }
+}
