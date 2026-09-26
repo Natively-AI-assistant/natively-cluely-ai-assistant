@@ -5,7 +5,7 @@
 // whether a Natively API key is saved. Pure and platform-injectable, so the
 // macOS and Windows branches are both tested on either OS (CLAUDE.md).
 //
-// Facts, never verdicts. A row says "Deepgram Nova-3 · key saved", not
+// Facts, never verdicts. A row says "Deepgram · key saved", not
 // "working": a saved key can still be wrong, and only Test Connection in Audio
 // or a real answer can prove it. `done` means only that the step has been
 // taken, so the pane can tick it.
@@ -45,7 +45,7 @@ const SPEECH_PROVIDERS = {
   groq: { label: 'Groq Whisper', key: 'hasSttGroqKey' },
   nvidia_nim: { label: 'Nvidia Nim', key: 'hasNvidiaNimKey' },
   openai: { label: 'OpenAI Whisper', key: 'hasSttOpenaiKey' },
-  deepgram: { label: 'Deepgram Nova-3', key: 'hasDeepgramKey' },
+  deepgram: { label: 'Deepgram', key: 'hasDeepgramKey' },
   elevenlabs: { label: 'ElevenLabs Scribe', key: 'hasElevenLabsKey' },
   azure: { label: 'Azure Speech', key: 'hasAzureKey' },
   ibmwatson: { label: 'IBM Watson', key: 'hasIbmWatsonKey' },

@@ -1498,7 +1498,12 @@ export const AipProviderMark: React.FC<AipProviderMarkProps> = ({ provider, name
     );
 };
 
-export interface AipModelEntry { id: string; label: string }
+export interface AipModelEntry {
+    id: string;
+    label: string;
+    /** A short line shown in place of the raw id (speech models: "Fastest"). */
+    description?: string;
+}
 
 interface AipModelListProps {
     /** Presets ∪ persisted catalog. The full universe for this provider. */
@@ -1546,6 +1551,14 @@ interface AipModelListProps {
      * here rather than behind a separate button elsewhere in the card.
      */
     onFirstOpen?: () => void;
+    /**
+     * A provider that runs ONE model at a time (Settings > Audio's speech
+     * providers). There is no allow-list, so a row's tick marks the model in
+     * use and clicking the row — or its Set default — picks it; the count is
+     * just the number of models and the bulk / reset controls are not offered.
+     * Everything else (the summary, the reveal, the row actions) is unchanged.
+     */
+    pickOnly?: boolean;
 }
 
 /** Above this many models, a filter field appears. */
@@ -1570,7 +1583,7 @@ const AIP_MODEL_FILTER_THRESHOLD = 12;
 export const AipModelList: React.FC<AipModelListProps> = ({
     models, enabled, onToggle, onReset, defaultId, onSetDefault, staleIds = [], error,
     onRefresh, refreshing, onFirstOpen, optIn = false, onBulkToggle,
-    catalogIsComplete = false,
+    catalogIsComplete = false, pickOnly = false,
 }) => {
     const t = useT();
     const [open, setOpen] = useState(false);
@@ -1583,7 +1596,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
     const panelId = `${idRef.current}-panel`;
 
     // Opt-in inverts the empty case: nothing is on until it is listed.
-    const isOn = (id: string) => optIn ? enabled.includes(id) : (enabled.length === 0 || enabled.includes(id));
+    const isOn = (id: string) => pickOnly ? id === defaultId : optIn ? enabled.includes(id) : (enabled.length === 0 || enabled.includes(id));
     const enabledCount = (!optIn && enabled.length === 0) ? models.length : enabled.length;
 
     // Threshold keys off the UNFILTERED count. Keying it off visible rows would
@@ -1662,7 +1675,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                 {error
                     ? <AipBadge tone="danger" label={t('Not saved')} />
                     : <span className="aip-count shrink-0" aria-live="polite">
-                        {enabled.length === 0
+                        {pickOnly ? `${models.length}` : enabled.length === 0
                             ? (optIn ? `${t('None selected')} · ${models.length}` : `${t('All')} ${models.length}`)
                             : `${enabledCount} / ${models.length}`}
                       </span>}
@@ -1674,7 +1687,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                 after the trigger it belongs to. */}
             <div className="aip-reveal aip-reveal--models w-full basis-full order-4" data-open={open ? 'true' : 'false'}>
                 <div>
-                    <div id={panelId} role="group" aria-label={t('Models shown in the picker')} className="pt-2" onKeyDown={onListKeyDown}>
+                    <div id={panelId} role="group" aria-label={pickOnly ? t('Models') : t('Models shown in the picker')} className="pt-2" onKeyDown={onListKeyDown}>
                         <div className="flex items-center gap-2 mb-2">
                         {showFilterBar && (
                             <>
@@ -1772,7 +1785,11 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                             tabIndex={i === activeIndex ? 0 : -1}
                                             aria-pressed={on}
                                             aria-disabled={inert || undefined}
-                                            onClick={() => { if (!inert) onToggle(m.id); }}
+                                            onClick={() => {
+                                                if (inert) return;
+                                                if (pickOnly) { if (m.id !== defaultId) onSetDefault?.(m.id); return; }
+                                                onToggle(m.id);
+                                            }}
                                             onFocus={() => setActiveIndex(i)}
                                             title={inert
                                                 ? t('At least one model must stay on. Turn the provider off to hide it entirely.')
@@ -1781,7 +1798,9 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                         >
                                             <Check size={11} strokeWidth={2.5} className="aip-model-check" aria-hidden="true" />
                                             <span className="aip-model-name truncate">{m.label}</span>
-                                            {m.label !== m.id && (
+                                            {m.description ? (
+                                                <span className="aip-model-id truncate">{m.description}</span>
+                                            ) : m.label !== m.id && (
                                                 <span className="aip-model-id aip-mono truncate">{m.id}</span>
                                             )}
                                         </button>

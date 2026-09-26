@@ -7,7 +7,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Download, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, Languages
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, Languages, Volume2, KeyRound, Loader2
 } from 'lucide-react';
 import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
@@ -15,7 +15,7 @@ import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
 import { ErrorBoundary } from './ErrorBoundary';
 import { HelpSettings } from './settings/HelpSettings';
-import { AIProvidersSettings } from './settings/AIProvidersSettings';
+import { AIProvidersSettings, AIP_CSS, AipModelList, AipPassedCheck } from './settings/AIProvidersSettings';
 import { PlansSettings } from './settings/PlansSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
 import { RetrievalSettings } from './settings/RetrievalSettings';
@@ -94,6 +94,8 @@ const DISGUISE_TILE_RESTING = {
 // Shared with the main process so the picker cannot offer a model the ipc
 // validator rejects. Pure data module — no node/electron imports.
 import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL, allowedLanguageKeysForNvidiaModel } from '../../electron/audio/nvidiaNimSttModels';
+import { STT_MODEL_CATALOG, isEnglishOnlySttModel, type SttModelProvider } from '../../electron/audio/sttModelCatalog';
+import { isDefaultOpenAiSttBase } from '../../electron/audio/openaiSttBaseUrl';
 import { isRecognitionLanguageOffered, PARAKEET_ONLY_LANGUAGE_KEYS } from '../../electron/config/languages';
 
 // ---------------------------------------------------------------------------
@@ -238,6 +240,22 @@ const LabelSwap: React.FC<{ id: string | null; children?: React.ReactNode }> = (
     </SettingsMotionReady.Provider>
 );
 
+// LabelSwap in a box sized to its widest state, so a button whose label
+// changes (Test Connection → Testing… → Connected) keeps one width instead of
+// shoving what sits beside it. Every state renders invisibly in one grid cell.
+// A spinner is a same-size blank in the sizers: a hidden .animate-spin still
+// reads as "loading" to GenieModal's snapshot check.
+const SizedLabelSwap: React.FC<{ id: string | null; sizers: React.ReactNode[]; children?: React.ReactNode }> = ({ id, sizers, children }) => (
+    <span className="grid place-items-center">
+        {sizers.map((node, i) => (
+            <span key={i} aria-hidden="true" className="invisible col-start-1 row-start-1 whitespace-nowrap">{node}</span>
+        ))}
+        <span className="col-start-1 row-start-1 whitespace-nowrap">
+            <LabelSwap id={id}>{children}</LabelSwap>
+        </span>
+    </span>
+);
+
 // The same swap for a whole description that follows a switch beside it.
 const DescriptionSwap: React.FC<{ id: string; children?: React.ReactNode }> = ({ id, children }) => (
     <SettingsMotionReady.Provider value={true}>
@@ -245,9 +263,30 @@ const DescriptionSwap: React.FC<{ id: string; children?: React.ReactNode }> = ({
     </SettingsMotionReady.Provider>
 );
 
+// AI Providers' Models control for a speech provider: AipModelList itself, so
+// the summary, the reveal, the row actions and Set default are that control's
+// own. `pickOnly` because a speech provider runs one model at a time: the tick
+// marks the model in use, and a row (or its Set default) picks it. Renders
+// inside an .aip-root (the key card), which carries AIP_CSS.
+const SttModelList: React.FC<{
+    models: { id: string; label: string; description?: string }[];
+    value: string;
+    onSelect: (id: string) => void;
+}> = ({ models, value, onSelect }) => (
+    <AipModelList
+        pickOnly
+        catalogIsComplete
+        models={models}
+        enabled={[]}
+        onToggle={() => {}}
+        onReset={() => {}}
+        defaultId={value}
+        onSetDefault={onSelect}
+    />
+);
+
 interface CustomSelectProps {
     label: string;
-    icon: React.ReactNode;
     value: string;
     options: MediaDeviceInfo[];
     onChange: (value: string) => void;
@@ -262,7 +301,7 @@ interface CustomSelectProps {
     badges?: Record<string, string>;
 }
 
-const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options, onChange, placeholder = "Select device", disabled = false, badges }) => {
+const CustomSelect: React.FC<CustomSelectProps> = ({ label, value, options, onChange, placeholder = "Select device", disabled = false, badges }) => {
     const t = useT();
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = React.useRef<HTMLDivElement>(null);
@@ -277,23 +316,42 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // Escape closes an open menu and hands focus back to its trigger.
+    const triggerRef = React.useRef<HTMLButtonElement>(null);
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            e.stopPropagation();
+            setIsOpen(false);
+            triggerRef.current?.focus();
+        };
+        document.addEventListener('keydown', onKey, true);
+        return () => document.removeEventListener('keydown', onKey, true);
+    }, [isOpen]);
+
     const selectedLabel = options.find(o => o.deviceId === value)?.label || placeholder;
 
     return (
         <div className="bg-bg-card rounded-xl p-4 border border-border-subtle" ref={containerRef}>
             {label && (
+                // A quiet caption over the value: secondary grey, no glyph. An icon
+                // on every card repeated its own label and was most of the pane's
+                // visual noise; the value is what the eye should land on.
                 <div className="flex items-center gap-2 mb-3">
-                    <span className="text-text-secondary">{icon}</span>
-                    <label className="text-xs font-medium text-text-primary uppercase tracking-wide">{label}</label>
+                    <label className="text-xs font-medium text-text-secondary uppercase tracking-wide truncate">{label}</label>
                 </div>
             )}
 
             <div className="relative">
                 <button
+                    ref={triggerRef}
                     onClick={() => !disabled && setIsOpen(!isOpen)}
                     disabled={disabled}
                     aria-disabled={disabled}
-                    className={`w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-sm text-text-primary flex items-center justify-between transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-bg-elevated'}`}
+                    aria-haspopup="listbox"
+                    aria-expanded={isOpen}
+                    className={`w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-sm text-text-primary flex items-center justify-between transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent-border ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-bg-elevated'}`}
                 >
                     <span className="truncate pr-4">{selectedLabel}</span>
                     <ChevronDown size={14} className={`text-text-secondary transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isOpen ? 'rotate-180' : ''}`} />
@@ -371,6 +429,20 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // Escape closes an open menu and hands focus back to its trigger.
+    const triggerRef = React.useRef<HTMLButtonElement>(null);
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            e.stopPropagation();
+            setIsOpen(false);
+            triggerRef.current?.focus();
+        };
+        document.addEventListener('keydown', onKey, true);
+        return () => document.removeEventListener('keydown', onKey, true);
+    }, [isOpen]);
+
     const selected = options.find(o => o.id === value);
 
     const getBadgeStyle = (color?: string) => {
@@ -410,8 +482,14 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
     return (
         <div ref={containerRef} className="relative z-20 font-sans">
             <button
+                ref={triggerRef}
                 onClick={() => setIsOpen(!isOpen)}
-                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-[border-color,box-shadow] duration-150 ease-out outline-none focus:ring-2 focus:ring-accent-border ${isOpen ? 'ring-2 ring-accent-border border-accent-focus' : 'hover:shadow-md'}`}
+                aria-haspopup="listbox"
+                aria-expanded={isOpen}
+                // focus-visible, not focus: a mouse click left the 2px ring on
+                // the trigger after the menu had closed, until something else
+                // took focus. Keyboard focus still gets it.
+                className={`w-full group bg-bg-input border border-border-subtle hover:border-border-muted shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-[border-color,box-shadow] duration-150 ease-out outline-none focus-visible:ring-2 focus-visible:ring-accent-border ${isOpen ? 'ring-2 ring-accent-border border-accent-focus' : 'hover:shadow-md'}`}
             >
                 {selected ? (
                     <div className="flex items-center gap-3 overflow-hidden">
@@ -447,7 +525,10 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({ value, options, onChang
                                 onClick={() => { onChange(option.id); setIsOpen(false); }}
                                 className={`w-full rounded-[10px] p-2 flex items-center gap-3 transition-[background-color,box-shadow] duration-150 ease-out group relative ${isSelected ? (isLight ? 'bg-bg-item-active shadow-inner' : 'bg-white/10 shadow-inner') : (isLight ? 'hover:bg-bg-item-surface' : 'hover:bg-white/5')}`}
                             >
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 ${isSelected ? 'scale-100' : 'scale-95 group-hover:scale-100'} ${getIconStyle(option.color, false, option.neutralTile, option.tileClassName)}`}>
+                                {/* The mark holds still on hover: the row's own fill and ring
+                                    already answer the pointer, and a tile that grew under it
+                                    made every pass down the list twitch. */}
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${getIconStyle(option.color, false, option.neutralTile, option.tileClassName)}`}>
                                     {option.icon}
                                 </div>
                                 <div className="flex-1 min-w-0 text-left">
@@ -843,6 +924,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // language-capability memo below reads it, and which languages that model
     // can recognise gates the recognition-language selector.
     const [nvidiaNimSttModel, setNvidiaNimSttModel] = useState(DEFAULT_NVIDIA_NIM_STT_MODEL);
+    // Deepgram / OpenAI transcription model (sttModelCatalog.ts), per provider.
+    const [sttModels, setSttModels] = useState<Record<SttModelProvider, string>>({
+        deepgram: STT_MODEL_CATALOG.deepgram.defaultId,
+        openai: STT_MODEL_CATALOG.openai.defaultId,
+    });
 
     // Local model language capability (local-whisper provider only).
     // Per-model: which RECOGNITION_LANGUAGES keys the model accepts, whether
@@ -1346,7 +1432,15 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // Language keys the active STT backend accepts. Unrestricted for cloud
     // providers; for local-whisper this is the active model's documented set.
     // Parakeet-only languages are hidden unless the active local model lists them.
-    const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? nvidiaLanguageCapability ?? appleLanguageCapability ?? null;
+    // Deepgram's English-only models (Nova-3 Medical, Nova-2 Meeting) answer
+    // any other language, or `multi`, with a 400 — measured live 2026-09-26.
+    const deepgramLanguageCapability = useMemo(() => {
+        if (sttProvider !== 'deepgram' || !isEnglishOnlySttModel('deepgram', sttModels.deepgram)) return null;
+        const keys = Object.entries(availableLanguages).filter(([, l]: [string, any]) => l?.group === 'English').map(([k]) => k);
+        return keys.length > 0 ? new Set<string>(keys) : null;
+    }, [sttProvider, sttModels.deepgram, availableLanguages]);
+
+    const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? nvidiaLanguageCapability ?? deepgramLanguageCapability ?? appleLanguageCapability ?? null;
     const isLanguageEntryAllowed = (key: string) =>
         isRecognitionLanguageOffered(key, localLanguageCapability?.allowedKeys ?? null, allowedLanguageKeySet);
 
@@ -1387,7 +1481,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // storedLanguageUnsupported (their allowed keys exclude these languages).
     const storedLanguageParakeetOnly =
         sttProvider !== 'local-whisper' && PARAKEET_ONLY_LANGUAGE_KEYS.has(recognitionLanguage);
-    const showsEnglishFallback = languageLocked && (storedLanguageUnsupported || autoDetectUnavailable);
+    // An English-only Deepgram model is locked to English the same way: its
+    // session always sends English (DeepgramStreamingSTT.connectLanguage), so
+    // an Auto or non-English stored choice shows as the English it gets —
+    // not as an empty placeholder with nothing in the list to match.
+    const showsEnglishFallback = (languageLocked || !!deepgramLanguageCapability) && (storedLanguageUnsupported || autoDetectUnavailable);
     const displayedSttGroup = showsEnglishFallback ? 'English' : selectedSttGroup;
     const displayedRecognitionLanguage = showsEnglishFallback ? 'english-us' : recognitionLanguage;
 
@@ -1473,6 +1571,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // granted, no loopback device, tap init refused).
     const [systemAudioLevel, setSystemAudioLevel] = useState(0);
     const [systemAudioError, setSystemAudioError] = useState<string | null>(null);
+    // Which way each meter last moved. A level meter rises at once and falls
+    // slowly (attack / release); one 100ms ease both ways made the bars jitter
+    // on every update instead of reading as a level.
+    const [micFalling, setMicFalling] = useState(false);
+    const [systemFalling, setSystemFalling] = useState(false);
+    // True for the length of the test tone, so Test Sound shows it is playing.
+    const [testSoundPlaying, setTestSoundPlaying] = useState(false);
+    const testSoundTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const [useExperimentalSck, setUseExperimentalSck] = useState(false);
     // Most-recent device fallback notice. Populated by main process via
     // 'device-selection-applied' IPC when the saved device couldn't be opened
@@ -1494,6 +1600,17 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [sttAzureRegion, setSttAzureRegion] = useState('eastus');
     const [sttIbmKey, setSttIbmKey] = useState('');
     const [sttOpenaiBaseUrl, setSttOpenaiBaseUrl] = useState('');
+    // What is stored for Azure's region and OpenAI's server, so their Save is
+    // live only for an edit, as the key's is, and which of them just saved.
+    const [savedAzureRegion, setSavedAzureRegion] = useState('eastus');
+    const [savedOpenaiBaseUrl, setSavedOpenaiBaseUrl] = useState('');
+    const [sttFieldSaved, setSttFieldSaved] = useState<'region' | 'baseUrl' | null>(null);
+    const sttFieldSavedTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const markSttFieldSaved = (field: 'region' | 'baseUrl') => {
+        setSttFieldSaved(field);
+        clearTimeout(sttFieldSavedTimer.current);
+        sttFieldSavedTimer.current = setTimeout(() => setSttFieldSaved(null), 2000);
+    };
     const [sttTestStatus, setSttTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
     const [sttTestError, setSttTestError] = useState('');
     const [sttSaving, setSttSaving] = useState(false);
@@ -1541,11 +1658,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     setHasStoredSttGroqKey(creds.hasSttGroqKey);
                     setHasStoredNvidiaNimKey(creds.hasNvidiaNimKey || false);
                     if ((creds as any).nvidiaNimSttModel) setNvidiaNimSttModel((creds as any).nvidiaNimSttModel);
+                    if (creds.sttModels) setSttModels((cur) => ({ ...cur, ...creds.sttModels }));
                     setHasStoredSttOpenaiKey(creds.hasSttOpenaiKey);
                     setHasStoredDeepgramKey(creds.hasDeepgramKey);
                     setHasStoredElevenLabsKey(creds.hasElevenLabsKey);
                     setHasStoredAzureKey(creds.hasAzureKey);
-                    if (creds.azureRegion) setSttAzureRegion(creds.azureRegion);
+                    if (creds.azureRegion) { setSttAzureRegion(creds.azureRegion); setSavedAzureRegion(creds.azureRegion); }
                     setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
                     setHasStoredSonioxKey(creds.hasSonioxKey || false);
 
@@ -1556,7 +1674,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     // which every provider (Deepgram, Groq, Soniox, etc.) rejects as invalid.
                     // The hasStoredXxxKey booleans already show the "Saved" badge and set the
                     // placeholder to "••••••••••••" — that is sufficient UX feedback.
-                    if (typeof creds.openAiSttBaseUrl === 'string') setSttOpenaiBaseUrl(creds.openAiSttBaseUrl);
+                    if (typeof creds.openAiSttBaseUrl === 'string') { setSttOpenaiBaseUrl(creds.openAiSttBaseUrl); setSavedOpenaiBaseUrl(creds.openAiSttBaseUrl); }
                 }
             } catch (e) {
                 console.error('Failed to load STT settings:', e);
@@ -1577,6 +1695,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     if (!creds) return;
                     setSttProvider(creds.sttProvider || 'none');
                     if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
+                    if (creds.nvidiaNimSttModel) setNvidiaNimSttModel(creds.nvidiaNimSttModel);
+                    if (creds.sttModels) setSttModels((cur) => ({ ...cur, ...creds.sttModels }));
                     setHasNativelyKey(creds.hasNativelyKey || false);
                     setHasStoredSttGroqKey(creds.hasSttGroqKey);
                     setHasStoredSttOpenaiKey(creds.hasSttOpenaiKey);
@@ -1626,17 +1746,34 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     };
 
-    /** Arrow-key navigation, which `role="radio"` obliges us to provide. */
-    const nvidiaNimSttModelKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
-        const forward = e.key === 'ArrowDown' || e.key === 'ArrowRight';
-        const back = e.key === 'ArrowUp' || e.key === 'ArrowLeft';
-        if (!forward && !back) return;
-        e.preventDefault();
-        const count = NVIDIA_NIM_STT_MODELS.length;
-        const next = (index + (forward ? 1 : -1) + count) % count;
-        void selectNvidiaNimSttModel(NVIDIA_NIM_STT_MODELS[next].id);
-        const group = e.currentTarget.parentElement;
-        (group?.querySelectorAll<HTMLElement>('[role="radio"]')[next])?.focus();
+    /** Groq's Whisper model (groqSttModel), saved like the others. */
+    const selectGroqSttModel = async (id: string) => {
+        const previous = groqSttModel;
+        if (previous === id) return;
+        setGroqSttModel(id);
+        try {
+            // @ts-ignore
+            const result = await window.electronAPI?.setGroqSttModel?.(id);
+            if (result && result.success === false) throw new Error(result.error || 'Could not save Groq model');
+        } catch (err) {
+            console.error('[Settings] Failed to set Groq model:', err);
+            setGroqSttModel(previous);
+        }
+    };
+
+    /** Same contract as selectNvidiaNimSttModel: optimistic, reverted if the
+     *  write did not land (unsupported id, degraded credential store). */
+    const selectSttModel = async (provider: SttModelProvider, id: string) => {
+        const previous = sttModels[provider];
+        if (previous === id) return;
+        setSttModels((cur) => ({ ...cur, [provider]: id }));
+        try {
+            const result = await window.electronAPI?.setSttModel?.(provider, id);
+            if (result && result.success === false) throw new Error(result.error || 'Could not save speech model');
+        } catch (err) {
+            console.error(`[Settings] Failed to save ${provider} speech model:`, err);
+            setSttModels((cur) => ({ ...cur, [provider]: previous }));
+        }
     };
 
     const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim', key: string) => {
@@ -2062,8 +2199,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         const shouldRun = isOpen && activeTab === 'audio' && !!selectedInput;
 
         if (shouldRun) {
+            let lastMic = 0;
+            let lastSystem = 0;
             const unsubscribe = window.electronAPI?.onAudioTestLevel?.((level) => {
-                setMicLevel(Math.max(0, Math.min(100, level * 100)));
+                const next = Math.max(0, Math.min(100, level * 100));
+                setMicFalling(next < lastMic);
+                lastMic = next;
+                setMicLevel(next);
             });
 
             // The main process probes system audio in PARALLEL with the mic for the
@@ -2071,7 +2213,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             // startAudioTest() call below — there is no separate start/stop to make.
             const unsubscribeSystemLevel = window.electronAPI?.onAudioTestSystemLevel?.((level) => {
                 setSystemAudioError(null);
-                setSystemAudioLevel(Math.max(0, Math.min(100, level * 100)));
+                const next = Math.max(0, Math.min(100, level * 100));
+                setSystemFalling(next < lastSystem);
+                lastSystem = next;
+                setSystemAudioLevel(next);
             });
             // A system-audio failure is reported, never left as a flat bar. A silent
             // zero reads as "quiet" when it actually means the tap could not start,
@@ -3395,7 +3540,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     {/* ── Speech Provider Section ── */}
                                     <div>
                                         <h3 className="text-lg font-bold text-text-primary mb-1">{t('Speech Provider')}</h3>
-                                        <p className="text-xs text-text-secondary mb-5">{t('Choose the engine that transcribes audio to text.')}</p>
+                                        <p className="text-xs text-text-secondary mb-4">{t('Choose the engine that transcribes audio to text.')}</p>
 
                                         <div className="space-y-4">
                                             <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
@@ -3420,7 +3565,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             { id: 'groq', label: 'Groq Whisper', badge: hasStoredSttGroqKey ? 'Saved' : null, desc: t('Ultra-fast REST transcription'), color: 'orange', icon: <BrandMark provider="groq" />, neutralTile: true },
                                                             { id: 'nvidia_nim', label: 'Nvidia Nim', badge: hasStoredNvidiaNimKey ? 'Saved' : null, desc: t('Low-latency Nemotron / Parakeet streaming ASR'), color: 'green', icon: <BrandMark provider="nvidia_nim" />, neutralTile: true },
                                                             { id: 'openai', label: 'OpenAI Whisper', badge: hasStoredSttOpenaiKey ? 'Saved' : null, desc: t('OpenAI-compatible Whisper API'), color: 'green', icon: <BrandMark provider="openai" />, neutralTile: true },
-                                                            { id: 'deepgram', label: 'Deepgram Nova-3', badge: hasStoredDeepgramKey ? 'Saved' : null, desc: t('Streaming Nova-3 with 300 ms endpointing'), color: 'purple', icon: <BrandMark provider="deepgram" />, neutralTile: true },
+                                                            { id: 'deepgram', label: 'Deepgram', badge: hasStoredDeepgramKey ? 'Saved' : null, desc: `${STT_MODEL_CATALOG.deepgram.models.find((m) => m.id === sttModels.deepgram)?.label ?? 'Nova-3'} · ${t('300 ms endpointing')}`, color: 'purple', icon: <BrandMark provider="deepgram" />, neutralTile: true },
                                                             { id: 'elevenlabs', label: 'ElevenLabs Scribe', badge: hasStoredElevenLabsKey ? 'Saved' : null, desc: t('Scribe v2 Realtime API'), color: 'teal', icon: <BrandMark provider="elevenlabs" />, neutralTile: true },
                                                             { id: 'azure', label: 'Azure Speech', badge: hasStoredAzureKey ? 'Saved' : null, desc: t('Microsoft Cognitive Services STT'), color: 'cyan', icon: <BrandMark provider="azure" />, neutralTile: true },
                                                             { id: 'ibmwatson', label: 'IBM Watson', badge: hasStoredIbmWatsonKey ? 'Saved' : null, desc: t('IBM Watson cloud STT service'), color: 'indigo', icon: <BrandMark provider="ibmwatson" />, neutralTile: true },
@@ -3447,95 +3592,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             {/* Each card below belongs to one provider and fades up as it
                                                 mounts (.settings-swap-in, src/index.css), so switching the
                                                 provider above swaps them in rather than cutting. */}
-                                            {sttProvider === 'groq' && (
-                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4 settings-swap-in">
-                                                    <label className="text-xs font-medium text-text-secondary mb-2.5 block">{t('Whisper Model')}</label>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        {[
-                                                            { id: 'whisper-large-v3-turbo', label: 'V3 Turbo', desc: t('Fastest') },
-                                                            { id: 'whisper-large-v3', label: 'V3', desc: t('Most Accurate') },
-                                                        ].map((m) => (
-                                                            <button
-                                                                key={m.id}
-                                                                onClick={async () => {
-                                                                    setGroqSttModel(m.id);
-                                                                    try {
-                                                                        // @ts-ignore
-                                                                        await window.electronAPI?.setGroqSttModel?.(m.id);
-                                                                    } catch (e) {
-                                                                        console.error('Failed to set Groq model:', e);
-                                                                    }
-                                                                }}
-                                                                className={`rounded-lg px-3 py-2.5 text-left transition-[background-color,color,box-shadow,transform] duration-150 ease-out active:scale-[0.97] motion-reduce:active:scale-100 ${groqSttModel === m.id
-                                                                    ? 'bg-accent-primary text-on-accent shadow-md'
-                                                                    : 'bg-bg-input hover:bg-bg-elevated text-text-primary'
-                                                                    }`}
-                                                            >
-                                                                <span className="text-sm font-medium block">{m.label}</span>
-                                                                <span className={`text-[11px] transition-colors ${groqSttModel === m.id ? 'text-on-accent opacity-70' : 'text-text-tertiary'
-                                                                    }`}>{m.desc}</span>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {sttProvider === 'nvidia_nim' && hasStoredNvidiaNimKey && (
-                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4 settings-swap-in">
-                                                    <label id="nvidia-nim-stt-model-label" className="text-xs font-medium text-text-secondary mb-2.5 block">{t('Nvidia Nim Speech Model')}</label>
-                                                    {/* One column, not a 2-col grid: there are THREE models, so a
-                                                        two-up grid leaves a lone orphan on the second row, and the
-                                                        descriptions ("Multilingual streaming ASR (40 locales,
-                                                        auto-detect)") wrap at half width. Mutually exclusive choice,
-                                                        so radiogroup semantics with a roving tabindex — previously
-                                                        three unrelated <button>s whose selected state was carried by
-                                                        colour alone and was invisible to a screen reader. */}
-                                                    <div role="radiogroup" aria-labelledby="nvidia-nim-stt-model-label"
-                                                        /* Nine models run ~420px; cap it so the picker cannot
-                                                           dominate the Audio tab. Arrow-key navigation scrolls the
-                                                           focused row into view for free. */
-                                                        className="flex flex-col gap-1.5 max-h-64 overflow-y-auto custom-scrollbar pr-0.5">
-                                                        {NVIDIA_NIM_STT_MODELS.map((m, i) => {
-                                                            const selected = nvidiaNimSttModel === m.id;
-                                                            return (
-                                                                <button
-                                                                    key={m.id}
-                                                                    type="button"
-                                                                    role="radio"
-                                                                    aria-checked={selected}
-                                                                    tabIndex={selected ? 0 : -1}
-                                                                    onClick={() => void selectNvidiaNimSttModel(m.id)}
-                                                                    onKeyDown={(e) => nvidiaNimSttModelKeyDown(e, i)}
-                                                                    className={`block w-full rounded-lg px-3 py-2.5 text-left text-text-primary
-                                                                        transition-[background-color,box-shadow,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]
-                                                                        motion-safe:active:scale-[0.99] ${selected
-                                                                            ? 'bg-[color-mix(in_srgb,var(--accent-primary)_12%,var(--bg-input))] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent-primary)_45%,transparent)]'
-                                                                            : 'bg-bg-input hover:bg-bg-elevated'}`}
-                                                                >
-                                                                    {/* Selected is a TINT plus a hairline accent ring, not
-                                                                        a solid accent slab: three full-width rows filled
-                                                                        with periwinkle overpowered a settings card, and
-                                                                        the label had to flip to --on-accent to stay
-                                                                        readable, which made the selected row the loudest
-                                                                        thing on the panel.
-                                                                        No check mark is needed even so: the ring is a
-                                                                        STRUCTURAL difference (present vs absent), not a
-                                                                        colour one, so the state survives greyscale and
-                                                                        colour-blind viewing — WCAG 1.4.1 without a second
-                                                                        glyph. `aria-checked` carries it to screen readers.
-                                                                        Opacity modifiers are unavailable here: the theme
-                                                                        colours are bare `var(--x)` with no <alpha-value>,
-                                                                        so `bg-accent-primary/12` would emit invalid CSS —
-                                                                        hence the explicit color-mix. */}
-                                                                    <span className="text-sm font-medium block leading-tight">{m.label}</span>
-                                                                    <span className={`text-[11px] leading-snug block mt-0.5 ${selected ? 'text-text-secondary' : 'text-text-tertiary'}`}>{m.description}</span>
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            )}
-
                                             {/* Google Cloud Service Account */}
                                             {sttProvider === 'google' && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4 settings-swap-in">
@@ -3560,7 +3616,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                     setGoogleServiceAccountError(result.error || t('That file is not a usable Google service-account key.'));
                                                                 }
                                                             }}
-                                                            className="px-3 py-2 bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-lg text-xs font-medium text-text-primary transition-colors flex items-center gap-2"
+                                                            className="px-3 py-2 bg-bg-input hover:bg-bg-elevated border border-border-subtle rounded-lg text-xs font-medium text-text-primary transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97] motion-reduce:active:scale-100 flex items-center gap-2"
                                                         >
                                                             <Upload size={14} /> {t('Select File')}
                                                         </button>
@@ -3574,205 +3630,339 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                             )}
 
-                                            {/* API Key Input (non-Google providers) */}
-                                            {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'apple-speech' && sttProvider !== 'natively' && sttProvider !== 'none' && (
-                                                // Keyed on the provider: every key-backed provider shares this
-                                                // card, so without a key it would never remount — and never swap.
-                                                <div key={sttProvider} className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3 settings-swap-in">
-                                                    <label className="text-xs font-medium text-text-secondary block">
-                                                        {sttProvider === 'nvidia_nim' ? 'Nvidia Nim' : sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram'} API Key
-                                                    </label>
-                                                    {sttProvider === 'openai' && (
-                                                        <p className="text-[10px] text-text-tertiary mb-1.5">
-                                                            {t('This key is separate from your main AI Provider key.')}
-                                                        </p>
-                                                    )}
-                                                    <div className="flex gap-2">
-                                                        <input
-                                                            type="password"
-                                                            value={
-                                                            sttProvider === 'nvidia_nim' ? sttNvidiaNimKey
-                                                                    : sttProvider === 'groq' ? sttGroqKey
-                                                                    : sttProvider === 'openai' ? sttOpenaiKey
-                                                                        : sttProvider === 'elevenlabs' ? sttElevenLabsKey
-                                                                            : sttProvider === 'azure' ? sttAzureKey
-                                                                                : sttProvider === 'ibmwatson' ? sttIbmKey
-                                                                                    : sttProvider === 'soniox' ? sttSonioxKey
-                                                                                        : sttDeepgramKey
-                                                            }
-                                                            onChange={(e) => {
-                                                                if (sttProvider === 'nvidia_nim') setSttNvidiaNimKey(e.target.value);
-                                                                else if (sttProvider === 'groq') setSttGroqKey(e.target.value);
-                                                                else if (sttProvider === 'openai') setSttOpenaiKey(e.target.value);
-                                                                else if (sttProvider === 'elevenlabs') setSttElevenLabsKey(e.target.value);
-                                                                else if (sttProvider === 'azure') setSttAzureKey(e.target.value);
-                                                                else if (sttProvider === 'ibmwatson') setSttIbmKey(e.target.value);
-                                                                else if (sttProvider === 'soniox') setSttSonioxKey(e.target.value);
-                                                                else setSttDeepgramKey(e.target.value);
-                                                            }}
-                                                            placeholder={
-                                                                sttProvider === 'nvidia_nim'
-                                                                    ? (hasStoredNvidiaNimKey ? '••••••••••••' : t('Enter Nvidia Nim API key'))
-                                                                    : sttProvider === 'groq'
-                                                                    ? (hasStoredSttGroqKey ? '••••••••••••' : t('Enter Groq API key'))
-                                                                    : sttProvider === 'openai'
-                                                                        ? (hasStoredSttOpenaiKey ? '••••••••••••' : t('Enter OpenAI STT API key'))
-                                                                        : sttProvider === 'elevenlabs'
-                                                                            ? (hasStoredElevenLabsKey ? '••••••••••••' : t('Enter ElevenLabs API key'))
-                                                                            : sttProvider === 'azure'
-                                                                                ? (hasStoredAzureKey ? '••••••••••••' : t('Enter Azure API key'))
-                                                                                : sttProvider === 'ibmwatson'
-                                                                                    ? (hasStoredIbmWatsonKey ? '••••••••••••' : t('Enter IBM Watson API key'))
-                                                                                    : sttProvider === 'soniox'
-                                                                                        ? (hasStoredSonioxKey ? '••••••••••••' : t('Enter Soniox API key'))
-                                                                                        : (hasStoredDeepgramKey ? '••••••••••••' : t('Enter Deepgram API key'))
-                                                            }
-                                                            className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
-                                                        />
-                                                        <button
-                                                            onClick={() => {
-                                                                const keyMap: Record<string, string> = {
-                                                                    nvidia_nim: sttNvidiaNimKey, groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
-                                                                    elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
-                                                                    soniox: sttSonioxKey,
-                                                                };
-                                                                handleSttKeySubmit(sttProvider as any, keyMap[sttProvider] || '');
-                                                            }}
-                                                            disabled={sttSaving || !(() => {
-                                                                const keyMap: Record<string, string> = {
-                                                                    nvidia_nim: sttNvidiaNimKey, groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
-                                                                    elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
-                                                                    soniox: sttSonioxKey,
-                                                                };
-                                                                return (keyMap[sttProvider] || '').trim();
-                                                            })()}
-                                                            className={`px-5 py-2.5 rounded-lg text-xs font-medium transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 ${sttSaved
-                                                                ? 'bg-green-500/20 text-green-400 border border-green-500/20'
-                                                                : 'bg-bg-input hover:bg-bg-elevated border border-border-subtle text-text-primary disabled:opacity-50'
-                                                                }`}
-                                                        >
-                                                            <LabelSwap id={sttSaving ? 'saving' : sttSaved ? 'saved' : 'save'}>
-                                                                {sttSaving ? t('Saving...') : sttSaved ? t('Saved!') : t('Save')}
-                                                            </LabelSwap>
-                                                        </button>
-                                                        {(() => {
-                                                            const hasKeyMap: Record<string, boolean> = {
-                                                                groq: hasStoredSttGroqKey,
-                                                                openai: hasStoredSttOpenaiKey,
-                                                                deepgram: hasStoredDeepgramKey,
-                                                                elevenlabs: hasStoredElevenLabsKey,
-                                                                azure: hasStoredAzureKey,
-                                                                ibmwatson: hasStoredIbmWatsonKey,
-                                                                soniox: hasStoredSonioxKey,
-                                                            };
-                                                            return hasKeyMap[sttProvider] ? (
-                                                                <button
-                                                                    onClick={() => handleRemoveSttKey(sttProvider as any)}
-                                                                    className="px-2.5 py-2.5 rounded-lg text-xs font-medium text-text-tertiary hover:text-red-500 hover:bg-red-500/10 transition-all"
-                                                                    title={t("Remove API Key")}
-                                                                >
-                                                                    <Trash2 size={16} strokeWidth={1.5} />
-                                                                </button>
-                                                            ) : null;
-                                                        })()}
-                                                    </div>
-
-                                                    {/* Azure Region Input */}
-                                                    {sttProvider === 'azure' && (
-                                                        <div className="space-y-1.5">
-                                                            <label className="text-xs font-medium text-text-secondary block">{t('Region')}</label>
-                                                            <div className="flex gap-2">
-                                                                <input
-                                                                    type="text"
-                                                                    value={sttAzureRegion}
-                                                                    onChange={(e) => setSttAzureRegion(e.target.value)}
-                                                                    placeholder={t("e.g. eastus")}
-                                                                    className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
-                                                                />
-                                                                <button
-                                                                    onClick={async () => {
-                                                                        if (!sttAzureRegion.trim()) return;
-                                                                        // @ts-ignore
-                                                                        await window.electronAPI?.setAzureRegion?.(sttAzureRegion.trim());
-                                                                        setSttSaved(true);
-                                                                        setTimeout(() => setSttSaved(false), 2000);
-                                                                    }}
-                                                                    disabled={!sttAzureRegion.trim()}
-                                                                    className="px-5 py-2.5 rounded-lg text-xs font-medium bg-bg-input hover:bg-bg-elevated border border-border-subtle text-text-primary disabled:opacity-50 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
-                                                                >
-                                                                    {t('Save')}
-                                                                </button>
-                                                            </div>
-                                                            <p className="text-[10px] text-text-tertiary">{t('e.g. eastus, westeurope, westus2')}</p>
-                                                        </div>
-                                                    )}
-
-                                                    {/* OpenAI Custom Base URL — for self-hosted OpenAI-compatible servers (e.g. Speaches).
-                                                        When set, the WebSocket Realtime path is skipped and REST is used against the custom host. */}
-                                                    {sttProvider === 'openai' && (
-                                                        <div className="space-y-1.5">
-                                                            <label className="text-xs font-medium text-text-secondary block">{t('Custom Base URL')} <span className="text-text-tertiary">{t('(optional)')}</span></label>
-                                                            <div className="flex gap-2">
-                                                                <input
-                                                                    type="text"
-                                                                    value={sttOpenaiBaseUrl}
-                                                                    onChange={(e) => setSttOpenaiBaseUrl(e.target.value)}
-                                                                    placeholder={t("https://api.openai.com (default)")}
-                                                                    className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary transition-colors"
-                                                                />
-                                                                <button
-                                                                    onClick={async () => {
-                                                                        // @ts-ignore
-                                                                        await window.electronAPI?.setOpenAiSttBaseUrl?.(sttOpenaiBaseUrl.trim());
-                                                                        setSttSaved(true);
-                                                                        setTimeout(() => setSttSaved(false), 2000);
-                                                                    }}
-                                                                    className="px-5 py-2.5 rounded-lg text-xs font-medium bg-bg-input hover:bg-bg-elevated border border-border-subtle text-text-primary transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
-                                                                >
-                                                                    {t('Save')}
-                                                                </button>
-                                                            </div>
-                                                            <p className="text-[10px] text-text-tertiary">{t('Point at any OpenAI-compatible server (e.g. Speaches). Custom servers use REST only — Realtime WebSocket is skipped. Leave blank for default.')}</p>
-                                                        </div>
-                                                    )}
-
-                                                    <div className="flex items-center gap-3">
-                                                        <button
-                                                            onClick={handleTestSttConnection}
-                                                            disabled={sttTestStatus === 'testing'}
-                                                            className="text-xs bg-bg-input hover:bg-bg-elevated text-text-primary px-3 py-1.5 rounded-md transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 flex items-center gap-2 disabled:opacity-50"
-                                                        >
-                                                            <LabelSwap id={sttTestStatus === 'testing' ? 'testing' : sttTestStatus === 'success' ? 'success' : 'idle'}>
-                                                                <span className="inline-flex items-center gap-2">
-                                                                    {sttTestStatus === 'testing' ? (
-                                                                        <><RefreshCw size={12} className="animate-spin" /> {t('Testing...')}</>
-                                                                    ) : sttTestStatus === 'success' ? (
-                                                                        <><Check size={12} className="text-green-500" /> {t('Connected')}</>
-                                                                    ) : (
-                                                                        <>{t('Test Connection')}</>
-                                                                    )}
+                                            {/* API Key Input (non-Google providers) — AI Providers' own card
+                                                (ProviderCard): the provider's mark and name with Get Key on the
+                                                head row, the key in one field with Save as its inset segment,
+                                                then Test Connection on a row of its own and one note line for
+                                                an error. The .aip-* sheet it needs is the one the Local Models
+                                                panel already brings into this pane, so a speech key reads
+                                                exactly like a model key does in AI Providers. Keyed on the
+                                                provider: every key-backed provider shares this card, so
+                                                without a key it would never remount — and never swap. */}
+                                            {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'apple-speech' && sttProvider !== 'natively' && sttProvider !== 'none' && (() => {
+                                                const providerName = sttProvider === 'nvidia_nim' ? 'Nvidia Nim' : sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram';
+                                                const keyValue = sttProvider === 'nvidia_nim' ? sttNvidiaNimKey
+                                                    : sttProvider === 'groq' ? sttGroqKey
+                                                    : sttProvider === 'openai' ? sttOpenaiKey
+                                                    : sttProvider === 'elevenlabs' ? sttElevenLabsKey
+                                                    : sttProvider === 'azure' ? sttAzureKey
+                                                    : sttProvider === 'ibmwatson' ? sttIbmKey
+                                                    : sttProvider === 'soniox' ? sttSonioxKey
+                                                    : sttDeepgramKey;
+                                                const hasStoredKey = sttProvider === 'nvidia_nim' ? hasStoredNvidiaNimKey
+                                                    : sttProvider === 'groq' ? hasStoredSttGroqKey
+                                                    : sttProvider === 'openai' ? hasStoredSttOpenaiKey
+                                                    : sttProvider === 'elevenlabs' ? hasStoredElevenLabsKey
+                                                    : sttProvider === 'azure' ? hasStoredAzureKey
+                                                    : sttProvider === 'ibmwatson' ? hasStoredIbmWatsonKey
+                                                    : sttProvider === 'soniox' ? hasStoredSonioxKey
+                                                    : hasStoredDeepgramKey;
+                                                // handleRemoveSttKey has no NVIDIA branch (the key is shared
+                                                // with AI Providers), so the card never offered one.
+                                                const removable = hasStoredKey && sttProvider !== 'nvidia_nim';
+                                                return (
+                                                // The card's fill is this pane's (bg-card), not AI Providers'
+                                                // (bg-item-surface): in the light theme that is grey against the
+                                                // white Speech Provider and Language cards around it.
+                                                <div key={sttProvider} className="aip-root settings-swap-in" data-theme={resolvedTheme} style={{ ['--aip-card-bg' as string]: 'var(--bg-card)' } as React.CSSProperties}>
+                                                    {/* bg-bg-card also brings the light theme's card shadow
+                                                        (index.css, "Level 1"), which the cards around it have. */}
+                                                    <div className="aip-card aip-provider bg-bg-card">
+                                                        <div className="aip-provider-head">
+                                                            {/* The provider's official mark, as AI Providers draws it.
+                                                                Soniox publishes no licence-clean mark: its monogram in
+                                                                the brand's own white-on-black. */}
+                                                            {sttProvider === 'soniox' ? (
+                                                                <span className="aip-tile" style={{ background: '#000', color: '#fff', borderColor: 'transparent' }} aria-hidden="true">SO</span>
+                                                            ) : (
+                                                                <span className="aip-tile aip-tile--mark" aria-hidden="true">
+                                                                    <BrandMark provider={sttProvider} />
                                                                 </span>
-                                                            </LabelSwap>
-                                                        </button>
-                                                        {STT_KEY_URLS[sttProvider] && (
-                                                            <button
-                                                                // @ts-ignore
-                                                                onClick={() => window.electronAPI?.openExternal(STT_KEY_URLS[sttProvider])}
-                                                                className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors ml-1"
-                                                                title={t("Get API Key")}
-                                                            >
-                                                                <ExternalLink size={12} />
-                                                            </button>
+                                                            )}
+                                                            <h4 className="aip-card-title truncate min-w-0">{providerName}</h4>
+                                                            {STT_KEY_URLS[sttProvider] && (
+                                                                <div className="ml-auto flex items-center gap-2 shrink-0">
+                                                                    <button
+                                                                        // @ts-ignore
+                                                                        onClick={() => window.electronAPI?.openExternal(STT_KEY_URLS[sttProvider])}
+                                                                        className="aip-btn"
+                                                                        data-size="sm"
+                                                                        data-variant="ghost"
+                                                                        title={`Get ${providerName} API Key`}
+                                                                    >
+                                                                        <span className="uppercase tracking-wide">{t('Get Key')}</span>
+                                                                        <ExternalLink size={12} strokeWidth={1.75} />
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {sttProvider === 'openai' && (
+                                                            <p className="aip-meta">{t('This key is separate from your main AI Provider key.')}</p>
                                                         )}
-                                                        <LabelSwap id={sttTestStatus === 'error' ? `error:${sttTestError}` : null}>
-                                                            <span className="text-xs text-red-400">{sttTestError}</span>
-                                                        </LabelSwap>
+
+                                                        <div className="aip-provider-row">
+                                                            <div className="aip-provider-field">
+                                                                {/* One 32px shell: glyph + input + Save as an inset segment. */}
+                                                                <div className="aip-field">
+                                                                    <KeyRound size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                                                                    <input
+                                                                        type="password"
+                                                                        value={keyValue}
+                                                                        onChange={(e) => {
+                                                                            if (sttProvider === 'nvidia_nim') setSttNvidiaNimKey(e.target.value);
+                                                                            else if (sttProvider === 'groq') setSttGroqKey(e.target.value);
+                                                                            else if (sttProvider === 'openai') setSttOpenaiKey(e.target.value);
+                                                                            else if (sttProvider === 'elevenlabs') setSttElevenLabsKey(e.target.value);
+                                                                            else if (sttProvider === 'azure') setSttAzureKey(e.target.value);
+                                                                            else if (sttProvider === 'ibmwatson') setSttIbmKey(e.target.value);
+                                                                            else if (sttProvider === 'soniox') setSttSonioxKey(e.target.value);
+                                                                            else setSttDeepgramKey(e.target.value);
+                                                                        }}
+                                                                        autoComplete="off"
+                                                                        spellCheck={false}
+                                                                        data-1p-ignore
+                                                                        aria-label={`${providerName} ${t('API key')}`}
+                                                                        placeholder={
+                                                                            sttProvider === 'nvidia_nim'
+                                                                                ? (hasStoredNvidiaNimKey ? '••••••••••••' : t('Enter Nvidia Nim API key'))
+                                                                                : sttProvider === 'groq'
+                                                                                ? (hasStoredSttGroqKey ? '••••••••••••' : t('Enter Groq API key'))
+                                                                                : sttProvider === 'openai'
+                                                                                    ? (hasStoredSttOpenaiKey ? '••••••••••••' : t('Enter OpenAI STT API key'))
+                                                                                    : sttProvider === 'elevenlabs'
+                                                                                        ? (hasStoredElevenLabsKey ? '••••••••••••' : t('Enter ElevenLabs API key'))
+                                                                                        : sttProvider === 'azure'
+                                                                                            ? (hasStoredAzureKey ? '••••••••••••' : t('Enter Azure API key'))
+                                                                                            : sttProvider === 'ibmwatson'
+                                                                                                ? (hasStoredIbmWatsonKey ? '••••••••••••' : t('Enter IBM Watson API key'))
+                                                                                                : sttProvider === 'soniox'
+                                                                                                    ? (hasStoredSonioxKey ? '••••••••••••' : t('Enter Soniox API key'))
+                                                                                                    : (hasStoredDeepgramKey ? '••••••••••••' : t('Enter Deepgram API key'))
+                                                                        }
+                                                                        className="aip-input"
+                                                                    />
+                                                                    {/* Rendered-and-disabled, never conditional, and sized to
+                                                                        its widest label, so the key field never changes width. */}
+                                                                    <button
+                                                                        onClick={() => handleSttKeySubmit(sttProvider as any, keyValue || '')}
+                                                                        disabled={sttSaving || !(keyValue || '').trim()}
+                                                                        className="aip-field-seg"
+                                                                        data-tone={sttSaved ? 'ok' : undefined}
+                                                                    >
+                                                                        <SizedLabelSwap
+                                                                            id={sttSaving ? 'saving' : sttSaved ? 'saved' : 'save'}
+                                                                            sizers={[
+                                                                                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Saving...')}</span>,
+                                                                                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Saved')}</span>,
+                                                                                t('Save'),
+                                                                            ]}
+                                                                        >
+                                                                            {sttSaving
+                                                                                ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{t('Saving...')}</span>
+                                                                                : sttSaved
+                                                                                    ? <span className="inline-flex items-center gap-1.5"><Check size={12} strokeWidth={2} className="aip-check" />{t('Saved')}</span>
+                                                                                    : t('Save')}
+                                                                        </SizedLabelSwap>
+                                                                    </button>
+                                                                </div>
+                                                                {removable && (
+                                                                    <button
+                                                                        onClick={() => handleRemoveSttKey(sttProvider as any)}
+                                                                        className="aip-btn shrink-0"
+                                                                        data-icon="true"
+                                                                        data-variant="danger-ghost"
+                                                                        title={t("Remove API Key")}
+                                                                        aria-label={t("Remove API Key")}
+                                                                    >
+                                                                        <Trash2 size={14} strokeWidth={1.75} />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Azure: the key's region, in the same field. */}
+                                                        {sttProvider === 'azure' && (
+                                                            <div className="aip-provider-row">
+                                                                <div className="aip-provider-field">
+                                                                    <div className="aip-field">
+                                                                        <MapPin size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                                                                        <input
+                                                                            type="text"
+                                                                            value={sttAzureRegion}
+                                                                            onChange={(e) => setSttAzureRegion(e.target.value)}
+                                                                            placeholder={t("e.g. eastus")}
+                                                                            aria-label={t('Region')}
+                                                                            className="aip-input"
+                                                                        />
+                                                                        <button
+                                                                            onClick={async () => {
+                                                                                const region = sttAzureRegion.trim();
+                                                                                if (!region) return;
+                                                                                // @ts-ignore
+                                                                                await window.electronAPI?.setAzureRegion?.(region);
+                                                                                setSavedAzureRegion(region);
+                                                                                markSttFieldSaved('region');
+                                                                            }}
+                                                                            disabled={!sttAzureRegion.trim() || sttAzureRegion.trim() === savedAzureRegion}
+                                                                            className="aip-field-seg"
+                                                                            data-tone={sttFieldSaved === 'region' ? 'ok' : undefined}
+                                                                        >
+                                                                            <SizedLabelSwap
+                                                                                id={sttFieldSaved === 'region' ? 'saved' : 'save'}
+                                                                                sizers={[
+                                                                                    <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Saving...')}</span>,
+                                                                                    <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Saved')}</span>,
+                                                                                    t('Save'),
+                                                                                ]}
+                                                                            >
+                                                                                {sttFieldSaved === 'region'
+                                                                                    ? <span className="inline-flex items-center gap-1.5"><Check size={12} strokeWidth={2} className="aip-check" />{t('Saved')}</span>
+                                                                                    : t('Save')}
+                                                                            </SizedLabelSwap>
+                                                                        </button>
+                                                                    </div>
+                                                                    {removable && (
+                                                                        <span className="aip-btn shrink-0 invisible" data-icon="true" aria-hidden="true">
+                                                                            <Trash2 size={14} strokeWidth={1.75} />
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* OpenAI Custom Base URL — for self-hosted OpenAI-compatible servers (e.g. Speaches).
+                                                            When set, the WebSocket Realtime path is skipped and REST is used against the custom host. */}
+                                                        {sttProvider === 'openai' && (
+                                                            <>
+                                                                <div className="aip-provider-row">
+                                                                    <div className="aip-provider-field">
+                                                                        <div className="aip-field">
+                                                                            <Globe size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                                                                            <input
+                                                                                type="text"
+                                                                                value={sttOpenaiBaseUrl}
+                                                                                onChange={(e) => setSttOpenaiBaseUrl(e.target.value)}
+                                                                                placeholder={t("https://api.openai.com (default)")}
+                                                                                aria-label={t('Custom Base URL')}
+                                                                                className="aip-input"
+                                                                            />
+                                                                            <button
+                                                                                onClick={async () => {
+                                                                                    const url = sttOpenaiBaseUrl.trim();
+                                                                                    // @ts-ignore
+                                                                                    await window.electronAPI?.setOpenAiSttBaseUrl?.(url);
+                                                                                    setSavedOpenaiBaseUrl(url);
+                                                                                    markSttFieldSaved('baseUrl');
+                                                                                }}
+                                                                                disabled={sttOpenaiBaseUrl.trim() === savedOpenaiBaseUrl}
+                                                                                className="aip-field-seg"
+                                                                                data-tone={sttFieldSaved === 'baseUrl' ? 'ok' : undefined}
+                                                                            >
+                                                                                <SizedLabelSwap
+                                                                                    id={sttFieldSaved === 'baseUrl' ? 'saved' : 'save'}
+                                                                                    sizers={[
+                                                                                        <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Saving...')}</span>,
+                                                                                        <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Saved')}</span>,
+                                                                                        t('Save'),
+                                                                                    ]}
+                                                                                >
+                                                                                    {sttFieldSaved === 'baseUrl'
+                                                                                        ? <span className="inline-flex items-center gap-1.5"><Check size={12} strokeWidth={2} className="aip-check" />{t('Saved')}</span>
+                                                                                        : t('Save')}
+                                                                                </SizedLabelSwap>
+                                                                            </button>
+                                                                        </div>
+                                                                        {removable && (
+                                                                            <span className="aip-btn shrink-0 invisible" data-icon="true" aria-hidden="true">
+                                                                                <Trash2 size={14} strokeWidth={1.75} />
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </>
+                                                        )}
+
+                                                        {/* Test Connection leads its own row, as in AI Providers. Sized
+                                                            to its widest label, so "Testing..." → "Passed" never moves it. */}
+                                                        <div className="aip-provider-row">
+                                                            <button
+                                                                onClick={handleTestSttConnection}
+                                                                disabled={sttTestStatus === 'testing'}
+                                                                className="aip-btn shrink-0"
+                                                                data-tone={sttTestStatus === 'success' ? 'ok' : sttTestStatus === 'error' ? 'danger' : undefined}
+                                                                title={sttTestError || t('Test Connection')}
+                                                            >
+                                                                <SizedLabelSwap
+                                                                    id={sttTestStatus}
+                                                                    sizers={[
+                                                                        t('Test Connection'),
+                                                                        <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Testing...')}</span>,
+                                                                        <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Passed')}</span>,
+                                                                        <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Error')}</span>,
+                                                                    ]}
+                                                                >
+                                                                    {sttTestStatus === 'testing' ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{t('Testing...')}</span> :
+                                                                        sttTestStatus === 'success' ? <span className="inline-flex items-center gap-1.5"><AipPassedCheck />{t('Passed')}</span> :
+                                                                            sttTestStatus === 'error' ? <span className="inline-flex items-center gap-1.5"><AlertCircle size={12} strokeWidth={1.75} />{t('Error')}</span> :
+                                                                                t('Test Connection')}
+                                                                </SizedLabelSwap>
+                                                            </button>
+                                                            {/* MODELS beside Test, as in AI Providers. OpenAI with a
+                                                                custom server skips the Realtime socket (REST only), so
+                                                                a Realtime model choice would do nothing there.
+                                                                OpenAI's own URL is not a custom server. */}
+                                                            {(sttProvider === 'deepgram' || (sttProvider === 'openai' && isDefaultOpenAiSttBase(savedOpenaiBaseUrl))) && (
+                                                                <SttModelList
+                                                                    models={STT_MODEL_CATALOG[sttProvider as SttModelProvider].models}
+                                                                    value={sttModels[sttProvider as SttModelProvider]}
+                                                                    onSelect={(id) => void selectSttModel(sttProvider as SttModelProvider, id)}
+                                                                />
+                                                            )}
+                                                            {sttProvider === 'groq' && (
+                                                                <SttModelList
+                                                                    models={[
+                                                                        { id: 'whisper-large-v3-turbo', label: 'Whisper Large V3 Turbo', description: t('Fastest') },
+                                                                        { id: 'whisper-large-v3', label: 'Whisper Large V3', description: t('Most Accurate') },
+                                                                    ]}
+                                                                    value={groqSttModel}
+                                                                    onSelect={(id) => void selectGroqSttModel(id)}
+                                                                />
+                                                            )}
+                                                            {sttProvider === 'nvidia_nim' && (
+                                                                <SttModelList
+                                                                    models={NVIDIA_NIM_STT_MODELS.map((m) => ({ id: m.id, label: m.label, description: m.description }))}
+                                                                    value={nvidiaNimSttModel}
+                                                                    onSelect={(id) => void selectNvidiaNimSttModel(id)}
+                                                                />
+                                                            )}
+                                                        </div>
+
+                                                        {/* One note line, and only when something is actually wrong. */}
+                                                        {sttTestStatus === 'error' && sttTestError && (
+                                                            <p className="aip-meta aip-danger-fg aip-provider-note settings-swap-in" role="alert">{sttTestError}</p>
+                                                        )}
                                                     </div>
+                                                    {/* OpenAI's server note sits under the card, in the footnote
+                                                        form the pane's other notes use (Auto mode, ScreenCaptureKit). */}
+                                                    {sttProvider === 'openai' && (
+                                                        <div className="flex gap-2 items-center mt-2 px-1">
+                                                            <Info size={14} className="text-text-secondary shrink-0" />
+                                                            <p className="text-xs text-text-secondary">
+                                                                {t('Point at any OpenAI-compatible server (e.g. Speaches). Custom servers use REST only — Realtime WebSocket is skipped. Leave blank for default.')}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    {/* Last child, as in AI Providers and the Local Models panel:
+                                                        on this tab AIProvidersSettings is unmounted, so its copy
+                                                        of the sheet is not in the DOM. */}
+                                                    <style>{AIP_CSS}</style>
                                                 </div>
-                                            )}
+                                                );
+                                            })()}
 
                                             {sttProvider === 'apple-speech' && (
-                                                <p className="text-xs text-text-secondary settings-swap-in">{t('Apple Speech runs transcription on your device. macOS may download the selected language model on first use; “Auto” uses your system language.')}</p>
+                                                <p className="text-xs text-text-secondary settings-swap-in">{t('Transcribes on this Mac. “Auto” follows your system language.')}</p>
                                             )}
                                             {/* Local Whisper Model Panel */}
                                             {sttProvider === 'local-whisper' && (
@@ -3784,41 +3974,44 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             {/* Recognition Language Family — options restricted to what the
                                                 active local model accepts (per its official docs); greyed out
                                                 entirely when the model is English-only and language cannot change. */}
-                                            <CustomSelect
-                                                label={t("Language")}
-                                                icon={<Globe size={14} />}
-                                                value={displayedSttGroup}
-                                                options={languageGroups.map(g => ({
-                                                    deviceId: g,
-                                                    label: g,
-                                                    kind: 'audioinput' as MediaDeviceKind,
-                                                    groupId: '',
-                                                    toJSON: () => ({})
-                                                }))}
-                                                onChange={handleGroupChange}
-                                                placeholder={t("Select Language")}
-                                                disabled={languageLocked}
-                                                badges={appleLanguageBadges?.group}
-                                            />
+                                            {/* Language and its Accent share one row: the accent
+                                                is a refinement of the language beside it, and two short
+                                                selects stacked full-width left most of each card empty. */}
+                                            <div className={currentGroupVariants.length > 1 ? 'grid grid-cols-2 gap-4' : ''}>
+                                                <CustomSelect
+                                                    label={t("Language")}
+                                                    value={displayedSttGroup}
+                                                    options={languageGroups.map(g => ({
+                                                        deviceId: g,
+                                                        label: g,
+                                                        kind: 'audioinput' as MediaDeviceKind,
+                                                        groupId: '',
+                                                        toJSON: () => ({})
+                                                    }))}
+                                                    onChange={handleGroupChange}
+                                                    placeholder={t("Select Language")}
+                                                    disabled={languageLocked}
+                                                    badges={appleLanguageBadges?.group}
+                                                />
 
-                                            {/* Variant/Accent Selector (Conditional) — greyed out when the
-                                                active local model's language conditioning is region-neutral
-                                                (Whisper-family) or fixed (English-only checkpoints). Only
-                                                Nemotron consumes regional variants. */}
-                                            {currentGroupVariants.length > 1 && (
-                                                <div className="mt-3 settings-swap-in">
-                                                    <CustomSelect
-                                                        label={t("Accent / Region")}
-                                                        icon={<MapPin size={14} />}
-                                                        value={displayedRecognitionLanguage}
-                                                        options={currentGroupVariants}
-                                                        onChange={handleLanguageChange}
-                                                        placeholder={t("Select Region")}
-                                                        badges={appleLanguageBadges?.variant}
-                                                        disabled={!!localLanguageCapability && !localLanguageCapability.accentSelectable}
-                                                    />
-                                                </div>
-                                            )}
+                                                {/* Variant/Accent Selector (Conditional) — greyed out when the
+                                                    active local model's language conditioning is region-neutral
+                                                    (Whisper-family) or fixed (English-only checkpoints). Only
+                                                    Nemotron consumes regional variants. */}
+                                                {currentGroupVariants.length > 1 && (
+                                                    <div className="settings-swap-in">
+                                                        <CustomSelect
+                                                            label={t("Accent")}
+                                                            value={displayedRecognitionLanguage}
+                                                            options={currentGroupVariants}
+                                                            onChange={handleLanguageChange}
+                                                            placeholder={t("Select Accent")}
+                                                            badges={appleLanguageBadges?.variant}
+                                                            disabled={!!localLanguageCapability && !localLanguageCapability.accentSelectable}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
 
                                             {/* Local model capability notes */}
                                             {localLanguageCapability && languageLocked && (
@@ -3940,7 +4133,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 <div className="flex gap-2 items-center mt-2 px-1 settings-swap-in">
                                                     <Info size={14} className="text-text-secondary shrink-0" />
                                                     <p className="text-xs text-text-secondary">
-                                                        {t('Languages marked Download are fetched by macOS the first time you use them — the first meeting starts once that finishes.')}
+                                                        {t('macOS fetches languages marked Download the first time you use them.')}
                                                     </p>
                                                 </div>
                                             )}
@@ -3982,7 +4175,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 is the meeting language, so restating it under every explicit
                                                 choice was noise — and it pushed the genuinely useful notes
                                                 (download state, slot budget) further down the panel. */}
-                                            {recognitionLanguage === 'auto' && (
+                                            {/* An English-only Deepgram model says so; it transcribes
+                                                English whatever was stored before. */}
+                                            {deepgramLanguageCapability && (
+                                                <div className="flex gap-2 items-center mt-2 px-1 settings-swap-in">
+                                                    <Info size={14} className="text-text-secondary shrink-0" />
+                                                    <p className="text-xs text-text-secondary">{t('This model transcribes English only.')}</p>
+                                                </div>
+                                            )}
+                                            {/* Not while English is fixed: "detected" would be untrue. */}
+                                            {recognitionLanguage === 'auto' && !showsEnglishFallback && (
                                                 <div className="flex gap-2 items-center mt-2 px-1 settings-swap-in">
                                                     <Info size={14} className="text-text-secondary shrink-0" />
                                                     <p className="text-xs text-text-secondary">
@@ -3993,7 +4195,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 )?.label as string | undefined;
                                                                 return `${t('Auto mode — detected:')} ${label ?? autoDetectedLanguage}`;
                                                               })()
-                                                            : t('Auto mode — language will be detected from the first few seconds of audio.')
+                                                            : t('Detected from the first few seconds of audio.')
                                                         }
                                                     </p>
                                                 </div>
@@ -4001,16 +4203,75 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         </div>
                                     </div>
 
-                                    {/* Opted out of the entrance cascade: a 1px rule sliding
-                                        7px moves seven times its own height, which reads as a
-                                        glitch rather than motion. It keeps its nth-child slot,
-                                        so the block below still lands on 60ms. */}
-                                    <div className="h-px bg-border-subtle" data-stagger-skip />
-
                                     {/* ── Audio Configuration Section ── */}
                                     <div>
-                                        <h3 className="text-lg font-bold text-text-primary mb-1">{t('Audio Configuration')}</h3>
-                                        <p className="text-xs text-text-secondary mb-5">{t('Manage input and output devices.')}</p>
+                                        {/* Test Sound sits on the heading line, on the right: it checks the
+                                            whole section's output path, not one card. On the page, not a
+                                            card, so it takes General's button fill (bg-component, as Theme
+                                            and Check use): the selects' bg-input vanishes on this background. */}
+                                        <div className="flex items-start justify-between gap-4 mb-4">
+                                            <div>
+                                                <h3 className="text-lg font-bold text-text-primary mb-1">{t('Audio Configuration')}</h3>
+                                                <p className="text-xs text-text-secondary">{t('Manage input and output devices.')}</p>
+                                            </div>
+                                            <button
+                                                onClick={async () => {
+                                                    // The tone lasts 1s; the icon says so for as long.
+                                                    setTestSoundPlaying(true);
+                                                    clearTimeout(testSoundTimer.current);
+                                                    testSoundTimer.current = setTimeout(() => setTestSoundPlaying(false), 1000);
+                                                    try {
+                                                        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+                                                        if (!AudioContext) {
+                                                            console.error("Web Audio API not supported");
+                                                            return;
+                                                        }
+
+                                                        const ctx = new AudioContext();
+
+                                                        if (ctx.state === 'suspended') {
+                                                            await ctx.resume();
+                                                        }
+
+                                                        const oscillator = ctx.createOscillator();
+                                                        const gainNode = ctx.createGain();
+
+                                                        oscillator.connect(gainNode);
+                                                        gainNode.connect(ctx.destination);
+
+                                                        oscillator.type = 'sine';
+                                                        oscillator.frequency.setValueAtTime(523.25, ctx.currentTime);
+                                                        gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
+                                                        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.0);
+
+                                                        if (selectedOutput && (ctx as any).setSinkId) {
+                                                            try {
+                                                                await (ctx as any).setSinkId(selectedOutput);
+                                                            } catch (e) {
+                                                                console.warn("Error setting sink for AudioContext", e);
+                                                            }
+                                                        }
+
+                                                        oscillator.start();
+                                                        oscillator.stop(ctx.currentTime + 1.0);
+                                                    } catch (e) {
+                                                        console.error("Error playing test sound", e);
+                                                    }
+                                                }}
+                                                // Pressed, it gives (0.97, like every button in Settings);
+                                                // while the tone plays the speaker cross-fades to a sounding
+                                                // one (icon swap). The label never changes, so neither
+                                                // does the width.
+                                                className="mt-0.5 shrink-0 text-xs bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-3 py-1.5 rounded-lg transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.97] motion-reduce:active:scale-100 flex items-center gap-2"
+                                            >
+                                                <SettingsMotionReady.Provider value={true}>
+                                                    <Presence kind="icon" id={testSoundPlaying ? 'playing' : 'idle'}>
+                                                        {testSoundPlaying ? <Volume2 size={12} /> : <Speaker size={12} />}
+                                                    </Presence>
+                                                </SettingsMotionReady.Provider>
+                                                {t('Test Sound')}
+                                            </button>
+                                        </div>
 
                                         {/* Device-fallback banner: shown when main process couldn't
                                             open the selected device and silently used the default. */}
@@ -4046,151 +4307,106 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         )}
 
                                         <div className="space-y-4">
-                                            <CustomSelect
-                                                label={t("Input Device")}
-                                                icon={<Mic size={16} />}
-                                                value={selectedInput}
-                                                options={inputDevices}
-                                                onChange={(id) => {
-                                                    setSelectedInput(id);
-                                                    localStorage.setItem('preferredInputDeviceId', id);
-                                                }}
-                                                placeholder={t("Default Microphone")}
-                                            />
-
-                                            <div>
-                                                <div className="flex justify-between text-xs text-text-secondary mb-2 px-1">
-                                                    <span>{t('Input Level')}</span>
+                                            {/* The two meters, side by side on one line, and set apart from
+                                                the device cards below (pb-4). Both run off the same audio test;
+                                                the system meter answers "will the app hear the person I am
+                                                talking to", which the mic meter cannot. */}
+                                            <div className="pb-4">
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <div className="flex justify-between text-xs text-text-secondary mb-2 px-1">
+                                                            <span>{t('Input Level')}</span>
+                                                        </div>
+                                                        <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
+                                                            <div
+                                                                className="h-full w-full origin-left bg-green-500 transition-transform ease-out motion-reduce:transition-none"
+                                                                style={{ transform: `scaleX(${Math.min(1, Math.max(0, micLevel / 100))})`, transitionDuration: micFalling ? '350ms' : '80ms' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex justify-between text-xs text-text-secondary mb-2 px-1">
+                                                            <span>{t('System Audio Level')}</span>
+                                                            {systemAudioError && (
+                                                                <span className="text-red-500 settings-swap-in" title={systemAudioError}>
+                                                                    {t('Unavailable')}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
+                                                            <div
+                                                                className="h-full w-full origin-left bg-green-500 transition-transform ease-out motion-reduce:transition-none"
+                                                                style={{ transform: `scaleX(${Math.min(1, Math.max(0, systemAudioLevel / 100))})`, transitionDuration: systemFalling ? '350ms' : '80ms' }}
+                                                            />
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full w-full origin-left bg-green-500 transition-transform duration-100 ease-out motion-reduce:transition-none"
-                                                        style={{ transform: `scaleX(${Math.min(1, Math.max(0, micLevel / 100))})` }}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            {/* System-audio meter, parallel to the mic meter above. Both run off
-                                                the same audio test; this one answers "will the app hear the person
-                                                I am talking to", which the mic meter cannot. */}
-                                            <div>
-                                                <div className="flex justify-between text-xs text-text-secondary mb-2 px-1">
-                                                    <span>{t('System Audio Level')}</span>
-                                                    {systemAudioError && (
-                                                        <span className="text-red-500" title={systemAudioError}>
-                                                            {t('Unavailable')}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full w-full origin-left bg-green-500 transition-transform duration-100 ease-out motion-reduce:transition-none"
-                                                        style={{ transform: `scaleX(${Math.min(1, Math.max(0, systemAudioLevel / 100))})` }}
-                                                    />
-                                                </div>
+                                                {/* Full width under the pair: the reason is a sentence, and half
+                                                    a column would wrap it into a block. */}
                                                 {systemAudioError && (
-                                                    <p className="text-xs text-red-500 mt-1 px-1">{systemAudioError}</p>
+                                                    <p className="text-xs text-red-500 mt-2 px-1 settings-swap-in">{systemAudioError}</p>
                                                 )}
                                             </div>
 
-                                            <div className="h-px bg-border-subtle my-2" />
-
-                                            <CustomSelect
-                                                label={t("Output Device")}
-                                                icon={<Speaker size={16} />}
-                                                value={selectedOutput}
-                                                options={outputDevices}
-                                                onChange={(id) => {
-                                                    setSelectedOutput(id);
-                                                    localStorage.setItem('preferredOutputDeviceId', id);
-                                                }}
-                                                placeholder={t("Default Speakers")}
-                                            />
-
-                                            <div className="flex justify-end">
-                                                <button
-                                                    onClick={async () => {
-                                                        try {
-                                                            const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-                                                            if (!AudioContext) {
-                                                                console.error("Web Audio API not supported");
-                                                                return;
-                                                            }
-
-                                                            const ctx = new AudioContext();
-
-                                                            if (ctx.state === 'suspended') {
-                                                                await ctx.resume();
-                                                            }
-
-                                                            const oscillator = ctx.createOscillator();
-                                                            const gainNode = ctx.createGain();
-
-                                                            oscillator.connect(gainNode);
-                                                            gainNode.connect(ctx.destination);
-
-                                                            oscillator.type = 'sine';
-                                                            oscillator.frequency.setValueAtTime(523.25, ctx.currentTime);
-                                                            gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
-                                                            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.0);
-
-                                                            if (selectedOutput && (ctx as any).setSinkId) {
-                                                                try {
-                                                                    await (ctx as any).setSinkId(selectedOutput);
-                                                                } catch (e) {
-                                                                    console.warn("Error setting sink for AudioContext", e);
-                                                                }
-                                                            }
-
-                                                            oscillator.start();
-                                                            oscillator.stop(ctx.currentTime + 1.0);
-                                                        } catch (e) {
-                                                            console.error("Error playing test sound", e);
-                                                        }
+                                            {/* Input and Output Device side by side: each card held one select
+                                                across the whole column. */}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <CustomSelect
+                                                    label={t("Input Device")}
+                                                    value={selectedInput}
+                                                    options={inputDevices}
+                                                    onChange={(id) => {
+                                                        setSelectedInput(id);
+                                                        localStorage.setItem('preferredInputDeviceId', id);
                                                     }}
-                                                    className="text-xs bg-bg-input hover:bg-bg-elevated text-text-primary px-3 py-1.5 rounded-md transition-colors flex items-center gap-2"
-                                                >
-                                                    <Speaker size={12} /> {t('Test Sound')}
-                                                </button>
+                                                    placeholder={t("Default Microphone")}
+                                                />
+
+                                                <CustomSelect
+                                                    label={t("Output Device")}
+                                                    value={selectedOutput}
+                                                    options={outputDevices}
+                                                    onChange={(id) => {
+                                                        setSelectedOutput(id);
+                                                        localStorage.setItem('preferredOutputDeviceId', id);
+                                                    }}
+                                                    placeholder={t("Default Speakers")}
+                                                />
                                             </div>
 
-                                            {/* SCK Backend Toggle — macOS only. The ScreenCaptureKit
+                                            {/* System Audio Capture (the SCK backend) — macOS only. The ScreenCaptureKit
                                                 backend is a CoreAudio alternative implemented in the
                                                 Rust speaker module under #[cfg(target_os="macos")];
                                                 Windows audio runs via WASAPI loopback so the toggle
                                                 has no meaning there and routing "sck" as a device id
                                                 silently breaks system audio (issue #252 audit / F-003). */}
                                             {isMac && (
-                                                /* Standard panel card, matching the Speech Provider cards above. This
-                                                   was an amber wash with a FlaskConical icon — the visual grammar this
-                                                   panel uses for warnings — which oversold a supported alternative
-                                                   backend as something risky, and matched nothing else in Settings.
-                                                   The "Alternative" badge went with it: the description's own first
-                                                   clause already says it, and a badge that only echoes adjacent copy
-                                                   is noise (same rule as the status badge in ProviderCard). */
-                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-                                                    <div className="flex items-center justify-between gap-4">
-                                                        <div className="flex items-center gap-4 min-w-0">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                                <Headphones size={20} />
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('SCK Backend')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">
-                                                                    {t('Use the ScreenCaptureKit backend. An optimized alternative to CoreAudio if you experience any capture issues.')}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                        <SettingsToggle
-                                                            checked={useExperimentalSck}
-                                                            label={t('Use ScreenCaptureKit backend')}
-                                                            onChange={() => {
-                                                                const newState = !useExperimentalSck;
-                                                                setUseExperimentalSck(newState);
-                                                                window.localStorage.setItem('useExperimentalSckBackend', newState ? 'true' : 'false');
-                                                            }}
-                                                            className={useExperimentalSck ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
-                                                        />
+                                                /* A card like its neighbours: Input Device and Output Device are
+                                                   CustomSelect cards (uppercase label, one control), so the capture
+                                                   method is one too, and the hint under it is the Language card's.
+                                                   It was a tile/title/switch card titled "SCK Backend" — the
+                                                   internal name — with a two-line description; a picker names both
+                                                   choices and shows which is on. App reads the flag when a meeting
+                                                   starts, so a change applies from the next one. */
+                                                <div>
+                                                    <CustomSelect
+                                                        label={t('System Audio Capture')}
+                                                        value={useExperimentalSck ? 'sck' : 'coreaudio'}
+                                                        options={[
+                                                            { deviceId: 'coreaudio', label: t('Core Audio (default)') },
+                                                            { deviceId: 'sck', label: 'ScreenCaptureKit' },
+                                                        ].map((o) => ({ ...o, kind: 'audiooutput' as MediaDeviceKind, groupId: '', toJSON: () => ({}) }))}
+                                                        onChange={(id) => {
+                                                            const useSck = id === 'sck';
+                                                            setUseExperimentalSck(useSck);
+                                                            window.localStorage.setItem('useExperimentalSckBackend', useSck ? 'true' : 'false');
+                                                        }}
+                                                    />
+                                                    <div className="flex gap-2 items-center mt-2 px-1">
+                                                        <Info size={14} className="text-text-secondary shrink-0" />
+                                                        <p className="text-xs text-text-secondary">
+                                                            {t("Try ScreenCaptureKit if the other side isn't transcribed.")}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             )}

@@ -3383,7 +3383,7 @@ export class AppState {
       const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
       if (apiKey) {
         console.log(`[Main] Using DeepgramStreamingSTT for ${speaker}`);
-        const dg = new DeepgramStreamingSTT(apiKey);
+        const dg = new DeepgramStreamingSTT(apiKey, CredentialsManager.getInstance().getSttModel('deepgram'));
         // Opt-in diarization (#3): only on the remote/system channel ('interviewer'), where
         // multiple people may speak. The mic channel is always the local user ('me'), so
         // diarizing it adds cost with no benefit. Default OFF via flag.
@@ -3423,7 +3423,7 @@ export class AppState {
       const baseUrl = CredentialsManager.getInstance().getOpenAiSttBaseUrl();
       if (apiKey) {
         console.log(`[Main] Using OpenAIStreamingSTT for ${speaker}${baseUrl ? ` (custom endpoint: ${baseUrl})` : ' (WebSocket+REST fallback)'}`);
-        stt = new OpenAIStreamingSTT(apiKey, baseUrl);
+        stt = new OpenAIStreamingSTT(apiKey, baseUrl, CredentialsManager.getInstance().getSttModel('openai'));
       } else {
         console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
@@ -3456,7 +3456,7 @@ export class AppState {
 
       if (apiKey) {
         console.log(`[Main] Using RestSTT (${sttProvider}) for ${speaker}`);
-        stt = new RestSTT(sttProvider, apiKey, modelOverride, region);
+        stt = new RestSTT(sttProvider, apiKey, modelOverride, region, speaker);
       } else {
         console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);

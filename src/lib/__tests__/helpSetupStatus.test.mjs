@@ -79,13 +79,13 @@ describe('speech', () => {
 
   test('a chosen provider without its key is not done', () => {
     assert.deepEqual(speechStep('darwin', { sttProvider: 'deepgram', hasDeepgramKey: false }), {
-      state: 'todo', detail: 'Deepgram Nova-3 · needs a key',
+      state: 'todo', detail: 'Deepgram · needs a key',
     });
   });
 
   test('a chosen provider with its key is done', () => {
     assert.deepEqual(speechStep('win32', { sttProvider: 'deepgram', hasDeepgramKey: true }), {
-      state: 'done', detail: 'Deepgram Nova-3 · key saved',
+      state: 'done', detail: 'Deepgram · key saved',
     });
   });
 

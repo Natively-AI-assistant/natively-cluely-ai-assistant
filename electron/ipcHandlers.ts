@@ -11922,6 +11922,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         sttProvider: creds.sttProvider || 'none',
         nvidiaNimSttModel: creds.nvidiaNimSttModel || 'nemotron-asr-streaming',
         groqSttModel: creds.groqSttModel || 'whisper-large-v3-turbo',
+        // Resolved, not raw: a stored id the catalogue has since dropped reads
+        // back as the provider's default, which is what a session would use.
+        sttModels: {
+          deepgram: CredentialsManager.getInstance().getSttModel('deepgram'),
+          openai: CredentialsManager.getInstance().getSttModel('openai'),
+        },
         hasSttGroqKey: hasKey(creds.groqSttApiKey),
         hasSttOpenaiKey: hasKey(creds.openAiSttApiKey),
         hasDeepgramKey: hasKey(creds.deepgramApiKey),
@@ -11995,6 +12001,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         googleServiceAccountPath: null,
         sttProvider: 'none',
         groqSttModel: 'whisper-large-v3-turbo',
+        nvidiaNimSttModel: 'nemotron-asr-streaming',
+        sttModels: { deepgram: 'nova-3', openai: 'gpt-live-transcribe' },
         hasSttGroqKey: false,
         hasSttOpenaiKey: false,
         hasDeepgramKey: false,
@@ -12220,6 +12228,24 @@ export function initializeIpcHandlers(appState: AppState): void {
       const cm = CredentialsManager.getInstance();
       const persisted = cm.setNvidiaNimSttModel(model);
       if (!persisted) return { success: false, error: 'Could not save NVIDIA NIM speech model' };
+      await appState.reconfigureSttProvider();
+      broadcastCredentialsChanged();
+      return { success: true };
+    } catch (error: any) { return { success: false, error: error.message }; }
+  });
+
+  // Deepgram / OpenAI transcription model (sttModelCatalog.ts). Same shape as
+  // the NVIDIA handler above: validated against the one catalogue the picker
+  // reads, the save's result reported, then the pipeline rebuilt.
+  safeHandle('set-stt-model', async (_, provider: string, model: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const { isSttModelProvider, isSttModel } = require('./audio/sttModelCatalog');
+      if (!isSttModelProvider(provider) || !isSttModel(provider, model)) {
+        return { success: false, error: 'Unsupported speech model' };
+      }
+      const persisted = CredentialsManager.getInstance().setSttModel(provider, model);
+      if (!persisted) return { success: false, error: 'Could not save speech model' };
       await appState.reconfigureSttProvider();
       broadcastCredentialsChanged();
       return { success: true };
@@ -12494,8 +12520,11 @@ export function initializeIpcHandlers(appState: AppState): void {
           const WebSocket = require('ws');
           const token = apiKey.trim();
           return await new Promise<{ success: boolean; error?: string }>((resolve) => {
+            // The model sessions will use, not a fixed one: this used to test
+            // nova-2 while every meeting ran nova-3.
+            const { CredentialsManager: DgCM } = require('./services/CredentialsManager');
             const url =
-              'wss://api.deepgram.com/v1/listen?model=nova-2&encoding=linear16&sample_rate=16000&channels=1';
+              `wss://api.deepgram.com/v1/listen?model=${encodeURIComponent(DgCM.getInstance().getSttModel('deepgram'))}&encoding=linear16&sample_rate=16000&channels=1`;
             const ws = new WebSocket(url, {
               headers: { Authorization: `Token ${token}` },
             });
@@ -12692,7 +12721,9 @@ export function initializeIpcHandlers(appState: AppState): void {
             provider === 'groq'
               ? 'https://api.groq.com/openai/v1/audio/transcriptions'
               : openAiEndpoint;
-          const model = provider === 'groq' ? 'whisper-large-v3-turbo' : 'whisper-1';
+          // Groq tests the model its sessions use (groqSttModel), not always turbo.
+          const { CredentialsManager: GroqCM } = require('./services/CredentialsManager');
+          const model = provider === 'groq' ? GroqCM.getInstance().getGroqSttModel() : 'whisper-1';
 
           const form = new FormData();
           form.append('file', testWav, { filename: 'test.wav', contentType: 'audio/wav' });

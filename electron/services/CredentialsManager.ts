@@ -15,6 +15,7 @@ import { deriveFallbackKey, encryptCredentialBlob, decryptCredentialBlob } from 
 import { customProviderSupportsVision, customProviderIsLocal } from '../llm/visionCapability';
 import { readActiveCustomProvider } from '../llm/activeCustomProvider';
 import { normalizeSttLanguageKey } from '../config/languages';
+import { resolveSttModel, type SttModelProvider } from '../audio/sttModelCatalog';
 
 const CREDENTIALS_PATH = path.join(app.getPath('userData'), 'credentials.enc');
 // App-managed AES fallback, used ONLY when the OS keyring (safeStorage) is
@@ -188,6 +189,9 @@ export interface StoredCredentials {
     // STT Provider settings
     sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech';
     nvidiaNimSttModel?: string;
+    /** Model per provider where the model is only a value on the app's own
+        endpoint (sttModelCatalog.ts). Absent = the provider's default. */
+    sttModels?: Partial<Record<SttModelProvider, string>>;
     groqSttApiKey?: string;
     groqSttModel?: string;
     openAiSttApiKey?: string;
@@ -1054,6 +1058,16 @@ export class CredentialsManager {
     public setNvidiaNimSttModel(model: string): boolean {
         if (this.refuseWriteWhileDegraded('set NVIDIA NIM STT model')) return false;
         this.credentials.nvidiaNimSttModel = model || 'nemotron-asr-streaming';
+        return this.saveCredentials();
+    }
+
+    /** The stored model for a catalogued provider, or its default. */
+    public getSttModel(provider: SttModelProvider): string {
+        return resolveSttModel(provider, this.credentials.sttModels?.[provider]);
+    }
+    public setSttModel(provider: SttModelProvider, model: string): boolean {
+        if (this.refuseWriteWhileDegraded(`set ${provider} STT model`)) return false;
+        this.credentials.sttModels = { ...(this.credentials.sttModels || {}), [provider]: resolveSttModel(provider, model) };
         return this.saveCredentials();
     }
 

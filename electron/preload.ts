@@ -238,6 +238,7 @@ interface ElectronAPI {
     hasNativelyKey: boolean;
     googleServiceAccountPath: string | null;
     sttProvider: string;
+    sttModels?: { deepgram?: string; openai?: string };
     hasSttGroqKey: boolean;
     hasSttOpenaiKey: boolean;
     hasDeepgramKey: boolean;
@@ -381,6 +382,7 @@ interface ElectronAPI {
   setGroqSttModel: (model: string) => Promise<{ success: boolean; error?: string }>;
   setSonioxApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setNvidiaNimSttModel: (model: string) => Promise<{ success: boolean; error?: string }>;
+  setSttModel: (provider: 'deepgram' | 'openai', model: string) => Promise<{ success: boolean; error?: string }>;
   setIbmWatsonRegion: (region: string) => Promise<{ success: boolean; error?: string }>;
   testSttConnection: (
     provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim',
@@ -1731,6 +1733,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setGroqSttModel: (model: string) => ipcRenderer.invoke('set-groq-stt-model', model),
   setSonioxApiKey: (apiKey: string) => ipcRenderer.invoke('set-soniox-api-key', apiKey),
   setNvidiaNimSttModel: (model: string) => ipcRenderer.invoke('set-nvidia-nim-stt-model', model),
+  setSttModel: (provider: 'deepgram' | 'openai', model: string) => ipcRenderer.invoke('set-stt-model', provider, model),
   setIbmWatsonRegion: (region: string) => ipcRenderer.invoke('set-ibmwatson-region', region),
   testSttConnection: (
     provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim',
