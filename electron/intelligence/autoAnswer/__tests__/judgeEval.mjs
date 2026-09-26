@@ -10,6 +10,12 @@
  *   # …or the pre-2026-09-22 fallback (chat model, no JSON mode) for comparison:
  *   JUDGE_EVAL_PROVIDER=openai-legacy JUDGE_EVAL_MODEL=gpt-5.6-luna OPENAI_API_KEY=… node …/judgeEval.mjs
  *
+ *   # The Natively rung (2026-09-26): /v1/chat with purpose:'decision', exactly
+ *   # what generateWithNatively sends — the server picks the model (flash-lite).
+ *   JUDGE_EVAL_PROVIDER=natively NATIVELY_API_KEY=… node …/judgeEval.mjs
+ *   # The DeepSeek rung: deepseek-flash, thinking disabled, JSON mode.
+ *   JUDGE_EVAL_PROVIDER=deepseek DEEPSEEK_API_KEY=… node …/judgeEval.mjs
+ *
  * Why it exists: the judge prompt was twice "improved" by reasoning about it
  * (a prefix-caching reorder, a strengthened merge rule) and both times the
  * change silently traded recall for precision or back. Prompt edits are only
@@ -33,7 +39,7 @@ const { buildJudgePrompt, parseJudgeVerdict, routeForVerdict } = dist('intellige
 const { resolveAutoAnswerThresholds } = dist('context-intelligence/policies/mode-policy-registry.js');
 
 const PROVIDER = process.env.JUDGE_EVAL_PROVIDER ?? 'gemini';
-const MODEL = process.env.JUDGE_EVAL_MODEL ?? (PROVIDER === 'gemini' ? 'gemini-3.1-flash-lite' : 'gpt-5.4-mini');
+const MODEL = process.env.JUDGE_EVAL_MODEL ?? ({ gemini: 'gemini-3.1-flash-lite', natively: 'server-decision-tier', deepseek: 'deepseek-flash' }[PROVIDER] ?? 'gpt-5.4-mini');
 const { getOpenAiReasoningEffort } = dist('llm/modelCapabilities.js');
 const CONCURRENCY = 6;
 const TH = resolveAutoAnswerThresholds('technical-interview');
@@ -42,7 +48,21 @@ const SET_PATHS = process.argv.length > 2
   ? process.argv.slice(2)
   : fs.readdirSync(EVAL_DIR).filter(f => f.endsWith('.json')).sort().map(f => path.join(EVAL_DIR, f));
 
+/** A key from the environment, else from the repo's .env files (values there are often QUOTED). */
+function keyFromEnv(name) {
+  if (process.env[name]) return process.env[name].replace(/^["']|["']$/g, '');
+  for (const rel of ['../../../../natively-api/.env', '../../../../.env']) {
+    const envFile = path.resolve(__dirname, rel);
+    if (!fs.existsSync(envFile)) continue;
+    const line = fs.readFileSync(envFile, 'utf8').split('\n').find(l => l.startsWith(`${name}=`));
+    if (line) return line.slice(line.indexOf('=') + 1).trim().replace(/^["']|["']$/g, '');
+  }
+  throw new Error(`set ${name}`);
+}
+
 function apiKey() {
+  if (PROVIDER === 'natively') return keyFromEnv('NATIVELY_API_KEY');
+  if (PROVIDER === 'deepseek') return keyFromEnv('DEEPSEEK_API_KEY');
   if (PROVIDER !== 'gemini') {
     if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
     throw new Error('set OPENAI_API_KEY');
@@ -68,7 +88,23 @@ async function judge(c) {
     try {
       const t0 = performance.now();
       let raw;
-      if (PROVIDER === 'gemini') {
+      if (PROVIDER === 'natively') {
+        const res = await fetch(`${process.env.NATIVELY_API_URL ?? 'https://api.natively.software'}/v1/chat`, {
+          method: 'POST', headers: { 'content-type': 'application/json', 'x-natively-key': KEY },
+          body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], purpose: 'decision' }),
+        });
+        const j = await res.json();
+        if (!res.ok || j.error) { await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); continue; }
+        raw = j.content ?? null;
+      } else if (PROVIDER === 'deepseek') {
+        const res = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${KEY}` },
+          body: JSON.stringify({ model: MODEL, messages: [{ role: 'user', content: prompt }], temperature: 0, max_tokens: 256, response_format: { type: 'json_object' }, thinking: { type: 'disabled' } }),
+        });
+        const j = await res.json();
+        if (j.error) { await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); continue; }
+        raw = j.choices?.[0]?.message?.content ?? null;
+      } else if (PROVIDER === 'gemini') {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${KEY}`, {
           method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0, maxOutputTokens: 256, responseMimeType: 'application/json' } }),
