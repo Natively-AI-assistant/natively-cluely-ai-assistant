@@ -15307,26 +15307,107 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('get-calendar-attendees', async (_, eventId: string) => {
     try {
-      const { CalendarManager } = require('./services/CalendarManager');
-      const cm = CalendarManager.getInstance();
-
-      // Try to get attendees from the event
-      const events = await cm.getUpcomingEvents();
-      const event = events?.find((e: any) => e.id === eventId);
-
-      if (event && event.attendees) {
-        return event.attendees
-          .map((a: any) => ({
-            email: a.email,
-            name: a.displayName || a.email?.split('@')[0] || '',
-          }))
-          .filter((a: any) => a.email);
+      // The snapshot a meeting kept of its event first: the calendar API only
+      // lists events that haven't ended, and a follow-up is written after.
+      const kept = DatabaseManager.getInstance().getCalendarEventSnapshot(eventId);
+      let attendees: any[] | undefined = kept?.attendees;
+      if (!attendees) {
+        const { CalendarManager } = require('./services/CalendarManager');
+        const events = await CalendarManager.getInstance().getUpcomingEvents();
+        attendees = events?.find((e: any) => e.id === eventId)?.attendees;
       }
-
-      return [];
+      return (attendees ?? [])
+        .map((a: any) => ({
+          email: a.email,
+          // CalendarManager stores the display name as `name`.
+          name: a.name || a.email?.split('@')[0] || '',
+        }))
+        .filter((a: any) => a.email);
     } catch (error: any) {
       console.error('Error getting calendar attendees:', error);
       return [];
+    }
+  });
+
+  // The calendar events a saved meeting could have been: those overlapping it,
+  // from an hour before it started to half an hour after it ended. The meeting
+  // notes offer them when the link at start was ambiguous, missing or wrong.
+  const meetingCalendarWindow = (meetingId: string) => {
+    const times = DatabaseManager.getInstance().getMeetingTimes(meetingId);
+    if (!times || !times.startMs) return null;
+    return { from: times.startMs - 60 * 60_000, to: times.startMs + times.durationMs + 30 * 60_000, startMs: times.startMs };
+  };
+
+  safeHandle('meeting-calendar-candidates', async (_, meetingId: string) => {
+    try {
+      if (typeof meetingId !== 'string' || !meetingId) return [];
+      const window = meetingCalendarWindow(meetingId);
+      if (!window) return [];
+      const { CalendarManager } = require('./services/CalendarManager');
+      const events = await CalendarManager.getInstance().getEventsBetween(window.from, window.to);
+      const { toEventSnapshot } = require('./services/calendar/calendarSessionMatch');
+      // Nearest start first: the likeliest answer leads.
+      return events
+        .filter((e: any) => e.selfResponse !== 'declined')
+        .sort((a: any, b: any) => Math.abs(Date.parse(a.startTime) - window.startMs) - Math.abs(Date.parse(b.startTime) - window.startMs))
+        .slice(0, 8)
+        .map((e: any) => toEventSnapshot(e, 'user'));
+    } catch (error: any) {
+      console.error('[IPC] meeting-calendar-candidates failed:', error?.message);
+      return [];
+    }
+  });
+
+  safeHandle('meeting-set-calendar-event', async (_, { meetingId, eventId }: { meetingId: string; eventId: string | null }) => {
+    try {
+      if (typeof meetingId !== 'string' || !meetingId) return { success: false };
+      const db = DatabaseManager.getInstance();
+      const { CalendarManager } = require('./services/CalendarManager');
+      const { toEventSnapshot } = require('./services/calendar/calendarSessionMatch');
+      const before = db.getMeetingDetails(meetingId);
+      let ok: boolean;
+      let snapshot: any = null;
+      if (eventId === null) {
+        ok = db.setMeetingCalendarEvent(meetingId, null);
+      } else {
+        // Looked up again here rather than trusting the renderer's copy.
+        const window = meetingCalendarWindow(meetingId);
+        if (!window || typeof eventId !== 'string') return { success: false };
+        const event = (await CalendarManager.getInstance().getEventsBetween(window.from, window.to)).find((e: any) => e.id === eventId);
+        if (!event) return { success: false };
+        snapshot = toEventSnapshot(event, 'user');
+        ok = db.setMeetingCalendarEvent(meetingId, snapshot);
+      }
+
+      // The speaker names came from the old link (a 1:1's other attendee). If
+      // the user never changed them, they follow the new one, notes included,
+      // the same way a rename does; "Not a calendar meeting" keeps only "me".
+      // A rename the user made is theirs and stays.
+      if (ok && before && isIntelligenceFlagEnabled('speakerLabelsV1')) {
+        try {
+          const { relinkSpeakerLabels } = require('./services/calendar/calendarSessionMatch');
+          const next = relinkSpeakerLabels(
+            (before.detailedSummary as any)?.speakerLabels,
+            before.calendarEvent,
+            snapshot,
+            CalendarManager.getInstance().getConnectionStatus()?.name,
+          );
+          if (next) {
+            const { SpeakerLabelService } = require('./services/meeting/SpeakerLabelService');
+            const svc = new SpeakerLabelService();
+            db.updateSpeakerLabels(meetingId, next, (d: any) => svc.applyRenamesToSummary(d, d?.speakerLabels, next));
+          }
+        } catch (e: any) {
+          console.warn('[IPC] meeting-set-calendar-event: speaker names not moved:', e?.message);
+        }
+      }
+      if (ok) {
+        BrowserWindow.getAllWindows().forEach((w) => { if (!w.isDestroyed()) w.webContents.send('meetings-updated'); });
+      }
+      return { success: ok };
+    } catch (error: any) {
+      console.error('[IPC] meeting-set-calendar-event failed:', error?.message);
+      return { success: false };
     }
   });
 

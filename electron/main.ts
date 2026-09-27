@@ -1320,6 +1320,7 @@ import { describePageCaptureFallback, describeDoubleCaptureFailure, PAGE_CAPTURE
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
+import { linkSessionToCalendar, cancelSessionCalendarLink } from './services/calendar/SessionCalendarLinker'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { nativePromptsBlocked } from './services/stealthPromptGate'
@@ -6390,6 +6391,10 @@ export class AppState {
     this.broadcastMeetingState()
     if (metadata) {
       this.intelligenceManager.setMeetingMetadata(metadata);
+      // Which calendar event this is (title, attendees, 1:1 speaker names,
+      // follow-up recipients). Decides at once from the cached list; never
+      // delays the start. See services/calendar/SessionCalendarLinker.ts.
+      linkSessionToCalendar(metadata, () => this.isMeetingActive);
     }
     // Every meeting gets its own conversation history, whether or not a mode
     // is active (the dynamic-action session id below exists only WITH a mode,
@@ -6611,6 +6616,7 @@ export class AppState {
   }
 
   private async endMeetingTransition(): Promise<void> {
+    cancelSessionCalendarLink();
     // Idempotency guard: a double-click on Stop, or a Stop racing with a
     // global-shortcut reset, can deliver two endMeeting() calls within ms of
     // each other. Without this, both invocations would run the synchronous

@@ -406,7 +406,7 @@ export class MeetingPersistence {
         data: { transcript: TranscriptSegment[], usage: any[] | undefined, startTime: number, durationMs: number, context: string, memoryEligibleCount?: number },
         meetingId: string,
         // BUG-04 fix: accept metadata snapshot so calendar info is not lost after session.reset()
-        metadata?: { title?: string; calendarEventId?: string; source?: 'manual' | 'calendar' } | null,
+        metadata?: { title?: string; calendarEventId?: string; calendarEvent?: import('./services/calendar/calendarSessionMatch').CalendarEventSnapshot; source?: 'manual' | 'calendar' } | null,
         // BUG-MODE-BLEEDING fix: accept mode snapshot so async summary uses the mode that was
         // active when meeting stopped, not whatever mode is active when async processing runs.
         modeSnapshot?: { id: string; name: string; templateType: string } | null
@@ -487,12 +487,39 @@ export class MeetingPersistence {
 
         // Use passed-in metadata snapshot (NOT this.session.getMeetingMetadata() which is already cleared)
         let calendarEventId: string | undefined;
+        let calendarEvent: import('./services/calendar/calendarSessionMatch').CalendarEventSnapshot | undefined;
         let source: 'manual' | 'calendar' = 'manual';
 
         if (metadata) {
             if (metadata.title) title = metadata.title;
             if (metadata.calendarEventId) calendarEventId = metadata.calendarEventId;
+            if (metadata.calendarEvent && metadata.calendarEvent.id === calendarEventId) calendarEvent = metadata.calendarEvent;
             if (metadata.source) source = metadata.source;
+        }
+
+        // A meeting linked to its calendar event can name its speakers: the mic
+        // is always the user, and in a 1:1 the other voice is the one other
+        // attendee (calendarSpeakerLabels). The notes are written from a NAMED
+        // COPY of the transcript, so "Priya will send the deck" rather than
+        // "Speaker 1 will…"; the stored transcript keeps its raw speakers,
+        // because the rename map is keyed on them. The same map is saved as the
+        // meeting's speaker labels, exactly as if the user had typed the names,
+        // and under the same "Speaker labels" switch.
+        let calendarLabels: Record<string, string> | null = null;
+        let llmTranscript = data.transcript;
+        if (calendarEvent && isIntelligenceFlagEnabled('speakerLabelsV1')) {
+            try {
+                const { calendarSpeakerLabels } = require('./services/calendar/calendarSessionMatch') as typeof import('./services/calendar/calendarSessionMatch');
+                calendarLabels = calendarSpeakerLabels(calendarEvent, followUpSenderName());
+                if (calendarLabels) {
+                    const { SpeakerLabelService } = require('./services/meeting/SpeakerLabelService');
+                    llmTranscript = new SpeakerLabelService().applyLabels(data.transcript, calendarLabels);
+                }
+            } catch (e: any) {
+                console.warn('[MeetingPersistence] calendar speaker names skipped:', e?.message);
+                calendarLabels = null;
+                llmTranscript = data.transcript;
+            }
         }
 
         // Scope gate applies to the entire post-call LLM summary path, not just
@@ -608,7 +635,7 @@ export class MeetingPersistence {
                 const assembler = new MeetingContextAssembler(this.llmHelper);
                 const v3StartedMs = Date.now();
                 const assembled = await assembler.assembleSummary({
-                    transcript: data.transcript,
+                    transcript: llmTranscript,
                     title,
                     modeTemplateType: modeSnapshot?.templateType,
                     modeNoteSections,
@@ -740,7 +767,7 @@ Return ONLY valid JSON (no markdown code blocks):
                     groqSummaryPrompt = GROQ_SUMMARY_JSON_PROMPT;
                 }
 
-                const fallbackContext = buildBalancedTranscriptContext(data.transcript, 16000);
+                const fallbackContext = buildBalancedTranscriptContext(llmTranscript, 16000);
                 const generatedSummary = await this.llmHelper.generateMeetingSummary(summaryPrompt, fallbackContext, groqSummaryPrompt);
 
                 if (generatedSummary) {
@@ -826,7 +853,7 @@ Return ONLY valid JSON (no markdown code blocks):
                 if (isIntelligenceFlagEnabled('meetingMemoryV2')) {
                     const record = new MeetingMemoryService().buildMeetingRecord({
                         meetingId,
-                        segments: data.transcript,
+                        segments: llmTranscript,
                         mode: modeSnapshot?.templateType,
                         startedAt: data.startTime,
                         endedAt: data.startTime + data.durationMs,
@@ -838,7 +865,7 @@ Return ONLY valid JSON (no markdown code blocks):
                     // regardless of what the extractor returned. Defense-in-depth on top
                     // of the extractor's own provenance filter. A zero-audio session of
                     // manual-chat questions + assistant answers persists NO meeting memory.
-                    const persisted = buildPersistedMeetingMemory(data.transcript, record);
+                    const persisted = buildPersistedMeetingMemory(llmTranscript, record);
                     if (persisted.telemetry.zeroEligibleGuardApplied) {
                         console.warn('[MeetingMemoryV2] zero memory-eligible (spoken/STT) transcript segments — persisting EMPTY structured memory. Manual-chat questions and assistant answers are not meeting evidence (Defect B provenance guard).', {
                             meetingId,
@@ -871,6 +898,13 @@ Return ONLY valid JSON (no markdown code blocks):
             const seconds = ((data.durationMs % 60000) / 1000).toFixed(0);
             const durationStr = `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
 
+            // The calendar's speaker names become the meeting's labels (a rename
+            // the user already made always wins). Regenerate and the follow-up
+            // draft carry speakerLabels forward, as they do the user's own.
+            if (calendarLabels && summaryData && typeof summaryData === 'object' && !summaryData.speakerLabels) {
+                summaryData = { ...summaryData, speakerLabels: calendarLabels };
+            }
+
             const meetingData: Meeting = {
                 id: meetingId,
                 title: title,
@@ -881,6 +915,7 @@ Return ONLY valid JSON (no markdown code blocks):
                 transcript: data.transcript,
                 usage: data.usage,
                 calendarEventId: calendarEventId,
+                calendarEvent: calendarEvent,
                 source: source,
                 isProcessed: true,
                 summaryStatus: generationSucceeded || data.transcript.length <= 2 ? 'completed' : 'failed'

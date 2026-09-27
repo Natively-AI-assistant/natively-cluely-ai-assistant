@@ -977,7 +977,12 @@ const App: React.FC = () => {
     }
   };
 
-  const handleStartMeeting = async () => {
+  // `calendar`: a start asked for from a calendar event (Settings › Calendar's
+  // Start Natively), so the session is linked to that event from the first
+  // second rather than matched by time. Guarded because a click handler could
+  // hand this an event object.
+  const handleStartMeeting = async (calendar?: { title: string; calendarEventId: string }) => {
+    const linked = calendar && typeof calendar === 'object' && typeof calendar.calendarEventId === 'string' ? calendar : undefined;
     try {
       // Self-heal a poisoned preference. Until the picker started filtering
       // them, Natively's own system-audio tap aggregate could be enumerated as
@@ -1015,7 +1020,8 @@ const App: React.FC = () => {
       const meetingRetention = await window.electronAPI.getMeetingRetention?.().catch(() => 'forever');
       const result = await window.electronAPI.startMeeting({
         audio: { inputDeviceId, outputDeviceId },
-        doNotPersist: meetingRetention === 'never'
+        doNotPersist: meetingRetention === 'never',
+        ...(linked ? { title: linked.title, calendarEventId: linked.calendarEventId, source: 'calendar' } : {}),
       });
       if (result.success) {
         analytics.trackMeetingStarted();
@@ -1048,6 +1054,28 @@ const App: React.FC = () => {
       }
     }
   };
+
+  // Settings › Calendar's "Start Natively" on a meeting: close Settings and
+  // start through the same path as the Launcher's button (saved devices,
+  // retention, the mic-permission recovery), linked to that event. Settings
+  // lives in this renderer, so a DOM event carries it; a running meeting is
+  // left alone, as the Launcher's button does.
+  const startMeetingRef = useRef(handleStartMeeting);
+  startMeetingRef.current = handleStartMeeting;
+  useEffect(() => {
+    const onStartForEvent = async (e: Event) => {
+      const detail = (e as CustomEvent<{ title?: string; calendarEventId?: string }>).detail;
+      if (!detail || typeof detail.calendarEventId !== 'string') return;
+      if (await window.electronAPI?.getMeetingActive?.().catch(() => false)) return;
+      setIsSettingsOpen(false);
+      // What the Launcher's button does before it starts one (Launcher.tsx CTA).
+      emitOrchestratorEvent({ type: 'turn:done', surface: 'meeting' });
+      void startMeetingRef.current({ title: String(detail.title || ''), calendarEventId: detail.calendarEventId });
+      analytics.trackCommandExecuted('start_natively_from_calendar');
+    };
+    window.addEventListener('natively:start-meeting-for-event', onStartForEvent);
+    return () => window.removeEventListener('natively:start-meeting-for-event', onStartForEvent);
+  }, []);
 
   // The pill's Stop is ended in main (it used to round-trip through this
   // renderer, so a busy or reloading overlay delayed or dropped it); main then

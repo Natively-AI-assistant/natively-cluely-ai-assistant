@@ -153,6 +153,8 @@ export interface CalendarEvent {
     link?: string;
     source: 'google';
     attendees?: CalendarAttendee[];
+    /** The user's own RSVP (their attendee entry is dropped from `attendees`). */
+    selfResponse?: CalendarAttendee['response'];
 }
 
 export interface SyncedCalendar {
@@ -283,6 +285,8 @@ export class CalendarManager extends EventEmitter {
         this.isConnected = false;
         this.accountEmail = null;
         this.accountName = null;
+        this.lastEvents = [];
+        this.lastEventsAt = 0;
 
         if (fs.existsSync(TOKEN_PATH)) {
             fs.unlinkSync(TOKEN_PATH);
@@ -544,6 +548,12 @@ export class CalendarManager extends EventEmitter {
     // Fetch Logic
     // =========================================================================
 
+    // The last list a fetch returned whole, and when. A session start matches
+    // against this at once (calendarSessionMatch.ts) instead of waiting on
+    // Google; the Launcher and Settings refetch it every minute anyway.
+    private lastEvents: CalendarEvent[] = [];
+    private lastEventsAt = 0;
+
     public async getUpcomingEvents(force: boolean = false): Promise<CalendarEvent[]> {
         if (!this.isConnected || !this.accessToken) return [];
 
@@ -552,21 +562,44 @@ export class CalendarManager extends EventEmitter {
             await this.refreshAccessToken();
         }
 
-        const events = await this.fetchEventsInternal();
-        this.scheduleReminders(events);
-        return events;
+        const now = Date.now();
+        const events = await this.fetchEventsInternal(now, now + 7 * 24 * 60 * 60 * 1000);
+        if (events) {
+            this.lastEvents = events;
+            this.lastEventsAt = now;
+        }
+        this.scheduleReminders(events ?? []);
+        return events ?? [];
     }
 
-    private async fetchEventsInternal(): Promise<CalendarEvent[]> {
-        if (!this.accessToken) return [];
+    /** The last fetched list if it is no older than `maxAgeMs`, else null. */
+    public getCachedEvents(maxAgeMs: number): CalendarEvent[] | null {
+        if (!this.isConnected || this.lastEventsAt === 0) return null;
+        return Date.now() - this.lastEventsAt <= maxAgeMs ? this.lastEvents : null;
+    }
 
-        const now = new Date();
-        const horizon = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    /**
+     * Events overlapping [fromMs, toMs], past ones included (a meeting's notes
+     * offering which event it was). Schedules no reminders: this is not the
+     * upcoming list.
+     */
+    public async getEventsBetween(fromMs: number, toMs: number): Promise<CalendarEvent[]> {
+        if (!this.isConnected || !this.accessToken) return [];
+        if (this.expiryDate && Date.now() >= this.expiryDate - 60000) {
+            await this.refreshAccessToken();
+        }
+        return (await this.fetchEventsInternal(fromMs, toMs)) ?? [];
+    }
+
+    /** Events overlapping [fromMs, toMs]; null when the fetch failed outright. */
+    private async fetchEventsInternal(fromMs: number, toMs: number): Promise<CalendarEvent[] | null> {
+        if (!this.accessToken) return [];
 
         try {
             const params = new URLSearchParams({
-                timeMin: now.toISOString(),
-                timeMax: horizon.toISOString(),
+                // timeMin bounds an event's END: one still running is included.
+                timeMin: new Date(fromMs).toISOString(),
+                timeMax: new Date(toMs).toISOString(),
                 singleEvents: 'true',
                 orderBy: 'startTime',
                 maxResults: '50',
@@ -601,7 +634,7 @@ export class CalendarManager extends EventEmitter {
                 seen.add(key);
                 return true;
             });
-            console.log(`[CalendarManager] Google returned ${items.length} raw items in next 7 days across ${calendarIds.length} calendar(s)`);
+            console.log(`[CalendarManager] Google returned ${items.length} raw items across ${calendarIds.length} calendar(s)`);
 
             const filtered = items
                 .filter((item: any) => {
@@ -625,10 +658,12 @@ export class CalendarManager extends EventEmitter {
                     endTime: item.end.dateTime,
                     link: this.resolveMeetingLink(item),
                     source: 'google' as const,
+                    // Everyone on it, to a sane cap: they are a follow-up's recipients
+                    // (the Launcher shows two faces and counts the rest).
                     attendees: Array.isArray(item.attendees)
                         ? item.attendees
                             .filter((a: any) => !a.self && !a.resource && a.email)
-                            .slice(0, 8)
+                            .slice(0, 50)
                             .map((a: any) => ({
                                 email: a.email,
                                 name: a.displayName,
@@ -636,13 +671,16 @@ export class CalendarManager extends EventEmitter {
                                 response: a.responseStatus,
                             }))
                         : undefined,
+                    selfResponse: Array.isArray(item.attendees)
+                        ? item.attendees.find((a: any) => a.self)?.responseStatus
+                        : undefined,
                 }))
                 // Each calendar comes back in order; the merge does not.
                 .sort((a: CalendarEvent, b: CalendarEvent) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
 
         } catch (error) {
             console.error('[CalendarManager] Failed to fetch events:', error);
-            return [];
+            return null;
         }
     }
 

@@ -849,6 +849,10 @@ export interface ElectronAPI {
   generateFollowupEmail: (input: any) => Promise<string>;
   extractEmailsFromTranscript: (transcript: Array<{ text: string }>) => Promise<string[]>;
   getCalendarAttendees: (eventId: string) => Promise<Array<{ email: string; name: string }>>;
+  /** Calendar events overlapping a saved meeting, nearest start first (the notes' "which event was this"). */
+  getMeetingCalendarCandidates: (meetingId: string) => Promise<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string; attendees: Array<{ email: string; name?: string; response?: string }>; linkedBy: string }>>;
+  /** Link a saved meeting to one of those events, or unlink it (null). */
+  setMeetingCalendarEvent: (meetingId: string, eventId: string | null) => Promise<{ success: boolean }>;
   openMailto: (params: { to: string; subject: string; body: string }) => Promise<{ success: boolean; error?: string }>;
 
   // Audio Test

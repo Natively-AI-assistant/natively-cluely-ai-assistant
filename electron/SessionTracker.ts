@@ -160,6 +160,8 @@ export class SessionTracker {
     private currentMeetingMetadata: {
         title?: string;
         calendarEventId?: string;
+        /** Filled in at start by SessionCalendarLinker when the session matches an event. */
+        calendarEvent?: import('./services/calendar/calendarSessionMatch').CalendarEventSnapshot;
         source?: 'manual' | 'calendar';
     } | null = null;
 

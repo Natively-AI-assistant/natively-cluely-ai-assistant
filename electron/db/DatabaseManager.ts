@@ -58,6 +58,13 @@ export interface Meeting {
         items?: string[];
     }>;
     calendarEventId?: string;
+    /**
+     * The calendar event as it was when the meeting was linked to it
+     * (calendarSessionMatch.ts CalendarEventSnapshot): title, times, link and
+     * attendees. Kept with the meeting because the calendar API only lists
+     * events that haven't ended; a follow-up written after the call needs them.
+     */
+    calendarEvent?: import('../services/calendar/calendarSessionMatch').CalendarEventSnapshot;
     source?: 'manual' | 'calendar';
     isProcessed?: boolean;
     summaryStatus?: SummaryStatus;
@@ -69,6 +76,17 @@ export interface Meeting {
  * not hold later SCHEMA migrations (notably v29's vec0 cosine rebuild) hostage.
  */
 const PAGE_COUNT_REPAIR_PENDING_KEY = 'pending_page_count_repair';
+
+/** A stored calendar_event_json, or undefined for none or anything malformed. */
+function parseCalendarEvent(json: unknown): Meeting['calendarEvent'] {
+    if (typeof json !== 'string' || !json) return undefined;
+    try {
+        const value = JSON.parse(json);
+        return value && typeof value === 'object' && typeof value.id === 'string' && Array.isArray(value.attendees) ? value : undefined;
+    } catch {
+        return undefined;
+    }
+}
 
 export class DatabaseManager {
     private static instance: DatabaseManager;
@@ -1508,6 +1526,9 @@ export class DatabaseManager {
         // construction (the try/catch absorbs "duplicate column"), so it must
         // not depend on a version counter that concurrent branches can race.
         try { this.db.exec("ALTER TABLE meetings ADD COLUMN user_titled INTEGER DEFAULT 0"); } catch (e) { /* Column already exists */ }
+        // The linked calendar event's snapshot (Meeting.calendarEvent), 2026-09-27.
+        // Additive and nullable, so applied the same unconditional way.
+        try { this.db.exec("ALTER TABLE meetings ADD COLUMN calendar_event_json TEXT"); } catch (e) { /* Column already exists */ }
         if (version < 28) {
             this.db.pragma('user_version = 28');
         }
@@ -2955,8 +2976,8 @@ export class DatabaseManager {
         }
 
         const insertMeeting = this.db.prepare(`
-            INSERT OR REPLACE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed, summary_status, user_titled)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed, summary_status, user_titled, calendar_event_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         // RC-7 (2026-08-21): INSERT OR REPLACE rewrites the whole row, so a
         // user rename made while the row still said "Processing…" (the
@@ -2964,6 +2985,10 @@ export class DatabaseManager {
         // was clobbered by the final save's generated title AND lost its
         // user_titled stamp. Pre-read the flag and let the user's title win.
         const readUserTitle = this.db.prepare(`SELECT title, COALESCE(user_titled, 0) AS user_titled FROM meetings WHERE id = ?`);
+        // The calendar link is pre-read for the same reason: the placeholder,
+        // zero-content and recovery saves carry no metadata, and REPLACE would
+        // otherwise wipe the event a meeting was linked to.
+        const readCalendarLink = this.db.prepare(`SELECT calendar_event_id, calendar_event_json, source FROM meetings WHERE id = ?`);
 
         const insertTranscript = this.db.prepare(`
             INSERT INTO transcripts (meeting_id, speaker, content, timestamp_ms)
@@ -2995,6 +3020,11 @@ export class DatabaseManager {
             // 1. Insert Meeting (a user-renamed row keeps its title — RC-7)
             const existing = readUserTitle.get(meeting.id) as { title: string; user_titled: number } | undefined;
             const userTitled = existing?.user_titled === 1;
+            // A save that names no event keeps the one already stored.
+            const linked = readCalendarLink.get(meeting.id) as {
+                calendar_event_id: string | null; calendar_event_json: string | null; source: string | null;
+            } | undefined;
+            const keepLink = !meeting.calendarEventId && !!linked?.calendar_event_id;
             insertMeeting.run(
                 meeting.id,
                 userTitled && existing?.title ? existing.title : meeting.title,
@@ -3002,11 +3032,14 @@ export class DatabaseManager {
                 durationMs,
                 summaryJson,
                 meeting.date, // Using the ISO string as created_at for sorting simply
-                meeting.calendarEventId || null,
-                meeting.source || 'manual',
+                keepLink ? linked!.calendar_event_id : (meeting.calendarEventId || null),
+                keepLink ? (linked!.source || 'calendar') : (meeting.source || 'manual'),
                 meeting.isProcessed ? 1 : 0,
                 meeting.summaryStatus || (meeting.isProcessed ? 'completed' : 'queued'),
-                userTitled ? 1 : 0
+                userTitled ? 1 : 0,
+                keepLink
+                    ? linked!.calendar_event_json
+                    : (meeting.calendarEvent ? JSON.stringify(meeting.calendarEvent) : (meeting.calendarEventId && linked?.calendar_event_id === meeting.calendarEventId ? linked.calendar_event_json : null)),
             );
 
             // 2. Insert Transcript
@@ -3250,6 +3283,55 @@ export class DatabaseManager {
      * labels still on it) and returns the one to save — so the rename and the
      * notes that carry it land in the same write.
      */
+    /**
+     * Link a meeting to a calendar event, or unlink it (`snapshot` null): the
+     * meeting notes' "which event was this" choice. Its own UPDATE, because
+     * saveMeeting keeps an existing link when a save names none, so "not a
+     * calendar meeting" could never be recorded through it. Takes the event's
+     * title too, unless the user renamed the meeting.
+     */
+    public setMeetingCalendarEvent(id: string, snapshot: NonNullable<Meeting['calendarEvent']> | null): boolean {
+        if (!this.db) return false;
+        try {
+            const info = snapshot
+                ? this.db.prepare(
+                    `UPDATE meetings SET calendar_event_id = ?, calendar_event_json = ?, source = 'calendar',
+                        title = CASE WHEN COALESCE(user_titled, 0) = 1 THEN title ELSE ? END WHERE id = ?`,
+                ).run(snapshot.id, JSON.stringify(snapshot), snapshot.title, id)
+                : this.db.prepare(
+                    `UPDATE meetings SET calendar_event_id = NULL, calendar_event_json = NULL, source = 'manual' WHERE id = ?`,
+                ).run(id);
+            return info.changes > 0;
+        } catch (error) {
+            console.error(`[DatabaseManager] Failed to set the calendar event for meeting ${id}:`, error);
+            return false;
+        }
+    }
+
+    /** When a meeting started and how long it ran, in ms; null for no such meeting. */
+    public getMeetingTimes(id: string): { startMs: number; durationMs: number } | null {
+        if (!this.db) return null;
+        try {
+            const row = this.db.prepare('SELECT start_time, duration_ms FROM meetings WHERE id = ?').get(id) as { start_time: number; duration_ms: number } | undefined;
+            return row ? { startMs: Number(row.start_time) || 0, durationMs: Number(row.duration_ms) || 0 } : null;
+        } catch {
+            return null;
+        }
+    }
+
+    /** The snapshot kept by the most recent meeting linked to this event, if any. */
+    public getCalendarEventSnapshot(eventId: string): Meeting['calendarEvent'] {
+        if (!this.db || !eventId) return undefined;
+        try {
+            const row = this.db.prepare(
+                `SELECT calendar_event_json FROM meetings WHERE calendar_event_id = ? AND calendar_event_json IS NOT NULL ORDER BY start_time DESC LIMIT 1`,
+            ).get(eventId) as { calendar_event_json: string } | undefined;
+            return parseCalendarEvent(row?.calendar_event_json);
+        } catch {
+            return undefined;
+        }
+    }
+
     public updateSpeakerLabels(
         id: string,
         speakerLabels: Record<string, string>,
@@ -3401,6 +3483,7 @@ export class DatabaseManager {
             summary: summaryData.legacySummary || '',
             detailedSummary: summaryData.detailedSummary,
             calendarEventId: meetingRow.calendar_event_id,
+            calendarEvent: parseCalendarEvent(meetingRow.calendar_event_json),
             source: meetingRow.source,
             summaryStatus: meetingRow.summary_status as SummaryStatus | undefined,
             transcript: transcript,

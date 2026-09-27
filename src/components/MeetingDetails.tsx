@@ -19,6 +19,8 @@ import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { vividDarkCodeTheme } from '../lib/codeTheme';
 import { splitGistLine } from '../lib/displayMarkup';
 import { splitIntoWordRuns } from '../lib/textRevealAnimation.mjs';
+import { followUpRecipients, recipientSummary, gmailComposeUrl } from '../lib/followUpRecipients.mjs';
+import { CalendarLinkChip, type CalendarEventSnapshot } from './meeting/CalendarLinkChip';
 
 registerPrismLanguages();
 
@@ -994,6 +996,9 @@ interface Meeting {
         text: string;
         timestamp: number;
     }>;
+    /** The calendar event this meeting was linked to, as kept at the time (attendees, title, times). */
+    calendarEventId?: string | null;
+    calendarEvent?: CalendarEventSnapshot;
     usage?: Array<{
         type: 'assist' | 'followup' | 'chat' | 'followup_questions';
         timestamp: number;
@@ -1170,7 +1175,12 @@ const FollowUpDraftCard: React.FC<{
     copied: boolean;
     onCopy: () => void;
     isLight: boolean;
-}> = ({ reveal, subjectLabel, subject, subjectText, body, bodyKey, busy, copied, onCopy, isLight }) => {
+    /** Everyone on the meeting's calendar invite (followUpRecipients): the To line. */
+    recipients?: Array<{ email: string; name?: string }>;
+    /** Opens the draft in Gmail, addressed to them. */
+    onEmail?: () => void;
+}> = ({ reveal, subjectLabel, subject, subjectText, body, bodyKey, busy, copied, onCopy, isLight, recipients, onEmail }) => {
+    const t = useT();
     const ref = useRef<HTMLDivElement>(null);
     const [shown, setShown] = useState(!reveal);
     useLayoutEffect(() => {
@@ -1181,6 +1191,26 @@ const FollowUpDraftCard: React.FC<{
     return (
         <div ref={ref} className={`t-stagger${shown ? ' is-shown' : ''}`}>
             <div className={`t-stagger-line t-stagger-line--1 rounded-xl border overflow-hidden ${isLight ? 'border-black/[0.08] bg-black/[0.015]' : 'border-white/[0.08] bg-white/[0.02]'}`}>
+                {/* Who it goes to: the meeting's calendar invite, as Fathom's recap does. */}
+                {recipients && recipients.length > 0 && (
+                    <div className={`flex items-center gap-2.5 min-h-9 pl-3.5 pr-1.5 py-1 border-b ${isLight ? 'border-black/[0.06]' : 'border-white/[0.06]'}`}>
+                        <p className="min-w-0 flex-1 truncate text-[12.5px] select-text" title={recipients.map((r) => r.email).join(', ')}>
+                            <span className="text-text-tertiary mr-1">{t('To:')}</span>{' '}
+                            <span className="text-text-primary">{recipientSummary(recipients)}</span>
+                        </p>
+                        {onEmail && (
+                            <button
+                                type="button"
+                                onClick={onEmail}
+                                aria-label={t('Open the draft in Gmail')}
+                                className={`h-7 shrink-0 inline-flex items-center gap-1.5 pl-2 pr-2.5 rounded-md text-[11px] font-medium text-text-secondary hover:text-text-primary transition-colors ${isLight ? 'hover:bg-black/[0.05]' : 'hover:bg-white/[0.06]'}`}
+                            >
+                                <Mail className="w-3.5 h-3.5" strokeWidth={2} />
+                                {t('Open in Gmail')}
+                            </button>
+                        )}
+                    </div>
+                )}
                 <div className={`flex items-center gap-2.5 min-h-10 pl-3.5 pr-1.5 py-1.5 border-b ${isLight ? 'border-black/[0.06]' : 'border-white/[0.06]'}`}>
                     {subject && (
                         <p className="min-w-0 flex-1 truncate text-[12.5px] select-text" title={subjectText}>
@@ -1933,6 +1963,21 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         setTimeout(() => setFollowUpCopied(false), 1500);
     };
 
+    // The follow-up's recipients: everyone on the meeting's calendar invite.
+    const followUpTo = followUpRecipients(meeting?.calendarEvent?.attendees);
+    // Gmail's compose window, addressed and filled in, in the calendar's own
+    // Google account (followUpRecipients.mjs says why Gmail over mailto).
+    const emailFollowUp = async () => {
+        const status = await window.electronAPI?.getCalendarStatus?.().catch(() => null);
+        const url = gmailComposeUrl({
+            to: followUpTo.map((r) => r.email),
+            subject: followUpSubject || '',
+            body: followUpBody,
+            account: status?.connected ? status.email : undefined,
+        });
+        await window.electronAPI?.openExternal?.(url);
+    };
+
     const handleRegenerateFollowUp = async (tone?: 'professional' | 'warm' | 'concise' | 'friendly') => {
         if (isRegeneratingFollowUp || !window.electronAPI?.regenerateMeetingFollowUp) return;
         setIsRegeneratingFollowUp(true);
@@ -2279,8 +2324,11 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     <div className="flex items-start justify-between mb-6">
                         <div className="w-full pr-4">
                             {/* Date formatting could be improved to use meeting.date if it's an ISO string */}
-                            <div className="text-xs text-text-tertiary font-medium mb-1">
-                                {new Date(meeting.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                            <div className="text-xs text-text-tertiary font-medium mb-1 flex items-center gap-2 min-w-0">
+                                <span className="shrink-0">{new Date(meeting.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
+                                {/* Which calendar event this was: shown when linked, offered when
+                                    a calendar is connected. See meeting/CalendarLinkChip. */}
+                                <CalendarLinkChip meetingId={meeting.id} event={meeting.calendarEvent} isLight={isLight} onChanged={reloadMeeting} />
                             </div>
 
                             {/* Editable Title — a bar while the note is being written. The
@@ -2904,6 +2952,8 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                     copied={followUpCopied}
                                                     onCopy={copyFollowUp}
                                                     isLight={isLight}
+                                                    recipients={followUpTo}
+                                                    onEmail={followUpTo.length > 0 ? emailFollowUp : undefined}
                                                 />
                                             );
                                         })()}
