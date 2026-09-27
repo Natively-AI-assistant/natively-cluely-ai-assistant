@@ -1,0 +1,352 @@
+{
+ "blind_id": "S-e250f6e6",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 78938,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 37539,
+  "candidatesTokenCount": 2406,
+  "totalTokenCount": 48536,
+  "cachedContentTokenCount": 24515,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 37539
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24515
+   }
+  ],
+  "thoughtsTokenCount": 8591,
+  "serviceTier": "standard"
+ },
+ "fact_count": 69,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 9,
+  "hallucination_control": 4,
+  "action_item_retention": 9,
+  "decision_retention": 6,
+  "speaker_attribution": 6,
+  "numeric_accuracy": 9,
+  "entity_retention": 8,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 5,
+  "structure": 3,
+  "conciseness": 2,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Hallucinated a participant named 'Jamal' who was not in the meeting.",
+   "Contradicted the final conclusion by stating the broker decision remains undecided pending Grace's input, despite correctly recording Grace's final decision elsewhere.",
+   "Listed the tentative (and later rejected) direction to migrate to Kafka on MSK as a formal decision.",
+   "Hallucinated an owner ('Me') for the open question regarding whether to resend the 2,300 unsent notifications."
+  ],
+  "missing_important_information": [
+   "The exact time the backlog peaked (16:40).",
+   "The exact times the backlog drained (18:35) and the incident was resolved (19:12).",
+   "The specific implementation details of the quiet hours logic (9pm to 8am, republishing to delayed exchange with TTL)."
+  ],
+  "hallucinated_information": [
+   "Jamal noting resending an old appointment reminder is risky.",
+   "Owner 'Me' assigned to the open question of whether to resend the 2,300 unsent queued notifications."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C08",
+    "reported": "Tentative direction agreed to migrate the notification pipeline to Kafka on MSK before the October 23rd code freeze."
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Tentative direction agreed to migrate the notification pipeline to Kafka on MSK before the October 23rd code freeze. (owner: Me)"
+  ],
+  "distractors_included": [
+   "April SSO incident was worse for employees while Tuesday was worse for patients.",
+   "Grace closed by reassuring Sam not to carry the incident, and Ravi and Pam joked about carrying the Kafka dream into the dead letter queue.",
+   "Naming clarification noted for the record: notif-worker is the RabbitMQ consumer... notify-gateway is the HTTP service"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "partial"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "partial"
+   },
+   {
+    "id": "F08",
+    "status": "partial"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "partial"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost all the important information and action items but suffer from severe structural and factual issues. The text is incredibly bloated, with entire sections (Action Items, Decisions, Open Questions) duplicated in 'structured' and unstructured formats. There are critical hallucinations, notably inventing a participant named 'Jamal'. Furthermore, the notes contradict themselves by correctly capturing the final decision to stay on RabbitMQ, but also listing the rejected Kafka migration as a decision, and stating the broker decision remains an open question pending Grace's input. These contradictions and hallucinations make the notes highly confusing and unreliable."
+ }
+}

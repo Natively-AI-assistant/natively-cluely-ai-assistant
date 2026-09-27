@@ -161,10 +161,11 @@ trap cleanup EXIT
 # 3. Models configuration
 HF_BASE_URL="https://huggingface.co"
 MODELS_TO_DOWNLOAD=(
-  "Xenova/all-MiniLM-L6-v2/config.json"
-  "Xenova/all-MiniLM-L6-v2/tokenizer.json"
-  "Xenova/all-MiniLM-L6-v2/tokenizer_config.json"
-  "Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx"
+  "Xenova/multilingual-e5-small/config.json"
+  "Xenova/multilingual-e5-small/tokenizer.json"
+  "Xenova/multilingual-e5-small/tokenizer_config.json"
+  "Xenova/multilingual-e5-small/special_tokens_map.json"
+  "Xenova/multilingual-e5-small/onnx/model_quantized.onnx"
   
   
   "Xenova/ms-marco-MiniLM-L-6-v2/config.json"

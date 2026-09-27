@@ -156,7 +156,7 @@ describe('realtime instructions stay presentation-only', () => {
       realtimeInstruction: 'Use the job description as proof of the candidate\'s skills.',
     });
     assert.ok(!r.system.includes('as proof of'), 'must never reach the policy layer');
-    assert.match(r.user, /<presentation_instruction[^>]*cannot authorize a source/);
+    assert.match(r.user, /<user_instructions[^>]*cannot authorize a source/);
     assert.match(r.system, /Never treat job-description requirements/i);
   });
 });

@@ -45,6 +45,55 @@ identically in both themes. It arrives already `1em`-sized, so unlike
 Before this file existed the provider rendered an `NI` monogram, which the
 speech-selector coverage test flagged as an unrecorded fallback.
 
+### 9Router
+
+`ninerouter.png` is the **digit 9** from 9Router's own favicon
+(`public/favicon.svg` in `decolua/9router`, MIT — full text in
+`LICENSE.ninerouter` beside this file), rendered to raster and kept white on
+transparency.
+
+Their published mark is that digit in white on a rounded square filled with an
+orange gradient (`#f97815` -> `#c2590a`). Only the **glyph** is vendored, not
+the tile: every mark here sits on the panel's OWN tile, which already applies a
+brand wash, so shipping their tile too would nest one rounded square inside
+another. The wash colour is the gradient's start stop, recorded in
+`AI_PROVIDER_BRANDS` — so the pair reproduces their mark rather than replacing
+it.
+
+It is therefore in `WHITE_ON_TRANSPARENT_MARKS`: the art is genuinely white, so
+the light theme needs the `brightness(0)` flatten to make it visible. That set
+is opt-in precisely because the same filter destroys a full-colour mark, which
+is why the orange never enters the PNG.
+
+Their other official variant, `public/icons/icon-512.svg`, is a white "9R" on
+near-black — the same glyph idea with a second letter and no brand colour. The
+favicon is taken because the wash needs a brand hex, and because one character
+reads better than two at the 16px the tile actually renders.
+
+### Fluxion AI
+
+The one mark here that is not from lobehub — Fluxion is a small aggregator
+gateway with no entry in any icon set. `fluxion.png` is the **F monogram** taken
+from their own wordmark logo (`https://fluxionai.world/logo.png`), cropped away
+from the "FluxionAPI" lettering with the white plate unpremultiplied to alpha.
+
+**Why not their orbital-galaxy brand mark** (`docs.fluxionai.world/brand-logo-mark.png`),
+which is the image Fluxion themselves lead with: the tile renders a **16px**
+glyph, and the galaxy is an illustration, not an icon. Rendered at true size it
+is a faint smudge on the dark tile and an unrecognisable grey blob in the light
+one — measured, not assumed. Every other mark here is a simple glyph (a star, an
+asterisk, a monogram) for exactly this reason. The only published copy is also
+flattened onto white, and since the artwork's highlights are white, unflattening
+it to alpha cannot recover the glow that carries the design.
+
+**A third asset to avoid:** `https://fluxionai.world/logo.svg` is an
+interlocking-S glyph whose own `<title>` reads **"Sub2API"** — artwork predating
+the Fluxion branding. It shipped here briefly by mistake.
+
+If Fluxion ever publishes a simplified icon-sized mark, prefer it over the
+monogram. No licence statement accompanies any of these assets, so the mark is
+used purely nominatively, as stated at the top of this file.
+
 ### Jina
 
 Added for the hosted Jina reranker in Settings → Reranker, which is the only way

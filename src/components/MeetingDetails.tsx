@@ -8,6 +8,9 @@ import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
 import { registerPrismLanguages } from '../utils/registerPrismLanguages';
 import MeetingChatOverlay from './MeetingChatOverlay';
 import GlassSurface from '../ui-components/GlassSurface';
+// .lg-bubble (the Usage tab's question bubble) and .lg-chip (the gist tag).
+// Imported here rather than left to arrive through Launcher's LiquidGlassBadge import.
+import '../ui-components/LiquidGlassButton.css';
 import EditableTextBlock from './EditableTextBlock';
 import NativelyLogo from './icon.png';
 import ReactMarkdown from 'react-markdown';
@@ -762,16 +765,13 @@ const UsageInteraction: React.FC<{
             {/* User question — contained bubble, enters from the right, selectable */}
             {interaction.question && (
                 <div className="group/q flex flex-col items-end">
-                    {/* Fill, gradient, glow and foreground all come from .bubble-user (index.css)
-                        rather than utilities — a gradient cannot live in the background-color that
-                        bg-[var(...)] compiles to. It also replaces shadow-sm, whose plain black
-                        shadow is invisible on the dark pane and muddies the tinted glow. Not
-                        the accent tokens directly: --bubble-user-* points AT the accent but stays a
-                        separate pair, so the bubble can be retuned without moving every button and
-                        focus ring with it. White text on the dark-mode fill is 2.21:1 — an
-                        accepted but severe AA shortfall, recorded in
-                        PeriwinkleContrastGuard.test.mjs. */}
-                    <motion.div {...enter({ x: 8 }, staggerDelay)} className="bubble-user px-5 py-2.5 rounded-2xl rounded-tr-sm max-w-[80%] text-[15px] leading-relaxed select-text">
+                    {/* .lg-bubble (ui-components): the original Liquid Glass material on the
+                        Settings toggle's periwinkle blue (--toggle-on, lifted toward white in light
+                        mode), with nothing painted around it and no hover effect. Fill and
+                        foreground come from --bubble-user-* in index.css; the radius stays here.
+                        White text on the fill is 3.28:1 (2.35:1 in light mode) — an accepted AA
+                        shortfall, recorded in PeriwinkleContrastGuard.test.mjs. */}
+                    <motion.div {...enter({ x: 8 }, staggerDelay)} className="lg-bubble px-5 py-2.5 rounded-2xl rounded-tr-sm max-w-[80%] text-[15px] leading-relaxed select-text">
                         {interaction.question}
                     </motion.div>
                     <span className="mt-1 pr-1 text-[11px] text-text-tertiary select-none cursor-default opacity-0 translate-y-1 group-hover/q:opacity-100 group-hover/q:translate-y-0 transition-all duration-[160ms] ease-out">
@@ -799,7 +799,7 @@ const UsageInteraction: React.FC<{
                                             <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                                                 {cleanMarkdown(gistBody)}
                                             </ReactMarkdown>
-                                            {gistLine && <div className="overlay-gist-chip">{gistLine}</div>}
+                                            {gistLine && <div className="overlay-gist-chip lg-chip">{gistLine}</div>}
                                         </>
                                     );
                                 })()}
@@ -1256,9 +1256,19 @@ interface MeetingDetailsProps {
     meeting: Meeting;
     onBack: () => void;
     onOpenSettings: () => void;
+    /** Open on the Transcript tab, scrolled to the line nearest this timestamp. */
+    initialMomentMs?: number;
+    /**
+     * The "ask about this meeting" chat opened or closed. The host raises this
+     * page above its header while it is open, so the chat's dim covers the whole
+     * window the way the dim behind Settings and the toasters does.
+     */
+    onChatOpenChange?: (open: boolean) => void;
+    // The Home list reads titles from the DB; tell it to re-read after a rename.
+    onTitleSaved?: () => void;
 }
 
-const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting }) => {
+const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting, initialMomentMs, onChatOpenChange, onBack, onTitleSaved }) => {
     const t = useT();
     const isLight = useResolvedTheme() === 'light';
     // We need local state for the meeting object to reflect optimistic updates
@@ -1267,7 +1277,30 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [query, setQuery] = useState('');
     const [isCopied, setIsCopied] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
+    // Tell the host, and take it back on the way out: the page unmounts with
+    // the chat still open when the user goes back to the list.
+    useEffect(() => {
+        onChatOpenChange?.(isChatOpen);
+    }, [isChatOpen, onChatOpenChange]);
+    useEffect(() => () => onChatOpenChange?.(false), [onChatOpenChange]);
     const [submittedQuery, setSubmittedQuery] = useState('');
+
+    // Esc goes back to the meeting list (no visible hint). It yields to anything
+    // else Esc should close first: the meeting chat, a field being edited, an open
+    // dialog, and — checked after this tick, since Settings and the search pill
+    // register their listeners later — any handler that already claimed the key.
+    useEffect(() => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape' || e.defaultPrevented || isChatOpen) return;
+            const el = e.target as HTMLElement | null;
+            if (el?.closest('input, textarea, select, [contenteditable="true"]')) return;
+            if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+            timer = setTimeout(() => { if (!e.defaultPrevented) onBack(); }, 0);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => { window.removeEventListener('keydown', onKeyDown); clearTimeout(timer); };
+    }, [isChatOpen, onBack]);
 
     // Stable client-side keys for the action-item and key-point lists. The
     // persisted shape is string[], so React keyed the rows by index, but the
@@ -1322,6 +1355,14 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [followUpCopied, setFollowUpCopied] = useState(false);
     const [showEvidence, setShowEvidence] = useState(false);
     const [pendingScrollTs, setPendingScrollTs] = useState<number | null>(null);
+    // "Search past meetings" opens a meeting AT the line that matched: land on the
+    // Transcript tab and reuse the evidence jump (scroll + highlight the nearest
+    // line). Keyed on the meeting too, so a second hit in another meeting re-jumps.
+    useEffect(() => {
+        if (typeof initialMomentMs !== 'number') return;
+        setActiveTab('transcript');
+        setPendingScrollTs(initialMomentMs);
+    }, [initialMeeting.id, initialMomentMs]);
     const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
     const [speakerDraft, setSpeakerDraft] = useState('');
     // Armed for exactly one materialisation: on mount when the notes are already
@@ -1615,12 +1656,22 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         } catch { /* swallow */ }
     };
 
-    const handleRegenerate = async (templateType?: string) => {
+    // Set when regenerating AS the auto-detected mode was refused because that mode
+    // needs Pro (the same gate as switching to it) — the suggestion then says so
+    // instead of spinning and silently doing nothing.
+    const [detectedNeedsPro, setDetectedNeedsPro] = useState(false);
+
+    const handleRegenerate = async (target?: string | { templateType?: string; modeId?: string }) => {
         if (isRegenerating || !window.electronAPI?.regenerateMeetingSummary) return;
+        const opts = typeof target === 'string' ? { templateType: target } : target;
         setIsRegenerating(true);
         try {
-            const res = await window.electronAPI.regenerateMeetingSummary(meeting.id, templateType ? { templateType } : undefined);
+            const res = await window.electronAPI.regenerateMeetingSummary(
+                meeting.id,
+                opts && (opts.templateType || opts.modeId) ? opts : undefined,
+            );
             if (res?.success) await reloadMeeting();
+            else if (res?.error === 'pro_required') setDetectedNeedsPro(true);
         } catch { /* swallow */ } finally { setIsRegenerating(false); }
     };
 
@@ -1639,7 +1690,12 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         if (!name.trim()) delete next[speakerId];
         setMeeting(prev => ({ ...prev, detailedSummary: { ...(prev.detailedSummary as any), speakerLabels: next } }));
         setEditingSpeaker(null);
-        try { await window.electronAPI?.updateMeetingSpeakerLabels?.(meeting.id, next); } catch { /* swallow */ }
+        try {
+            const res = await window.electronAPI?.updateMeetingSpeakerLabels?.(meeting.id, next);
+            // With "Speaker labels" on, the backend has rewritten the saved notes
+            // and action items with the new name — reload so they show it now.
+            if (res?.notesUpdated) await reloadMeeting();
+        } catch { /* swallow */ }
     };
 
     // Resolve a transcript segment's display name using saved speaker labels.
@@ -1776,6 +1832,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
         setMeeting(prev => ({ ...prev, title: newTitle }));
         if (window.electronAPI?.updateMeetingTitle) {
             await window.electronAPI.updateMeetingTitle(meeting.id, newTitle);
+            onTitleSaved?.();
         }
     };
 
@@ -1841,6 +1898,16 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     content width: a two-container split would offset this column from the one below
                     by the scrollbar width on platforms with classic (non-overlay) scrollbars. */}
                 <div className={`sticky top-0 z-20 ${isLight ? 'bg-bg-secondary' : 'bg-bg-elevated'}`}>
+                    {/* Absolute so the header content keeps its original position. */}
+                    <button
+                        type="button"
+                        onClick={onBack}
+                        aria-label={t("Back")}
+                        title={t("Back")}
+                        className="absolute left-3 top-3 z-10 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border-subtle"
+                    >
+                        <ArrowLeft size={19} />
+                    </button>
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -2142,8 +2209,14 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                   v3Mode.detectedModeName !== v3Mode.selectedModeName && (
                                     <motion.button
                                         type="button"
-                                        onClick={() => handleRegenerate(v3Mode.detectedModeId ? undefined : (v3Mode.detectedModeName || '').toLowerCase())}
-                                        disabled={isRegenerating}
+                                        // The DETECTED mode, by id when the detector matched one
+                                        // (it always does for the built-ins). This used to pass
+                                        // `undefined` in exactly that case, so the notes were rebuilt
+                                        // in the ORIGINAL template.
+                                        onClick={() => handleRegenerate(v3Mode.detectedModeId
+                                            ? { modeId: v3Mode.detectedModeId }
+                                            : { templateType: (v3Mode.detectedModeName || '').toLowerCase() })}
+                                        disabled={isRegenerating || detectedNeedsPro}
                                         initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
                                         animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
                                         whileTap={prefersReducedMotion || isRegenerating ? undefined : { scale: 0.99, transition: { duration: 0.1 } }}
@@ -2157,7 +2230,9 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             <p className="text-[14px] font-semibold text-text-primary tracking-[-0.01em] truncate leading-tight">
                                                 {isRegenerating
                                                     ? t('Regenerating…')
-                                                    : <>{t('Regenerate notes as')} <span className="text-accent-primary">{v3Mode.detectedModeName}</span></>}
+                                                    : detectedNeedsPro
+                                                        ? <>{v3Mode.detectedModeName} {t('notes need Natively Pro')}</>
+                                                        : <>{t('Regenerate notes as')} <span className="text-accent-primary">{v3Mode.detectedModeName}</span></>}
                                             </p>
                                         </div>
                                         <ChevronRight className="shrink-0 w-4 h-4 text-text-tertiary group-hover:text-accent-primary group-hover:translate-x-0.5 transition-all duration-150" strokeWidth={2} />
@@ -2761,8 +2836,13 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                 </motion.div>
             </main>
 
-            {/* Floating Footer (Ask Bar) */}
-            <div className={`absolute bottom-0 left-0 right-0 p-6 flex justify-center pointer-events-none ${isChatOpen ? 'z-50' : 'z-20'}`}>
+            {/* Floating Footer (Ask Bar). While the chat is open this bar is the chat's
+                input — follow-ups go through it (MeetingChatOverlay has none of its own and
+                leaves pb-32 for it) — so it must sit ABOVE the overlay. The overlay became
+                `fixed inset-0 z-[300]` in a8c1ac82 (the sheet-style dimming); at the old
+                z-50 the bar vanished under it the moment a chat opened. z-[310] clears it.
+                Same stacking context: neither is portaled. */}
+            <div className={`absolute bottom-0 left-0 right-0 p-6 flex justify-center pointer-events-none ${isChatOpen ? 'z-[310]' : 'z-20'}`}>
                 {/* Refractive glass, not a blurred pane. The pill floats over the
                     scrolling notes, so the material is only readable as glass if
                     what passes behind it BENDS — a plain backdrop-blur reads as

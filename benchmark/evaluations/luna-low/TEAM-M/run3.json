@@ -1,0 +1,349 @@
+{
+ "blind_id": "S-04167b72",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 74606,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 33148,
+  "candidatesTokenCount": 1732,
+  "totalTokenCount": 43678,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 33148
+   }
+  ],
+  "thoughtsTokenCount": 8798,
+  "serviceTier": "standard"
+ },
+ "fact_count": 72,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 7,
+  "hallucination_control": 4,
+  "action_item_retention": 6,
+  "decision_retention": 6,
+  "speaker_attribution": 4,
+  "numeric_accuracy": 8,
+  "entity_retention": 7,
+  "timeline_accuracy": 2,
+  "conclusion_accuracy": 4,
+  "structure": 2,
+  "conciseness": 1,
+  "readability": 3,
+  "overall_summary_quality": 3,
+  "critical_errors": [
+   "Changed the September 21, 22, and 23 deadlines for the Kestrel Logistics remediation to October 21, 22, and 23.",
+   "Contradicted the launch date decision by stating that the final launch date remains unresolved.",
+   "Assigned ownership of the migration runbook to Viktor in one section, contradicting the correct assignment to Maya.",
+   "Failed to map speaker labels (Speaker 1, Speaker 3, Speaker 4, Me) to their actual names."
+  ],
+  "missing_important_information": [
+   "Dana escalating the ledger 3.4 dependency with Grace Obi.",
+   "Viktor's shadow-rating reconciliation script.",
+   "The agenda of the meeting."
+  ],
+  "hallucinated_information": [
+   "October 21, October 22, and October 23 as the dates for the Kestrel Logistics credit, root cause, and customer call.",
+   "The launch date remains unresolved in this chunk."
+  ],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "The October 2 tripwire coincides with the office move, so desk availability may be limited that day.",
+   "Whether monitors will move to the Harlow building or be replaced is unknown."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "partial"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "partial"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "contradicted"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "partial"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "missing"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "contradicted"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "partial"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "partial"
+   },
+   {
+    "id": "F46",
+    "status": "partial"
+   },
+   {
+    "id": "F47",
+    "status": "contradicted"
+   },
+   {
+    "id": "F48",
+    "status": "contradicted"
+   },
+   {
+    "id": "F49",
+    "status": "contradicted"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "missing"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "partial"
+   },
+   {
+    "id": "F63",
+    "status": "partial"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "partial"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "missing"
+   },
+   {
+    "id": "F70",
+    "status": "partial"
+   },
+   {
+    "id": "F71",
+    "status": "missing"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes suffer from severe repetition, listing the same points across multiple redundant sections, which destroys conciseness and readability. There are critical timeline errors, shifting the September deadlines for the Kestrel Logistics escalation to October. The notes also contradict themselves by correctly stating the October 14 launch date in one section but claiming the launch date remains unresolved in another. Speaker attribution is poor, leaving labels like 'Speaker 1' and 'Me' unresolved."
+ }
+}

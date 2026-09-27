@@ -98,11 +98,15 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
         if (model === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
         if (model === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
         if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
+        if (model === 'qwen/qwen3.8-27b') return 'Groq Qwen 3.8';
         if (model === 'qwen/qwen3.6-27b') return 'Groq Qwen 3.6';
         if (model === 'openai/gpt-oss-120b') return 'Groq GPT-OSS 120B';
         if (model === 'openai/gpt-oss-20b') return 'Groq GPT-OSS 20B';
         if (model === 'gpt-5.4') return 'GPT 5.4';
         if (model === 'claude-sonnet-4-6') return 'Sonnet 4.6';
+        // Legacy: DeepSeek retired deepseek-v4-flash on 2026-09-10 and now serves
+        // it as deepseek-flash (V4.1), which is what a persisted pick actually gets.
+        if (model === 'deepseek-v4-flash') return 'DeepSeek V4.1 Flash';
 
         // Check dynamic cloud models
         const cloud = cloudModels.find(m => m.id === model);

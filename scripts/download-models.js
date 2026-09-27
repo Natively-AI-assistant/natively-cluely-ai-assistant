@@ -8,10 +8,15 @@ const https = require('https');
 // bundled so a clean-machine install never has to download a 280MB cross-encoder
 // on first document-grounded mode activation.
 const REQUIRED_MODEL_FILES = [
-    'Xenova/all-MiniLM-L6-v2/config.json',
-    'Xenova/all-MiniLM-L6-v2/tokenizer.json',
-    'Xenova/all-MiniLM-L6-v2/tokenizer_config.json',
-    'Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx',
+    // multilingual-e5-small — the DEFAULT bundled embedder since 2026-09-22
+    // (electron/rag/bundledLocalEmbedding.ts, docs/local-embedding-benchmark.md).
+    // Required, as MiniLM was: an install with no working default embedder
+    // silently runs every retrieval lexical-only.
+    'Xenova/multilingual-e5-small/config.json',
+    'Xenova/multilingual-e5-small/tokenizer.json',
+    'Xenova/multilingual-e5-small/tokenizer_config.json',
+    'Xenova/multilingual-e5-small/special_tokens_map.json',
+    'Xenova/multilingual-e5-small/onnx/model_quantized.onnx',
     // The bundled cross-encoder. ms-marco replaced bge-reranker-base on
     // 2026-09-04 — see step 3 below for the numbers. bge is gone entirely: not
     // bundled, not lazily downloaded, not in the catalogue.
@@ -76,6 +81,45 @@ async function downloadSmartTurn(modelsDir) {
     console.log('[download-models] smart-turn-v3.1 downloaded and sha256-verified.');
 }
 
+/** Streaming sha256, so re-verifying a 279 MB model does not load it into memory. */
+function sha256FileStream(file) {
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash('sha256');
+        fs.createReadStream(file)
+            .on('data', (c) => hash.update(c))
+            .on('end', () => resolve(hash.digest('hex')))
+            .on('error', reject);
+    });
+}
+
+/**
+ * Multi-file, manifest-driven model download (idempotent).
+ *
+ * Generalises downloadSmartTurn to a model made of several files: every file is
+ * fetched from the PINNED revision in `<modelDir>/manifest.json` — never a
+ * moving `main` — and sha256 + byte-count verified before it is renamed into
+ * place. A file already present with the right size AND hash is skipped, so a
+ * repeat `npm install` re-downloads nothing.
+ */
+async function downloadManifestModel(modelsDir, modelDir) {
+    const dir = path.join(modelsDir, ...modelDir.split('/'));
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+    let fetched = 0;
+    for (const f of manifest.files) {
+        const dest = path.join(dir, ...f.path.split('/'));
+        if (fs.existsSync(dest) && fs.statSync(dest).size === f.bytes
+            && (await sha256FileStream(dest)) === f.sha256) continue;
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        const url = `https://huggingface.co/${manifest.model}/resolve/${manifest.revision}/${f.path}`;
+        console.log(`[download-models] ${manifest.model}/${f.path} (${(f.bytes / 1e6).toFixed(1)} MB)...`);
+        await downloadVerified(url, dest, f.sha256, f.bytes);
+        fetched++;
+    }
+    console.log(fetched === 0
+        ? `[download-models] ${manifest.model} already present (sha256 OK).`
+        : `[download-models] ${manifest.model}: ${fetched} file(s) downloaded and sha256-verified.`);
+}
+
 function verifyModels() {
     const modelsDir = path.join(__dirname, '../resources/models');
     const missing = [];
@@ -122,10 +166,12 @@ async function downloadModels() {
         // model_quantized.onnx; see the same reasoning at electron/rag/LocalReranker.ts.
         const QUANTIZED = { dtype: 'q8' };
 
-        // 1. Embedding model (RAG)
-        console.log('[download-models] Downloading Xenova/all-MiniLM-L6-v2 (q8)...');
-        await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', QUANTIZED);
-        console.log('[download-models] all-MiniLM-L6-v2 downloaded.');
+        // 1. (removed 2026-09-22) Xenova/all-MiniLM-L6-v2, the embedder bundled
+        //    before multilingual-e5-small (step 5). Nothing loads it at runtime:
+        //    a saved MiniLM selection resolves to the bundled model
+        //    (isBundledLocalModelId), and old-space vectors are re-embedded by
+        //    the space-key re-index. The R&D baseline fetches its own pinned copy
+        //    (scripts/download-embedding-experiments.mjs minilm-baseline).
 
         // 2. (removed 2026-09-05) Xenova/mobilebert-uncased-mnli, the zero-shot
         //    intent classifier. Its output never reached the dispatched prompt
@@ -167,6 +213,12 @@ async function downloadModels() {
         } catch (e) {
             console.warn('[download-models] smart-turn-v3.1 download failed (optional; Auto Answer runs deterministic-only):', e?.message ?? e);
         }
+
+        // 5. multilingual-e5-small — the DEFAULT bundled embedder since
+        //    2026-09-22 (docs/local-embedding-benchmark.md). Pinned revision,
+        //    every file sha256-verified against its manifest. REQUIRED: a failure
+        //    here fails the install, exactly as a failed MiniLM download always has.
+        await downloadManifestModel(modelsDir, 'Xenova/multilingual-e5-small');
 
         console.log('[download-models] All models downloaded successfully!');
     } catch (e) {

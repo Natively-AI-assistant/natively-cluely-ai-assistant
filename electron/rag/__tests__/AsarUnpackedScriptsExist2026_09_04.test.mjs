@@ -97,8 +97,9 @@ test('the asar rewrite is OPT-IN, not the default', () => {
   const asarDir = '/Applications/Natively.app/Contents/Resources/app.asar/dist-electron/electron';
 
   const notAsked = resolveBundledScript(asarDir, ['services', 'thing.js'], { exists: () => true });
-  assert.ok(notAsked.includes('app.asar/'), `default must stay inside the archive: ${notAsked}`);
-  assert.ok(!notAsked.includes('app.asar.unpacked'), notAsked);
+  const normalizedNotAsked = notAsked.replaceAll('\\', '/');
+  assert.ok(normalizedNotAsked.includes('app.asar/'), `default must stay inside the archive: ${notAsked}`);
+  assert.ok(!normalizedNotAsked.includes('app.asar.unpacked'), notAsked);
 
   const asked = resolveBundledScript(asarDir, ['services', 'thing.js'],
     { exists: () => true, unpackFromAsar: true });

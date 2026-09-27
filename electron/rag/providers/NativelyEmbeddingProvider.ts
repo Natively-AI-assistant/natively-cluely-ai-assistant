@@ -1,3 +1,5 @@
+import { e2eLocalTestHeaderFor } from '../e2eLocalTest';
+import { describeProbeError } from './probeError';
 import { IEmbeddingProvider } from './IEmbeddingProvider';
 import { embeddingSpaceKey } from '../embeddingSpace';
 import { TRIAL_SENTINEL_KEY } from '../../config/constants';
@@ -87,6 +89,8 @@ export interface NativelyEmbeddingOptions {
   trialToken?: string;
 }
 
+export { describeProbeError } from './probeError';
+
 export class NativelyEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'natively';
   readonly model = MODEL;
@@ -123,6 +127,8 @@ export class NativelyEmbeddingProvider implements IEmbeddingProvider {
     } else {
       h['x-natively-key'] = this.apiKey;
     }
+    // A locally run server under test auth — see e2eLocalTest.ts. Inert unless NATIVELY_E2E=1.
+    Object.assign(h, e2eLocalTestHeaderFor(this.baseUrl));
     return h;
   }
 
@@ -236,6 +242,12 @@ export class NativelyEmbeddingProvider implements IEmbeddingProvider {
       // Let the resolver see a structural auth failure and demote at once; any
       // other error is transient and answers "not available right now".
       if (error?.permanentAuthFailure) throw error;
+      // SAY WHY (2026-09-19). This returned a bare `false`, the resolver printed
+      // "probe 1/3 failed", and a session was demoted to the bundled model —
+      // every new upload left `lexical_only`, every query lexical — with no
+      // record anywhere of WHAT failed: a timeout, a 429, a 5xx, DNS. Status
+      // and message only; the key never appears in either.
+      console.warn(`[NativelyEmbeddingProvider] availability probe failed: ${describeProbeError(error)}`);
       return false;
     }
   }

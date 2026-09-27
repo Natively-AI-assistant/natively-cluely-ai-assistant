@@ -370,7 +370,7 @@ import {
 } from '../lib/overlayAppearance';
 import { NegotiationCoachingCard } from '../premium';
 import type { DynamicActionPayload } from '../types/electron';
-import { getCodexCliModelDisplayName, litellmModelLabel } from '../utils/modelUtils';
+import { getCodexCliModelDisplayName, gatewayModelLabel, litellmModelLabel } from '../utils/modelUtils';
 import { getModifierSymbol, isMac, isWindows } from '../utils/platformUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
@@ -1937,6 +1937,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // on React's render cycle for stop signals.
   const [stealthTapActive, setStealthTapActive] = useState<boolean>(false);
   const stealthTapActiveRef = useRef<boolean>(false);
+  const caretMirrorRef = useRef<HTMLDivElement>(null);
+  // While the stealth hook is engaged the input is never DOM-focused (always
+  // on Windows), so the browser does not scroll it to the insertion point as
+  // text is appended: a sentence longer than the box stays pinned to its start
+  // and the drawn caret runs off past the right edge. Scroll the input to its
+  // end and give the caret mirror the same offset, so the glyphs and the caret
+  // shift together and the caret stays on the last character.
+  useLayoutEffect(() => {
+    const input = textInputRef.current;
+    const mirror = caretMirrorRef.current;
+    if (!stealthTapActive || !input || !mirror) return;
+    input.scrollLeft = input.scrollWidth;
+    mirror.scrollLeft = input.scrollLeft;
+  }, [stealthTapActive, inputValue]);
   // True when the click-to-engage stealth path is safe. False when an IME
   // (Pinyin / Hangul / Kanji / …) is enabled in macOS HIToolbox: the tap
   // captures below the IME so composition would never reach the chat box.
@@ -5690,10 +5704,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // from registerStreamingNode's mount-time call (and from
       // ensureRevealTicker on a fresh msgId) — i.e. on the very first paint
       // of the streaming node, before any token has arrived. At that moment
-      // the node's only children are the React-rendered blinking-dot
+      // the node's only children are the React-rendered thinking-label
       // indicator (see the `!msg.text` branch in renderMessageText); wiping
       // to '' here destroyed it before the browser ever got a frame to
-      // paint it, so the "thinking" dot never visibly appeared. There is no
+      // paint it, so the "Thinking..." label never visibly appeared. There is no
       // stale content to clear: this div is freshly mounted per message
       // (key="streaming" forces a full unmount on the PREVIOUS row when it
       // finalizes), so leaving existing children alone is always correct.
@@ -8459,14 +8473,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               },
             ]);
           } else {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: genMessageId(),
-                role: 'system',
-                text: '⚠️ No speech detected. Try speaking closer to your microphone.',
-              },
-            ]);
+            // Issue #540: a healthy but silent mic (listening through headphones,
+            // Bluetooth or USB) means the user wants the other party answered.
+            // Hand off to What to Answer, which reads main's speaker-labelled
+            // transcript (recency window, question extraction, interim guard) and
+            // says so itself when there is nothing to answer. A failed or
+            // reconnecting mic keeps its diagnostic above instead. Read through
+            // handlersRef: this closure is from the Stop press, before the tail
+            // wait. Not awaited, so the Answer lock is released immediately.
+            void handlersRef.current.handleWhatToSay();
           }
           return;
         }
@@ -8887,9 +8902,9 @@ Provide only the answer, nothing else.`;
         // (a plain setMessages), never paintRevealedNow — nothing imperative
         // writes to the ref node in this mode anymore. Reusing that branch
         // would render blank the moment msg.text becomes non-empty (its
-        // isThinking flips false, killing the dots, with no React child to
+        // isThinking flips false, killing the label, with no React child to
         // fill the gap). Render straight off msg.text/React state instead —
-        // dots while still empty, paced text + cursor once content has
+        // the label while still empty, paced text + cursor once content has
         // arrived — the SAME shape (raw text + sibling cursor span, not
         // ReactMarkdown) as the "handoff gap" block further below. Raw text
         // is deliberate, not a shortcut: ReactMarkdown wraps text in a
@@ -8908,7 +8923,7 @@ Provide only the answer, nothing else.`;
         // React RECONCILE instead of unmount when this branch takes over
         // from the imperative one — i.e. diff this branch's real React
         // children against the imperative div's last-known-to-React
-        // children (typically the dots, since msg.text/React state never
+        // children (typically the label, since msg.text/React state never
         // changes during imperative-mode streaming). But the imperative
         // div's ACTUAL dom contents were long since overwritten out-of-band
         // by paintRevealedNow's `node.innerHTML = ...` (math-aware rendered output)
@@ -8931,9 +8946,7 @@ Provide only the answer, nothing else.`;
             >
               {isThinking ? (
                 <div className="flex items-center min-h-[24px] py-0.5">
-                  <div
-                    className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
-                  />
+                  <span className="natively-thinking-label text-[13px]">{t('Thinking...')}</span>
                 </div>
               ) : (
                 msg.text
@@ -8962,38 +8975,39 @@ Provide only the answer, nothing else.`;
               className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed natively-streaming-answer"
             >
               {/*
-               * Blinking-dot indicator INSIDE the streaming bubble. Renders
+               * Shimmering "Thinking..." label INSIDE the streaming bubble. Renders
                * while no tokens have arrived yet (text === ''). When the first
                * token lands, queueToken's mid-stream path does
                *   streamingNodeRef.current.textContent = streamingTextRef.current
                * which REPLACES these React-rendered children with a text node,
                * and the subsequent RAF replaces that with math-aware rendered HTML.
                *
-               * React's fiber still thinks the children are these dots — but
+               * React's fiber still thinks the child is this label — but
                * because we never re-trigger the streaming branch with
                * different JSX while text is flowing, no reconciliation kicks
                * in and the imperative DOM persists. Once the row finalizes,
-               * key="streaming" causes a full unmount, so the dots-vs-text
+               * key="streaming" causes a full unmount, so the label-vs-text
                * discrepancy never causes a reconciliation conflict.
                *
                * The outer div's className must stay constant across isThinking
                * — it is never re-rendered by React while tokens stream in (the
                * imperative writes above bypass reconciliation), so any
                * isThinking-conditional class here would freeze at whichever
-               * value was present on first paint. The dot's own layout
-               * (flex/items-center) lives on the inner wrapper below instead,
+               * value was present on first paint. That is also why the label
+               * takes its colours from the --overlay-text-* tokens in CSS
+               * rather than from the `isLightTheme` prop: the class string
+               * here stays constant, so there is nothing to freeze. Its
+               * layout (flex/items-center) lives on the inner wrapper below,
                * which unmounts cleanly once real text arrives.
                *
-               * Placing the dot INSIDE the bubble (instead of as a separate
+               * Placing the label INSIDE the bubble (instead of as a separate
                * pill below the message list) gives the classic messaging
-               * "typing indicator" UX — the dot appears where the answer
+               * "typing indicator" UX — the word appears where the answer
                * will, then smoothly hands off to the answer text.
                */}
               {!msg.text && (
                 <div className="flex items-center min-h-[24px] py-0.5">
-                  <div
-                    className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
-                  />
+                  <span className="natively-thinking-label text-[13px]">{t('Thinking...')}</span>
                 </div>
               )}
             </div>
@@ -9358,7 +9372,11 @@ Provide only the answer, nothing else.`;
         </div>
       );
     },
-    [isLightTheme, mdComponents, appearance],
+    // `t` is useCallback(..., [lang]) in i18n.tsx — its identity is stable
+    // across renders and changes only on a language switch, so listing it
+    // keeps the thinking label translatable without costing MessageRow its
+    // React.memo bailout (which compares this callback by identity).
+    [isLightTheme, mdComponents, appearance, t],
   );
 
   // We use a ref to hold the latest handlers to avoid re-binding the event listener on every render
@@ -10921,13 +10939,13 @@ Provide only the answer, nothing else.`;
                   )}
 
                   {/*
-                   * Blinking-dot "AI is thinking" indicator (no card chrome —
+                   * Shimmering "Thinking..." indicator (no card chrome —
                    * see `.ai-response-card` neutralization in index.css).
                    * Gated on `!hasStreamingPlaceholder` so it never co-exists
                    * with a streaming system row, which already renders its own
-                   * identical single-dot indicator inside `renderMessageText`
+                   * identical label inside `renderMessageText`
                    * (the `isThinking` branch there). Without this gate the
-                   * user would see TWO dot indicators during the wait — one
+                   * user would see the word TWICE during the wait — one
                    * per surface — even though neither has a visible bubble to
                    * "double up" with anymore.
                    *
@@ -10941,9 +10959,7 @@ Provide only the answer, nothing else.`;
                       (m) => m.role === 'system' && m.isStreaming,
                     ) && (
                     <div className="flex justify-start my-2.5 min-h-[24px] items-center">
-                      <div
-                        className={`natively-thinking-dot w-2 h-2 ${isLightTheme ? 'bg-slate-400' : 'bg-white'} rounded-full`}
-                      />
+                      <span className="natively-thinking-label text-[13px]">{t('Thinking...')}</span>
                     </div>
                   )}
                   <div ref={messagesEndRef} />
@@ -11443,6 +11459,29 @@ Provide only the answer, nothing else.`;
                     style={appearance.inputStyle}
                   />
 
+                  {/* Stealth-typing caret. While the hook is engaged the input
+                      is readOnly and — on Windows — never DOM-focused, so the
+                      OS paints no caret and the box reads as dead even though
+                      keystrokes ARE arriving via StealthKeyboardManager. Mirror
+                      the text invisibly to occupy the same width, then draw a
+                      blinking pipe after it. Pointer-events:none so it can
+                      never intercept the click that engages the tap.
+                      No `appearance.inputStyle` here: that carries the input's
+                      semi-transparent background, and this layer sits ON TOP
+                      of the input, so it veiled the typed text for the whole
+                      session — dim while engaged, full contrast the moment the
+                      session ended (clicking another app). */}
+                  {stealthTapActive && (
+                    <div
+                      ref={caretMirrorRef}
+                      aria-hidden="true"
+                      className="nat-caret-mirror pl-3 pr-10 py-2.5 text-[13px] leading-relaxed"
+                    >
+                      <span className="nat-caret-text">{inputValue}</span>
+                      <span className="nat-caret" />
+                    </div>
+                  )}
+
                   {/* Skill picker — portal so it escapes the overflow-hidden shell */}
                   {filteredSkills.length > 0 && skillPickerQuery !== null &&
                     createPortal(
@@ -11531,6 +11570,20 @@ Provide only the answer, nothing else.`;
                           // verbatim for LiteLLM, so that path would render the
                           // full id and this chip is a 140px truncating control.
                           if (m.startsWith('litellm/')) return litellmModelLabel(m);
+                          // 9Router stacks the same two prefixes — ours and the
+                          // instance's upstream namespace — so a raw id reads
+                          // `ninerouter/minimax/MiniMax-M3`. Same position rule as
+                          // LiteLLM above: getCurrentModelDisplayName() returns
+                          // currentModelId verbatim for a gateway, so below the
+                          // displayName branch this chip renders the whole id.
+                          if (m.startsWith('ninerouter/')) return gatewayModelLabel(m);
+                          // The managed route. LLMHelper.getCurrentModelDisplayName()
+                          // returns the id verbatim for it, so the displayName branch
+                          // below cannot name it and the chip fell through to `return m`
+                          // and rendered a lowercase "natively" — the one label a trial
+                          // user sees for the whole trial. 'Natively API' is what the
+                          // model picker and every settings row already call it.
+                          if (m === 'natively') return 'Natively API';
                           // For everything else, prefer the authoritative
                           // displayName from `getCurrentLlmConfig` (handles
                           // custom-provider UUIDs and any future model aliases
@@ -11547,11 +11600,14 @@ Provide only the answer, nothing else.`;
                           if (m === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
                           if (m === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
                           if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
+                          if (m === 'qwen/qwen3.8-27b') return 'Groq Qwen 3.8';
                           if (m === 'qwen/qwen3.6-27b') return 'Groq Qwen 3.6';
                           if (m === 'openai/gpt-oss-120b') return 'Groq GPT-OSS 120B';
                           if (m === 'openai/gpt-oss-20b') return 'Groq GPT-OSS 20B';
                           if (m === 'gpt-5.4') return 'GPT 5.4';
                           if (m === 'claude-sonnet-4-6') return 'Sonnet 4.6';
+                          // Retired 2026-09-10; DeepSeek serves it as deepseek-flash (V4.1).
+                          if (m === 'deepseek-v4-flash') return 'DeepSeek V4.1 Flash';
                           return m;
                         })()}
                       </span>

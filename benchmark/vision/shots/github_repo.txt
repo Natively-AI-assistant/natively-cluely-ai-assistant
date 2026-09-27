@@ -1,0 +1,251 @@
+Skip to content
+Navigation Menu
+Platform
+AI CODE CREATION
+GitHub Copilot
+Write better code with AI
+GitHub Copilot app
+Direct agents from issue to merge
+MCP Registry
+Integrate external tools
+DEVELOPER WORKFLOWS
+Actions
+Automate any workflow
+Codespaces
+Instant dev environments
+Issues
+Plan and track work
+Code Review
+Manage code changes
+Code Quality
+Enforce quality at merge
+APPLICATION SECURITY
+GitHub Advanced Security
+Find and fix vulnerabilities
+Code security
+Secure your code as you build
+Secret protection
+Stop leaks before they start
+EXPLORE
+Why GitHub
+Documentation
+Blog
+Changelog
+Marketplace
+View all features
+Solutions
+BY COMPANY SIZE
+Enterprises
+Small and medium teams
+Startups
+Nonprofits
+BY USE CASE
+App Modernization
+DevSecOps
+DevOps
+CI/CD
+View all use cases
+BY INDUSTRY
+Healthcare
+Financial services
+Manufacturing
+Government
+View all industries
+View all solutions
+Resources
+EXPLORE BY TOPIC
+AI
+Software Development
+DevOps
+Security
+View all topics
+EXPLORE BY TYPE
+Customer stories
+Events & webinars
+Ebooks & reports
+Business insights
+GitHub Skills
+SUPPORT & SERVICES
+Documentation
+Customer support
+Community forum
+Trust center
+Partners
+View all resources
+Open Source
+COMMUNITY
+GitHub Sponsors
+Fund open source developers
+PROGRAMS
+Security Lab
+Maintainer Community
+GitHub Stars
+Archive Program
+REPOSITORIES
+Topics
+Trending
+Collections
+Enterprise
+ENTERPRISE SOLUTIONS
+Enterprise platform
+AI-powered developer platform
+AVAILABLE ADD-ONS
+GitHub Advanced Security
+Enterprise-grade security features
+Copilot for Business
+Enterprise-grade AI features
+Premium Support
+Enterprise-grade 24/7 support
+Pricing
+Search
+/
+Sign in
+Sign up
+expressjs
+/
+express
+Public
+Sponsor
+Notifications
+Fork
+25k
+Star
+69.5k
+Code
+Issues
+107
+Pull requests
+123
+Discussions
+Actions
+Wiki
+Security and quality
+3
+Insights
+master
+16
+Branches
+305
+Tags
+Code
+Latest commit
+cuishuang
+fix(res.send): preserve ETag generation with Transfer-Encoding (
+#7459
+)
+9a34acf
+·
+Sep 15, 2026
+History
+6,170 Commits
+Folders and files
+.github
+ci: add npm staged publication with dist-tag support (
+#7464
+)
+Sep 13, 2026
+examples
+docs: replace dummy with placeholder in example comments (
+#7064
+)
+Mar 1, 2026
+lib
+fix(res.send): preserve ETag generation with Transfer-Encoding (
+#7459
+)
+Sep 15, 2026
+test
+fix(res.send): preserve ETag generation with Transfer-Encoding (
+#7459
+)
+Sep 15, 2026
+.editorconfig
+fix(docs): Update multiple links to use
+https
+instead of
+http
+(
+#6338
+Feb 14, 2025
+.eslintignore
+lint: add eslint rules that cover editorconfig
+Aug 6, 2017
+.eslintrc.yml
+chore: enforce explicit Buffer import and add lint rule (
+#6525
+)
+Jun 28, 2025
+.gitignore
+chore: update git rules to ignore
+yarn.lock
+file (
+#6588
+)
+Aug 20, 2025
+.npmrc
+chore: ensure safe config in the npmrc (
+#7144
+)
+May 17, 2026
+History.md
+deps: bump body-parser to ^2.3.0 to fix
+CVE-2026-12590
+(
+#7390
+)
+Aug 22, 2026
+LICENSE
+Merge tag '3.20.0'
+Feb 19, 2015
+Readme.md
+docs: fix capitalization of GitHub Discussions in Readme (
+#7426
+)
+Sep 11, 2026
+index.js
+perf: enable strict mode
+Jun 19, 2015
+package.json
+build(deps-dev): bump morgan from 1.11.0 to 1.12.0 (
+#7461
+)
+Sep 8, 2026
+About
+Fast, unopinionated, minimalist web framework for node.
+expressjs.com
+Topics
+express
+javascript
+nodejs
+server
+Resources
+Readme
+MIT license
+Code of conduct
+Code of conduct
+Contributing
+Contributing
+Security policy
+Security policy
+Activity
+Custom properties
+Stars
+69.5k
+stars
+Watchers
+1.7k
+watching
+Forks
+25.0k
+forks
+Report repository
+Releases
+166
+(
+166
+)
+v5.2.1
+Latest
+Dec 1, 2025
++ 165 releases
+Sponsor this project

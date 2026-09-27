@@ -1,0 +1,51 @@
+/* ── Learn more hover (transitions.dev 24) ────────────────────────────────
+   Verbatim from .claude/skills/transitions-dev/24-learn-more-hover.md.
+   Used by HowItWorksRefund's "Watch demo", "Open" and "Email" actions: the
+   chevron slides toward the reading direction and its arms spread into an
+   arrow. Hover-only; focus and touch keep the resting chevron, so nothing is
+   communicated by the motion alone. Scoped to this component's file rather
+   than index.css so it ships with the only thing that uses it. */
+:root {
+  --learn-shift: 2px;
+  --learn-spread: 8deg;
+  --learn-in: 350ms;
+  --learn-out: 350ms;
+  --learn-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.t-learn-chevron {
+  display: inline-flex;
+  transform: translateX(0);
+  transition: transform var(--learn-out) var(--learn-ease);
+}
+.t-learn-arm {
+  transform-box: view-box;
+  transform-origin: 10px 8px;
+  vector-effect: non-scaling-stroke;
+  transition: transform var(--learn-out) var(--learn-ease);
+}
+.t-learn:hover .t-learn-chevron { transform: translateX(var(--learn-shift)); transition-duration: var(--learn-in); }
+.t-learn:hover .t-learn-arm { transition-duration: var(--learn-in); }
+.t-learn:hover .t-learn-arm-top { transform: rotate(var(--learn-spread)); }
+.t-learn:hover .t-learn-arm-bot { transform: rotate(calc(var(--learn-spread) * -1)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .t-learn-chevron, .t-learn-arm { transition: none !important; }
+}
+
+/* ── Sky blue for this section's controls ────────────────────────────────
+   The tab pill, "Watch the demo" and "Manage" share one sky blue. Light theme
+   keeps .lg-sky's own #3a9ff7; dark theme takes the midpoint between that and
+   the darker step LiquidGlassButton.css names (#0972ce) — #2188e2, so the
+   controls don't glare on the dark card without going navy (owner's call;
+   white text there reads 3.69:1). The app always sets data-theme (default
+   'dark', src/main.tsx), so the dark value is the default and light overrides
+   it. */
+:root {
+  --hiw-sky: #2188e2;
+  --hiw-sky-hover: #3398f0;
+}
+[data-theme='light'] {
+  --hiw-sky: #3a9ff7;
+  --hiw-sky-hover: #4dacff;
+}

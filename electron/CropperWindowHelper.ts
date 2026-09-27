@@ -1,5 +1,8 @@
-import { BrowserWindow, screen, app, ipcMain, IpcMainEvent } from "electron"
+import { BrowserWindow, screen, app, ipcMain, IpcMainEvent, globalShortcut } from "electron"
 import path from "node:path"
+import { setVisibleOnAllWorkspacesKeepingDock } from "./utils/macDockPolicy"
+import { attachNoActivate } from "./utils/windowsFocusPolicy"
+import { DEV_SERVER_URL } from './devServerUrl';
 
 // Force production mode if running as packaged app — matches WindowHelper.ts's
 // isDev predicate. A stray NODE_ENV=development in a packaged launch's
@@ -8,7 +11,7 @@ import path from "node:path"
 const isDev = process.env.NODE_ENV === "development" && !app.isPackaged
 
 const startUrl = isDev
-    ? "http://127.0.0.1:5180"
+    ? DEV_SERVER_URL
     : `file://${path.join(app.getAppPath(), "dist/index.html")}`
 
 /**
@@ -22,8 +25,16 @@ const CROPPER_CONFIG = {
     /** Delay in ms before setting opacity to 1 (Windows opacity shield) */
     OPACITY_DELAY_MS: parseInt(process.env.CROPPER_OPACITY_DELAY || '60', 10),
 
-    /** Window type for the cropper window */
+    /** Window type for the cropper window (Linux; macOS uses MAC_WINDOW_TYPE) */
     WINDOW_TYPE: 'toolbar' as const,
+
+    /**
+     * macOS window type. Electron ignores 'toolbar' on macOS (a plain
+     * NSWindow), and a plain window can only cover another app's fullscreen
+     * Space after an activation-policy flip — the flip that left duplicate
+     * Dock tiles (utils/macDockPolicy.ts). An NSPanel covers it with no flip.
+     */
+    MAC_WINDOW_TYPE: 'panel' as const,
 
     /** Maximum retries for loading cropper URL */
     MAX_LOAD_RETRIES: 3,
@@ -96,9 +107,17 @@ function getCombinedDisplayBounds(): Electron.Rectangle {
  * The correction is additive — darwin gains the flag, win32 keeps it — so this
  * function changes NOTHING on Windows. See the inline note at the gate.
  *
- * `type: 'toolbar'` stays on every non-win32 platform exactly as before — it is
- * load-bearing for the macOS NSPanel stealth path (see createWindow), and Linux
- * has always received it.
+ * WINDOW TYPE — macOS gets `type: 'panel'`; Linux keeps `'toolbar'`; win32 gets
+ * none. Electron ignores 'toolbar' on macOS, so the cropper used to be a plain
+ * NSWindow there (and applyStealthToWindow's NSPanel-only attributes were
+ * no-ops on it). A plain window only covered another app's fullscreen Space
+ * because setVisibleOnAllWorkspaces flipped the activation policy — the flip
+ * behind the duplicate Dock tiles. As a panel it covers the fullscreen Space with
+ * no flip, and show() no longer activates the app. Verified on the real build
+ * over a real fullscreen app (2026-09-23), normal and undetectable mode: the
+ * cropper shows on that Space, Esc cancels, a drag captures the app's pixels.
+ * ElectronNSPanel subclasses ElectronNSWindow, so enableLargerThanScreen (below)
+ * still applies.
  */
 export function buildCropperWindowSettings(
     combinedBounds: Electron.Rectangle,
@@ -127,7 +146,9 @@ export function buildCropperWindowSettings(
         }
     };
 
-    if (platform !== 'win32') {
+    if (platform === 'darwin') {
+        settings.type = CROPPER_CONFIG.MAC_WINDOW_TYPE;
+    } else if (platform !== 'win32') {
         settings.type = CROPPER_CONFIG.WINDOW_TYPE;
     }
 
@@ -180,6 +201,7 @@ export class CropperWindowHelper {
     private isUndetectable: boolean = false;
     private isWaitingForSelection: boolean = false;
     private isDisposed: boolean = false;
+    private isEscapeRegistered: boolean = false;
 
     // IPC listener references for cleanup
     private readonly confirmedListener: (event: IpcMainEvent, bounds: unknown) => void;
@@ -246,11 +268,55 @@ export class CropperWindowHelper {
         this.beforeQuitHandler = () => {
             if (!this.isDisposed) {
                 console.log('[CropperWindowHelper] before-quit: auto-disposing IPC listeners');
+                this.unregisterEscapeShortcut();
                 ipcMain.removeListener('cropper-confirmed', this.confirmedListener);
                 ipcMain.removeListener('cropper-cancelled', this.cancelledListener);
             }
         };
         app.on('before-quit', this.beforeQuitHandler);
+    }
+
+    /**
+     * On Windows, the cropper is placed under WS_EX_NOACTIVATE and never receives
+     * keyboard focus so the user's foreground app (Zoom / Chrome) never loses focus.
+     * We temporarily register a global Escape hotkey while waiting for selection
+     * so the user can cancel without having to click or focus the cropper (Issue #518).
+     */
+    private registerEscapeShortcut(): void {
+        if (process.platform !== 'win32') return;
+        if (this.isEscapeRegistered) return;
+        try {
+            if (typeof globalShortcut !== 'undefined' && globalShortcut && typeof globalShortcut.register === 'function') {
+                if (typeof globalShortcut.isRegistered === 'function' && globalShortcut.isRegistered('Escape')) {
+                    return;
+                }
+                const registered = globalShortcut.register('Escape', () => {
+                    console.log('[CropperWindowHelper] Escape captured via globalShortcut');
+                    this.rejectCurrentSelection(null);
+                    this.hideOrClose();
+                });
+                this.isEscapeRegistered = registered;
+                if (!registered) {
+                    // Another app holds Escape. The no-activate cropper never gets
+                    // keyboard focus, so it can now only be dismissed by the timeout.
+                    console.warn('[CropperWindowHelper] Could not register global Escape (held by another app?) — cancel falls back to the selection timeout');
+                }
+            }
+        } catch (e) {
+            console.error('[CropperWindowHelper] Failed to register global Escape shortcut:', e);
+        }
+    }
+
+    private unregisterEscapeShortcut(): void {
+        if (!this.isEscapeRegistered) return;
+        try {
+            if (typeof globalShortcut !== 'undefined' && globalShortcut && typeof globalShortcut.unregister === 'function') {
+                globalShortcut.unregister('Escape');
+            }
+        } catch (e) {
+            console.error('[CropperWindowHelper] Failed to unregister global Escape shortcut:', e);
+        }
+        this.isEscapeRegistered = false;
     }
 
     /**
@@ -319,6 +385,7 @@ export class CropperWindowHelper {
      * Protection against multiple resolve/reject calls.
      */
     private resolveCurrentSelection(bounds: Electron.Rectangle | null): void {
+        this.unregisterEscapeShortcut();
         if (!this.isWaitingForSelection) {
             console.warn('[CropperWindowHelper] resolveCurrentSelection called but not waiting for selection');
             return;
@@ -336,6 +403,7 @@ export class CropperWindowHelper {
      * Protection against multiple resolve/reject calls.
      */
     private rejectCurrentSelection(reason?: unknown): void {
+        this.unregisterEscapeShortcut();
         if (!this.isWaitingForSelection) {
             console.warn('[CropperWindowHelper] rejectCurrentSelection called but not waiting for selection');
             return;
@@ -403,6 +471,7 @@ export class CropperWindowHelper {
         }
 
         this.isWaitingForSelection = true;
+        this.registerEscapeShortcut();
 
         return new Promise((resolve, reject) => {
             // Set up selection timeout
@@ -489,17 +558,31 @@ export class CropperWindowHelper {
      *
      * HOW:
      * 1. Set opacity to 0 (invisible to eye, but "active" for DWM)
-     * 2. Show window
+     * 2. Show window via showInactive() on Windows (never activating show())
      * 3. Apply protection flag
      * 4. Delay to let DWM process the flag
-     * 5. Set opacity to 1
+     * 5. Set opacity to 1 (do NOT call focus() on Windows; Issue #518)
      */
     private applyOpacityShield(): void {
         if (!this.cropperWindow || this.isDisposed) return;
 
         if (process.platform === 'win32') {
             this.cropperWindow.setOpacity(0);
-            this.cropperWindow.show();
+            if (typeof this.cropperWindow.showInactive === 'function') {
+                this.cropperWindow.showInactive();
+            } else {
+                this.cropperWindow.show();
+            }
+            // showInactive() is SW_SHOWNOACTIVATE, which is not expected to change
+            // the z-order, and nothing activates the window any more to raise it.
+            // The cropper is preloaded at startup, so any always-on-top window
+            // shown since then (Zoom's share toolbar, say) would sit above it.
+            // moveTop() raises it without activating (SWP_NOACTIVATE).
+            try {
+                this.cropperWindow.moveTop();
+            } catch (e) {
+                console.error('[CropperWindowHelper] moveTop failed:', e);
+            }
             this.cropperWindow.setContentProtection(this.isUndetectable);
 
             // NOTE: Do NOT call maximize() - it limits to current monitor on Windows
@@ -509,7 +592,8 @@ export class CropperWindowHelper {
             this.opacityTimeout = setTimeout(() => {
                 if (this.cropperWindow && !this.cropperWindow.isDestroyed() && !this.isDisposed) {
                     this.cropperWindow.setOpacity(1);
-                    this.cropperWindow.focus();
+                    // Issue #518: Do NOT call focus() on Windows! Calling focus()
+                    // deactivates the user's foreground app and emits blur/focus events.
                 }
             }, CROPPER_CONFIG.OPACITY_DELAY_MS);
         } else {
@@ -601,6 +685,11 @@ export class CropperWindowHelper {
 
         this.cropperWindow = new BrowserWindow(windowSettings)
 
+        // Issue #518: apply WS_EX_NOACTIVATE on Windows right after construction
+        // while the window is still hidden, so clicking or dragging the cropper
+        // never activates Natively or steals foreground focus from Chrome/Zoom.
+        attachNoActivate(this.cropperWindow);
+
         // Apply NSPanel stealth attributes (becomesKeyOnlyIfNeeded +
         // _setPreventsActivation: SPI + sharingType=None + collectionBehavior).
         // Cropper opens during meetings via Cmd+Shift+H — without this, the
@@ -628,7 +717,7 @@ export class CropperWindowHelper {
         }
 
         if (process.platform === "darwin") {
-            this.cropperWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+            setVisibleOnAllWorkspacesKeepingDock(this.cropperWindow, true, true)
             this.cropperWindow.setAlwaysOnTop(true, "screen-saver")
         }
 
@@ -665,7 +754,7 @@ export class CropperWindowHelper {
         // the cropper, not the overlay's hidden chat input. Same rationale
         // as Settings + Model Selector.
         this.cropperWindow.on('show', () => {
-            if (process.platform !== 'darwin') return;
+            if (process.platform !== 'darwin' && process.platform !== 'win32') return;
             try {
                 // eslint-disable-next-line @typescript-eslint/no-var-requires
                 const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
@@ -676,6 +765,7 @@ export class CropperWindowHelper {
         });
 
         this.cropperWindow.on('closed', () => {
+            this.unregisterEscapeShortcut();
             // Protect against race condition: window closed after successful selection
             if (this.isWaitingForSelection) {
                 this.rejectCurrentSelection(null);
@@ -722,6 +812,7 @@ export class CropperWindowHelper {
     }
 
     private hideOrClose(): void {
+        this.unregisterEscapeShortcut();
         if (this.cropperWindow && !this.cropperWindow.isDestroyed() && !this.isDisposed) {
             if (process.platform === 'linux') {
                 // Linux: close and recreate each time (no preload strategy on Linux)
@@ -759,6 +850,7 @@ export class CropperWindowHelper {
 
         console.log('[CropperWindowHelper] Disposing...');
         this.isDisposed = true;
+        this.unregisterEscapeShortcut();
 
         // Clear opacity timeout with safety check
         if (this.opacityTimeout) {

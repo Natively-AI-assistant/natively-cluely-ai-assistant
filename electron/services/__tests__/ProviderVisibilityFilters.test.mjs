@@ -112,13 +112,13 @@ test('reconciliation installs nothing when every candidate is filtered out', () 
 
 test('the renderer picker and main-process routing agree on family names', () => {
     const ipcFamilies = new Set(
-        [...modelAvailableSource().matchAll(/'([a-z-]+)'/g)].map((m) => m[1]),
+        [...modelAvailableSource().matchAll(/'([a-z_-]+)'/g)].map((m) => m[1]),
     );
     const ipcAll = new Set(
-        [...read(IPC).matchAll(/return '([a-z-]+)';/g)].map((m) => m[1]),
+        [...read(IPC).matchAll(/return '([a-z_-]+)';/g)].map((m) => m[1]),
     );
     const rendererFamilies = new Set(
-        [...read(SETTINGS).matchAll(/isProviderEnabled\('([a-z-]+)'\)/g)].map((m) => m[1]),
+        [...read(SETTINGS).matchAll(/isProviderEnabled\('([a-z_-]+)'\)/g)].map((m) => m[1]),
     );
 
     // Every family the renderer hides must be one the main process can also
@@ -138,17 +138,42 @@ test('every provider with a UI toggle is a family the main process can classify'
     // The five cloud providers are rendered from a table now, so their toggles call
     // handleToggleProvider(id, ...) with a VARIABLE — the literals only remain for the
     // bespoke cards. Read both sources, or this silently stops covering the cloud five.
-    const fromLiterals = [...settings.matchAll(/handleToggleProvider\('([a-z-]+)'/g)].map(m => m[1]);
+    // `[a-z_-]+`, NOT `[a-z-]+`. The narrower class silently skipped every
+    // family with an underscore, so `nvidia_nim` was invisible to this guard for
+    // its whole life — the table already held SIX providers while the count
+    // below asserted five and passed. Both sides are widened together; narrowing
+    // either one again re-opens the hole.
+    const fromLiterals = [...settings.matchAll(/handleToggleProvider\('([a-z_-]+)'/g)].map(m => m[1]);
     const tableMatch = settings.match(/export const CLOUD_PROVIDERS = \[([\s\S]*?)\n\];/);
     assert.ok(tableMatch, 'CLOUD_PROVIDERS table should exist — the cloud cards render from it');
-    const fromTable = [...tableMatch[1].matchAll(/id:\s*'([a-z-]+)'/g)].map(m => m[1]);
+    const fromTable = [...tableMatch[1].matchAll(/id:\s*'([a-z_-]+)'/g)].map(m => m[1]);
 
     const toggled = new Set([...fromLiterals, ...fromTable]);
     const ipcAll = new Set(
-        [...read(IPC).matchAll(/return '([a-z-]+)';/g)].map((m) => m[1]),
+        [...read(IPC).matchAll(/return '([a-z_-]+)';/g)].map((m) => m[1]),
     );
 
-    assert.ok(fromTable.length === 5, `expected 5 cloud providers in the table, got ${fromTable.length}`);
+    // The MEMBERSHIP, not a bare count. This assertion has been wrong twice: it
+    // read `=== 5` against a six-row table (the underscore bug above), then
+    // `=== 7` needed a hand-edit the moment an eighth card landed. A number
+    // records how many providers there were, which is not the thing worth
+    // pinning — the set records WHICH, so a silently dropped card names itself
+    // in the diff instead of showing up as "expected 8, got 7".
+    assert.deepEqual(
+        [...fromTable].sort(),
+        ['claude', 'deepseek', 'fluxion', 'gemini', 'groq', 'nvidia_nim', 'openai', 'openrouter'],
+        'CLOUD_PROVIDERS membership changed — every id here must also be a '
+        + "`return '<family>';` in ipcHandlers.ts providerFamily(), which the "
+        + 'assertions below check.',
+    );
+    // Still named explicitly: the gateway-shaped providers are exactly the ones
+    // the old regex could not see, and these three are the ones whose
+    // misclassification would bill a request to the WRONG VENDOR'S KEY. Fluxion
+    // is the sharpest case — it resells the real vendors, so its ids are not
+    // look-alikes but byte-identical to Anthropic's and OpenAI's own.
+    for (const required of ['nvidia_nim', 'openrouter', 'fluxion']) {
+        assert.ok(fromTable.includes(required), `${required} should be a cloud provider card`);
+    }
     assert.ok(toggled.size >= 9, `expected at least 9 toggleable families, got ${toggled.size}`);
     for (const family of toggled) {
         assert.ok(

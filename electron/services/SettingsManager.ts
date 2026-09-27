@@ -14,6 +14,10 @@ export interface AppSettings {
     // typing is OFF, closing the residual leak where a dropped RegisterHotKey
     // registration lets a chord's modifier/completing key reach the foreground.
     stealthShortcutGuard?: boolean;
+    // Issue #517: master switch for OS-wide shortcuts. false = only Toggle
+    // Visibility stays global (so a hidden window can always come back); every
+    // other bind works only while Natively is focused. Unset = true.
+    globalShortcutsEnabled?: boolean;
     // Context Intelligence debug logging level (Developer settings). The env
     // var NATIVELY_CONTEXT_DEBUG overrides this — precedence is owned by
     // context-intelligence/debug/debug-config.ts, which reads this value
@@ -145,6 +149,7 @@ export interface AppSettings {
         provider?: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'voyage' | 'openai' | 'gemini' | 'local';
         model?: string;
         dimensions?: number;
+        localModelId?: string;
     };
     /**
      * Reranker configuration, independent of BOTH the generation model and the
@@ -160,7 +165,7 @@ export interface AppSettings {
      * This file is plaintext on disk.
      */
     reranker?: {
-        provider?: 'local' | 'natively' | 'openrouter' | 'jina';
+        provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom';
         /**
          * A catalogue id from rag/rerankerModelCatalog.ts, or absent for the
          * bundled model (ms-marco-MiniLM-L-6-v2 as of 2026-09-04 — see
@@ -171,6 +176,7 @@ export interface AppSettings {
         openrouterModel?: string;
         /** Model id for the Jina AI hosted reranker (jina-reranker-v3.5 and friends). */
         jinaModel?: string;
+        voyageModel?: string;
         /**
          * Model id for the Natively-managed reranker. Absent means the one model
          * the API serves — unlike the BYOK providers there is nothing to choose,
@@ -196,6 +202,13 @@ export interface AppSettings {
      * because this file is plaintext on disk.
      */
     customEmbeddingEndpoint?: string;
+    /**
+     * A user-hosted OpenAI/Cohere-compatible reranking endpoint (LM Studio,
+     * TEI, llama.cpp's llama-server, vLLM, Infinity, or local proxy).
+     */
+    customRerankerEndpoint?: string;
+    customRerankerModel?: string;
+    localEmbeddingModelId?: string;
     /**
      * The user chose "Keep MiniLM". Suppresses the lightweight-embedding
      * warning permanently — an unstoppable warning is worse than none, and this
@@ -358,9 +371,21 @@ export class SettingsManager {
             console.warn(`[SettingsManager] Refusing to set "${String(key)}": the settings store is degraded this session (see the quarantine warning at startup).`);
             return false;
         }
+        const hadPreviousValue = Object.prototype.hasOwnProperty.call(this.settings, key);
+        const previousValue = this.settings[key];
         this.settings[key] = value;
-        this.saveSettings();
-        return true;
+        if (this.saveSettings()) return true;
+
+        // A write can fail even when the store loaded successfully (for example,
+        // a locked Windows profile, antivirus holding the destination, or a full
+        // disk). Keep the live process aligned with the last durable value so IPC
+        // callers never broadcast a change that will disappear on restart.
+        if (hadPreviousValue) {
+            this.settings[key] = previousValue;
+        } else {
+            delete this.settings[key];
+        }
+        return false;
     }
 
     // Resolved screen-understanding mode with default and runtime validation.
@@ -565,12 +590,10 @@ export class SettingsManager {
         const migrated = LEGACY_SCREEN_MODE_MIGRATION[raw];
         if (migrated) {
             console.warn(`[SettingsManager] Migrating legacy screenUnderstandingMode "${raw}" → "${migrated}" (OCR runtime path removed)`);
-            this.settings.screenUnderstandingMode = migrated;
-            this.saveSettings();
+            this.set('screenUnderstandingMode', migrated);
         } else {
             console.warn(`[SettingsManager] Unknown legacy screenUnderstandingMode "${raw}" — defaulting to vision_first`);
-            this.settings.screenUnderstandingMode = 'vision_first';
-            this.saveSettings();
+            this.set('screenUnderstandingMode', 'vision_first');
         }
     }
 
@@ -628,13 +651,13 @@ export class SettingsManager {
         }
     }
 
-    private saveSettings(): void {
+    private saveSettings(): boolean {
         if (this.settingsUnreadable) {
             console.warn('[SettingsManager] Refusing to save: settings.json was unreadable and could not be quarantined, so writing would overwrite it with an incomplete set. Repair or remove the file, then restart.');
-            return;
+            return false;
         }
+        const tmpPath = this.settingsPath + '.tmp';
         try {
-            const tmpPath = this.settingsPath + '.tmp';
             // R-15: write + fsync + rename. Without the fsync the rename could be
             // durable while the DATA was still in the page cache, so a power loss
             // left a 0-byte settings.json — which is exactly the input that used to
@@ -649,8 +672,16 @@ export class SettingsManager {
                 fs.closeSync(fd);
             }
             fs.renameSync(tmpPath, this.settingsPath);
+            return true;
         } catch (e) {
             console.error('[SettingsManager] Failed to save settings:', e);
+            try {
+                if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+            } catch {
+                // Best-effort cleanup only; the original settings file remains
+                // authoritative and the caller receives false either way.
+            }
+            return false;
         }
     }
 }

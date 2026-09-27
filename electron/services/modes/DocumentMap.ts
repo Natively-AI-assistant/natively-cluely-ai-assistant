@@ -2,6 +2,7 @@
 //
 // Document Map for document-grounded custom modes (round-6 rebuild, 2026-06-29).
 
+import { normalizeLineEndings } from './semanticChunker';
 import { normalizeDocumentGroundedRetrievalQuery } from '../../llm/documentGroundedPrompt';
 import { includesPlannerTerm } from './retrievalTextMatch';
 //
@@ -235,6 +236,8 @@ function detectTocRegion(lines: string[]): { start: number; end: number; count: 
  * and degrades gracefully on plain text without markers.
  */
 export function buildDocumentMap(content: string): DocumentMap {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     const lines = content.split('\n');
     const toc = detectTocRegion(lines);
     const tocStart = toc ? toc.start : -1;
@@ -353,6 +356,8 @@ export function buildDocumentMap(content: string): DocumentMap {
  * consistent delimited table.
  */
 export function tabularChunks(content: string, rowsPerChunk?: number): string[] | null {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
     if (lines.length < 3) return null; // need a header + at least a couple rows
     // Pick the delimiter from the header: comma or tab, whichever splits into >=2

@@ -91,6 +91,19 @@ test('a model that is not bundled does not ride along', () => {
     'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx',
     'Xenova/mobilebert-uncased-mnli/config.json',
     'Xenova/some-future-experiment/onnx/model.onnx',
+    // The 2026-09-21 bake-off downloaded 13 candidates. multilingual-e5-small is
+    // the bundled default (since 2026-09-22); its siblings — including the
+    // briefly-bundled, never-released e5-base, and the 1024d large, which is over
+    // the 500 MiB cap — must not be dragged into an installer by a broadened filter.
+    'Xenova/multilingual-e5-base/onnx/model_quantized.onnx',
+    'Xenova/multilingual-e5-large/onnx/model_quantized.onnx',
+    'Xenova/e5-small-v2/onnx/model_quantized.onnx',
+    'Xenova/bge-large-en-v1.5/onnx/model_quantized.onnx',
+    // The embedder bundled until 2026-09-21. Unshipped 2026-09-22 once nothing
+    // loaded it: a saved MiniLM selection resolves to the bundled model and
+    // old vectors are re-embedded. The reranker's ms-marco-MiniLM stays.
+    'Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx',
+    'Xenova/all-MiniLM-L6-v2/config.json',
   ]) {
     assert.equal(shipped(rel), false, rel + ' would be shipped - the filter is too broad');
   }
@@ -102,4 +115,7 @@ test('the matcher itself works, or this file proves nothing', () => {
   // A prefix that is not a path boundary must not match.
   assert.equal(matches('Xenova/ms-marco/**', 'Xenova/ms-marco-MiniLM-L-6-v2/config.json'), false);
   assert.equal(matches('pipecat-ai/**', 'pipecat-ai/smart-turn-v3/smart-turn-v3.1-cpu.onnx'), true);
+  // Prefix trap: the selected model's glob must not also match its sibling.
+  assert.equal(matches('Xenova/multilingual-e5-small/**', 'Xenova/multilingual-e5-small/onnx/model_quantized.onnx'), true);
+  assert.equal(matches('Xenova/multilingual-e5-small/**', 'Xenova/multilingual-e5-base/onnx/model_quantized.onnx'), false);
 });

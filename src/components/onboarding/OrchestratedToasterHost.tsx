@@ -140,11 +140,11 @@ export const OrchestratedToasterHost: React.FC = () => {
             const res = await window.electronAPI?.startTrial?.();
             if (!res?.ok) throw new Error(res?.error || 'Could not start trial');
             orch.setUserState({ hasTrialToken: true });
-            onDismiss('trial_promo')();
+            // The toaster reports the dismiss itself, once its close has
+            // played: dismissing here would unmount it mid-genie.
           }}
           onManualSetup={() => {
             window.electronAPI?.openSettingsTab?.('api');
-            onDismiss('trial_promo')();
           }}
         />
       );

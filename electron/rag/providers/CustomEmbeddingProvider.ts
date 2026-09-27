@@ -1,3 +1,4 @@
+import { describeProbeError } from './probeError';
 import { IEmbeddingProvider } from './IEmbeddingProvider';
 import { embeddingSpaceKey } from '../embeddingSpace';
 
@@ -169,6 +170,8 @@ export class CustomEmbeddingProvider implements IEmbeddingProvider {
       return true;
     } catch (error: any) {
       if (error?.permanentAuthFailure) throw error;
+      // Say why — see probeError.ts.
+      console.warn(`[CustomEmbeddingProvider] availability probe failed: ${describeProbeError(error)}`);
       return false;
     }
   }

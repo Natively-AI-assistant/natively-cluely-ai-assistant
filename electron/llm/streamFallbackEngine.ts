@@ -294,6 +294,27 @@ export async function closeIteratorBounded(it: AsyncIterator<string> | null, cle
 }
 
 /**
+ * Read up to the first chunk that carries real text. A whitespace-only (or
+ * empty) chunk is not an answer yet, but it is not the absence of one either:
+ * moondream streams "\n" before its first word, and judging the stream on that
+ * chunk alone discarded good answers as 'empty-stream'. Leading whitespace is
+ * held and prepended to the first real chunk so the answer arrives
+ * byte-for-byte. Returns the raw result when the stream ends, or yields a
+ * non-string, before any real text — callers still treat that as empty. Always
+ * awaited inside the caller's first-token budget, so a provider trickling
+ * whitespace cannot stretch it.
+ */
+export async function nextNonBlankChunk(it: AsyncIterator<string>): Promise<IteratorResult<string>> {
+  let held = '';
+  for (;;) {
+    const r = await it.next();
+    if (r.done || typeof r.value !== 'string') return r;
+    if (r.value.trim().length > 0) return { done: false, value: held + r.value };
+    held += r.value;
+  }
+}
+
+/**
  * Hedged open: start `primary`, and if it hasn't produced a first token within
  * an EWMA-derived delay, launch `primary.hedgeWith` IN PARALLEL. The first
  * branch to yield a usable first token wins; the loser is aborted + closed.
@@ -338,7 +359,7 @@ export async function* openHedged(
     outerSignal.addEventListener('abort', onAbort, { once: true });
     const it = p.open(ctrl.signal, attempt)[Symbol.asyncIterator]();
     const branch: Branch = { id: p.id, name: p.name, ctrl, it, started: now(), firstUsable: undefined as any };
-    branch.firstUsable = it.next().then((res) => {
+    branch.firstUsable = nextNonBlankChunk(it).then((res) => {
       if (res.done || typeof res.value !== 'string' || res.value.trim().length === 0) {
         throw new Error('empty-stream');
       }
@@ -507,7 +528,7 @@ export async function* runStreamingFallback(
         it = src[Symbol.asyncIterator]();
 
         // ── Race chunk #1 against the TTFT timeout (the only safe fallback point) ──
-        const firstNext = it.next();
+        const firstNext = nextNonBlankChunk(it);
         firstNext.catch(() => { }); // swallow late rejection if the timeout wins
         let ttftTimer: ReturnType<typeof setTimeout> | null = null;
         // Per-provider TTFT budget when set (e.g. Pro is slower), else config default.

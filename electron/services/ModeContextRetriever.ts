@@ -1,5 +1,6 @@
 import { Mode, ModeReferenceFile } from './ModesManager';
 import { wordsOf } from './modes/lexicalTokens';
+import { normalizeLineEndings } from './modes/semanticChunker';
 import { ModeHybridRetriever, ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
 import { VectorStore } from '../rag/VectorStore';
 import { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
@@ -65,6 +66,8 @@ export interface ModeRetrievalOptions {
      * Absent means the tighter live budget — see rerankBudget.ts.
      */
     rerankSurface?: 'live' | 'manual';
+    /** See ModeHybridRetriever.shouldUseLexicalForLocalManualQuery. */
+    meetingActive?: boolean;
     /**
      * The caller's own race deadline for the whole retrieval, in ms. A rerank
      * whose budget cannot fit inside it is skipped rather than started and
@@ -244,6 +247,8 @@ function levenshtein1(a: string, b: string): boolean {
 }
 
 function chunkText(content: string, fineChunk: boolean = false): string[] {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     // TABULAR data (CSV/TSV) → row-aware chunks with the header repeated, so a
     // query for one entity retrieves its labelled row instead of a giant blob
     // (prose chunkers made the model fabricate dataset figures). Mirror of
@@ -799,6 +804,8 @@ function getCachedDocumentMap(fileId: string, content: string): DocumentMap {
  * then keeps the existing chunkText() path (flat-prose fixtures, slide decks).
  */
 function sectionAwareChunks(fileId: string, content: string): string[] | null {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     const map = getCachedDocumentMap(fileId, content);
     // Delegates to the shared chunker in DocumentMap so the lexical and hybrid
     // retrievers produce identical section-tagged chunks (single source of
@@ -869,6 +876,20 @@ function buildDocumentIdentityBlock(mode: Mode, identities: DocumentIdentity[]):
     lines.push('  </document_identity>');
     return lines.join('\n');
 }
+
+/**
+ * Index states the launch sweep (retryLexicalOnlyFiles) re-indexes.
+ *
+ * `indexing` was missing until 2026-09-22. A persisted `indexing` state at
+ * launch is left over from a process that quit or died mid-index. Live-
+ * reproduced: two files stayed `indexing`, half-embedded, after a relaunch,
+ * because only mode ACTIVATION re-indexes non-ready files and an already-active
+ * mode is never re-activated. Safe even if a file is genuinely mid-index:
+ * ModeHybridRetriever.indexFile is single-flight per file id.
+ *
+ * One exported set: ModesManager used to keep two private copies of it.
+ */
+export const RETRY_ELIGIBLE_INDEX_STATUSES: ReadonlySet<string> = new Set(['lexical_only', 'failed', 'pending', 'indexing']);
 
 export class ModeContextRetriever {
     // Expose helpers for unit testing the fuzzy-matching layer in isolation.
@@ -1702,7 +1723,7 @@ export class ModeContextRetriever {
         for (const file of files) {
             try {
                 const { status } = retriever.getFileIndexStatus(file.id);
-                if (status === 'lexical_only' || status === 'failed' || status === 'pending') {
+                if (RETRY_ELIGIBLE_INDEX_STATUSES.has(status)) {
                     console.log(`[ModeContextRetriever] re-indexing "${file.fileName}" (was ${status})`);
                     await retriever.indexFile(file);
                 }
@@ -1757,11 +1778,37 @@ export class ModeContextRetriever {
         await retriever.indexFile(file);
     }
 
+    /**
+     * True when the file's index was built from different content or an older
+     * chunker version. Index STATUS is read by file id and cannot see the content,
+     * so such a file reads `ready` forever; prewarm asks this as well, which is
+     * where a chunker bump re-indexes — lazily, one mode at a time, on activation
+     * (owner's choice 2026-09-19), never every file of every mode at boot.
+     */
+    referenceFileNeedsReindex(file: ModeReferenceFile): boolean {
+        try { return this.ensureHybridRetriever()?.needsReindexing(file) ?? false; } catch { return false; }
+    }
+
+    /** Corpus arbitration pass-through — see ModeHybridRetriever.probeAnchors. */
+    probeReferenceAnchors(files: ModeReferenceFile[], question: string): boolean {
+        return this.ensureHybridRetriever()?.probeAnchors(files, question) ?? false;
+    }
+
     /** Index status for the Modes Manager UI badge. */
     getReferenceFileIndexStatus(fileId: string): { status: string; chunkCount: number; embeddedChunkCount: number } {
         const retriever = this.ensureHybridRetriever();
         if (!retriever) return { status: 'pending', chunkCount: 0, embeddedChunkCount: 0 };
         return retriever.getFileIndexStatus(fileId);
+    }
+
+    /** See ModeHybridRetriever.pruneFileIndexesByPrefix. */
+    /** See ModeHybridRetriever.usesHostedEmbeddings. */
+    usesHostedEmbeddings(): boolean {
+        try { return this.ensureHybridRetriever()?.usesHostedEmbeddings() === true; } catch { return false; }
+    }
+
+    pruneReferenceFileIndexesByPrefix(prefix: string, keepId: string): number {
+        return this.ensureHybridRetriever()?.pruneFileIndexesByPrefix(prefix, keepId) ?? 0;
     }
 
     /** Drop a deleted file's persisted chunks + index state. */
@@ -1831,6 +1878,7 @@ export class ModeContextRetriever {
             rerankDeadlineMs: options.rerankDeadlineMs,
             rerankPoolMultiplier: options.rerankPoolMultiplier,
             queryEmbedRetryBudgetMs: options.queryEmbedRetryBudgetMs,
+            meetingActive: options.meetingActive,
         });
 
         diagLog('retrieveHybrid() return', { usedFallback: result.usedFallback, usedHybrid: result.usedHybrid, chunkCount: result.chunks?.length, hasContext: !!result.formattedContext });

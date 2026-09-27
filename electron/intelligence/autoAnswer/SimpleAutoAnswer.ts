@@ -99,8 +99,38 @@ export const FALLBACK_INTERROGATIVE = /^(?:(?:ok(?:ay)?|so|and|now|alright|well)
  * the one case that never benefited. Now the ration is TIME, not shape — at
  * most one prefetch per window, so a long meeting cannot spend more than a
  * bounded number of generations no matter how it is phrased.
+ *
+ * 2026-09-22: the time ration is the FLOOR, not the only gate. Live telemetry
+ * (9 automatic answers, Deepgram + gpt-5.6-luna) showed the judge (1.2-2.5 s)
+ * and the answer's first token (0.7-2.7 s) running back to back, because an
+ * interview asks faster than once per 25 s and the ration let the head start
+ * fire for one question in several. A candidate that is question-SHAPED — a
+ * trailing '?' or an interrogative lead ("tell me", "walk me through", "how
+ * would you") — is the high-prior case: those are the asks the judge
+ * overwhelmingly said 'answer' to, so a rejected prefetch is rare there and
+ * the shape now bypasses the ration. Statements and bare declarative tasks
+ * keep it: their prior is low, and the ration is what bounds the spend.
+ * (The engine's own guards — never over a live stream or an existing
+ * speculation — still apply on top, so bypassing cannot stack generations.)
  */
 export const PREFETCH_MIN_INTERVAL_MS = 25_000;
+/**
+ * STT providers whose transcript can be trusted to be caught up when the local
+ * VAD reports the interviewer stopped: they stream interims, so a dangling
+ * interim tells the controller the last words' final is still in flight (see
+ * onLocalSpeechEnd). The rest produce their FINAL from the end of the segment
+ * itself — REST uploads (groq, azure, ibmwatson), OpenAI's whisper-1 REST
+ * fallback, and the local models (their own VAD closes the segment, then
+ * inference runs) — so the stop always precedes the text and would judge the
+ * turn without its last words.
+ */
+export function acceptsLocalSpeechEndHint(sttProvider: string): boolean {
+    return !['none', 'groq', 'azure', 'ibmwatson', 'openai', 'local-whisper'].includes(sttProvider);
+}
+/** The shape that earns an unrationed prefetch: a trailing '?' or an interrogative lead. */
+export function isQuestionShaped(candidate: string): boolean {
+    return /\?\s*$/.test(candidate) || FALLBACK_INTERROGATIVE.test(candidate);
+}
 /**
  * How long after an automatic answer a manual press still counts as "that
  * answer was not good enough". Long enough for the user to read it and
@@ -172,7 +202,12 @@ export interface SimpleAutoAnswerHost {
     /** See answerStreamActive: retired 2026-09-03, supplied but never called. */
     cancelAutomaticAnswer?(reason: 'user_barge_in'): boolean;
     /** The judge call (same hook as V3): raw model reply, parsed here. */
-    judgeCandidate?(req: JudgeRequest): Promise<string | null>;
+    /**
+     * The judge call. `signal` aborts when the controller supersedes the verdict
+     * (more interviewer speech, meeting ended) — the answer would be discarded
+     * anyway, so the provider request should stop costing money and quota.
+     */
+    judgeCandidate?(req: JudgeRequest, signal?: AbortSignal): Promise<string | null>;
     /** Key the engine's speculative cache to this candidate. */
     noteCandidate?(questionId: string, candidateGeneration: number): void;
     /** What the engine currently holds speculatively, for keyed reuse. */
@@ -209,6 +244,8 @@ export class SimpleAutoAnswerEngine {
     private lastInterviewerAt = 0;
     private retryTimer: ClockTimer | null = null;
     private judgeSeq = 0;
+    /** Aborts the judge call in flight; nulled when it settles or is superseded. */
+    private judgeAbort: AbortController | null = null;
     private sequence = 0;
     private lastJudgedKey = '';
     private lastAnsweredText: string | null = null;
@@ -244,6 +281,8 @@ export class SimpleAutoAnswerEngine {
     private bumpJudgeSeq(cause: NonNullable<AutoAnswerTelemetryEvent['supersededBy']>): void {
         this.judgeSeq++;
         this.judgeSeqCause = cause;
+        // The in-flight verdict is superseded — stop paying for it.
+        if (this.judgeAbort) { try { this.judgeAbort.abort(); } catch { /* never break ingest */ } this.judgeAbort = null; }
     }
 
     onMeetingStart(): void { this.reset(); }
@@ -263,6 +302,21 @@ export class SimpleAutoAnswerEngine {
     /** Provider says the interviewer's turn ended: confirm the stop sooner. */
     onProviderEndpoint(): void {
         if (!this.host.isEnabled() || this.pending.length === 0) return;
+        this.arm(ENDPOINT_CONFIRM_MS);
+    }
+
+    /**
+     * The LOCAL VAD (native capture, 150-200 ms hangover) saw the interviewer
+     * stop. Only four STT providers emit their own end-of-turn event; the rest
+     * waited the full STABILITY_MS after the last final even though the
+     * capture layer already knew. Treat the local stop like a provider
+     * endpoint — with one guard: a dangling interim means the final for the
+     * last words has not landed yet, and committing now would judge half a
+     * turn. That final re-arms the window itself when it arrives.
+     */
+    onLocalSpeechEnd(): void {
+        if (!this.host.isEnabled() || this.pending.length === 0) return;
+        if (this.lastInterviewerInterim) return;
         this.arm(ENDPOINT_CONFIRM_MS);
     }
 
@@ -416,7 +470,10 @@ export class SimpleAutoAnswerEngine {
      */
     private maybePrefetch(id: string, candidate: string, now: number): void {
         if (!this.host.prefetchAnswer) return;
-        if (this.lastPrefetchAt !== null && now - this.lastPrefetchAt < PREFETCH_MIN_INTERVAL_MS) return;
+        // Question-shaped asks always get the head start; everything else is
+        // rationed by time. See PREFETCH_MIN_INTERVAL_MS for why both exist.
+        const rationed = this.lastPrefetchAt !== null && now - this.lastPrefetchAt < PREFETCH_MIN_INTERVAL_MS;
+        if (rationed && !isQuestionShaped(candidate)) return;
         this.lastPrefetchAt = now;
         try {
             this.host.prefetchAnswer(id, candidate);
@@ -435,6 +492,11 @@ export class SimpleAutoAnswerEngine {
         if (!this.host.judgeCandidate) {
             outcome = 'absent';
         } else {
+            // One controller per consult. bumpJudgeSeq() aborts it when newer
+            // speech supersedes this verdict; a deadline also aborts it — the
+            // controller has stopped waiting, so the provider may stop working.
+            const abort = new AbortController();
+            this.judgeAbort = abort;
             try {
                 raw = await Promise.race([
                     this.host.judgeCandidate({
@@ -445,16 +507,17 @@ export class SimpleAutoAnswerEngine {
                         modeName: this.host.modeName?.() ?? null,
                         questionId: id,
                         lastAnsweredText: this.lastAnsweredText,
-                    }),
+                    }, abort.signal),
                     new Promise<null>((resolve) => {
                         timer = this.clock.setTimeout(() => { timedOut = true; resolve(null); }, JUDGE_DEADLINE_MS);
                     }),
                 ]);
-                if (timedOut) outcome = 'timeout';
+                if (timedOut) { outcome = 'timeout'; try { abort.abort(); } catch { /* noop */ } }
             } catch {
                 outcome = 'error';
             } finally {
                 if (timer !== null) this.clock.clearTimeout(timer);
+                if (this.judgeAbort === abort) this.judgeAbort = null;
             }
         }
         const judgeMs = this.clock.now() - committedAt;

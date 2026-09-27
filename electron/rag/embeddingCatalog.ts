@@ -8,6 +8,8 @@
 // is worse than offering none, because the failure only shows up at index time,
 // after the user has committed to a re-index.
 
+import { BUNDLED_LOCAL_EMBEDDING } from './bundledLocalEmbedding';
+
 export interface EmbeddingCatalogModel {
   id: string;
   /** Short display name. The id is shown separately where it differs. */
@@ -29,7 +31,7 @@ export interface EmbeddingCatalogModel {
 }
 
 export interface EmbeddingCatalogProvider {
-  id: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'voyage' | 'openai' | 'gemini' | 'local';
+  id: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'ninerouter' | 'voyage' | 'openai' | 'gemini' | 'local';
   name: string;
   /** Embedding calls leave the machine. */
   cloud: boolean;
@@ -103,7 +105,11 @@ export const STATIC_EMBEDDING_MODELS = Object.freeze({
   ]),
   /** The model bundled with the app — always present, needs no network. */
   local: Object.freeze([
-    Object.freeze({ id: 'Xenova/all-MiniLM-L6-v2', label: 'MiniLM', dimensions: 384, dimensionsVerified: true, lightweight: true, note: 'Bundled with Natively. Small and fast; weaker retrieval on large projects.' }),
+    // Since 2026-09-22 the bundled model is multilingual-e5-small
+    // (bundledLocalEmbedding.ts). Not `lightweight`: that flag drives the
+    // "your embeddings are lightweight" notice, which was true of MiniLM and is
+    // not of this model (docs/local-embedding-benchmark.md §12b).
+    Object.freeze({ id: BUNDLED_LOCAL_EMBEDDING.modelId, label: BUNDLED_LOCAL_EMBEDDING.label, dimensions: BUNDLED_LOCAL_EMBEDDING.dimensions, dimensionsVerified: true, note: 'Bundled with Natively. Runs entirely on this device; nothing leaves the machine.' }),
   ]),
   /**
    * Voyage AI's embedding suite (docs.voyageai.com, checked 2026-08-31).
@@ -159,6 +165,11 @@ export interface CatalogInput {
    * offer, and what it costs, before signing up.
    */
   openrouterModels?: EmbeddingCatalogModel[];
+  ninerouterModels?: EmbeddingCatalogModel[];
+  /** True when a base URL is stored — the gate for 9Router, as everywhere else. */
+  ninerouterConfigured?: boolean;
+  /** The instance currently configured, for display. */
+  ninerouterEndpoint?: string;
   /** A user-hosted OpenAI-compatible endpoint, if one is configured. */
   customEndpoint?: string;
   customModels?: Array<{ id: string; capabilityKnown?: boolean }>;
@@ -283,6 +294,27 @@ export function buildEmbeddingCatalog(input: CatalogInput): EmbeddingCatalogProv
     models: cloudBlocked ? [] : (input.openrouterModels || []).map(m => ({ ...m })),
   };
 
+  const ninerouter: EmbeddingCatalogProvider = {
+    id: 'ninerouter',
+    name: '9Router',
+    // CLOUD, even though the endpoint is usually the user's own machine. The
+    // binary is local; the inference is not — it forwards to Gemini, OpenAI and
+    // 40+ others. Saying otherwise here is a false privacy claim, the same
+    // reason embeddingStatus keeps it out of the host-gated branch.
+    cloud: true,
+    // The BASE URL is the gate, not a key: a stock instance runs with
+    // REQUIRE_API_KEY=false and embeds fine without one.
+    available: !cloudBlocked && !!input.ninerouterConfigured,
+    unavailableReason: cloudBlocked ? 'blocked_by_policy' : (input.ninerouterConfigured ? undefined : 'not_configured'),
+    endpoint: input.ninerouterEndpoint,
+    // Listed models are NOT a promise that they work: 9Router relays whatever
+    // its upstream says, and on the reference instance 4 of 6 listed embedding
+    // models answer 401/404 from a dead vendor account. The width probe on
+    // selection is what separates them, so everything listed is offered and the
+    // probe refuses the broken ones.
+    models: cloudBlocked ? [] : (input.ninerouterModels || []).map(m => ({ ...m })),
+  };
+
   const voyage: EmbeddingCatalogProvider = {
     id: 'voyage',
     name: 'Voyage AI',
@@ -322,5 +354,5 @@ export function buildEmbeddingCatalog(input: CatalogInput): EmbeddingCatalogProv
     ],
   };
 
-  return [natively, ollama, custom, openrouter, voyage, openai, gemini, local];
+  return [natively, ollama, custom, openrouter, ninerouter, voyage, openai, gemini, local];
 }

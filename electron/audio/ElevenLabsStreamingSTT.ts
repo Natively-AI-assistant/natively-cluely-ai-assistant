@@ -6,6 +6,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { streamingStttWsOptions } from './dnsHelpers';
+import { RealtimeSilenceTail } from './realtimeSilenceTail';
 
 const ELEVENLABS_WS_URL = 'wss://api.elevenlabs.io/v1/speech-to-text/realtime';
 // Cap reconnect attempts so a flapping network can't drive an indefinite WS
@@ -13,6 +14,28 @@ const ELEVENLABS_WS_URL = 'wss://api.elevenlabs.io/v1/speech-to-text/realtime';
 // the cap, emit 'error' so the orchestrator can surface a UI prompt; a
 // user-triggered restart via stop()/start() resets the counter to 0.
 const RECONNECT_MAX_ATTEMPTS = 10;
+
+// COMMIT STRATEGY (2026-09-23). The realtime API's default is `manual`: a
+// transcript only becomes `committed_transcript` when the client commits,
+// and "even if you do not commit manually, the model automatically commits
+// after approximately 36 seconds of accumulated audio" (elevenlabs.io/docs,
+// "Transcripts and commit strategies"). This client never committed, so every
+// final — the thing SessionTracker stores and Auto Answer judges — arrived
+// once per ~36 s of audio. natively-api's own ElevenLabs relay has always sent
+// commit_strategy=vad; the BYOK client did not.
+//
+// 0.8 s of silence ends a segment: long enough not to cut a question at a
+// breath, short enough to finalize promptly (range 0.3–3.0, their example 1.5).
+export const ELEVENLABS_VAD_SILENCE_SECS = 0.8;
+// Real-time silence after the local VAD's speech end, so that 0.8 s is wall
+// time rather than ~5× it at the native keepalive cadence:
+// hangover (>= 500) + 600 = 1100 ms. See realtimeSilenceTail.ts.
+export const ELEVENLABS_SILENCE_TAIL_MS = 600;
+// 100 ms per message at 16 kHz — the low end of the 0.1–1 s chunk range the
+// docs recommend ("smaller chunks result in lower latency"). It was 250 ms,
+// which held every partial back by up to a quarter second, and during the
+// keepalive cadence took ~1.25 s to fill.
+export const ELEVENLABS_SEND_THRESHOLD_SAMPLES = 1600;
 
 export class ElevenLabsStreamingSTT extends EventEmitter {
     private apiKey: string;
@@ -31,10 +54,21 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
     
     private debugWriteStream: fs.WriteStream | null = null;
     
-    // Chunk buffering properties (250ms @ 16k = 4000 samples)
+    // Chunk buffering properties (100ms @ 16k — see ELEVENLABS_SEND_THRESHOLD_SAMPLES)
     private pcmAccumulator: Int16Array[] = [];
     private pcmAccumulatorLen = 0;
-    private readonly SEND_THRESHOLD_SAMPLES = 4000;
+    private readonly SEND_THRESHOLD_SAMPLES = ELEVENLABS_SEND_THRESHOLD_SAMPLES;
+    private readonly silenceTail = new RealtimeSilenceTail({
+        tailMs: ELEVENLABS_SILENCE_TAIL_MS,
+        format: () => ({ sampleRate: this.inputSampleRate, channels: 1 }),
+        sink: (pcm) => this.sendAudio(pcm),
+    });
+    // With include_timestamps the server can report one commit as both
+    // committed_transcript and committed_transcript_with_timestamps; emit it once.
+    // The two land back to back, so a short window — a speaker who genuinely
+    // repeats a phrase ("Yes." ... "Yes.") a moment later is not swallowed.
+    private lastCommittedText = '';
+    private lastCommittedAt = 0;
     
     private debugMessageCount = 0;
 
@@ -91,6 +125,7 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
 
     public stop(): void {
         this.shouldReconnect = false;
+        this.silenceTail.cancel();
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
@@ -115,28 +150,70 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
         console.log('[ElevenLabsStreaming] Stopped');
     }
 
+    /**
+     * "Answer now": flush what is pending so the server has every sample now.
+     *
+     * Deliberately NO `commit: true`. Measured live (2026-09-23): a commit with
+     * under 0.3 s of uncommitted audio is answered with `commit_throttled` —
+     * "You need at least 0.3s of uncommitted audio before committing" — AND the
+     * server CLOSES the socket (1000, reason commit_throttled). The VAD commit
+     * is invisible until its transcript arrives, so the client cannot know
+     * whether 0.3 s is still uncommitted when the button is pressed (the usual
+     * case is right after the VAD already committed). The VAD commit
+     * (commit_strategy=vad, 0.8 s, kept real-time by the silence tail) lands
+     * ~1.2-1.4 s after speech end on its own — measured — so a manual commit
+     * would buy a few hundred ms at the price of a dead session.
+     */
     public finalize(): void {
         if (!this.isActive || !this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isSessionReady) return;
+        if (this.pcmAccumulatorLen === 0) return;
 
-        if (this.pcmAccumulatorLen > 0) {
-            const combined = new Int16Array(this.pcmAccumulatorLen);
-            let offset = 0;
-            for (const arr of this.pcmAccumulator) {
-                combined.set(arr, offset);
-                offset += arr.length;
-            }
-            this.pcmAccumulator = [];
-            this.pcmAccumulatorLen = 0;
-            try {
-                this.ws.send(JSON.stringify({
-                    message_type: 'input_audio_chunk',
-                    audio_base_64: Buffer.from(combined.buffer, combined.byteOffset, combined.byteLength).toString('base64'),
-                }));
-                console.log('[ElevenLabsStreaming] Finalize — flushed pending accumulator');
-            } catch (err) {
-                console.error('[ElevenLabsStreaming] Finalize flush failed:', err);
-            }
+        const combined = new Int16Array(this.pcmAccumulatorLen);
+        let offset = 0;
+        for (const arr of this.pcmAccumulator) {
+            combined.set(arr, offset);
+            offset += arr.length;
         }
+        this.pcmAccumulator = [];
+        this.pcmAccumulatorLen = 0;
+        try {
+            this.ws.send(JSON.stringify(this.audioMessage(
+                Buffer.from(combined.buffer, combined.byteOffset, combined.byteLength).toString('base64'),
+                false,
+            )));
+            console.log('[ElevenLabsStreaming] Finalize — flushed pending accumulator');
+        } catch (err) {
+            console.error('[ElevenLabsStreaming] Finalize flush failed:', err);
+        }
+    }
+
+    /** Local VAD: the speaker stopped. Keep the server VAD's clock real-time. */
+    public notifySpeechEnded(): void {
+        if (!this.isActive) return;
+        this.silenceTail.start();
+    }
+
+    /**
+     * input_audio_chunk as the API reference declares it: `commit` and
+     * `sample_rate` are REQUIRED fields there. They used to be omitted, which
+     * the server tolerated; sending them costs nothing and stops depending on
+     * that leniency.
+     */
+    private audioMessage(audioBase64: string, commit: boolean): Record<string, unknown> {
+        return {
+            message_type: 'input_audio_chunk',
+            audio_base_64: audioBase64,
+            commit,
+            sample_rate: this.targetSampleRate,
+        };
+    }
+
+    private emitCommitted(text: string): void {
+        const now = Date.now();
+        if (text === this.lastCommittedText && now - this.lastCommittedAt < 1500) return;
+        this.lastCommittedText = text;
+        this.lastCommittedAt = now;
+        this.emit('transcript', { text, isFinal: true, confidence: 1.0 });
     }
 
     /**
@@ -145,6 +222,12 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
      * Note: Input from Natively DSP is 32-bit Float PCM (F32).
      */
     public write(chunk: Buffer): void {
+        if (!this.isActive) return;
+        this.silenceTail.observe(chunk);
+        this.sendAudio(chunk);
+    }
+
+    private sendAudio(chunk: Buffer): void {
         if (!this.isActive) return;
 
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isSessionReady) {
@@ -210,13 +293,10 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
                 this.pcmAccumulatorLen = 0;
 
                 const base64 = Buffer.from(combined.buffer, combined.byteOffset, combined.byteLength).toString('base64');
-                // ElevenLabs Scribe v2 requires fields message_type and audio_base_64
+                // input_audio_chunk shape: see audioMessage()
                 // Use the snapshot captured earlier to avoid null-dereference from concurrent close
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        message_type: 'input_audio_chunk',
-                        audio_base_64: base64,
-                    }));
+                    ws.send(JSON.stringify(this.audioMessage(base64, false)));
                 }
             }
         } catch (err) {
@@ -232,7 +312,8 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
         console.log(`[ElevenLabsStreaming] Connecting`, { hasApiKey: Boolean(this.apiKey) });
 
         // raw WebSocket URL with parameters
-        let url = `${ELEVENLABS_WS_URL}?model_id=scribe_v2_realtime&include_timestamps=true&sample_rate=${this.targetSampleRate}`;
+        let url = `${ELEVENLABS_WS_URL}?model_id=scribe_v2_realtime&include_timestamps=true&sample_rate=${this.targetSampleRate}`
+            + `&commit_strategy=vad&vad_silence_threshold_secs=${ELEVENLABS_VAD_SILENCE_SECS}`;
         
         // Always enable language detection metadata; only pin to a specific code when one is set
         if (this.languageCode) {
@@ -304,13 +385,8 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
                         break;
 
                     case 'committed_transcript':
-                        if (msg.text) {
-                            this.emit('transcript', { 
-                                text: msg.text, 
-                                isFinal: true, 
-                                confidence: 1.0 
-                            });
-                        }
+                    case 'committed_transcript_with_timestamps':
+                        if (msg.text) this.emitCommitted(msg.text);
                         break;
 
                     case 'auth_error':

@@ -106,7 +106,11 @@ describe('litellmModelLabel is wired into every surface that shows a LiteLLM mod
     );
     assert.match(
       src,
-      /provider === 'litellm' \? litellmModelLabel\(id\) : prettifyModelId\(id\)/,
+      // The label function is now gatewayModelLabel, which applies the identical
+      // rule to every routing prefix rather than the literal `litellm/` — for a
+      // LiteLLM id the two are the same function. What this test cares about is
+      // unchanged: a LiteLLM row takes the segment label, never prettifyModelId.
+      /provider === 'litellm'[^?]*\? gatewayModelLabel\(id\) : prettifyModelId\(id\)/,
       'allow-listed ids with no catalog entry need the same treatment',
     );
     assert.match(

@@ -467,6 +467,13 @@ export function buildDirectAssistRequest(input: DirectAssistRequestInput): Direc
     ? input.selection.model.replace(/^litellm\//, '')
     : input.selection.provider === 'nvidia_nim'
       ? input.selection.model.replace(/^nvidia_nim\//, '')
+      // 'openrouter' is deliberately NOT in this chain. getModelCapabilities()
+      // strips TWO segments (stripProviderRoutingPrefix), so handing it the full
+      // `openrouter/anthropic/claude-sonnet-5` yields `claude-sonnet-5`, which the
+      // capability table recognises. Pre-stripping here would leave
+      // `anthropic/claude-sonnet-5` — no longer a routing prefix, so nothing
+      // strips the vendor segment and every OpenRouter model would resolve as an
+      // unknown text-only route.
       : input.selection.model;
   const capabilities = getModelCapabilities(capabilityModel, input.selection.provider === 'ollama');
   // Leave the provider's output budget plus a fixed system/serialization reserve.

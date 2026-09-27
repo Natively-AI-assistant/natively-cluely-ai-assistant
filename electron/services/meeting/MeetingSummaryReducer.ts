@@ -230,7 +230,7 @@ const MODE_HEADLINE_SECTIONS: Record<string, string[]> = {
   recruiting: ['Role fit', 'Candidate profile'],
   'team-meet': ['Progress since last sync', 'Blockers'],
   'looking-for-work': ['Role fit', 'Next steps'],
-  seminar: ['Core concepts', 'Open questions'],
+  seminar: ['Answer from your files', 'Question'],
   'call-center': ['Customer issue', 'Resolution'],
 };
 

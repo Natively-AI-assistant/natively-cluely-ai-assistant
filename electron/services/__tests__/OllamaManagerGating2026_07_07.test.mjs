@@ -86,12 +86,14 @@ describe('OllamaManager gating (2026-07-07)', () => {
     try {
       const { OllamaManager } = require(OM_PATH);
       const mgr = OllamaManager.getInstance();
-      // Use a non-default port so checkIsRunning returns false and the spawn
-      // path is taken.
+      // Use a closed port so checkIsRunning returns false and the spawn path
+      // is taken. This said "non-default" but passed 11434, Ollama's real
+      // default, so the test failed on any machine running Ollama: the daemon
+      // answered and the status was 'ready'.
       const status = await mgr.ensureRunning({
         reason: 'user-action',
         selectedModel: 'llama3:8b',
-        url: 'http://127.0.0.1:11434',
+        url: 'http://127.0.0.1:1',
       });
       assert.equal(status.health, 'missing_optional_dependency');
       assert.equal(status.requiredForStartup, false);
@@ -115,8 +117,8 @@ describe('OllamaManager gating (2026-07-07)', () => {
       // ensure they share one in-flight Promise so the second awaits the first
       // rather than both spawning.
       const [a, b] = await Promise.all([
-        mgr.ensureRunning({ reason: 'user-action', url: 'http://127.0.0.1:11434' }),
-        mgr.ensureRunning({ reason: 'selected-model', url: 'http://127.0.0.1:11434' }),
+        mgr.ensureRunning({ reason: 'user-action', url: 'http://127.0.0.1:1' }),
+        mgr.ensureRunning({ reason: 'selected-model', url: 'http://127.0.0.1:1' }),
       ]);
       assert.ok(a && b);
       // Both must produce a coherent status; the second cannot have spawned

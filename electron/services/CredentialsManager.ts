@@ -96,7 +96,7 @@ export interface CurlProvider {
  * and setter build the key by concatenation, so adding a name here without the
  * field would silently read and write `undefined`.
  */
-export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'litellm';
+export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm' | 'ninerouter';
 
 export interface StoredCredentials {
     geminiApiKey?: string;
@@ -109,10 +109,36 @@ export interface StoredCredentials {
     litellmBaseURL?: string;
     /** Manual output ceiling for LiteLLM-proxied models. Unset → Auto (per-model via /model/info). */
     litellmMaxTokens?: number;
+    /**
+     * 9Router — a self-hosted fallback proxy. The BASE URL is the presence
+     * gate everywhere, not the key: 9Router's REQUIRE_API_KEY defaults to
+     * false, so a stock local install is legitimately keyless. The key is
+     * still required by its POST routes on any instance that enables auth,
+     * which is why both fields exist and only one gates.
+     */
+    ninerouterApiKey?: string;
+    ninerouterBaseURL?: string;
+    /** Manual output ceiling for 9Router-routed models. Unset → Auto (per-model via /v1/models). */
+    ninerouterMaxTokens?: number;
+    /**
+     * Thinking level sent as `reasoning_effort`. 'auto' or unset sends nothing
+     * and leaves the upstream's own choice. The level is honoured and monotonic
+     * (none < low < medium < high), but the size of the win is model- and
+     * prompt-dependent — on Gemini, 'auto' was itself the fastest measured.
+     */
+    ninerouterThinking?: string;
+    /**
+     * Per-model reasoning capability as the catalogue reported it, so the
+     * settings dropdown adapts its options to the SELECTED model with no
+     * network round-trip. Keyed by the instance's own wire id.
+     */
+    ninerouterModelMeta?: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>;
     googleServiceAccountPath?: string;
     customProviders?: CustomProvider[];
     curlProviders?: CurlProvider[];
     defaultModel?: string;
+    /** Model for cheap internal calls (Auto Answer judge, query rewrite, classification). */
+    fastModel?: string;
     nativelyApiKey?: string;
     /**
      * Optional bearer token for a user-hosted OpenAI-compatible embedding
@@ -121,11 +147,41 @@ export interface StoredCredentials {
      * LiteLLM/proxy deployment does.
      */
     customEmbeddingApiKey?: string;
+    /** Optional bearer token for user-hosted custom reranker endpoint. */
+    customRerankerApiKey?: string;
     /**
-     * OpenRouter key, used for EMBEDDINGS. OpenRouter is otherwise reachable in
-     * this app only as a cURL/custom chat provider, which has no typed slot.
+     * ONE OpenRouter key, THREE consumers: chat/vision generation, embeddings and
+     * reranking. Deliberately not split — it is the same vendor and the same
+     * credential, and a user who set it up for retrieval should find the chat
+     * card already reading "Saved".
+     *
+     * The coupling is load-bearing in the other direction too: clearing this
+     * from the AI Providers card DEACTIVATES any hosted retrieval built on it
+     * (see setOpenrouterApiKey -> activateHostedRetrieval). That is why the
+     * remove path reports `retrievalDeactivated` and the renderer confirms
+     * first, the same shape NVIDIA NIM uses for `sttProviderCleared`.
      */
     openrouterApiKey?: string;
+    /**
+     * Fluxion AI gateway key. Unlike openrouterApiKey this backs CHAT ONLY —
+     * Fluxion exposes no embeddings or rerank endpoint — so there is no
+     * activateHostedRetrieval coupling and removing it cannot deactivate
+     * retrieval.
+     */
+    fluxionApiKey?: string;
+    /**
+     * Which wire protocol to speak to Fluxion.
+     *
+     * Absent → 'openai', which is the only protocol measured to work on EVERY
+     * group: a Claude-group key took /v1/chat/completions and /v1/messages
+     * equally (2026-09-18), while a GLM-group key took /v1/chat/completions but
+     * answered /v1/messages with a hard 403 "This group does not allow
+     * /v1/messages dispatch" (2026-09-19).
+     *
+     * So the Anthropic endpoint is the RESTRICTED one and this setting is a
+     * narrow escape hatch — not, as the docs imply, a per-group requirement.
+     */
+    fluxionProtocol?: 'openai' | 'anthropic';
     jinaApiKey?: string;
     /** Voyage AI key, used for EMBEDDINGS (Voyage is embeddings-only here). */
     voyageApiKey?: string;
@@ -156,6 +212,8 @@ export interface StoredCredentials {
     claudePreferredModel?: string;
     deepseekPreferredModel?: string;
     nvidia_nimPreferredModel?: string;
+    openrouterPreferredModel?: string;
+    fluxionPreferredModel?: string;
     /**
      * The LiteLLM model the user promoted to this provider's default, stored
      * PREFIXED (`litellm/<model>`) so it is the same id the picker, the
@@ -167,6 +225,17 @@ export interface StoredCredentials {
      * to something that no longer exists.
      */
     litellmPreferredModel?: string;
+    /**
+     * The 9Router model the user promoted to this provider's default, stored
+     * PREFIXED (`ninerouter/<model>`) for the reason the LiteLLM field above
+     * gives: it must be the same id the picker, the allow-list and
+     * modelAvailable() all compare against.
+     *
+     * Cleared whenever the instance is removed or repointed — a default naming
+     * a model on the old host is worse than none, and 9Router instances differ
+     * by which upstream accounts their owner has connected.
+     */
+    ninerouterPreferredModel?: string;
     /**
      * Provider ids the user switched off in Settings → AI Providers. A disabled
      * provider keeps its stored credential but contributes no models to the
@@ -198,6 +267,24 @@ export interface StoredCredentials {
      * discovery is an explicit user action (`refresh-litellm-models`).
      */
     litellmModels?: string[];
+    /**
+     * Last-known model list discovered from the configured 9Router instance,
+     * cached so the picker renders without a network round-trip. Stored
+     * UNPREFIXED (9Router's own ids, `gemini/gemini-3.6-flash`), matching
+     * litellmModels — the `ninerouter/` prefix is added at render time.
+     */
+    ninerouterModels?: string[];
+    /**
+     * The subset of `ninerouterModels` whose catalogue entry reports
+     * `capabilities.vision`. Persisted because VisionProviderRegistry has to
+     * answer "can this model read an image?" synchronously, with no handle on
+     * LLMHelper's in-memory cache.
+     *
+     * ABSENT OR EMPTY MEANS UNKNOWN, never "none". A cold cache must not read
+     * as "this instance has no vision models" — gating on absent data is what
+     * told LiteLLM users with a working vision model that they had none.
+     */
+    ninerouterVisionModels?: string[];
     /**
      * Per-provider model catalog, as last discovered from that provider's API.
      * Persisted because the allow-list below references these ids: without it the
@@ -906,6 +993,31 @@ export class CredentialsManager {
         return this.credentials.litellmMaxTokens;
     }
 
+    public getNinerouterApiKey(): string | undefined {
+        return this.credentials.ninerouterApiKey;
+    }
+
+    public getNinerouterBaseURL(): string | undefined {
+        return this.credentials.ninerouterBaseURL;
+    }
+
+    public getNinerouterMaxTokens(): number | undefined {
+        return this.credentials.ninerouterMaxTokens;
+    }
+
+    public getNinerouterThinking(): string | undefined {
+        return this.credentials.ninerouterThinking;
+    }
+
+    public getNinerouterModelMeta(): Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }> {
+        return this.credentials.ninerouterModelMeta || {};
+    }
+    public setNinerouterModelMeta(meta: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>): void {
+        if (this.refuseWriteWhileDegraded('set ninerouter model meta')) return;
+        this.credentials.ninerouterModelMeta = meta;
+        this.saveCredentials();
+    }
+
     public getGoogleServiceAccountPath(): string | undefined {
         return this.credentials.googleServiceAccountPath;
     }
@@ -1016,6 +1128,17 @@ export class CredentialsManager {
         return this.credentials.defaultModel || 'gemini-3.1-flash-lite';
     }
 
+    /**
+     * The user's chosen fast model, or null when unset.
+     *
+     * Null is a first-class state meaning "use the measured per-provider ladder",
+     * NOT a missing default. Returning a model id here would silently override the
+     * judge ladder for every user who never opened the picker.
+     */
+    public getFastModel(): string | null {
+        return this.credentials.fastModel || null;
+    }
+
     public getVoyageApiKey(): string | undefined {
         return this.credentials.voyageApiKey;
     }
@@ -1107,6 +1230,33 @@ export class CredentialsManager {
         return true;
     }
 
+    public getFluxionApiKey(): string | undefined {
+        return this.credentials.fluxionApiKey;
+    }
+
+    /**
+     * No activateHostedRetrieval call, deliberately: Fluxion is chat-only, so
+     * unlike the OpenRouter/Voyage/Jina setters this key can never be the thing
+     * a hosted embedding or reranker is running on.
+     */
+    public setFluxionApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set fluxion api key')) return false;
+        this.credentials.fluxionApiKey = key.trim() || undefined;
+        this.saveCredentials();
+        return true;
+    }
+
+    public getFluxionProtocol(): 'openai' | 'anthropic' {
+        return this.credentials.fluxionProtocol === 'anthropic' ? 'anthropic' : 'openai';
+    }
+
+    public setFluxionProtocol(protocol: 'openai' | 'anthropic'): boolean {
+        if (this.refuseWriteWhileDegraded('set fluxion protocol')) return false;
+        this.credentials.fluxionProtocol = protocol === 'anthropic' ? 'anthropic' : 'openai';
+        this.saveCredentials();
+        return true;
+    }
+
     public getJinaApiKey(): string | undefined {
         return this.credentials.jinaApiKey;
     }
@@ -1126,6 +1276,17 @@ export class CredentialsManager {
     public setCustomEmbeddingApiKey(key: string): boolean {
         if (this.refuseWriteWhileDegraded('set custom embedding api key')) return false;
         this.credentials.customEmbeddingApiKey = key.trim() || undefined;
+        this.saveCredentials();
+        return true;
+    }
+
+    public getCustomRerankerApiKey(): string | undefined {
+        return this.credentials.customRerankerApiKey;
+    }
+
+    public setCustomRerankerApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set custom reranker api key')) return false;
+        this.credentials.customRerankerApiKey = key.trim() || undefined;
         this.saveCredentials();
         return true;
     }
@@ -1194,6 +1355,24 @@ export class CredentialsManager {
         console.log(`[CredentialsManager] LiteLLM model cache updated (${models.length} model(s))`);
     }
 
+    public getNinerouterModels(): string[] {
+        return this.credentials.ninerouterModels || [];
+    }
+    public getNinerouterVisionModels(): string[] {
+        return this.credentials.ninerouterVisionModels || [];
+    }
+    public setNinerouterVisionModels(models: string[]): void {
+        if (this.refuseWriteWhileDegraded('set ninerouter vision models')) return;
+        this.credentials.ninerouterVisionModels = models;
+        this.saveCredentials();
+    }
+    public setNinerouterModels(models: string[]): void {
+        if (this.refuseWriteWhileDegraded('set ninerouter models')) return;
+        this.credentials.ninerouterModels = models;
+        this.saveCredentials();
+        console.log(`[CredentialsManager] 9Router model cache updated (${models.length} model(s))`);
+    }
+
     public getAllCredentials(): StoredCredentials {
         return { ...this.credentials };
     }
@@ -1211,7 +1390,7 @@ export class CredentialsManager {
         if (this.getOpenaiApiKey()) return true;                 // gpt-4o / gpt-5 vision
         if (this.getClaudeApiKey()) return true;                 // Claude vision
         if (this.getGeminiApiKey()) return true;                 // Gemini vision
-        if (this.getGroqApiKey()) return true;                   // Groq qwen3.6-27b vision
+        if (this.getGroqApiKey()) return true;                   // Groq qwen3.8-27b vision
         // Custom providers. TWO fixes over the previous `customProviders.some(
         // p => p.multimodal === true)`:
         //   • getAllCustomProviders() — the old read missed the store the
@@ -1329,6 +1508,51 @@ export class CredentialsManager {
      * maxTokens is the optional user-set output ceiling (0/undefined → default).
      * Passing an empty baseURL clears everything, disabling the provider.
      */
+    /**
+     * Persist the 9Router connection.
+     *
+     * Mirrors setLitellmConfig, including the two behaviours that are easy to
+     * miss: an empty base URL clears EVERYTHING (that is Remove), and a blank
+     * key on a re-save keeps the stored one, because the Settings field is
+     * masked and left empty when the user is only changing max-tokens.
+     */
+    public setNinerouterConfig(apiKey: string, baseURL: string, maxTokens?: number, thinking?: string): void {
+        if (this.refuseWriteWhileDegraded('set ninerouter config')) return;
+        const trimmedURL = (baseURL || '').trim();
+        const trimmedKey = (apiKey || '').trim();
+        const previousURL = (this.credentials.ninerouterBaseURL || '').trim();
+        if (!trimmedURL) {
+            this.credentials.ninerouterApiKey = undefined;
+            this.credentials.ninerouterBaseURL = undefined;
+            this.credentials.ninerouterMaxTokens = undefined;
+            this.credentials.ninerouterPreferredModel = undefined;
+            this.credentials.ninerouterModels = undefined;
+            this.credentials.ninerouterVisionModels = undefined;
+            this.credentials.ninerouterThinking = undefined;
+            this.credentials.ninerouterModelMeta = undefined;
+            this.saveCredentials();
+            console.log('[CredentialsManager] 9Router config cleared');
+            return;
+        }
+        // Repointing at a different instance invalidates the default AND the
+        // discovered catalogue: which models a 9Router serves is a function of
+        // which upstream accounts its owner has connected, so two instances
+        // rarely agree. A same-URL re-save keeps both.
+        if (previousURL && previousURL !== trimmedURL) {
+            this.credentials.ninerouterPreferredModel = undefined;
+            this.credentials.ninerouterModels = undefined;
+            this.credentials.ninerouterVisionModels = undefined;
+            this.credentials.ninerouterModelMeta = undefined;
+        }
+        this.credentials.ninerouterApiKey = trimmedKey || this.credentials.ninerouterApiKey || undefined;
+        this.credentials.ninerouterBaseURL = trimmedURL;
+        const mt = Number(maxTokens);
+        this.credentials.ninerouterMaxTokens = Number.isFinite(mt) && mt > 0 ? Math.floor(mt) : undefined;
+        this.credentials.ninerouterThinking = (thinking || '').trim() || undefined;
+        this.saveCredentials();
+        console.log('[CredentialsManager] 9Router config updated');
+    }
+
     public setLitellmConfig(apiKey: string, baseURL: string, maxTokens?: number): void {
         if (this.refuseWriteWhileDegraded('set litellm config')) return;
         const trimmedURL = (baseURL || '').trim();
@@ -1544,6 +1768,19 @@ export class CredentialsManager {
     }
 
     /**
+     * @returns false when the write was refused or did not persist. Boolean, not
+     * void: a void setter is how a refused write gets reported to the UI as a
+     * success and then vanishes on restart.
+     */
+    public setFastModel(model: string | null): boolean {
+        if (this.refuseWriteWhileDegraded('set fast model')) return false;
+        this.credentials.fastModel = model ?? undefined;
+        const persisted = this.saveCredentials();
+        console.log(`[CredentialsManager] Fast Model set to: ${model ?? '(auto)'}`);
+        return persisted;
+    }
+
+    /**
      * Undo the auto-promotions setNativelyApiKey() performs when a key is stored.
      * Mutates only; the caller saves.
      *
@@ -1672,12 +1909,14 @@ export class CredentialsManager {
             // Auto-assigned ids, past and present: the gemini defaults, the
             // historical Groq fallbacks (llama-3.3, scout — both retired,
             // which is exactly why sitting on them must not be treated as a
-            // choice), and the current Groq default qwen/qwen3.6-27b.
+            // choice), the former Groq default qwen/qwen3.6-27b (retired
+            // 2026-09-14) and the current one, qwen/qwen3.8-27b.
             const AUTO_ASSIGNED_MODEL_IDS = new Set([
                 'gemini', 'llama',
                 'llama-3.3-70b-versatile',
                 'meta-llama/llama-4-scout-17b-16e-instruct',
                 'qwen/qwen3.6-27b',
+                'qwen/qwen3.8-27b',
             ]);
             const isAutoDefault = !current
                 || current.startsWith('gemini-')

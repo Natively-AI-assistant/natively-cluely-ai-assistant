@@ -47,7 +47,13 @@ function resolveLocation(provider: { name: string; space?: string }): 'cloud' | 
   return 'on-device';
 }
 
-const CLOUD_PROVIDERS = new Set(['natively', 'openai', 'gemini', 'voyage', 'openrouter']);
+// 'ninerouter' is UNCONDITIONALLY cloud, and deliberately not host-gated the
+// way 'custom' is. A loopback LM Studio genuinely runs the model on the
+// machine, so its host decides. 9Router is the case that looks identical and
+// is the opposite: the binary is local, the inference never is — it forwards
+// every request to Gemini, OpenAI, Anthropic and 40+ others. Host-gating it
+// would print "on-device" for text being sent to Google.
+const CLOUD_PROVIDERS = new Set(['natively', 'openai', 'gemini', 'voyage', 'openrouter', 'ninerouter']);
 
 /**
  * Whether an embedding space is a lightweight/compatibility-tier model.
@@ -70,6 +76,7 @@ export interface EmbeddingProviderDescription {
   configured: boolean;
   provider: string | null;
   model: string | null;
+  catalogId?: string | null;
   dimensions: number | null;
   space: string | null;
   /** Where embedding actually happens — drives the local-only claim in the UI. */
@@ -83,15 +90,16 @@ export interface EmbeddingProviderDescription {
  * fell through, which is exactly the case the user most needs to see.
  */
 export function describeEmbeddingProvider(
-  provider: Pick<IEmbeddingProvider, 'name' | 'model' | 'dimensions' | 'space'> | null | undefined,
+  provider: (Pick<IEmbeddingProvider, 'name' | 'model' | 'dimensions' | 'space'> & { catalogId?: string }) | null | undefined,
 ): EmbeddingProviderDescription {
   if (!provider) {
-    return { configured: false, provider: null, model: null, dimensions: null, space: null, location: 'unknown', lightweight: false };
+    return { configured: false, provider: null, model: null, catalogId: null, dimensions: null, space: null, location: 'unknown', lightweight: false };
   }
   return {
     configured: true,
     provider: provider.name,
     model: provider.model,
+    catalogId: provider.catalogId ?? null,
     dimensions: provider.dimensions,
     space: provider.space,
     // Ollama counts as on-device: "local-only" means no external call, and an
@@ -102,7 +110,7 @@ export function describeEmbeddingProvider(
 }
 
 /** Generation providers that are the user's own third-party choice. */
-const THIRD_PARTY_GENERATION = new Set(['openrouter', 'litellm', 'openai', 'anthropic', 'gemini', 'groq', 'deepseek', 'minimax', 'codex']);
+const THIRD_PARTY_GENERATION = new Set(['openrouter', 'litellm', 'ninerouter', 'openai', 'anthropic', 'gemini', 'groq', 'deepseek', 'minimax', 'codex']);
 
 /**
  * Whether to surface the "your embeddings are lightweight" warning.

@@ -1,0 +1,441 @@
+{
+ "blind_id": "S-46639995",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 106300,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 61695,
+  "candidatesTokenCount": 3168,
+  "totalTokenCount": 77695,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 61695
+   }
+  ],
+  "thoughtsTokenCount": 12832,
+  "serviceTier": "standard"
+ },
+ "fact_count": 90,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 10,
+  "hallucination_control": 10,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 4,
+  "entity_retention": 10,
+  "timeline_accuracy": 4,
+  "conclusion_accuracy": 8,
+  "structure": 4,
+  "conciseness": 1,
+  "readability": 3,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Reported superseded value (Homework 4 due Friday, October 9) as a fact and action item alongside the corrected Monday deadline.",
+   "Reported superseded value (Midterm covers lectures 1-8) as a fact, action item, and decision alongside the corrected 1-9 coverage.",
+   "Reported superseded value (4 nodes tolerate 2 failures) as a formula/step alongside the corrected 1 failure value.",
+   "Reported superseded value (Kofi posting the practice midterm) as an action item alongside the corrected assignment to Ana."
+  ],
+  "missing_important_information": [],
+  "hallucinated_information": [],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C01",
+    "reported": "Homework 4, the Raft leader election assignment, is due Friday, October 9th at 11:59pm"
+   },
+   {
+    "correction_id": "C02",
+    "reported": "with 4 nodes you can tolerate 2 failures, meaning adding a fourth node still buys additional fault tolerance."
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Midterm coverage is set to lectures 1 through 8, everything up through primary-backup replication."
+   },
+   {
+    "correction_id": "C05",
+    "reported": "Kofi (Speaker 4): Post a practice midterm on Ed so students can work through it over the weekend."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Joke that the second-floor espresso machine is a single node with no replicas so the faculty loses liveness; the Larkin coffee cart is a 'Byzantine failure'",
+   "Rambling aside about watching Twelve Angry Men (1957, Henry Fonda; 1997 remake with Jack Lemmon) with her daughter; juries as n-of-n quorums",
+   "Devin's assumption that the server with the longest log always wins the election",
+   "4 nodes tolerate 2 failures",
+   "Homework 4 due Friday October 9",
+   "Midterm covers lectures 1 through 8",
+   "Kofi will post the practice midterm",
+   "CockroachDB range size of 64 MB from the lecture slides",
+   "Three different election timeout figures: paper 150-300ms, homework recommendation 400-800ms, etcd default 1000ms",
+   "Several Whitaker Hall rooms in play: 120 (lecture/review), 214 (Kofi's office hours), 318 (professor's office)",
+   "Stretch break small talk about the broken coffee machine sign and faculty purchase orders",
+   "The professor's postmortem joke about how the outage led her to teach this lecture"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "contradicted"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "contradicted"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "contradicted"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "present"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "contradicted"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "present"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   },
+   {
+    "id": "F73",
+    "status": "present"
+   },
+   {
+    "id": "F74",
+    "status": "present"
+   },
+   {
+    "id": "F75",
+    "status": "present"
+   },
+   {
+    "id": "F76",
+    "status": "present"
+   },
+   {
+    "id": "F77",
+    "status": "present"
+   },
+   {
+    "id": "F78",
+    "status": "present"
+   },
+   {
+    "id": "F79",
+    "status": "present"
+   },
+   {
+    "id": "F80",
+    "status": "present"
+   },
+   {
+    "id": "F81",
+    "status": "present"
+   },
+   {
+    "id": "F82",
+    "status": "present"
+   },
+   {
+    "id": "F83",
+    "status": "present"
+   },
+   {
+    "id": "F84",
+    "status": "present"
+   },
+   {
+    "id": "F85",
+    "status": "present"
+   },
+   {
+    "id": "F86",
+    "status": "present"
+   },
+   {
+    "id": "F87",
+    "status": "present"
+   },
+   {
+    "id": "F88",
+    "status": "present"
+   },
+   {
+    "id": "F89",
+    "status": "present"
+   },
+   {
+    "id": "F90",
+    "status": "present"
+   }
+  ],
+  "rationale": "The candidate notes capture an extraordinary amount of detail, retaining every single fact from the transcript. However, the notes suffer from severe structural and conciseness issues. The text is bloated with 15 overlapping sections, causing the same facts to be repeated 5-10 times. Furthermore, because the notes act as an unedited chronological dump, they report superseded values (HW4 due Friday, midterm covering lectures 1-8, 4 nodes tolerating 2 failures, Kofi posting the practice midterm) as definitive facts, action items, and decisions alongside their corrected values. This creates direct contradictions and material errors, severely impacting factual accuracy, numeric accuracy, and timeline accuracy. The inclusion of almost all distractors and irrelevant small talk further degrades readability and conciseness."
+ }
+}

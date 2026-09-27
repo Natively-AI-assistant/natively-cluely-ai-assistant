@@ -3148,6 +3148,24 @@ export class DatabaseManager {
         }
     }
 
+    /**
+     * Title + date for the given meeting ids, nothing else — the Launcher's memory
+     * search links a recalled memory to its meeting on every (debounced) keystroke, so
+     * it must not load summaries or transcripts. Ids match case-insensitively: Hindsight
+     * tags carry them lowercased. Unknown ids are simply absent from the result.
+     */
+    public getMeetingHeadlines(ids: string[]): Array<{ id: string; title: string; date: string }> {
+        if (!this.db || ids.length === 0) return [];
+        try {
+            const wanted = [...new Set(ids.map((id) => String(id).toLowerCase()))].slice(0, 50);
+            const rows = this.db.prepare(`SELECT id, title, created_at FROM meetings WHERE lower(id) IN (${wanted.map(() => '?').join(', ')})`).all(...wanted) as Array<{ id: string; title: string; created_at: string }>;
+            return rows.map((row) => ({ id: row.id, title: row.title, date: row.created_at }));
+        } catch (error) {
+            console.error('[DatabaseManager] Failed to get meeting headlines:', error);
+            return [];
+        }
+    }
+
     public updateMeetingSummary(id: string, updates: { overview?: string, actionItems?: string[], keyPoints?: string[], actionItemsTitle?: string, keyPointsTitle?: string }): boolean {
         if (!this.db) return false;
 
@@ -3227,9 +3245,16 @@ export class DatabaseManager {
 
     /**
      * Persist the per-meeting speaker rename map into detailedSummary.speakerLabels.
-     * Additive: never touches transcript rows or other summary fields.
+     * Never touches transcript rows. Other summary fields change only through
+     * `rewriteNotes`, which gets the stored detailed summary (with its PREVIOUS
+     * labels still on it) and returns the one to save — so the rename and the
+     * notes that carry it land in the same write.
      */
-    public updateSpeakerLabels(id: string, speakerLabels: Record<string, string>): boolean {
+    public updateSpeakerLabels(
+        id: string,
+        speakerLabels: Record<string, string>,
+        rewriteNotes?: (detailed: any) => any,
+    ): boolean {
         if (!this.db) return false;
         try {
             const row = this.db.prepare('SELECT summary_json FROM meetings WHERE id = ?').get(id) as any;
@@ -3239,7 +3264,11 @@ export class DatabaseManager {
             // absent we attach labels to a minimal object WITHOUT inventing empty
             // actionItems/keyPoints arrays that the renderer would treat as "processed but
             // empty" — labels alone is a safe additive blob a later summarize will merge into.
-            const currentDetailed = existingData.detailedSummary;
+            let currentDetailed = existingData.detailedSummary;
+            if (rewriteNotes && currentDetailed && typeof currentDetailed === 'object') {
+                try { currentDetailed = rewriteNotes(currentDetailed) ?? currentDetailed; }
+                catch (e) { console.warn(`[DatabaseManager] speaker rename not applied to notes for ${id}:`, e); }
+            }
             const newDetailed = currentDetailed && typeof currentDetailed === 'object'
                 ? { ...currentDetailed, speakerLabels }
                 : { speakerLabels };
@@ -3249,6 +3278,29 @@ export class DatabaseManager {
         } catch (error) {
             console.error(`[DatabaseManager] Failed to update speaker labels for meeting ${id}:`, error);
             return false;
+        }
+    }
+
+    /**
+     * Transcript lines that contain any of `terms` (case-insensitive substring),
+     * across every saved meeting. Backs "Search past meetings", which used to
+     * search titles and summaries only — never what was actually said — and so
+     * could never "jump to the moment". LIKE wildcards in a term are escaped, so
+     * a search for "50%" matches the text "50%" and not every line.
+     */
+    public searchTranscriptLines(terms: string[], limit: number = 2000): Array<{ meetingId: string; speaker: string; content: string; timestampMs: number }> {
+        if (!this.db) return [];
+        const clean = terms.map((t) => String(t || '').toLowerCase().trim()).filter((t) => t.length > 1).slice(0, 8);
+        if (clean.length === 0) return [];
+        const escapeLike = (t: string) => t.replace(/[\\%_]/g, (c) => `\\${c}`);
+        const where = clean.map(() => `lower(content) LIKE ? ESCAPE '\\'`).join(' OR ');
+        try {
+            return this.db.prepare(
+                `SELECT meeting_id AS meetingId, speaker, content, timestamp_ms AS timestampMs FROM transcripts WHERE ${where} LIMIT ?`,
+            ).all(...clean.map((t) => `%${escapeLike(t)}%`), Math.max(1, Math.min(limit, 10_000))) as any[];
+        } catch (error) {
+            console.error('[DatabaseManager] searchTranscriptLines failed:', error);
+            return [];
         }
     }
 

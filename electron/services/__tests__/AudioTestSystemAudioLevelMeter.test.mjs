@@ -230,13 +230,15 @@ describe('UX4: audio test probes system audio in parallel with the mic', () => {
     );
   });
 
-  it('10. SettingsOverlay.tsx binds the level bar width to `systemAudioLevel`', () => {
-    // Accept either tagged-template width:`${systemAudioLevel}%` or
-    // generic style references that include systemAudioLevel.
+  it('10. SettingsOverlay.tsx binds the level bar to `systemAudioLevel`', () => {
+    // Accept a width binding (tagged-template width:`${systemAudioLevel}%` or a
+    // generic style reference) or a scaleX transform: the meters moved from
+    // width to scaleX so a per-chunk level update no longer triggers layout.
     const taggedTemplate = /width\s*:\s*`\$\{\s*systemAudioLevel\s*\}%`/.test(overlaySrc);
     const styleReference = /width\s*:[^,;}]*systemAudioLevel/.test(overlaySrc);
+    const scaleXReference = /transform\s*:\s*`scaleX\([^`]*systemAudioLevel[^`]*\)`/.test(overlaySrc);
     assert.ok(
-      taggedTemplate || styleReference,
+      taggedTemplate || styleReference || scaleXReference,
       'BUG (UX4 REGRESSION): SettingsOverlay.tsx no longer binds the System Audio Level bar width to the `systemAudioLevel` state. Without this binding the bar is either static or invisible — the meter renders but never animates against the live level, defeating the visual verification.',
     );
   });

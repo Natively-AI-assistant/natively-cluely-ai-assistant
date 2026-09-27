@@ -1,0 +1,125 @@
+{
+ "generated": "2026-09-16T23:37:51.240Z",
+ "conversations": [
+  "INT-M",
+  "SALES-S",
+  "TEAM-M",
+  "TECH-DISC-L"
+ ],
+ "baseline": {
+  "config": "ds-flash-prod",
+  "model_id": "deepseek-v4-flash",
+  "n": 12,
+  "succeeded": 12,
+  "model_call_errors": 0,
+  "chunks_dropped": 0,
+  "blocked_fallback_calls": 0,
+  "prod_deadline_violations": 0,
+  "requested_models": [
+   "deepseek-v4-flash"
+  ],
+  "response_models": [
+   "deepseek-flash"
+  ],
+  "thinking_sent": [
+   "{\"type\":\"disabled\"}"
+  ],
+  "reasoning_tokens": 0,
+  "verify_all": true,
+  "p50_s": 39.059,
+  "p90_s": 58.832600000000006,
+  "mean_input_tokens": 50440.5,
+  "mean_output_tokens": 22474.083333333332,
+  "mean_cost_cold_offpeak": 0.021050524999999997,
+  "action_items": 26,
+  "decisions": 16.416666666666668,
+  "sections": 5.5,
+  "section_bullets": 104.91666666666667,
+  "polish_overview_rejected": 11,
+  "anchor_retention": 0.9492840545817355,
+  "critical_anchor_retention": 0.9857501569365977,
+  "unsupported_numbers": 1.25,
+  "superseded_value_leaks": 5,
+  "judged_fact_retention": 0.9307506810524052,
+  "per_conversation": {
+   "INT-M": {
+    "anchor": 0.9632352941176471,
+    "p50_s": 25.66,
+    "out_tokens": 15309.666666666666
+   },
+   "SALES-S": {
+    "anchor": 0.8994708994708995,
+    "p50_s": 23.356,
+    "out_tokens": 6972
+   },
+   "TEAM-M": {
+    "anchor": 0.9564564564564565,
+    "p50_s": 59.683,
+    "out_tokens": 34524
+   },
+   "TECH-DISC-L": {
+    "anchor": 0.9779735682819384,
+    "p50_s": 50.161,
+    "out_tokens": 33090.666666666664
+   }
+  }
+ },
+ "migrated": {
+  "config": "ds-flash-migrated",
+  "model_id": "deepseek-flash",
+  "n": 12,
+  "succeeded": 12,
+  "model_call_errors": 0,
+  "chunks_dropped": 0,
+  "blocked_fallback_calls": 0,
+  "prod_deadline_violations": 0,
+  "requested_models": [
+   "deepseek-flash"
+  ],
+  "response_models": [
+   "deepseek-flash"
+  ],
+  "thinking_sent": [
+   "{\"type\":\"disabled\"}"
+  ],
+  "reasoning_tokens": 0,
+  "verify_all": true,
+  "p50_s": 38.9285,
+  "p90_s": 56.4519,
+  "mean_input_tokens": 51070.25,
+  "mean_output_tokens": 22908.25,
+  "mean_cost_cold_offpeak": 0.0214054875,
+  "action_items": 26.166666666666668,
+  "decisions": 16.333333333333332,
+  "sections": 5.5,
+  "section_bullets": 108.08333333333333,
+  "polish_overview_rejected": 12,
+  "anchor_retention": 0.9658762770563109,
+  "critical_anchor_retention": 0.991723163841808,
+  "unsupported_numbers": 1,
+  "superseded_value_leaks": 4.916666666666667,
+  "judged_fact_retention": null,
+  "per_conversation": {
+   "INT-M": {
+    "anchor": 0.982843137254902,
+    "p50_s": 25.942,
+    "out_tokens": 15784.666666666666
+   },
+   "SALES-S": {
+    "anchor": 0.9312169312169312,
+    "p50_s": 23.911,
+    "out_tokens": 6990
+   },
+   "TEAM-M": {
+    "anchor": 0.9714714714714715,
+    "p50_s": 56.668,
+    "out_tokens": 35210
+   },
+   "TECH-DISC-L": {
+    "anchor": 0.9779735682819384,
+    "p50_s": 50.415,
+    "out_tokens": 33648.333333333336
+   }
+  }
+ }
+}

@@ -173,6 +173,16 @@ export class SessionTracker {
     private transcriptEpochSummaries: string[] = [];
     private isCompacting: boolean = false;
 
+    // Advanced by reset() only. The compaction recap call reads it before its
+    // await and drops its result if it moved, so an ended session cannot write
+    // into the next one. clearSessionContext() keeps the transcript and does
+    // NOT advance it: a compaction in flight across a mode switch still applies.
+    private sessionEpoch: number = 0;
+    // Advanced by reset() AND clearSessionContext(). An answer asked before
+    // either (phone-mirror, launcher or overlay chat) is still shown, but not
+    // saved into the context that replaced the one it was asked in.
+    private contextEpoch: number = 0;
+
     // Track interim interviewer segment
     private lastInterimInterviewer: TranscriptSegment | null = null;
 
@@ -260,8 +270,8 @@ export class SessionTracker {
         }
     }
 
-    getDetectedCodingQuestion(): { question: string | null; source: 'screenshot' | 'transcript' | null } {
-        return { question: this.detectedCodingQuestion, source: this.codingQuestionSource };
+    getDetectedCodingQuestion(): { question: string | null; source: 'screenshot' | 'transcript' | null; setAt: number | null } {
+        return { question: this.detectedCodingQuestion, source: this.codingQuestionSource, setAt: this.codingQuestionSetAt };
     }
 
     clearCodingQuestion(): void {
@@ -286,6 +296,7 @@ export class SessionTracker {
         this.lastAssistantMessage = null;
         this.assistantResponseHistory = [];
         this.lastInterimInterviewer = null;
+        this.contextEpoch++;
         console.log('[SessionTracker] Mode-specific session context cleared');
     }
 
@@ -741,6 +752,14 @@ export class SessionTracker {
         return this.sessionStartTime;
     }
 
+    getSessionEpoch(): number {
+        return this.sessionEpoch;
+    }
+
+    getContextEpoch(): number {
+        return this.contextEpoch;
+    }
+
     // ============================================
     // Usage Tracking
     // ============================================
@@ -806,6 +825,8 @@ export class SessionTracker {
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.sessionEpoch++;
+        this.contextEpoch++;
     }
 
     // ============================================
@@ -836,6 +857,10 @@ export class SessionTracker {
         if (this.fullTranscript.length <= 1800 || this.isCompacting) return;
 
         this.isCompacting = true;
+        // A meeting stop resets the session while the recap call below is still
+        // pending. Its summary and the 500-entry eviction belong to the session
+        // that ended, not the one that replaced it.
+        const epoch = this.sessionEpoch;
         try {
             // Take the oldest 500 entries to summarize
             const summarizeCount = 500;
@@ -853,6 +878,7 @@ export class SessionTracker {
                     const epochSummary = await this.recapLLM.generate(
                         `Summarize this conversation segment into 3-5 concise bullet points preserving key topics, decisions, and questions:\n\n${summaryInput}`
                     );
+                    if (this.sessionEpoch !== epoch) return;
                     if (epochSummary && epochSummary.trim().length > 0) {
                         this.transcriptEpochSummaries.push(epochSummary.trim());
                         console.log(`[SessionTracker] Epoch summary created (${this.transcriptEpochSummaries.length} total)`);
@@ -862,6 +888,7 @@ export class SessionTracker {
                         this.transcriptEpochSummaries.push(marker);
                     }
                 } catch (e) {
+                    if (this.sessionEpoch !== epoch) return;
                     // If summarization fails, store a simple marker
                     const fallback = `[Earlier discussion: ${oldEntries.length} segments summarized without transcript snippets.]`;
                     this.transcriptEpochSummaries.push(fallback);

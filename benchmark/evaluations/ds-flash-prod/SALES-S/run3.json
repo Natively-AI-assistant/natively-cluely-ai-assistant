@@ -1,0 +1,161 @@
+{
+ "blind_id": "S-2b61d531",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 29924,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 9857,
+  "candidatesTokenCount": 824,
+  "totalTokenCount": 14090,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 9857
+   }
+  ],
+  "thoughtsTokenCount": 3409,
+  "serviceTier": "standard"
+ },
+ "fact_count": 28,
+ "evaluation": {
+  "factual_accuracy": 9,
+  "important_information_retention": 9,
+  "hallucination_control": 10,
+  "action_item_retention": 9,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 10,
+  "entity_retention": 10,
+  "timeline_accuracy": 9,
+  "conclusion_accuracy": 9,
+  "structure": 4,
+  "conciseness": 4,
+  "readability": 5,
+  "overall_summary_quality": 4,
+  "critical_errors": [],
+  "missing_important_information": [
+   "Migration off homegrown alerting will take a quarter.",
+   "Daniel will check with the deal desk today regarding mid-term seat pricing."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "partial"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "partial"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost all important information, numbers, and decisions accurately without hallucinations. However, the notes suffer from severe formatting and generation issues. The Summary section is a direct, repetitive copy of the Overview section, and one of the bullet points is cut off mid-sentence ('an answer on whe'). Additionally, the Action Items section includes several statements that are not action items (e.g., contract start date, legal turnaround time). These issues significantly impact structure, conciseness, readability, and overall summary quality."
+ }
+}

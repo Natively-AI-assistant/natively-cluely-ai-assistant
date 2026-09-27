@@ -292,10 +292,18 @@ describe('the rendered history honours the mode\'s declared conversation budget'
     }
     const last = await turn(sid, 'And finally?', 99);
     // general mode declares 2400 conversationTokens => ~9600 chars of history.
-    const block = last.user.slice(last.user.indexOf('# Conversation so far'));
+    // The HISTORY body, after the section's one-line provenance header: the
+    // budget governs what is carried, and the header's wording is not history.
+    const header = last.user.indexOf('# Conversation so far');
+    const block = last.user.slice(last.user.indexOf('\n', header) + 1);
     assert.ok(block.length < 12000, `history block was ${block.length} chars — budget not enforced`);
     assert.match(last.user, /ANSWER12/, 'the most recent exchange must survive');
-    assert.ok(!/ANSWER1\b/.test(last.user), 'the oldest exchanges are dropped first');
+    // Retargeted 2026-09-24: older exchanges are CONDENSED (the user's words +
+    // a one-line gist), not dropped — dropping them is how a fact typed early
+    // in a meeting vanished. The oldest answer must not survive in FULL.
+    assert.ok(!/ANSWER1 x{300}/.test(last.user), 'the oldest answers are not carried in full');
+    assert.match(last.user, /Earlier in this conversation \(older exchanges, condensed/);
+    assert.match(last.user, /User: Question number 1\b/, 'the oldest question survives in the condensed tier');
   });
 
   test('a single over-budget exchange is still kept — a follow-up needs an antecedent', async () => {

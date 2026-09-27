@@ -7,6 +7,7 @@ import { Trash2, AlertCircle, ExternalLink, Loader2, Check, KeyRound } from 'luc
 // here fails that suite. The resulting import cycle is safe — every reference
 // below is inside a render function, never at module-evaluation time.
 import { AipSwitch, AipProviderMark, AipModelList } from './AIProvidersSettings';
+import { isOptInModelProvider } from '../../utils/modelUtils';
 
 interface FetchedModel {
     id: string;
@@ -14,13 +15,17 @@ interface FetchedModel {
 }
 
 interface ProviderCardProps {
-    providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim';
+    providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion';
     /** Provider switched off in Settings — keeps the key, hides the models. */
     isDisabled?: boolean;
     onToggleDisabled?: (enabled: boolean) => void;
     /** The provider's full model universe: presets ∪ catalog ∪ allow-listed ids. */
     selectableModels?: { id: string; label: string }[];
-    /** Allow-list of model ids; empty means all of `selectableModels` are shown. */
+    /**
+     * Allow-list of model ids. Empty means ALL of `selectableModels` for most
+     * providers — but NOTHING for an opt-in one (OpenRouter), whose catalogue is
+     * a gateway's. See isOptInModelProvider.
+     */
     enabledModels?: string[];
     onToggleModel?: (modelId: string) => void;
     /** Clears the allow-list back to "all". */
@@ -41,11 +46,26 @@ interface ProviderCardProps {
     onTestConnection: () => void;
     testStatus: 'idle' | 'testing' | 'success' | 'error';
     testError?: string;
+    /** A save/remove the main process refused (e.g. a degraded credential store). */
+    keyWriteError?: string;
     savingStatus: boolean;
     savedStatus: boolean;
     keyPlaceholder: string;
     keyUrl: string;
     onPreferredModelChange?: (modelId: string) => void;
+    /**
+     * Provider-specific settings rendered between the key row and the Test row.
+     * Exists for exactly one provider: Fluxion needs a wire-protocol choice
+     * alongside its key, because the protocol is a property of the key's group
+     * and cannot be read back from the key.
+     *
+     * A slot rather than a `fluxionProtocol` prop on purpose — this table drives
+     * eight cards, and the comment on CLOUD_PROVIDERS records that a new prop
+     * used to mean five edits with a missed one invisible. Keeping the control
+     * itself in AIProvidersSettings.tsx keeps that state where the rest of the
+     * panel's state already lives.
+     */
+    extraControls?: React.ReactNode;
 }
 
 export const ProviderCard: React.FC<ProviderCardProps> = ({
@@ -69,11 +89,13 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     onTestConnection,
     testStatus,
     testError,
+    keyWriteError,
     savingStatus,
     savedStatus,
     keyPlaceholder,
     keyUrl,
     onPreferredModelChange,
+    extraControls,
 }) => {
     const t = useT();
     const [isFetching, setIsFetching] = useState(false);
@@ -121,7 +143,15 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 // list, so a Refresh could silently change which model answers your
                 // questions. A default that is missing from the catalog is surfaced as
                 // "Not offered" in the list instead.
-                if (result.models.length > 0) {
+                //
+                // NEVER for an opt-in provider (OpenRouter). Its catalogue is a
+                // gateway's, sorted by label, so "first" was simply the
+                // alphabetically-first vendor — `openrouter/aion-labs/aion-2.0` on
+                // 2026-09-17 — and its allow-list starts EMPTY, so that model was
+                // not even routable: the card showed "Aion-2.0 · default" beside
+                // "None selected" for a model nobody chose. Reproduced live. There
+                // the user picks with "Set default", which also allow-lists.
+                if (result.models.length > 0 && !isOptInModelProvider(providerId)) {
                     const existsInList = result.models.some((m: FetchedModel) => m.id === selectedModel);
                     if (!existsInList && !selectedModel && !preferredModel) {
                         const firstModel = result.models[0].id;
@@ -251,6 +281,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
             </div>
 
+            {extraControls}
+
             {/* Second row: Test leads, MODELS beside it — the arrangement these two had
                 before the redesign. Costs 40px against putting Test after the trash on
                 one row, and buys back the left-edge alignment that made Test read as the
@@ -275,6 +307,11 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         three 1-preset providers unable to fetch anything at all. */}
                     {!isDisabled && onToggleModel && selectableModels && selectableModels.length >= 1 && (
                         <AipModelList
+                            // Without this every cloud card defaulted to `optIn`
+                            // false, so OpenRouter's empty allow-list would have
+                            // read as "All 444" in the summary and un-ticking the
+                            // last model would have re-enabled the whole gateway.
+                            optIn={isOptInModelProvider(providerId)}
                             models={selectableModels}
                             enabled={enabledModels || []}
                             onToggle={onToggleModel}
@@ -293,9 +330,11 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             )}
 
             {/* One note line, and only when something is actually wrong. */}
-            {(testError || fetchError) && (
-                <p className="aip-meta aip-danger-fg aip-provider-note">
-                    {testError || `${t('Model fetch error:')} ${fetchError}`}
+            {/* A refused key write outranks the others: it means the key the user
+                just typed was NOT stored, which every other note assumes it was. */}
+            {(keyWriteError || testError || fetchError) && (
+                <p className="aip-meta aip-danger-fg aip-provider-note" role="alert">
+                    {keyWriteError || testError || `${t('Model fetch error:')} ${fetchError}`}
                 </p>
             )}
         </div>

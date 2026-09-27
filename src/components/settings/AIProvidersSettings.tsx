@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useT } from '../../i18n';
 import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, FileText, User, Boxes, ClipboardList, Laptop } from 'lucide-react';
-import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -25,8 +25,11 @@ import {
     AI_PROVIDER_BRANDS,
     AI_PROVIDER_MARKS,
     AI_PROVIDER_MARK_IMAGES,
+    WHITE_ON_TRANSPARENT_MARKS,
 } from '../ui/aiProviderMarks';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { FLUXION_REFERRAL_URL } from '../../lib/partnerLinks';
+import { isKnownFastModel } from '../../lib/fastModelHint.mjs';
 import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -224,6 +227,10 @@ export const AIP_CSS = `
     --aip-dur-travel: 220ms;
 
     --aip-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Codex action buttons (transitions.dev 17 Tooltip) — softer muted tones */
+    --codex-refresh-hover-color: #82b997;
+    --codex-logout-hover-color:  #cc7e7e;
 }
 
 .aip-root[data-theme='light'] {
@@ -293,6 +300,9 @@ export const AIP_CSS = `
     --aip-warn-border:   rgba(161,98,7,0.20);
     --aip-danger-bg:     rgba(239,68,68,0.08);
     --aip-danger-border: rgba(185,28,28,0.20);
+
+    --codex-refresh-hover-color: #3b7754;
+    --codex-logout-hover-color:  #a54848;
 }
 
 /* ── Motion. Two easings: ease-out for everything, spring ONLY for the switch
@@ -302,11 +312,70 @@ export const AIP_CSS = `
 @keyframes aip-check-in { from { opacity:0; transform:scale(0.6); } to { opacity:1; transform:scale(1); } }
 @keyframes aip-shimmer  { 0%,100% { opacity:0.55; } 50% { opacity:1; } }
 
-.aip-panel-fade { animation: aip-fade-up var(--aip-dur-state) var(--aip-ease-out) both; }
+.aip-panel-fade { animation: aip-fade-up var(--aip-dur-state) var(--aip-ease-out) backwards; }
 .aip-spinner    { animation: aip-spin 0.65s linear infinite; }
 .aip-check      { animation: aip-check-in 200ms var(--aip-ease-spring) both; }
 .aip-skeleton   { background: var(--aip-btn-bg); border-radius: var(--aip-r-sm);
                   animation: aip-shimmer 1.4s ease-in-out infinite; }
+
+/* ── Success check (transitions.dev #10) for a Test button's "Passed" tick:
+      fade + rotate upright + blur-in + Y-bob, while the tick's stroke draws.
+      The snippet's 40px bob and 10px blur are tuned for a ~48px icon; this is
+      a 12px glyph inside a 32px button, so both are scaled down or it would
+      fly out of the button. The wrapper mounts with the success render, so the
+      keyframes play once per pass — no reflow trick needed. */
+.aip-root {
+    --check-opacity-dur: 500ms;
+    --check-rotate-dur: 500ms;
+    --check-rotate-from: 80deg;
+    --check-bob-dur: 500ms;
+    --check-y-amount: 6px;
+    --check-blur-dur: 500ms;
+    --check-blur-from: 3px;
+    --check-path-dur: 500ms;
+    --check-path-delay: 80ms;
+    --check-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --check-ease-opacity: cubic-bezier(0.22, 1, 0.36, 1);
+    --check-ease-rotate: cubic-bezier(0.22, 1, 0.36, 1);
+    --check-ease-bob: cubic-bezier(0.34, 1.35, 0.64, 1);
+    --check-ease-path: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.t-success-check {
+    display: inline-block;
+    transform-origin: center;
+    opacity: 0;
+    will-change: transform, opacity, filter;
+}
+.t-success-check svg { display: block; overflow: visible; }
+/* 24 = lucide Check's "M20 6 9 17l-5-5" (15.56 + 7.07 = 22.63), rounded up. */
+.t-success-check svg path {
+    stroke-dasharray: 24;
+    stroke-dashoffset: 24;
+}
+.t-success-check[data-state="in"] {
+    animation:
+        t-check-fade   var(--check-opacity-dur) var(--check-ease-opacity) forwards,
+        t-check-rotate var(--check-rotate-dur)  var(--check-ease-rotate)  forwards,
+        t-check-blur   var(--check-blur-dur)    var(--check-ease-out)     forwards,
+        t-check-bob    var(--check-bob-dur)     var(--check-ease-bob)     forwards;
+}
+.t-success-check[data-state="in"] svg path {
+    animation: t-check-draw var(--check-path-dur) var(--check-ease-path) var(--check-path-delay, 0ms) forwards;
+}
+@keyframes t-check-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes t-check-rotate {
+    from { transform: rotate(var(--check-rotate-from)); }
+    to   { transform: rotate(0deg); }
+}
+@keyframes t-check-blur {
+    from { filter: blur(var(--check-blur-from)); }
+    to   { filter: blur(0); }
+}
+@keyframes t-check-bob {
+    from { translate: 0 var(--check-y-amount); }
+    to   { translate: 0 0; }
+}
+@keyframes t-check-draw { to { stroke-dashoffset: 0; } }
 
 /* ── Dismissal. A one-shot card that disappears on click, without the rest of
       the panel snapping up into the hole it left.
@@ -462,6 +531,8 @@ export const AIP_CSS = `
     transition: background var(--aip-dur-state) var(--aip-ease-out),
                 color var(--aip-dur-state) ease,
                 border-color var(--aip-dur-state) ease,
+                opacity var(--aip-dur-state) var(--aip-ease-out),
+                filter var(--aip-dur-state) var(--aip-ease-out),
                 transform var(--aip-dur-press) var(--aip-ease-out);
 }
 .aip-press:active:not(:disabled),
@@ -565,6 +636,48 @@ export const AIP_CSS = `
 .aip-btn[data-tone='info']:hover:not(:disabled),
 .aip-btn[data-tone='danger']:hover:not(:disabled) { filter: brightness(1.08); }
 
+/* ── Codex action buttons (transitions.dev 17 Tooltip + custom soft colors) ── */
+.aip-btn.aip-codex-action-btn {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    /* transform: the shared press would otherwise snap (this list replaces it). */
+    transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+                transform var(--aip-dur-press) var(--aip-ease-out);
+}
+.aip-btn.aip-codex-action-btn:hover:not(:disabled),
+.aip-btn.aip-codex-action-btn:focus-visible:not(:disabled),
+.aip-btn.aip-codex-action-btn:active:not(:disabled) {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+.t-tt-wrap:hover .aip-codex-refresh-btn:not(:disabled),
+.aip-codex-refresh-btn:focus-visible:not(:disabled) {
+    color: var(--codex-refresh-hover-color) !important;
+}
+.t-tt-wrap:hover .aip-codex-logout-btn:not(:disabled),
+.aip-codex-logout-btn:focus-visible:not(:disabled) {
+    color: var(--codex-logout-hover-color) !important;
+}
+/* Tooltip below the button with muted, understated styling */
+.t-tt-wrap .t-tt {
+    top: calc(100% + 5px);
+    bottom: auto;
+    transform-origin: 50% 0%;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: var(--tt-bg);
+    color: var(--tt-fg);
+    font-size: 10.5px;
+    font-weight: 450;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+    border: 1px solid var(--tt-border);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
 /* ── Chips: DUAL encoding — dashed border off / solid + tinted on — so the
       state survives colour-blindness and greyscale. ───────────────────── */
 /* ── Provider card ───────────────────────────────────────────────────────────
@@ -630,7 +743,8 @@ export const AIP_CSS = `
     font-family:inherit; font-size:12px; font-weight:500; line-height:1;
     white-space:nowrap; cursor:pointer;
     transition: background var(--aip-dur-state) var(--aip-ease-out),
-                color      var(--aip-dur-state) var(--aip-ease-out);
+                color      var(--aip-dur-state) var(--aip-ease-out),
+                opacity    var(--aip-dur-state) var(--aip-ease-out);
 }
 .aip-field-seg:hover:not(:disabled)  { background: var(--aip-btn-bg-hover); }
 .aip-field-seg:active:not(:disabled) { background: var(--aip-item-active); }
@@ -667,7 +781,8 @@ export const AIP_CSS = `
     color: var(--aip-secondary); cursor:pointer; font-family:inherit; text-align:left;
     transition: background var(--aip-dur-state) var(--aip-ease-out),
                 border-color var(--aip-dur-state) var(--aip-ease-out),
-                color var(--aip-dur-state) var(--aip-ease-out);
+                color var(--aip-dur-state) var(--aip-ease-out),
+                transform var(--aip-dur-press) var(--aip-ease-out);
 }
 .aip-models-summary:hover {
     background: var(--aip-item-hover); border-color: var(--aip-border-strong);
@@ -928,7 +1043,8 @@ select.aip-input { cursor:pointer; }
     border:1px solid var(--aip-btn-border); color: var(--aip-primary);
     font-size:12px; line-height:1; text-align:left; cursor:pointer;
     transition: background var(--aip-dur-state) var(--aip-ease-out),
-                border-color var(--aip-dur-state) var(--aip-ease-out);
+                border-color var(--aip-dur-state) var(--aip-ease-out),
+                opacity var(--aip-dur-state) var(--aip-ease-out);
 }
 .aip-select-trigger:hover { background: var(--aip-btn-bg-hover); }
 .aip-select-trigger[aria-disabled='true'] { cursor:default; }
@@ -974,7 +1090,8 @@ select.aip-input { cursor:pointer; }
    transition-duration to 0.01ms !important on every descendant, and a
    non-important shorthand here would lose to it anyway. */
 .aip-tab { color: var(--aip-secondary); background:transparent; cursor:pointer;
-           transition: color 200ms var(--aip-ease-out); }
+           transition: color 200ms var(--aip-ease-out),
+                       transform var(--aip-dur-press) var(--aip-ease-out); }
 /* Inset focus ring. This started as a workaround for the tablist's
    overflow:hidden (which the selection pill's spring overshoot has since forced
    off, see the tablist JSX) and is kept as the deliberate look: the tabs sit
@@ -1042,6 +1159,9 @@ select.aip-input { cursor:pointer; }
        to land it. Opacity is left alone: it aids comprehension and carries no motion. */
     .aip-root .aip-reveal--models > div > * { transform: none !important; }
     .aip-root .aip-skeleton { animation: none; opacity: 0.55; }
+    /* The success check's own guard: show the finished tick outright. */
+    .aip-root .t-success-check { animation: none !important; opacity: 1; }
+    .aip-root .t-success-check svg path { animation: none !important; stroke-dashoffset: 0 !important; }
 }
 `;
 
@@ -1173,16 +1293,32 @@ export const AipSwitch: React.FC<AipSwitchProps> = ({
  */
 export const CLOUD_PROVIDERS = [
     { id: 'gemini'   as const, name: 'Gemini',   placeholder: 'AIzaSy...',  url: 'https://aistudio.google.com/app/apikey' },
+    // Also a gateway, but NOT opt-in: 36 models, and its catalogue endpoint is
+    // scoped to the key's group. The one provider here with a second required
+    // setting — see the protocol selector passed as `extraControls` below.
+    // Natively's partner link (sponsor): new sign-ups get $3 in API credit.
+    { id: 'fluxion' as const, name: 'Fluxion AI', placeholder: 'sk-...', url: FLUXION_REFERRAL_URL },
     { id: 'groq'     as const, name: 'Groq',     placeholder: 'gsk_...',    url: 'https://console.groq.com/keys' },
     { id: 'openai'   as const, name: 'OpenAI',   placeholder: 'sk-...',     url: 'https://platform.openai.com/api-keys' },
     { id: 'claude'   as const, name: 'Claude',   placeholder: 'sk-ant-...', url: 'https://console.anthropic.com/settings/keys' },
     // Text-only; intentionally NOT part of the screenshot/vision fallback chain.
     { id: 'deepseek' as const, name: 'DeepSeek', placeholder: 'sk-...',     url: 'https://platform.deepseek.com/api_keys' },
     { id: 'nvidia_nim' as const, name: 'Nvidia Nim', placeholder: 'nvapi-...', url: 'https://build.nvidia.com' },
+    // A gateway, not a vendor: its model list is opt-in (isOptInModelProvider),
+    // and ONE key here also backs OpenRouter embeddings and reranking.
+    { id: 'openrouter' as const, name: 'OpenRouter', placeholder: 'sk-or-v1-...', url: 'https://openrouter.ai/keys' },
 ];
 export type CloudProviderId = (typeof CLOUD_PROVIDERS)[number]['id'];
 
 export const AIP_PROVIDER_BRANDS = AI_PROVIDER_BRANDS;
+
+/** A Test button's "Passed" tick with the success-check animation. Render it
+    only in the success branch: each mount is one play. */
+export const AipPassedCheck: React.FC = () => (
+    <span className="t-success-check" data-state="in" aria-hidden="true">
+        <Check size={12} strokeWidth={2} />
+    </span>
+);
 
 interface AipMonogramProps {
     /** Two letters. Longer strings are clipped to two. */
@@ -1245,12 +1381,22 @@ export const AipProviderMark: React.FC<AipProviderMarkProps> = ({ provider, name
                 title={name || provider}
                 style={{ ['--aip-brand' as string]: brand?.brand ?? 'var(--aip-accent)' } as React.CSSProperties}
             >
-                {/* `.brand-mark-raster` (index.css) flattens a white-on-transparent
+                {/* 20px inside the 26px tile, where the inlined SVG marks get 16
+                    (`.aip-tile--mark > svg`). Deliberately different: those are
+                    two-colour vector glyphs that stay crisp small, while these are
+                    detailed raster artwork — Fluxion's monogram and LiteLLM's
+                    favicon — which need the extra pixels to be readable at all.
+                    20 leaves 3px of breathing room per side.
+
+                    `.brand-mark-raster` (index.css) flattens a white-on-transparent
                     mark to black in the light theme. Natively's own icon is drawn
-                    for the dark theme, so without it the tile reads as empty. This
-                    renderer is shared: the natively mark reaches it from Retrieval's
+                    for the dark theme, so without it the tile reads as empty. It is
+                    opt-in (WHITE_ON_TRANSPARENT_MARKS) because on a full-colour
+                    mark that filter paints every pixel black. This renderer is
+                    shared: the natively mark reaches it from Retrieval's
                     Embeddings/Reranker rows, not from any row in this panel. */}
-                <img src={imageSrc} alt="" width={16} height={16} className="object-contain brand-mark-raster" />
+                <img src={imageSrc} alt="" width={20} height={20}
+                    className={`object-contain ${WHITE_ON_TRANSPARENT_MARKS.has(key) ? 'brand-mark-raster' : ''}`} />
             </span>
         );
     }
@@ -1758,6 +1904,7 @@ export const AipSelect: React.FC<AipSelectProps> = ({
 // the confirm dialog can render action-specific copy from one piece of state.
 type PendingConfirm =
     | { kind: 'litellm' }
+    | { kind: 'ninerouter' }
     | { kind: 'providerKey'; provider: string; setter: (val: string) => void }
     | { kind: 'customProvider'; id: string };
 
@@ -1807,6 +1954,8 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly strin
     ['gpt-5.2',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.4',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
+    ['gpt-5.6',          ['low', 'medium', 'high', 'xhigh']],
+    ['gpt-6',            ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.3-codex-spark', ['low', 'medium', 'high']],
@@ -2055,7 +2204,7 @@ const AmbiguousStoresCard: React.FC = () => {
             </div>
             <div className="flex flex-wrap gap-2 pl-6">
                 <button
-                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
                     style={{ borderColor: 'var(--aip-warn-border)' }}
                     disabled={busy !== null}
                     onClick={() => resolve('keyring')}
@@ -2063,7 +2212,7 @@ const AmbiguousStoresCard: React.FC = () => {
                     {busy === 'keyring' ? t('Applying…') : t('Keep system keychain')}
                 </button>
                 <button
-                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
                     style={{ borderColor: 'var(--aip-warn-border)' }}
                     disabled={busy !== null}
                     onClick={() => resolve('fallback')}
@@ -2071,7 +2220,7 @@ const AmbiguousStoresCard: React.FC = () => {
                     {busy === 'fallback' ? t('Applying…') : t('Keep app backup')}
                 </button>
                 <button
-                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
                     style={{ borderColor: 'var(--aip-warn-border)' }}
                     disabled={busy !== null}
                     onClick={() => resolve('merge')}
@@ -2300,15 +2449,58 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [claudeApiKey, setClaudeApiKey] = useState('');
     const [deepseekApiKey, setDeepseekApiKey] = useState('');
     const [nvidiaNimApiKey, setNvidiaNimApiKey] = useState('');
+    const [openrouterApiKey, setOpenrouterApiKey] = useState('');
+    const [fluxionApiKey, setFluxionApiKey] = useState('');
+    /**
+     * Which wire protocol the user's Fluxion key speaks, which is a property
+     * of the KEY'S GROUP and is not discoverable from the key itself. Held in
+     * component state (not just written on save) because the card has to show
+     * the stored value when the panel re-opens — a silently wrong protocol is
+     * exactly the failure this control exists to prevent.
+     */
+    const [fluxionProtocol, setFluxionProtocol] = useState<'openai' | 'anthropic'>('openai');
     /**
      * The active speech provider, so the remove-key confirmation can warn when
      * the NVIDIA key it is about to delete is ALSO the one speech is using —
      * one nvapi- credential authenticates both.
      */
     const [activeSttProvider, setActiveSttProvider] = useState<string>('none');
+    /**
+     * Whether embeddings or reranking are currently running on OpenRouter, so the
+     * remove-key confirmation can warn BEFORE the click that deleting the key
+     * also takes retrieval down with it — the same "say it first, don't let them
+     * discover it later" rule the NVIDIA/speech warning follows. One OpenRouter
+     * credential backs chat, embeddings and reranking.
+     */
+    const [openrouterBacksRetrieval, setOpenrouterBacksRetrieval] = useState(false);
+    const openrouterBacksRetrievalRef = useRef(false);
+    /**
+     * Re-reads whether retrieval runs on OpenRouter. A mount-time read alone was
+     * NOT enough: saving the key activates OpenRouter reranking asynchronously,
+     * so the value read at load went stale the moment a key was saved in this
+     * session (reproduced live 2026-09-17 — reranker 'openrouter', dialog copy
+     * still generic). Called at load, after an OpenRouter save, and again when
+     * the remove dialog opens. A failed read keeps the last known value rather
+     * than inventing or dropping a warning.
+     */
+    const refreshOpenrouterRetrievalCoupling = async (): Promise<boolean> => {
+        try {
+            const [embedding, reranker]: any[] = await Promise.all([
+                window.electronAPI?.getEmbeddingStatus?.().catch(() => null),
+                window.electronAPI?.getRerankerStatus?.().catch(() => null),
+            ]);
+            if (!embedding && !reranker) return openrouterBacksRetrievalRef.current;
+            const backs = embedding?.active?.provider === 'openrouter' || reranker?.provider === 'openrouter';
+            openrouterBacksRetrievalRef.current = backs;
+            setOpenrouterBacksRetrieval(backs);
+            return backs;
+        } catch {
+            return openrouterBacksRetrievalRef.current;
+        }
+    };
 
 
-    // Binds the five key fields to the CLOUD_PROVIDERS table. The useState calls stay
+    // Binds the key fields to the CLOUD_PROVIDERS table. The useState calls stay
     // separate (they are read individually elsewhere); this is only the lookup the
     // render map needs, so adding a provider is a table row plus one line here.
     const keyFields: Record<CloudProviderId, [string, (v: string) => void]> = {
@@ -2318,6 +2510,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         claude: [claudeApiKey, setClaudeApiKey],
         deepseek: [deepseekApiKey, setDeepseekApiKey],
         nvidia_nim: [nvidiaNimApiKey, setNvidiaNimApiKey],
+        openrouter: [openrouterApiKey, setOpenrouterApiKey],
+        fluxion: [fluxionApiKey, setFluxionApiKey],
     };
 
     // --- LiteLLM proxy (OpenAI-compatible gateway: baseURL + optional virtual key) ---
@@ -2328,6 +2522,21 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [litellmMaxTokens, setLitellmMaxTokens] = useState('');
     const [litellmModels, setLitellmModels] = useState<string[]>([]);
     const [isRefreshingLitellm, setIsRefreshingLitellm] = useState(false);
+    // --- 9Router (self-hosted OpenAI-compatible fallback proxy: baseURL + optional key) ---
+    const [ninerouterBaseURL, setNinerouterBaseURL] = useState('');
+    const [ninerouterApiKey, setNinerouterApiKey] = useState('');
+    const [ninerouterMaxTokens, setNinerouterMaxTokens] = useState('');
+    const [ninerouterModels, setNinerouterModels] = useState<string[]>([]);
+    const [isRefreshingNinerouter, setIsRefreshingNinerouter] = useState(false);
+    // Test Connection result. Kept separate from savingStatus because it answers a
+    // different question: Save persists, this proves the instance will actually
+    // answer. On 9Router those are genuinely different outcomes — /v1/models
+    // responds without a key while /v1/chat/completions does not.
+    const [ninerouterTest, setNinerouterTest] = useState<{ testing: boolean; ok?: boolean; message?: string }>({ testing: false });
+    const [ninerouterThinking, setNinerouterThinking] = useState('');
+    // Per-model reasoning capability from the catalogue, so the thinking
+    // dropdown offers what THIS model can actually do.
+    const [ninerouterModelMeta, setNinerouterModelMeta] = useState<Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>>({});
     // Provider visibility filters. `disabledProviders` hides a provider's models
     // without touching its stored credential; `cloudEnabledModels[prov]` narrows
     // which of that provider's models reach the picker (empty = all).
@@ -2345,6 +2554,18 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [hasStoredKey, setHasStoredKey] = useState<Record<string, boolean>>({});
     const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'success' | 'error'>>({});
     const [testError, setTestError] = useState<Record<string, string>>({});
+    /**
+     * A key write the main process REFUSED (e.g. `credential_store_degraded`).
+     * Before this, a failed save only stopped the spinner, so the user had no
+     * way to tell a refused key from a saved one. Cleared on the next attempt.
+     */
+    const [keyWriteError, setKeyWriteError] = useState<Record<string, string>>({});
+    const keyWriteFailureText = (result: { error?: string; message?: string } | undefined, action: 'save' | 'remove'): string =>
+        result?.error === 'credential_store_degraded'
+            ? (action === 'save'
+                ? t('Could not save the key: your credential store is unavailable this session. Restart Natively and try again.')
+                : t('Could not remove the key: your credential store is unavailable this session. Restart Natively and try again.'))
+            : (result?.message || result?.error || (action === 'save' ? t('Could not save the key.') : t('Could not remove the key.')));
 
     // --- Custom Providers ---
     const [customProviders, setCustomProviders] = useState<CustomProvider[]>([]);
@@ -2470,12 +2691,30 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // 2026-09-03), so the model default takes the branch side; the three
     // Direct Assist states are main's and are additive.
     const [defaultModel, setDefaultModel] = useState<string>('gemini-3.8-flash');
+    // 'auto' means unset: use the measured per-provider ladder, not a slow default.
+    const [fastModel, setFastModel] = useState<string>('auto');
+    // Only the ids the fast path can actually dispatch. Main owns the provider
+    // classifiers, so we ASK it rather than re-deriving them here - a second copy
+    // would drift, and drift here means offering a pick that silently does nothing.
+    // null = not answered yet.
+    const [fastModelDispatchable, setFastModelDispatchable] = useState<string[] | null>(null);
     const [directAssistEnabled, setDirectAssistEnabled] = useState(false);
     const [directAssistBusy, setDirectAssistBusy] = useState(false);
     const [directAssistError, setDirectAssistError] = useState('');
     const [fastResponseMode, setFastResponseMode] = useState(false);
     const [credentialsLoaded, setCredentialsLoaded] = useState(false);
     const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || (codexCliConfig.enabled && codexOauthStatus.signedIn));
+    // Mirror of LLMHelper's `fastModeApplies` (2026-09-22): the runtime routes
+    // through fast mode ONLY when the active model is itself a Groq or Natively
+    // model, or Codex CLI is signed in — a Groq key with, say, an OpenAI model
+    // selected leaves the switch on and silently ignored. The switch's
+    // availability (canUseFastMode) is about KEYS; this is about the MODEL, and
+    // it is what the inline hint below tells the user.
+    const fastModeAppliesToActiveModel = !!(
+        (codexCliConfig.enabled && codexOauthStatus.signedIn) ||
+        defaultModel === 'natively' ||
+        /^(?:llama-|mixtral-|gemma-|meta-llama\/|qwen\/|qwen-|openai\/gpt-oss-|groq\/)/.test(defaultModel)
+    ) && !defaultModel.startsWith('codex-cli');
 
     // --- Dynamic Model Discovery ---
     const [preferredModels, setPreferredModels] = useState<Record<string, string>>({});
@@ -2590,8 +2829,19 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 // If we set fastResponseMode before hasStoredKey is populated, the enforcement
                 // effect below fires with canUseFastMode=false and immediately resets fast mode
                 // to false — writing that reset back to SettingsManager on every startup.
-                // @ts-ignore
-                const creds = await window.electronAPI?.getStoredCredentials?.();
+                //
+                // The persisted default model is read in the SAME round trip, not after
+                // the Codex / Antigravity / custom-provider loads below. Read last, the
+                // `useState` initial value stayed on screen for that whole chain, and
+                // once hasStoredKey made it a real option (any Gemini key does) the
+                // Active Model picker showed Gemini for a beat before switching to the
+                // actual default, e.g. Natively API. Both setters now land in one render.
+                const [creds, persistedDefault] = await Promise.all([
+                    // @ts-ignore
+                    window.electronAPI?.getStoredCredentials?.(),
+                    window.electronAPI?.getDefaultModel?.().catch(() => null),
+                ]);
+                if (persistedDefault?.model) setDefaultModel(persistedDefault.model);
                 if (creds) {
                     setHasStoredKey({
                         gemini: creds.hasGeminiKey,
@@ -2600,7 +2850,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         claude: creds.hasClaudeKey,
                         deepseek: creds.hasDeepseekKey || false,
                         nvidia_nim: creds.hasNvidiaNimKey || false,
+                        openrouter: (creds as any).hasOpenrouterKey || false,
+                        fluxion: (creds as any).hasFluxionKey || false,
                         litellm: creds.hasLitellmBaseURL || false,
+                        // Base URL, not key: a stock 9Router runs keyless.
+                        ninerouter: (creds as any).hasNinerouterBaseURL || false,
                         natively: creds.hasNativelyKey || false
                     });
                     setActiveSttProvider((creds as any).sttProvider || 'none');
@@ -2609,6 +2863,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     // Also clear the fields when another window removes the proxy.
                     setLitellmBaseURL(creds.litellmBaseURL || '');
                     setLitellmMaxTokens(creds.litellmMaxTokens ? String(creds.litellmMaxTokens) : '');
+                    setNinerouterBaseURL((creds as any).ninerouterBaseURL || '');
+                    setNinerouterMaxTokens((creds as any).ninerouterMaxTokens ? String((creds as any).ninerouterMaxTokens) : '');
+                    setNinerouterThinking((creds as any).ninerouterThinking || '');
+                    setNinerouterModelMeta((creds as any).ninerouterModelMeta || {});
                     // Load preferred models
                     const pm: Record<string, string> = {};
                     if (creds.geminiPreferredModel) pm.gemini = creds.geminiPreferredModel;
@@ -2617,16 +2875,42 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     if (creds.claudePreferredModel) pm.claude = creds.claudePreferredModel;
                     if (creds.deepseekPreferredModel) pm.deepseek = creds.deepseekPreferredModel;
                     if (creds.nvidia_nimPreferredModel) pm.nvidia_nim = creds.nvidia_nimPreferredModel;
+                    // Already prefixed on disk (`openrouter/<vendor>/<model>`), the same
+                    // form the model list renders — see the LiteLLM note below.
+                    if ((creds as any).openrouterPreferredModel) pm.openrouter = (creds as any).openrouterPreferredModel;
+                    // Already prefixed on disk (`fluxion/<model>`), same rule as above.
+                    if ((creds as any).fluxionPreferredModel) pm.fluxion = (creds as any).fluxionPreferredModel;
+                    // Only adopt the stored protocol when a key actually exists.
+                    // loadCredentials re-runs on EVERY credentials-changed broadcast —
+                    // saving a Gemini key on another card fires one — and an
+                    // unconditional set silently reverted a protocol the user had
+                    // picked but not yet saved (there is nothing to persist against
+                    // before a key exists). They would then hit Save and ship the
+                    // default they had explicitly opted out of, with the UI agreeing
+                    // with disk so nothing looked wrong. With a key stored the stored
+                    // value IS the truth, so cross-window sync still converges.
+                    if ((creds as any).hasFluxionKey) {
+                        setFluxionProtocol((creds as any).fluxionProtocol === 'anthropic' ? 'anthropic' : 'openai');
+                    }
                     // Already prefixed on disk (`litellm/<model>`), which is the id the
                     // LiteLLM model list renders — no re-prefixing here or the star lands
                     // on no row at all.
                     if (creds.litellmPreferredModel) pm.litellm = creds.litellmPreferredModel;
+                    // Already prefixed on disk (`ninerouter/<alias>/<model>`), same rule.
+                    if ((creds as any).ninerouterPreferredModel) pm.ninerouter = (creds as any).ninerouterPreferredModel;
                     setDisabledProviders(Array.isArray(creds.disabledProviders) ? creds.disabledProviders : []);
                     setCloudEnabledModelsState(creds.cloudEnabledModels || {});
                     window.electronAPI?.getCloudFetchedModels?.()
                         .then((res: { models?: Record<string, AipModelEntry[]> }) => { if (res?.models) setCloudFetchedModels(res.models); })
                         .catch(() => {});
                     setPreferredModels(pm);
+
+                    // Is retrieval actually running on OpenRouter right now? Only
+                    // asked when a key exists, so an install that has never seen
+                    // OpenRouter makes no IPC calls. Both are best-effort: a
+                    // failure leaves the flag false, which downgrades the remove
+                    // dialog to its generic copy rather than inventing a warning.
+                    if ((creds as any).hasOpenrouterKey) void refreshOpenrouterRetrievalCoupling();
                 }
 
                 // Now it's safe to read fast mode — hasStoredKey is already set so
@@ -2662,12 +2946,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     setCustomProviders(custom);
                 }
 
-                // Load persisted default model
+                // Load the persisted fast model. null on disk means "Auto".
                 // @ts-ignore
-                const result = await window.electronAPI?.getDefaultModel();
-                if (result && result.model) {
-                    setDefaultModel(result.model);
-                }
+                const fastResult = await window.electronAPI?.getFastModel?.();
+                setFastModel(fastResult?.model || 'auto');
 
                 const directEnabled = await window.electronAPI?.getDirectAssistEnabled?.();
                 setDirectAssistEnabled(directEnabled === true);
@@ -2747,6 +3029,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // modelAvailable() in ipcHandlers.ts compares against; storing the bare name
         // would make the two surfaces disagree and the filter would silently no-op.
         if (provider === 'litellm') litellmModels.forEach(m => push(`litellm/${m}`, litellmModelLabel(m)));
+        // Same shape as LiteLLM: no preset table, no cloudFetchedModels entry.
+        // The universe is whatever the instance reported, held UNPREFIXED in
+        // `ninerouterModels`, so the prefix is added here and the allow-list
+        // stores the same `ninerouter/<id>` ids modelAvailable() compares.
+        if (provider === 'ninerouter') ninerouterModels.forEach(m => push(`ninerouter/${m}`, gatewayModelLabel(m)));
         // Antigravity is the same shape of problem as LiteLLM: no preset table, and
         // `cloudFetchedModels` is written only from getCloudFetchedModels(), which
         // covers the key-backed providers and never the OAuth ones. Without this the
@@ -2766,10 +3053,20 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // prettifyModelId — which would render `litellm/openai/gpt-4o` as
         // "Litellm/Openai/Gpt 4o".
         (cloudEnabledModels[provider] || []).forEach(id =>
-            push(id, provider === 'litellm' ? litellmModelLabel(id) : prettifyModelId(id)));
+            push(id, (provider === 'litellm' || provider === 'ninerouter') ? gatewayModelLabel(id) : prettifyModelId(id)));
         return out;
-    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, antigravityModels]);
+    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, ninerouterModels, antigravityModels]);
 
+    /**
+     * The Background Model picker's options: Auto, plus only the models the fast
+     * path can actually run.
+     *
+     * Until main answers the filter IPC we offer ONLY Auto (plus whatever is
+     * already saved), so the full unfiltered list never flashes up as selectable.
+     * A saved-but-unsupported pick stays visible and labelled rather than being
+     * silently dropped - dropping it would render an empty control while the id
+     * is still persisted, and rewriting it would change a setting the user chose.
+     */
     const buildAvailableModelOptions = (): { id: string; name: string }[] => {
         const opts: { id: string; name: string }[] = [];
 
@@ -2822,6 +3119,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 opts.push({ id, name: `${litellmModelLabel(model)} (LiteLLM)` });
             });
         }
+        if (hasStoredKey.ninerouter && isProviderEnabled('ninerouter')) {
+            // Same allow-list gate, same reason: without it the instance's whole
+            // catalogue reaches the picker while modelAvailable() filters it, and
+            // the two surfaces disagree.
+            ninerouterModels.forEach(model => {
+                const id = `ninerouter/${model}`;
+                if (!isModelEnabled('ninerouter', id)) return;
+                opts.push({ id, name: `${gatewayModelLabel(model)} (9Router)` });
+            });
+        }
         if (isProviderEnabled('custom')) {
             customProviders.forEach(p => opts.push({ id: p.id, name: p.name }));
         }
@@ -2830,6 +3137,30 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         }
         return opts;
     };
+
+    const fastModelCandidateKey = buildAvailableModelOptions().map((o) => o.id).join(',');
+    useEffect(() => {
+        let cancelled = false;
+        const ids = fastModelCandidateKey ? fastModelCandidateKey.split(',') : [];
+        window.electronAPI?.filterFastModelCandidates?.(ids)
+            .then((r) => { if (!cancelled) setFastModelDispatchable(r?.ids ?? []); })
+            .catch(() => { if (!cancelled) setFastModelDispatchable([]); });
+        return () => { cancelled = true; };
+    }, [fastModelCandidateKey]);
+
+    const buildFastModelOptions = (): { id: string; name: string }[] => {
+        const all = buildAvailableModelOptions();
+        const allowed = fastModelDispatchable === null
+            ? []
+            : all.filter((o) => fastModelDispatchable.includes(o.id));
+        const opts = [{ id: 'auto', name: t('Auto (recommended)') }, ...allowed];
+        if (fastModel !== 'auto' && !allowed.some((o) => o.id === fastModel)) {
+            const saved = all.find((o) => o.id === fastModel);
+            opts.push({ id: fastModel, name: `${saved?.name ?? fastModel} ${t('(not supported)')}` });
+        }
+        return opts;
+    };
+
 
     // Keep the persisted default model from pointing at a provider the user just
     // removed/signed out of. This turns credential changes into immediate routing
@@ -2849,7 +3180,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             || opts[0].id;
         setDefaultModel(next);
         window.electronAPI?.setDefaultModel?.(next).catch(console.error);
-    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, codexModelCatalog, customProviders, ollamaModels, litellmModels, disabledProviders, cloudEnabledModels, antigravityStatus.signedIn, antigravityModels, antigravityError]);
+    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, codexModelCatalog, customProviders, ollamaModels, litellmModels, ninerouterModels, disabledProviders, cloudEnabledModels, antigravityStatus.signedIn, antigravityModels, antigravityError]);
 
     // Load LiteLLM model IDs only when the proxy is configured. The active-model
     // selector should not expose stale `litellm/...` choices after the proxy is
@@ -2869,6 +3200,27 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             });
         return () => { cancelled = true; };
     }, [hasStoredKey.litellm, litellmBaseURL]);
+
+    // Same rule for 9Router: load its ids only while configured, so the
+    // active-model selector cannot offer stale `ninerouter/...` choices after the
+    // instance is removed. Keyed on the base URL too, because repointing at a
+    // different instance invalidates the catalogue — which models a 9Router
+    // serves depends on which upstream accounts its owner has connected.
+    useEffect(() => {
+        let cancelled = false;
+        if (!hasStoredKey.ninerouter) {
+            setNinerouterModels([]);
+            return;
+        }
+        window.electronAPI?.getAvailableNinerouterModels?.()
+            .then((models) => {
+                if (!cancelled) setNinerouterModels(Array.isArray(models) ? models.filter(Boolean) : []);
+            })
+            .catch(() => {
+                if (!cancelled) setNinerouterModels([]);
+            });
+        return () => { cancelled = true; };
+    }, [hasStoredKey.ninerouter, ninerouterBaseURL]);
 
     // Switch a whole provider off/on. The credential is left untouched — this is
     // the difference between "I'm not using this right now" and "delete my key".
@@ -3006,8 +3358,15 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         const prevEnabled = cloudEnabledModels;
         const prevPreferred = preferredModels;
         const current = cloudEnabledModels[provider] || [];
-        // An empty allow-list already means "all", so nothing to add in that case.
-        const needsAllow = current.length > 0 && !current.includes(modelId);
+        // An empty allow-list means "all" for most providers, so nothing to add.
+        // For an OPT-IN provider (OpenRouter, LiteLLM) empty means NONE, so the
+        // new default must be added or it is a default that routing rejects:
+        // reproduced live 2026-09-17 — "Set default" on an OpenRouter model
+        // stored the preference, left the allow-list empty, and the model never
+        // appeared in the overlay picker.
+        const needsAllow = isOptInModelProvider(provider)
+            ? !current.includes(modelId)
+            : current.length > 0 && !current.includes(modelId);
         const nextList = needsAllow ? [...current, modelId] : current;
 
         if (needsAllow) setCloudEnabledModelsState(p => ({ ...p, [provider]: nextList }));
@@ -3456,6 +3815,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const handleSaveKey = async (provider: string, key: string, setter: (val: string) => void) => {
         if (!key.trim()) return;
         setSavingStatus(prev => ({ ...prev, [provider]: true }));
+        setKeyWriteError(prev => ({ ...prev, [provider]: '' }));
         try {
             let result;
             // @ts-ignore
@@ -3469,17 +3829,128 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             // @ts-ignore
             if (provider === 'deepseek') result = await window.electronAPI.setDeepseekApiKey(key);
             if (provider === 'nvidia_nim') result = await window.electronAPI.setNvidiaNimApiKey(key);
+            if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey(key);
+            // No protocol is passed: the main process PROBES the key's group and
+            // reports what it found. The group is a property of the key that the
+            // key does not reveal, so asking the user was asking them to guess.
+            if (provider === 'fluxion') {
+                result = await window.electronAPI.setFluxionConfig({ apiKey: key });
+                const detected = (result as { protocol?: 'openai' | 'anthropic' })?.protocol;
+                if (detected) setFluxionProtocol(detected);
+            }
 
             if (result && result.success) {
+                // The save may have just switched OpenRouter reranking on; the
+                // credentials broadcast does not fire when the same key is saved
+                // again, so re-read here rather than rely on it.
+                if (provider === 'openrouter') void refreshOpenrouterRetrievalCoupling();
                 setSavedStatus(prev => ({ ...prev, [provider]: true }));
                 setHasStoredKey(prev => ({ ...prev, [provider]: true }));
                 setter('');
                 setTimeout(() => setSavedStatus(prev => ({ ...prev, [provider]: false })), 2000);
+            } else if (result && (result as { success?: boolean }).success === false) {
+                // Keep the typed key in the field: nothing was stored, so clearing
+                // it would throw away the only copy.
+                setKeyWriteError(prev => ({ ...prev, [provider]: keyWriteFailureText(result as any, 'save') }));
             }
         } catch (e) {
             console.error(`Failed to save ${provider} key:`, e);
         } finally {
             setSavingStatus(prev => ({ ...prev, [provider]: false }));
+        }
+    };
+
+    // 9Router takes the same three fields as LiteLLM for the same reason: it is a
+    // user-supplied endpoint, not a vendor key.
+    const handleSaveNinerouter = async () => {
+        const url = ninerouterBaseURL.trim();
+        if (!url) return;
+        setSavingStatus(prev => ({ ...prev, ninerouter: true }));
+        try {
+            const parsedMax = parseInt(ninerouterMaxTokens, 10);
+            const result = await window.electronAPI.setNinerouterConfig({
+                apiKey: ninerouterApiKey.trim(),
+                baseURL: url,
+                maxTokens: Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : undefined,
+                thinking: ninerouterThinking || undefined,
+            });
+            if (result && result.success) {
+                setSavedStatus(prev => ({ ...prev, ninerouter: true }));
+                setHasStoredKey(prev => ({ ...prev, ninerouter: true }));
+                setNinerouterApiKey('');
+                window.electronAPI?.getAvailableNinerouterModels?.()
+                    .then((models) => setNinerouterModels(Array.isArray(models) ? models.filter(Boolean) : []))
+                    .catch(() => setNinerouterModels([]));
+                setTimeout(() => setSavedStatus(prev => ({ ...prev, ninerouter: false })), 2000);
+            }
+        } catch (e) {
+            console.error('Failed to save 9Router config:', e);
+        } finally {
+            setSavingStatus(prev => ({ ...prev, ninerouter: false }));
+        }
+    };
+
+    /**
+     * Test Connection.
+     *
+     * Deliberately tests what the user typed, not what is stored, so pressing it
+     * before Save answers for the config in front of them. The probe POSTs — a
+     * GET-based test would go green on an instance whose work routes reject the
+     * key, because on 9Router every GET answers openly and every POST does not.
+     */
+    const handleTestNinerouter = async () => {
+        setNinerouterTest({ testing: true });
+        try {
+            const r = await window.electronAPI?.testNinerouterConnection?.({
+                apiKey: ninerouterApiKey.trim(),
+                baseURL: ninerouterBaseURL.trim(),
+            });
+            setNinerouterTest({
+                testing: false,
+                ok: !!r?.ok,
+                message: r?.ok ? t('9Router answered. The key works.') : (r?.error || t('Connection test failed.')),
+            });
+        } catch (e: any) {
+            setNinerouterTest({ testing: false, ok: false, message: e?.message || t('Connection test failed.') });
+        }
+    };
+
+    const handleRefreshNinerouterModels = async () => {
+        setIsRefreshingNinerouter(true);
+        try {
+            const models = await window.electronAPI?.refreshNinerouterModels?.();
+            setNinerouterModels(Array.isArray(models) ? models.filter(Boolean) : []);
+        } catch (e) {
+            console.error('Failed to refresh 9Router models:', e);
+        } finally {
+            setIsRefreshingNinerouter(false);
+        }
+    };
+
+    const handleRemoveNinerouter = () => setPendingConfirm({ kind: 'ninerouter' });
+
+    const performRemoveNinerouter = async () => {
+        try {
+            const result = await window.electronAPI.setNinerouterConfig({ apiKey: '', baseURL: '' });
+            if (result && result.success) {
+                setHasStoredKey(prev => ({ ...prev, ninerouter: false }));
+                setNinerouterBaseURL('');
+                setNinerouterApiKey('');
+                setNinerouterMaxTokens('');
+                setNinerouterThinking('');
+                setNinerouterModelMeta({});
+                setNinerouterModels([]);
+                setNinerouterTest({ testing: false });
+                // Main already dropped ninerouterPreferredModel with the rest of the
+                // config; mirror it so re-configuring the same instance in this
+                // session doesn't show a star pointing at the old catalogue.
+                setPreferredModels(prev => {
+                    const { ninerouter: _removed, ...rest } = prev;
+                    return rest;
+                });
+            }
+        } catch (e) {
+            console.error('Failed to remove 9Router config:', e);
         }
     };
 
@@ -3542,11 +4013,22 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     };
 
 
-    const handleRemoveKey = (provider: string, setter: (val: string) => void) => {
+    const handleRemoveKey = async (provider: string, setter: (val: string) => void) => {
+        // Read the coupling FRESH before the dialog renders its copy, so the
+        // warning reflects what removing the key will actually do right now.
+        // Bounded: a slow status read must not make the trash button feel dead,
+        // so after 1s the dialog opens on the last known value.
+        if (provider === 'openrouter') {
+            await Promise.race([
+                refreshOpenrouterRetrievalCoupling(),
+                new Promise(resolve => setTimeout(resolve, 1000)),
+            ]);
+        }
         setPendingConfirm({ kind: 'providerKey', provider, setter });
     };
 
     const performRemoveKey = async (provider: string, setter: (val: string) => void) => {
+        setKeyWriteError(prev => ({ ...prev, [provider]: '' }));
         try {
             let result;
             // @ts-ignore
@@ -3560,6 +4042,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             // @ts-ignore
             if (provider === 'deepseek') result = await window.electronAPI.setDeepseekApiKey('');
             if (provider === 'nvidia_nim') result = await window.electronAPI.setNvidiaNimApiKey('');
+            if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey('');
+            if (provider === 'fluxion') result = await window.electronAPI.setFluxionConfig({ apiKey: '' });
 
             if (result && result.success) {
                 setHasStoredKey(prev => ({ ...prev, [provider]: false }));
@@ -3571,6 +4055,20 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 if (provider === 'nvidia_nim' && (result as { sttProviderCleared?: boolean }).sttProviderCleared) {
                     console.log('[Settings] NVIDIA key removed — speech recognition switched off (it shared this key)');
                 }
+                // Same shape, one layer deeper: the OpenRouter key also backs
+                // embeddings and reranking, and clearing it reverts an OpenRouter
+                // reranker to local. The Intelligence tab re-reads on the
+                // credentials-changed broadcast; this records WHY and clears the
+                // local flag so a re-opened dialog does not repeat a stale warning.
+                if (provider === 'openrouter' && (result as { retrievalDeactivated?: boolean }).retrievalDeactivated) {
+                    openrouterBacksRetrievalRef.current = false;
+                    setOpenrouterBacksRetrieval(false);
+                    console.log('[Settings] OpenRouter key removed — embeddings/reranking that used it were switched off');
+                }
+            } else if (result && (result as { success?: boolean }).success === false) {
+                // The key is still stored; say so instead of leaving a trash
+                // button that silently did nothing.
+                setKeyWriteError(prev => ({ ...prev, [provider]: keyWriteFailureText(result as any, 'remove') }));
             }
         } catch (e) {
             console.error(`Failed to remove ${provider} key:`, e);
@@ -3683,6 +4181,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const confirmCopy = (() => {
         if (!pendingConfirm) return null;
         switch (pendingConfirm.kind) {
+            case 'ninerouter':
+                return {
+                    title: t('Remove 9Router configuration?'),
+                    description: t('The base URL, API key and token limit will be cleared. Discovered models will no longer appear in the model picker.'),
+                    confirmLabel: t('Remove'),
+                };
             case 'litellm':
                 return {
                     title: t('Remove LiteLLM proxy configuration?'),
@@ -3695,11 +4199,19 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 // running on. Said before the click, not discovered afterwards.
                 const alsoDisablesSpeech =
                     pendingConfirm.provider === 'nvidia_nim' && activeSttProvider === 'nvidia_nim';
+                // OpenRouter issues ONE key for chat, embeddings AND reranking.
+                // Removing it here reverts an OpenRouter reranker to the local
+                // model and leaves an OpenRouter embedding space with no
+                // credential — a silently degraded corpus if it is not said here.
+                const alsoDisablesRetrieval =
+                    pendingConfirm.provider === 'openrouter' && openrouterBacksRetrieval;
                 return {
                     title: `${t('Remove the')} ${pendingConfirm.provider} ${t('API key?')}`,
                     description: alsoDisablesSpeech
                         ? t('The stored key is deleted. Speech recognition uses this same key, so it will be switched off too — you will need to pick another speech provider under Audio.')
-                        : t('The stored key is deleted. You will need to paste it again to re-enable this provider.'),
+                        : alsoDisablesRetrieval
+                            ? t('The stored key is deleted. Embeddings and reranking use this same key, so they will fall back to the local models — you can pick another provider under Intelligence.')
+                            : t('The stored key is deleted. You will need to paste it again to re-enable this provider.'),
                     confirmLabel: t('Remove key'),
                 };
             }
@@ -3719,6 +4231,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             switch (pendingConfirm.kind) {
                 case 'litellm':
                     await performRemoveLitellm();
+                    break;
+                case 'ninerouter':
+                    await performRemoveNinerouter();
                     break;
                 case 'providerKey':
                     await performRemoveKey(pendingConfirm.provider, pendingConfirm.setter);
@@ -3790,6 +4305,42 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             setDefaultModel(val);
                             // @ts-ignore - persist as default + update runtime + broadcast
                             window.electronAPI?.setDefaultModel(val).catch(console.error);
+                        }}
+                    />
+                </div>
+
+            <div className="aip-card p-5 flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Background Model')}</label>
+                        <p className="text-[10px] aip-muted mt-0.5">{t('Runs Auto Answer and other quick background decisions.')}</p>
+                        {/* Advisory only: a big pick silently re-creates the latency
+                            problem the measured judge ladder exists to avoid, but a
+                            hard filter would need a hand-maintained list that goes
+                            stale on every model retirement. */}
+                        {!isKnownFastModel(fastModel) && (
+                            <p className="text-[10px] aip-warn-fg mt-0.5 font-medium">{t('Large models make Auto Answer slower. Pick a small tier for the best results.')}</p>
+                        )}
+                    </div>
+                    <ModelSelect
+                        value={fastModel}
+                        options={buildFastModelOptions()}
+                        onChange={async (val) => {
+                            const previous = fastModel;
+                            setFastModel(val);
+                            try {
+                                // @ts-ignore - null clears it, which means "use the measured ladder"
+                                const res = await window.electronAPI?.setFastModel?.(val === 'auto' ? null : val);
+                                // A resolved { success:false } is invisible to .catch(), and a
+                                // missing preload method resolves undefined. Either way the write
+                                // did not land, so the row must not keep showing the new value.
+                                if (!res?.success) {
+                                    setFastModel(previous);
+                                    console.error('[Settings] Fast Model not saved:', res?.error ?? 'unavailable');
+                                }
+                            } catch (e) {
+                                setFastModel(previous);
+                                console.error('[Settings] Fast Model not saved:', e);
+                            }
                         }}
                     />
                 </div>
@@ -3914,6 +4465,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         <p className="text-[10px] aip-muted mt-0.5">{t('Uses the fastest available provider instead of your selected model.')}</p>
                         {!canUseFastMode && (
                             <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Requires Groq, Natively API, or Codex CLI to be configured.')}</p>
+                        )}
+                        {canUseFastMode && fastResponseMode && !fastModeAppliesToActiveModel && (
+                            <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Not applied to the current Active Model — pick a Groq or Natively model (or sign in to Codex CLI) for this to take effect.')}</p>
                         )}
                     </div>
                     {/* aria-disabled, not disabled: the onClick guard below is the
@@ -4066,9 +4620,24 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 onTestConnection={() => handleTestConnection(id, keyValue)}
                                 testStatus={testStatus[id] || 'idle'}
                                 testError={testError[id]}
+                                keyWriteError={keyWriteError[id]}
                                 savingStatus={!!savingStatus[id]}
                                 savedStatus={!!savedStatus[id]}
                                 onPreferredModelChange={(model) => setPreferredModels(prev => ({ ...prev, [id]: model }))}
+                                extraControls={id !== 'fluxion' || !hasStoredKey.fluxion ? undefined : (
+                                    /* One muted line, not a label + two buttons + a hint.
+                                       The protocol is DETECTED from the key's group on save
+                                       (see detectFluxionProtocol), so there is nothing here
+                                       for the user to decide — this only reports what was
+                                       found, the way a resolved value should. */
+                                    <div className="aip-provider-row">
+                                        <span className="text-[11px] aip-muted">
+                                            {t('API format')}: {fluxionProtocol === 'anthropic' ? t('Anthropic') : t('OpenAI')}
+                                            {' · '}
+                                            {t('detected from your key')}
+                                        </span>
+                                    </div>
+                                )}
                             />
                         );
                     })}
@@ -4226,12 +4795,54 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             <p className="text-xs aip-muted">{t('Use your ChatGPT Plus/Pro subscription as an AI provider.')}</p>
                         </div>
                     </div>
-                    <AipSwitch
-                        checked={!disabledProviders.includes('codex-cli')}
-                        onChange={() => handleToggleProvider('codex-cli', disabledProviders.includes('codex-cli'))}
-                        label={`${disabledProviders.includes('codex-cli') ? t('Enable') : t('Disable')} OpenAI Codex`}
-                        title={disabledProviders.includes('codex-cli') ? t('Enable provider') : t('Disable provider')}
-                    />
+                    <div className="flex items-center gap-2 shrink-0">
+                        {/* Refresh / Sign out act on Natively's own tokens only, so a
+                            `codex login` session gets the sign-in button below instead —
+                            signing in here takes precedence over the CLI login.
+                            Icon-only beside the switch with transitions.dev #17 tooltips. */}
+                        {codexOauthStatus.signedIn && codexOauthStatus.source !== 'codex-cli' && <>
+                            <span className="t-tt-wrap">
+                                <button
+                                    type="button"
+                                    onClick={handleCodexRefresh}
+                                    disabled={codexOauthInProgress}
+                                    className="aip-btn aip-codex-action-btn aip-codex-refresh-btn t-tt-trigger"
+                                    data-icon="true"
+                                    data-variant="ghost"
+                                    aria-label={t('Refresh session')}
+                                    aria-describedby="codex-tt-refresh"
+                                >
+                                    <RefreshCw size={16} strokeWidth={1.75} className={codexOauthInProgress ? 'aip-spinner' : undefined} />
+                                </button>
+                                <span className="t-tt" id="codex-tt-refresh" role="tooltip">
+                                    {t('Refresh')}
+                                </span>
+                            </span>
+                            <span className="t-tt-wrap">
+                                <button
+                                    type="button"
+                                    onClick={handleCodexSignOut}
+                                    disabled={codexOauthInProgress}
+                                    className="aip-btn aip-codex-action-btn aip-codex-logout-btn t-tt-trigger"
+                                    data-icon="true"
+                                    data-variant="ghost"
+                                    aria-label={t('Sign out')}
+                                    aria-describedby="codex-tt-logout"
+                                >
+                                    <LogOut size={16} strokeWidth={1.75} />
+                                </button>
+                                <span className="t-tt" id="codex-tt-logout" role="tooltip">
+                                    {t('Logout')}
+                                </span>
+                            </span>
+                        </>}
+                        <AipSwitch
+                            checked={!disabledProviders.includes('codex-cli')}
+                            onChange={() => handleToggleProvider('codex-cli', disabledProviders.includes('codex-cli'))}
+                            label={`${disabledProviders.includes('codex-cli') ? t('Enable') : t('Disable')} OpenAI Codex`}
+                            title={disabledProviders.includes('codex-cli') ? t('Enable provider') : t('Disable provider')}
+                        />
+                    </div>
                 </div>
 
                 {/* Mounted-but-hidden live region, same reasoning as Antigravity's. */}
@@ -4242,13 +4853,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             : ''}
                 </p>
 
-                <div className="flex flex-wrap gap-2">
-                    {/* Refresh / Sign out act on Natively's own tokens only, so a
-                        `codex login` session gets the sign-in button instead —
-                        signing in here takes precedence over the CLI login. */}
-                    {!codexOauthStatus.signedIn || codexOauthStatus.source === 'codex-cli' ? (
-                        /* Full-width row, and NEUTRAL: data-variant="accent" tints it
-                           periwinkle, which the Antigravity bar deliberately does not do. */
+                {/* Only the sign-in state has a row now — Refresh / Sign out live
+                    in the header — so it isn't mounted empty under space-y-4. */}
+                {(!codexOauthStatus.signedIn || codexOauthStatus.source === 'codex-cli') && (
+                    <div className="flex flex-wrap gap-2">
+                        {/* Full-width row, and NEUTRAL: data-variant="accent" tints it
+                           periwinkle, which the Antigravity bar deliberately does not do. */}
                         <button
                             type="button"
                             onClick={() => handleCodexAuthAction('login')}
@@ -4260,18 +4870,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 ? <><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}</>
                                 : <><ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with ChatGPT')}</>}
                         </button>
-                    ) : <>
-                        {/* Plain aip-btn in a wrap row, matching Antigravity's
-                            Reload models / Disconnect pair. Glyphs kept: they cost
-                            nothing here and the two actions are easy to confuse. */}
-                        <button type="button" onClick={handleCodexRefresh} disabled={codexOauthInProgress} className="aip-btn" title={t("Refresh session")}>
-                            <RefreshCw size={13} strokeWidth={1.75} /> {t('Refresh')}
-                        </button>
-                        <button type="button" onClick={handleCodexSignOut} disabled={codexOauthInProgress} className="aip-btn">
-                            <LogOut size={13} strokeWidth={1.75} /> {t('Sign out')}
-                        </button>
-                    </>}
-                </div>
+                    </div>
+                )}
 
                 {/* The Codex CLI's `codex login` works too, read-only: Natively
                     never refreshes it (that would sign the CLI out), so an
@@ -4300,14 +4900,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 {/* Model + settings — only shown once signed in */}
                 {codexOauthStatus.signedIn && (
                         <>
-                            {codexModelsFromCli && (
-                                <p className="text-xs aip-muted">
-                                    {t('Model list from your Codex CLI')}
-                                    {codexModelCatalog?.fetchedAt && !Number.isNaN(Date.parse(codexModelCatalog.fetchedAt))
-                                        ? ` · ${t('updated')} ${new Date(codexModelCatalog.fetchedAt).toLocaleDateString()}`
-                                        : ''}
-                                </p>
-                            )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <CodexCliModelField
                                     label={t("Model")}
@@ -4375,7 +4967,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                     />
                                 </label>
                             </div>
-                            <div className="flex items-end justify-between gap-4 mt-1">
+                            {/* Same grid as the selectors above, so Test Connection is
+                                exactly one selector wide and tall. The error sits in its
+                                own full-width row so it can't push the button off the
+                                input's baseline. */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end mt-1">
                                 <label className="space-y-1 block min-w-0">
                                     <span className="aip-label">{t('Timeout (ms)')}</span>
                                     <input
@@ -4387,30 +4983,30 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                         className="aip-input"
                                         min={1000}
                                     />
-                                    {codexCliStatus === 'error' && codexCliError && (
-                                        <p className="text-[10px] aip-danger-fg mt-1">{codexCliError}</p>
-                                    )}
                                 </label>
-                                {/* Fixed min-width + centred content: a label change
+                                {/* Column-width + centred content: a label change
                                     ("Test Connection" → "Testing…") must not reflow
                                     the row it sits in. */}
                                 <button
                                     type="button"
                                     onClick={handleTestCodexCli}
                                     disabled={codexCliStatus === 'testing'}
-                                    className="aip-btn shrink-0 min-w-[124px]"
+                                    className="aip-btn w-full"
                                     data-tone={codexCliStatus === 'success' ? 'ok' : codexCliStatus === 'error' ? 'danger' : undefined}
                                 >
                                     {codexCliStatus === 'testing' ? (
                                         <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing…')}</>
                                     ) : codexCliStatus === 'success' ? (
-                                        <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
+                                        <><AipPassedCheck /> {t('Passed')}</>
                                     ) : codexCliStatus === 'error' ? (
                                         <><AlertCircle size={12} strokeWidth={1.75} /> {t('Failed')}</>
                                     ) : (
                                         t('Test Connection')
                                     )}
                                 </button>
+                                {codexCliStatus === 'error' && codexCliError && (
+                                    <p className="text-[10px] aip-danger-fg md:col-span-2">{codexCliError}</p>
+                                )}
                             </div>
                         </>
                     )}
@@ -4567,6 +5163,196 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 />
                             )}
                         </div>
+                    </div>
+                </div>
+            </div>
+
+
+            {/* 9Router — self-hosted fallback proxy. Grouped with LiteLLM rather
+                than with the Cloud providers because it is the same SHAPE: an
+                address the user runs and pastes, not a vendor key. */}
+            <div className="space-y-5">
+                <div className="space-y-4">
+                    <div className="aip-card p-5 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-start gap-2.5 min-w-0">
+                                <AipProviderMark provider="ninerouter" name="9Router" className="mt-0.5" />
+                                <div className="min-w-0">
+                                <label className="block text-xs font-bold aip-hero mb-0">9Router</label>
+                                <p className="text-[10px] aip-muted">
+                                    {t('Self-hosted proxy that falls back across 40+ providers. Models auto-discovered from your instance.')}{' '}
+                                    <a href="https://github.com/decolua/9router" target="_blank" rel="noreferrer" className="aip-link">{t('Docs')}</a>
+                                </p>
+                                </div>
+                            </div>
+                            {hasStoredKey.ninerouter && (
+                                <div className="flex items-center gap-2 shrink-0">
+                                    {/* No "Configured" badge: the card already says so three
+                                        times over — the fields are filled, Remove has
+                                        appeared, and the switch itself only renders once
+                                        there is a configuration to switch. */}
+                                    <AipSwitch
+                                        checked={!disabledProviders.includes('ninerouter')}
+                                        onChange={() => handleToggleProvider('ninerouter', disabledProviders.includes('ninerouter'))}
+                                        label={`${disabledProviders.includes('ninerouter') ? t('Enable') : t('Disable')} 9Router`}
+                                        title={disabledProviders.includes('ninerouter') ? t('Enable provider') : t('Disable provider (keeps your configuration)')}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <label className="space-y-1 block min-w-0">
+                                <span className="aip-label">{t('Base URL')}</span>
+                                <input
+                                    value={ninerouterBaseURL}
+                                    onChange={e => { setNinerouterBaseURL(e.target.value); setNinerouterTest({ testing: false }); }}
+                                    data-mono="true"
+                                    className="aip-input"
+                                    placeholder="http://localhost:20128/v1"
+                                />
+                            </label>
+
+                            <label className="space-y-1 block min-w-0">
+                                <span className="aip-label">{t('API Key')}</span>
+                                <input
+                                    type="password"
+                                    value={ninerouterApiKey}
+                                    onChange={e => { setNinerouterApiKey(e.target.value); setNinerouterTest({ testing: false }); }}
+                                    data-mono="true"
+                                    className="aip-input"
+                                    placeholder={hasStoredKey.ninerouter ? t('•••••••• (leave blank to keep)') : t('From the 9Router dashboard → Keys')}
+                                />
+                            </label>
+                        </div>
+
+                        {/* Said here rather than discovered later: 9Router's model list
+                            answers without a key, so a configuration can look complete
+                            and still fail every question. */}
+                        <p className="text-[10px] aip-muted">
+                            {t('Your instance may serve its model list without a key while still requiring one to answer. Use Test Connection to be sure.')}
+                        </p>
+
+                        <div className="space-y-1">
+                            <span className="block aip-label">{t('Max Output Tokens')}</span>
+                            <ModelSelect
+                                value={ninerouterMaxTokens}
+                                options={LITELLM_MAX_TOKENS_OPTIONS}
+                                onChange={setNinerouterMaxTokens}
+                                placeholder={t("Auto (per-model)")}
+                            />
+                            <p className="text-[10px] aip-muted">
+                                {t("Auto reads each model's real output budget from")} <span className="aip-code-inline">/v1/models</span> {t('(falls back to 64,000 if unavailable). Pick a fixed value to override.')}
+                            </p>
+                        </div>
+
+                        {/* Thinking level.
+                            45 of the 47 models a stock instance serves are reasoning
+                            models, and reasoning_effort is honoured monotonically
+                            (measured: none < low < medium < high). How much it buys
+                            depends on the model and the prompt — on Gemini, Auto was
+                            itself the fastest, because it varies effort per prompt.
+
+                            The OPTIONS come from the selected model's own catalogue
+                            entry, so a non-reasoning model shows no control at all and a
+                            model that can only be turned DOWN says "Minimal" rather than
+                            promising "Off". */}
+                        {(() => {
+                            const selected = (preferredModels['ninerouter'] || '').replace(/^ninerouter\//, '');
+                            const opts = ninerouterThinkingOptions(selected ? ninerouterModelMeta[selected] : undefined);
+                            if (opts.length === 0) {
+                                return (
+                                    <p className="text-[10px] aip-muted">
+                                        {t('This model does not use reasoning, so there is no thinking level to set.')}
+                                    </p>
+                                );
+                            }
+                            return (
+                                <div className="space-y-1">
+                                    <span className="block aip-label">{t('Thinking')}</span>
+                                    <ModelSelect
+                                        /* An empty stored value IS the default, so the row
+                                           shown is the first option rather than a blank —
+                                           a control whose default renders as nothing reads
+                                           as unset, and users then set it redundantly. */
+                                        value={ninerouterThinking || opts[0].id}
+                                        options={opts}
+                                        onChange={setNinerouterThinking}
+                                        placeholder={opts[0].name}
+                                    />
+                                    <p className="text-[10px] aip-muted">
+                                        {selected
+                                            ? t('Applies to the model you set as default here.')
+                                            : t('Set a default model above to match these options to it.')}{' '}
+                                        {t('Natively defaults to the fastest setting. Raise it when an answer needs more reasoning, or pick Auto to let the model choose.')}
+                                    </p>
+                                </div>
+                            );
+                        })()}
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handleSaveNinerouter}
+                                disabled={!ninerouterBaseURL.trim() || !!savingStatus.ninerouter}
+                                className="aip-btn min-w-[92px]"
+                                data-variant="accent"
+                            >
+                                {savingStatus.ninerouter
+                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving…')}</>
+                                    : savedStatus.ninerouter
+                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
+                                        : t('Save')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleTestNinerouter}
+                                disabled={!ninerouterBaseURL.trim() || ninerouterTest.testing}
+                                className="aip-btn"
+                                data-variant="ghost"
+                            >
+                                {ninerouterTest.testing
+                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing…')}</>
+                                    : t('Test Connection')}
+                            </button>
+                            {hasStoredKey.ninerouter && (
+                                <button
+                                    type="button"
+                                    onClick={handleRemoveNinerouter}
+                                    className="aip-btn"
+                                    data-variant="ghost"
+                                >
+                                    {t('Remove')}
+                                </button>
+                            )}
+
+                            {hasStoredKey.ninerouter && (
+                                <AipModelList
+                                    models={effectiveModels('ninerouter')}
+                                    enabled={cloudEnabledModels['ninerouter'] || []}
+                                    onToggle={(modelId) => handleToggleModel('ninerouter', modelId)}
+                                    onReset={() => handleResetModels('ninerouter')}
+                                    defaultId={preferredModels['ninerouter']}
+                                    onSetDefault={(modelId) => handleSetDefaultModel('ninerouter', modelId)}
+                                    // Opt-in: a stock instance already answers with 47 models
+                                    // across 6 upstream aliases, and that is one user's
+                                    // connected accounts, not the ceiling.
+                                    optIn
+                                    onBulkToggle={(ids, enable) => handleBulkToggleModels('ninerouter', ids, enable)}
+                                    error={modelSaveError['ninerouter'] ? 'save-failed' : null}
+                                    refreshing={isRefreshingNinerouter}
+                                    onRefresh={handleRefreshNinerouterModels}
+                                    onFirstOpen={() => {
+                                        if (ninerouterModels.length === 0) handleRefreshNinerouterModels();
+                                    }}
+                                />
+                            )}
+                        </div>
+                        {ninerouterTest.message && (
+                            <p className={`text-[10px] ${ninerouterTest.ok ? 'aip-ok-fg' : 'aip-danger-fg'}`} role="status">
+                                {ninerouterTest.message}
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>

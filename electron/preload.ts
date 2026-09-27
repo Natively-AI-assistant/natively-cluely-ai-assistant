@@ -174,6 +174,9 @@ interface ElectronAPI {
   /** `sttProviderCleared` is true when clearing this key also switched the
    *  speech provider off — the two share one credential. */
   setNvidiaNimApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; sttProviderCleared?: boolean }>;
+  /** `retrievalDeactivated` is true when CLEARING the key also switched an OpenRouter embedding/reranker off. */
+  setOpenrouterApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; retrievalDeactivated?: boolean }>;
+  setFluxionConfig: (config: { apiKey?: string; protocol?: 'openai' | 'anthropic' }) => Promise<{ success: boolean; error?: string; message?: string; protocol?: 'openai' | 'anthropic'; protocolDetected?: boolean }>;
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => Promise<{ success: boolean; error?: string }>;
   getAvailableLiteLLMModels: () => Promise<string[]>;
   refreshLiteLLMModels: () => Promise<string[]>;
@@ -181,7 +184,7 @@ interface ElectronAPI {
   getDisabledProviders: () => Promise<string[]>;
   setDisabledProviders: (providers: string[]) => Promise<{ success: boolean; error?: string }>;
   setCloudEnabledModels: (provider: string, models: string[]) => Promise<{ success: boolean; error?: string }>;
-  setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; proPending?: boolean; proError?: string }>;
   // ── In-app review / testimonial prompt ─────────────────────────────────
   reviewGetPromptState: () => Promise<{
     ok: boolean;
@@ -227,6 +230,9 @@ interface ElectronAPI {
     hasClaudeKey: boolean;
     hasDeepseekKey: boolean;
     hasNvidiaNimKey?: boolean;
+    hasOpenrouterKey?: boolean;
+    hasFluxionKey?: boolean;
+    fluxionProtocol?: 'openai' | 'anthropic';
     disabledProviders?: string[];
     cloudEnabledModels?: Record<string, string[]>;
     hasNativelyKey: boolean;
@@ -282,6 +288,13 @@ interface ElectronAPI {
   convertTrial: (choice: string) => Promise<{ ok: boolean }>;
   endTrialByok: () => Promise<{ success: boolean; error?: string }>;
   onTrialEnded: (cb: (data: { choice: string }) => void) => () => void;
+  /** Emitted by `trial:start` so a trial claimed mid-session unlocks without a relaunch. */
+  onTrialStarted: (cb: (data: {
+    expiresAt: string;
+    startedAt: string;
+    usage?: { ai: number; ai_tokens?: number; stt_seconds: number; search: number };
+    limits?: object;
+  }) => void) => () => void;
   onModesActiveCleared: (cb: () => void) => () => void;
 
   // STT Provider Management
@@ -501,6 +514,7 @@ interface ElectronAPI {
   >;
   getMeetingDetails: (id: string) => Promise<any>;
   searchGlobalMeetings: (query: string, filters?: any) => Promise<{ enabled: boolean; results: any[] }>;
+  searchMemories: (query: string) => Promise<{ enabled: boolean; results: Array<{ text: string; meetingId?: string; meetingTitle?: string; date?: string }> }>;
   searchInMeeting: (query: string) => Promise<{ enabled: boolean; results: any[] }>;
   generateLectureNotes: (opts?: { title?: string; course?: string }) => Promise<{ enabled: boolean; notes: any }>;
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>;
@@ -541,6 +555,10 @@ interface ElectronAPI {
   setEmbeddingCustomEndpoint: (input: { url?: string; apiKey?: string }) => Promise<{
     success: boolean; endpoint?: string | null; models?: Array<{ id: string; capabilityKnown: boolean }>; reachable?: boolean; error?: string; message?: string
   }>;
+  setRerankerCustomEndpoint: (input: { url?: string; apiKey?: string }) => Promise<{
+    success: boolean; endpoint?: string | null; models?: Array<{ id: string; label: string }>; reachable?: boolean; error?: string; message?: string
+  }>;
+  getCustomRerankerModels: () => Promise<Array<{ id: string; label: string }>>;
   acknowledgeLightweightEmbeddings: (acknowledged: boolean) => Promise<{ success: boolean }>;
   getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>;
   setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>;
@@ -773,6 +791,12 @@ interface ElectronAPI {
 
   // Theme API
   getThemeMode: () => Promise<{ mode: 'system' | 'light' | 'dark'; resolved: 'light' | 'dark' }>;
+  // Genie snapshots (electron/genieSnapshots.ts): pictures of popup cards the genie warps.
+  genieSnapshotCapture?: (rect: { x: number; y: number; width: number; height: number }) => Promise<{ png: Uint8Array; width: number; height: number } | null>;
+  genieSnapshotSave?: (key: string, png: Uint8Array) => Promise<boolean>;
+  genieSnapshotLoad?: (key: string) => Promise<Uint8Array | null>;
+  genieSnapshotList?: () => Promise<string[]>;
+  genieSnapshotClear?: (prefix?: string) => Promise<boolean>;
   setThemeMode: (mode: 'system' | 'light' | 'dark') => Promise<void>;
   onThemeChanged: (
     callback: (data: { mode: 'system' | 'light' | 'dark'; resolved: 'light' | 'dark' }) => void,
@@ -870,6 +894,8 @@ interface ElectronAPI {
   getKeybindRegistrationFailures: () => Promise<
     Array<{ id: string; accelerator: string }>
   >;
+  getGlobalShortcutsEnabled: () => Promise<boolean>;
+  setGlobalShortcutsEnabled: (enabled: boolean) => Promise<boolean>;
 
   // Global shortcut events (stealth: fired even when window is not focused)
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void;
@@ -935,9 +961,12 @@ interface ElectronAPI {
   knowledgeExportProfilePack: () => Promise<{ success: boolean; path?: string; fileCount?: number; error?: string; violations?: Array<{ path: string; reason: string }> }>;
   knowledgeListProfilePacks: () => Promise<{ success: boolean; error?: string; packs: Array<{ id: string; fileName: string; cardCount: number; entityCount: number; packVersion: number; updatedAt: string; cardsByType: Record<string, number> }> }>;
   knowledgeGetProfilePack: (kind: string) => Promise<{ success: boolean; error?: string; pack?: { id: string; fileName: string; packVersion: number; updatedAt: string; cards: Array<{ id: string; type: string; title: string; conceptId: string; body: string; confidence: string; tags: string[]; entities: string[]; sourceQuotes: string[]; pii: boolean }> } }>;
+  // forceRefresh omitted/false serves the cached dossier — which the JD-upload
+  // AOT run has usually already paid for. Only the Refresh pill passes true.
   profileResearchCompany: (
     companyName: string,
-  ) => Promise<{ success: boolean; dossier?: any; error?: string }>;
+    forceRefresh?: boolean,
+  ) => Promise<{ success: boolean; dossier?: any; error?: string; searchQuotaExhausted?: boolean }>;
   profileGenerateNegotiation: (
     force?: boolean,
   ) => Promise<{ success: boolean; script?: any; error?: string }>;
@@ -1494,6 +1523,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  // Genie snapshots (electron/genieSnapshots.ts): pictures of popup cards the
+  // genie warps. capture reads this window's own compositor output.
+  genieSnapshotCapture: (rect: { x: number; y: number; width: number; height: number }) =>
+    ipcRenderer.invoke('genie-snapshot:capture', rect) as Promise<{ png: Uint8Array; width: number; height: number } | null>,
+  genieSnapshotSave: (key: string, png: Uint8Array) => ipcRenderer.invoke('genie-snapshot:save', key, png) as Promise<boolean>,
+  genieSnapshotLoad: (key: string) => ipcRenderer.invoke('genie-snapshot:load', key) as Promise<Uint8Array | null>,
+  genieSnapshotList: () => ipcRenderer.invoke('genie-snapshot:list') as Promise<string[]>,
+  genieSnapshotClear: (prefix?: string) => ipcRenderer.invoke('genie-snapshot:clear', prefix) as Promise<boolean>,
   // UX2: in-app TCC repair. Returns { ok, bundleId, results, promptRelaunch, message }.
   // Renderer should show the `message` and prompt the user to fully quit and reopen.
   repairTccPermissions: () => ipcRenderer.invoke('repair-tcc-permissions'),
@@ -1607,7 +1644,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('switch-to-ollama', model, url),
   switchToGemini: (apiKey?: string, modelId?: string) =>
     ipcRenderer.invoke('switch-to-gemini', apiKey, modelId),
-  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim', apiKey: string) =>
+  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion', apiKey: string) =>
     ipcRenderer.invoke('test-llm-connection', provider, apiKey),
   selectServiceAccount: () => ipcRenderer.invoke('select-service-account'),
 
@@ -1618,9 +1655,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setClaudeApiKey: (apiKey: string) => ipcRenderer.invoke('set-claude-api-key', apiKey),
   setDeepseekApiKey: (apiKey: string) => ipcRenderer.invoke('set-deepseek-api-key', apiKey),
   setNvidiaNimApiKey: (apiKey: string) => ipcRenderer.invoke('set-nvidia-nim-api-key', apiKey),
+  setOpenrouterApiKey: (apiKey: string) => ipcRenderer.invoke('set-openrouter-api-key', apiKey),
+  setFluxionConfig: (config: { apiKey?: string; protocol?: 'openai' | 'anthropic' }) => ipcRenderer.invoke('set-fluxion-config', config),
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => ipcRenderer.invoke('set-litellm-config', config),
   getAvailableLiteLLMModels: () => ipcRenderer.invoke('get-available-litellm-models'),
   refreshLiteLLMModels: () => ipcRenderer.invoke('refresh-litellm-models'),
+  setNinerouterConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number; thinking?: string }) => ipcRenderer.invoke('set-ninerouter-config', config),
+  getAvailableNinerouterModels: () => ipcRenderer.invoke('get-available-ninerouter-models'),
+  refreshNinerouterModels: () => ipcRenderer.invoke('refresh-ninerouter-models'),
+  testNinerouterConnection: (config?: { apiKey?: string; baseURL?: string }) => ipcRenderer.invoke('test-ninerouter-connection', config),
   getCloudFetchedModels: () => ipcRenderer.invoke('get-cloud-fetched-models'),
   getDisabledProviders: () => ipcRenderer.invoke('get-disabled-providers'),
   setDisabledProviders: (providers: string[]) => ipcRenderer.invoke('set-disabled-providers', providers),
@@ -1667,6 +1710,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const sub = (_: any, data: any) => cb(data);
     ipcRenderer.on('trial-ended', sub);
     return () => ipcRenderer.removeListener('trial-ended', sub);
+  },
+  onTrialStarted: (cb: (data: any) => void) => {
+    const sub = (_: any, data: any) => cb(data);
+    ipcRenderer.on('trial-started', sub);
+    return () => ipcRenderer.removeListener('trial-started', sub);
   },
 
   // STT Provider Management
@@ -2001,6 +2049,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRecentMeetings: () => ipcRenderer.invoke('get-recent-meetings'),
   getMeetingDetails: (id: string) => ipcRenderer.invoke('get-meeting-details', id),
   searchGlobalMeetings: (query: string, filters?: any) => ipcRenderer.invoke('search:global-meetings', { query, filters }),
+  searchMemories: (query: string) => ipcRenderer.invoke('search:memories', query),
   searchInMeeting: (query: string) => ipcRenderer.invoke('search:in-meeting', { query }),
   generateLectureNotes: (opts?: { title?: string; course?: string }) => ipcRenderer.invoke('lecture:generate-notes', opts),
   generateDiagram: (text?: string) => ipcRenderer.invoke('diagram:generate', { text }),
@@ -2023,15 +2072,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Was 'local' | 'openrouter' — already missing 'jina' before this change.
     // The object is forwarded opaquely so the omission never failed at runtime,
     // which is exactly why it went unnoticed; kept in step with the handler now.
-    provider?: 'local' | 'natively' | 'openrouter' | 'jina';
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom';
     openrouterModel?: string;
     jinaModel?: string;
+    voyageModel?: string;
     nativelyModel?: string;
+    customModel?: string;
     candidateCount?: number;
     fallbackToLocal?: boolean;
   }) => ipcRenderer.invoke('reranker:set-config', next),
   setRerankerOpenRouterKey: (key: string) => ipcRenderer.invoke('reranker:set-openrouter-key', key),
   setRerankerHostedKey: (provider: string, key: string) => ipcRenderer.invoke('reranker:set-hosted-key', provider, key),
+  setRerankerCustomEndpoint: (input: { url?: string; apiKey?: string }) => ipcRenderer.invoke('reranker:set-custom-endpoint', input),
+  getCustomRerankerModels: () => ipcRenderer.invoke('reranker:get-custom-models'),
   getRerankerHostedProviders: () => ipcRenderer.invoke('reranker:hosted-providers'),
   testReranker: (choice?: { model?: string }) => ipcRenderer.invoke('reranker:test', choice),
 
@@ -2047,6 +2100,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => { ipcRenderer.removeListener('reranker:model-progress', subscription); };
   },
 
+  // Direct embedding model install: curated local models for embeddings
+  listLocalEmbeddingModels: () => ipcRenderer.invoke('embedding:list-local-models'),
+  installLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:install-local-model', id),
+  cancelLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:cancel-local-model', id),
+  removeLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:remove-local-model', id),
+  useLocalEmbeddingModel: (id: string | null) => ipcRenderer.invoke('embedding:use-local-model', id),
+  testLocalEmbeddingModel: (id: string) => ipcRenderer.invoke('embedding:test-local-model', id),
+  revealLocalEmbeddingModelsFolder: () => ipcRenderer.invoke('embedding:reveal-folder'),
+  acknowledgeLocalEmbeddingCatalogModel: (id: string) => ipcRenderer.invoke('embedding:acknowledge-catalog-license', id),
+  onLocalEmbeddingModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => {
+    const subscription = (_e: any, payload: any) => callback(payload);
+    ipcRenderer.on('embedding:model-progress', subscription);
+    return () => { ipcRenderer.removeListener('embedding:model-progress', subscription); };
+  },
+
   // Extensions. Reranker extensions surface inside Settings > Reranker.
   listExtensions: () => ipcRenderer.invoke('extensions:list'),
   installExtensionFromFolder: () => ipcRenderer.invoke('extensions:install-from-folder'),
@@ -2056,6 +2124,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   downloadExtensionModel: (id: string, modelKey: string) => ipcRenderer.invoke('extensions:download-model', id, modelKey),
   cancelExtensionModelDownload: (id: string, modelKey: string) => ipcRenderer.invoke('extensions:cancel-download', id, modelKey),
   browseExtensionRegistry: (url?: string) => ipcRenderer.invoke('extensions:browse-registry', url),
+  // Takes an EXTENSION ID, never a URL: main resolves the download itself.
+  installExtensionFromRegistry: (id: string) => ipcRenderer.invoke('extensions:install-from-registry', id),
   onExtensionModelProgress: (callback: (p: { id: string; modelKey: string; fraction: number }) => void) => {
     const subscription = (_e: any, payload: any) => callback(payload);
     ipcRenderer.on('extensions:model-progress', subscription);
@@ -2069,14 +2139,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearContextDebugLogs: () => ipcRenderer.invoke('context-debug:clear'),
   exportContextDebugSession: () => ipcRenderer.invoke('context-debug:export'),
   getHindsightConfig: () => ipcRenderer.invoke('hindsight-config:get'),
-  setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => ipcRenderer.invoke('hindsight-config:set', cfg),
+  setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string; enableMemory?: boolean }) => ipcRenderer.invoke('hindsight-config:set', cfg),
   testHindsightConnection: () => ipcRenderer.invoke('hindsight-config:test'),
   updateMeetingTitle: (id: string, title: string) =>
     ipcRenderer.invoke('update-meeting-title', { id, title }),
   updateMeetingSummary: (id: string, updates: any) =>
     ipcRenderer.invoke('update-meeting-summary', { id, updates }),
-  regenerateMeetingSummary: (id: string, opts?: { templateType?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }) =>
-    ipcRenderer.invoke('regenerate-meeting-summary', { id, templateType: opts?.templateType, tone: opts?.tone }),
+  regenerateMeetingSummary: (id: string, opts?: { templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }) =>
+    ipcRenderer.invoke('regenerate-meeting-summary', { id, templateType: opts?.templateType, modeId: opts?.modeId, tone: opts?.tone }),
   regenerateMeetingFollowUp: (id: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly') =>
     ipcRenderer.invoke('regenerate-meeting-followup', { id, tone }),
   updateMeetingSpeakerLabels: (id: string, labels: Record<string, string>) =>
@@ -2323,6 +2393,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDefaultModel: () => ipcRenderer.invoke('get-default-model'),
   setModel: (modelId: string) => ipcRenderer.invoke('set-model', modelId),
   setDefaultModel: (modelId: string) => ipcRenderer.invoke('set-default-model', modelId),
+  getFastModel: () => ipcRenderer.invoke('get-fast-model'),
+  setFastModel: (modelId: string | null) => ipcRenderer.invoke('set-fast-model', modelId),
+  filterFastModelCandidates: (ids: string[]) => ipcRenderer.invoke('filter-fast-model-candidates', ids),
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) =>
     ipcRenderer.invoke('toggle-model-selector', coords),
   modelSelectorCloseIfOpen: () => ipcRenderer.invoke('model-selector:close-if-open'),
@@ -2669,6 +2742,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resetKeybinds: () => ipcRenderer.invoke('keybinds:reset'),
   getKeybindRegistrationFailures: () =>
     ipcRenderer.invoke('keybinds:get-registration-failures'),
+  getGlobalShortcutsEnabled: () => ipcRenderer.invoke('keybinds:get-global-enabled'),
+  setGlobalShortcutsEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('keybinds:set-global-enabled', enabled),
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => {
     const subscription = (_: any, keybinds: any) => callback(keybinds);
     ipcRenderer.on('keybinds:update', subscription);
@@ -2762,8 +2838,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   knowledgeExportProfilePack: () => ipcRenderer.invoke('knowledge:export-profile-pack'),
   knowledgeListProfilePacks: () => ipcRenderer.invoke('knowledge:list-profile-packs'),
   knowledgeGetProfilePack: (kind: string) => ipcRenderer.invoke('knowledge:get-profile-pack', kind),
-  profileResearchCompany: (companyName: string) =>
-    ipcRenderer.invoke('profile:research-company', companyName),
+  profileResearchCompany: (companyName: string, forceRefresh?: boolean) =>
+    ipcRenderer.invoke('profile:research-company', companyName, forceRefresh === true),
   profileGenerateNegotiation: (force?: boolean) =>
     ipcRenderer.invoke('profile:generate-negotiation', force),
   profileGenerateCoverLetter: (force?: boolean) =>
@@ -2793,9 +2869,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setTavilyApiKey: (apiKey: string) => ipcRenderer.invoke('set-tavily-api-key', apiKey),
 
   // Dynamic Model Discovery
-  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim', apiKey: string) =>
+  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion', apiKey: string) =>
     ipcRenderer.invoke('fetch-provider-models', provider, apiKey),
-  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'litellm', modelId: string) =>
+  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm' | 'ninerouter', modelId: string) =>
     ipcRenderer.invoke('set-provider-preferred-model', provider, modelId),
 
   // License Management

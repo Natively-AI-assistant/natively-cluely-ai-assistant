@@ -522,6 +522,16 @@ export class RAGManager {
      * This is the single source of that id for the V3 surfaces and the
      * rag:query-live gate.
      */
+    /** Live index counters, for diagnostics and the meeting-memory harness. */
+    getLiveIndexStats(): { running: boolean; saved: number; embedded: number; pending: number } {
+        return {
+            running: this.liveIndexer.isRunning(),
+            saved: this.liveIndexer.getSavedChunkCount(),
+            embedded: this.liveIndexer.getIndexedChunkCount(),
+            pending: this.liveIndexer.getPendingEmbedCount(),
+        };
+    }
+
     getLiveMeetingId(): string | null {
         if (!this.liveIndexer.isRunning() || !this.liveIndexer.hasIndexedChunks()) return null;
         return this.liveIndexer.getActiveMeetingId();
@@ -803,6 +813,7 @@ export class RAGManager {
         const count = this.vectorStore.getIncompatibleSpaceCount(activeSpace);
         if (count === 0) {
             console.log('[RAGManager] No incompatible meetings to re-index.');
+            this._emitReindex('embedding:reindex-complete', { total: 0, space: activeSpace, partial: false });
             return;
         }
 

@@ -9,9 +9,10 @@
 // no JSX runtime, no jsdom. The renderer is plain text that must contain the
 // gate clause inside each upload onClick handler.
 //
-// The contract is: each upload onClick handler must invoke
-// setIsPremiumModalOpen(true) and return BEFORE calling profileSelectFile()
-// whenever hasProfileAccess is false.
+// The contract is: each upload onClick handler must hand over to Settings →
+// Plans & Billing (openPlans) and return BEFORE calling profileSelectFile()
+// whenever hasProfileAccess is false. The old "Unlock Pro" modal is gone;
+// upgrading, entering a licence key and managing Pro all live in Settings.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,11 +26,11 @@ const SOURCE = path.resolve(__dirname, '../../../src/components/ProfileIntellige
 describe('Profile Intelligence renderer: click-time Pro gate', () => {
   const source = fs.readFileSync(SOURCE, 'utf8');
 
-  // Sanity: the file still imports the upgrade modal and exposes the setter.
-  test('component imports PremiumUpgradeModal and tracks hasProfileAccess', () => {
-    assert.ok(source.includes('PremiumUpgradeModal'), 'PremiumUpgradeModal import missing');
+  // Sanity: the upgrade path is Settings → Plans & Billing, and access is tracked.
+  test('an ungated action opens Plans & Billing, and access is tracked', () => {
+    assert.ok(source.includes('const openPlans = () => onOpenNativelyAPI?.();'), 'openPlans must hand over to Settings');
     assert.ok(source.includes('hasProfileAccess'), 'hasProfileAccess flag missing');
-    assert.ok(source.includes('setIsPremiumModalOpen'), 'modal setter missing');
+    assert.ok(!source.includes('PremiumUpgradeModal'), 'the old upgrade modal must not come back');
   });
 
   // THE GATE MOVED TO A CHOKE POINT. This used to walk back from each upload
@@ -64,8 +65,8 @@ describe('Profile Intelligence renderer: click-time Pro gate', () => {
 
       assert.match(
         body,
-        /if\s*\(!hasProfileAccess\)\s*\{\s*setIsPremiumModalOpen\(true\);\s*return;\s*\}/,
-        `${fn} must short-circuit to the upgrade modal before opening the file picker — ` +
+        /if\s*\(!hasProfileAccess\)\s*\{\s*openPlans\(\);\s*return;\s*\}/,
+        `${fn} must short-circuit to Plans & Billing before opening the file picker — ` +
         'without this, any button wired straight to the helper (e.g. "Re-upload") bypasses Pro',
       );
     });
@@ -80,8 +81,8 @@ describe('Profile Intelligence renderer: click-time Pro gate', () => {
       'profileSelectFile must only be reached from browseResume/browseJD, which carry the Pro gate');
   });
 
-  test('the upgrade modal is still what an ungated click opens', () => {
-    assert.ok(source.includes('PremiumUpgradeModal'), 'PremiumUpgradeModal import missing');
-    assert.ok(source.includes('onNeedUpgrade'), 'presentational upload slots must still expose onNeedUpgrade');
+  test('Plans & Billing is what an ungated click opens', () => {
+    assert.ok(source.includes('onNeedUpgrade={() => openPlans()}'), 'presentational upload slots must still expose onNeedUpgrade, wired to Plans & Billing');
+    assert.equal([...source.matchAll(/setIsPremiumModalOpen/g)].length, 0, 'no leftover modal setter');
   });
 });

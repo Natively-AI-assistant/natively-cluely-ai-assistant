@@ -35,4 +35,13 @@ export function deleteProfileTransactional(
     orchestrator.deleteDocumentsByType(docType);
     ProfilePackBuilder.getInstance().deleteProfilePack(kind);
   });
+  // The document's RAW-TEXT INDEX goes too (2026-09-20, review finding): the
+  // semantic arm indexes the résumé/JD text under profile:<kind>:<version> in
+  // the mode-reference tables, which nothing above touches — deleting a résumé
+  // left its text and vectors on disk. After the transaction, because a failure
+  // here must not undo (or mask the success of) the delete itself; the kick
+  // never throws and re-collects the active documents, so the deleted kind is
+  // pruned completely.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('./v3ProfileSources').kickProfileRawIndex(orchestrator);
 }

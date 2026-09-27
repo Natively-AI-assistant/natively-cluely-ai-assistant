@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { useToggleInit } from './settings/useToggleInit';
-import { PremiumUpgradeModal, RoleInsightPanel } from '../premium';
+import { RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { useLensTracking } from '../ui-components/LiquidGlassButton';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
@@ -1917,9 +1917,16 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
 // ─── Main export ──────────────────────────────────────────────────────────────
 export function ProfileIntelligenceSettings({
     onClose,
+    isTrialActive = false,
     onOpenNativelyAPI,
 }: {
     onClose: () => void;
+    /** An unexpired free trial grants the same access a Pro licence does. Owned by
+     *  App (the `trial-started` / `trial-ended` events), exactly as ModesSettings
+     *  receives it — this panel used to hardcode it to false, so a trial user was
+     *  shown the Unlock-Pro gate on every Profile Intelligence surface even though
+     *  main's own `isProOrTrialActive()` would have served every one of them. */
+    isTrialActive?: boolean;
     onOpenNativelyAPI?: () => void;
 }) {
     const cachedPremium = readPremiumCache();
@@ -1928,8 +1935,10 @@ export function ProfileIntelligenceSettings({
     const piToggleInit = useToggleInit();
     const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
     const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
-    const [isTrialActive] = useState(false);
-    const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+    // Upgrading, entering a licence key and managing Pro all live in Settings →
+    // Plans & Billing. The manager hands over to it (App's openSettingsExclusive
+    // closes this panel), and the licence is read again on the next mount.
+    const openPlans = () => onOpenNativelyAPI?.();
     const [licenseLoaded, setLicenseLoaded] = useState(false);
     const hasProfileAccess = isPremium || isTrialActive;
     const theme = useResolvedTheme();
@@ -1968,6 +1977,9 @@ export function ProfileIntelligenceSettings({
         extractionMode?: 'llm' | 'heuristic' | 'none';
     }>({ hasProfile: false, profileMode: false });
     const [profileUploading, setProfileUploading] = useState(false);
+    // The genie keeps a picture of this card to pour out on the next open
+    // (genieSnapshots.ts); it must never picture it half-loaded.
+    const [statusLoaded, setStatusLoaded] = useState(false);
     const [profileUploadStatus, setProfileUploadStatus] = useState<string | undefined>(undefined);
     const [profileError, setProfileError] = useState('');
     // Nothing sets `cancelled` any more — the X button used to, but that only
@@ -2043,6 +2055,16 @@ export function ProfileIntelligenceSettings({
     const [companyDossier, setCompanyDossier] = useState<any>(null);
     const [companySearchQuotaExhausted, setCompanySearchQuotaExhausted] = useState(false);
 
+    // Apply the dossier carried by a getProfileData() payload (2026-09-21).
+    // getProfileData returns the wrapper { dossier, sources, last_checked } from
+    // some paths and the inner dossier from others, so unwrap once here instead
+    // of at each call site. Setting null is CORRECT and load-bearing: a new JD
+    // means a new company, and the previous company's dossier must not linger.
+    const applyCompanyDossier = (data: any) => {
+        const cd = data?.companyDossier;
+        setCompanyDossier(cd ? (cd.dossier ?? cd) : null);
+    };
+
     // Cover Letter
     const [coverLetter, setCoverLetter] = useState<any>(null);
     const [coverLetterGenerating, setCoverLetterGenerating] = useState(false);
@@ -2099,7 +2121,7 @@ export function ProfileIntelligenceSettings({
             if (status?.resume_indexing_in_flight || status?.jd_indexing_in_flight) {
                 setAdoptTick(t => t + 1);
             }
-        }).catch(() => {});
+        }).catch(() => {}).finally(() => setStatusLoaded(true));
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
             setProfileData(data);
             if (data?.coverLetter) setCoverLetter(data.coverLetter);
@@ -2111,8 +2133,7 @@ export function ProfileIntelligenceSettings({
             // dossier directly. Unwrap so the Company Intel panel always sees the
             // inner dossier shape — required by the live-search vs LLM-only branch.
             if (data?.companyDossier) {
-                const cd = data.companyDossier;
-                setCompanyDossier(cd?.dossier ?? cd);
+                applyCompanyDossier(data);
             }
             // Fallback path — if the full profile payload's companyDossier is
             // missing for any reason (cache race, schema mismatch), fetch it
@@ -2174,6 +2195,10 @@ export function ProfileIntelligenceSettings({
                 if (stopped) return;
                 if (data) setProfileData(data);
                 setProfileStatus(st);
+                // An ADOPTED JD ingest lands here instead of in doJdUpload, so it
+                // needs the same dossier hydration — otherwise a JD uploaded just
+                // before this panel mounted keeps showing the CTA.
+                if (data && jdSettled) applyCompanyDossier(data);
 
                 if (resumeSettled) {
                     profileDetachedRef.current = false;
@@ -2199,6 +2224,56 @@ export function ProfileIntelligenceSettings({
         timer = setTimeout(tick, 1500);
         return cleanup;
     }, [profileUploading, jdUploading, adoptTick]);
+
+    // Wait out the fire-and-forget AOT run (2026-09-21).
+    //
+    // Uploading a JD automatically researches the company — ingest step 9 calls
+    // aotPipeline.runForJD(), whose Phase 1 spends 7-10 Tavily queries and writes
+    // the dossier to company_dossiers. But runForJD is NOT awaited in production,
+    // so profileUploadJD acks long before the dossier exists, and ingest pushes no
+    // event when it lands. The panel therefore sat on null and offered to research
+    // a company it had just researched — and that CTA used to force-refresh, so
+    // accepting the offer bought the same dossier a second time.
+    //
+    // getProfileData already publishes aotStatus.companyResearch; runForJD sets it
+    // to 'running' synchronously, before its first await, so it is reliably visible
+    // by the time the upload ack returns. Poll until it settles, then hydrate.
+    // Keyed on the status value itself, so this also covers mounting mid-research.
+    useEffect(() => {
+        let stopped = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        // Declared ABOVE the guard and returned on every path, for the reason
+        // spelled out on the adopted-ingest effect above: a bare `return` out of
+        // an effect that arms a polling timer is safe only while the guard stays
+        // above every schedule site, which is not an invariant to leave to a
+        // future edit.
+        const cleanup = () => { stopped = true; if (timer) clearTimeout(timer); };
+        if (profileData?.aotStatus?.companyResearch !== 'running') return cleanup;
+        // Bound the poll. Company research is ~10 sequential queries behind a 2s
+        // rate limiter plus an LLM summarise, so it can legitimately run past a
+        // minute — but a pipeline that died without setting 'done' or 'failed'
+        // must not leave a timer ticking for the life of the window.
+        let remaining = 90; // 90 x 2s = 3 minutes
+        const tick = async () => {
+            try {
+                const data: any = await window.electronAPI?.profileGetProfile?.();
+                if (stopped) return;
+                if (data) {
+                    setProfileData(data);
+                    if (data.aotStatus?.companyResearch !== 'running') {
+                        // Settled — 'done' hydrates the dossier, 'failed' clears to
+                        // null and the CTA legitimately reappears (and is now free
+                        // to click, since nothing was cached).
+                        applyCompanyDossier(data);
+                        return;
+                    }
+                }
+            } catch { /* transient IPC failure — keep polling */ }
+            if (!stopped && --remaining > 0) timer = setTimeout(tick, 2000);
+        };
+        timer = setTimeout(tick, 2000);
+        return cleanup;
+    }, [profileData?.aotStatus?.companyResearch]);
 
     const handleRemoveTavilyKey = async () => {
         if (!confirm('Remove your Tavily API key?')) return;
@@ -2258,6 +2333,12 @@ export function ProfileIntelligenceSettings({
                 const data = await window.electronAPI?.profileGetProfile?.();
                 if (token.cancelled) return;
                 if (data) setProfileData(data);
+                // Clear the previous company's dossier and pick up the new one if
+                // it somehow already exists (cached from an earlier session at the
+                // same company). Usually it does NOT: ingest fires the AOT pipeline
+                // fire-and-forget, so this ack lands ~20-60s before company research
+                // finishes. The aotStatus poll below is what catches that.
+                applyCompanyDossier(data);
                 setJdUploadStatus('ready');
             } else {
                 setJdError(result?.error || 'JD upload failed');
@@ -2288,25 +2369,29 @@ export function ProfileIntelligenceSettings({
     // FileUploadEmpty stays: it also decides the "Requires Pro." hint, so it is
     // doing UI work, not just guarding — and a double gate here is idempotent.
     const browseResume = async () => {
-        if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
+        if (!hasProfileAccess) { openPlans(); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doResumeUpload(fileResult.filePath);
     };
 
     const browseJD = async () => {
-        if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
+        if (!hasProfileAccess) { openPlans(); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doJdUpload(fileResult.filePath);
     };
 
-    const doCompanyResearch = async () => {
+    // forceRefresh MUST be passed explicitly by each call site. Never wire this
+    // as onClick={doCompanyResearch} — React hands the MouseEvent to the first
+    // parameter, and a truthy object would silently force-refresh every click,
+    // re-buying 14-20 Tavily credits of dossier that is already cached.
+    const doCompanyResearch = async (forceRefresh: boolean) => {
         const company = profileData?.activeJD?.company;
         if (!company) return;
         setCompanyResearching(true); setCompanySearchQuotaExhausted(false);
         try {
-            const result = await window.electronAPI?.profileResearchCompany?.(company);
+            const result = await window.electronAPI?.profileResearchCompany?.(company, forceRefresh);
             if (result?.success && result.dossier) setCompanyDossier(result.dossier);
             if (result?.searchQuotaExhausted) setCompanySearchQuotaExhausted(true);
         } catch { /**/ }
@@ -2398,7 +2483,7 @@ export function ProfileIntelligenceSettings({
                     hint="Add your resume as real-time context."
                     hasAccess={hasProfileAccess}
                     onBrowse={browseResume}
-                    onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    onNeedUpgrade={() => openPlans()}
                     enterClass={profileHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
@@ -2510,7 +2595,7 @@ export function ProfileIntelligenceSettings({
                     hint="Add a job description as real-time context."
                     hasAccess={hasProfileAccess}
                     onBrowse={browseJD}
-                    onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    onNeedUpgrade={() => openPlans()}
                     enterClass={jdHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
@@ -2979,6 +3064,15 @@ export function ProfileIntelligenceSettings({
         // render below it instead of replacing it. Company research keys off
         // the active JD's company, not the resume.
         const loaded = !!companyDossier;
+        // The JD upload's automatic research is ALREADY spending (2026-09-21).
+        // Without this, the 20-60s AOT window renders "Ready to research →
+        // Research Now" — the exact screen that trained the habit of clicking it
+        // — and a click there fires a SECOND query set concurrently with the run
+        // in flight. It also re-resolves the provider on the shared singleton
+        // engine mid-run, minting a new session UUID, so the server bills the
+        // remainder of the AOT run as another research run too. Show the skeleton
+        // that already exists instead: the work is genuinely underway.
+        const aotResearching = profileData?.aotStatus?.companyResearch === 'running';
         return (
             <>
                 {/* Header — Refresh pill sits next to the title once the dossier is
@@ -2994,7 +3088,7 @@ export function ProfileIntelligenceSettings({
                         </p>
                     </div>
                     {loaded && (
-                        <button className="pi-pill-btn pi-press" disabled={companyResearching} onClick={doCompanyResearch}>
+                        <button className="pi-pill-btn pi-press" disabled={companyResearching} onClick={() => doCompanyResearch(true)}>
                             <RefreshCw size={12} className={companyResearching ? 'pi-spinner' : ''} />
                             {companyResearching ? 'Refreshing' : 'Refresh'}
                         </button>
@@ -3039,7 +3133,7 @@ export function ProfileIntelligenceSettings({
                         Web search credits exhausted — showing AI-only research.
                     </div>
                 )}
-                {!companyDossier && !companyResearching && companyName && (
+                {!companyDossier && !companyResearching && !aotResearching && companyName && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
                         <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
@@ -3053,13 +3147,13 @@ export function ProfileIntelligenceSettings({
                         <button
                             className="pi-pill-btn pi-press"
                             style={{ color: 'var(--pi-cta-accent-text)', borderColor: 'var(--pi-cta-accent-border)', background: 'var(--pi-accent-subtle)', fontWeight: 600, padding: '8px 20px' }}
-                            onClick={doCompanyResearch}
+                            onClick={() => doCompanyResearch(false)}
                         >
                             Research Now
                         </button>
                     </div>
                 )}
-                {companyResearching && companyName && (
+                {(companyResearching || aotResearching) && companyName && (
                     <div className="pi-cascade" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {/* Work Culture skeleton — overall rating + 4 sub-ratings grid.
                             Card shell is solid (no pulse); only the inner text placeholders breathe. */}
@@ -3614,7 +3708,7 @@ export function ProfileIntelligenceSettings({
     const renderRoleInsight = () => (
         <RoleInsightPanel
             hasAccess={hasProfileAccess}
-            onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+            onNeedUpgrade={() => openPlans()}
             onGoToProfile={() => goToSection('identity')}
         />
     );
@@ -3635,29 +3729,10 @@ export function ProfileIntelligenceSettings({
         !isPremium && !isTrialActive  ? 'pi-cta--shimmer' : '',
     ].filter(Boolean).join(' ');
 
-    // ── Shared premium-modal lifecycle handlers (used by both the gate and the
-    //    unlocked panel's own CTA, so activating/deactivating behaves the same
-    //    regardless of which surface triggered the modal) ──────────────────────
-    const handlePremiumActivated = async () => {
-        setIsPremium(true);
-        try {
-            const details = await window.electronAPI?.licenseGetDetails?.();
-            const plan = details?.plan ?? '';
-            if (plan) setPremiumPlan(plan);
-            writePremiumCache(true, plan);
-        } catch { writePremiumCache(true, premiumPlan); }
-        const status = await window.electronAPI?.profileGetStatus?.();
-        if (status) setProfileStatus(status);
-    };
-    const handlePremiumDeactivated = () => {
-        setIsPremium(false); setPremiumPlan('');
-        writePremiumCache(false, '');
-        setProfileStatus(prev => ({ ...prev, profileMode: false }));
-    };
-
     // ── Non-pro users see the gate (wait for license verification) ────────────
     if (!hasProfileAccess) {
-        if (!licenseLoaded) return null;
+        // Busy, not empty: an empty card would read as settled to the genie.
+        if (!licenseLoaded) return <div aria-busy="true" style={{ height: '100%' }} />;
         return (
             <ProfileIntelligenceProGate
                 onOpenNativelyAPI={onOpenNativelyAPI}
@@ -3670,6 +3745,7 @@ export function ProfileIntelligenceSettings({
         <div
             className="pi-root"
             data-theme={theme}
+            aria-busy={!statusLoaded || profileUploading || jdUploading}
             style={{
                 display: 'flex', height: '100%', background: 'var(--pi-bg)',
                 borderRadius: 16, overflow: 'hidden',
@@ -3729,7 +3805,7 @@ export function ProfileIntelligenceSettings({
                 <div style={{ padding: '12px', borderTop: '1px solid var(--pi-border)', flexShrink: 0 }}>
                     <button
                         ref={ctaLens.ref}
-                        onClick={() => setIsPremiumModalOpen(true)}
+                        onClick={() => openPlans()}
                         onPointerMove={ctaLens.onPointerMove}
                         onFocus={ctaLens.onFocus}
                         className={ctaClass}
@@ -3761,19 +3837,11 @@ export function ProfileIntelligenceSettings({
                 {/* Scrollable content — key remounts the block on each switch, which
                     is what re-fires the directional blur-in below it. */}
                 <div ref={panelScrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '24px 32px', boxSizing: 'border-box' }}>
-                    <div key={activeSection} className="pi-panel-fade" data-dir={navDir}>
+                    <div key={activeSection} className="pi-panel-fade" data-dir={navDir} data-genie-view={activeSection}>
                         {(SECTION_RENDERERS[activeSection] ?? renderIdentity)()}
                     </div>
                 </div>
             </div>
-
-            <PremiumUpgradeModal
-                isOpen={isPremiumModalOpen}
-                onClose={() => setIsPremiumModalOpen(false)}
-                isPremium={isPremium}
-                onActivated={handlePremiumActivated}
-                onDeactivated={handlePremiumDeactivated}
-            />
         </div>
     );
 }

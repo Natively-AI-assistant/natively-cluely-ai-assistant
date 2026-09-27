@@ -1,0 +1,289 @@
+{
+ "blind_id": "S-c4b8df9b",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 53350,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 22199,
+  "candidatesTokenCount": 2049,
+  "totalTokenCount": 30411,
+  "cachedContentTokenCount": 16315,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 22199
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 16315
+   }
+  ],
+  "thoughtsTokenCount": 6163,
+  "serviceTier": "standard"
+ },
+ "fact_count": 51,
+ "evaluation": {
+  "factual_accuracy": 3,
+  "important_information_retention": 8,
+  "hallucination_control": 9,
+  "action_item_retention": 6,
+  "decision_retention": 3,
+  "speaker_attribution": 5,
+  "numeric_accuracy": 4,
+  "entity_retention": 8,
+  "timeline_accuracy": 3,
+  "conclusion_accuracy": 2,
+  "structure": 2,
+  "conciseness": 2,
+  "readability": 2,
+  "overall_summary_quality": 2,
+  "critical_errors": [
+   "Reporting superseded dates (Oct 16-19) as a final decision.",
+   "Reporting the superseded booking owner (Priya) as a final decision.",
+   "Reporting the superseded cost split ($285) as the current estimate.",
+   "Reporting resolved issues (pet policy, private chef, camera price) as open questions.",
+   "Extreme repetition and duplicate sections (e.g., 'Decisions' and 'Decisions (structured)').",
+   "Failing to resolve speaker labels ('Speaker 1', 'Speaker 2', 'Me') to their actual names consistently."
+  ],
+  "missing_important_information": [
+   "Birchwater Lake is about a 3-hour drive, versus about 4.5 hours to Hollins Ridge.",
+   "Halvorsen is hybrid and will pay for Tom's CFA level two certification.",
+   "Dan's rent is going up $200 a month and he is apartment hunting.",
+   "Jonah has not seen Maya in about fourteen months."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "The planned trip dates are Friday, October 16th through Monday, October 19th"
+   },
+   {
+    "correction_id": "C03",
+    "reported": "The current cost estimate is $285 each for the four paying participants."
+   },
+   {
+    "correction_id": "C04",
+    "reported": "Priya will book the accommodation."
+   }
+  ],
+  "not_decisions_reported_as_decided": [
+   "Priya will book the accommodation.",
+   "The planned trip dates are Friday, October 16th through Monday, October 19th"
+  ],
+  "distractors_included": [
+   "Priya’s puppy Waffles is eleven weeks old and starts puppy class the following Saturday.",
+   "Priya reported working a twelve-and-a-half-hour shift while three nurses were absent",
+   "The group joked about the need to avoid revealing the surprise, referencing Tom's prior accidental disclosure of Priya's surprise party."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "missing"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "contradicted"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "missing"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "contradicted"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "contradicted"
+   },
+   {
+    "id": "F17",
+    "status": "partial"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "contradicted"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "contradicted"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "missing"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "missing"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "missing"
+   }
+  ],
+  "rationale": "The notes suffer from severe structural and logical flaws. The AI failed to resolve the chronological progression of the meeting, resulting in superseded ideas (like the Oct 16-19 dates, Priya booking, and the $285 cost split) being listed as final decisions alongside the actual final decisions. Furthermore, resolved issues (like the pet policy and the private chef) are listed as open questions. The structure is incredibly bloated and repetitive, with duplicate sections (e.g., 'Decisions' and 'Decisions (structured)') that contradict each other. Speaker attribution is also poor, leaving labels like 'Speaker 1' and 'Me' unresolved."
+ }
+}

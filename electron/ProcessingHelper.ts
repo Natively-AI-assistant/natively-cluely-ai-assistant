@@ -75,6 +75,8 @@ export class ProcessingHelper {
     const claudeKey = credManager.getClaudeApiKey();
     const deepseekKey = credManager.getDeepseekApiKey();
     const nvidiaNimKey = credManager.getNvidiaNimApiKey();
+    const openrouterKey = credManager.getOpenrouterApiKey();
+    const fluxionKey = credManager.getFluxionApiKey();
 
     if (geminiKey) {
       console.log("[ProcessingHelper] Loading stored Gemini API Key from CredentialsManager");
@@ -101,11 +103,30 @@ export class ProcessingHelper {
       this.llmHelper.setDeepseekApiKey(deepseekKey);
     }
     if (nvidiaNimKey) this.llmHelper.setNvidiaNimApiKey(nvidiaNimKey);
+    // Hydrated here rather than through the constructor: this ONE key may already
+    // be on disk because the user configured OpenRouter embeddings or reranking,
+    // long before the AI Providers card existed. Loading it at boot is what makes
+    // chat work for them without re-entering anything.
+    if (openrouterKey) this.llmHelper.setOpenrouterApiKey(openrouterKey);
+    // The protocol must be hydrated WITH the key: setFluxionConfig builds one
+    // client per protocol, so passing the key alone would silently rebuild an
+    // 'openai' client for a user whose group is Anthropic and turn every boot
+    // into a wrong-endpoint failure.
+    if (fluxionKey) this.llmHelper.setFluxionConfig(fluxionKey, credManager.getFluxionProtocol());
 
     const litellmBaseURL = credManager.getLitellmBaseURL();
     if (litellmBaseURL) {
       console.log("[ProcessingHelper] Loading stored LiteLLM config from CredentialsManager");
       this.llmHelper.setLitellmConfig(credManager.getLitellmApiKey() || '', litellmBaseURL, credManager.getLitellmMaxTokens());
+    }
+
+    // Without this the client is never constructed at startup, so a user who
+    // configured 9Router in a previous session has a selected model that
+    // dispatches to nothing until they re-save the card.
+    const ninerouterBaseURL = credManager.getNinerouterBaseURL();
+    if (ninerouterBaseURL) {
+      console.log("[ProcessingHelper] Loading stored 9Router config from CredentialsManager");
+      this.llmHelper.setNinerouterConfig(credManager.getNinerouterApiKey() || '', ninerouterBaseURL, credManager.getNinerouterMaxTokens(), credManager.getNinerouterThinking() || null);
     }
 
     const nativelyKey = credManager.getNativelyApiKey();

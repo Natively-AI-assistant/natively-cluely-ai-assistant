@@ -1,12 +1,12 @@
-// Guards the obsidian-editorial review modal against silent regression back
-// into the stacked dark utility card it replaced.
+// Guards the review modal's composition and behaviour.
 //
-// WHY THIS EXISTS. The modal was rebuilt twice. The first rebuild kept the
-// header-bar/body/button-row skeleton and only restyled it, so it read as the
-// same UI. The contract below therefore pins the things that make the
-// composition different — the two-column plate, the display numeral that
-// tracks the live rating, the signature rule instead of a boxed field — not
-// just the colours, which a restyle could satisfy while changing nothing.
+// WHY THIS EXISTS. The modal was rebuilt more than once. An early rebuild kept
+// the header-bar/body/button-row skeleton and only restyled it, so it read as
+// the same UI. The contract below therefore pins what makes the composition
+// what it is — two panes with the star art inset on the right, a live verdict
+// that tracks the rating, the signature rule instead of a boxed field, one
+// layout for both themes — not just the colours, which a restyle could satisfy
+// while changing nothing.
 //
 // The behavioural half pins what must survive any future redesign: the two
 // explicit attribution outcomes and their exact payloads, the 5s self-dismiss,
@@ -30,9 +30,9 @@ const CSS = readFileSync(join(HERE, '../ReviewModal.css'), 'utf8');
 /** Strip comments so prose about the old design never satisfies an assertion. */
 const LIVE_CSS = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
 
-describe('Review modal — obsidian editorial composition', () => {
-    test('is a two-column plate, not a stacked card', () => {
-        // The plate/column split IS the redesign. A future revert to a single
+describe('Review modal — two-pane composition', () => {
+    test('is a two-pane grid, not a stacked card', () => {
+        // The column/art split IS the design. A future revert to a single
         // centred column would drop these.
         // The variant class is composed (`review-grid-${variant}`), so assert
         // on the composition plus each variant name passed to StepFrame.
@@ -45,20 +45,22 @@ describe('Review modal — obsidian editorial composition', () => {
                 `.review-grid-${variant} does not define its own column split`,
             );
         }
-        assert.match(MODAL, /className="review-plate"/);
+        assert.match(MODAL, /className="review-art"/);
         assert.match(MODAL, /className="review-column/);
-        // No header bar: the close glyph floats over the plate instead.
+        // No header bar: the close glyph floats over the art panel instead.
         assert.match(LIVE_CSS, /\.review-close\s*\{[^}]*position:\s*absolute/);
     });
 
     test('each step has its own silhouette', () => {
-        // Steps 1-2 are plate grids with distinct figures (numeral, pull-quote).
-        assert.match(MODAL, /className="review-numeral"/);
-        assert.match(MODAL, /className="review-quote"/);
-        assert.match(MODAL, /REVIEW · 1 OF 3/);
-        assert.match(MODAL, /ATTRIBUTION · 2 OF 3/);
+        // Steps 1-2 share the two-pane grid with the art on both; the art is
+        // the same object, so the step swap reads as the copy changing beside
+        // a still image.
+        const code = MODAL.replace(/\/\*[\s\S]*?\*\//g, '');
+        assert.equal((code.match(/<ArtPanel \/>/g) || []).length, 2, 'the art sits on steps 1 and 2');
+        assert.match(MODAL, /Review · 1 of 3/);
+        assert.match(MODAL, /Rating saved · 2 of 3/);
         // Step 3 deliberately leaves the grid: a terminal receipt has one short
-        // message, and the plate left a lone seal adrift in an empty half.
+        // message, and the grid left a lone seal adrift beside the art.
         assert.match(MODAL, /className="review-receipt"/);
         assert.match(MODAL, /className="review-seal"/);
         assert.match(LIVE_CSS, /\.review-receipt\s*\{[^}]*text-align:\s*center/);
@@ -101,11 +103,13 @@ describe('Review modal — obsidian editorial composition', () => {
         assert.match(MODAL, /\{byline\}/);
     });
 
-    test('the display numeral tracks the live (hover-or-selected) rating', () => {
-        // The numeral is keyed on shownRating so it re-mounts and swaps per
-        // value; keying it on `rating` alone would kill the hover preview.
+    test('the verdict tracks the live (hover-or-selected) rating', () => {
+        // The verdict word is keyed on shownRating so it re-mounts and swaps
+        // per value; keying it on `rating` alone would kill the hover preview.
         assert.match(MODAL, /shownRating\s*=\s*hoverRating\s*\|\|\s*rating/);
         assert.match(MODAL, /key=\{shownRating\}/);
+        assert.match(MODAL, /className="review-verdict"/);
+        assert.match(MODAL, /\{ratingWord\}/);
     });
 
     test('the name field is a signature rule, not a boxed input', () => {
@@ -126,7 +130,8 @@ describe('Review modal — obsidian editorial composition', () => {
     });
 
     test('the confirmation self-dismisses at 5s with no Done button', () => {
-        assert.match(MODAL, /window\.setTimeout\(\(\) => onClose\(\), 5000\)/);
+        // Through closeModal, so the genie plays before the host hears onClose.
+        assert.match(MODAL, /window\.setTimeout\(\(\) => closeModal\(\), 5000\)/);
         assert.match(MODAL, /review-thanks-countdown/);
         assert.doesNotMatch(MODAL, />\s*Done\s*</);
     });
@@ -166,8 +171,36 @@ describe('Review modal — obsidian editorial composition', () => {
         const reducedBlocks = LIVE_CSS.match(/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/g) ?? [];
         assert.ok(reducedBlocks.length > 0, 'no reduced-motion block covers the review modal');
         const joined = reducedBlocks.join('\n');
-        assert.match(joined, /\.review-modal-ambient/);
+        assert.match(joined, /\.review-art-image::before/);
         assert.match(joined, /\.review-thanks-countdown/);
         assert.match(joined, /\.review-modal-shell/);
+    });
+
+    test('one layout for both themes, driven by variables', () => {
+        // Every theme difference is a --rv-* variable, so no rule branches on
+        // the theme except the variable blocks, the backdrop and the art
+        // hairline. The old stylesheet was dark-only.
+        assert.match(LIVE_CSS, /\[data-theme='light'\] \.review-modal-shell\s*\{[^}]*--rv-ground:\s*#F7F8FC/);
+        assert.match(LIVE_CSS, /\.review-modal-shell\s*\{[^}]*--rv-ground:\s*#1C1C1E/);
+        for (const v of ['--rv-strong', '--rv-body', '--rv-quiet', '--rv-faint', '--rv-gold']) {
+            assert.match(LIVE_CSS, new RegExp(`\\[data-theme='light'\\] \\.review-modal-shell\\s*\\{[^}]*${v}:`), `light theme does not set ${v}`);
+        }
+        assert.match(LIVE_CSS, /url\("\.\.\/assets\/cards\/star\.jpg"\)/, 'the art is the star');
+    });
+
+    test('the scrim dims without blurring, and nothing idles in a loop', () => {
+        // 3a9901ae4: frosting the whole launcher behind the card left it
+        // unreadable. And a card waiting for a decision should be still: the
+        // countdown is the one animation, and it runs once (`forwards`).
+        assert.doesNotMatch(LIVE_CSS, /backdrop-filter/);
+        assert.doesNotMatch(LIVE_CSS, /\binfinite\b/);
+        assert.doesNotMatch(MODAL, /review-modal-ambient/);
+        assert.match(LIVE_CSS, /animation:\s*review-countdown 5s linear forwards/);
+    });
+
+    test('labels are sentence case', () => {
+        // Tracked-out capitals on buttons and eyebrows shouted the quietest
+        // words on the card.
+        assert.doesNotMatch(LIVE_CSS, /text-transform:\s*uppercase/);
     });
 });

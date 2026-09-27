@@ -18,8 +18,6 @@ const NullComponent: React.FC<any> = () => null;
 
 // Not needed by the Profile Intelligence panel's render paths, but the module
 // must satisfy every named import the panel (and its imports) may reference.
-export const PremiumUpgradeModal: React.FC<any> = NullComponent;
-export const PremiumPromoToaster: React.FC<any> = NullComponent;
 export const ProfileFeatureToaster: React.FC<any> = NullComponent;
 export const JDAwarenessToaster: React.FC<any> = NullComponent;
 export const RemoteCampaignToaster: React.FC<any> = NullComponent;

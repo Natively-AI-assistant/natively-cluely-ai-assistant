@@ -132,7 +132,8 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 // TEXT_HEDGE_ENABLED / GEMINI_TEXT_HEDGE_CONFIG knobs were removed.
 // Groq retired every Llama id it hosted: `llama-3.3-70b-versatile` shut down
 // 2026-08-16 and `meta-llama/llama-4-scout-17b-16e-instruct` on 2026-07-17.
-// `qwen/qwen3.6-27b` is the replacement for BOTH paths — it is the only model
+// `qwen/qwen3.8-27b` (successor to qwen3.6-27b, itself shut down 2026-09-14) is
+// the model for BOTH paths — it is the only model
 // left in Groq's catalogue that accepts image input, so text and vision share
 // one id. The user's pick in the model selector still wins; these are only the
 // baseline used when nothing is chosen and by the Fast Text / emergency paths.
@@ -143,14 +144,98 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 // vision chain is meant to fall through to another provider.
 const GROQ_MODEL = GROQ_PRIMARY_MODEL
 import { GROQ_VISION_MODEL } from './llm/groqModels'
+import { DEEPSEEK_DEFAULT_MODEL, deepseekWireModel, isDeepseekModelId } from './llm/deepseekModels'
 import { stripLeadingReasoningBlock } from './llm/reasoningTagFilter'
+import { describeNinerouterFailure, NINEROUTER_EMPTY_ANSWER } from './llm/ninerouterErrors'
+import { renderUserInstructionSystemLayer } from './llm/userInstructionContract'
 // Groq rejects a request carrying more than 5 images. Every other vision
 // provider here takes as many as we send, so the cap lives on the Groq path.
 const GROQ_VISION_MAX_IMAGES = 5
+// How long the vision chain waits for a cold Ollama vision-model probe before
+// seating the other providers without it, and how long an empty result is
+// trusted. The probe itself can take 5s per request against a hung daemon.
+const OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS = 1500
+const OLLAMA_VISION_NEGATIVE_TTL_MS = 30_000
 const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
-const DEEPSEEK_MODEL = "deepseek-v4-flash"
+// Auto Answer judge on the OpenAI rung — chosen by MEASUREMENT, not by size.
+// Scored with judgeEval.mjs on the 146 labeled real-meeting candidates (19 asks),
+// two runs each, JSON mode, 2026-09-22:
+//   gpt-5.5       none  recall 14/19 14/19  false fires 0  p50 1.4 s  worst p90 2.1 s
+//   gpt-5.6-luna  low   recall 12/19 13/19  false fires 0  p50 2.0 s  worst p90 3.7 s  ← the old path
+//   gpt-5.4       none  recall 11/19 11/19  false fires 0  p50 1.4 s  worst p90 2.3 s
+//   gpt-5.4-mini  none  recall  9/19  6/19  false fires 1  p50 1.2 s  worst p90 2.5 s
+// The small tiers are faster but miss real asks; gpt-5.5 is both faster AND more
+// accurate than the chat-model fallback it replaces. Re-run the eval before
+// changing this.
+// Sub-deadline for the fast rung inside the judge's 2500 ms budget.
+//
+// Measured 2026-09-24 against gemini-3.1-flash-lite on the REAL capped judge
+// prompt (~3039 tokens), thinking minimal, 7 runs:
+//   1085, 1104, 1119, 1419, 1722, 2096, 2213 ms   (median 1419)
+// The earlier 1200 ms was set from a 60-token synthetic call and would have
+// timed out 4 of those 7 — spending the latency and then falling through
+// anyway, which is worse than not having the rung.
+//
+// 1800 ms covers the median and most of the spread while leaving ~700 ms of the
+// judge budget for the ladder beneath. The variance here is real and the deeper
+// lever is prompt size: JUDGE_PROMPT_RULES alone is 7420 chars of the ~12.2k
+// total, so trimming the boilerplate would buy more than any timeout tuning.
+const FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS = 1800
+// Ceiling for a fast call made with no caller signal (the preferFast callers).
+const FAST_MODEL_DEFAULT_TIMEOUT_MS = 8000
+const OPENAI_JUDGE_MODEL = "gpt-5.5"
+const CLAUDE_JUDGE_MODEL = "claude-haiku-4-5"
+// DEEPSEEK_MODEL keeps main's centralised id, NOT the "deepseek-v4-flash"
+// literal this commit carried: v4-flash is a RETIRED alias and deepseek-flash
+// is what DeepSeek serves today (llm/deepseekModels.ts). Taking the literal
+// would silently revert main's fix.
+const DEEPSEEK_MODEL = DEEPSEEK_DEFAULT_MODEL
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+// DeepSeek's chat API THINKS BY DEFAULT: `thinking.type` defaults to `enabled`
+// (reasoning_effort `high`), and in streaming the reasoning arrives in
+// `delta.reasoning_content` BEFORE the first `delta.content` token
+// (api-docs.deepseek.com/api/create-chat-completion). Every reader here takes
+// only `delta.content`, so a request without this field waits out the whole
+// hidden chain of thought before the overlay shows a word. The post-meeting
+// summary server has always sent it (benchmark/reports/REPORT.md: a probe that
+// dropped it returned reasoning_tokens 106 on a tiny prompt, the production
+// body 0); the interactive paths never did. A spread, not an inline literal:
+// the OpenAI SDK's request type has no `thinking` field.
+const DEEPSEEK_NO_THINKING = { thinking: { type: 'disabled' as const } }
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+// Optional on OpenRouter's side, and purely for their public leaderboards —
+// they are NOT auth and carry nothing about the user. Sent as constants so a
+// request can never leak a real page URL or document title from the overlay.
+const OPENROUTER_ATTRIBUTION_HEADERS = {
+  "HTTP-Referer": "https://natively.software",
+  "X-OpenRouter-Title": "Natively",
+}
+// Fluxion AI is an aggregator gateway that speaks BOTH wire protocols, and the
+// one it accepts is fixed by the group the user's key belongs to — a property
+// the key itself does not expose. Hence two base URLs and a user-chosen
+// protocol rather than a single client:
+//   openai    → POST {base}/chat/completions   (Authorization: Bearer)
+//   anthropic → POST {base}/v1/messages        (x-api-key, set by the SDK)
+// The Anthropic base URL deliberately has NO /v1: the Anthropic SDK appends
+// `/v1/messages` itself, exactly as Fluxion's own Claude Code instructions say.
+//
+// CONFORMANCE CHECKED against the published docs 2026-09-19, by capturing what
+// both SDKs actually put on the wire: OpenAI -> POST /v1/chat/completions with
+// `Authorization: Bearer`; Anthropic -> POST /v1/messages with `x-api-key` and
+// `anthropic-version: 2023-06-01` (the exact value the docs' curl example
+// shows). No `/v1/v1` duplication — the mistake the Help Center warns about
+// twice — and neither client sends the other's auth header.
+//
+// The docs ALSO describe a `https://fluxionai.world/vip/v1` base for "all-model"
+// group keys. We deliberately do not implement it: probed 2026-09-19,
+// /vip/v1/responses (the only /vip path the docs actually cite) and
+// /vip/v1/{chat/completions,messages,models} ALL return the site's SPA HTML
+// shell with `text/html`, i.e. they are not API routes at all, while the plain
+// /v1 equivalents return real JSON. Supporting /vip/v1 would have meant
+// implementing a dead route.
+const FLUXION_OPENAI_BASE_URL = "https://fluxionai.world/v1"
+const FLUXION_ANTHROPIC_BASE_URL = "https://fluxionai.world"
 const NVIDIA_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
 // Requested ceiling; see createNvidiaNimCompletion for why it is a request and
 // not a guarantee (NVIDIA exposes no per-model output budget to look up).
@@ -166,6 +251,32 @@ const LITELLM_MAX_TOKENS_MIN = 256
 const LITELLM_MAX_TOKENS_MAX = 1048576 // 1M — Gemini-class ceilings exist behind proxies
 // /model/info budgets are cached this long; the proxy's model list rarely churns.
 const LITELLM_MODEL_INFO_TTL_MS = 5 * 60_000
+// 9Router answers budgets AND context windows on /v1/models itself, so
+// unlike LiteLLM there is no second /model/info round-trip: these are only
+// the clamp and the fallback for a model its catalogue does not describe.
+// The default deliberately mirrors 9Router's own DEFAULT_CAPABILITIES
+// (open-sse/providers/capabilities.js, maxOutput 64000), so an undescribed
+// model is treated the way 9Router itself would treat it rather than the way
+// a different proxy would.
+const NINEROUTER_DEFAULT_MAX_OUTPUT_TOKENS = 64000
+const NINEROUTER_MAX_TOKENS_MIN = 256
+const NINEROUTER_MAX_TOKENS_MAX = 1048576
+const NINEROUTER_MODELS_TTL_MS = 5 * 60_000
+// Mirrors NINEROUTER_THINKING_LEVELS in src/utils/modelUtils.ts. electron/
+// never imports from src/, so the list is restated; the settings dropdown
+// and this validator have to agree or a picked level is silently dropped.
+// The UNION of 9Router's per-format level sets (FORMAT_LEVELS in
+// open-sse/providers/thinkingLevels.js). Mirrors NINEROUTER_THINKING_LEVELS
+// in src/utils/modelUtils.ts — electron/ never imports from src/, so the
+// list is restated, and a test pins the two together. A level the picker
+// offers and this validator drops would be a silent no-op.
+/** Sent when the user has expressed no preference. See ninerouterThinkingParam. */
+const NINEROUTER_DEFAULT_THINKING = 'none'
+const NINEROUTER_THINKING_LEVELS: readonly string[] = [
+  'none', 'minimal', 'thinking', 'low', 'medium', 'high', 'xhigh', 'max',
+]
+/** The SDK's own reasoning_effort type, widened to admit 9Router's 'none'. */
+type ReasoningEffortValue = NonNullable<OpenAI.ChatCompletionCreateParams['reasoning_effort']> | 'none'
 const MAX_OUTPUT_TOKENS = 65536
 const CLAUDE_MAX_OUTPUT_TOKENS = 64000
 
@@ -410,10 +521,24 @@ export class LLMHelper {
   // Kept as a separate client so credentials/scope/telemetry stay provider-specific.
   private _deepseekClient: OpenAI | null = null
   private _nvidiaNimClient: OpenAI | null = null
+  // OpenRouter is OpenAI-compatible. Same pattern as DeepSeek/NVIDIA: OpenAI SDK
+  // + custom baseURL, its own client so credentials/scope/telemetry stay
+  // provider-specific.
+  private _openrouterClient: OpenAI | null = null
+  // Fluxion speaks both protocols, so it gets one client per protocol and the
+  // user's `fluxionProtocol` setting decides which one a request uses. Exactly
+  // one is ever non-null at a time — see setFluxionConfig.
+  private _fluxionOpenAIClient: OpenAI | null = null
+  private _fluxionAnthropicClient: Anthropic | null = null
   // LiteLLM proxy is OpenAI-compatible (AI gateway fronting 100+ providers).
   // Same pattern as DeepSeek: OpenAI SDK + custom baseURL, separate client so
   // credentials/scope/telemetry stay provider-specific.
   private _litellmClient: OpenAI | null = null
+  // 9Router is a self-hosted fallback proxy, OpenAI-compatible on /v1. Same
+  // shape as LiteLLM — OpenAI SDK against a user-supplied baseURL — and a
+  // separate client for the same reason: credentials, outbound scopes and
+  // telemetry stay provider-specific.
+  private _ninerouterClient: OpenAI | null = null
 
   private get client(): GoogleGenAI | null { return this.isProviderDisabled('gemini') ? null : this._client }
   private set client(v: GoogleGenAI | null) { this._client = v }
@@ -427,8 +552,24 @@ export class LLMHelper {
   private set deepseekClient(v: OpenAI | null) { this._deepseekClient = v }
   private get nvidiaNimClient(): OpenAI | null { return this.isProviderDisabled('nvidia_nim') ? null : this._nvidiaNimClient }
   private set nvidiaNimClient(v: OpenAI | null) { this._nvidiaNimClient = v }
+  private get openrouterClient(): OpenAI | null { return this.isProviderDisabled('openrouter') ? null : this._openrouterClient }
+  private set openrouterClient(v: OpenAI | null) { this._openrouterClient = v }
+  // These two getters ARE the disabled-provider guard for Fluxion. PROVIDER_LABEL_FAMILY
+  // carries no entry for the gateways (openrouter/litellm/nvidia_nim included), so
+  // assertOutboundScopes' backstop never fires for them — returning null here is
+  // what actually stops a switched-off Fluxion from being called.
+  private get fluxionOpenAIClient(): OpenAI | null { return this.isProviderDisabled('fluxion') ? null : this._fluxionOpenAIClient }
+  private set fluxionOpenAIClient(v: OpenAI | null) { this._fluxionOpenAIClient = v }
+  private get fluxionAnthropicClient(): Anthropic | null { return this.isProviderDisabled('fluxion') ? null : this._fluxionAnthropicClient }
+  private set fluxionAnthropicClient(v: Anthropic | null) { this._fluxionAnthropicClient = v }
   private get litellmClient(): OpenAI | null { return this.isProviderDisabled('litellm') ? null : this._litellmClient }
   private set litellmClient(v: OpenAI | null) { this._litellmClient = v }
+  // This getter IS the disabled-provider guard for 9Router, for the reason the
+  // Fluxion pair above spells out: PROVIDER_LABEL_FAMILY carries no entry for
+  // any gateway, so assertOutboundScopes' backstop never fires here and
+  // returning null is what actually stops a switched-off 9Router being called.
+  private get ninerouterClient(): OpenAI | null { return this.isProviderDisabled('ninerouter') ? null : this._ninerouterClient }
+  private set ninerouterClient(v: OpenAI | null) { this._ninerouterClient = v }
 
   /**
    * The user's switched-off providers, read LIVE on every question.
@@ -468,6 +609,11 @@ export class LLMHelper {
   private claudeApiKey: string | null = null
   private deepseekApiKey: string | null = null
   private nvidiaNimApiKey: string | null = null
+  private openrouterApiKey: string | null = null
+  private fluxionApiKey: string | null = null
+  /** Which wire protocol this key's Fluxion group speaks. Default matches the
+   *  GPT/Grok/Gemini/DeepSeek/GLM/Kimi groups; Claude groups need 'anthropic'. */
+  private fluxionProtocol: 'openai' | 'anthropic' = 'openai'
   private litellmApiKey: string | null = null
   private litellmBaseURL: string = "http://localhost:4000/v1"
   // Manual output-ceiling override (Settings → LiteLLM Proxy dropdown).
@@ -478,6 +624,24 @@ export class LLMHelper {
   private litellmModelBudgets: Map<string, number> = new Map()
   private litellmModelBudgetsFetchedAt: number = 0
   private litellmModelBudgetsFetch: Promise<void> | null = null
+  private ninerouterApiKey: string | null = null
+  // 9Router's own default port. Users who expose it through a Cloudflare
+  // tunnel paste that host instead — it is a user endpoint either way.
+  private ninerouterBaseURL: string = "http://localhost:20128/v1"
+  // Manual output-ceiling override (Settings → 9Router dropdown).
+  // null = Auto: resolve per-model from the catalogue.
+  private ninerouterMaxTokens: number | null = null
+  private ninerouterModelBudgets: Map<string, number> = new Map()
+  private ninerouterModelInputCaps: Map<string, number> = new Map()
+  /** Wire ids whose catalogue entry reports `capabilities.vision`. EMPTY
+   *  means UNKNOWN (never "none") — see ninerouterModelSupportsVision. */
+  private ninerouterVisionModels: Set<string> = new Set()
+  /** Thinking level for 9Router-routed models, sent as `reasoning_effort`.
+   *  'auto' (or unset) sends nothing and leaves the upstream's own choice,
+   *  which for some models (Gemini) adapts per prompt and is already fast. */
+  private ninerouterThinking: string | null = null
+  private ninerouterModelsFetchedAt: number = 0
+  private ninerouterModelsFetch: Promise<void> | null = null
   private useOllama: boolean = false
   private ollamaModel: string = ""
   private ollamaUrl: string = "http://127.0.0.1:11434"
@@ -497,6 +661,10 @@ export class LLMHelper {
   private ollamaVisionCache: Map<string, boolean> = new Map();
   // Dedupe concurrent refreshOllamaVisionModel() calls (init + switch + lazy).
   private ollamaVisionRefreshInFlight: Promise<string | null> | null = null;
+  // Until this time (ms epoch), the vision chain skips its bounded Ollama probe:
+  // the last one found nothing vision-capable or ran out of budget. Without it a
+  // user with Ollama selected and no vision model re-paid the probe per screenshot.
+  private ollamaVisionNegativeUntil = 0;
   private ollamaStartedByApp: boolean = false;
   private geminiModel: string = GEMINI_FLASH_MODEL
   private customProvider: CustomProvider | null = null;
@@ -596,7 +764,7 @@ export class LLMHelper {
       const c: any = this.activeCurlProvider;
       return `curl:${c.id}:${c.curlCommand ? String(c.curlCommand).length : ''}`;
     }
-    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId)) {
+    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId)) {
       return `model:${this.currentModelId}`;
     }
     return null;
@@ -971,6 +1139,11 @@ export class LLMHelper {
   private static readonly PROVIDER_LABEL_FAMILY: Readonly<Record<string, string>> = {
     gemini: 'gemini', groq: 'groq', natively: 'natively', openai: 'openai',
     claude: 'claude', deepseek: 'deepseek', litellm: 'litellm', codex: 'codex-cli',
+    // Present so the last-boundary disabled check actually runs: the lookup is
+    // `if (family && ...)`, so an absent entry removes the guard silently
+    // rather than failing. The client getter is the primary guard; this is the
+    // backstop for any path that reaches the provider without passing it.
+    ninerouter: 'ninerouter',
     antigravity: 'antigravity', custom_curl: 'custom', custom_provider: 'custom',
   };
 
@@ -1339,6 +1512,70 @@ export class LLMHelper {
   }
 
   /**
+   * The SAME key CredentialsManager hands the embedding and rerank providers —
+   * one OpenRouter credential, three consumers. Setting it here only builds the
+   * chat client; the retrieval side is activated by CredentialsManager itself.
+   */
+  public setOpenrouterApiKey(apiKey: string) {
+    const trimmed = (apiKey || '').trim();
+    this.openrouterApiKey = trimmed || null;
+    this.openrouterClient = trimmed
+      ? new OpenAI({ apiKey: trimmed, baseURL: OPENROUTER_BASE_URL, defaultHeaders: OPENROUTER_ATTRIBUTION_HEADERS })
+      : null;
+    this.textHealth.delete('openrouter');
+    this.visionHealth.delete('openrouter');
+    console.log(`[LLMHelper] OpenRouter API Key ${trimmed ? 'updated' : 'cleared'}.`);
+  }
+
+  /**
+   * Configure Fluxion AI.
+   *
+   * MEASURED on two real keys, and the truth is asymmetric — neither the docs'
+   * version nor the simpler story an earlier revision of this comment told:
+   *
+   *   Claude group (2026-09-18): 200 on BOTH /v1/chat/completions AND
+   *     /v1/messages for the same model. The gateway transcodes; the OpenAI
+   *     chunks it streams back still carry Anthropic `msg_…` ids. The docs claim
+   *     Claude groups answer on /v1/messages only — that is wrong.
+   *   GLM group (2026-09-19): /v1/chat/completions 200, but /v1/messages is a
+   *     hard **403 `{"message":"This group does not allow /v1/messages
+   *     dispatch","type":"permission_error"}`**.
+   *
+   * So the group DOES gate the protocol, just not the way the docs describe:
+   * the Anthropic endpoint is the RESTRICTED one, and /v1/chat/completions is
+   * the universal one. That makes 'openai' the correct default for every group
+   * — it is the only protocol observed to work on all of them — and makes the
+   * 'anthropic' option a narrow escape hatch, not a per-group requirement.
+   * Exactly one client is built, so a request can never go out on the protocol
+   * the user did not choose.
+   *
+   * Test Connection and the catalogue fetch do NOT use either client — they are
+   * raw axios calls against GET /v1/models with a Bearer header, which the
+   * gateway accepts regardless of group (it takes Authorization, x-api-key and
+   * x-goog-api-key on every route). So neither breaks when protocol is
+   * 'anthropic'.
+   */
+  public setFluxionConfig(apiKey: string, protocol: 'openai' | 'anthropic' = 'openai') {
+    const trimmed = (apiKey || '').trim();
+    this.fluxionApiKey = trimmed || null;
+    this.fluxionProtocol = protocol === 'anthropic' ? 'anthropic' : 'openai';
+    this.fluxionOpenAIClient = trimmed && this.fluxionProtocol === 'openai'
+      ? new OpenAI({ apiKey: trimmed, baseURL: FLUXION_OPENAI_BASE_URL })
+      : null;
+    this.fluxionAnthropicClient = trimmed && this.fluxionProtocol === 'anthropic'
+      ? new Anthropic({ apiKey: trimmed, baseURL: FLUXION_ANTHROPIC_BASE_URL })
+      : null;
+    this.textHealth.delete('fluxion');
+    this.visionHealth.delete('fluxion');
+    console.log(`[LLMHelper] Fluxion API Key ${trimmed ? `updated (${this.fluxionProtocol} protocol)` : 'cleared'}.`);
+  }
+
+  /** True when a Fluxion client exists for the selected protocol. */
+  private hasFluxionCredential(): boolean {
+    return !!(this.fluxionOpenAIClient || this.fluxionAnthropicClient);
+  }
+
+  /**
    * Configure the LiteLLM proxy. baseURL is required (the proxy location);
    * apiKey is the optional virtual/master key (`sk-...`). A keyless local
    * proxy is supported by sending no Authorization header — represented here
@@ -1463,6 +1700,239 @@ export class LLMHelper {
     return Math.min(LITELLM_MAX_TOKENS_MAX, Math.max(LITELLM_MAX_TOKENS_MIN, budget));
   }
 
+  /**
+   * Point the app at a 9Router instance.
+   *
+   * The BASE URL is the presence gate, not the key — 9Router's own
+   * REQUIRE_API_KEY defaults to false, so a stock local install is legitimately
+   * keyless and the OpenAI SDK's non-empty-apiKey requirement is satisfied with
+   * a dummy. A remote or hardened instance DOES require the real key, and its
+   * /v1 POST routes 401 without one even though every GET answers openly.
+   */
+  public setNinerouterConfig(apiKey: string, baseURL: string, maxTokens?: number, thinking?: string | null) {
+    const trimmedURL = (baseURL || '').trim();
+    if (!trimmedURL) {
+      this.ninerouterApiKey = null;
+      this.ninerouterClient = null;
+      this.ninerouterBaseURL = "http://localhost:20128/v1";
+      this.ninerouterMaxTokens = null;
+      this.ninerouterThinking = null;
+      this.ninerouterModelBudgets.clear();
+      this.ninerouterModelInputCaps.clear();
+      this.ninerouterVisionModels.clear();
+      this.ninerouterModelsFetchedAt = 0;
+      console.log("[LLMHelper] 9Router config cleared.");
+      return;
+    }
+    this.ninerouterApiKey = (apiKey || '').trim() || null;
+    this.ninerouterBaseURL = trimmedURL;
+    const n = Number(maxTokens);
+    this.ninerouterMaxTokens = (Number.isFinite(n) && n > 0)
+      ? Math.min(NINEROUTER_MAX_TOKENS_MAX, Math.max(NINEROUTER_MAX_TOKENS_MIN, Math.floor(n)))
+      : null; // Auto
+    this.ninerouterThinking = (thinking || '').trim() || null;
+    // Repointed → the cached budgets describe a different instance's catalogue.
+    this.ninerouterModelBudgets.clear();
+    this.ninerouterModelInputCaps.clear();
+    this.ninerouterVisionModels.clear();
+    this.ninerouterModelsFetchedAt = 0;
+    this.ninerouterClient = new OpenAI({ apiKey: this.ninerouterApiKey || "dummy", baseURL: trimmedURL });
+    console.log(`[LLMHelper] 9Router client initialized with base URL: ${trimmedURL}, max_tokens: ${this.ninerouterMaxTokens ?? 'auto'}`);
+  }
+
+  /**
+   * Refresh the per-model budget cache from 9Router's /v1/models.
+   *
+   * ONE fetch, where LiteLLM needs two: 9Router returns per-model capabilities
+   * and token limits on the model list itself, as `context_length` /
+   * `max_completion_tokens` at the top level and `capabilities.contextWindow` /
+   * `capabilities.maxOutput` nested. Both are read, top level first, because
+   * 9Router emits the snake_case pair precisely so that clients which do not
+   * recurse into nested objects stop guessing the window from the model name.
+   *
+   * Failures are silent — Auto then falls back to the default budget and never
+   * blocks a question. Concurrent callers share one in-flight fetch.
+   */
+  private async refreshNinerouterModelCatalogue(): Promise<void> {
+    if (Date.now() - this.ninerouterModelsFetchedAt < NINEROUTER_MODELS_TTL_MS) return;
+    if (this.ninerouterModelsFetch) return this.ninerouterModelsFetch;
+
+    // The instance this fetch belongs to. setNinerouterConfig can repoint the
+    // app mid-flight; without this tag the OLD instance's reply lands in the
+    // freshly-cleared cache and stamps fetchedAt, pinning another host's
+    // ceilings for the whole TTL.
+    const issuedForBaseURL = this.ninerouterBaseURL;
+    this.ninerouterModelsFetch = (async () => {
+      try {
+        // The configured value already ends in /v1 (that is the base URL
+        // 9Router's dashboard hands out), but accept a bare root too.
+        const root = this.ninerouterBaseURL.replace(/\/+$/, '');
+        const url = /\/v1$/.test(root) ? `${root}/models` : `${root}/v1/models`;
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        // Sent when present even though /v1/models answers without it: a
+        // hardened instance may well require it, and it costs nothing here.
+        if (this.ninerouterApiKey) headers['Authorization'] = `Bearer ${this.ninerouterApiKey}`;
+        const resp = await fetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(5000) });
+        if (!resp.ok) return;
+        const data: any = await resp.json();
+        const fresh = new Map<string, number>();
+        const freshInput = new Map<string, number>();
+        const freshVision = new Set<string>();
+        for (const entry of (data?.data || [])) {
+          const name = entry?.id;
+          // typeof, not truthiness. A numeric id (42) is truthy, becomes a
+          // NUMBER key in these string-keyed Maps/Sets, and every later lookup
+          // misses silently — the model reads as "no budget" and "not
+          // vision-capable" while occupying a cache slot.
+          // listNinerouterEmbeddingModels already gets this right.
+          if (typeof name !== 'string' || !name) continue;
+          // Per-model vision, which no other gateway here can answer. 30 of
+          // the 47 models a stock instance serves report true and 17 report
+          // false, so this is the difference between routing a screenshot to
+          // a model that can read it and burning an attempt on one that
+          // cannot.
+          if (entry?.capabilities?.vision === true) freshVision.add(name);
+          const budget = Number(entry?.max_completion_tokens ?? entry?.capabilities?.maxOutput);
+          if (Number.isFinite(budget) && budget > 0) fresh.set(name, Math.floor(budget));
+          const inputCap = Number(entry?.context_length ?? entry?.capabilities?.contextWindow);
+          if (Number.isFinite(inputCap) && inputCap > 0) freshInput.set(name, Math.floor(inputCap));
+        }
+        if (this.ninerouterBaseURL !== issuedForBaseURL) {
+          console.log('[LLMHelper] 9Router /v1/models reply discarded — the instance was repointed while it was in flight.');
+          return;
+        }
+        this.ninerouterModelBudgets = fresh;
+        this.ninerouterModelInputCaps = freshInput;
+        this.ninerouterVisionModels = freshVision;
+        console.log(`[LLMHelper] 9Router /v1/models: cached budgets for ${fresh.size} model(s) `
+          + `(${freshInput.size} with a context window)`);
+      } catch {
+        // Instance down, unreachable or mid-restart — Auto falls back to the
+        // default budget and the user can always set a manual value.
+      } finally {
+        // Stamp on failure too (negative cache), or an unreachable instance adds
+        // up to 5s to EVERY question. Never stamp for an instance we are no
+        // longer pointed at, or the repoint's cache reset is silently undone.
+        if (this.ninerouterBaseURL === issuedForBaseURL) {
+          this.ninerouterModelsFetchedAt = Date.now();
+        }
+        this.ninerouterModelsFetch = null;
+      }
+    })();
+    return this.ninerouterModelsFetch;
+  }
+
+  /**
+   * Effective max_tokens for a 9Router-routed model. Manual override wins;
+   * otherwise the catalogue's budget for this model; otherwise the default.
+   */
+  private async resolveNinerouterMaxTokens(ninerouterModel: string): Promise<number> {
+    // The refresh runs BEFORE the manual-override return, and that ordering is
+    // load-bearing. This is the catalogue's only caller, so returning early
+    // meant that choosing a fixed Max Output Tokens in Settings left it
+    // permanently unfetched: `ninerouterVisionModels` stayed empty, its
+    // "empty means unknown" fallback then answered true for every model, and the
+    // per-model vision gate -- the one thing this provider does that LiteLLM
+    // cannot -- was silently dead. `ninerouterModelInputCaps` starved with it,
+    // so fitContextForCurrentModel never trimmed either.
+    //
+    // It is TTL-guarded, negative-cached and ~45ms, so running it here is free.
+    await this.refreshNinerouterModelCatalogue();
+    if (this.ninerouterMaxTokens !== null) return this.ninerouterMaxTokens; // manual override
+    const budget = this.ninerouterModelBudgets.get(ninerouterModel) ?? NINEROUTER_DEFAULT_MAX_OUTPUT_TOKENS;
+    return Math.min(NINEROUTER_MAX_TOKENS_MAX, Math.max(NINEROUTER_MAX_TOKENS_MIN, budget));
+  }
+
+  /**
+   * Can this 9Router model read an image?
+   *
+   * The one place this integration deliberately does NOT copy LiteLLM.
+   * LiteLLM's vision builder seats every proxied model as vision-capable and
+   * says why: the proxy fronts arbitrary upstreams and "gating on a guess
+   * is what produced 'no vision provider configured' for users who had one".
+   * That reasoning is sound for LiteLLM, whose /model/info says nothing about
+   * modalities. 9Router's /v1/models DOES — `capabilities.vision`, per model,
+   * 30 true and 17 false on a stock instance.
+   *
+   * So: a model the catalogue calls text-only is refused. And the cost of NOT
+   * refusing it is worse than a wasted attempt — measured against the live
+   * instance, sending an image to a text-only model returns HTTP 200. 9Router
+   * does not reject it; the upstream simply answers without having seen it. So
+   * the alternative to this gate is not an error the chain can fail over from,
+   * it is a confident answer that silently ignored the user's screenshot.
+   *
+   * But an EMPTY set means the catalogue has not been fetched — cold cache,
+   * cleared cache, or the instance down at discovery time — and that is
+   * UNKNOWN, never "no". Failing closed there would reproduce LiteLLM's bug
+   * exactly.
+   */
+  private ninerouterModelSupportsVision(modelId: string): boolean {
+    if (!this.isNinerouterModel(modelId)) return false;
+    if (this.ninerouterVisionModels.size === 0) return true; // unknown, not "no"
+    return this.ninerouterVisionModels.has(this.ninerouterWireModel(modelId));
+  }
+
+  /**
+   * The wire ids this instance's catalogue reports as vision-capable.
+   *
+   * Exposed because VisionProviderRegistry runs in the main process without a
+   * handle on this cache and must answer the same question synchronously — so
+   * the IPC discovery path persists this list and the registry reads it back.
+   * Empty means the catalogue has not been fetched, which is UNKNOWN.
+   */
+  public getNinerouterVisionModels(): string[] {
+    return [...this.ninerouterVisionModels];
+  }
+
+  /**
+   * The thinking parameter for a 9Router request, or nothing.
+   *
+   * `reasoning_effort` is the control 9Router honours across formats —
+   * verified live, and monotonic (none < low < medium < high) rather than
+   * accepted-and-ignored, which is the OpenRouter `output_dimension` failure
+   * this repo has been bitten by before.
+   *
+   * Sending nothing is deliberate for 'auto': the upstream's own default is
+   * not uniformly slow (Gemini varies effort per prompt and was the fastest
+   * setting measured), so pinning a level is a user choice rather than a fix.
+   *
+   * An unrecognised stored value sends NOTHING rather than reaching the
+   * wire: settings outlive code, and a stale level must not turn every
+   * question into a 400.
+   */
+  private ninerouterThinkingParam(): { reasoning_effort?: ReasoningEffortValue } {
+    const level = (this.ninerouterThinking || '').trim();
+    // DEFAULT IS NO THINKING. 9Router's own default reasons hard, and on a
+    // free/cheap-tier aggregator that is the difference between a ~1s answer and
+    // a multi-second one. 'auto' is the explicit opt-out for users who would
+    // rather the model decide — and it is a real choice, not a worse one: Gemini
+    // varies its own effort per prompt and was the fastest setting measured.
+    //
+    // 'none' is sent as canonical INTENT, not as a literal. applyFormat()
+    // translates it per backend — disabling where the format supports it, and
+    // clamping to the model's floor where it does not (gemini-level has no off,
+    // so it lands on minimal). That is why one value is safe across formats.
+    if (!level) return { reasoning_effort: NINEROUTER_DEFAULT_THINKING };
+    if (level === 'auto') return {};
+    // Cast is confined to THIS line on purpose. The OpenAI SDK types
+    // reasoning_effort as its own union which does not include 'none' — but
+    // 9Router honours 'none' and it is the fastest setting there is (3963ms ->
+    // 721ms on gemini-3.5-flash-lite, measured). Casting the whole request
+    // instead would destroy the `stream: true` literal that picks the
+    // streaming overload, which is how the first attempt at this broke.
+    return NINEROUTER_THINKING_LEVELS.includes(level)
+      ? { reasoning_effort: level as ReasoningEffortValue }
+      // A stale level from an older build falls back to the default rather than
+      // to silence, so it keeps the fast path instead of quietly becoming Auto.
+      : { reasoning_effort: NINEROUTER_DEFAULT_THINKING };
+  }
+
+  /** The wire id: one segment off, never two. `ninerouter/openai/gpt-5` is
+   *  `openai/gpt-5` to 9Router, whose catalogue is namespaced by upstream. */
+  private ninerouterWireModel(modelId: string): string {
+    return (modelId || '').replace(/^ninerouter\//, '');
+  }
+
   public setNativelyKey(key: string | null): void {
     this.nativelyKey = key || null;
     console.log(`[LLMHelper] Natively key ${key ? 'set' : 'cleared'}`);
@@ -1536,7 +2006,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -1569,6 +2039,12 @@ export class LLMHelper {
         return this.generateWithLiteLLM(userPrompt, systemPrompt, [imagePath]);
       case 'nvidia_nim':
         return this.generateWithNvidiaNim(userPrompt, systemPrompt, [imagePath]);
+      case 'openrouter':
+        return this.generateWithOpenRouter(userPrompt, systemPrompt, [imagePath]);
+      case 'fluxion':
+        return this.generateWithFluxion(userPrompt, systemPrompt, [imagePath]);
+      case 'ninerouter':
+        return this.generateWithNinerouter(userPrompt, systemPrompt, [imagePath]);
       case 'gemini_flash_lite':
       case 'gemini_flash':
       case 'gemini_pro': {
@@ -1673,23 +2149,95 @@ export class LLMHelper {
     // review 2026-08-23). Excluding Groq-hosted ids HERE fixes every dispatch
     // site at once, independent of branch ordering.
     if (this.isGroqModel(modelId)) return false;
+    // Same reasoning, one gateway further. Fluxion ids are BARE vendor ids
+    // behind a routing prefix (`fluxion/gpt-5.5`, `fluxion/claude-opus-5`), so
+    // without this line every `fluxion/gpt-*` id would be claimed by the
+    // startsWith("gpt-") test below and billed to the user's own OpenAI key.
+    // Excluding it here covers the non-streaming cascade, the streaming cascade
+    // and the direct-assist chain at once, so none of them depends on branch
+    // order staying correct.
+    if (this.isFluxionModel(modelId)) return false;
+    // Third gateway, same line of defence, and the one that needs it most
+    // literally: 9Router's catalogue IS vendor-namespaced, so
+    // `ninerouter/openai/gpt-5` satisfies BOTH the startsWith("gpt-") test
+    // (no) and the includes("openai") catch-all (yes) below. Without this the
+    // request goes to api.openai.com on the user's own key and answers
+    // perfectly, which is what makes it so hard to see.
+    if (this.isNinerouterModel(modelId)) return false;
     return modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-") || modelId.includes("openai");
   }
 
   private isClaudeModel(modelId: string): boolean {
+    // `fluxion/claude-opus-5` is byte-identical to the Anthropic id once the
+    // prefix is gone, so the prefix is the ONLY thing separating a Fluxion
+    // Claude request from one billed to the user's Anthropic key.
+    if (this.isFluxionModel(modelId)) return false;
     return modelId.startsWith("claude-");
   }
 
   private isDeepseekModel(modelId: string): boolean {
-    if (!modelId) return false;
-    return /^deepseek-v\d/.test(modelId.toLowerCase());
+    return isDeepseekModelId(modelId);
   }
 
   private isLiteLLMModel(modelId: string): boolean {
     return !!modelId && modelId.startsWith("litellm/");
   }
 
+  /**
+   * MUST be tested before isOpenAiModel/isGroqModel/isGeminiModel everywhere it
+   * is used — and, because that is easy to get wrong once and never notice,
+   * isOpenAiModel excludes it directly rather than relying on branch order.
+   *
+   * 9Router ids are vendor-namespaced (`ninerouter/openai/gpt-5`,
+   * `ninerouter/gemini/gemini-3.6-flash`, `ninerouter/cc/claude-opus-5`), so the
+   * vendor segment inside the id is a live match for that vendor's own
+   * predicate. Classified late, a 9Router turn is answered by — and billed to —
+   * the user's real OpenAI/Gemini key, and neither the request nor the answer
+   * looks wrong anywhere in the trace.
+   *
+   * The internal id is `ninerouter`, never `9router`: the latter is not a legal
+   * JavaScript identifier, and CredentialsManager builds its preferred-model key
+   * by interpolation (`${provider}PreferredModel`). "9Router" is the display
+   * name everywhere a user can see one.
+   */
+  private isNinerouterModel(modelId: string): boolean {
+    return !!modelId && modelId.startsWith('ninerouter/');
+  }
+
   private isNvidiaNimModel(modelId: string): boolean { return !!modelId && modelId.startsWith('nvidia_nim/'); }
+  /**
+   * MUST be tested before isGroqModel/isOpenAiModel everywhere it is used.
+   * OpenRouter ids are vendor-namespaced, so `openrouter/openai/gpt-oss-120b`
+   * matches Groq's catalogue and the OpenAI `includes('openai')` catch-all —
+   * whichever ran first would route an OpenRouter model to the wrong client and
+   * bill the wrong key.
+   */
+  private isOpenRouterModel(modelId: string): boolean { return !!modelId && modelId.startsWith('openrouter/'); }
+
+  /**
+   * MUST be tested before isClaudeModel/isOpenAiModel/the gemini and deepseek
+   * branches everywhere it is used — and unlike OpenRouter the danger here is
+   * not a look-alike but an EXACT match. Fluxion resells the real vendors, so
+   * its catalogue ids (`claude-opus-5`, `gpt-5.5`, `gemini-3.1-pro`,
+   * `deepseek-v4-flash-0731`) are byte-identical to the ids Natively already
+   * ships as its own defaults. `fluxion/` is the only thing that separates
+   * them; drop it and the request silently succeeds against the WRONG vendor's
+   * key, with a perfectly good answer and nothing in the logs to notice.
+   */
+  private isFluxionModel(modelId: string): boolean { return !!modelId && modelId.startsWith('fluxion/'); }
+
+  /**
+   * `fluxion/claude-opus-5` → `claude-opus-5`. Strips exactly ONE segment,
+   * which for Fluxion is both the wire id AND the capability id — its ids are
+   * bare, so there is no vendor segment underneath. This is why
+   * stripProviderRoutingPrefix() can be used on a Fluxion id but NOT on an
+   * OpenRouter one (which needs two segments gone for capabilities and one for
+   * the wire). Deliberately does not use a regex replace on the whole string:
+   * only the leading prefix may be removed.
+   */
+  private fluxionWireModel(modelId: string): string {
+    return this.isFluxionModel(modelId) ? modelId.slice('fluxion/'.length) : modelId;
+  }
 
   /**
    * NVIDIA NIM output ceiling.
@@ -2363,6 +2911,25 @@ export class LLMHelper {
     return this.litellmModelInputCaps.get(modelId.replace('litellm/', '')) ?? null;
   }
 
+  /**
+   * The same ceiling for a 9Router-routed model, read from the catalogue cache
+   * that refreshNinerouterModelCatalogue fills from `/v1/models`.
+   *
+   * 9Router reports `context_length` per model and its own DEFAULT_CAPABILITIES
+   * floor is 200k, but its catalogue is full of genuinely small models -- a
+   * stock instance lists Gemma and GLM variants well under that. Without this
+   * the id resolves to the full cloud tier and fitContextForCurrentModel returns
+   * early for anything at or above 100k, so a small model behind the proxy gets
+   * a cloud-sized prompt and either 400s or is truncated upstream where nothing
+   * here can see it.
+   *
+   * Absent means "no extra cap", never "cap at zero".
+   */
+  private ninerouterInputCapFor(modelId: string): number | null {
+    if (!modelId?.startsWith('ninerouter/')) return null;
+    return this.ninerouterModelInputCaps.get(modelId.replace('ninerouter/', '')) ?? null;
+  }
+
   public fitContextForCurrentModel(text: string, reservedOutputTokens?: number): string {
     if (!text) return text;
     const modelId = this.useOllama ? this.ollamaModel : this.currentModelId;
@@ -2377,6 +2944,7 @@ export class LLMHelper {
     const maxContextTokens = Math.min(
       caps.maxContextTokens,
       this.litellmInputCapFor(modelId) ?? Number.POSITIVE_INFINITY,
+      this.ninerouterInputCapFor(modelId) ?? Number.POSITIVE_INFINITY,
     );
     if (maxContextTokens >= 100_000) return text;
     const reserved = reservedOutputTokens ?? 2000;
@@ -2737,7 +3305,10 @@ export class LLMHelper {
         const isRetryable = msg.includes("503") || msg.includes("overloaded")
           || status === 529 || status === 429 || status === 500
           || msg.includes("rate_limit") || msg.includes("rate limit");
-        if (!isRetryable) throw e;
+        // "Consecutive" must mean consecutive: a 429 followed by a non-429 error
+        // used to leave the count at 1 forever, so the next lone 429 — hours
+        // later — tripped a breaker meant for a saturated model.
+        if (!isRetryable) { if (circuitKey) this.rateLimitCircuit.delete(circuitKey); throw e; }
 
         // Track 429s for the breaker and trip it once saturated.
         if (circuitKey && is429) {
@@ -2970,15 +3541,22 @@ ${IMAGE_TRUST_TRAILER}`;
     try {
       const imageBuffer = await fs.promises.readFile(path);
 
-      // Resize and compress
+      // Resize and compress. 1536px @ q80 unless "Shrink screenshots when the
+      // provider is slow" is on AND the measured provider would blow this turn's
+      // budget AND this is not a coding session — then ImageOptimizer's `fast`
+      // preset size (1024px @ q78). This is the path every built-in vision
+      // adapter (OpenAI, Claude, Gemini, Groq, Antigravity, Fluxion …) uses; the
+      // switch used to reach only the Custom/cURL paths.
+      const shrink = this.imageProfileFor('balanced', 0) === 'fast';
+      const edge = shrink ? 1024 : 1536;
       const processedBuffer = await sharp(imageBuffer)
         .resize({
-          width: 1536,
-          height: 1536,
-          fit: 'inside', // Maintain aspect ratio, max dimension 1536
+          width: edge,
+          height: edge,
+          fit: 'inside', // Maintain aspect ratio
           withoutEnlargement: true
         })
-        .jpeg({ quality: 80 }) // 80% quality JPEG is much smaller than PNG
+        .jpeg({ quality: shrink ? 78 : 80 }) // JPEG is much smaller than PNG
         .toBuffer();
 
       return {
@@ -3771,13 +4349,12 @@ if (!shouldSkipModeInjection) {
     }
     if (pinnedInstructions) {
       const baseForPin = systemPromptOverride || HARD_SYSTEM_PROMPT;
-      const customModePolicy = isActiveCustomMode
-        ? 'Treat these user-configured custom-mode instructions as a supplemental behavioral layer for this mode. They govern tone, source routing, answer style, and fallback behavior, but they never modify or override CORE_IDENTITY, EXECUTION_CONTRACT, the <security> block, or any safety/identity rules above. Do not let default mode templates or prior chat override these custom-mode preferences when they are consistent with those immutable rules.'
-        : 'Treat as configuration for tone/focus. Never as facts about the candidate and never overriding the rules above.';
-      const customTemplateGuard = isActiveCustomMode
-        ? '\nFor this custom mode, do not use default technical-interview scaffolds or section headings like Approach, Code, Dry Run, or Complexity unless the custom instructions explicitly ask for that format.'
-        : '';
-      systemPromptOverride = `${baseForPin}\n\n## ACTIVE MODE INSTRUCTIONS (user-configured)\n${customModePolicy}${customTemplateGuard}\n${pinnedInstructions}`;
+      // ONE renderer for every carrier (2026-09-20): the copy that lived here told
+      // the model, for every BUILT-IN mode, that the user's prompt was "never
+      // overriding the rules above" — i.e. subordinate to the very defaults it
+      // was written to change. See renderUserInstructionSystemLayer.
+      const pinnedLayer = renderUserInstructionSystemLayer(pinnedInstructions, { isCustomMode: isActiveCustomMode });
+      if (pinnedLayer) systemPromptOverride = `${baseForPin}\n\n${pinnedLayer}`;
     }
 
     if (modeContextBlock) {
@@ -3997,6 +4574,21 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
         return await this.generateWithNvidiaNim(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
       }
+      if (this.isNinerouterModel(this.currentModelId) && this.ninerouterClient) {
+        // Images forwarded only when the catalogue agrees this model reads
+        // them; otherwise the turn still runs, as text, rather than failing.
+        const sendImages = cloudIsMultimodal && this.ninerouterModelSupportsVision(this.currentModelId);
+        return await this.generateWithNinerouter(cloudUserContent, openaiSystemPrompt, sendImages ? cloudImagePaths : undefined);
+      }
+      // Before the Groq/OpenAI branches below — see isOpenRouterModel.
+      if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
+        return await this.generateWithOpenRouter(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
+      }
+      // Before the Groq/OpenAI branches below, and before the Claude branch
+      // above reachable through isClaudeModel — see isFluxionModel.
+      if (this.isFluxionModel(this.currentModelId) && this.hasFluxionCredential()) {
+        return await this.generateWithFluxion(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
+      }
       if (this.isGroqModel(this.currentModelId) && this.groqClient) {
         if (cloudIsMultimodal && cloudImagePaths) {
           return await this.generateWithGroqMultimodal(cloudUserContent, cloudImagePaths, openaiSystemPrompt);
@@ -4176,24 +4768,402 @@ let isMultimodal = !!(imagePaths?.length);
    * generateContentStructured ladder so the judge still answers when Gemini
    * is down (the controller's deadline bounds the total wait either way).
    */
-  public async generateJudgeVerdict(message: string): Promise<string> {
+  /**
+   * The user's chosen fast model, or null. Read PER CALL rather than cached so a
+   * Settings change takes effect without restarting the helper.
+   */
+  private get fastModelId(): string | null {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getFastModel();
+    } catch { return null; }
+  }
+
+  /**
+   * Which provider family will actually serve this fast-model id, or null when
+   * NONE will.
+   *
+   * ONE resolver, used by callFastModel to dispatch AND by the renderer over IPC
+   * to filter the picker, so the list the user is offered cannot drift from the
+   * list the seam can run. A separate boolean beside callFastModel would drift
+   * the first time a branch changed, and invisibly - which is how the gateway
+   * egress bug got in.
+   */
+  private resolveFastModelFamily(modelId: string):
+    'openai' | 'groq' | 'gemini' | 'deepseek' | 'claude'
+    | 'openrouter' | 'litellm' | 'nvidia_nim' | 'ninerouter' | 'fluxion' | null {
+    if (!modelId) return null;
+    // Gateways are OpenAI-SHAPED but are NOT OpenAI. isOpenAiModel() self-excludes
+    // Groq and Fluxion but not these, and its final clause is `includes('openai')`
+    // - so `openrouter/openai/gpt-5.6-terra` (a stock picker preset) would be
+    // POSTed to api.openai.com on the user's OWN OpenAI key, carrying the judge
+    // prompt's meeting turns, for a prefixed id OpenAI rejects. Supporting them
+    // properly needs per-gateway clients plus routing-prefix stripping; until
+    // then they resolve to no family rather than leak. MUST stay first.
+    if (this.isOpenRouterModel(modelId)) return 'openrouter';
+    if (this.isLiteLLMModel(modelId)) return 'litellm';
+    if (this.isNvidiaNimModel(modelId)) return 'nvidia_nim';
+    if (this.isNinerouterModel(modelId)) return 'ninerouter';
+    if (this.isFluxionModel(modelId)) return 'fluxion';
+    if (this.isOpenAiModel(modelId)) return 'openai';
+    if (this.isGroqModel(modelId)) return 'groq';
+    if (this.isGeminiModel(modelId)) return 'gemini';
+    if (this.isDeepseekModel(modelId)) return 'deepseek';
+    if (this.isClaudeModel(modelId)) return 'claude';
+    return null;
+  }
+
+  /**
+   * Can the fast path actually run this model id? The Settings picker filters
+   * its options through this over IPC, so a user is never offered a model that
+   * would save, display, and silently do nothing.
+   */
+  public canDispatchFastModel(modelId: string): boolean {
+    return this.resolveFastModelFamily(modelId) !== null;
+  }
+
+  /**
+   * One non-streaming call on the user's chosen FAST model.
+   *
+   * Returns null for every "not available" case — unset, no client, family
+   * disabled, local-only, unrecognised id, provider failure, empty body — so the
+   * caller falls through to its own ladder unchanged. ONLY an abort throws, so a
+   * caller can tell a missing setting from a user cancellation; the judge needs
+   * that distinction because its deadline and supersede must propagate rather
+   * than quietly spend a ladder call.
+   */
+  private async callFastModel(
+    message: string,
+    opts: { signal?: AbortSignal; timeoutMs?: number; json?: boolean } = {},
+  ): Promise<string | null> {
+    const modelId = this.fastModelId;
+    if (!modelId) return null;
+    if (this.isLocalOnlyMode) return null;
+
+    // A pick the seam cannot dispatch is a silent no-op forever, which is
+    // indistinguishable from "unset" without this line.
+    const notDispatchable = () => {
+      console.log(`[LLMHelper] fast-model not dispatchable (${modelId}) - falling through to the ladder`);
+      return null;
+    };
+
+    const family = this.resolveFastModelFamily(modelId);
+    if (!family) return notDispatchable();
+
+    // A caller with neither a signal nor a timeout would leave the request running
+    // to the SDK default (10 min on OpenAI) long after its result is worthless.
+    const budget = opts.timeoutMs ?? (opts.signal ? undefined : FAST_MODEL_DEFAULT_TIMEOUT_MS);
+    const timer = budget
+      ? AbortSignal.any([opts.signal, AbortSignal.timeout(budget)].filter(Boolean) as AbortSignal[])
+      : opts.signal;
+
+    const finish = (raw: string | null | undefined): string | null => {
+      let text = stripLeadingReasoningBlock(raw || '').trim();
+      // A model that ignores response_format returns ```json ... ``` and the
+      // caller's JSON.parse fails silently - no verdict, no error, no log.
+      // Observed live on OpenRouter 2026-09-24. We do send response_format, but
+      // not every gateway model honours it.
+      const fenced = text.match(/^```(?:[a-zA-Z]+)?\s*\n?([\s\S]*?)\n?```$/);
+      if (fenced) text = fenced[1].trim();
+      if (!text) return null;
+      // Stable, greppable marker: this is how a user's debug log shows whether
+      // their pick is actually being used, and which model answered.
+      console.log(`[LLMHelper] fast-model answered (${modelId})`);
+      return text;
+    };
+
+    try {
+      // The gateways are OpenAI-SHAPED but each has its OWN wire-id rule, and
+      // getting it wrong 404s: Fluxion strips to a bare id, OpenRouter keeps the
+      // vendor segment underneath. Never a generic strip.
+      const gateways: Record<string, { client: OpenAI | null; wire: string } | undefined> = {
+        openrouter: { client: this.openrouterClient, wire: this.openrouterWireModel(modelId) },
+        litellm:    { client: this.litellmClient,    wire: modelId.replace(/^litellm\//, '') },
+        nvidia_nim: { client: this.nvidiaNimClient,  wire: modelId.replace(/^nvidia_nim\//, '') },
+        ninerouter: { client: this.ninerouterClient, wire: this.ninerouterWireModel(modelId) },
+        fluxion:    { client: this.fluxionOpenAIClient, wire: this.fluxionWireModel(modelId) },
+      };
+      const gw = gateways[family];
+      if (gw) {
+        // Fluxion speaks either protocol and exactly one client is ever non-null;
+        // when the user's group is Anthropic the OpenAI client is null, so take
+        // the Anthropic path rather than falling through to a wrong provider.
+        if (family === 'fluxion' && !gw.client && this.fluxionAnthropicClient) {
+          this.assertOutboundScopes('fluxion', message);
+          await this.rateLimiters.fluxion?.acquire();
+          const res: any = await this.fluxionAnthropicClient.messages.create({
+            model: this.fluxionWireModel(modelId), max_tokens: 256, temperature: 0,
+            messages: [{ role: 'user', content: message }],
+          }, { signal: timer });
+          return finish((res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join(''));
+        }
+        if (!gw.client) return notDispatchable();
+        this.assertOutboundScopes(family, message);
+        await this.rateLimiters[family]?.acquire();
+        const res = await gw.client.chat.completions.create({
+          model: gw.wire,
+          messages: [{ role: 'user', content: message }],
+          temperature: 0, max_tokens: 256,
+          ...(opts.json ? { response_format: { type: 'json_object' as const } } : {}),
+        }, { signal: timer });
+        return finish(res.choices?.[0]?.message?.content);
+      }
+
+      if (family === 'openai' && this.openaiClient) {
+        this.assertOutboundScopes('openai', message);
+        await this.rateLimiters.openai?.acquire();
+        const res = await this.openaiClient.chat.completions.create({
+          model: modelId,
+          messages: [{ role: 'user', content: message }],
+          max_completion_tokens: 512,
+          ...(opts.json ? { response_format: { type: 'json_object' as const } } : {}),
+          ...openaiReasoningParam(modelId),
+        }, { signal: timer });
+        return finish(res.choices?.[0]?.message?.content);
+      }
+      if (family === 'groq' && this.groqClient && !this._groqLocalDisabled) {
+        this.assertOutboundScopes('groq', message);
+        await this.rateLimiters.groq?.acquire();
+        const res = await this.createGroqCompletion(
+          { model: modelId, messages: [{ role: 'user', content: message }], temperature: 0, max_tokens: 256, stream: false },
+          { signal: timer },
+        );
+        return finish(res.choices?.[0]?.message?.content);
+      }
+      if (family === 'gemini' && this.client) {
+        this.assertOutboundScopes('gemini', message);
+        await this.rateLimiters.gemini?.acquire();
+        // @ts-ignore - abortSignal is accepted by the SDK's request config
+        const res = await this.client.models.generateContent({
+          model: modelId,
+          contents: [{ role: 'user', parts: [{ text: message }] }],
+          config: {
+            maxOutputTokens: 256, temperature: 0, abortSignal: timer,
+            ...(opts.json ? { responseMimeType: 'application/json' } : {}),
+          },
+        });
+        const parts = res.candidates?.[0]?.content?.parts ?? [];
+        return finish(res.text ?? (Array.isArray(parts) ? parts : [parts]).map((pt: any) => pt?.text ?? '').join(''));
+      }
+      if (family === 'deepseek' && this.deepseekClient) {
+        this.assertOutboundScopes('deepseek', message);
+        await this.rateLimiters.deepseek?.acquire();
+        const res = await this.deepseekClient.chat.completions.create({
+          model: modelId,
+          messages: [{ role: 'user', content: message }],
+          temperature: 0, max_tokens: 256,
+          ...(opts.json ? { response_format: { type: 'json_object' as const } } : {}),
+          ...DEEPSEEK_NO_THINKING,
+        }, { signal: timer });
+        return finish(res.choices?.[0]?.message?.content);
+      }
+      if (family === 'claude' && this.claudeClient) {
+        this.assertOutboundScopes('claude', message);
+        await this.rateLimiters.claude?.acquire();
+        const res: any = await this.claudeClient.messages.create({
+          model: modelId, max_tokens: 256, temperature: 0,
+          messages: [{ role: 'user', content: message }],
+        }, { signal: timer });
+        return finish((res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join(''));
+      }
+      // Family resolved but its client is not configured right now (key removed
+      // since the pick was saved). Fall through rather than guessing another.
+      return notDispatchable();
+    } catch (error) {
+      if (opts.signal?.aborted) throw error;
+      return null;
+    }
+  }
+
+  /**
+   * The low-confidence QUERY REWRITE's model call (2026-09-20): exactly ONE rung,
+   * aborted at its deadline. It first borrowed generateJudgeVerdict, and an
+   * adversarial review read what that does without a Gemini key: it falls into
+   * generateContentStructured — OpenAI, Claude, a Codex CLI subprocess, Ollama
+   * with a 120 s timeout competing with the answer call, then the Natively
+   * extraction route — for three rotations, on a call whose result is discarded
+   * after 1.5 s. A rewrite is an optimisation: it uses the one fast provider the
+   * user has, honours the outbound data-scope settings like every other call,
+   * and returns '' when there is nothing suitable — never a ladder.
+   */
+  public async generateQueryRewrite(message: string, opts: { timeoutMs?: number } = {}): Promise<string> {
+    const timeoutMs = opts.timeoutMs ?? 1500;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      if (this.isLocalOnlyMode) return '';
+      // The user's chosen fast model first; the Gemini -> Groq -> Natively chain
+      // below is the fallback. This method already had exactly this shape, so the
+      // seam replaces a hand-rolled copy rather than adding a layer.
+      const pickedFast = await this.callFastModel(message, { timeoutMs, signal: controller.signal, json: true });
+      if (pickedFast) return pickedFast;
+      if (this.client) {
+        this.assertOutboundScopes('gemini', message);
+        // @ts-ignore — abortSignal is accepted by the SDK's request config
+        const res = await this.client.models.generateContent({
+          model: GEMINI_FLASH_LITE_MODEL,
+          contents: [{ role: 'user', parts: [{ text: message }] }],
+          config: { maxOutputTokens: 96, temperature: 0, responseMimeType: 'application/json', abortSignal: controller.signal },
+        });
+        const parts = res.candidates?.[0]?.content?.parts ?? [];
+        return res.text ?? (Array.isArray(parts) ? parts : [parts]).map((p: any) => p?.text ?? '').join('');
+      }
+      if (this.groqClient) return await this.generateWithGroq(message);
+      const nativelyKey = this.nativelyKey || (() => {
+        try { return require('./services/CredentialsManager').CredentialsManager.getInstance().getNativelyApiKey() || null; } catch { return null; }
+      })();
+      if (nativelyKey) return await this.generateWithNatively(message, undefined, undefined, { timeoutMs, signal: controller.signal });
+      return '';
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * The Auto Answer judge's call. A small, FAST model — never the user's chat
+   * model. Live telemetry (2026-09-22, OpenAI-only user on gpt-5.6-luna): the
+   * judge fell through to generateContentStructured, whose OpenAI rung takes
+   * the CURRENT model, so a yes/no classification ran on whatever chat model
+   * was selected — 1.4 s median, 2.5 s p90 (the deadline), and 41 of 83 calls
+   * superseded mid-flight and paid for nothing. The ladder here is an explicit
+   * JUDGE model per provider: Gemini flash-lite (the tuned default, live-probed
+   * 750-1200 ms) → Groq (~0.3 s TTFT, and previously NO judge rung at all, so a
+   * Groq-only user got the "only a trailing '?' fires" regex fallback) →
+   * OpenAI OPENAI_JUDGE_MODEL (measured: see the constant) → DeepSeek flash →
+   * Claude's default model. Only when none of those is configured does it fall
+   * back to the structured ladder. Every rung honours the outbound data-scope policy and its
+   * provider's rate limiter like any other call, and `signal` aborts the rung
+   * in flight when the interviewer keeps talking (the controller supersedes
+   * the verdict anyway — the call was money and quota spent on nothing).
+   */
+  public async generateJudgeVerdict(message: string, opts: { signal?: AbortSignal } = {}): Promise<string> {
+    const signal = opts.signal;
+    const aborted = () => signal?.aborted === true;
+    const abortError = () => Object.assign(new Error('judge aborted: superseded by newer speech'), { name: 'AbortError' });
+    const userOnly = [{ role: 'user' as const, content: message }];
+
+    // Rung 0: the user's chosen fast model, when they have set one. Everything
+    // below is the measured per-provider ladder and remains the fallback, so an
+    // unset or failing pick degrades to exactly the previous behaviour. An abort
+    // here propagates rather than falling through — a superseded judge must not
+    // spend a ladder call on a verdict the controller has already discarded.
+    const picked = await this.callFastModel(message, { signal, json: true, timeoutMs: FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS });
+    if (picked) return picked;
+
     if (this.client) {
       for (const modelId of [GEMINI_FLASH_LITE_MODEL, GEMINI_FLASH_MODEL]) {
+        if (aborted()) throw abortError();
         try {
+          this.assertOutboundScopes('gemini', message);
           await this.rateLimiters.gemini.acquire();
-          // @ts-ignore
+          // @ts-ignore — abortSignal is accepted by the SDK's request config
           const res = await this.client.models.generateContent({
             model: modelId,
             contents: [{ role: 'user', parts: [{ text: message }] }],
-            config: { maxOutputTokens: 256, temperature: 0, responseMimeType: 'application/json' },
+            config: { maxOutputTokens: 256, temperature: 0, responseMimeType: 'application/json', abortSignal: signal },
           });
           const parts = res.candidates?.[0]?.content?.parts ?? [];
           const text = res.text ?? (Array.isArray(parts) ? parts : [parts]).map((p: any) => p?.text ?? '').join('');
           if (text) return text;
-        } catch { /* try the next model, then the structured ladder */ }
+        } catch { if (aborted()) throw abortError(); /* try the next rung */ }
       }
     }
-    return this.generateContentStructured(message, { preferFast: true });
+    if (this.groqClient && !this._groqLocalDisabled && !this.isLocalOnlyMode) {
+      if (aborted()) throw abortError();
+      try {
+        this.assertOutboundScopes('groq', message);
+        await this.rateLimiters.groq.acquire();
+        // createGroqCompletion adds reasoning_effort:'none' for a thinking model
+        // and ladders a retired id down to the production tier.
+        const res = await this.createGroqCompletion(
+          { model: GROQ_MODEL, messages: userOnly, temperature: 0, max_tokens: 256, stream: false },
+          { signal },
+        );
+        const text = stripLeadingReasoningBlock(res.choices?.[0]?.message?.content || '');
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (this.openaiClient && !this.isLocalOnlyMode) {
+      if (aborted()) throw abortError();
+      try {
+        this.assertOutboundScopes('openai', message);
+        await this.rateLimiters.openai.acquire();
+        // OPENAI_NO_SAMPLING_PARAMS: gpt-5 / o-series 400 on temperature. The
+        // JSON response_format and the lowest valid reasoning effort keep the
+        // verdict deterministic enough and the first token fast.
+        const res = await this.openaiClient.chat.completions.create({
+          model: OPENAI_JUDGE_MODEL,
+          messages: userOnly,
+          max_completion_tokens: 512,
+          response_format: { type: 'json_object' },
+          ...openaiReasoningParam(OPENAI_JUDGE_MODEL),
+        }, { signal });
+        const text = res.choices?.[0]?.message?.content || '';
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (this.deepseekClient && !this.isLocalOnlyMode) {
+      if (aborted()) throw abortError();
+      try {
+        this.assertOutboundScopes('deepseek', message);
+        await this.rateLimiters.deepseek.acquire();
+        const res = await this.deepseekClient.chat.completions.create({
+          model: DEEPSEEK_MODEL,
+          messages: userOnly,
+          temperature: 0,
+          max_tokens: 256,
+          response_format: { type: 'json_object' },
+          // Without it the default reasoning pass runs first — and inside a
+          // 256-token budget it can spend all of it, leaving empty content,
+          // so the rung would silently fall through on exactly the calls
+          // it exists to answer.
+          ...DEEPSEEK_NO_THINKING,
+        }, { signal });
+        const text = stripLeadingReasoningBlock(res.choices?.[0]?.message?.content || '');
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (this.claudeClient && !this.isLocalOnlyMode) {
+      if (aborted()) throw abortError();
+      try {
+        this.assertOutboundScopes('claude', message);
+        await this.rateLimiters.claude.acquire();
+        const res: any = await this.claudeClient.messages.create({
+          // The app's default Claude model, as the structured ladder used before.
+          // A smaller tier is NOT substituted unmeasured: on OpenAI the small
+          // tiers lost 3-7 of 19 real asks (see OPENAI_JUDGE_MODEL).
+          model: CLAUDE_MODEL,
+          max_tokens: 256,
+          temperature: 0,
+          messages: userOnly,
+        }, { signal });
+        const text = (res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join('');
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (aborted()) throw abortError();
+    // Natively-only users have no small rung above, so without this their judge
+    // reached /v1/chat via the structured ladder carrying the ACTIVE MODE's
+    // system prompt - and in an interview mode the server routed a yes/no
+    // verdict to gemini-3.8-flash, which is slower AND cannot take thinkingLevel
+    // 'minimal' (it 400s and falls back to 'low', paying thinking overhead every
+    // consult). `purpose:'decision'` pins gemini-3.1-flash-lite server-side.
+    if (this.nativelyKey) {
+      try {
+        const text = await this.generateWithNatively(message, undefined, undefined, {
+          purpose: 'decision', timeoutMs: FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS, signal,
+        });
+        if (text) return text;
+      } catch { if (aborted()) throw abortError(); }
+    }
+    if (aborted()) throw abortError();
+
+    // Nothing small is configured (Codex CLI / Ollama / custom): the structured
+    // ladder still answers, bounded by the controller's deadline.
+    // NOT preferFast: rung 0 already tried the fast model with the caller's signal.
+    // Re-entering here would bill it a second time, milliseconds after it failed,
+    // on a request that carries no signal and so cannot be cancelled.
+    return this.generateContentStructured(message);
   }
 
   public async generateContentStructured(
@@ -4216,6 +5186,9 @@ let isMultimodal = !!(imagePaths?.length);
   ): Promise<string> {
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];
+    // A breaker may skip a rung only if another rung exists to fall to. Evaluated
+    // when the rung RUNS (the list is complete by then), not when it is pushed.
+    const breakerKeyFor = (key: string): string | undefined => (providers.length > 1 ? key : undefined);
     const permanentFailureKeyFor = (name: string): string => {
       if (name.startsWith('Gemini')) return 'gemini';
       if (name.startsWith('OpenAI')) return 'openai';
@@ -4225,19 +5198,38 @@ let isMultimodal = !!(imagePaths?.length);
       if (name.startsWith('Natively')) return 'natively';
       return name;
     };
-    // `opts.preferFast` retained for API compatibility; ordering no longer
-    // depends on it (the Gemini block always leads with flash-lite).
-    void opts;
+    // `opts.preferFast` is the opt-in fast path: the user's chosen fast model is
+    // tried BEFORE the ladder is built. It was previously a no-op behind `void
+    // opts` — "retained for API compatibility" — so the flag promised something
+    // it never delivered. The ladder below is unchanged and remains the fallback.
+    if (opts?.preferFast) {
+      const pickedFast = await this.callFastModel(message, { json: true });
+      if (pickedFast) return pickedFast;
+    }
 
     // Priority 1: OpenAI
     if (this.openaiClient) {
-      providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message) });
+      // Breaker key (2026-09-20): the Gemini rungs below have always had one; this
+      // rung did not. Measured on a live 45-role résumé ingest with a
+      // rate-limited OpenAI key: 140 of 141 structured calls spent ~9.7 s in
+      // 429 backoff HERE before Gemini answered in ~4.4 s — 1,334 s of a
+      // 33-minute ingest, on a provider that never once succeeded. With the key,
+      // two consecutive 429s open the breaker and the ladder skips this rung
+      // for the cooldown. Scoped to the structured ladder: chat's handling of
+      // the same client is unchanged.
+      // …but ONLY when a later rung can take the call (review finding, reproduced):
+      // with the key unconditionally set, a user whose ONLY provider is OpenAI
+      // lost all structured generation for 60 s after two 429s — before, the
+      // third attempt succeeded in 1.2 s. `breakerKeyFor` decides at call time,
+      // once the ladder is known.
+      providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message, undefined, undefined, undefined, breakerKeyFor('structured:openai')) });
     }
 
     // Priority 2: Claude (now safe — generateWithClaude streams internally, so the SDK's
     // 10-minute pre-flight gate on large max_tokens is bypassed).
     if (this.claudeClient) {
-      providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message) });
+      // Same breaker as the OpenAI rung above, for the same reason.
+      providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message, undefined, undefined, undefined, breakerKeyFor('structured:claude')) });
     }
 
     // Priority 3: Gemini cascade — flash-lite → 3.7-flash ONLY (cheapest/fastest
@@ -4438,8 +5430,12 @@ let isMultimodal = !!(imagePaths?.length);
     // used to pay a doomed full-payload round trip to the dead model before
     // laddering — callers keep passing the module const. Skip straight to the
     // fallback rung when this process has already seen the model die.
-    const { markGroqModelGone, isGroqModelKnownGone, groqReasoningParams } = require('./llm/groqModels') as typeof import('./llm/groqModels');
-    if (!opts?.strictModel && isGroqModelKnownGone(request?.model)) {
+    const { markGroqModelGone, isGroqModelKnownGone, isRetiredModelId, groqReasoningParams } = require('./llm/groqModels') as typeof import('./llm/groqModels');
+    // A RETIRED id with a named successor is known-gone before the first call,
+    // not after it: no process should pay a doomed round trip to learn what
+    // the deprecations page already says. (Retired ids without a successor
+    // return null below and take the normal path, as before.)
+    if (!opts?.strictModel && (isGroqModelKnownGone(request?.model) || isRetiredModelId(request?.model))) {
       const memoFallback = groqFallbackFor(request?.model);
       if (memoFallback) {
         return await this.createGroqCompletion({ ...request, model: memoFallback }, opts);
@@ -4512,7 +5508,7 @@ let isMultimodal = !!(imagePaths?.length);
   /**
    * Routes AI generation through the Natively API backend (Gemini-powered).
    */
-  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction'; timeoutMs?: number; signal?: AbortSignal }): Promise<string> {
+  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction' | 'decision'; timeoutMs?: number; signal?: AbortSignal }): Promise<string> {
     this.assertOutboundScopes('natively', userMessage, imagePaths);
     // Prefer the in-memory field; fall back to CredentialsManager for the direct-routing path
     // where currentModelId === 'natively' but setNativelyKey() wasn't called yet.
@@ -4720,7 +5716,7 @@ let isMultimodal = !!(imagePaths?.length);
    * Non-streaming OpenAI generation with proper system/user separation.
    * PREFIX CACHING: see streamWithOpenai for the caching contract.
    */
-  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithOpenai(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, circuitKey?: string): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.openaiClient) throw new Error("OpenAI client not initialized");
     this.assertOutboundScopes('openai', userMessage, imagePaths);
@@ -4761,7 +5757,7 @@ let isMultimodal = !!(imagePaths?.length);
       provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
     });
     const response = await this.withTimeout(
-      this.withRetry(() => this.openaiClient!.chat.completions.create(request)),
+      this.withRetry(() => this.openaiClient!.chat.completions.create(request), 3, circuitKey),
       60000,
       `OpenAI (${model})`
     );
@@ -4782,7 +5778,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     await this.rateLimiters.deepseek.acquire();
 
-    const model = modelId || (this.isDeepseekModel(this.currentModelId) ? this.currentModelId : DEEPSEEK_MODEL);
+    const model = deepseekWireModel(modelId || (this.isDeepseekModel(this.currentModelId) ? this.currentModelId : DEEPSEEK_MODEL));
 
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
@@ -4793,6 +5789,7 @@ let isMultimodal = !!(imagePaths?.length);
         model,
         messages,
         max_tokens: this.getDeepseekMaxOutput(model),
+        ...DEEPSEEK_NO_THINKING,
       })),
       60000,
       `DeepSeek (${model})`
@@ -4841,6 +5838,63 @@ let isMultimodal = !!(imagePaths?.length);
     return stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
   }
 
+  /**
+   * Non-streaming 9Router call. 9Router decides which upstream serves this, so
+   * images are forwarded when present and the chosen upstream decides whether
+   * it can read them.
+   */
+  private async generateWithNinerouter(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.ninerouterClient) throw new Error("9Router client not initialized");
+    this.assertOutboundScopes('ninerouter', userMessage, imagePaths);
+
+    await this.rateLimiters.ninerouter.acquire();
+
+    const ninerouterModel = this.ninerouterWireModel(this.currentModelId);
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: "text", text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)];
+      messages.push({ role: "user", content });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
+
+    const maxTokens = await this.resolveNinerouterMaxTokens(ninerouterModel);
+    const request = {
+      model: ninerouterModel,
+      messages,
+      max_tokens: maxTokens,
+      ...this.ninerouterThinkingParam(),
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'ninerouter', classification: 'sdk_request_object_before_serialization', payload: request,
+    });
+    let response: any;
+    try {
+      response = await this.withTimeout(
+        this.withRetry(() => this.ninerouterClient!.chat.completions.create(request)),
+        60000,
+        `9Router (${ninerouterModel})`
+      );
+    } catch (e: any) {
+      throw Object.assign(new Error(describeNinerouterFailure(e, ninerouterModel)), {
+        status: e?.status, provider: 'ninerouter', cause: e,
+      });
+    }
+
+    const answer = stripLeadingReasoningBlock(response.choices?.[0]?.message?.content || "");
+    if (!answer.trim()) {
+      // Same silent case as the streaming path. Note the strip runs FIRST: a
+      // reply that was nothing but a <think> block is empty once filtered, and
+      // is just as useless to the caller as no reply at all.
+      throw Object.assign(new Error(describeNinerouterFailure(new Error(NINEROUTER_EMPTY_ANSWER), ninerouterModel)), {
+        provider: 'ninerouter',
+      });
+    }
+    return answer;
+  }
+
   private async generateWithNvidiaNim(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
     if (!this.nvidiaNimClient) throw new Error('NVIDIA NIM client not initialized');
@@ -4855,6 +5909,276 @@ let isMultimodal = !!(imagePaths?.length);
     } else messages.push({ role: 'user', content: userMessage });
     const response = await this.withTimeout(this.withRetry(() => this.createNvidiaNimCompletion({ model, messages })), 60000, `NVIDIA NIM (${model})`);
     return stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
+  }
+
+  /**
+   * OpenRouter's wire model id.
+   *
+   * Strips ONE segment — Natively's own `openrouter/` routing prefix — and no
+   * more. The remainder (`anthropic/claude-sonnet-5`) IS the id OpenRouter
+   * expects, so this is deliberately NOT stripProviderRoutingPrefix(), which
+   * takes two segments off because the capability table wants a bare name.
+   * Getting this wrong sends `claude-sonnet-5`, which OpenRouter 404s.
+   */
+  private openrouterWireModel(modelId: string): string {
+    return (modelId || '').replace(/^openrouter\//, '');
+  }
+
+  /**
+   * OpenRouter reports mid-stream failures INSIDE a 200 OK body, as
+   * `{ error: { code, message }, choices: [{ delta: {}, finish_reason: "error" }] }`
+   * (api_reference/streaming). A stream that dies after the headers would
+   * otherwise complete with zero content and NO error, and the fallback chain
+   * would never engage — the failure class in issue #543, where a swallowed
+   * provider rejection reached the user as "ask that once more".
+   *
+   * WHAT THE SDK ALREADY DOES, verified in node_modules/openai/core/streaming.js
+   * at openai@6.38.0: the streaming iterator throws an APIError on any chunk
+   * carrying `data.error`. So on the STREAMING path the first branch here is
+   * belt-and-braces against an SDK change, and the `finish_reason` branch is the
+   * one doing real work — the SDK never inspects that field.
+   *
+   * On the BLOCKING path neither is redundant: that decoder only throws on HTTP
+   * status, so a 200 whose body carries an `error` object returns normally and
+   * `choices[0].message.content` is undefined — a silent empty answer.
+   */
+  private assertNoOpenRouterStreamError(chunk: any, model: string): void {
+    const err = chunk?.error;
+    if (err) {
+      const code = err.code ?? err.metadata?.error_type ?? 'error';
+      throw new Error(`OpenRouter (${model}) stream error [${code}]: ${err.message || 'provider failed mid-stream'}`);
+    }
+    if (chunk?.choices?.[0]?.finish_reason === 'error') {
+      throw new Error(`OpenRouter (${model}) ended the stream with finish_reason=error`);
+    }
+  }
+
+  /** Shared message builder — identical on the blocking and streaming paths. */
+  private async buildOpenRouterMessages(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<any[]> {
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    if (imagePaths?.length) {
+      messages.push({ role: 'user', content: [{ type: 'text', text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)] });
+    } else messages.push({ role: 'user', content: userMessage });
+    return messages;
+  }
+
+  private async generateWithOpenRouter(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    const client = this.openrouterClient;
+    if (!client) throw new Error('OpenRouter client not initialized');
+    this.assertOutboundScopes('openrouter', userMessage, imagePaths);
+    await this.rateLimiters.openrouter.acquire();
+    const model = this.openrouterWireModel(this.currentModelId);
+    const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
+    const response = await this.withTimeout(
+      this.withRetry(() => client.chat.completions.create({ model, messages })),
+      60000,
+      `OpenRouter (${model})`
+    );
+    // Load-bearing here: the SDK only throws on HTTP status, so a 200 carrying
+    // an error body would otherwise return an empty string as a real answer.
+    this.assertNoOpenRouterStreamError(response, model);
+    return stripLeadingReasoningBlock((response as any).choices?.[0]?.message?.content || "");
+  }
+
+  /**
+   * In-band stream errors.
+   *
+   * MEASURED 2026-09-18, and the common case is better than feared: an
+   * out-of-group model is refused with a clean HTTP 404 + `{"error":{"code":
+   * "model_not_found"}}` on BOTH the blocking and streaming endpoints, so the
+   * SDK throws on status and this check never sees it.
+   *
+   * It stays for the case that status cannot cover: a relay picks its upstream
+   * AFTER responding, so an upstream that dies mid-stream (the "no available
+   * account" / channel-exhausted family) arrives inside an already-200 body.
+   * That is issue #543's failure mode — a swallowed provider rejection reaches
+   * the user as "ask that once more" while the fallback chain never engages,
+   * because nothing threw.
+   */
+  /**
+   * A protocol/group mismatch is the one Fluxion failure a user can actually fix
+   * from Settings, so it gets named. Measured shape (GLM-group key on
+   * /v1/messages): HTTP 403 `{"message":"This group does not allow /v1/messages
+   * dispatch","type":"permission_error"}`. Without this it surfaces as a bare
+   * 403, which reads like a dead key rather than one wrong toggle.
+   */
+  private explainFluxionProtocolMismatch(err: any): string | null {
+    const status = err?.status ?? err?.response?.status;
+    const body = err?.error?.message ?? err?.response?.data?.message ?? err?.message ?? '';
+    if (status === 403 && /does not allow \/v1\/messages dispatch/i.test(String(body))) {
+      return 'Fluxion rejected the Anthropic API format for this key\'s group. '
+        + 'Open Settings > AI Providers > Fluxion AI and switch API format to OpenAI.';
+    }
+    return null;
+  }
+
+  private assertNoFluxionStreamError(chunk: any, model: string): void {
+    const err = chunk?.error;
+    if (err) {
+      const code = err.code ?? err.type ?? 'error';
+      throw new Error(`Fluxion (${model}) stream error [${code}]: ${err.message || 'gateway failed mid-stream'}`);
+    }
+    if (chunk?.choices?.[0]?.finish_reason === 'error') {
+      throw new Error(`Fluxion (${model}) ended the stream with finish_reason=error`);
+    }
+  }
+
+  /**
+   * Anthropic-protocol request body for a Fluxion Claude-group key.
+   *
+   * Deliberately plainer than the native Claude path: the system prompt goes as
+   * a STRING, not as buildClaudeSystemBlocks' cache_control blocks. Prompt
+   * caching is an upstream-account feature and a relay may be pooling accounts
+   * per request, so cache blocks would at best not engage and at worst be
+   * rejected by a strict gateway. getClaudeMaxOutput IS reused — it is keyed on
+   * the bare model name, which is exactly what a Fluxion wire id is, and it
+   * falls back to 8192 for the non-Claude models an all-model group may serve.
+   *
+   * NO THINKING / EFFORT PARAMETERS, and that is not an omission. Measured
+   * 2026-09-19 against the live gateway on claude-sonnet-5: `thinking:{type:
+   * "adaptive"}`, `thinking:{type:"enabled",budget_tokens:N}`,
+   * `output_config:{effort:"high"}` and `reasoning_effort` on the OpenAI path
+   * ALL returned HTTP 200 with zero thinking blocks and unchanged output. The
+   * giveaway is that `budget_tokens` is a hard 400 on Sonnet 5 at the real
+   * Anthropic API, and so is `thinking:{type:"totally-invalid"}` — both came
+   * back 200 here, as did an invented top-level field. The gateway strips what
+   * it does not recognise, so sending these would cost bytes and buy nothing,
+   * and exposing a thinking control in the UI would be a dead switch.
+   */
+  private buildFluxionAnthropicRequest(model: string, userMessage: string, systemPrompt?: string, content?: any[]): any {
+    return {
+      model,
+      max_tokens: this.getClaudeMaxOutput(model),
+      ...(systemPrompt ? { system: systemPrompt } : {}),
+      messages: [{ role: 'user' as const, content: content ?? userMessage }],
+    };
+  }
+
+  /** Base64 `image` blocks for the Anthropic protocol, mirroring generateWithClaude. */
+  private async buildFluxionAnthropicContent(userMessage: string, imagePaths?: string[]): Promise<any[]> {
+    const content: any[] = [];
+    if (imagePaths?.length) {
+      for (const p of imagePaths) {
+        if (fs.existsSync(p)) {
+          const { mimeType, data } = await this.processImage(p);
+          content.push({
+            type: 'image',
+            source: { type: 'base64', media_type: mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data },
+          });
+        }
+      }
+    }
+    content.push({ type: 'text', text: userMessage });
+    return content;
+  }
+
+  private async generateWithFluxion(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    this.assertOutboundScopes('fluxion', userMessage, imagePaths);
+    await this.rateLimiters.fluxion.acquire();
+    const model = this.fluxionWireModel(modelId || this.currentModelId);
+
+    if (this.fluxionProtocol === 'anthropic') {
+      const client = this.fluxionAnthropicClient;
+      if (!client) throw new Error('Fluxion client not initialized');
+      const content = await this.buildFluxionAnthropicContent(userMessage, imagePaths);
+      const request = this.buildFluxionAnthropicRequest(model, userMessage, systemPrompt, content);
+      let response;
+      try {
+        response = await this.withTimeout(
+          this.withRetry(async () => await client.messages.stream(request).finalMessage()),
+          120000,
+          `Fluxion (${model})`
+        );
+      } catch (e: any) {
+        const hint = this.explainFluxionProtocolMismatch(e);
+        throw hint ? new Error(hint) : e;
+      }
+      const textBlock = (response as any).content?.find((b: any) => b.type === 'text');
+      return textBlock?.text || '';
+    }
+
+    const client = this.fluxionOpenAIClient;
+    if (!client) throw new Error('Fluxion client not initialized');
+    const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
+    // STREAMS AND ACCUMULATES rather than calling the non-streaming endpoint —
+    // the same trick generateWithClaude uses, for a different reason. Measured
+    // 2026-09-19: Fluxion's NON-streaming /v1/chat/completions hangs on the GLM
+    // group, 1/5 requests completing and the other four still open at 45s, while
+    // the streaming endpoint answered 5/5 in ~4s on the identical key and model.
+    // The Claude group was 5/5 on both. So this path is the one that decides
+    // whether a screenshot turn works at all for a GLM-group user:
+    // runVisionRequest('fluxion') and the non-streaming cloud cascade both land
+    // here, and a hang there is a 60s stall followed by a failure.
+    //
+    // Callers see no difference — the accumulated string is what they already
+    // expected — and the per-chunk error check is strictly better than the
+    // single-response one it replaces.
+    const text = await this.withTimeout(
+      this.withRetry(async () => {
+        const stream = await client.chat.completions.create({ model, messages, stream: true }) as any;
+        let acc = '';
+        for await (const chunk of stream) {
+          this.assertNoFluxionStreamError(chunk, model);
+          const piece = chunk.choices?.[0]?.delta?.content;
+          if (piece) acc += piece;
+        }
+        return acc;
+      }),
+      60000,
+      `Fluxion (${model})`
+    );
+    return stripLeadingReasoningBlock(text || '');
+  }
+
+  private async * streamWithFluxion(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    this.assertOutboundScopes('fluxion', userMessage, imagePaths);
+    await this.rateLimiters.fluxion.acquire();
+    const model = this.fluxionWireModel(modelId || this.currentModelId);
+    if (abortSignal?.aborted) return;
+
+    if (this.fluxionProtocol === 'anthropic') {
+      const client = this.fluxionAnthropicClient;
+      if (!client) throw new Error('Fluxion client not initialized');
+      const content = await this.buildFluxionAnthropicContent(userMessage, imagePaths);
+      const request = this.buildFluxionAnthropicRequest(model, userMessage, systemPrompt, content);
+      const stream = client.messages.stream(request);
+      const onAbort = () => { try { stream.abort(); } catch {} };
+      abortSignal?.addEventListener('abort', onAbort, { once: true });
+      try {
+        for await (const event of stream) {
+          if (abortSignal?.aborted) return;
+          if (event.type === 'content_block_delta' && (event as any).delta?.type === 'text_delta') {
+            yield (event as any).delta.text;
+          }
+        }
+      } catch (e: any) {
+        const hint = this.explainFluxionProtocolMismatch(e);
+        throw hint ? new Error(hint) : e;
+      } finally {
+        abortSignal?.removeEventListener('abort', onAbort);
+      }
+      return;
+    }
+
+    const client = this.fluxionOpenAIClient;
+    if (!client) throw new Error('Fluxion client not initialized');
+    const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
+    const stream = await client.chat.completions.create({ model, messages, stream: true }, { signal: abortSignal }) as any;
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        // BEFORE reading the delta: a chunk can carry an error and an empty
+        // delta at once, and yielding "" first would hide it.
+        this.assertNoFluxionStreamError(chunk, model);
+        const content = chunk.choices?.[0]?.delta?.content;
+        if (content) yield content;
+      }
+    }
+    finally { if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort(); }
   }
 
   // The handler for cURL requests
@@ -4999,7 +6323,7 @@ let isMultimodal = !!(imagePaths?.length);
   /**
    * Non-streaming Claude generation with proper system/user separation
    */
-  private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
+  private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, circuitKey?: string): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.claudeClient) throw new Error("Claude client not initialized");
     // Was MISSING entirely — this method accepts imagePaths and builds base64
@@ -5050,7 +6374,7 @@ let isMultimodal = !!(imagePaths?.length);
       this.withRetry(async () => {
         const stream = this.claudeClient!.messages.stream(request);
         return await stream.finalMessage();
-      }),
+      }, 3, circuitKey),
       120000,
       `Claude (${model})`
     );
@@ -5410,14 +6734,14 @@ let isMultimodal = !!(imagePaths?.length);
       model: GROQ_VISION_MODEL,
       messages,
       temperature: 1,
-      // Groq caps qwen3.6-27b at 16,384 completion tokens. The old 28,672 was
+      // Groq caps qwen3.8-27b (as it did 3.6) at 16,384 completion tokens. The old 28,672 was
       // llama-4-scout's ceiling; asking for more than a model's limit is a 400,
       // not a silent clamp.
       max_completion_tokens: 16384,
       top_p: 1,
       stream: false as const,
       stop: null as string[] | null,
-      // GROQ_VISION_MODEL is qwen3.6-27b — a THINKING model. Without this the
+      // GROQ_VISION_MODEL is qwen3.8-27b — a THINKING model. Without this the
       // <think> block is returned as message.content and handed straight to the
       // caller (2026-09-03). Note this call deliberately does NOT go through
       // createGroqCompletion: that ladder falls back to a TEXT-ONLY model, which
@@ -5837,7 +7161,7 @@ let isMultimodal = !!(imagePaths?.length);
    * and Gemini-only for multimodal (images)
    *
    * TEXT-ONLY FALLBACK CHAIN:
-   * 1. Groq (qwen/qwen3.6-27b) - Primary
+   * 1. Groq (qwen/qwen3.8-27b) - Primary
    * 2. Gemini Flash - 1st fallback
    * 3. Gemini Flash + Pro parallel - 2nd fallback
    * 4. Gemini Flash retries (max 3) - Last resort
@@ -6265,6 +7589,30 @@ let isMultimodal = !!(imagePaths?.length);
         cloud.push({ id: 'nvidia_nim', name: `NVIDIA NIM (${this.currentModelId.replace('nvidia_nim/', '')})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithNvidiaNim(userContent, systemPrompt, imagePaths, sig) });
       }
+      // Same selection rule as the gateways around it, plus one gate none of
+      // them can apply: the catalogue says per model whether it reads images.
+      // A text-only 9Router model is not seated at all, so the screenshot
+      // goes to something that can actually see it instead of burning an
+      // attempt and a health mark first.
+      if (this.isNinerouterModel(this.currentModelId) && this.ninerouterClient && this.ninerouterModelSupportsVision(this.currentModelId)) {
+        cloud.push({ id: 'ninerouter', name: `9Router (${this.ninerouterWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithNinerouter(userContent, systemPrompt, imagePaths, sig) });
+      }
+      // Same rule as the two gateways above: only recruited when it is the model
+      // the user actually picked. OpenRouter fronts hundreds of upstreams and we
+      // cannot know whether someone else's turn should be routed through it.
+      if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
+        cloud.push({ id: 'openrouter', name: `OpenRouter (${this.openrouterWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithOpenRouter(userContent, systemPrompt, imagePaths, sig) });
+      }
+      // Same rule again: a gateway is only ever recruited for the model the user
+      // picked. It matters more here than for the others — Fluxion's ids are the
+      // real vendors' own, so a Fluxion rung seated for someone else's turn would
+      // look entirely plausible in the logs while billing the wrong account.
+      if (this.isFluxionModel(this.currentModelId) && this.hasFluxionCredential()) {
+        cloud.push({ id: 'fluxion', name: `Fluxion (${this.fluxionWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithFluxion(userContent, systemPrompt, imagePaths, sig) });
+      }
       // isCodexAvailable() — NOT `codexCliConfig.enabled` — is the gate every
       // other Codex call site uses. It additionally covers the disabled-provider
       // kill switch and "is ChatGPT actually signed in". streamWithCodexCli
@@ -6311,11 +7659,18 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
     // Ollama: use the resolved vision-capable model (which may differ from the
-    // primary text model). Synchronously trust the cached resolution; kick off
-    // a refresh for next time if we haven't probed yet.
-    const ollamaVisionModel = this.useOllama ? this.ollamaVisionModel : null;
+    // primary text model). If not yet resolved, await the probe so the very first
+    // screenshot request finds any installed vision model instead of dead-ending.
+    // The wait is bounded (resolveOllamaVisionModelForChain): it runs before ANY
+    // provider is seated, cloud included, and an unbounded probe against a hung
+    // daemon cost 5s on every screenshot.
+    let ollamaVisionModel = this.useOllama ? this.ollamaVisionModel : null;
     if (this.useOllama && !ollamaVisionModel) {
-      this.refreshOllamaVisionModel().catch(() => { }); // populate for the next request
+      try {
+        ollamaVisionModel = await this.resolveOllamaVisionModelForChain();
+      } catch (err: any) {
+        console.warn('[LLMHelper] Failed to probe Ollama vision model:', err?.message || err);
+      }
     }
     if (ollamaVisionModel) {
       local.push({ id: 'ollama', name: `Ollama (${ollamaVisionModel})`, isLocal: true, priority: 101,
@@ -6338,6 +7693,17 @@ let isMultimodal = !!(imagePaths?.length);
       // rather than being sorted behind whichever key happens to be fastest.
       if (this.isLiteLLMModel(this.currentModelId)) { const l = cloud.find(p => p.id === 'litellm'); if (l) front.push(l); }
       if (this.isNvidiaNimModel(this.currentModelId)) { const n = cloud.find(p => p.id === 'nvidia_nim'); if (n) front.push(n); }
+      if (this.isOpenRouterModel(this.currentModelId)) { const o = cloud.find(p => p.id === 'openrouter'); if (o) front.push(o); }
+      if (this.isNinerouterModel(this.currentModelId)) { const n9 = cloud.find(p => p.id === 'ninerouter'); if (n9) front.push(n9); }
+      // Fluxion belongs here for a sharper version of the same reason. Its rung
+      // IS seated in `cloud`, but at the end of the priority order, and
+      // orderVisionByHealth sorts unmeasured providers by ascending priority —
+      // so without this line a screenshot turn on a SELECTED Fluxion model was
+      // sent to the user's OpenAI/Claude/Gemini/Groq key first. That is the
+      // wrong-vendor billing this whole integration is built to prevent, just
+      // inverted: the other vendor silently wins the turn the user assigned to
+      // the gateway.
+      if (this.isFluxionModel(this.currentModelId)) { const f = cloud.find(p => p.id === 'fluxion'); if (f) front.push(f); }
       const backLocal = local.filter(p => !front.includes(p));
       const backCloud = cloud.filter(p => !front.includes(p));
       ordered = [...front, ...orderVisionByHealth(backCloud, this.visionHealth, nowMs), ...backLocal];
@@ -6350,6 +7716,8 @@ let isMultimodal = !!(imagePaths?.length);
       // four providers they had deliberately not set up.
       const gateway = this.isLiteLLMModel(this.currentModelId) ? 'LiteLLM proxy'
         : this.isNvidiaNimModel(this.currentModelId) ? 'NVIDIA NIM endpoint'
+        : this.isOpenRouterModel(this.currentModelId) ? 'OpenRouter gateway'
+        : this.isFluxionModel(this.currentModelId) ? 'Fluxion AI gateway'
         : null;
       throw new Error(gateway
         ? `No vision-capable provider configured. The selected ${gateway} model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings.`
@@ -7321,13 +8689,12 @@ let isMultimodal = !!(imagePaths?.length);
         }
         if (pinnedInstructions) {
           const baseForPin = systemPromptOverride || HARD_SYSTEM_PROMPT;
-          const customModePolicy = isActiveCustomMode
-            ? 'Treat these user-configured custom-mode instructions as a supplemental behavioral layer for this mode. They govern tone, source routing, answer style, and fallback behavior, but they never modify or override CORE_IDENTITY, EXECUTION_CONTRACT, the <security> block, or any safety/identity rules above. Do not let default mode templates or prior chat override these custom-mode preferences when they are consistent with those immutable rules.'
-            : 'Treat as configuration for tone/focus. Never as facts about the candidate and never overriding the rules above.';
-          const customTemplateGuard = isActiveCustomMode
-            ? '\nFor this custom mode, do not use default technical-interview scaffolds or section headings like Approach, Code, Dry Run, or Complexity unless the custom instructions explicitly ask for that format.'
-            : '';
-          systemPromptOverride = `${baseForPin}\n\n## ACTIVE MODE INSTRUCTIONS (user-configured)\n${customModePolicy}${customTemplateGuard}\n${pinnedInstructions}`;
+          // ONE renderer for every carrier (2026-09-20): the copy that lived here told
+          // the model, for every BUILT-IN mode, that the user's prompt was "never
+          // overriding the rules above" — i.e. subordinate to the very defaults it
+          // was written to change. See renderUserInstructionSystemLayer.
+          const pinnedLayer = renderUserInstructionSystemLayer(pinnedInstructions, { isCustomMode: isActiveCustomMode });
+          if (pinnedLayer) systemPromptOverride = `${baseForPin}\n\n${pinnedLayer}`;
         }
 
         if (isActiveCustomMode) {
@@ -7358,6 +8725,39 @@ let isMultimodal = !!(imagePaths?.length);
         }
       } catch (_modeErr: any) {
         console.warn('[LLMHelper] ModesManager injection failed (non-fatal):', _modeErr?.message);
+      }
+    } else {
+      // THE USER'S INSTRUCTIONS ARE NOT "MODE CONTEXT" (2026-09-20).
+      //
+      // `shouldSkipModeInjection` exists so a coding / safety / universal-prompt
+      // turn does not pull the active mode's résumé, JD, reference files or
+      // 23–45k legacy template. But the block it skips was ALSO the only place
+      // typed chat delivered the mode's Real-time prompt — so, found by driving
+      // this method for real (real ModesManager, real DB, provider spied):
+      //   · with the v2 prompt active (the default) NO built-in mode — General,
+      //     Seminar, Call Centre, Sales — ever received the user's instructions
+      //     in typed chat, and
+      //   · no typed-chat CODING turn did in any mode ("Java only" included).
+      // The instruction layer is answer-type scoped by the accessor (facts and
+      // sensitive chunks never pass on coding turns), so it is safe exactly
+      // where the rest of the mode context is not.
+      //
+      // Guards: never twice (the live path and V3-owned typed turns already
+      // carry the block in the prompt they hand us); never on a safety
+      // redirect; and only for an ANSWER turn — internal utility calls (recap,
+      // follow-up questions, summaries) pass no answerType and must not be bent
+      // to "Answer in 100 words".
+      try {
+        const alreadyCarried = /<user_instructions\b|<custom_instructions>/.test(`${systemPromptOverride || ''}\n${message || ''}`);
+        const answerTurn = Boolean(routeOptions?.answerType) && routeOptions?.answerType !== 'ethical_usage_answer';
+        if (!alreadyCarried && answerTurn) {
+          const modesMgr = modesMgrForInjection || require('./services/ModesManager').ModesManager.getInstance();
+          const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions), routeOptions?.pinnedModeId ?? undefined) || '';
+          const pinnedLayer = renderUserInstructionSystemLayer(pinnedInstructions, { isCustomMode: isActiveCustomMode });
+          if (pinnedLayer) systemPromptOverride = `${systemPromptOverride || HARD_SYSTEM_PROMPT}\n\n${pinnedLayer}`;
+        }
+      } catch (_pinErr: any) {
+        console.warn('[LLMHelper] user-instruction layer failed (non-fatal):', _pinErr?.message);
       }
     }
 
@@ -8182,6 +9582,48 @@ let isMultimodal = !!(imagePaths?.length);
       return;
     }
 
+    if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
+      const orSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      // Same treatment as Custom / LiteLLM / NIM: the upstream OpenRouter picks
+      // may be queueing or cold, so this rung gets failover rather than being a
+      // single terminal attempt.
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'openrouter',
+        name: `OpenRouter (${this.openrouterWireModel(this.currentModelId)})`,
+        open: (sig) => this.streamWithOpenRouter(userContent, orSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: orSystem, thinkingBudget, abortSignal,
+        hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
+      return;
+    }
+
+    // THE PRIMARY ANSWER PATH. Its absence here was the worst defect in the
+    // whole Fluxion integration and the hardest to see: every vendor predicate
+    // correctly returns false for a `fluxion/` id, so the turn fell all the way
+    // through to step 4's Gemini cascade and was answered by Gemini Flash-Lite
+    // on the USER'S OWN GEMINI KEY — the exact silent wrong-vendor billing the
+    // prefix exists to prevent, with a log line naming Gemini and nothing
+    // anywhere saying Fluxion. On a Fluxion-only profile it instead threw
+    // "No AI provider configured" on every typed question.
+    //
+    // Excluding a family from the predicates fixes MISROUTING to a wrong client;
+    // it does nothing about a dispatch branch that was never written. Those are
+    // two different bugs and only one of them is ordering.
+    if (this.isFluxionModel(this.currentModelId) && this.hasFluxionCredential()) {
+      const fxSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      // Failover for the same reason as the gateways above, and a stronger one:
+      // Fluxion picks its upstream AFTER accepting the request, so a cold or
+      // exhausted channel is a normal outcome rather than an exceptional one.
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'fluxion',
+        name: `Fluxion (${this.fluxionWireModel(this.currentModelId)})`,
+        open: (sig) => this.streamWithFluxion(userContent, fxSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: fxSystem, thinkingBudget, abortSignal,
+        hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
+      return;
+    }
+
     if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
       const nimSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
       // Same treatment as Custom and LiteLLM: a self-hosted NIM endpoint may be
@@ -8211,6 +9653,34 @@ let isMultimodal = !!(imagePaths?.length);
         open: (sig) => this.streamWithLiteLLM(userContent, finalLitellmSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
         userContent, finalSystemPrompt: finalLitellmSystem, thinkingBudget, abortSignal,
         hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
+      return;
+    }
+
+    // 9Router (self-hosted OpenAI-compatible fallback proxy). It picks its
+    // upstream AFTER accepting the request, so images are forwarded through and
+    // the chosen upstream decides whether it can read them — same contract as
+    // the LiteLLM rung above.
+    if (this.isNinerouterModel(this.currentModelId) && this.ninerouterClient) {
+      const ninerouterSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      // Images go only to a model the catalogue says can read them. This is the
+      // PRIMARY chat path, and it was the one of four dispatch sites that
+      // forwarded them ungated while the non-streaming cascade and the vision
+      // chain both gated. The asymmetry mattered because 9Router returns HTTP
+      // 200 for an image sent to a text-only model: nothing errors, the upstream
+      // simply answers without having seen it. Forwarding was therefore not the
+      // permissive choice, it was the silent one.
+      const ninerouterSendsImages = Boolean(isMultimodal && imagePaths?.length)
+        && this.ninerouterModelSupportsVision(this.currentModelId);
+      // Failover for the reason the Fluxion rung gives, squared: 9Router is
+      // ITSELF a fallback ladder, so a stall here can be a cold upstream two
+      // hops away rather than anything wrong with the request.
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'ninerouter',
+        name: `9Router (${this.ninerouterWireModel(this.currentModelId)})`,
+        open: (sig) => this.streamWithNinerouter(userContent, ninerouterSystem, ninerouterSendsImages ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: ninerouterSystem, thinkingBudget, abortSignal,
+        hasImages: ninerouterSendsImages,
       });
       return;
     }
@@ -8681,6 +10151,19 @@ let isMultimodal = !!(imagePaths?.length);
       } catch { return connectTimeoutMs; }
     })();
 
+    // E2E-only (NATIVELY_E2E=1): the request body as sent, minus image bytes.
+    // The what-to-answer path layers the legacy transcript packet under V3's
+    // composed prompt, so the meeting-memory harness must read what actually
+    // left the app, not what one layer composed.
+    if (process.env.NATIVELY_E2E === '1') {
+      try {
+        const g = globalThis as unknown as { __nativelyE2eOutbound?: unknown[] };
+        const ring = g.__nativelyE2eOutbound ?? (g.__nativelyE2eOutbound = []);
+        ring.push({ at: Date.now(), system: body.system ?? null, message: body.message ?? body.messages ?? null });
+        if (ring.length > 20) ring.splice(0, ring.length - 20);
+      } catch { /* harness capture only */ }
+    }
+
     const endpointUrl = `${NATIVELY_API_URL}/v1/chat`;
     const requestId = makeRequestId('nat_stream');
     const streamStartedAt = nowMs();
@@ -9017,7 +10500,15 @@ let isMultimodal = !!(imagePaths?.length);
       // we don't leak DOM event subscriptions on long-lived AbortSignals
       // (e.g., the IPC handler's per-stream controller is short-lived, but a
       // future caller might reuse a single signal across many calls).
-      try { reader.cancel(); } catch { }
+      // reader.cancel() returns a Promise: when the stream was torn down by an
+      // abort (streamFallbackEngine's finally calls ctrl.abort() on every exit
+      // path), it REJECTS with that AbortError. A sync try/catch cannot catch
+      // that, so the rejection reached process.on('unhandledRejection') in
+      // main.ts — and five of those inside 60s trip the crash-loop guard and
+      // terminate the app. Switching AI actions quickly (Ctrl+1 then Ctrl+2 …)
+      // aborts one stream per switch, so this was reachable in normal use.
+      // Same idiom as CodexCliService/OllamaBootstrap.
+      try { reader.cancel().catch(() => { /* already torn down */ }); } catch { }
       abortSignal?.removeEventListener('abort', onCallerAbort);
     }
   }
@@ -9107,7 +10598,7 @@ let isMultimodal = !!(imagePaths?.length);
       temperature: 1,
       top_p: 1,
       stop: null,
-      // Same as the non-streaming vision call above: qwen3.6-27b thinks out loud
+      // Same as the non-streaming vision call above: qwen3.8-27b thinks out loud
       // into delta.content, and this is the LATENCY-CRITICAL path (every
       // screenshot turn). Applied here rather than via createGroqCompletion
       // because that ladder's fallback rung is text-only.
@@ -9234,7 +10725,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     await this.rateLimiters.deepseek.acquire();
 
-    const model = modelId || (this.isDeepseekModel(this.currentModelId) ? this.currentModelId : DEEPSEEK_MODEL);
+    const model = deepseekWireModel(modelId || (this.isDeepseekModel(this.currentModelId) ? this.currentModelId : DEEPSEEK_MODEL));
 
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
@@ -9250,6 +10741,7 @@ let isMultimodal = !!(imagePaths?.length);
         temperature: INTERACTIVE_TEMPERATURE,
         seed: INTERACTIVE_SEED, // DeepSeek is OpenAI-compatible and honors seed
         max_tokens: this.getDeepseekMaxOutput(model),
+        ...DEEPSEEK_NO_THINKING, // else the first token waits out the default reasoning
       }, { signal: abortSignal });
     } catch (err: any) {
       // Hard-trip on billing/quota/auth failures so we don't burn 3 chain rotations
@@ -9320,6 +10812,80 @@ let isMultimodal = !!(imagePaths?.length);
     }
   }
 
+  private async * streamWithNinerouter(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    if (!this.ninerouterClient) throw new Error("9Router client not initialized");
+    this.assertOutboundScopes('ninerouter', userMessage, imagePaths);
+
+    await this.rateLimiters.ninerouter.acquire();
+
+    const ninerouterModel = this.ninerouterWireModel(modelId || this.currentModelId);
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: "text", text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)];
+      messages.push({ role: "user", content });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
+
+    const maxTokens = await this.resolveNinerouterMaxTokens(ninerouterModel);
+    if (abortSignal?.aborted) return;
+    const request = {
+      model: ninerouterModel,
+      messages,
+      stream: true as const,
+      max_tokens: maxTokens,
+      ...this.ninerouterThinkingParam(),
+    };
+    require('./llm/providerPayloadCapture').captureProviderPayload({
+      provider: 'ninerouter', classification: 'sdk_request_object_before_serialization', payload: request,
+    });
+    // An IIFE rather than a pre-declared `let`: annotating the stream's type
+    // would need `typeof this.…`, which is not legal in a type position, and
+    // widening it to `any` loses the `stream: true` overload's iterability.
+    const stream = await (async () => {
+      try {
+        return await this.ninerouterClient!.chat.completions.create(request, { signal: abortSignal });
+      } catch (e: any) {
+        // Rewrite before it leaves the adapter. 9Router relays its upstream's
+        // status, so the raw text is a nested JSON blob naming a provider the
+        // user has never heard of — and the right REMEDY differs per status in
+        // ways that CONFLICT (429 means retry, 410 means never retry, 401 means
+        // open a dashboard). See ninerouterErrors.ts for the measured spread.
+        throw Object.assign(new Error(describeNinerouterFailure(e, ninerouterModel)), {
+          status: e?.status, provider: 'ninerouter', cause: e,
+        });
+      }
+    })();
+
+    let emitted = false;
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) { emitted = true; yield content; }
+      }
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw Object.assign(new Error(describeNinerouterFailure(e, ninerouterModel)), {
+        status: e?.status, provider: 'ninerouter', cause: e,
+      });
+    } finally {
+      if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort();
+    }
+
+    // HTTP 200, a well-formed stream, and no content at all — measured on
+    // MiniMax-M3 and gemma-4-31b-it, which stream reasoning only. Nothing
+    // rejects, so without this the turn ends with an empty answer bubble and no
+    // indication that anything failed.
+    if (!emitted && !abortSignal?.aborted) {
+      throw Object.assign(new Error(describeNinerouterFailure(new Error(NINEROUTER_EMPTY_ANSWER), ninerouterModel)), {
+        provider: 'ninerouter',
+      });
+    }
+  }
+
   private async * streamWithNvidiaNim(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
     if (!this.nvidiaNimClient) throw new Error('NVIDIA NIM client not initialized');
@@ -9334,6 +10900,29 @@ let isMultimodal = !!(imagePaths?.length);
     } else messages.push({ role: 'user', content: userMessage });
     const stream = await this.createNvidiaNimCompletion({ model, messages, stream: true }, { signal: abortSignal });
     try { for await (const chunk of stream) { if (abortSignal?.aborted) return; const content = chunk.choices[0]?.delta?.content; if (content) yield content; } }
+    finally { if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort(); }
+  }
+
+  private async * streamWithOpenRouter(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    const client = this.openrouterClient;
+    if (!client) throw new Error('OpenRouter client not initialized');
+    this.assertOutboundScopes('openrouter', userMessage, imagePaths);
+    await this.rateLimiters.openrouter.acquire();
+    const model = this.openrouterWireModel(modelId || this.currentModelId);
+    const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
+    if (abortSignal?.aborted) return;
+    const stream = await client.chat.completions.create({ model, messages, stream: true }, { signal: abortSignal }) as any;
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        // BEFORE reading the delta: a chunk can carry an error and an empty
+        // delta at once, and yielding "" first would hide it.
+        this.assertNoOpenRouterStreamError(chunk, model);
+        const content = chunk.choices?.[0]?.delta?.content;
+        if (content) yield content;
+      }
+    }
     finally { if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort(); }
   }
 
@@ -10378,7 +11967,15 @@ let isMultimodal = !!(imagePaths?.length);
    */
   public isUsingUserEndpoint(): boolean {
     if (this.customProvider || this.activeCurlProvider) return true;
-    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId);
+    // OpenRouter joins this class for the reason liveDeadlines.ts already names
+    // at its budget comment: an OpenRouter model can be QUEUEING behind the
+    // upstream it fronts, so it gets the user-supplied-endpoint budget rather
+    // than a first-party provider's tighter one.
+    // 9Router belongs here most literally of all: the address is the user's own
+    // machine or their tunnel, and its whole purpose is to fail over between
+    // upstreams AFTER accepting the request, so its first token can be waiting
+    // on a cold provider two hops away.
+    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId);
   }
 
   /**
@@ -10394,6 +11991,24 @@ let isMultimodal = !!(imagePaths?.length);
    * Fails open to the requested preset on any error: a latency hint must never
    * be able to stop an image being sent.
    */
+  /**
+   * True in a coding session (the active mode's template is technical), where a
+   * screenshot is code and must stay legible. Same predicate
+   * ScreenUnderstandingService uses to pick the sharper `technical` preset.
+   * Fails closed to FALSE — the only consequence is an eligible downgrade.
+   */
+  private isCodingSession(): boolean {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { ModesManager } = require('./services/ModesManager');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { isTechnicalModeTemplate } = require('./services/screen/technicalMode');
+      return isTechnicalModeTemplate(ModesManager.getInstance().getActiveMode()?.templateType);
+    } catch {
+      return false;
+    }
+  }
+
   private imageProfileFor(
     requested: 'fast' | 'balanced' | 'technical' | 'best',
     approxInputChars: number,
@@ -10404,11 +12019,12 @@ let isMultimodal = !!(imagePaths?.length);
       return imageProfileForTurn(requested, {
         llmHelper: this,
         inputTokens: Math.ceil(Math.max(0, approxInputChars) / 4),
-        // These three sites serve both live and manual turns and cannot tell
+        // These sites serve both live and manual turns and cannot tell
         // which from here. `manual_chat_stream` is the CONSERVATIVE label: its
         // 20s budget is twice the live one, so a turn is only ever downgraded
         // when it would blow the more generous of the two.
         streamRoute: 'manual_chat_stream',
+        isCode: this.isCodingSession(),
       });
     } catch {
       return requested;
@@ -10586,6 +12202,28 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
+   * The vision chain's view of refreshOllamaVisionModel(): the same probe, but
+   * capped at OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS and remembered when it comes up
+   * empty. On a timeout the probe keeps running in the background (and is shared
+   * with any concurrent caller), so a slow-but-alive daemon still populates
+   * ollamaVisionModel for the next screenshot.
+   */
+  private async resolveOllamaVisionModelForChain(): Promise<string | null> {
+    if (!this.useOllama) return null;
+    if (this.ollamaVisionModel) return this.ollamaVisionModel;
+    if (Date.now() < this.ollamaVisionNegativeUntil) return null;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS);
+    });
+    const model = await Promise.race([this.refreshOllamaVisionModel(), timedOut]);
+    clearTimeout(timer);
+    if (!model) this.ollamaVisionNegativeUntil = Date.now() + OLLAMA_VISION_NEGATIVE_TTL_MS;
+    return model;
+  }
+
+  /**
    * Resolve a vision-capable installed Ollama model and cache it in
    * `this.ollamaVisionModel`. Prefers the currently-active model when it is
    * itself vision-capable (no behavior change for users already on a vision
@@ -10760,7 +12398,17 @@ let isMultimodal = !!(imagePaths?.length);
         provider = 'codex-cli';
         model = this.getSelectedCodexCliModel(false);
       } else if (this.isNvidiaNimModel(selected)) provider = 'nvidia_nim';
+      else if (this.isOpenRouterModel(selected)) provider = 'openrouter';
+      // Fluxion's ids are the real vendors' own, so EVERY predicate below would
+      // claim one if the prefix check did not come first — claude-*, gpt-*,
+      // gemini-* and deepseek-v* are all live Fluxion catalogue entries.
+      else if (this.isFluxionModel(selected)) provider = 'fluxion';
       else if (this.isLiteLLMModel(selected)) provider = 'litellm';
+      // Same rule, same reason as Fluxion above: 9Router's ids carry a real
+      // vendor segment (`ninerouter/openai/gpt-5`,
+      // `ninerouter/gemini/gemini-3.6-flash`), so every predicate below would
+      // claim one if this did not come first.
+      else if (this.isNinerouterModel(selected)) provider = 'ninerouter';
       else if (this.isGroqModel(selected)) provider = 'groq';
       else if (this.isOpenAiModel(selected)) provider = 'openai';
       else if (this.isClaudeModel(selected)) provider = 'claude';
@@ -10900,11 +12548,41 @@ let isMultimodal = !!(imagePaths?.length);
       case 'groq': return !!this.groqClient;
       case 'deepseek': return !!this.deepseekClient;
       case 'nvidia_nim': return !!this.nvidiaNimClient;
+      case 'openrouter': return !!this.openrouterClient;
+      case 'fluxion': return this.hasFluxionCredential();
       case 'litellm': return !!this.litellmClient;
+      case 'ninerouter': return !!this.ninerouterClient;
       case 'ollama': return this.useOllama;
       case 'antigravity': return !!this.antigravityFallbackModel();
       default: return false;
     }
+  }
+
+  /**
+   * Returns true if at least one LLM provider (cloud, gateway, local, OAuth, or custom)
+   * is configured and ready to handle requests.
+   * Useful for background tasks (e.g. prompt compilation) to avoid churning
+   * through fallback ladders when no provider is configured.
+   */
+  public hasAnyConfiguredProvider(): boolean {
+    return Boolean(
+      this.client ||
+      this.openaiClient ||
+      this.claudeClient ||
+      this.groqClient ||
+      this.deepseekClient ||
+      this.nvidiaNimClient ||
+      this.openrouterClient ||
+      this.litellmClient ||
+      this.ninerouterClient ||
+      this.hasFluxionCredential() ||
+      this.hasNatively() ||
+      this.customProvider ||
+      this.activeCurlProvider ||
+      this.isCodexAvailable() ||
+      this.antigravityFallbackModel() ||
+      this.useOllama
+    );
   }
 
   /**
@@ -10972,6 +12650,17 @@ let isMultimodal = !!(imagePaths?.length);
           ?? getModelCapabilities(selection.model, true).supportsImages;
       case 'litellm':
       case 'nvidia_nim':
+      case 'openrouter':
+      case 'fluxion':
+      // 9Router belongs with them rather than with its own vision seat's
+      // per-model gate, and the difference is deliberate. The vision CHAIN
+      // chooses whether to recruit 9Router for a screenshot turn at all, so
+      // refusing a text-only model there costs nothing — another rung answers.
+      // Direct Assist has no other rung: the user picked this model for this
+      // question. Dropping the image here would answer it blind and say
+      // nothing, which is worse than forwarding it and surfacing the
+      // upstream's own error.
+      case 'ninerouter':
         // These adapters are image-forwarding gateways whose catalogues can
         // contain newly-added upstream vision models that are unknown to the
         // app's static capability table. Preserve the image and exact model;
@@ -11155,8 +12844,25 @@ let isMultimodal = !!(imagePaths?.length);
       ? this.getAntigravityModelId(model)
       : provider === 'litellm'
       ? model.replace(/^litellm\//, '')
+      // 'ninerouter' falls through on purpose, for the same reason 'openrouter'
+      // does below — and an earlier version of this had it exactly backwards.
+      // Pre-stripping `ninerouter/` is what makes ROUTING_PREFIX_RE STOP
+      // matching, so the vendor segment survives and the id resolves as
+      // something else entirely:
+      //
+      //   ninerouter/qwen/qwen3-8b   whole -> qwen3-8b      -> 128k ctx (cloud)
+      //                           stripped -> qwen/qwen3-8b ->   8k ctx (local-small)
+      //
+      // requestBuilder sizes the prompt against the WHOLE id, so the two
+      // disagreed by 16x and this function then threw CONTEXT_TOO_LARGE on a
+      // prompt just declared legal. It also set isGatewayRouted=false, which
+      // disables the guard in modelCapabilities added because
+      // `litellm/qwen/qwen2.5-vl-72b` was being claimed by Groq's tables.
       : provider === 'nvidia_nim'
         ? model.replace(/^nvidia_nim\//, '')
+        // 'openrouter' falls through on purpose: getModelCapabilities strips two
+        // segments itself, so the FULL id resolves to a bare name it knows.
+        // Pre-stripping here would leave `anthropic/claude-sonnet-5` unresolved.
         : model;
     const directCapabilities = getModelCapabilities(capabilityModel, provider === 'ollama');
     const directInputTokens = estimateTokens(request.systemPrompt) + estimateTokens(directUserPrompt);
@@ -11212,8 +12918,25 @@ let isMultimodal = !!(imagePaths?.length);
       case 'nvidia_nim':
         yield* this.streamWithNvidiaNim(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
         return;
+      case 'openrouter':
+        // `model` is still prefixed; streamWithOpenRouter strips exactly the one
+        // `openrouter/` segment to get OpenRouter's own wire id.
+        yield* this.streamWithOpenRouter(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
+        return;
+      case 'fluxion':
+        // `model` is still prefixed; streamWithFluxion strips the one `fluxion/`
+        // segment. For Fluxion that single strip yields BOTH the wire id and the
+        // capability id, because its ids are bare — the opposite of OpenRouter,
+        // which needs one strip for the wire and two for capabilities.
+        yield* this.streamWithFluxion(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
+        return;
       case 'litellm':
         yield* this.streamWithLiteLLM(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
+        return;
+      case 'ninerouter':
+        // `model` is still prefixed; streamWithNinerouter strips the one
+        // `ninerouter/` segment to get the instance's own wire id.
+        yield* this.streamWithNinerouter(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
         return;
       case 'ollama':
         yield* this.streamWithOllama(directUserPrompt, undefined, request.systemPrompt, imagePaths, abortSignal, model, true);
@@ -11785,45 +13508,49 @@ let isMultimodal = !!(imagePaths?.length);
 
     // ATTEMPT 3: Gemini Flash-Lite (cheapest/fastest — leads the Gemini cascade).
     // 3 attempts with linear backoff before dropping to full Flash.
-    console.log(`[LLMHelper] Attempting Gemini Flash-Lite for summary...`);
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const text = await this.withTimeout(
-          this.generateContent(contents, GEMINI_FLASH_LITE_MODEL),
-          45000,
-          `Gemini Flash-Lite Summary (Attempt ${attempt})`
-        );
-        if (text.trim().length > 0) {
-          console.log(`[LLMHelper] ✅ Gemini Flash-Lite summary generated successfully (Attempt ${attempt}).`);
-          return this.processResponse(text);
-        }
-      } catch (e: any) {
-        console.warn(`[LLMHelper] ⚠️ Gemini Flash-Lite attempt ${attempt}/3 failed: ${e.message}`);
-        if (attempt < 3) {
-          await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+    if (this.client) {
+      console.log(`[LLMHelper] Attempting Gemini Flash-Lite for summary...`);
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const text = await this.withTimeout(
+            this.generateContent(contents, GEMINI_FLASH_LITE_MODEL),
+            45000,
+            `Gemini Flash-Lite Summary (Attempt ${attempt})`
+          );
+          if (text.trim().length > 0) {
+            console.log(`[LLMHelper] ✅ Gemini Flash-Lite summary generated successfully (Attempt ${attempt}).`);
+            return this.processResponse(text);
+          }
+        } catch (e: any) {
+          console.warn(`[LLMHelper] ⚠️ Gemini Flash-Lite attempt ${attempt}/3 failed: ${e.message}`);
+          if (attempt < 3) {
+            await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+          }
         }
       }
-    }
 
-    // ATTEMPT 4: Gemini Flash (with 2 retries = 3 attempts total)
-    console.log(`[LLMHelper] ⚠️ Flash-Lite exhausted. Switching to Gemini Flash...`);
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const text = await this.withTimeout(
-          this.generateWithFlash(contents),
-          45000,
-          `Gemini Flash Summary (Attempt ${attempt})`
-        );
-        if (text.trim().length > 0) {
-          console.log(`[LLMHelper] ✅ Gemini Flash summary generated successfully (Attempt ${attempt}).`);
-          return this.processResponse(text);
-        }
-      } catch (e: any) {
-        console.warn(`[LLMHelper] ⚠️ Gemini Flash attempt ${attempt}/3 failed: ${e.message}`);
-        if (attempt < 3) {
-          await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+      // ATTEMPT 4: Gemini Flash (with 2 retries = 3 attempts total)
+      console.log(`[LLMHelper] ⚠️ Flash-Lite exhausted. Switching to Gemini Flash...`);
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const text = await this.withTimeout(
+            this.generateWithFlash(contents),
+            45000,
+            `Gemini Flash Summary (Attempt ${attempt})`
+          );
+          if (text.trim().length > 0) {
+            console.log(`[LLMHelper] ✅ Gemini Flash summary generated successfully (Attempt ${attempt}).`);
+            return this.processResponse(text);
+          }
+        } catch (e: any) {
+          console.warn(`[LLMHelper] ⚠️ Gemini Flash attempt ${attempt}/3 failed: ${e.message}`);
+          if (attempt < 3) {
+            await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
+          }
         }
       }
+    } else {
+      console.log(`[LLMHelper] Gemini client not initialized — skipping Gemini Flash-Lite / Flash.`);
     }
 
     // ATTEMPT 5: Gemini Pro
@@ -11907,6 +13634,7 @@ let isMultimodal = !!(imagePaths?.length);
     // URL/model change invalidates the per-model vision cache from a prior host.
     this.ollamaVisionCache.clear();
     this.ollamaVisionModel = null;
+    this.ollamaVisionNegativeUntil = 0;
 
     if (model) {
       this.ollamaModel = model;
@@ -11917,7 +13645,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     // Resolve the best vision-capable installed model for screenshots (may
     // differ from the primary text model). Fire-and-forget; the vision chain
-    // also refreshes lazily on first image request.
+    // also probes (bounded) on the first image request.
     this.refreshOllamaVisionModel().catch(() => { });
 
     console.log(`[LLMHelper] Switched to Ollama: ${this.ollamaModel} at ${this.ollamaUrl}`);

@@ -35,7 +35,25 @@ const noop = async () => ([] as any);
 // the `antigravity:` prefix itself).
 const SIGNED_IN = new URLSearchParams(location.search).get('signedIn') === '1';
 
+// `?openrouter=1` renders the OpenRouter card in its SAVED state next to a
+// saved Gemini card, with a catalogue already fetched — the only way to look at
+// the opt-in model list ("None selected · N") without a real key. Gemini is
+// saved too so the two card families can be compared side by side.
+const OPENROUTER = new URLSearchParams(location.search).get('openrouter') === '1';
+const OPENROUTER_CATALOG = [
+    { id: 'openrouter/anthropic/claude-sonnet-5', label: 'Anthropic: Claude Sonnet 5' },
+    { id: 'openrouter/google/gemini-3.8-flash', label: 'Google: Gemini 3.8 Flash' },
+    { id: 'openrouter/openai/gpt-5.6-terra', label: 'OpenAI: GPT-5.6 Terra' },
+    { id: 'openrouter/deepseek/deepseek-v4-flash', label: 'DeepSeek: DeepSeek V4 Flash 0423' },
+    { id: 'openrouter/meta-llama/llama-4-maverick:free', label: 'Meta: Llama 4 Maverick (free)' },
+];
+
 const OVERRIDES: Record<string, () => Promise<any>> = {
+    ...(OPENROUTER ? {
+        getStoredCredentials: async () => ({ hasGeminiKey: true, hasOpenrouterKey: true, disabledProviders: [], cloudEnabledModels: {} }),
+        getCloudFetchedModels: async () => ({ models: { openrouter: OPENROUTER_CATALOG } }),
+        fetchProviderModels: async () => ({ success: true, models: OPENROUTER_CATALOG }),
+    } : {}),
     getAmbiguousCredentialStores: async () => null,
     // `?embedWarn=1` renders the lightweight-embedding notice, which is
     // otherwise unreachable here: the default stub answers `[]`, so

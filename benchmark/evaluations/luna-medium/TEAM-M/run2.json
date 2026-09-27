@@ -1,0 +1,362 @@
+{
+ "blind_id": "S-428c9684",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 75155,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 33950,
+  "candidatesTokenCount": 2420,
+  "totalTokenCount": 44639,
+  "cachedContentTokenCount": 24508,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 33950
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 24508
+   }
+  ],
+  "thoughtsTokenCount": 8269,
+  "serviceTier": "standard"
+ },
+ "fact_count": 72,
+ "evaluation": {
+  "factual_accuracy": 6,
+  "important_information_retention": 8,
+  "hallucination_control": 8,
+  "action_item_retention": 7,
+  "decision_retention": 8,
+  "speaker_attribution": 6,
+  "numeric_accuracy": 6,
+  "entity_retention": 8,
+  "timeline_accuracy": 6,
+  "conclusion_accuracy": 7,
+  "structure": 8,
+  "conciseness": 4,
+  "readability": 5,
+  "overall_summary_quality": 6,
+  "critical_errors": [
+   "Contradiction: States the migration runbook ownership moved to Maya, but assigns the action item to Viktor.",
+   "Contradiction: States the rollout will start at 5%, but assigns an action item to Speaker 4 to create the rollout plan around 10%.",
+   "Contradiction: States dry runs completed on three of twelve shards, but later claims 'The migration has only had a dry run for one shard'.",
+   "Timeline error: Lists the Kestrel Logistics root cause and customer call dates as October 22 and October 23 instead of September 22 and September 23."
+  ],
+  "missing_important_information": [
+   "Dana escalating the ledger dependency with Grace Obi.",
+   "Exact counts of P1, P2, and P3 bugs.",
+   "The meeting agenda set by Dana."
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C04",
+    "reported": "Viktor: Create the migration runbook covering the dry-run process before the remaining nine shards are migrated."
+   },
+   {
+    "correction_id": "C05",
+    "reported": "Speaker 4: Create the rollout plan around 10% of eligible accounts on launch day."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Clarify with Facilities whether monitors will move to the Harlow building or be replaced.",
+   "The October 2 tripwire does not depend on desk access and will be checked by verifying whether Sunil's release is in production."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "missing"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "partial"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "partial"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "contradicted"
+   },
+   {
+    "id": "F25",
+    "status": "contradicted"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "partial"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "partial"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "partial"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "present"
+   },
+   {
+    "id": "F37",
+    "status": "present"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "partial"
+   },
+   {
+    "id": "F43",
+    "status": "partial"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "contradicted"
+   },
+   {
+    "id": "F49",
+    "status": "contradicted"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "contradicted"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "present"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   },
+   {
+    "id": "F68",
+    "status": "present"
+   },
+   {
+    "id": "F69",
+    "status": "partial"
+   },
+   {
+    "id": "F70",
+    "status": "present"
+   },
+   {
+    "id": "F71",
+    "status": "present"
+   },
+   {
+    "id": "F72",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a vast amount of detail but suffer from severe repetition and several critical contradictions. The model failed to resolve superseded values, resulting in conflicting statements (e.g., stating the rollout is 5% but assigning an action item for 10%; stating Maya owns the runbook but assigning it to Viktor). It also introduced numeric and timeline errors, such as claiming only one shard was dry-run (after correctly stating three) and shifting the Kestrel Logistics remediation dates from September to October. Speaker attribution is inconsistent, mixing names with raw speaker labels. The inclusion of distractors and extreme redundancy significantly degrade conciseness and readability."
+ }
+}

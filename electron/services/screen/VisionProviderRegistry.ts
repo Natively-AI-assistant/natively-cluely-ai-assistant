@@ -70,6 +70,12 @@ export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionP
     // two subsystems, two privacy policies.
     providers.push(litellm(credentials, inputs));
     providers.push(nvidiaNim(credentials, inputs));
+    providers.push(openrouter(credentials, inputs));
+    providers.push(fluxion(credentials, inputs));
+    // Unlike the four above, this one knows per model whether it can read an
+    // image — see ninerouter() for why that matters, and why an empty
+    // catalogue still seats it.
+    providers.push(ninerouter(credentials, inputs));
   }
 
   // Local providers — always allowed, including in private_vision.
@@ -316,6 +322,48 @@ function litellm(creds: CredentialsManager, _inputs: VisionProviderBuildInputs):
   };
 }
 
+
+/**
+ * A 9Router instance as a vision rung.
+ *
+ * Differs from litellm() above in exactly one way, and it is the point of the
+ * whole seat: `supportsVision` is ANSWERED rather than assumed. LiteLLM's
+ * builder seats every proxied model as vision-capable because /model/info says
+ * nothing about modalities, and its comment is right that gating on a guess is
+ * what produced "no vision provider configured" for users who had one.
+ *
+ * 9Router's /v1/models reports `capabilities.vision` per model, and the
+ * discovery path persists the vision-capable subset. On a stock instance 30 of
+ * 47 are capable and 17 are not, so assuming would route screenshots into
+ * seventeen models that cannot read them.
+ *
+ * An EMPTY persisted list means the catalogue has never been fetched, which is
+ * UNKNOWN, not "none" — so it falls back to LiteLLM's behaviour and seats the
+ * rung. Failing closed on absent data is the bug, not the fix.
+ */
+function ninerouter(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const baseURL = creds.getNinerouterBaseURL();
+  // The SELECTED model, not the stored preference — same reason litellm() gives:
+  // runVisionRequest dispatches against LLMHelper's live currentModelId.
+  const activeModelId = readActiveModelId();
+  const isSelected = /^ninerouter\//i.test(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  const wireId = modelId.replace(/^ninerouter\//i, '');
+  const visionModels = creds.getNinerouterVisionModels?.() || [];
+  const supportsImages = visionModels.length === 0 || visionModels.includes(wireId);
+  return {
+    id: 'ninerouter',
+    displayName: modelId ? `9Router (${wireId})` : '9Router',
+    modelId,
+    isLocal: false,
+    isConfigured: !!baseURL && isSelected,
+    supportsVision: !!baseURL && isSelected && supportsImages,
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('ninerouter', p),
+  };
+}
+
 /** An NVIDIA NIM endpoint as a vision rung. Same reasoning as litellm() above. */
 function nvidiaNim(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
   const apiKey = creds.getNvidiaNimApiKey?.();
@@ -332,6 +380,65 @@ function nvidiaNim(creds: CredentialsManager, _inputs: VisionProviderBuildInputs
     scopeAllowsScreenshots: true,
     hint: 'generic',
     invoke: async (p) => callLLMHelperVision('nvidia_nim', p),
+  };
+}
+
+/**
+ * OpenRouter as a vision rung. Same reasoning as litellm() and nvidiaNim():
+ * gated on `isSelected`, so it is only ever a rung for the model the user
+ * actually picked and never gets auto-recruited into someone else's turn.
+ *
+ * Registered rather than omitted DELIBERATELY. All three shipped presets take
+ * images, and without an entry here a user whose only configured provider is
+ * OpenRouter would get "no vision provider" on every screenshot while the
+ * streaming chain was perfectly willing to call it — the gap litellm()'s own
+ * comment records having fixed.
+ */
+function openrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getOpenrouterApiKey?.();
+  const activeModelId = readActiveModelId();
+  const isSelected = /^openrouter\//i.test(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  return {
+    id: 'openrouter',
+    displayName: modelId ? `OpenRouter (${modelId.replace(/^openrouter\//, '')})` : 'OpenRouter',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey && isSelected,
+    supportsVision: !!apiKey && isSelected,
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('openrouter', p),
+  };
+}
+
+/**
+ * Fluxion AI as a vision rung. Same `isSelected` gate as the three gateways
+ * above, and for Fluxion the gate is doing more work than it is for them: its
+ * model ids are the upstream vendors' own, so an ungated Fluxion rung would be
+ * indistinguishable in the logs from the user's real Anthropic/OpenAI/Gemini
+ * provider while spending a different account.
+ *
+ * `supportsVision` is reported for the SELECTED model only, and the image-only
+ * ids (gpt-image-2, nano-banana-2) never reach here because modelFetcher drops
+ * them from the chat catalogue — they answer on /v1/images/generations, which
+ * is not a chat endpoint at all.
+ */
+function fluxion(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getFluxionApiKey?.();
+  const activeModelId = readActiveModelId();
+  const isSelected = /^fluxion\//i.test(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  return {
+    id: 'fluxion',
+    displayName: modelId ? `Fluxion (${modelId.replace(/^fluxion\//, '')})` : 'Fluxion',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey && isSelected,
+    supportsVision: !!apiKey && isSelected,
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('fluxion', p),
   };
 }
 

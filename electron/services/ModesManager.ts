@@ -2,11 +2,12 @@ import * as crypto from 'crypto';
 import { DatabaseManager } from '../db/DatabaseManager';
 import { isRetrievalFixEnabled } from '../context-intelligence/contracts/retrieval-flags';
 import type { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
-import { ModeContextRetriever, type ModeRetrievalOptions, type RetrieveOptions } from './ModeContextRetriever';
+import { ModeContextRetriever, RETRY_ELIGIBLE_INDEX_STATUSES, type ModeRetrievalOptions, type RetrieveOptions } from './ModeContextRetriever';
 import type { ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
 import type { AnswerType } from '../llm/AnswerPlanner';
 import type { ActiveModeInfo } from '../llm/modeProfiles';
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
+import { registerUserInstructionProvider, USER_INSTRUCTIONS_MAX_CHARS } from '../llm/userInstructionContract';
 import { diagLog } from '../llm/documentGroundedPrompt';
 import { planBuiltinAdoption, BUILTIN_MODE_LABELS } from './builtinModes';
 import {
@@ -225,10 +226,10 @@ export const TEMPLATE_NOTE_SECTIONS: Record<ModeTemplateType, Array<{ title: str
     ],
     // Campaign-3 (2026-07-19): 8th built-in mode — file-grounded Q&A.
     seminar: [
-        { title: 'Question', description: 'The question asked (verbatim or paraphrased).' },
-        { title: 'Answer from your files', description: 'The answer grounded in your reference files / slides / paper. Direct quote or close paraphrase.' },
-        { title: 'Source', description: 'Which file + section the answer came from. Cite the filename and section/heading.' },
-        { title: 'If not in your files', description: 'A short, labeled "not from your reference files" note from general knowledge — never fabricated as if from the files.' },
+        { title: 'Question', description: 'Each question the audience or panel asked, one bullet per question (verbatim or closely paraphrased).' },
+        { title: 'Answer from your files', description: 'For each question, the answer grounded in your reference files / slides / paper, one bullet per question. Direct quote or close paraphrase.' },
+        { title: 'Source', description: 'Which file + section each answer came from. Cite the filename and section/heading.' },
+        { title: 'If not in your files', description: 'For each question your files did not cover, a short, labeled "not from your reference files" note from general knowledge — never fabricated as if from the files.' },
         { title: 'Follow-up you might be asked', description: 'Likely follow-up questions on the same topic the audience or panel could ask next.' },
     ],
     'call-center': [
@@ -405,6 +406,15 @@ export class ModesManager {
     public static getInstance(): ModesManager {
         if (!ModesManager.instance) {
             ModesManager.instance = new ModesManager();
+            // The coding-format resolver asks the OWNER for the mode's
+            // instruction text instead of ten call sites each threading it
+            // (userInstructionContract.ts). Registered here — the single
+            // construction point — so it exists before any turn can run. The
+            // text is the coding-scoped view: what a coding turn is actually
+            // given is what may define that turn's format.
+            const instance = ModesManager.instance;
+            registerUserInstructionProvider((pinnedModeId) =>
+                instance.getScopedInstructionText('dsa_question_answer', pinnedModeId));
             // Establish the app defaults ONCE, here rather than at a startup
             // hook: the database opens lazily, and every entry point that can
             // read a mode goes through this accessor. Doing it anywhere else
@@ -1178,6 +1188,16 @@ export class ModesManager {
     // retriever degrades to lexical for any file that isn't 'ready' yet.
 
     /** Index one reference file (idempotent — re-embeds only on content/space change). */
+    /** See ModeHybridRetriever.usesHostedEmbeddings. */
+    public usesHostedEmbeddings(): boolean {
+        return this.modeContextRetriever.usesHostedEmbeddings();
+    }
+
+    /** See ModeHybridRetriever.pruneFileIndexesByPrefix (profile documents' pseudo-files). */
+    public pruneReferenceFileIndexesByPrefix(prefix: string, keepId: string): number {
+        return this.modeContextRetriever.pruneReferenceFileIndexesByPrefix(prefix, keepId);
+    }
+
     public async indexReferenceFile(file: ModeReferenceFile): Promise<void> {
         await this.modeContextRetriever.indexReferenceFile(file);
     }
@@ -1196,14 +1216,13 @@ export class ModesManager {
      *  retry-eligible state, so a user with many fully-indexed modes doesn't pay
      *  an O(modes × files) re-scan + per-file indexFile entry on every kick. */
     public async retryAllLexicalOnlyFiles(): Promise<void> {
-        const RETRY_ELIGIBLE = new Set(['lexical_only', 'failed', 'pending']);
         for (const mode of this.getModes()) {
             const files = this.getReferenceFiles(mode.id);
             if (files.length === 0) continue;
             // Cheap status read (no embedding work) gates the expensive retry.
             const hasEligible = files.some(f => {
                 try {
-                    return RETRY_ELIGIBLE.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
+                    return RETRY_ELIGIBLE_INDEX_STATUSES.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
                 } catch {
                     return true; // status lookup failed → let the retry decide
                 }
@@ -1217,14 +1236,13 @@ export class ModesManager {
      *  main process to broadcast 'done' only for modes that were actually
      *  re-indexed (LOW #8), instead of spamming every mode on every kick. */
     public getModesWithRetryEligibleFiles(): string[] {
-        const RETRY_ELIGIBLE = new Set(['lexical_only', 'failed', 'pending']);
         const out: string[] = [];
         for (const mode of this.getModes()) {
             const files = this.getReferenceFiles(mode.id);
             if (files.length === 0) continue;
             const hasEligible = files.some(f => {
                 try {
-                    return RETRY_ELIGIBLE.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
+                    return RETRY_ELIGIBLE_INDEX_STATUSES.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
                 } catch {
                     return true;
                 }
@@ -1239,7 +1257,9 @@ export class ModesManager {
         const files = this.getReferenceFiles(modeId);
         for (const file of files) {
             const { status } = this.modeContextRetriever.getReferenceFileIndexStatus(file.id);
-            if (status !== 'ready') {
+            // `status` cannot see the content; the hash check can (chunker bump →
+            // lazy per-mode re-index, see referenceFileNeedsReindex).
+            if (status !== 'ready' || this.modeContextRetriever.referenceFileNeedsReindex(file)) {
                 await this.modeContextRetriever.indexReferenceFile(file).catch(() => { /* logged inside */ });
             }
         }
@@ -1352,7 +1372,7 @@ export class ModesManager {
         void (async () => {
             try {
                 const llmHelper = ModesManager.llmHelperForCompiler;
-                if (!llmHelper) return; // compiler not available in this context
+                if (!llmHelper || !llmHelper.hasAnyConfiguredProvider?.()) return; // compiler not available or no provider configured
                 // Scope gate: never call a cloud LLM for prompt compilation when post_call_summary
                 // is denied (the deterministic fallback covers it at summary time).
                 try {
@@ -1383,8 +1403,15 @@ export class ModesManager {
     public compileAllSectionsAsync(modeId: string): void {
         void (async () => {
             try {
+                // Yield one macrotask before reading provider state. Built-in seeding runs inside
+                // AppState.getInstance(), BEFORE loadStoredCredentials() in the same synchronous
+                // stretch of initializeApp, so a packaged build has no keys loaded yet. Checking
+                // now would permanently skip every seeded section for users who DO have keys
+                // (a release that adds a built-in template, an upgrade from before built-ins
+                // existed, or a rebuilt DB whose stored keys survived).
+                await new Promise<void>(resolve => setImmediate(resolve));
                 const llmHelper = ModesManager.llmHelperForCompiler;
-                if (!llmHelper) return;
+                if (!llmHelper || !llmHelper.hasAnyConfiguredProvider?.()) return;
                 try {
                     const { SettingsManager } = require('./SettingsManager');
                     if (SettingsManager.getInstance().get('providerDataScopes')?.post_call_summary === false) return;
@@ -1456,7 +1483,12 @@ export class ModesManager {
     // Roughly 300 tokens — enough for real mode instructions, small enough that
     // a pasted document can't crowd out the transcript. Anything longer remains
     // fully available to RETRIEVAL (reference-file path), so nothing is lost.
-    private static readonly PINNED_INSTRUCTIONS_MAX_CHARS = 1_200;
+    // Was 1_200 while the Modes editor's textarea accepts 8,000
+    // (premium/src/ModesSettings.tsx maxLength): everything past 1,200 chars was
+    // cut off with " …[truncated]" and never seen by the model — so the MORE
+    // carefully a user wrote their prompt, the less of it applied. One shared
+    // constant now, equal to what the editor lets them type.
+    private static readonly PINNED_INSTRUCTIONS_MAX_CHARS = USER_INSTRUCTIONS_MAX_CHARS;
 
     /**
      * PI v3 (W2): the active mode's user-authored "Real-time prompt"
@@ -1475,22 +1507,37 @@ export class ModesManager {
     public getActiveModePinnedInstructions(answerType?: AnswerType, pinnedModeId?: string): string {
         const mode = this.resolveMode(pinnedModeId);
         if (!mode) return '';
+        const text = this.getScopedInstructionText(answerType, pinnedModeId);
+        if (!text) return '';
+        // isCustom is a pure function of (templateType, name) on the resolved
+        // mode — derive it directly so a pinned mode reports correctly even when
+        // it differs from the (possibly switched) live active mode.
+        const custom = isCustomMode(mode);
+        return custom ? `Mode: ${mode.name}\n${text}` : text;
+    }
+
+    /**
+     * The mode's instruction text exactly as an answer of `answerType` receives
+     * it — sensitivity/fact-scoped and capped — WITHOUT the "Mode: <name>"
+     * label getActiveModePinnedInstructions adds for custom modes. The label is
+     * presentation; this is the text itself, so it is also what the
+     * coding-format resolver analyses (a mode NAMED "Interview Format" must not
+     * read as the user defining a format).
+     */
+    public getScopedInstructionText(answerType?: AnswerType, pinnedModeId?: string): string {
+        const mode = this.resolveMode(pinnedModeId);
+        if (!mode) return '';
         const raw = (mode.customContext || '').trim();
         if (!raw) return '';
         const grounding = this.getActiveModeDocumentGroundingInfo(pinnedModeId);
         const scoped = (answerType && !grounding.documentGroundedCustomModeActive)
             ? selectCustomContextForAnswer(classifyCustomContext(raw), answerType).included.map(c => c.text).join('\n')
             : raw;
-        if (!scoped.trim()) return '';
         let text = scoped.trim();
         if (text.length > ModesManager.PINNED_INSTRUCTIONS_MAX_CHARS) {
             text = text.slice(0, ModesManager.PINNED_INSTRUCTIONS_MAX_CHARS) + ' …[truncated]';
         }
-        // isCustom is a pure function of (templateType, name) on the resolved
-        // mode — derive it directly so a pinned mode reports correctly even when
-        // it differs from the (possibly switched) live active mode.
-        const custom = isCustomMode(mode);
-        return custom ? `Mode: ${mode.name}\n${text}` : text;
+        return text;
     }
 
     /**
@@ -1631,6 +1678,12 @@ export class ModesManager {
      * mode's files are genuinely indexed and ready, which is exactly the bug
      * this passthrough exists to prevent a future caller from reintroducing.
      */
+    /** Corpus arbitration pass-through — see ModeHybridRetriever.probeAnchors. */
+    public probeReferenceAnchors(_mode: Mode, files: ModeReferenceFile[], question: string): boolean {
+        if (!question?.trim() || !files?.length) return false;
+        return this.modeContextRetriever.probeReferenceAnchors(files, question);
+    }
+
     public async retrieveHybridRaw(mode: Mode, files: ModeReferenceFile[], options: RetrieveOptions): Promise<HybridContext> {
         // Fail-closed on an empty query — same choke-point rule as the
         // buildRetrievedActiveModeContextBlock* twins; see retrievalQueryPolicy.ts.
