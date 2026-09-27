@@ -406,7 +406,7 @@ export class MeetingPersistence {
         data: { transcript: TranscriptSegment[], usage: any[] | undefined, startTime: number, durationMs: number, context: string, memoryEligibleCount?: number },
         meetingId: string,
         // BUG-04 fix: accept metadata snapshot so calendar info is not lost after session.reset()
-        metadata?: { title?: string; calendarEventId?: string; calendarEvent?: import('./services/calendar/calendarSessionMatch').CalendarEventSnapshot; source?: 'manual' | 'calendar' } | null,
+        metadata?: { title?: string; calendarEventId?: string; calendarEvent?: import('./services/calendar/calendarSessionMatch').CalendarEventSnapshot; callKey?: string; source?: 'manual' | 'calendar' } | null,
         // BUG-MODE-BLEEDING fix: accept mode snapshot so async summary uses the mode that was
         // active when meeting stopped, not whatever mode is active when async processing runs.
         modeSnapshot?: { id: string; name: string; templateType: string } | null
@@ -521,6 +521,47 @@ export class MeetingPersistence {
                 llmTranscript = data.transcript;
             }
         }
+
+        // The call's own record of who spoke (the Meet page's speaking indicator,
+        // via the Companion extension): each other-side line whose speaker is
+        // clear gets that person, in the stored transcript (as a speaker id, so
+        // the notes show the name and a rename applies per person) and in the
+        // notes' named copy; the people in the call are kept with the meeting.
+        // Group calls get names this way, which the calendar alone can't give.
+        // Same "Speaker labels" switch.
+        let storedTranscript = data.transcript;
+        let callLabels: Record<string, string> | null = null;
+        let callParticipants: string[] = [];
+        if (metadata?.callKey && isIntelligenceFlagEnabled('speakerLabelsV1')) {
+            try {
+                const { nameCallLines } = require('./services/meetingDetection/nameCallLines') as typeof import('./services/meetingDetection/nameCallLines');
+                const named = nameCallLines(data.transcript, metadata.callKey, data.startTime, data.durationMs);
+                if (named) {
+                    storedTranscript = named.transcript;
+                    callParticipants = named.participants;
+                    if (Object.keys(named.labels).length > 0) {
+                        callLabels = named.labels;
+                        const byLine = named.transcript;
+                        llmTranscript = llmTranscript.map((seg, i) => {
+                            const id = byLine[i]?.speakerId;
+                            return id && named.labels[id] ? { ...seg, speaker: named.labels[id] } : seg;
+                        });
+                    }
+                }
+            } catch (e: any) {
+                console.warn('[MeetingPersistence] call speaker names skipped:', e?.message);
+                storedTranscript = data.transcript;
+                callLabels = null;
+                callParticipants = [];
+            }
+        }
+        // Only the call's named ids are stored: an STT provider's own voice ids
+        // (diarization) stay in-session, as they always have.
+        storedTranscript = storedTranscript.map((seg: any) => {
+            if (!seg?.speakerId || (callLabels && callLabels[seg.speakerId])) return seg;
+            const { speakerId: _unnamed, ...rest } = seg;
+            return rest;
+        });
 
         // Scope gate applies to the entire post-call LLM summary path, not just
         // mode-reference snippets. If denied, V3 is skipped and LLMHelper's existing
@@ -904,6 +945,12 @@ Return ONLY valid JSON (no markdown code blocks):
             if (calendarLabels && summaryData && typeof summaryData === 'object' && !summaryData.speakerLabels) {
                 summaryData = { ...summaryData, speakerLabels: calendarLabels };
             }
+            // The call's names join them (a user's rename of an id still wins),
+            // and the people who were in the call are kept for the notes.
+            if (summaryData && typeof summaryData === 'object') {
+                if (callLabels) summaryData = { ...summaryData, speakerLabels: { ...callLabels, ...(summaryData.speakerLabels || {}) } };
+                if (callParticipants.length > 0) summaryData = { ...summaryData, callParticipants };
+            }
 
             const meetingData: Meeting = {
                 id: meetingId,
@@ -912,7 +959,7 @@ Return ONLY valid JSON (no markdown code blocks):
                 duration: durationStr,
                 summary: "See detailed summary",
                 detailedSummary: summaryData,
-                transcript: data.transcript,
+                transcript: storedTranscript,
                 usage: data.usage,
                 calendarEventId: calendarEventId,
                 calendarEvent: calendarEvent,

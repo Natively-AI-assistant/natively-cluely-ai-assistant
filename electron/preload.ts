@@ -817,6 +817,10 @@ interface ElectronAPI {
   calendarDisconnect: () => Promise<{ success: boolean; error?: string }>;
   getCalendarStatus: () => Promise<{ connected: boolean; email?: string; name?: string }>;
   getSyncedCalendars: () => Promise<Array<{ id: string; name: string; primary: boolean; color?: string }>>;
+  getMeetingDetectionEnabled: () => Promise<boolean>;
+  setMeetingDetectionEnabled: (on: boolean) => Promise<{ success: boolean; error?: string }>;
+  /** A notification's Start (a detected call, the calendar reminder), relayed by main to the launcher. */
+  onMeetingStartRequest: (callback: (req: { title?: string; calendarEventId?: string; via?: 'detected' | 'reminder' }) => void) => () => void;
   getUpcomingEvents: () => Promise<
     Array<{
       id: string;
@@ -2603,6 +2607,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   calendarDisconnect: () => ipcRenderer.invoke('calendar-disconnect'),
   getCalendarStatus: () => ipcRenderer.invoke('get-calendar-status'),
   getSyncedCalendars: () => ipcRenderer.invoke('calendar-get-synced-calendars'),
+  getMeetingDetectionEnabled: () => ipcRenderer.invoke('get-meeting-detection-enabled'),
+  setMeetingDetectionEnabled: (on: boolean) => ipcRenderer.invoke('set-meeting-detection-enabled', on),
+  onMeetingStartRequest: (callback: (req: { title?: string; calendarEventId?: string; via?: 'detected' | 'reminder' }) => void) => {
+    const subscription = (_: any, req: any) => callback(req && typeof req === 'object' ? req : {})
+    ipcRenderer.on('meeting:start-request', subscription)
+    return () => {
+      ipcRenderer.removeListener('meeting:start-request', subscription)
+    }
+  },
   getUpcomingEvents: () => ipcRenderer.invoke('get-upcoming-events'),
   calendarRefresh: () => ipcRenderer.invoke('calendar-refresh'),
 

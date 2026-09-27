@@ -32,6 +32,8 @@ export interface MatchableEvent {
     attendees?: MatchableAttendee[];
     /** The user's own RSVP on the event ('declined' events never match). */
     selfResponse?: string;
+    /** The meetings its links join (meetingDetection/meetingLinks.ts keys). */
+    meetingKeys?: string[];
 }
 
 /** What a meeting keeps of its event, so nothing later depends on the event still being "upcoming". */
@@ -42,8 +44,12 @@ export interface CalendarEventSnapshot {
     endTime: string;
     link?: string;
     attendees: MatchableAttendee[];
-    /** How the link was made: at start, from the notification, when an early start reached the event, or by the user. */
-    linkedBy: 'start' | 'notification' | 'late' | 'user';
+    /**
+     * How the link was made: by time at start, from the notification, when an
+     * early start reached the event, by the meeting link the user is in (a
+     * meeting tab whose key is the event's), or by the user.
+     */
+    linkedBy: 'start' | 'notification' | 'late' | 'link' | 'user';
 }
 
 /** A session started up to this long before an event can belong to it. */
@@ -110,6 +116,42 @@ export function matchEventForSession<E extends MatchableEvent>(events: E[], nowM
     const margin = Math.abs(nowMs - timeOf(second.startTime)) - Math.abs(nowMs - timeOf(first.startTime));
     if (firstStarted === secondStarted && margin >= CLEAR_MARGIN_MS) return { kind: 'linked', event: first };
     return { kind: 'ambiguous', candidates: byDistance };
+}
+
+/** A session joined up to this long before its event is that event, when the meeting link says so. */
+export const LINK_LEAD_MS = 30 * 60_000;
+/** ...and up to this long after its end (meetings overrun). */
+export const LINK_OVERRUN_MS = 30 * 60_000;
+
+/**
+ * The event whose meeting link is one the user is in right now: exact, so it
+ * beats any time scoring, and settles what time alone left ambiguous (two
+ * meetings at once, back to back). `keys` come best first (liveMeetings); the
+ * first that matches wins. Only events on around now count: a recurring series
+ * shares one link, and its other instances are days away. Declined never.
+ */
+export function matchEventByMeetingKeys<E extends MatchableEvent>(events: E[], keys: readonly string[], nowMs: number): E | null {
+    for (const key of keys) {
+        const hits = events.filter((e) => {
+            if (declined(e) || !(e.meetingKeys ?? []).includes(key)) return false;
+            const start = timeOf(e.startTime);
+            const end = timeOf(e.endTime);
+            return Number.isFinite(start) && Number.isFinite(end) && nowMs >= start - LINK_LEAD_MS && nowMs <= end + LINK_OVERRUN_MS;
+        });
+        if (hits.length > 0) return hits.sort((a, b) => Math.abs(nowMs - timeOf(a.startTime)) - Math.abs(nowMs - timeOf(b.startTime)))[0];
+    }
+    return null;
+}
+
+/**
+ * Leaves out the events that are provably OTHER meetings: while the user is
+ * audibly in a call with a known link (`inCallKeys`), an event with links of
+ * its own, none of them that call's, is not this session. Events without a
+ * link (an in-person meeting, a phone call) stay candidates.
+ */
+export function withoutOtherMeetings<E extends MatchableEvent>(events: E[], inCallKeys: readonly string[]): E[] {
+    if (inCallKeys.length === 0) return events;
+    return events.filter((e) => !(e.meetingKeys ?? []).length || (e.meetingKeys ?? []).some((k) => inCallKeys.includes(k)));
 }
 
 /** The event as a meeting keeps it. */

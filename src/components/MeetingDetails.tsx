@@ -927,6 +927,12 @@ const SHOW_NEXT_STEPS = false;
 // sections: "Next steps", "Owners and next steps", "Asks / next steps",
 // "What happens next", "Recommended next step". Mirrors isNextStepsSectionTitle()
 // in MeetingSummaryReducer.ts (duplicated, not imported — this is renderer code).
+/** "Priya, Rob and 3 others": the call's people for the date line. */
+const participantsSummary = (names: string[]): string => {
+    if (names.length <= 3) return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    return `${names.slice(0, 2).join(', ')} and ${names.length - 2} others`;
+};
+
 const isNextStepsSectionTitle = (title?: string | null): boolean => {
     const t = (title || '').trim();
     if (!t) return false;
@@ -968,6 +974,8 @@ interface Meeting {
         mode?: { selectedModeId?: string; selectedModeName?: string; selectedTemplateType?: string; detectedModeId?: string; detectedModeName?: string; detectedConfidence?: number; summaryModeUsed?: string };
         generation?: { strategy?: string; chunkCount?: number; durationMs?: number; warnings?: string[] };
         speakerLabels?: Record<string, string>;
+        /** Who was in the call (the Meet page's participant list), first to join first. */
+        callParticipants?: string[];
         crossMeeting?: { stillOpen?: string[] };
         recipes?: Record<string, string>;
         // Phase 7 — PostCallWorkflow enhancements (schema v2). Backend writes
@@ -995,6 +1003,8 @@ interface Meeting {
         speaker: string;
         text: string;
         timestamp: number;
+        /** Which of the other side's voices said it (speaker_2…), named in speakerLabels; from the call's speaking record. */
+        speakerId?: string;
     }>;
     /** The calendar event this meeting was linked to, as kept at the time (attendees, title, times). */
     calendarEventId?: string | null;
@@ -2017,6 +2027,8 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         if (labels[id]) return labels[id];
         if (id === 'me') return 'Me';
         if (id === 'speaker_1') return 'Speaker 1';
+        const voice = /^speaker_(\d+)$/.exec(id);
+        if (voice) return `Speaker ${voice[1]}`;
         return rawSpeaker || 'Speaker';
     };
 
@@ -2200,7 +2212,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                 `.trim();
             }
         } else if (activeTab === 'transcript' && meeting.transcript) {
-            textToCopy = meeting.transcript.map(t => `[${formatTime(t.timestamp)}] ${resolveSpeakerName(t.speaker)}: ${t.text}`).join('\n');
+            textToCopy = meeting.transcript.map(t => `[${formatTime(t.timestamp)}] ${resolveSpeakerName(t.speakerId || t.speaker)}: ${t.text}`).join('\n');
         } else if (activeTab === 'usage' && meeting.usage) {
             // Without the overlay's [[GIST]] line, as the tab shows it.
             textToCopy = meeting.usage.map(u => `Q: ${u.question || ''}\nA: ${splitGistLine(u.answer || '').body}`).join('\n\n');
@@ -2326,6 +2338,12 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             {/* Date formatting could be improved to use meeting.date if it's an ISO string */}
                             <div className="text-xs text-text-tertiary font-medium mb-1 flex items-center gap-2 min-w-0">
                                 <span className="shrink-0">{new Date(meeting.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
+                                {/* Who was in the call, from the Meet page (meetingDetection/callRoster). */}
+                                {meeting.detailedSummary?.callParticipants && meeting.detailedSummary.callParticipants.length > 0 && (
+                                    <span className="min-w-0 truncate" title={meeting.detailedSummary.callParticipants.join(', ')}>
+                                        · {t('With')} {participantsSummary(meeting.detailedSummary.callParticipants)}
+                                    </span>
+                                )}
                                 {/* Which calendar event this was: shown when linked, offered when
                                     a calendar is connected. See meeting/CalendarLinkChip. */}
                                 <CalendarLinkChip meetingId={meeting.id} event={meeting.calendarEvent} isLight={isLight} onChanged={reloadMeeting} />
@@ -3249,10 +3267,13 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 })()}
                                 <div ref={transcriptListRef} className="space-y-6">
                                     {(() => {
-                                        const filteredTranscript = meeting.transcript?.filter(entry => {
+                                        const filteredTranscript = (meeting.transcript?.filter(entry => {
                                             const isHidden = ['system', 'ai', 'assistant', 'model'].includes(entry.speaker?.toLowerCase());
                                             return !isHidden;
-                                        }) || [];
+                                        }) || [])
+                                            // A line the call attributed to one of the other side's voices
+                                            // shows (and renames) as that person, and turns break between people.
+                                            .map(entry => entry.speakerId ? { ...entry, speaker: entry.speakerId } : entry);
 
                                         if (filteredTranscript.length === 0) {
                                             return <p className="text-text-tertiary">{t('No transcript available.')}</p>;

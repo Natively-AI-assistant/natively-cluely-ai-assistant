@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { EventEmitter } from 'events';
+import { meetingLinksIn, meetingRefOf } from './meetingDetection/meetingLinks';
 
 /*
   Google OAuth client for calendar sync — a "Desktop app" client, used with
@@ -117,6 +118,31 @@ function gravatarUrl(email: string): string {
     return `https://gravatar.com/avatar/${hash}?s=64&d=404`;
 }
 
+/** A conferencing add-on's video join URLs (Meet, Zoom for Google Calendar, Teams). */
+function conferenceVideoUris(item: any): string[] {
+    const points = Array.isArray(item?.conferenceData?.entryPoints) ? item.conferenceData.entryPoints : [];
+    return points
+        .filter((p: any) => p?.entryPointType === 'video' && typeof p.uri === 'string')
+        .map((p: any) => p.uri as string);
+}
+
+/**
+ * Every meeting an event's links join, as keys (CalendarEvent.meetingKeys):
+ * hangoutLink, video entry points, then URLs in the location and description.
+ * Omitted when there are none.
+ */
+function meetingKeysField(item: any): { meetingKeys?: string[] } {
+    const keys = new Set<string>();
+    for (const uri of [item?.hangoutLink, ...conferenceVideoUris(item)]) {
+        const ref = typeof uri === 'string' ? meetingRefOf(uri) : null;
+        if (ref) keys.add(ref.key);
+    }
+    for (const text of [item?.location, item?.description]) {
+        if (typeof text === 'string') for (const l of meetingLinksIn(text)) keys.add(l.ref.key);
+    }
+    return keys.size > 0 ? { meetingKeys: [...keys].slice(0, 8) } : {};
+}
+
 class TokenEndpointError extends Error {
     constructor(public readonly status: number, public readonly code: string, description?: string) {
         super(`${code}${description ? `: ${description}` : ''} (HTTP ${status})`);
@@ -155,6 +181,13 @@ export interface CalendarEvent {
     attendees?: CalendarAttendee[];
     /** The user's own RSVP (their attendee entry is dropped from `attendees`). */
     selfResponse?: CalendarAttendee['response'];
+    /**
+     * Every meeting its links join (meetingDetection/meetingLinks.ts keys, no
+     * passwords): the Meet link, a Zoom or Teams add-on's entry point, and any
+     * join URL in the location or description. A session whose meeting tab has
+     * one of these IS this event (calendarSessionMatch.ts).
+     */
+    meetingKeys?: string[];
 }
 
 export interface SyncedCalendar {
@@ -508,6 +541,9 @@ export class CalendarManager extends EventEmitter {
         });
     }
 
+    /** The last reminder shown, kept referenced so its buttons still work. */
+    private reminderNotification: unknown = null;
+
     private showNotification(event: CalendarEvent) {
         // A system notification is its own OS window (and it chimes), outside
         // the content protection Undetectable mode relies on, so it would show
@@ -524,10 +560,15 @@ export class CalendarManager extends EventEmitter {
                 { type: 'button', text: 'Start Meeting' },
                 { type: 'button', text: 'Dismiss' }
             ],
-            sound: true
+            // Not silent: the OS's default sound. (`sound` names a macOS sound
+            // file; `true` was never a valid value.)
         });
+        // Electron drops a Notification nothing references; keep the latest.
+        this.reminderNotification = notif;
 
-        notif.on('action', (event_unused: any, index: number) => {
+        // Electron 43: the index is `details.actionIndex`; the positional one is deprecated.
+        notif.on('action', (details: any, legacyIndex?: number) => {
+            const index = typeof details?.actionIndex === 'number' ? details.actionIndex : legacyIndex;
             if (index === 0) {
                 // Start Meeting
                 // We need to tell the main process to open window and start meeting
@@ -657,6 +698,7 @@ export class CalendarManager extends EventEmitter {
                     startTime: item.start.dateTime,
                     endTime: item.end.dateTime,
                     link: this.resolveMeetingLink(item),
+                    ...meetingKeysField(item),
                     source: 'google' as const,
                     // Everyone on it, to a sane cap: they are a follow-up's recipients
                     // (the Launcher shows two faces and counts the rest).
@@ -736,12 +778,19 @@ export class CalendarManager extends EventEmitter {
         }
     }
 
-    // Intelligent Link Extraction
+    // Intelligent Link Extraction: the Join button's target.
     private resolveMeetingLink(item: any): string | undefined {
-        // 1. Prefer explicit Hangout link (Google Meet) if valid
+        // 1. Google Meet's own link.
         if (item.hangoutLink) return item.hangoutLink;
-
-        // 2. Parse description for other providers
+        // 2. A conferencing add-on's video entry point (Zoom and Teams for Google
+        //    Calendar put their join link here, not in the description).
+        const video = conferenceVideoUris(item)[0];
+        if (video) return video;
+        // 3. A join link typed into the location, then one in the description.
+        const inText = meetingLinksIn(typeof item.location === 'string' ? item.location : '')[0]
+            ?? meetingLinksIn(typeof item.description === 'string' ? item.description : '')[0];
+        if (inText) return inText.url;
+        // 4. Any other provider link (a Zoom registration page still joins).
         if (!item.description) return undefined;
 
         return this.extractMeetingLink(item.description);
@@ -749,8 +798,8 @@ export class CalendarManager extends EventEmitter {
 
     private extractMeetingLink(description: string): string | undefined {
         // Regex for common meeting providers
-        // Matches zoom.us, teams.microsoft.com, meet.google.com, webex.com
-        const providerRegex = /(https?:\/\/(?:[a-z0-9-]+\.)?(?:zoom\.us|teams\.microsoft\.com|meet\.google\.com|webex\.com)\/[^\s<>"']+)/gi;
+        // Matches zoom.us, zoomgov.com, teams.microsoft.com, teams.live.com, teams.cloud.microsoft, meet.google.com, webex.com
+        const providerRegex = /(https?:\/\/(?:[a-z0-9-]+\.)?(?:zoom\.us|zoomgov\.com|teams\.microsoft\.com|teams\.live\.com|teams\.cloud\.microsoft|meet\.google\.com|webex\.com)\/[^\s<>"']+)/gi;
 
         const matches = description.match(providerRegex);
         if (matches && matches.length > 0) {

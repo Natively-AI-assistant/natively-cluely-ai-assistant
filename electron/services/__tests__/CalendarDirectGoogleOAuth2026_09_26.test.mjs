@@ -363,6 +363,36 @@ test('events: merged from every calendar ticked in Google Calendar, soonest firs
     }
 });
 
+test('events: every meeting an event links to, from any field, as keys; Join goes to the add-on link', async () => {
+    const env = setup({
+        savedTokens: { accessToken: 'at', refreshToken: 'rt', expiryDate: Date.now() + 3_600_000 },
+        calendarList: { status: 200, body: { items: [{ id: 'me@example.com', primary: true, selected: true }] } },
+        eventsByCalendar: { 'me@example.com': [
+            // Zoom for Google Calendar puts its link in conferenceData, not the description.
+            gEvent('zoom-addon', 10, {
+                conferenceData: { entryPoints: [{ entryPointType: 'video', uri: 'https://us02web.zoom.us/j/81234567890?pwd=abc' }, { entryPointType: 'phone', uri: 'tel:+1-555-0100' }] },
+                description: 'Backup room: <a href="https://meet.google.com/abc-defg-hij">here</a>',
+            }),
+            gEvent('teams-in-location', 20, { location: 'Microsoft Teams Meeting https://teams.microsoft.com/l/meetup-join/19%3ameeting_ABC123%40thread.v2/0?context=x' }),
+            gEvent('meet', 30, { hangoutLink: 'https://meet.google.com/xyz-abcd-efg' }),
+            gEvent('in-person', 40, { location: 'Room 4' }),
+        ] },
+    });
+    try {
+        const events = await env.cm.getUpcomingEvents(true);
+        const by = Object.fromEntries(events.map((e) => [e.title, e]));
+        assert.deepEqual(by['zoom-addon'].meetingKeys, ['zoom:81234567890', 'meet:abc-defg-hij']);
+        assert.equal(by['zoom-addon'].link, 'https://us02web.zoom.us/j/81234567890?pwd=abc', 'Join keeps the passcode; the key never does');
+        assert.deepEqual(by['teams-in-location'].meetingKeys, ['teams:19:meeting_ABC123@thread.v2']);
+        assert.equal(by['teams-in-location'].link, 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_ABC123%40thread.v2/0?context=x');
+        assert.deepEqual(by.meet.meetingKeys, ['meet:xyz-abcd-efg']);
+        assert.equal(by['in-person'].meetingKeys, undefined);
+        assert.equal(by['in-person'].link, undefined);
+    } finally {
+        await env.restore();
+    }
+});
+
 test('events: without calendar-list access, sync falls back to the primary calendar', async () => {
     const env = setup({
         savedTokens: { accessToken: 'at', refreshToken: 'rt', expiryDate: Date.now() + 3_600_000 },

@@ -193,6 +193,17 @@ export class PhoneMirrorService {
   // Timestamp the extension socket announced `hello` — the tie-break for picking a
   // target when no browser has reported activity yet (most-recently-connected wins).
   private extConnectedAt = new WeakMap<WebSocket, number>();
+  // Sockets that authenticated with the EXTENSION token at upgrade. A `hello`
+  // only self-declares its role, and the phone token travels in the LAN QR code,
+  // so meeting tabs (and larger frames) are trusted from these alone.
+  private extTokenSockets = new WeakSet<WebSocket>();
+  // Whether the app wants each browser's meeting tabs (meetingDetection); told
+  // to every extension on its `hello`. The listener gets a socket's latest tabs,
+  // or null when that socket closes (null socket: clear every browser).
+  private meetingTabsWanted = false;
+  private meetingTabsListener: ((socket: object | null, tabs: unknown) => void) | null = null;
+  // Who is in a meeting page's call and who is speaking (the Meet reader).
+  private meetingPeopleListener: ((socket: object, report: Record<string, unknown>) => void) | null = null;
   // In-flight desktop→extension requests keyed by reqId, resolved by the
   // matching `capture-ack`/`tabs` control frame (or a timeout).
   private pendingCaptures = new Map<string, { resolve: (r: { ok: boolean; reason?: string; category?: string }) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -456,6 +467,36 @@ export class PhoneMirrorService {
   /** True while the /pair window is open (set by armExtensionPairing). */
   private isArmed(): boolean {
     return Date.now() < this.armedUntil;
+  }
+
+  /**
+   * Ask the connected extensions to report their open meeting tabs (keys and
+   * titles only) or to stop. Each extension also hears it on connect.
+   */
+  setMeetingTabsWanted(on: boolean): void {
+    this.meetingTabsWanted = on;
+    for (const c of this.extClients) {
+      if (this.extTokenSockets.has(c)) this.sendMeetingTabsSubscribe(c, on);
+    }
+    if (!on) this.meetingTabsListener?.(null, null);
+  }
+
+  /** Where each browser's meeting tabs go (see meetingDetection/extensionMeetingTabs.ts). */
+  onMeetingTabs(listener: ((socket: object | null, tabs: unknown) => void) | null): void {
+    this.meetingTabsListener = listener;
+  }
+
+  /** Where a meeting page's participants and speaking reports go (meetingDetection/extensionMeetingTabs.ts). */
+  onMeetingPeople(listener: ((socket: object, report: Record<string, unknown>) => void) | null): void {
+    this.meetingPeopleListener = listener;
+  }
+
+  private sendMeetingTabsSubscribe(ws: WebSocket, on: boolean): void {
+    try {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'meeting-tabs-subscribe', on }));
+    } catch (_) {
+      /* the close handler clears this socket */
+    }
   }
 
   /** True when at least one companion extension is connected over /ws. */
@@ -780,9 +821,20 @@ export class PhoneMirrorService {
           // until an unrelated status event (a phone joining, or reopening
           // Settings) happens to refresh it.
           this.emitStatusClientCount();
+          if (this.meetingTabsWanted && this.extTokenSockets.has(ws)) this.sendMeetingTabsSubscribe(ws, true);
           return true;
         }
         return false;
+      case 'meeting-tabs':
+        // A browser's open meeting tabs, which calendar linking reads. Only from
+        // an extension-token socket, and only while the app asked for them.
+        if (this.meetingTabsWanted && this.extTokenSockets.has(ws)) this.meetingTabsListener?.(ws, msg.tabs);
+        return true;
+      case 'meeting-people':
+        // A meeting page's participants and who is speaking, for names on the
+        // transcript. Same gate as the tabs.
+        if (this.meetingTabsWanted && this.extTokenSockets.has(ws)) this.meetingPeopleListener?.(ws, msg);
+        return true;
       case 'active':
         if (this.extClients.has(ws)) this.extActiveAt.set(ws, Date.now());
         return true;
@@ -990,6 +1042,7 @@ export class PhoneMirrorService {
     this.rateBuckets.clear();
     this.armedUntil = 0;
     this.extClients.clear();
+    this.meetingTabsListener?.(null, null);
     this.openCaptureReqIds.clear();
     this.stopExtensionKeepalive();
     // Release any waitForExtension() callers so the capture path doesn't hang on
@@ -1379,6 +1432,7 @@ export class PhoneMirrorService {
       return;
     }
 
+    const viaExtToken = !!(this.extToken && timingSafeEqualStr(provided, this.extToken));
     const wss = this.wss;
     if (!wss) {
       socket.destroy();
@@ -1393,6 +1447,7 @@ export class PhoneMirrorService {
     wss.handleUpgrade(req, socket, head, (ws) => {
       upgraded = true;
       clearTimeout(handshakeTimer);
+      if (viaExtToken) this.extTokenSockets.add(ws);
       wss.emit('connection', ws, req);
     });
   }
@@ -1439,6 +1494,7 @@ export class PhoneMirrorService {
       clearInterval(ping);
       // Drop any extension bookkeeping for this socket (no-op for phones).
       const wasExtension = this.extClients.delete(ws);
+      if (this.extTokenSockets.has(ws)) this.meetingTabsListener?.(ws, null);
       // Stop the keepalive once the last extension is gone (it restarts on the next
       // `hello`). With no extension connected, any in-flight capture can't be served
       // here — let it time out to the screenshot fallback as designed.
@@ -1454,7 +1510,9 @@ export class PhoneMirrorService {
     ws.on('message', (data: any) => {
       try {
         const raw = typeof data === 'string' ? data : (data as Buffer).toString('utf8');
-        if (raw.length > 4096) return; // guard oversized payloads
+        // Guard oversized payloads. An extension's `tabs` reply lists every open
+        // tab, which passes 4 KB at about 20 tabs, so its sockets get more room.
+        if (raw.length > (this.extTokenSockets.has(ws) ? 65_536 : 4096)) return;
         const cmd = JSON.parse(raw) as unknown;
         if (!cmd || typeof cmd !== 'object') return;
         const c = cmd as Record<string, unknown>;

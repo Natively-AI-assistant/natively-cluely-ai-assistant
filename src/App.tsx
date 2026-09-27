@@ -1062,19 +1062,30 @@ const App: React.FC = () => {
   // left alone, as the Launcher's button does.
   const startMeetingRef = useRef(handleStartMeeting);
   startMeetingRef.current = handleStartMeeting;
+  // A notification's Start (a detected call, the calendar reminder) arrives from
+  // main the same way and takes the same path; it may name no event.
   useEffect(() => {
-    const onStartForEvent = async (e: Event) => {
-      const detail = (e as CustomEvent<{ title?: string; calendarEventId?: string }>).detail;
-      if (!detail || typeof detail.calendarEventId !== 'string') return;
+    const start = async (req: { title?: string; calendarEventId?: string }, from: string) => {
       if (await window.electronAPI?.getMeetingActive?.().catch(() => false)) return;
       setIsSettingsOpen(false);
       // What the Launcher's button does before it starts one (Launcher.tsx CTA).
       emitOrchestratorEvent({ type: 'turn:done', surface: 'meeting' });
-      void startMeetingRef.current({ title: String(detail.title || ''), calendarEventId: detail.calendarEventId });
-      analytics.trackCommandExecuted('start_natively_from_calendar');
+      void startMeetingRef.current(typeof req.calendarEventId === 'string' ? { title: String(req.title || ''), calendarEventId: req.calendarEventId } : undefined);
+      analytics.trackCommandExecuted(from);
+    };
+    const onStartForEvent = (e: Event) => {
+      const detail = (e as CustomEvent<{ title?: string; calendarEventId?: string }>).detail;
+      if (!detail || typeof detail.calendarEventId !== 'string') return;
+      void start(detail, 'start_natively_from_calendar');
     };
     window.addEventListener('natively:start-meeting-for-event', onStartForEvent);
-    return () => window.removeEventListener('natively:start-meeting-for-event', onStartForEvent);
+    const offRequest = window.electronAPI?.onMeetingStartRequest?.((req) => {
+      void start(req, req.via === 'reminder' ? 'start_natively_from_reminder' : 'start_natively_from_detection');
+    });
+    return () => {
+      window.removeEventListener('natively:start-meeting-for-event', onStartForEvent);
+      offRequest?.();
+    };
   }, []);
 
   // The pill's Stop is ended in main (it used to round-trip through this

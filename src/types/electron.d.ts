@@ -893,6 +893,11 @@ export interface ElectronAPI {
   calendarDisconnect: () => Promise<{ success: boolean; error?: string }>
   getCalendarStatus: () => Promise<{ connected: boolean; email?: string; name?: string }>
   getSyncedCalendars: () => Promise<Array<{ id: string; name: string; primary: boolean; color?: string }>>
+  /** Meeting detection (Settings › Calendar): offer to start when a call begins. */
+  getMeetingDetectionEnabled?: () => Promise<boolean>
+  setMeetingDetectionEnabled?: (on: boolean) => Promise<{ success: boolean; error?: string }>
+  /** A notification's Start (a detected call, the calendar reminder), relayed by main to the launcher. */
+  onMeetingStartRequest?: (callback: (req: { title?: string; calendarEventId?: string; via?: 'detected' | 'reminder' }) => void) => () => void
   getUpcomingEvents: () => Promise<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string; source: 'google'; attendees?: Array<{ email: string; name?: string; photoUrl?: string; response?: 'accepted' | 'declined' | 'tentative' | 'needsAction' }> }>>
   calendarRefresh: () => Promise<{ success: boolean; error?: string }>
 

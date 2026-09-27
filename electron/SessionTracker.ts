@@ -162,6 +162,8 @@ export class SessionTracker {
         calendarEventId?: string;
         /** Filled in at start by SessionCalendarLinker when the session matches an event. */
         calendarEvent?: import('./services/calendar/calendarSessionMatch').CalendarEventSnapshot;
+        /** The call it is in (a meeting tab's key), for who spoke when (meetingDetection/callRoster). */
+        callKey?: string;
         source?: 'manual' | 'calendar';
     } | null = null;
 

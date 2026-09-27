@@ -123,7 +123,8 @@
     "test:css:clear-variant": "electron tests/css/clear-variant-liquid-glass.check.mjs",
     "test:css:thinking-label": "electron tests/css/thinking-label.check.mjs",
     "test:css:pricing-liquid-glass": "electron tests/css/pricing-liquid-glass.check.mjs",
-    "test:css:bubble-liquid-glass": "electron tests/css/bubble-liquid-glass.check.mjs"
+    "test:css:bubble-liquid-glass": "electron tests/css/bubble-liquid-glass.check.mjs",
+    "test:meet-dom": "electron tests/meet/meet-dom.check.mjs"
   },
   "build": {
     "generateUpdatesFilesForAllChannels": true,

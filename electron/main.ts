@@ -1322,6 +1322,8 @@ import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
 import { linkSessionToCalendar, cancelSessionCalendarLink } from './services/calendar/SessionCalendarLinker'
+import { wireExtensionMeetingTabs } from './services/meetingDetection/extensionMeetingTabs'
+import { wireMeetingDetection, registerMeetingDetection, electronNotify, type MeetingStartRequest } from './services/meetingDetection/wireMeetingDetection'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { nativePromptsBlocked } from './services/stealthPromptGate'
@@ -9206,6 +9208,46 @@ if (process.env.THINKING_MATRIX === '1') {
   } else if (disablePhoneMirrorOnBoot) {
     console.warn('[LeakTest] NATIVELY_DISABLE_PHONE_MIRROR=1 → PhoneMirror WS server NOT started this run');
   }
+  // Each connected browser reports its open meeting tabs, so a session links to
+  // its calendar event by the meeting link itself (services/meetingDetection).
+  const meetingDetectionOn = SettingsManager.getInstance().get('meetingDetectionEnabled') ?? true;
+  wireExtensionMeetingTabs(PhoneMirrorService.getInstance(), meetingDetectionOn);
+
+  // Starts a meeting the way the Launcher's button does (saved devices,
+  // retention, the mic-permission recovery) when a notification asks: the
+  // meeting-detected one and the calendar reminder. The launcher's renderer
+  // runs the start (App.tsx, meeting:start-request); with no live launcher,
+  // main starts it.
+  const requestMeetingStart = (req: MeetingStartRequest) => {
+    const launcher = appState.getWindowHelper().getLauncherWindow();
+    if (launcher && !launcher.isDestroyed() && !launcher.webContents.isCrashed()) {
+      launcher.webContents.send('meeting:start-request', req);
+      return;
+    }
+    appState
+      .startMeeting(req.calendarEventId ? { title: req.title, calendarEventId: req.calendarEventId, source: 'calendar' } : undefined)
+      .catch((err) => console.error('[Main] Meeting start from a notification failed:', err));
+  };
+
+  // When a call starts in Zoom, Teams, Meet (…), offer to start Natively.
+  const meetingDetector = wireMeetingDetection({
+    platform: process.platform,
+    native: loadNativeModule(),
+    self: { pid: process.pid, execPath: process.execPath },
+    isMeetingActive: () => appState.getIsMeetingActive(),
+    promptsBlocked: () => nativePromptsBlocked(() => appState.getUndetectable()) || appState.getDisguise() !== 'none',
+    events: () => {
+      try {
+        return require('./services/CalendarManager').CalendarManager.getInstance().getCachedEvents(30 * 60_000);
+      } catch {
+        return null;
+      }
+    },
+    requestStart: requestMeetingStart,
+    notify: electronNotify,
+  });
+  registerMeetingDetection(meetingDetector, PhoneMirrorService.getInstance());
+  meetingDetector.setEnabled(meetingDetectionOn);
 
   // One-time macOS screen recording permission prompt.
   //
@@ -9355,13 +9397,10 @@ if (process.env.THINKING_MATRIX === '1') {
     calMgr.init();
 
     calMgr.on('start-meeting-requested', (event: any) => {
-      console.log('[Main] Start meeting requested from calendar notification', event);
-      appState.centerAndShowWindow();
-      appState.startMeeting({
-        title: event.title,
-        calendarEventId: event.id,
-        source: 'calendar'
-      });
+      console.log('[Main] Start meeting requested from calendar notification', event?.id);
+      // Through the renderer's start path, like the Launcher's button (it used
+      // to start in main: default devices, and a mic denial went unhandled).
+      requestMeetingStart({ title: event.title, calendarEventId: event.id, via: 'reminder' });
     });
 
     calMgr.on('open-requested', () => {

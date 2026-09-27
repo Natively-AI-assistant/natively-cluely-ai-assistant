@@ -37,6 +37,11 @@ export interface AppSettings {
     // produced only by the What-to-Answer hotkey, exactly as before. The
     // trigger itself lives in AppState.scheduleAutoAnswer().
     autoAnswerEnabled?: boolean;
+    // Meeting detection (2026-09-27): Natively reads which meeting the user is in
+    // (the Companion extension's meeting tabs, later the meeting apps' windows and
+    // microphone use) to link a session to its calendar event exactly and to
+    // offer to start one. Local only. Unset = on.
+    meetingDetectionEnabled?: boolean;
     // Direct Assist is the opt-in, single-provider answer path. It deliberately
     // bypasses meeting retrieval and the legacy answer-orchestration pipeline.
     // Keep the persisted default OFF during rollout; the operator kill switch

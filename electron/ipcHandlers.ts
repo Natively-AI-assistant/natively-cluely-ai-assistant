@@ -15249,6 +15249,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     return CalendarManager.getInstance().getSyncedCalendars();
   });
 
+  // Meeting detection (Settings › Calendar): offer to start Natively when a call
+  // begins, and read which meeting tab the user is in. Unset = on.
+  safeHandle('get-meeting-detection-enabled', async () => SettingsManager.getInstance().get('meetingDetectionEnabled') ?? true);
+  safeHandle('set-meeting-detection-enabled', async (_, on: boolean) => {
+    if (typeof on !== 'boolean') return { success: false };
+    if (!SettingsManager.getInstance().set('meetingDetectionEnabled', on)) return { success: false, error: 'settings_store_degraded' };
+    require('./services/meetingDetection/wireMeetingDetection').setMeetingDetectionActive(on);
+    return { success: true };
+  });
+
   safeHandle('calendar-refresh', async () => {
     const { CalendarManager } = require('./services/CalendarManager');
     await CalendarManager.getInstance().refreshState();

@@ -49,6 +49,8 @@ export interface Meeting {
         speaker: string;
         text: string;
         timestamp: number;
+        /** Which of the other side's voices said it (speaker_2…), when known; see speaker_id. */
+        speakerId?: string;
     }>;
     usage?: Array<{
         type: 'assist' | 'followup' | 'chat' | 'followup_questions';
@@ -1529,6 +1531,12 @@ export class DatabaseManager {
         // The linked calendar event's snapshot (Meeting.calendarEvent), 2026-09-27.
         // Additive and nullable, so applied the same unconditional way.
         try { this.db.exec("ALTER TABLE meetings ADD COLUMN calendar_event_json TEXT"); } catch (e) { /* Column already exists */ }
+        // Which of the other side's voices said a line (speaker_2…, named in the
+        // meeting's speakerLabels): the call's speaking record (2026-09-27) puts
+        // names on group calls, whose voices share one channel. `speaker` keeps
+        // the channel, so everything that reads it is unchanged. Additive and
+        // nullable, applied the same unconditional way.
+        try { this.db.exec("ALTER TABLE transcripts ADD COLUMN speaker_id TEXT"); } catch (e) { /* Column already exists */ }
         if (version < 28) {
             this.db.pragma('user_version = 28');
         }
@@ -2991,8 +2999,8 @@ export class DatabaseManager {
         const readCalendarLink = this.db.prepare(`SELECT calendar_event_id, calendar_event_json, source FROM meetings WHERE id = ?`);
 
         const insertTranscript = this.db.prepare(`
-            INSERT INTO transcripts (meeting_id, speaker, content, timestamp_ms)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO transcripts (meeting_id, speaker, content, timestamp_ms, speaker_id)
+            VALUES (?, ?, ?, ?, ?)
         `);
 
         const insertInteraction = this.db.prepare(`
@@ -3052,7 +3060,8 @@ export class DatabaseManager {
                         meeting.id,
                         segment.speaker,
                         segment.text,
-                        segment.timestamp
+                        segment.timestamp,
+                        typeof segment.speakerId === 'string' && /^speaker_\d{1,3}$/.test(segment.speakerId) ? segment.speakerId : null
                     );
                 }
             }
@@ -3448,7 +3457,8 @@ export class DatabaseManager {
         const transcript = transcriptRows.map(row => ({
             speaker: row.speaker,
             text: row.content,
-            timestamp: row.timestamp_ms
+            timestamp: row.timestamp_ms,
+            ...(row.speaker_id ? { speakerId: row.speaker_id as string } : {}),
         }));
 
         const usage = usageRows.map(row => {

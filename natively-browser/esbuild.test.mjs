@@ -27,6 +27,10 @@ await build({
     path.join(rootDir, 'src', 'capture', 'extractors', 'index.ts'),
     path.join(rootDir, 'src', 'capture', 'smart-capture.ts'),
     path.join(rootDir, 'src', 'capture', 'page-signals.ts'),
+    // Meeting detection: which open tabs are meetings, as keys only.
+    path.join(rootDir, 'src', 'meeting-tabs.ts'),
+    // What the Meet reader reads from a Meet page.
+    path.join(rootDir, 'src', 'meet-dom.ts'),
   ],
   bundle: true,
   outdir: path.join(rootDir, 'dist-test'),

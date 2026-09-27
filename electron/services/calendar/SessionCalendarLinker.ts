@@ -16,8 +16,14 @@
  * first checks that the meeting is still running and still this one (each
  * start takes a new token; ending the meeting spends it), so it can never land
  * on the next meeting.
+ *
+ * The meeting the user is in beats the clock: when a live meeting (a browser's
+ * meeting tab, via the Companion extension) has the same link as an event, the
+ * session is that event, at start or whenever the tab turns up later. That
+ * never overrides the user's own choice or a start made for a specific event.
  */
-import { matchEventForSession, toEventSnapshot, MATCH_LEAD_MS, type MatchableEvent } from './calendarSessionMatch';
+import { matchEventForSession, matchEventByMeetingKeys, withoutOtherMeetings, toEventSnapshot, MATCH_LEAD_MS, type MatchableEvent } from './calendarSessionMatch';
+import type { LiveMeetingSource } from '../meetingDetection/liveMeetings';
 
 /** How old the cached list may be for a start to trust it. */
 const CACHE_MAX_AGE_MS = 10 * 60_000;
@@ -27,11 +33,15 @@ const FETCH_BUDGET_MS = 8_000;
 let lateTimer: ReturnType<typeof setTimeout> | null = null;
 /** The current start's token; a late write for an older one is dropped. */
 let linkToken = 0;
+/** Stops the current session's watch on the live meetings. */
+let stopWatching: (() => void) | null = null;
 
-/** Drops a pending re-check and spends the token. Called when a meeting ends and before a new one links. */
+/** Drops a pending re-check and the live-meeting watch, and spends the token. Called when a meeting ends and before a new one links. */
 export function cancelSessionCalendarLink(): void {
     if (lateTimer) clearTimeout(lateTimer);
     lateTimer = null;
+    stopWatching?.();
+    stopWatching = null;
     linkToken++;
 }
 
@@ -51,6 +61,14 @@ function defaultCalendar(): CalendarSource | null {
     }
 }
 
+function defaultLive(): LiveMeetingSource | null {
+    try {
+        return require('../meetingDetection/liveMeetings').liveMeetings;
+    } catch {
+        return null;
+    }
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
     return new Promise((resolve) => {
         const timer = setTimeout(() => resolve(null), ms);
@@ -63,13 +81,36 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
  * together with this start's token it guards every write that happens after
  * this call returns.
  */
-export function linkSessionToCalendar(metadata: any, isActive: () => boolean, source: CalendarSource | null = defaultCalendar()): void {
+export function linkSessionToCalendar(
+    metadata: any,
+    isActive: () => boolean,
+    source: CalendarSource | null = defaultCalendar(),
+    live: LiveMeetingSource | null = defaultLive(),
+): void {
     cancelSessionCalendarLink();
     const token = linkToken;
     if (!metadata || typeof metadata !== 'object') return;
-    const cm = source;
-    if (!cm || !cm.getConnectionStatus().connected) return;
     const stillThisMeeting = () => isActive() && token === linkToken;
+
+    // The call this session is in (the best live meeting's key), with or
+    // without a calendar: the saved meeting reads who spoke from it
+    // (meetingDetection/callRoster). Kept current while the session runs.
+    const noteCall = () => {
+        const key = live?.keys()[0];
+        if (key && stillThisMeeting()) metadata.callKey = key;
+    };
+    noteCall();
+    const cm = source;
+    const calendarOn = !!cm && cm.getConnectionStatus().connected;
+    if (!calendarOn && live) {
+        live.on('change', noteCall);
+        stopWatching = () => live.off('change', noteCall);
+    }
+    if (!cm || !calendarOn) return;
+    // The live meetings' keys, best first; and those of the calls making sound,
+    // which rule out events that are provably other meetings.
+    const liveKeys = () => live?.keys() ?? [];
+    const inCallKeys = () => (live?.list() ?? []).flatMap((m) => (m.audible && m.key ? [m.key] : []));
 
     const apply = (events: MatchableEvent[]) => {
         // Started from the calendar notification: the event is known; keep its snapshot.
@@ -79,7 +120,12 @@ export function linkSessionToCalendar(metadata: any, isActive: () => boolean, so
             if (known) metadata.calendarEvent = toEventSnapshot(known, 'notification');
             return;
         }
-        const match = matchEventForSession(events, Date.now());
+        const exact = matchEventByMeetingKeys(events, liveKeys(), Date.now());
+        if (exact) {
+            link(exact, 'link');
+            return;
+        }
+        const match = matchEventForSession(withoutOtherMeetings(events, inCallKeys()), Date.now());
         if (match.kind === 'linked') {
             link(match.event, 'start');
         } else if (match.kind === 'ambiguous') {
@@ -89,11 +135,17 @@ export function linkSessionToCalendar(metadata: any, isActive: () => boolean, so
         }
     };
 
-    const link = (event: MatchableEvent, linkedBy: 'start' | 'late') => {
+    // The title this linker set, so a relink replaces it (and a title the user
+    // gave, or typed since, stays).
+    let titleSet: string | null = null;
+    const link = (event: MatchableEvent, linkedBy: 'start' | 'late' | 'link') => {
         metadata.calendarEventId = event.id;
         metadata.calendarEvent = toEventSnapshot(event, linkedBy);
         metadata.source = 'calendar';
-        if (!metadata.title) metadata.title = event.title;
+        if (!metadata.title || (titleSet !== null && metadata.title === titleSet)) {
+            metadata.title = event.title;
+            titleSet = event.title;
+        }
         console.log(`[SessionCalendarLinker] linked to "${event.title}" (${linkedBy}).`);
     };
 
@@ -105,10 +157,30 @@ export function linkSessionToCalendar(metadata: any, isActive: () => boolean, so
             if (!stillThisMeeting() || metadata.calendarEventId) return;
             const fresh = cm.getCachedEvents(CACHE_MAX_AGE_MS) ?? await withTimeout(cm.getUpcomingEvents(), FETCH_BUDGET_MS);
             if (!fresh || !stillThisMeeting() || metadata.calendarEventId) return;
-            const match = matchEventForSession(fresh, Date.now());
+            const match = matchEventForSession(withoutOtherMeetings(fresh, inCallKeys()), Date.now());
             if (match.kind === 'linked') link(match.event, 'late');
         }, Math.max(0, at - Date.now()) + 1_000);
     };
+
+    // A meeting tab that turns up during the session (Natively started first,
+    // then the call joined) or changes links it exactly. Only over a link this
+    // linker made by time or by an earlier tab.
+    if (live) {
+        const onChange = async () => {
+            if (!stillThisMeeting()) return;
+            noteCall();
+            const by = metadata.calendarEvent?.linkedBy;
+            if (metadata.calendarEventId && by !== 'start' && by !== 'late' && by !== 'link') return;
+            const keys = liveKeys();
+            if (keys.length === 0) return;
+            const events = cm.getCachedEvents(CACHE_MAX_AGE_MS) ?? await withTimeout(cm.getUpcomingEvents(), FETCH_BUDGET_MS);
+            if (!events || !stillThisMeeting()) return;
+            const exact = matchEventByMeetingKeys(events, keys, Date.now());
+            if (exact && exact.id !== metadata.calendarEventId) link(exact, 'link');
+        };
+        live.on('change', onChange);
+        stopWatching = () => live.off('change', onChange);
+    }
 
     const cached = cm.getCachedEvents(CACHE_MAX_AGE_MS);
     if (cached) {

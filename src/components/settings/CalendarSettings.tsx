@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { AlertCircle, ArrowUpRight, CalendarRange, Info, Loader2, RefreshCw } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, CalendarRange, Info, Loader2, RefreshCw, Video } from 'lucide-react';
 import { useLanguage, useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { Collapse, Presence, SettingsMotionReady, SwapLabel, useMotionReadyAfter, useSettledFlag } from './SettingsRow';
+import { SettingsToggle } from './SettingsToggle';
 import './CalendarSettings.css';
 
 /*
@@ -184,6 +185,28 @@ export const CalendarSettings: React.FC = () => {
       .catch(() => {});
     return () => { live = false; };
   }, [now]);
+
+  // Meeting detection: offer to start when a call begins (main's MeetingDetector).
+  // Works with or without a calendar, so it shows either way. Saved first; a
+  // failed save puts the switch back.
+  const [detect, setDetect] = useState<boolean | null>(null);
+  useEffect(() => {
+    let live = true;
+    window.electronAPI?.getMeetingDetectionEnabled?.()
+      .then((on) => { if (live) setDetect(on !== false); })
+      .catch(() => { if (live) setDetect(true); });
+    return () => { live = false; };
+  }, []);
+  const detectRef = useRef(detect);
+  detectRef.current = detect;
+  const toggleDetect = useCallback(() => {
+    const was = detectRef.current;
+    if (was === null) return;
+    setDetect(!was);
+    window.electronAPI?.setMeetingDetectionEnabled?.(!was)
+      .then((r) => { if (!r?.success) setDetect(was); })
+      .catch(() => setDetect(was));
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -534,6 +557,27 @@ export const CalendarSettings: React.FC = () => {
             </div>
           </section>
         </Collapse>
+
+        {/* ── Meeting detection ── */}
+        <section>
+          <div className="cp-card">
+            <div className="cp-card-header">
+              <span className="cp-card-icon"><Video size={12} /></span>
+              <h4 className="cp-card-label">{t('Detect meetings')}</h4>
+              <span className="ml-auto flex items-center">
+                <SettingsToggle
+                  checked={!!detect}
+                  onChange={toggleDetect}
+                  label={t('Detect meetings')}
+                  disabled={detect === null}
+                />
+              </span>
+            </div>
+            <p className="cp-desc" style={{ margin: 0 }}>
+              {t('Offers to start Natively when a Zoom, Teams, Meet or Webex call begins.')}
+            </p>
+          </div>
+        </section>
 
         <p className="cp-foot">
           <Info size={14} />
