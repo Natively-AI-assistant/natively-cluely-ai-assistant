@@ -5,7 +5,6 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { DynamicActionPayload } from '@/types/electron'
-import { isMac } from '../../utils/platformUtils'
 import './dynamicActionCard.css'
 
 /** Why a card left, so its exit can say so. */
@@ -38,9 +37,9 @@ const GLYPH: Record<string, LucideIcon> = {
 /** Everything else drafts something to say next. */
 const glyphFor = (type: string): LucideIcon => GLYPH[type] ?? CornerDownRight
 
-/** A shortcut as the keycap shows it: "⌘8" on macOS, "Ctrl+8" on Windows. */
-export const formatShortcut = (keys: string[], mac = isMac): string =>
-  keys.filter(Boolean).join(mac ? '' : '+')
+/** A shortcut as the keycap shows it, keys spaced apart: "⌘ 8" on macOS, "Ctrl 8" on Windows. */
+export const formatShortcut = (keys: string[]): string =>
+  keys.filter(Boolean).join(' ')
 
 // Motion, in transitions.dev's tokens (written as literals, as the rest of the
 // renderer does): --ease-smooth-out for every surface move, --duration-fast
