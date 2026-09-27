@@ -4166,6 +4166,17 @@ export class IntelligenceEngine extends EventEmitter {
             // streaming: from that token on it paints like a live turn.
             let speculativeStreamingLive = false;
             const STREAMING_SAFE_PREFIX_CHARS = 160;
+            // What the FIRST paint waits for (2026-09-27). It used to be the 160
+            // above, and — the bug — every later paint waited for another 160
+            // too, because the buffer reset after each emit: live, answers
+            // reached the overlay in 160-167-char lumps 120-230 ms apart, and the
+            // first lump alone cost ~250-400 ms after the first token (a short
+            // answer painted only when it had FINISHED). The guards this prefix
+            // exists for decide far sooner: the scaffold hold at 4 chars, the
+            // canned opener on its own hold, and the longest non-answer sentinel
+            // ("Nothing actionable right now.") is 29. STREAMING_SAFE_PREFIX_CHARS
+            // still decides the deadline fallback (what counts as a fragment).
+            const FIRST_PAINT_CHARS = 40;
             // RC-4 (session C, 2026-08-21): scaffold-aware stream hold for
             // NON-coding turns. Live, 23 presses streamed a "## Approach…"
             // template draft to the screen and then visibly REPLACED it with
@@ -4310,6 +4321,14 @@ export class IntelligenceEngine extends EventEmitter {
                     }
                 }
                 if (scaffoldStreamHold) return;
+                // Past the first paint the guards have ruled: stream every token
+                // as it arrives (the spec stripper still holds a partial tag).
+                if (emittedStreamingToken) {
+                    const visible = specStripper ? specStripper.push(streamingTokenBuffer) : streamingTokenBuffer;
+                    streamingTokenBuffer = '';
+                    if (visible) emitChunk(visible);
+                    return;
+                }
                 // Canned-opener hold (2026-09-07): "Sorry, I don't have that in
                 // front of me. Could you clarify which…?" followed by a real
                 // answer must paint WITHOUT the opener — see cannedOpener.ts.
@@ -4318,7 +4337,7 @@ export class IntelligenceEngine extends EventEmitter {
                     const { shouldHoldForCannedOpener } = require('./llm/cannedOpener') as typeof import('./llm/cannedOpener');
                     openerHold = shouldHoldForCannedOpener(streamingTokenBuffer);
                 } catch { /* never hold on a helper failure */ }
-                if (streamingTokenBuffer.length >= STREAMING_SAFE_PREFIX_CHARS
+                if (streamingTokenBuffer.length >= FIRST_PAINT_CHARS
                     && !openerHold
                     && !IntelligenceEngine.isNonAnswerSentinel(streamingTokenBuffer)) {
                     // Prompt System v2: a misfired "[[NO_ACTION]] real
