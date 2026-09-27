@@ -10,7 +10,7 @@
     "build:test": "node esbuild.test.mjs",
     "build:store": "npm run build && node scripts/build-store.js",
     "typecheck": "tsc --noEmit",
-    "test": "node esbuild.test.mjs && node --test src/__tests__/*.test.mjs"
+    "test": "node esbuild.test.mjs && node --test src/__tests__"
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0"

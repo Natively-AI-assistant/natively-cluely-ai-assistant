@@ -20,7 +20,7 @@ import type {
 } from './types';
 
 const CATEGORIES: ReadonlySet<string> = new Set<BrowserContextCategory>([
-  'coding_problem', 'coding_editor', 'interview_assessment', 'developer_docs',
+  'coding_problem', 'coding_editor', 'interview_assessment', 'coding_project', 'developer_docs',
   'job_description', 'google_docs_visible', 'notes', 'article', 'email', 'chat',
   'banking', 'auth', 'unknown',
 ]);
@@ -33,6 +33,9 @@ const EXTRACTION_SOURCES: ReadonlySet<string> = new Set<ExtractionSource>([
 
 /** Per-string-field cap inside the envelope payload. */
 const FIELD_CAP = 8000;
+/** Existing payload arrays remain tightly capped; project manifests need 300. */
+const DEFAULT_ARRAY_CAP = 100;
+const PROJECT_ARRAY_CAP = 300;
 /** Total budget for the whole envelope payload (JSON length) before we drop it. */
 const PAYLOAD_CAP = 60000;
 
@@ -41,17 +44,19 @@ function capStr(v: unknown, max: number): string | undefined {
 }
 
 /** Recursively cap all string fields of a payload object/array. */
-function capPayload(value: unknown, depth = 0): unknown {
+function capPayload(value: unknown, depth = 0, arrayCap = DEFAULT_ARRAY_CAP): unknown {
   if (depth > 4) return undefined; // bound recursion
   if (typeof value === 'string') return value.slice(0, FIELD_CAP);
   if (typeof value === 'number' || typeof value === 'boolean' || value === null) return value;
-  if (Array.isArray(value)) return value.slice(0, 100).map((v) => capPayload(v, depth + 1));
+  if (Array.isArray(value)) {
+    return value.slice(0, arrayCap).map((v) => capPayload(v, depth + 1, arrayCap));
+  }
   if (value && typeof value === 'object') {
     const out: Record<string, unknown> = {};
     let n = 0;
     for (const [k, v] of Object.entries(value)) {
       if (n++ > 50) break;
-      out[k] = capPayload(v, depth + 1);
+      out[k] = capPayload(v, depth + 1, arrayCap);
     }
     return out;
   }
@@ -82,7 +87,11 @@ export function sanitizeContextEnvelope(raw: unknown): ContextEnvelope | undefin
   // Sanitize the payload and enforce a total budget.
   let payload: unknown;
   try {
-    payload = capPayload(e.payload);
+    payload = capPayload(
+      e.payload,
+      0,
+      e.category === 'coding_project' ? PROJECT_ARRAY_CAP : DEFAULT_ARRAY_CAP,
+    );
     if (JSON.stringify(payload ?? null).length > PAYLOAD_CAP) {
       // Over budget — keep the envelope metadata but drop the heavy payload.
       payload = {};

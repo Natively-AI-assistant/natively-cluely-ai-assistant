@@ -24,6 +24,7 @@ export type BrowserContextCategory =
   | 'coding_problem'
   | 'coding_editor'
   | 'interview_assessment'
+  | 'coding_project'
   | 'developer_docs'
   | 'job_description'
   | 'google_docs_visible'
@@ -52,6 +53,15 @@ export type BrowserContextSensitivity = 'low' | 'medium' | 'high' | 'critical';
 
 /** Coarse confidence bucket carried on a finished capture envelope. */
 export type ClassificationConfidence = 'high' | 'medium' | 'low';
+
+/** Per-file outcome recorded by a multi-file coding-project capture. */
+export type ProjectFileStatus =
+  | 'included'
+  | 'unreadable'
+  | 'ignored'
+  | 'truncated'
+  | 'unchanged'
+  | 'removed';
 
 /* ────────────────────────── classifier I/O ────────────────────────── */
 
@@ -184,6 +194,34 @@ export interface CodingProblemPayload {
   selectedText?: string;
 }
 
+/** One project file, preserving its exact workspace-relative path. */
+export interface ProjectFileContext {
+  path: string;
+  language?: string;
+  content?: string;
+  revision?: string;
+  charCount: number;
+  status: ProjectFileStatus;
+  reason?: string;
+}
+
+/** Structured multi-file coding workspace captured by a browser provider. */
+export interface CodingProjectPayload {
+  workspaceId: string;
+  workspaceName?: string;
+  provider: string;
+  problemStatement?: string;
+  files: ProjectFileContext[];
+  omitted: Array<{ path: string; reason: string }>;
+  selectedPaths: string[];
+  capturedFileCount: number;
+  totalFileCount: number;
+  budgetChars: number;
+  usedChars: number;
+  refreshMode: 'full' | 'changed';
+  baseContextId?: string;
+}
+
 /** Notes/docs editor payload — manual-first, selected/visible only. */
 export interface NotesPayload {
   editorType:
@@ -218,6 +256,7 @@ export const BROWSER_CONTEXT_PARITY = {
     'coding_problem',
     'coding_editor',
     'interview_assessment',
+    'coding_project',
     'developer_docs',
     'job_description',
     'google_docs_visible',
@@ -232,6 +271,7 @@ export const BROWSER_CONTEXT_PARITY = {
   autoPolicies: ['auto', 'auto_if_high_confidence', 'ask', 'manual', 'blocked'],
   sensitivities: ['low', 'medium', 'high', 'critical'],
   confidences: ['high', 'medium', 'low'],
+  projectFileStatuses: ['included', 'unreadable', 'ignored', 'truncated', 'unchanged', 'removed'],
   captureModes: ['auto', 'manual', 'selected_text', 'screenshot_fallback'],
   envelopeFields: [
     'envelopeVersion',
