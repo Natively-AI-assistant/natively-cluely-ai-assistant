@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import { getSttContextTerms } from './sttContextTerms';
 import WebSocket from 'ws';
 import { RECOGNITION_LANGUAGES, EnglishVariant } from '../config/languages';
 import { TRIAL_SENTINEL_KEY } from '../config/constants';
@@ -996,6 +997,17 @@ export class NativelyProSTT extends EventEmitter {
     }
 
     /**
+     * The user's name for the transcriber (sttContextTerms.ts), as context_terms.
+     * Absent when there is none, so the frame is unchanged; a server that
+     * predates the field ignores it. LEGACY frame only: the regional relay owns
+     * its own frame contract (see buildAuthFrame), and does not take it yet.
+     */
+    private contextTermsField(): { context_terms?: string[] } {
+        const terms = getSttContextTerms();
+        return terms.length ? { context_terms: terms } : {};
+    }
+
+    /**
      * The unchanged legacy auth frame. Extracted verbatim from the original
      * 'open' handler so the Railway / flag-off path is byte-for-byte identical:
      *   { sample_rate, language, language_alternates, audio_channels, channel,
@@ -1013,6 +1025,7 @@ export class NativelyProSTT extends EventEmitter {
             // ~15 MB per channel per meeting-hour, measured 2026-09-21. Only a
             // boolean false opts out; a server that predates the flag ignores it.
             full_text:           false,
+            ...this.contextTermsField(),
         };
         if (this.apiKey === TRIAL_SENTINEL_KEY) {
             try {

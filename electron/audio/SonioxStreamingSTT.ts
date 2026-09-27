@@ -17,6 +17,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { getSttContextTerms } from './sttContextTerms';
 import WebSocket from 'ws';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { streamingStttWsOptions } from './dnsHelpers';
@@ -195,6 +196,10 @@ export class SonioxStreamingSTT extends EventEmitter {
             enable_endpoint_detection: true,
             ...SONIOX_ENDPOINT_TUNING,
         };
+
+        // The user's name, so STT stops spelling it a new way each time (sttContextTerms.ts).
+        const terms = getSttContextTerms();
+        if (terms.length) config.context = { terms };
 
         if (this.languageCode) {
             config.language_hints = [this.languageCode];

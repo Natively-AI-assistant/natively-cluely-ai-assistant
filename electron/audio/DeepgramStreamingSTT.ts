@@ -8,6 +8,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { getSttContextTerms } from './sttContextTerms';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { RealtimeSilenceTail } from './realtimeSilenceTail';
 import { isEnglishOnlySttModel, resolveSttModel } from './sttModelCatalog';
@@ -195,6 +196,12 @@ export class DeepgramStreamingSTT extends EventEmitter {
         }
     }
 
+    private hintTerms(): Record<string, string[]> {
+        const terms = getSttContextTerms();
+        if (!terms.length) return {};
+        return this.model.startsWith('nova-3') ? { keyterm: terms } : this.model.startsWith('nova-2') ? { keywords: terms } : {};
+    }
+
     private connect(): void {
         if (this.isConnecting) return;
         this.isConnecting = true;
@@ -227,6 +234,10 @@ export class DeepgramStreamingSTT extends EventEmitter {
                 vad_events: true,
                 // Opt-in: ask Deepgram to tag each word with a speaker index.
                 ...(this.diarize ? { diarize: true } : {}),
+                // The user's name (sttContextTerms.ts). Nova-3 takes keyterm and
+                // rejects keywords; Nova-2 takes keywords. The SDK repeats an array
+                // as one query parameter per term, as both expect.
+                ...this.hintTerms(),
             });
 
             // F-203: identity guard. restartStream() does a synchronous

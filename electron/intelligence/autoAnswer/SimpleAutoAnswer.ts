@@ -143,6 +143,25 @@ export function isQuestionShaped(candidate: string): boolean {
     return sentencesOf(candidate).some(s => /\?\s*$/.test(s) || FALLBACK_INTERROGATIVE.test(s));
 }
 /**
+ * The asks that carry no question at all (2026-09-27). In sales, support and
+ * seminar sessions the ask is often a REPORT: a pain point ("our biggest pain
+ * is that escalations get lost over the weekend"), a symptom ("now it says
+ * license limit reached"), or an observation about the user's work ("I
+ * noticed the baseline numbers are lower than the paper's"). Across 343 live
+ * judged candidates these were the only 4 answered asks that were not
+ * question-shaped, and the prefetch ration made one of them (sales, 19.8 s
+ * after the last prefetch) wait the whole judge before its answer started.
+ * This pattern matched all 4 and 10 others (mostly that same pain point on
+ * runs where the judge ruled it "either" way), so it rides the question-shape
+ * bypass. A fragment that stops on a hanging word is still unfinished.
+ */
+export const REPORT_SHAPED = /\b(?:i (?:just )?noticed|i see that|our (?:biggest |main |real )?(?:pain|problem|issue|challenge|concern|bottleneck)s? (?:is|are)|(?:can'?t|cannot|couldn'?t|won'?t|doesn'?t|isn'?t|aren'?t|not able to) (?:log|work|load|connect|sign|access|see|find|open|get)|error|it says|now says|keeps? (?:failing|crashing|timing out)|stopped working|(?:is|are) broken|went down)\b/i;
+const HANGING_END = /\b(?:that|and|but|so|because|is|are|was|the|a|an|to|of|with|when|if|which)\s*[,.-]*\s*$/i;
+export function isReportShaped(candidate: string): boolean {
+    const t = candidate.trim();
+    return REPORT_SHAPED.test(t) && !HANGING_END.test(t);
+}
+/**
  * How long after an automatic answer a manual press still counts as "that
  * answer was not good enough". Long enough for the user to read it and
  * decide, short enough that an unrelated later press is not blamed on it.
@@ -263,6 +282,13 @@ export interface SimpleAutoAnswerHost {
     speculativeSnapshot?(): { questionId: string | null; text: string | null };
     /** Start the answer WHILE the judge decides (see PREFETCH_MIN_ANSWERABILITY). */
     prefetchAnswer?(questionId: string, text: string): void;
+    /**
+     * The interviewer just stopped and this is the question the next candidate
+     * will carry (the finals so far plus the words still in flight as an
+     * interim). The host may start work that only needs the text, such as the
+     * retrieval query's embedding, before the final transcript lands.
+     */
+    warmQuery?(text: string): void;
     modeName?(): string | null;
     /** The USER's name, so the judge can tell an ask to them from one to a teammate. */
     userName?(): string | null;
@@ -399,7 +425,11 @@ export class SimpleAutoAnswerEngine {
         if (!this.host.isEnabled()) return;
         this.localStopAt = this.clock.now();
         // The dangling interim IS the stall case: start its clock from here.
-        if (this.lastInterviewerInterim) { this.armStallCap(); return; }
+        if (this.lastInterviewerInterim) {
+            this.armStallCap();
+            this.warmNextCandidate();
+            return;
+        }
         if (this.pending.length === 0) return;
         this.arm(ENDPOINT_CONFIRM_MS);
     }
@@ -583,11 +613,12 @@ export class SimpleAutoAnswerEngine {
      */
     private maybePrefetch(id: string, candidate: string, unjudged: string, now: number): void {
         if (!this.host.prefetchAnswer) return;
-        // Question-shaped asks always get the head start; everything else is
+        // Question-shaped asks, and report-shaped ones (isReportShaped), always
+        // get the head start; everything else is
         // rationed by time. See PREFETCH_MIN_INTERVAL_MS for why both exist.
         // The shape is read from the unjudged finals only (see judgedParts).
         const rationed = this.lastPrefetchAt !== null && now - this.lastPrefetchAt < PREFETCH_MIN_INTERVAL_MS;
-        if (rationed && !isQuestionShaped(unjudged)) return;
+        if (rationed && !isQuestionShaped(unjudged) && !isReportShaped(unjudged)) return;
         this.lastPrefetchAt = now;
         try {
             this.host.prefetchAnswer(id, candidate);
@@ -893,6 +924,19 @@ export class SimpleAutoAnswerEngine {
     }
 
     private dropParked(): void { this.parkedAttempt = null; this.clearRetry(); }
+
+    /**
+     * Hand the host the candidate-to-be: the pending finals plus the interim
+     * whose final is still in flight. The final usually adds one word to it, so
+     * work keyed on this text (the query embedding) is reusable ~0.7 s early.
+     */
+    private warmNextCandidate(): void {
+        if (!this.host.warmQuery || !this.host.isMeetingActive()) return;
+        try {
+            const parts = [...this.pending.filter(p => !p.provisional), { text: this.lastInterviewerInterim }];
+            this.host.warmQuery(joinTranscriptParts(parts));
+        } catch { /* an optimisation; never break the pipeline */ }
+    }
 
     // ── the stall cap (STALL_PROMOTE_MS) ─────────────────────────────────
 

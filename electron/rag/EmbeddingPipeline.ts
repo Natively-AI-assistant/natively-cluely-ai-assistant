@@ -28,6 +28,42 @@ const QUERY_EMBED_TIMEOUT_MS = 3_000;
 /** How long an identical query's vector is reused (see queryEmbedMemo). */
 const QUERY_EMBED_MEMO_TTL_MS = 5_000;
 const QUERY_EMBED_MEMO_MAX = 64;
+/**
+ * Warmed query vectors (2026-09-27). Auto Answer embeds the interviewer's
+ * would-be question the moment the voice detector hears them stop, while the
+ * final transcript is still ~0.7 s away; the answer's own query embed then
+ * reuses that vector when its text is the same utterance. Live, the hosted
+ * query embed was ~450-650 ms of every answer's assembly. See warmQueryEmbedding.
+ */
+const WARM_QUERY_TTL_MS = 20_000;
+const WARM_QUERY_MAX = 4;
+/** A warm call's own retry budget: it is speculative, so it never retries long. */
+const WARM_QUERY_BUDGET_MS = 1_500;
+
+function queryWords(text: string): string[] {
+    return text.toLowerCase().replace(/[^\p{L}\p{N}\s']/gu, ' ').split(/\s+/).filter(Boolean);
+}
+
+/**
+ * Whether `query` is the utterance `warm` was taken from: the interim lags the
+ * final by about a word (and its last word may be clipped), and the question
+ * loses its filler words ("um", "uh") before retrieval. Near-identical text
+ * embeds to a near-identical vector; anything more than a few words apart
+ * must be embedded on its own.
+ */
+export function isNearQueryText(warm: string, query: string): boolean {
+    const w = queryWords(warm);
+    const q = queryWords(query);
+    if (w.length < 4 || q.length < 4) return false;
+    if (Math.abs(q.length - w.length) > 3) return false;
+    const contained = (needle: string[], hay: string[]) => {
+        const have = new Set(hay);
+        return needle.filter((t) => have.has(t)).length / needle.length;
+    };
+    // The warm text's last word is where an interim is clipped ("…with Z").
+    const head = w.length > 1 ? w.slice(0, -1) : w;
+    return contained(head, q) >= 0.9 && contained(q, w) >= 0.8;
+}
 
 // ── T13 / RC12: query-path hysteresis (2026-08-28) ──────────────────────────
 //
@@ -1059,6 +1095,57 @@ export class EmbeddingPipeline {
     // Object.create(prototype) — every hysteresis test does — has no fields, and
     // an optimisation must not be able to throw on the query path.
     private queryEmbedMemo?: Map<string, { at: number; promise: Promise<number[]> }>;
+    /** Resolved warm vectors, newest last. Only RESOLVED ones are ever reused (see warmQueryEmbedding). */
+    private warmQueries?: Array<{ space: string; text: string; at: number; vector: number[] }>;
+    private lastWarmAt = 0;
+
+    /**
+     * Embed a query that is about to be asked, in the background. Fire and
+     * forget: never throws, never blocks, and a failure only means the real
+     * query embeds on its own as before. Skipped for an on-device embedder,
+     * which answers in ~10 ms and has nothing to hide.
+     *
+     * Only a RESOLVED warm vector is reused. Sharing the in-flight promise would
+     * hand a live caller this call's budget and latency, the trap the memo's
+     * budget key exists for.
+     */
+    warmQueryEmbedding(text: string): void {
+        try {
+            const provider = this.provider;
+            if (!provider || provider.name === 'local' || provider.name === 'ollama') return;
+            const t = String(text ?? '').trim();
+            if (queryWords(t).length < 4) return;
+            const now = Date.now();
+            // One per utterance is the intent; this bounds a noisy caller.
+            if (now - this.lastWarmAt < 500) return;
+            this.lastWarmAt = now;
+            const space = provider.space ?? provider.name;
+            this.getEmbeddingForQueryUncached(t, { retryBudgetMs: WARM_QUERY_BUDGET_MS }).then((vector) => {
+                // The active space may have changed while it was out: a vector from
+                // another space must never meet this corpus.
+                if ((this.provider?.space ?? this.provider?.name) !== space) return;
+                const list = (this.warmQueries ??= []);
+                list.push({ space, text: t, at: Date.now(), vector });
+                while (list.length > WARM_QUERY_MAX) list.shift();
+            }).catch(() => { /* speculative: the real query embeds on its own */ });
+        } catch { /* never on the caller's path */ }
+    }
+
+    /** A resolved warm vector for this query, if one is the same utterance. */
+    private warmVectorFor(space: string, text: string): number[] | null {
+        const list = this.warmQueries;
+        if (!list?.length) return null;
+        const now = Date.now();
+        for (let i = list.length - 1; i >= 0; i--) {
+            const w = list[i];
+            if (now - w.at > WARM_QUERY_TTL_MS) { list.splice(i, 1); continue; }
+            if (w.space === space && isNearQueryText(w.text, text)) {
+                console.log(`[EmbeddingPipeline] query embed reused a warm vector (${queryWords(text).length}w, warmed ${now - w.at}ms ago)`);
+                return w.vector.slice();
+            }
+        }
+        return null;
+    }
 
     async getEmbeddingForQuery(
         text: string,
@@ -1083,6 +1170,11 @@ export class EmbeddingPipeline {
         // A copy per caller: the array used to be shared, so one caller
         // normalising in place would have corrupted the other's vector.
         if (hit) return hit.promise.then((v: number[]) => v.slice());
+        const warm = this.warmVectorFor(space, text);
+        if (warm) {
+            memo.set(key, { at: now, promise: Promise.resolve(warm) });
+            return warm.slice();
+        }
         const promise = this.getEmbeddingForQueryUncached(text, opts);
         memo.set(key, { at: now, promise });
         promise.catch(() => { if (memo.get(key)?.promise === promise) memo.delete(key); });

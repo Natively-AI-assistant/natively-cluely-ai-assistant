@@ -1228,6 +1228,7 @@ import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
 import { buildJudgePrompt } from "./intelligence/autoAnswer/AutoAnswerJudge"
 import { SimpleAutoAnswerEngine } from "./intelligence/autoAnswer/SimpleAutoAnswer"
 import { AutoAnswerUsageTelemetry } from "./intelligence/autoAnswer/AutoAnswerUsageTelemetry"
+import { nameTerms, setSttContextTerms } from "./audio/sttContextTerms"
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
@@ -3301,6 +3302,15 @@ export class AppState {
     noteCandidate: (id, gen) => this.intelligenceManager.noteAutoAnswerCandidate(id, gen),
     speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
     prefetchAnswer: (id, text) => this.intelligenceManager.prefetchAutoAnswer(id, text),
+    // The retrieval query's embedding, started when the interviewer stops rather
+    // than when the final lands (~0.7 s later). Filler words are stripped as the
+    // orchestrator strips them from the question, so the texts line up.
+    warmQuery: (text) => {
+      try {
+        const { stripSttFillers } = require('./context-intelligence/question/turn-classifier');
+        this.ragManager?.getEmbeddingPipeline()?.warmQueryEmbedding(stripSttFillers(text) || text);
+      } catch { /* speculative */ }
+    },
     ...((process.env.NATIVELY_AUTO_ANSWER_JUDGE || '').toLowerCase() === 'off' ? {} : {
       judgeCandidate: async (req, signal) => {
         const llm = this.processingHelper?.getLLMHelper?.();
@@ -3316,16 +3326,7 @@ export class AppState {
     },
     // Who the USER is, so "Raj, can you…" in a team meet stays quiet: the
     // active résumé's name, else the connected Calendar account's.
-    userName: () => {
-      try {
-        const orchestrator = this.knowledgeOrchestrator ?? this.processingHelper?.getLLMHelper?.()?.getKnowledgeOrchestrator?.();
-        const resume = (orchestrator as any)?.activeResume?.structured_data;
-        const fromResume = resume?.identity?.name || resume?.name;
-        if (typeof fromResume === 'string' && fromResume.trim()) return fromResume;
-        const { CalendarManager } = require('./services/CalendarManager');
-        return CalendarManager.getInstance().getConnectionStatus().name ?? null;
-      } catch { return null; }
-    },
+    userName: () => this.currentUserName(),
     telemetry: (event) => {
       try {
         const { telemetryService } = require('./services/telemetry/TelemetryService');
@@ -3339,6 +3340,18 @@ export class AppState {
     // (the stricter MEETING bar), not the compiled-in interview constants.
   }, undefined, resolveAutoAnswerThresholds(null));
   private autoAnswerEmbedder: { embed(text: string): Promise<number[]> } | null = null;
+
+  /** The user's name: the active résumé's, else the connected Calendar account's. */
+  private currentUserName(): string | null {
+    try {
+      const orchestrator = this.knowledgeOrchestrator ?? this.processingHelper?.getLLMHelper?.()?.getKnowledgeOrchestrator?.();
+      const resume = (orchestrator as any)?.activeResume?.structured_data;
+      const fromResume = resume?.identity?.name || resume?.name;
+      if (typeof fromResume === 'string' && fromResume.trim()) return fromResume;
+      const { CalendarManager } = require('./services/CalendarManager');
+      return CalendarManager.getInstance().getConnectionStatus().name ?? null;
+    } catch { return null; }
+  }
 
   /**
    * The same Auto Answer events, sent to Pro operational telemetry: one row per
@@ -6433,6 +6446,8 @@ export class AppState {
     const meetingGeneration = ++this._meetingGeneration;
     this.isMeetingActive = true;
     this.autoAnswerUsage.meetingStarted();
+    // The user's name as a transcription hint, before any STT connects (sttContextTerms.ts).
+    try { setSttContextTerms(nameTerms(this.currentUserName())); } catch { /* a hint, never a blocker */ }
     this.broadcastMeetingState()
     if (metadata) {
       this.intelligenceManager.setMeetingMetadata(metadata);
