@@ -18,7 +18,6 @@ import {
   RefreshCw,
   SlidersHorizontal,
   X,
-  Zap,
 } from 'lucide-react';
 import {
   mergeRollingTranscriptFinal,
@@ -34,11 +33,13 @@ function SkillPicker({
   selectedIndex,
   anchorEl,
   onSelect,
+  closing = false,
 }: {
   skills: SkillSummary[];
   selectedIndex: number;
   anchorEl: HTMLElement | null;
   onSelect: (s: SkillSummary) => void;
+  closing?: boolean;
 }) {
   const rect = anchorEl?.getBoundingClientRect();
   if (!rect) return null;
@@ -50,7 +51,7 @@ function SkillPicker({
     zIndex: 9999,
   };
   return (
-    <div style={style} className="rounded-xl border border-border-subtle bg-bg-card shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+    <div style={style} className={`ov-skill-picker${closing ? ' is-closing' : ''} rounded-xl border border-border-subtle bg-bg-card shadow-xl overflow-hidden max-h-48 overflow-y-auto`}>
       {skills.map((skill, i) => (
         <button
           key={skill.id}
@@ -62,6 +63,53 @@ function SkillPicker({
         </button>
       ))}
     </div>
+  );
+}
+
+/** Must match `.ov-skill-picker.is-closing`'s transition-duration (index.css). */
+const SKILL_PICKER_CLOSE_MS = 150;
+
+/** Keeps the picker mounted for its #05 dropdown close, showing the list it had
+ *  when it closed, so it fades out instead of vanishing. Reopening mid-close
+ *  just drops .is-closing and the picker eases back. */
+function SkillPickerLayer({
+  open,
+  skills,
+  selectedIndex,
+  anchorEl,
+  onSelect,
+}: {
+  open: boolean;
+  skills: SkillSummary[];
+  selectedIndex: number;
+  anchorEl: HTMLElement | null;
+  onSelect: (s: SkillSummary) => void;
+}) {
+  const [closing, setClosing] = useState(false);
+  // Adjusted during render, not in an effect: the render where `open` turns
+  // false must already count as closing, or it would commit null for a frame
+  // and the remount would start from the pre-open state.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    setClosing(!open);
+  }
+  const last = useRef({ skills, selectedIndex });
+  if (open) last.current = { skills, selectedIndex };
+  useEffect(() => {
+    if (!closing) return;
+    const timer = setTimeout(() => setClosing(false), SKILL_PICKER_CLOSE_MS);
+    return () => clearTimeout(timer);
+  }, [closing]);
+  if (!open && !closing) return null;
+  return (
+    <SkillPicker
+      skills={last.current.skills}
+      selectedIndex={last.current.selectedIndex}
+      anchorEl={anchorEl}
+      onSelect={onSelect}
+      closing={!open}
+    />
   );
 }
 
@@ -90,10 +138,15 @@ const CardCopyButton = ({
 }) => {
   const t = useT();
   const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
   const handleCopy = () => {
     onCopy(text);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 2000);
   };
 
   const buttonColorClass = isLightTheme
@@ -106,11 +159,15 @@ const CardCopyButton = ({
       className={`p-1 transition-colors duration-200 flex items-center justify-center ${buttonColorClass}`}
       title={t("Copy answer")}
     >
-      {copied ? (
-        <Check className="w-3.5 h-3.5 text-emerald-400" />
-      ) : (
-        <Copy className="w-3.5 h-3.5" />
-      )}
+      {/* #09 icon swap: both icons stay mounted in one grid cell. */}
+      <span className="t-icon-swap ov-copy-swap" data-state={copied ? 'b' : 'a'}>
+        <span className="t-icon flex items-center justify-center" data-icon="a" aria-hidden>
+          <Copy className="w-3.5 h-3.5" />
+        </span>
+        <span className="t-icon flex items-center justify-center" data-icon="b" aria-hidden>
+          <Check className="w-3.5 h-3.5 text-emerald-400" />
+        </span>
+      </span>
     </button>
   );
 };
@@ -183,8 +240,8 @@ const CodeBlockChrome = ({ lang, code }: { lang: string; code: string }) => {
     >
       {lang && (
         <span
-          className="text-[10px] font-mono tracking-wide pointer-events-none"
-          style={{ color: VIVID_DARK_LINE_NUMBER_COLOR }}
+          className="ov-keep-color text-[10px] font-mono tracking-wide pointer-events-none"
+          style={{ '--ov-keep-color': VIVID_DARK_LINE_NUMBER_COLOR } as React.CSSProperties}
         >
           {displayLanguageName(lang)}
         </span>
@@ -194,33 +251,25 @@ const CodeBlockChrome = ({ lang, code }: { lang: string; code: string }) => {
         onClick={handleCopy}
         title={copied ? t('Copied') : t('Copy code')}
         aria-label={copied ? t('Copied') : t('Copy code')}
-        className="relative w-5 h-5 flex items-center justify-center transition-transform duration-150 active:scale-95"
+        className="relative w-5 h-5 flex items-center justify-center transition-transform duration-150 active:scale-95 text-white/70 hover:text-white/95"
       >
-        <AnimatePresence mode="wait" initial={false}>
-          {copied ? (
-            <motion.span
-              key="check"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.14 }}
-              className="absolute inset-0 flex items-center justify-center"
-            >
-              <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2.5} />
-            </motion.span>
-          ) : (
-            <motion.span
-              key="copy"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.14 }}
-              className="absolute inset-0 flex items-center justify-center text-white/70 hover:text-white/95"
-            >
-              <Copy className="w-3.5 h-3.5" strokeWidth={2} />
-            </motion.span>
-          )}
-        </AnimatePresence>
+        {/* #09 icon swap, the same one the answer cards' copy uses. CSS, not
+            framer: this sits in a block that re-renders while an answer
+            streams, and framer's rAF shares the main thread with the parse.
+            The colour sits on the button: the answer card recolours every
+            span inside it, which turned this icon full white. */}
+        <span className="t-icon-swap ov-copy-swap" data-state={copied ? 'b' : 'a'}>
+          <span
+            className="t-icon flex items-center justify-center"
+            data-icon="a"
+            aria-hidden
+          >
+            <Copy className="w-3.5 h-3.5" strokeWidth={2} />
+          </span>
+          <span className="t-icon flex items-center justify-center" data-icon="b" aria-hidden>
+            <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2.5} />
+          </span>
+        </span>
       </button>
     </div>
   );
@@ -372,6 +421,9 @@ import GlassEffectLayer from './ui/GlassEffectLayer';
 import { OverlayBanner, OverlayBannerButton } from './ui/OverlayBanner';
 import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import RollingTranscript from './ui/RollingTranscript';
+import SwapText from './ui/SwapText';
+import ScreenshotTray from './overlay/ScreenshotTray';
+import ChromeFold from './overlay/ChromeFold';
 
 // PERF: hoisted plugin arrays. ReactMarkdown receives `remarkPlugins` and
 // `rehypePlugins` as new array literals if defined inline at the call site —
@@ -1101,6 +1153,7 @@ const MessageRow = React.memo(
                     : 'bg-blue-600/20 backdrop-blur-md border border-blue-500/30 text-blue-100 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium'
                   : ''
               }
+              ${msg.role === 'user' ? 'ov-bubble-in' : ''}
               ${
                 msg.role === 'system'
                   ? 'overlay-text-primary font-normal'
@@ -2810,6 +2863,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // below the (already fully visible) content, not a clip. Only SHORT
   // answers that end below the scroll cap are guaranteed an exact settle
   // immediately (their last real text change is still a size change).
+  // The last window height this renderer ASKED for (reportShellSize and
+  // resizeOverlayWindow are the only two senders). window.innerHeight trails a
+  // request by an IPC round trip, so "would this report grow the window?" is
+  // asked of this instead.
+  const lastWindowHeightAskedRef = useRef(0);
   const reportShellSize = useCallback(() => {
     if (!contentRef.current) return;
     // Skip IPC while the shell is hidden (Cmd+B has fired hideWindow and the
@@ -2873,6 +2931,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         screenAvailHeight: window.screen?.availHeight,
       });
     }
+    lastWindowHeightAskedRef.current = height;
     if (window.electronAPI?.updateContentDimensionsCentered) {
       void window.electronAPI
         .updateContentDimensionsCentered({ width, height })
@@ -3123,6 +3182,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // expand tween awaits it, because "the window has been ASKED for 496" and
       // "the window IS 496" are one round trip apart and the difference is a
       // frame of clipped footer.
+      lastWindowHeightAskedRef.current = targetHeight;
       if (window.electronAPI?.updateContentDimensionsCentered) {
         return window.electronAPI
           .updateContentDimensionsCentered({ width, height: targetHeight })
@@ -3159,6 +3219,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // waits for the first token (`hasText`); an empty placeholder reports its
   // exact height and is not adopted as the current stream, so the first
   // token still takes the brand-new-card branch and gets its own headroom.
+  // A chrome fold that runs while an answer streams (the screenshot tray
+  // folding on send) can't take the height channel: the stream's growth must
+  // keep flowing. It holds only this: until the fold settles, a streaming
+  // report that would not GROW the window is skipped. Before the first token
+  // the stream reports its exact height every frame, so without the hold a
+  // fold there is one native setBounds per frame on the glass window.
+  const streamShrinkHoldsRef = useRef(0);
+  const streamShrinkHoldUntilRef = useRef(0);
   const driveStreamingHeight = useCallback(
     (targetHeight: number) => {
       const decision = decideStreamingHeightCommit({
@@ -3172,6 +3240,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       streamingHeightStreamIdRef.current = decision.nextStreamId;
       streamingHeightCommittedRef.current = decision.nextCommittedHeight;
       if (decision.action === 'none') return;
+      if (
+        streamShrinkHoldsRef.current > 0 &&
+        Date.now() < streamShrinkHoldUntilRef.current &&
+        decision.height <= lastWindowHeightAskedRef.current
+      ) {
+        return;
+      }
       resizeOverlayWindow(decision.height);
     },
     [resizeOverlayWindow],
@@ -5210,23 +5285,63 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // not on a timer: a janky frame can stretch a 250ms tween past any fixed
   // deadline, and a settle mid-tween shrank the window under a still-growing
   // slot (live 2026-09-27, one frame cut 18px). A timer only backs it up.
-  // Refused (null) while an answer streams (its growth must keep flowing
-  // through driveStreamingHeight) or another transition holds the channel;
-  // the bar then folds a leaving slot in one step. Growth is led EVEN THEN,
+  // While an answer streams, its growth must keep flowing through
+  // driveStreamingHeight, so the ResizeObserver is NOT held: the grant is a
+  // shrink-only hold (streamShrinkHoldsRef) that settles the same way.
+  // Refused (null) while another transition holds the channel; the bar then
+  // folds a leaving slot in one step. Growth is led EVEN THEN,
   // grow-only: a window too tall for a moment shows transparent space, one too
   // short cuts the footer off (live: a card that arrived as an answer was
   // about to stream left the window 42px short for its whole life).
   const chromeMotionUntilRef = useRef(0);
   const chromeMotionOpenRef = useRef(0);
-  const requestChromeHeightMotion = useCallback((growPx: number, durationMs: number): (() => void) | null => {
+  // `resize`: an OPEN block's contents changed height (ChromeFold's card
+  // resize). That must never tween against the panel's width spring: a banner
+  // re-wraps every frame of it, and a height on its own curve lags the width
+  // (the 09-13 tear). So it is refused while the width moves or another
+  // transition holds the channel, and the block steps with the width.
+  const requestChromeHeightMotion = useCallback((growPx: number, durationMs: number, options?: { resize?: boolean }): (() => void) | null => {
     const content = contentRef.current;
     const log = (msg: string) => { if (process.env.NODE_ENV === 'development') console.log(`[chrome-motion] ${msg} grow=${growPx} ms=${durationMs}`); };
     if (!content || !isExpandedRef.current || isResizingRef.current) { log('refused hidden-or-resizing'); return null; }
     const leadGrowth = () => {
       if (growPx > 0) void resizeOverlayWindow(Math.max(window.innerHeight, content.offsetHeight + growPx));
     };
-    if (streamingMsgIdRef.current !== null) { leadGrowth(); log('refused streaming (growth led)'); return null; }
     const now = Date.now();
+    if (
+      options?.resize &&
+      (animationControlsRef.current !== null ||
+        (now < heightReportSuppressedUntilRef.current && heightReportSuppressedUntilRef.current !== chromeMotionUntilRef.current))
+    ) {
+      leadGrowth();
+      log('refused resize: width or another transition moving');
+      return null;
+    }
+    if (streamingMsgIdRef.current !== null) {
+      leadGrowth();
+      streamShrinkHoldsRef.current += 1;
+      const holdUntil = Math.max(streamShrinkHoldUntilRef.current, now + durationMs + CHROME_MOTION_FALLBACK_MS);
+      streamShrinkHoldUntilRef.current = holdUntil;
+      log('streaming: shrink-only hold (growth led)');
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        streamShrinkHoldsRef.current = Math.max(0, streamShrinkHoldsRef.current - 1);
+        if (streamShrinkHoldsRef.current > 0) return;
+        streamShrinkHoldUntilRef.current = 0;
+        // One exact report for where the fold ended, through whichever
+        // channel owns the height now.
+        const el = contentRef.current;
+        if (streamingMsgIdRef.current !== null) {
+          if (el && isExpandedRef.current) driveStreamingHeightRef.current(el.offsetHeight);
+        } else {
+          reportShellSize();
+        }
+      };
+      window.setTimeout(release, holdUntil - now);
+      return release;
+    }
     const heldUntil = heightReportSuppressedUntilRef.current;
     if (now < heldUntil && heldUntil !== chromeMotionUntilRef.current) { leadGrowth(); log('refused held (growth led)'); return null; }
     const until = Math.max(heldUntil, now + durationMs + CHROME_MOTION_FALLBACK_MS);
@@ -10230,7 +10345,7 @@ Provide only the answer, nothing else.`;
       // flush to the window. Horizontally it keeps contentEl's outer box at the
       // full window width when the panel is expanded, so mx-auto still centres
       // and panelLeft (measured from THIS element) stays self-consistent.
-      className="flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-[6px] rounded-[24px] font-sans gap-2 overlay-text-primary"
+      className="ov-motion flex flex-col items-center w-fit mx-auto h-fit min-h-0 bg-transparent p-[6px] rounded-[24px] font-sans gap-2 overlay-text-primary"
     >
       {/*
        * Always-mounted: isExpanded drives opacity/scale/pointer-events only.
@@ -10309,7 +10424,9 @@ Provide only the answer, nothing else.`;
             >
               {isGlassTheme && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
 
-              {hasStatusPill && (
+              {/* Chrome that comes and goes folds open and shut (ChromeFold)
+                  instead of jumping the card and the window. */}
+              <ChromeFold show={hasStatusPill} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} testId="fold-status-pills">
               <div className="relative no-drag flex flex-wrap items-center justify-center gap-1.5 px-4 pt-3 pb-1">
                 {shouldShowSttSummaryPill && (
                   <div
@@ -10381,11 +10498,12 @@ Provide only the answer, nothing else.`;
                   </div>
                 )}
               </div>
-              )}
+              </ChromeFold>
 
               {/* Multi-tab picker — choose which open browser tab to capture. */}
+              <ChromeFold show={tabPicker !== null} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-1 pb-1" testId="fold-tab-picker">
               {tabPicker !== null && (
-                <div className="relative no-drag mx-4 mt-1 mb-1 rounded-[12px] border border-white/10 bg-black/30 backdrop-blur-xl p-2 shadow-sm">
+                <div className="relative no-drag mx-4 rounded-[12px] border border-white/10 bg-black/30 backdrop-blur-xl p-2 shadow-sm">
                   <div className="flex items-center justify-between px-1 pb-1.5">
                     <span className="text-[11px] font-medium overlay-text-primary">
                       {tabPickerLoading ? t('Finding open tabs…') : t('Pick a tab to capture')}
@@ -10422,6 +10540,7 @@ Provide only the answer, nothing else.`;
                   </div>
                 </div>
               )}
+              </ChromeFold>
 
               {/*
                 System Audio / Screen Recording Warning Banner.
@@ -10441,6 +10560,7 @@ Provide only the answer, nothing else.`;
                 row wraps (rather than crushing the text into a ~150px ribbon,
                 the shape that shipped the vertical-overflow bug).
               */}
+              <ChromeFold show={!!systemAudioWarning} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-audio-warning">
               {systemAudioWarning && (() => {
                 /*
                   Which macOS pane actually FIXES this warning.
@@ -10526,7 +10646,7 @@ Provide only the answer, nothing else.`;
                   permissionPaneVisited === warningIdentity;
                 return (
                   <OverlayBanner
-                    className="mx-4 mt-3 mb-1"
+                    className="mx-4"
                     /*
                       The title is an i18n KEY shipped from the main process
                       (main.ts `permissionTitleKey`) so it stays localisable
@@ -10621,10 +10741,12 @@ Provide only the answer, nothing else.`;
                   />
                 );
               })()}
+              </ChromeFold>
 
               {/* PR #173: STT Not Configured Warning Banner */}
+              <ChromeFold show={sttNotConfigured} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stt-not-configured">
               {sttNotConfigured && (
-                <div className="flex items-center justify-between mx-4 mt-3 mb-1 px-3.5 py-2.5 bg-orange-500/10 border border-orange-500/20 rounded-[12px] shadow-sm relative no-drag group/stt-warning">
+                <div className="flex items-center justify-between mx-4 px-3.5 py-2.5 bg-orange-500/10 border border-orange-500/20 rounded-[12px] shadow-sm relative no-drag group/stt-warning">
                   <div className="flex flex-col gap-1 pr-3">
                     <div className="flex items-center gap-2 text-[12.5px] text-orange-600 dark:text-orange-400/90 font-medium leading-tight">
                       <div className="shrink-0 p-1 bg-orange-500/20 rounded-full">
@@ -10667,6 +10789,7 @@ Provide only the answer, nothing else.`;
                   </div>
                 </div>
               )}
+              </ChromeFold>
 
               {/* Phase 3 — Dynamic action card row (Cluely-style live triggers).
                                 Appears between status pills and rolling transcript so users see
@@ -10689,7 +10812,7 @@ Provide only the answer, nothing else.`;
                   for hard failures. Reconnecting/awaiting-audio status is owned by
                   the top status pill, so the bar no longer mounts for those (which
                   also avoids an empty bar / duplicated status text). */}
-              {showTranscript && rollingTranscript ? (
+              <ChromeFold show={!!(showTranscript && rollingTranscript)} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} testId="fold-transcript">
                 <RollingTranscript
                   text={rollingTranscript}
                   isActive={isInterviewerSpeaking}
@@ -10705,7 +10828,7 @@ Provide only the answer, nothing else.`;
                     provider: sttUserProvider,
                   }}
                 />
-              ) : null}
+              </ChromeFold>
 
               {/* Chat History - Only show if there are messages OR active states,
                   or a pinned height that needs a viewport to fill it. No padding
@@ -10768,7 +10891,7 @@ Provide only the answer, nothing else.`;
 
                   {/* Active Recording State with Live Transcription */}
                   {isManualRecording && (
-                    <div className="flex flex-col items-end gap-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="ov-listening-in flex flex-col items-end gap-1">
                       {/* Live transcription preview */}
                       {(manualTranscript || voiceInput) && (
                         <div className="max-w-[85%] px-3.5 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-[18px] rounded-tr-[4px]">
@@ -10780,18 +10903,11 @@ Provide only the answer, nothing else.`;
                         </div>
                       )}
                       <div className="px-3 py-2 flex gap-1.5 items-center bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                        <div
-                          className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
-                          style={{ animationDelay: '0ms' }}
-                        />
-                        <div
-                          className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
-                          style={{ animationDelay: '150ms' }}
-                        />
-                        <div
-                          className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
-                          style={{ animationDelay: '300ms' }}
-                        />
+                        <span className="ov-listening-wave" aria-hidden>
+                          {[0, 1, 2, 3].map((i) => (
+                            <span key={i} className="stt-wave-dot w-[3px] h-1.5 rounded-full bg-emerald-400" />
+                          ))}
+                        </span>
                         <span className="text-[10px] text-emerald-400/70 ml-1">{t('Listening...')}</span>
                       </div>
                     </div>
@@ -11048,7 +11164,7 @@ Provide only the answer, nothing else.`;
                   )}
                 </AnimatePresence>
                 <div
-                  className={`flex flex-wrap justify-center items-center gap-1.5 px-4 pb-3 max-w-full overflow-visible ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}
+                  className={`ov-quickrow-pad flex flex-wrap justify-center items-center gap-1.5 px-4 pb-3 max-w-full overflow-visible ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3 is-bare'}`}
                 >
                 <button
                   onClick={handleWhatToSay}
@@ -11095,76 +11211,51 @@ Provide only the answer, nothing else.`;
                   }`}
                   style={isManualRecording ? undefined : appearance.chipStyle}
                 >
-                  {isManualRecording ? (
-                    <>
-                      <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                      {t('Stop')}
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-3 h-3 opacity-70" /> {t('Answer')}
-                    </>
-                  )}
+                  {/* Block-level flex inside the inline-block swap span: an
+                      inline-flex child would sit on a text baseline and lift
+                      the label ~2px above its neighbours. */}
+                  <SwapText swapKey={isManualRecording ? 'stop' : 'answer'}>
+                    {isManualRecording ? (
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                        {t('Stop')}
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        <Mic className="w-3 h-3 opacity-70" /> {t('Answer')}
+                      </span>
+                    )}
+                  </SwapText>
                 </button>
                 </div>
               </div>
 
               {/* Input Area */}
               <div className="p-3 pt-0">
-                {/* Latent Context Preview (Attached Screenshot) */}
-                {attachedContext.length > 0 && (
-                  <div
-                    className={`mb-2 rounded-lg p-2 transition-all duration-200 border ${subtleSurfaceClass}`}
-                    style={appearance.subtleStyle}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[11px] font-medium overlay-text-primary">
-                        {attachedContext.length} screenshot{attachedContext.length > 1 ? 's' : ''}{' '}
-                        attached
-                      </span>
-                      <button
-                        onClick={() => setAttachedContext([])}
-                        className="p-1 rounded-full transition-colors overlay-icon-surface overlay-icon-surface-hover overlay-text-interactive"
-                        title={t("Remove all")}
-                        style={appearance.iconStyle}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <div className="flex gap-1.5 overflow-x-auto max-w-full pb-1">
-                      {attachedContext.map((ctx, idx) => (
-                        <div key={ctx.path} className="relative group/thumb flex-shrink-0">
-                          <img
-                            src={ctx.preview}
-                            alt={`Screenshot ${idx + 1}`}
-                            className={`h-12 w-auto rounded-[10px] border object-cover shadow-sm ${isLightTheme ? 'border-black/15' : 'border-white/20'}`}
-                          />
-                          <button
-                            onClick={() =>
-                              setAttachedContext((prev) => prev.filter((_, i) => i !== idx))
-                            }
-                            className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
-                            title={t("Remove")}
-                          >
-                            <X className="w-2.5 h-2.5 text-white" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <span className="text-[10px] overlay-text-muted">
-                      {t('Ask a question or click Answer')}
-                    </span>
-                  </div>
-                )}
+                {/* Latent Context Preview (Attached Screenshot). It folds open
+                    and closed with the card instead of jumping it. */}
+                <ScreenshotTray
+                  shots={attachedContext}
+                  onRemove={(path) => setAttachedContext((prev) => prev.filter((shot) => shot.path !== path))}
+                  onClear={() => setAttachedContext([])}
+                  overlayVisible={isExpanded}
+                  requestHeightMotion={requestChromeHeightMotion}
+                  surfaceClassName={subtleSurfaceClass}
+                  surfaceStyle={appearance.subtleStyle}
+                  iconStyle={appearance.iconStyle}
+                  isLightTheme={isLightTheme}
+                  t={t}
+                />
 
                 {/* Stealth hotkey conflict banner — shown if globalShortcut.register()
                                     failed for chat:focusInput (typically because the configured
                                     activation hotkey is already claimed by another app or by the
                                     OS). Click-to-activate still works (mousedown listener is
                                     independent of the hotkey), but the user can rebind in Settings. */}
+                <ChromeFold show={!!stealthHotkeyConflict} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pb-2" testId="fold-hotkey-conflict">
                 {stealthHotkeyConflict && (
                   <div
-                    className="mb-2 px-3 py-2 rounded-xl border border-rose-400/40 bg-rose-500/10 text-[11px] flex items-center gap-2"
+                    className="px-3 py-2 rounded-xl border border-rose-400/40 bg-rose-500/10 text-[11px] flex items-center gap-2"
                     data-stealth-ignore="true"
                   >
                     <span className="overlay-text-primary flex-1">
@@ -11191,6 +11282,7 @@ Provide only the answer, nothing else.`;
                     </button>
                   </div>
                 )}
+                </ChromeFold>
 
                 {/* Stealth tap permission banner — shown only when the user
                                     pressed the activation hotkey but Accessibility wasn't
@@ -11198,9 +11290,9 @@ Provide only the answer, nothing else.`;
                                     doesn't exist on Windows, and the underlying CGEventTap
                                     Rust module ships only in the Darwin binary. Gating here
                                     is belt-and-suspenders on top of the native-side gate. */}
+                <ChromeFold show={isMac && stealthPermissionMissing} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pb-2" testId="fold-accessibility">
                 {isMac && stealthPermissionMissing && (
                   <OverlayBanner
-                    className="mb-2"
                     data-stealth-ignore="true"
                     /*
                       Unified onto the same primitive as the system-audio
@@ -11249,6 +11341,7 @@ Provide only the answer, nothing else.`;
                     }
                   />
                 )}
+                </ChromeFold>
 
                 {/* data-stealth-engage marks this subtree as
                                     the ONLY clickable region that engages the
@@ -11341,18 +11434,18 @@ Provide only the answer, nothing else.`;
                     </div>
                   )}
 
-                  {/* Skill picker — portal so it escapes the overflow-hidden shell */}
-                  {filteredSkills.length > 0 && skillPickerQuery !== null &&
-                    createPortal(
-                      <SkillPicker
-                        skills={filteredSkills}
-                        selectedIndex={clampedPickerIndex}
-                        anchorEl={textInputRef.current}
-                        onSelect={selectSkill}
-                      />,
-                      document.body,
-                    )
-                  }
+                  {/* Skill picker — portal so it escapes the overflow-hidden shell.
+                      Always rendered: the layer holds it mounted for its close. */}
+                  {createPortal(
+                    <SkillPickerLayer
+                      open={filteredSkills.length > 0 && skillPickerQuery !== null}
+                      skills={filteredSkills}
+                      selectedIndex={clampedPickerIndex}
+                      anchorEl={textInputRef.current}
+                      onSelect={selectSkill}
+                    />,
+                    document.body,
+                  )}
 
                   {/* Custom Rich Placeholder */}
                   {!inputValue && (

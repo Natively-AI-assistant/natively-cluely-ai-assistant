@@ -11061,3 +11061,202 @@ html[data-platform="linux"][data-window="launcher"] body {
 @media (prefers-reduced-motion: reduce) {
   .t-tt { transition: none !important; }
 }
+
+/* @overlay-motion:start ─────────────────────────────────────────────────────
+   Meeting overlay micro-interactions (2026-09-27), on the transitions.dev
+   motion-token scale. The tokens are not installed globally, so the values
+   are literals; the token each one maps to is named beside it.
+
+   Rules for everything in this block:
+   - Inside the card only transform, opacity and filter move. Animating a
+     size would feed the viewport ResizeObserver every frame and fight the
+     card's 300ms height tween (OVERLAY_RESIZE_TWEEN).
+   - Motion sits on INNER elements, never on an .overlay-*-surface: the
+     liquid-glass and modern themes set `transition … !important` on those
+     surfaces, so a transition added there would be dead in two of the three
+     themes.
+   - Entrances use @starting-style, so they play once, when the node is
+     inserted, and never replay on a re-render or across Cmd+B.
+   - Answers are deliberately absent. They already materialize word by word,
+     and the streaming → final swap mounts a new node, so an entrance there
+     would re-fade text the user has already read. */
+.ov-motion {
+  /* #04 text states swap — Answer ⇄ Stop (SwapText.tsx). */
+  --text-swap-dur: 150ms;          /* --duration-quick */
+  --text-swap-translate-y: 4px;    /* --distance-micro */
+  --text-swap-blur: 2px;           /* --blur-small */
+  --text-swap-ease: ease-in-out;   /* --ease-in-out */
+
+  /* #09 icon swap — Copy → Check on answer cards and code blocks. */
+  --icon-swap-dur: 250ms;          /* --duration-fast */
+  --icon-swap-blur: 2px;           /* --blur-small */
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;   /* --ease-in-out */
+}
+
+/* transitions.dev #04, verbatim. ProviderChangeNotice.css carries the same
+   rules; keep the copies identical and tune through the variables. */
+.t-text-swap {
+  display: inline-block;
+  transform: translateY(0);
+  filter: blur(0);
+  opacity: 1;
+  transition:
+    transform var(--text-swap-dur) var(--text-swap-ease),
+    filter    var(--text-swap-dur) var(--text-swap-ease),
+    opacity   var(--text-swap-dur) var(--text-swap-ease);
+  will-change: transform, filter, opacity;
+}
+.t-text-swap.is-exit {
+  transform: translateY(calc(var(--text-swap-translate-y) * -1));
+  filter: blur(var(--text-swap-blur));
+  opacity: 0;
+}
+.t-text-swap.is-enter-start {
+  transform: translateY(var(--text-swap-translate-y));
+  filter: blur(var(--text-swap-blur));
+  opacity: 0;
+  transition: none;
+}
+/* At rest the overlay's swap label must not be a stacking context. The modern
+   theme paints a z-index:0 gloss (.overlay-chip-surface::before) OVER each
+   chip's label; a resting translateY(0) / blur(0) / will-change would lift the
+   Answer label above it and make that one chip read differently from its
+   neighbours. The transitions still interpolate from `none`. */
+.ov-motion .t-text-swap:not(.is-exit):not(.is-enter-start) {
+  transform: none;
+  filter: none;
+  will-change: auto;
+}
+
+/* The answer card's Copy → Check slots. Every theme recolours
+   `.ai-response-card span:not(.token)…` to the answer's text colour, which
+   with !important, which would turn the muted copy icon bright; the slots take
+   the button's colour. `:not(#_)` carries ID specificity to outrank those
+   rules (0,4,5). */
+.ov-copy-swap:not(#_),
+.ov-copy-swap:not(#_) > .t-icon {
+  color: inherit !important;
+}
+
+/* Your question lands. The bubble rises from the input side and settles.
+   The tail corner is top-right, but the eye follows the send, so the scale
+   grows out of the bottom-right. No blur: the bubble carries its own
+   backdrop-filter. */
+.ov-bubble-in {
+  transform-origin: 100% 100%;
+  transition:
+    opacity   250ms cubic-bezier(0.22, 1, 0.36, 1),   /* --duration-fast, --ease-smooth-out */
+    transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@starting-style {
+  .ov-bubble-in {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);          /* --distance-base, --scale-medium */
+  }
+}
+
+/* Listening (manual recording). The entrance used to be Tailwind
+   `animate-in fade-in slide-in-from-bottom-2`, which never ran: the project
+   has no tailwindcss-animate plugin. */
+.ov-listening-in {
+  transition:
+    opacity   250ms cubic-bezier(0.22, 1, 0.36, 1),   /* --duration-fast, --ease-smooth-out */
+    transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@starting-style {
+  .ov-listening-in {
+    opacity: 0;
+    transform: translateY(8px);                       /* --distance-base */
+  }
+}
+/* Its level bars reuse the existing `stt-wave-dot` keyframes. The wrapper
+   holds only the bars, so the rule's nth-child delays line up. */
+.ov-listening-wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 14px;
+}
+
+/* Screenshot attached. The tray and its thumbnails move in framer
+   (overlay/ScreenshotTray.tsx + ChromeFold.tsx): the tray folds the card's
+   height open and closed, which CSS can't do without animating a size here.
+   Only the thumbnail's remove disc is CSS: it grows in with the hover, quick
+   in, and shrinks away as the pointer leaves. */
+.ov-thumb-remove {
+  transform: scale(0.8);
+  transition:
+    opacity   150ms ease-out,                          /* --duration-quick, --ease-out */
+    transform 150ms cubic-bezier(0.22, 1, 0.36, 1),    /* --ease-smooth-out */
+    background-color 150ms ease-out;
+}
+.group\/thumb:hover .ov-thumb-remove {
+  transform: scale(1);
+}
+.group\/thumb:hover .ov-thumb-remove:active {
+  transform: scale(0.9);
+}
+
+/* The quick-action row sits 12px under whatever is above it, 4px under the
+   rolling transcript. That padding eases with the transcript's fold
+   (ChromeFold: 250ms open; on the fold, 250ms that starts just after the line's) instead of
+   stepping 8px at its first or last frame. */
+.ov-quickrow-pad {
+  transition: padding-top 250ms cubic-bezier(0.22, 1, 0.36, 1);   /* --duration-fast, --ease-smooth-out */
+}
+.ov-quickrow-pad.is-bare {
+  /* Trails the fold's collapse (which starts at 60ms, on framer's clock) by
+     a frame or two, so the padding can never grow before the line shrinks. */
+  transition-delay: 100ms;
+}
+
+/* Skill picker — transitions.dev #05 menu dropdown, growing UP from the
+   input's left edge. It mounts fresh on every open, so @starting-style is
+   the pre-open state; SkillPickerLayer holds it mounted with .is-closing for
+   the close. */
+.ov-skill-picker {
+  transform-origin: 0% 100%;
+  transition:
+    opacity   250ms cubic-bezier(0.22, 1, 0.36, 1),   /* open: --duration-fast, --ease-smooth-out */
+    transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@starting-style {
+  .ov-skill-picker {
+    opacity: 0;
+    transform: scale(0.97);                           /* --scale-medium */
+  }
+}
+.ov-skill-picker.is-closing {
+  opacity: 0;
+  transform: scale(0.99);                             /* --scale-tiny */
+  pointer-events: none;
+  transition-duration: 150ms;                         /* close: --duration-quick */
+}
+
+/* A colour set inline that must survive the answer card's
+   `span:not(.token)… { color: … !important }` recolour (0,4,5). */
+.ov-keep-color:not(#_) {
+  color: var(--ov-keep-color) !important;
+}
+
+/* Not animated on purpose: the pill's Hide ⇄ Show. On collapse the whole pill
+   fades out and its window hides with the overlay (OverlayAuxWindows.tsx), so
+   its "Show" state never reaches the screen. A swap there would only play
+   inside that fade, and on re-show it would open on an empty label. */
+
+@media (prefers-reduced-motion: reduce) {
+  .t-text-swap { transition: none !important; }
+  .ov-bubble-in,
+  .ov-listening-in,
+  .ov-thumb-remove,
+  .ov-quickrow-pad,
+  .ov-skill-picker {
+    transition: none !important;
+  }
+  .ov-listening-wave .stt-wave-dot {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+/* @overlay-motion:end */

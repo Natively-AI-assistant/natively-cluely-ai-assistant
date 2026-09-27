@@ -202,7 +202,7 @@ const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: M
                                 <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
                             </div>
                             <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium min-w-[74px] shrink-0 border overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <Zap className="w-3 h-3 opacity-70" /> {t('Answer')}
+                                <Mic className="w-3 h-3 opacity-70" /> {t('Answer')}
                             </div>
                         </div>
 

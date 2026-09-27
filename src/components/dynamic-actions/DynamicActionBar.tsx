@@ -29,8 +29,9 @@ interface Props {
   // Asks the overlay to own the window height while the slot tweens open
   // (growPx > 0) or closed: one window resize up front, none per frame. Returns
   // the settle to call when the tween is DONE, or null when the overlay can't
-  // hold the channel (an answer is streaming, another transition holds it); an
-  // emptied slot then folds in one step.
+  // hold the channel (another transition holds it); an emptied slot then folds
+  // in one step. While an answer streams the hold is shrink-only: the stream's
+  // growth still reaches the window.
   requestHeightMotion?: (growPx: number, durationMs: number) => (() => void) | null;
 }
 
