@@ -108,6 +108,9 @@ async function judge(c) {
     // JUDGE_EVAL_USER_NAME gives every candidate a USER name (what a résumé does
     // live); JUDGE_EVAL_NO_NAME strips the set's own, for the before/after A/B.
     userName: process.env.JUDGE_EVAL_NO_NAME ? null : (c.userName ?? process.env.JUDGE_EVAL_USER_NAME ?? null),
+    // JUDGE_EVAL_LAGGING: judge every candidate as a stalled transcript (the
+    // stall cap's promoted interim), for the clipped-ask A/B.
+    ...(process.env.JUDGE_EVAL_LAGGING ? { transcriptLagging: true } : {}),
   });
   for (let attempt = 0; attempt < 3; attempt++) {
     try {

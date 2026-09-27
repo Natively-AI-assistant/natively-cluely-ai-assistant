@@ -4097,6 +4097,11 @@ export class AppState {
       }
     });
     capture.on('speech_edge', (edge: SpeechEdge) => {
+      // Auto Answer's stall cap: the interviewer talking again ends the stop
+      // it would otherwise promote a frozen interim on.
+      if (this.systemAudioCapture === capture && edge?.channel === 'interviewer' && edge.speaking) {
+        this.simpleAutoAnswer.onLocalSpeechStart();
+      }
     });
     // setupAudioRecoveryHandler registers its own 'error' listener — do not
     // add a duplicate logger here or the same error reports twice.

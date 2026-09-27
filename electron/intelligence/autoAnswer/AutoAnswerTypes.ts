@@ -40,7 +40,9 @@ export type AutoAnswerEndpointSource =
     | 'utterance_end'
     | 'vad'
     | 'quiet_window'
-    | 'semantic';
+    | 'semantic'
+    // A stalled interim promoted to stand in for its final (SimpleAutoAnswer STALL_PROMOTE_MS).
+    | 'stt_stall';
 
 export type AutoAnswerPace = 'fast' | 'balanced' | 'relaxed';
 

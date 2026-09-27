@@ -95,6 +95,14 @@ export interface JudgeRequest {
      * named ask to someone else fired. Absent, the prompt is byte-identical.
      */
     userName?: string | null;
+    /**
+     * The candidate's last words are a STALLED interim standing in for a final
+     * that has not arrived: the speaker has stopped (the local voice detector
+     * says so), the transcript has not caught up, so its last word is usually
+     * cut or missing. Absent, the prompt is byte-identical. See
+     * SimpleAutoAnswer's STALL_PROMOTE_MS.
+     */
+    transcriptLagging?: boolean;
 }
 
 /**
@@ -295,6 +303,14 @@ ${partsLabelled ? 'The candidate itself is split by speaker below; judge the ASK
     // it" — regressed from 3/3 fires to 0/3 rhetorical, reproducing the live
     // miss in meeting fd28a1af. The task rules and the JSON schema must be
     // the LAST thing the model reads, after the untrusted candidate.
+    // Only for a stalled transcript. The completeness rule judges the
+    // candidate "on its own last words", and a stall cuts exactly those: with
+    // the last word dropped or clipped to a letter, the judge called 17/36 and
+    // 29/36 real asks unfinished (2026-09-27), so the stall cap bought nothing.
+    // Trailing, beside the candidate it qualifies.
+    const lagging = req.transcriptLagging
+        ? `\nThe speaker has STOPPED talking, but speech-to-text has not caught up: the candidate's LAST word may be cut off or missing (e.g. "…how would you partition the ord"). Do not call it incomplete for that alone. Judge the ask from the words that are there; everything else in the rules still applies.\n`
+        : '';
     return `${JUDGE_PROMPT_INTRO}
 ${mode}${diarization}Recent transcript (oldest first):
 ${context || '(none)'}
@@ -302,7 +318,7 @@ ${context || '(none)'}
 <candidate>
 ${candidateBlock}
 </candidate>
-${answered}${addressee}
+${answered}${addressee}${lagging}
 ${JUDGE_PROMPT_RULES}`;
 }
 
