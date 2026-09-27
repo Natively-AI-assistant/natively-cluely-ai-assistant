@@ -106,6 +106,17 @@ async function googleErrorReason(response: Response): Promise<string> {
     return [reason, message].filter(Boolean).join(': ');
 }
 
+/**
+ * An attendee's Gravatar: the SHA-256 of their trimmed, lowercased email, as
+ * docs.gravatar.com specifies. `d=404` makes a missing one fail, so the card
+ * keeps its initials. Only the hash leaves the app, never the address. The
+ * Calendar API itself has no attendee photos.
+ */
+function gravatarUrl(email: string): string {
+    const hash = crypto.createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
+    return `https://gravatar.com/avatar/${hash}?s=64&d=404`;
+}
+
 class TokenEndpointError extends Error {
     constructor(public readonly status: number, public readonly code: string, description?: string) {
         super(`${code}${description ? `: ${description}` : ''} (HTTP ${status})`);
@@ -621,6 +632,7 @@ export class CalendarManager extends EventEmitter {
                             .map((a: any) => ({
                                 email: a.email,
                                 name: a.displayName,
+                                photoUrl: gravatarUrl(a.email),
                                 response: a.responseStatus,
                             }))
                         : undefined,

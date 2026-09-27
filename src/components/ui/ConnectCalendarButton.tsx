@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useT } from '../../i18n';
 import { ArrowRight, Loader, Check } from 'lucide-react';
-import { motion } from 'framer-motion';
 // Static import keeps Vite from warning about a "mixed" dynamic+static import
 // graph for analytics.service (App.tsx, Launcher.tsx, NativelyInterface.tsx,
 // and SettingsOverlay.tsx all import it statically). The previous
@@ -10,6 +9,8 @@ import { motion } from 'framer-motion';
 // warning at build time and made the chunk boundary platform-dependent.
 import { analytics } from '../../lib/analytics/analytics.service';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
+import { useTextsReveal } from './useTextsReveal';
+import './textsReveal.css';
 
 /*
   Liquid Glass (src/ui-components/design.md) at UI scale, in the box of the
@@ -28,6 +29,18 @@ const GLASS_STYLE = {
     padding: '0 20px 0 16px',
 } as React.CSSProperties;
 
+const ConnectedLabel: React.FC<{ reveal: boolean; text: string }> = ({ reveal, text }) => {
+    const { ref, shown } = useTextsReveal<HTMLSpanElement>(reveal);
+    return (
+        <span ref={ref} className={`t-stagger cal-connected-label inline-block${shown ? ' is-shown' : ''}`}>
+            <span className="t-stagger-line t-stagger-line--1 !inline-flex items-center gap-2.5 font-semibold">
+                <Check size={15} strokeWidth={2.5} />
+                {text}
+            </span>
+        </span>
+    );
+};
+
 interface ConnectCalendarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: 'default' | 'dark';
     /**
@@ -43,6 +56,9 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
     const t = useT();
     const [loading, setLoading] = useState(false);
     const [connected, setConnected] = useState(false);
+    // Connected by this click, as opposed to found connected on mount: only
+    // then does the label swap animate.
+    const [justConnected, setJustConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -68,6 +84,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
             const res = await window.electronAPI.calendarConnect();
             if (res.success) {
                 setConnected(true);
+                setJustConnected(true);
                 setError(null);
                 onConnect?.({ fresh: true });
                 // Track calendar connection (analytics imported statically above)
@@ -85,91 +102,25 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
     };
 
     if (connected) {
+        // The same glass button, now a status: the label swaps to "Connected"
+        // with the Texts reveal (textsReveal.css), a short blurred rise. It
+        // used to become a different, violet pill with a looping aurora and
+        // shimmer; a static status has no use for endless motion, and keeping
+        // the material means the button doesn't turn into another object.
+        // Same element types as the button below, so React keeps the glass
+        // node and only the label changes.
         return (
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 2 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
-                className={`
-                    relative
-                    flex items-center gap-2.5
-                    pl-4 pr-5 py-2
-                    rounded-full
-                    text-[13px] font-medium
-                    overflow-hidden
-                    select-none
-                    ${className}
-                `}
-                style={{
-                    // Ultra Premium "Gemstone Glass"
-                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0.02) 100%)',
-                    backdropFilter: 'blur(16px)',
-                    WebkitBackdropFilter: 'blur(16px)',
-                    boxShadow: `
-                        0 8px 32px -4px rgba(139, 92, 246, 0.25),   // Deep soft violet dispersion
-                        0 2px 8px -1px rgba(124, 58, 237, 0.3),     // Closer intense glow
-                        inset 0 1px 0 0 rgba(255, 255, 255, 0.4),   // Sharp top rim reflection
-                        inset 0 -2px 1px 0 rgba(109, 40, 217, 0.15) // Deep bottom refractions
-                    `,
-                }}
-            >
-                {/* 1. Iridescent Aurora Border (Animated) */}
-                <motion.div
-                    className="absolute inset-0 rounded-full opacity-60 pointer-events-none"
-                    animate={{
-                        background: [
-                            'radial-gradient(circle at 0% 0%, rgba(216, 180, 254, 0.3), transparent 60%)',
-                            'radial-gradient(circle at 100% 100%, rgba(216, 180, 254, 0.3), transparent 60%)',
-                            'radial-gradient(circle at 0% 0%, rgba(216, 180, 254, 0.3), transparent 60%)',
-                        ]
-                    }}
-                    transition={{
-                        duration: 6,
-                        repeat: Infinity,
-                        ease: "linear"
-                    }}
-                />
-
-                {/* 2. Crystalline Noise Texture (Subtle Grain for realism) */}
-                <div
-                    className="absolute inset-0 rounded-full opacity-10 pointer-events-none"
-                    style={{
-                        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-                        mixBlendMode: 'overlay',
-                    }}
-                />
-
-                {/* 3. Slow Elegant Shimmer */}
-                <div className="absolute inset-0 overflow-hidden rounded-full pointer-events-none">
-                    <motion.div
-                        animate={{
-                            x: ['-200%', '200%'],
-                        }}
-                        transition={{
-                            duration: 4,
-                            repeat: Infinity,
-                            repeatDelay: 3,
-                            ease: "easeInOut"
-                        }}
-                        className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12 blur-md"
-                    />
-                </div>
-
-                <span className="relative z-10 flex items-center gap-3 pl-0.5">
-                    {/* Icon: Simple Polished Circle */}
-                    <div className="
-                        relative flex items-center justify-center w-[20px] h-[20px] rounded-full 
-                        bg-violet-600 shadow-sm ring-1 ring-white/20
-                    ">
-                        <Check size={12} className="text-white" strokeWidth={4} />
-                    </div>
-
-                    {/* Text: High-End Typography */}
-                    <span className="text-[13px] font-medium tracking-wide text-white flex flex-col leading-none gap-0.5" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
-                        <span className="font-semibold text-white/95">Calendar Connected</span>
-                    </span>
-                </span>
-            </motion.div>
+            <div className={`flex flex-col items-center gap-1.5 w-fit ${className}`}>
+                <LiquidGlassButton
+                    variant="sky"
+                    className="lg-sm pointer-events-none"
+                    style={GLASS_STYLE}
+                    tabIndex={-1}
+                    aria-disabled="true"
+                >
+                    <ConnectedLabel reveal={justConnected} text={t('Connected')} />
+                </LiquidGlassButton>
+            </div>
         );
     }
 

@@ -343,13 +343,18 @@ test('events: merged from every calendar ticked in Google Calendar, soonest firs
         ] } },
         eventsByCalendar: {
             'me@example.com': [gEvent('primary-later', 120), gEvent('standup', 30, shared)],
-            'work#team@group.calendar.google.com': [gEvent('work-soonest', 10), gEvent('standup', 30, shared)],
+            'work#team@group.calendar.google.com': [gEvent('work-soonest', 10, { attendees: [{ email: ' Ana.Ruiz@Example.com ', displayName: 'Ana Ruiz' }, { email: 'me@example.com', self: true }] }), gEvent('standup', 30, shared)],
             'unticked@group.calendar.google.com': [gEvent('should-not-appear', 5)],
         },
     });
     try {
         const events = await env.cm.getUpcomingEvents(true);
         assert.deepEqual(events.map((e) => e.title), ['work-soonest', 'standup', 'primary-later']);
+        // Gravatar by the SHA-256 of the trimmed, lowercased email; the
+        // user's own entry (self) is not listed. Only the hash leaves the app.
+        const hash = crypto.createHash('sha256').update('ana.ruiz@example.com').digest('hex');
+        assert.deepEqual(events[0].attendees.map((a) => a.photoUrl), [`https://gravatar.com/avatar/${hash}?s=64&d=404`]);
+        assert.equal(events[0].attendees[0].photoUrl.includes('example.com'), false, 'the address itself never goes to Gravatar');
         const fetched = env.fetchCalls.map((c) => c.url).filter((u) => u.includes('/events?'));
         assert.equal(fetched.some((u) => u.includes('unticked')), false, 'a calendar hidden in Google Calendar is not synced');
         assert.equal(fetched.some((u) => u.includes(encodeURIComponent('work#team@group.calendar.google.com'))), true, 'calendar ids are URL-encoded');
