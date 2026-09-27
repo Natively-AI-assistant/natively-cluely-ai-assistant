@@ -136,6 +136,11 @@ function installSchedule() {
     case 'darwin': {
       const dir = logDir();
       const script = fileURLToPath(import.meta.url);
+      // process.execPath is the RESOLVED binary (Homebrew: Cellar/node/<version>/bin/node),
+      // which the next `brew upgrade node` deletes. Prefer a stable link to the same node.
+      const node = ['/opt/homebrew/bin/node', '/usr/local/bin/node'].find((p) => {
+        try { return fs.realpathSync(p) === fs.realpathSync(process.execPath); } catch { return false; }
+      }) ?? process.execPath;
       const pathEnv = [path.dirname(process.execPath), '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'].join(':');
       const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
       const plist = `<?xml version="1.0" encoding="UTF-8"?>
@@ -144,7 +149,7 @@ function installSchedule() {
 <dict>
   <key>Label</key><string>${LABEL}</string>
   <key>ProgramArguments</key>
-  <array><string>${esc(process.execPath)}</string><string>${esc(script)}</string></array>
+  <array><string>${esc(node)}</string><string>${esc(script)}</string></array>
   <key>WorkingDirectory</key><string>${esc(WT)}</string>
   <key>EnvironmentVariables</key><dict><key>PATH</key><string>${esc(pathEnv)}</string></dict>
   <key>StartCalendarInterval</key><dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>30</integer></dict>
