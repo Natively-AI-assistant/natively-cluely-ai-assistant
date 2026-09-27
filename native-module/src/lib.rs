@@ -28,6 +28,10 @@ pub mod stealth_window;
 // macOS and Windows implementations live side by side in the module.
 pub mod capture_exclusion;
 
+// Meeting detection: which processes hold a microphone, and the visible windows
+// (owner + title). macOS and Windows implementations side by side.
+pub mod meeting_signals;
+
 #[cfg(target_os = "macos")]
 pub mod keyboard_tap;
 
