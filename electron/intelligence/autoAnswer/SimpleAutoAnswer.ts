@@ -424,6 +424,7 @@ export class SimpleAutoAnswerEngine {
     onLocalSpeechEnd(): void {
         if (!this.host.isEnabled()) return;
         this.localStopAt = this.clock.now();
+        this.host.log?.(`[AutoAnswer:simple] voice stop (${this.lastInterviewerInterim ? 'words in flight' : 'transcript caught up'}, ${this.pending.length} pending)`);
         // The dangling interim IS the stall case: start its clock from here.
         if (this.lastInterviewerInterim) {
             this.armStallCap();

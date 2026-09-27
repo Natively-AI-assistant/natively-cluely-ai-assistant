@@ -66,15 +66,33 @@ test('a warm vector from another embedding space is never reused', async () => {
   assert.equal(p.calls.length, 2);
 });
 
-test('a warm still in flight is not joined (it would hand the caller its budget)', async () => {
+test('a warm still in flight is JOINED: live, the query arrived ~1 s after the voice stop with the warm still out', async () => {
   const p = pipeline();
   let release;
   p.getEmbeddingForQueryUncached = (text) => { p.calls.push(text); return p.calls.length === 1 ? new Promise((r) => { release = r; }) : Promise.resolve([9]); };
   p.warmQueryEmbedding('what is the time complexity of your remove');
-  const v = await p.getEmbeddingForQuery('What is the time complexity of your remove operation?');
-  assert.deepEqual(v, [9]);
+  const pending = p.getEmbeddingForQuery('What is the time complexity of your remove operation?', { retryBudgetMs: 1000 });
+  release([1, 2]);
+  assert.deepEqual(await pending, [1, 2]);
+  assert.equal(p.calls.length, 1, 'one real embed for the utterance');
+});
+
+test('a warm that fails: the caller runs its own request', async () => {
+  const p = pipeline();
+  p.getEmbeddingForQueryUncached = (text) => { p.calls.push(text); return p.calls.length === 1 ? Promise.reject(new Error('503')) : Promise.resolve([7]); };
+  p.warmQueryEmbedding('what is the time complexity of your remove');
+  assert.deepEqual(await p.getEmbeddingForQuery('What is the time complexity of your remove operation?', { retryBudgetMs: 1000 }), [7]);
   assert.equal(p.calls.length, 2);
-  release([1]);
+});
+
+test('a warm slower than the caller\'s budget: the caller stops waiting and runs its own', async () => {
+  const p = pipeline();
+  p.getEmbeddingForQueryUncached = (text) => { p.calls.push(text); return p.calls.length === 1 ? new Promise(() => {}) : Promise.resolve([5]); };
+  p.warmQueryEmbedding('what is the time complexity of your remove');
+  const t0 = Date.now();
+  assert.deepEqual(await p.getEmbeddingForQuery('What is the time complexity of your remove operation?', { retryBudgetMs: 60 }), [5]);
+  assert.ok(Date.now() - t0 < 1000);
+  assert.equal(p.calls.length, 2);
 });
 
 test('an on-device embedder is never warmed (it answers in ~10 ms)', async () => {

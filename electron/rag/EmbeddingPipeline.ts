@@ -1096,7 +1096,8 @@ export class EmbeddingPipeline {
     // an optimisation must not be able to throw on the query path.
     private queryEmbedMemo?: Map<string, { at: number; promise: Promise<number[]> }>;
     /** Resolved warm vectors, newest last. Only RESOLVED ones are ever reused (see warmQueryEmbedding). */
-    private warmQueries?: Array<{ space: string; text: string; at: number; vector: number[] }>;
+    /** Warm query embeds, newest last: settled or still in flight (see warmQueryEmbedding). */
+    private warmQueries?: Array<{ space: string; text: string; at: number; promise: Promise<number[]> }>;
     private lastWarmAt = 0;
 
     /**
@@ -1104,10 +1105,6 @@ export class EmbeddingPipeline {
      * forget: never throws, never blocks, and a failure only means the real
      * query embeds on its own as before. Skipped for an on-device embedder,
      * which answers in ~10 ms and has nothing to hide.
-     *
-     * Only a RESOLVED warm vector is reused. Sharing the in-flight promise would
-     * hand a live caller this call's budget and latency, the trap the memo's
-     * budget key exists for.
      */
     warmQueryEmbedding(text: string): void {
         try {
@@ -1120,29 +1117,53 @@ export class EmbeddingPipeline {
             if (now - this.lastWarmAt < 500) return;
             this.lastWarmAt = now;
             const space = provider.space ?? provider.name;
-            this.getEmbeddingForQueryUncached(t, { retryBudgetMs: WARM_QUERY_BUDGET_MS }).then((vector) => {
-                // The active space may have changed while it was out: a vector from
-                // another space must never meet this corpus.
-                if ((this.provider?.space ?? this.provider?.name) !== space) return;
-                const list = (this.warmQueries ??= []);
-                list.push({ space, text: t, at: Date.now(), vector });
-                while (list.length > WARM_QUERY_MAX) list.shift();
-            }).catch(() => { /* speculative: the real query embeds on its own */ });
+            const promise = this.getEmbeddingForQueryUncached(t, { retryBudgetMs: WARM_QUERY_BUDGET_MS });
+            promise.catch(() => { /* speculative: the real query embeds on its own */ });
+            const list = (this.warmQueries ??= []);
+            list.push({ space, text: t, at: now, promise });
+            while (list.length > WARM_QUERY_MAX) list.shift();
+            console.log(`[EmbeddingPipeline] warming a query embed (${queryWords(t).length}w)`);
         } catch { /* never on the caller's path */ }
     }
 
-    /** A resolved warm vector for this query, if one is the same utterance. */
-    private warmVectorFor(space: string, text: string): number[] | null {
+    /**
+     * The warm embed for this query, if one is the same utterance, as a promise
+     * the caller can await INSTEAD of its own request.
+     *
+     * Joined even while in flight (2026-09-27): live, the warm started at the
+     * voice stop and the answer's query arrived ~1 s later with it still out,
+     * so reusing only settled vectors hit 3 of 11 turns. Joining is bounded so
+     * it can never cost the caller: if the warm has not answered within the
+     * caller's own budget, or fails, or its space is no longer active, the
+     * caller runs its own request exactly as before.
+     */
+    private warmEmbeddingFor(space: string, text: string, budgetMs: number, own: () => Promise<number[]>): Promise<number[]> | null {
         const list = this.warmQueries;
         if (!list?.length) return null;
         const now = Date.now();
         for (let i = list.length - 1; i >= 0; i--) {
             const w = list[i];
             if (now - w.at > WARM_QUERY_TTL_MS) { list.splice(i, 1); continue; }
-            if (w.space === space && isNearQueryText(w.text, text)) {
-                console.log(`[EmbeddingPipeline] query embed reused a warm vector (${queryWords(text).length}w, warmed ${now - w.at}ms ago)`);
-                return w.vector.slice();
-            }
+            if (w.space !== space || !isNearQueryText(w.text, text)) continue;
+            console.log(`[EmbeddingPipeline] query embed joined a warm one (${queryWords(text).length}w, warmed ${now - w.at}ms ago)`);
+            return new Promise<number[]>((resolve, reject) => {
+                let settled = false;
+                const fallback = () => {
+                    if (settled) return;
+                    settled = true;
+                    own().then(resolve, reject);
+                };
+                const timer = setTimeout(fallback, Math.max(0, budgetMs));
+                w.promise.then((v) => {
+                    if (settled) return;
+                    // The active space may have changed while it was out: a vector
+                    // from another space must never meet this corpus.
+                    if ((this.provider?.space ?? this.provider?.name) !== space) { clearTimeout(timer); fallback(); return; }
+                    settled = true;
+                    clearTimeout(timer);
+                    resolve(v.slice());
+                }, () => { clearTimeout(timer); fallback(); });
+            });
         }
         return null;
     }
@@ -1170,12 +1191,8 @@ export class EmbeddingPipeline {
         // A copy per caller: the array used to be shared, so one caller
         // normalising in place would have corrupted the other's vector.
         if (hit) return hit.promise.then((v: number[]) => v.slice());
-        const warm = this.warmVectorFor(space, text);
-        if (warm) {
-            memo.set(key, { at: now, promise: Promise.resolve(warm) });
-            return warm.slice();
-        }
-        const promise = this.getEmbeddingForQueryUncached(text, opts);
+        const own = () => this.getEmbeddingForQueryUncached(text, opts);
+        const promise = this.warmEmbeddingFor(space, text, opts?.retryBudgetMs ?? QUERY_EMBED_TIMEOUT_MS, own) ?? own();
         memo.set(key, { at: now, promise });
         promise.catch(() => { if (memo.get(key)?.promise === promise) memo.delete(key); });
         return promise.then((v: number[]) => v.slice());
