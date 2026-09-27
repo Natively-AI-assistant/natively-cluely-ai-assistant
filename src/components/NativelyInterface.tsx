@@ -11164,7 +11164,7 @@ Provide only the answer, nothing else.`;
                   )}
                 </AnimatePresence>
                 <div
-                  className={`ov-quickrow-pad flex flex-wrap justify-center items-center gap-1.5 px-4 pb-3 max-w-full overflow-visible ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3 is-bare'}`}
+                  className={`ov-chip-row ov-quickrow-pad flex flex-wrap justify-center items-center gap-1.5 px-4 pb-3 max-w-full overflow-visible ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3 is-bare'}`}
                 >
                 <button
                   onClick={handleWhatToSay}

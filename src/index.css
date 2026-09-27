@@ -11240,6 +11240,57 @@ html[data-platform="linux"][data-window="launcher"] body {
   color: var(--ov-keep-color) !important;
 }
 
+/* Quick-action chips: hover highlights in place — nothing moves. A faint
+   neutral tint of the overlay's strongest text colour (so it reads on every
+   interface × colour theme) and a hairline ring fade in over the chip's own
+   surface, and the icon comes up from 70% to full. Kept deliberately quiet:
+   just enough to see which chip the pointer is on. The tint is a ::after layer under
+   the label (the chip isolates, the layer sits at z-index -1), so the glass
+   and modern surfaces keep their gradient and rim beneath it. The recording
+   Stop chip is not a chip surface, so it keeps its red. */
+.ov-chip-row > .overlay-chip-surface {
+  position: relative;
+  isolation: isolate;
+}
+.ov-chip-row > .overlay-chip-surface::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+  background-color: color-mix(in srgb, var(--overlay-text-strong, #fff) 5%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--overlay-text-strong, #fff) 10%, transparent);
+  opacity: 0;
+  /* Hover out: softer and longer than the in, so a sweep along the row
+     leaves a faint trail instead of blinking off. */
+  transition:
+    opacity 250ms ease-out,                           /* --duration-fast, --ease-out */
+    background-color 250ms ease-out;
+}
+.ov-chip-row > .overlay-chip-surface:hover::after {
+  opacity: 1;
+  transition-duration: 150ms;                         /* hover in: --duration-quick */
+}
+/* Press: the tint deepens while the chip is held, snapping in and easing back
+   on release (back to the hover rule's 150ms). */
+.ov-chip-row > .overlay-chip-surface:active::after {
+  background-color: color-mix(in srgb, var(--overlay-text-strong, #fff) 9%, transparent);
+  transition-duration: 80ms;                          /* --duration-micro */
+}
+.ov-chip-row > .overlay-chip-surface svg {
+  transition: opacity 250ms ease-out;                 /* out, with the tint */
+}
+.ov-chip-row > .overlay-chip-surface:hover svg {
+  opacity: 1;
+  transition-duration: 150ms;                         /* in, with the tint */
+}
+/* Glass and modern lift a hovered chip 1px on their own; here it stays put.
+   Mid-press their press scale still applies. */
+.ov-chip-row > .overlay-chip-surface:hover:not(:active):not(#_) {
+  transform: none;
+}
+
 /* Not animated on purpose: the pill's Hide ⇄ Show. On collapse the whole pill
    fades out and its window hides with the overlay (OverlayAuxWindows.tsx), so
    its "Show" state never reaches the screen. A swap there would only play
