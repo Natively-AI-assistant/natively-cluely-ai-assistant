@@ -15243,6 +15243,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     return CalendarManager.getInstance().getUpcomingEvents();
   });
 
+  // The calendars whose events sync (ticked in Google Calendar), for Settings → Calendar.
+  safeHandle('calendar-get-synced-calendars', async () => {
+    const { CalendarManager } = require('./services/CalendarManager');
+    return CalendarManager.getInstance().getSyncedCalendars();
+  });
+
   safeHandle('calendar-refresh', async () => {
     const { CalendarManager } = require('./services/CalendarManager');
     await CalendarManager.getInstance().refreshState();

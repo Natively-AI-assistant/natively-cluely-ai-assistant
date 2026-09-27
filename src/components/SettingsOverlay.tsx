@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { LANG_NATIVE_NAMES, useLanguage, useT } from '../i18n';
+import { CalendarSettings } from './settings/CalendarSettings';
 import packageJson from '../../package.json';
 import {
     X, Mic, Speaker, Monitor, Keyboard, User, LifeBuoy, LogOut, Upload,
@@ -1992,10 +1993,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     };
 
 
-    const [calendarStatus, setCalendarStatus] = useState<{ connected: boolean; email?: string }>({ connected: false });
-    const [isCalendarsLoading, setIsCalendarsLoading] = useState(false);
-    const [calendarEvents, setCalendarEvents] = useState<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string }>>([]);
-    const [isCalendarRefreshing, setIsCalendarRefreshing] = useState(false);
 
 
     // Load stored credentials on mount
@@ -2119,10 +2116,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             const savedSck = localStorage.getItem('useExperimentalSckBackend') === 'true';
             setUseExperimentalSck(savedSck);
 
-            // Load Calendar Status
-            if (window.electronAPI?.getCalendarStatus) {
-                window.electronAPI.getCalendarStatus().then(setCalendarStatus);
-            }
         }
     }, [isOpen, selectedInput, selectedOutput]); // Re-run if isOpen changes, or if selected devices are cleared
 
@@ -2144,23 +2137,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         ]).then(() => { if (live) timer = setTimeout(() => { if (live) setGeneralMotionReady(true); }, 0); });
         return () => { live = false; clearTimeout(timer); };
     }, [isOpen]);
-
-    // Fetch upcoming calendar events while the Calendar tab is open and connected.
-    // Polls every 60s to mirror the Launcher's cadence.
-    useEffect(() => {
-        if (!isOpen || activeTab !== 'calendar' || !calendarStatus.connected) return;
-        if (!window.electronAPI?.getUpcomingEvents) return;
-
-        let cancelled = false;
-        const fetchEvents = () => {
-            window.electronAPI.getUpcomingEvents()
-                .then(events => { if (!cancelled) setCalendarEvents(events || []); })
-                .catch(err => console.error('[Settings] Failed to fetch upcoming events:', err));
-        };
-        fetchEvents();
-        const interval = setInterval(fetchEvents, 60_000);
-        return () => { cancelled = true; clearInterval(interval); };
-    }, [isOpen, activeTab, calendarStatus.connected]);
 
     // Listen for device-selection-applied so the user can see when their saved
     // device couldn't be opened and audio fell back to the system default.
@@ -2361,7 +2337,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {activeTab === 'audio' && navActivePill}
                                         <Mic size={16} /> {t('Audio')}
                                     </button>
-                                    {/* Temporarily hidden — TODO: re-enable Calendar settings nav item
                                     <button
                                         onClick={() => setActiveTab('calendar')}
                                         className={navItemClass(activeTab === 'calendar')}
@@ -2369,7 +2344,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {activeTab === 'calendar' && navActivePill}
                                         <Calendar size={16} /> {t('Calendar')}
                                     </button>
-                                    */}
                                     <button
                                         onClick={() => setActiveTab('skills')}
                                         className={navItemClass(activeTab === 'skills')}
@@ -4420,265 +4394,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             )}
 
 
-                            {activeTab === 'calendar' && (
-                                <div className="space-y-6 animated fadeIn h-full" data-settings-stagger>
-                                    <div>
-                                        <h3 className="text-lg font-bold text-text-primary mb-2">{t('Visible Calendars')}</h3>
-                                        <p className="text-xs text-text-secondary mb-4">{t('Upcoming meetings are synchronized from these calendars')}</p>
-                                    </div>
-
-                                    <div className="bg-bg-card rounded-xl border border-border-subtle overflow-hidden">
-                                        {calendarStatus.connected ? (
-                                            <>
-                                                {/* Connection header */}
-                                                <div className="p-6 flex items-center justify-between">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 rounded-lg bg-bg-item-surface border border-border-subtle flex items-center justify-center text-text-primary">
-                                                            <Calendar size={20} />
-                                                        </div>
-                                                        <div>
-                                                            <h4 className="text-sm font-medium text-text-primary">Google Calendar</h4>
-                                                            <p className="text-xs text-text-secondary">{t('Connected as')} {calendarStatus.email || 'User'}</p>
-                                                        </div>
-                                                    </div>
-
-                                                    <button
-                                                        onClick={async () => {
-                                                            setIsCalendarsLoading(true);
-                                                            try {
-                                                                await window.electronAPI.calendarDisconnect();
-                                                                const status = await window.electronAPI.getCalendarStatus();
-                                                                setCalendarStatus(status);
-                                                                setCalendarEvents([]);
-                                                            } catch (e) {
-                                                                console.error(e);
-                                                            } finally {
-                                                                setIsCalendarsLoading(false);
-                                                            }
-                                                        }}
-                                                        disabled={isCalendarsLoading}
-                                                        className="px-3 py-1.5 bg-bg-input hover:bg-bg-elevated border border-border-subtle text-text-primary rounded-md text-xs font-medium transition-colors"
-                                                    >
-                                                        {isCalendarsLoading ? t('Disconnecting...') : t('Disconnect')}
-                                                    </button>
-                                                </div>
-
-                                                {/* Upcoming section — masterpiece treatment, same parent card backdrop */}
-                                                <div className="relative border-t border-white/[0.05]">
-                                                    {/* Ambient mesh — soft cool radial behind the list, pointer-events-none */}
-                                                    <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                                                        <div className="absolute -top-20 -left-10 w-[260px] h-[260px] bg-blue-500/[0.06] blur-[90px]" />
-                                                        <div className="absolute -bottom-24 right-0 w-[220px] h-[220px] bg-violet-500/[0.04] blur-[80px]" />
-                                                    </div>
-
-                                                    {/* Section header */}
-                                                    <div className="relative px-6 pt-5 pb-3 flex items-end justify-between">
-                                                        <div className="space-y-2">
-                                                            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-white/[0.04] ring-1 ring-white/[0.06] text-[9px] font-medium tracking-[0.22em] text-text-secondary uppercase shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                                                                <span className="w-1 h-1 rounded-full bg-emerald-400/80" />
-                                                                {t('Upcoming')}
-                                                            </span>
-                                                            <p className="text-[11px] text-text-tertiary tracking-[0.01em]">
-                                                                {calendarEvents.length > 0
-                                                                    ? `${calendarEvents.length} ${calendarEvents.length === 1 ? t('meeting') : t('meetings')} · ${t('next 7 days')}`
-                                                                    : t('next 7 days from your primary calendar')}
-                                                            </p>
-                                                        </div>
-                                                        <button
-                                                            onClick={async () => {
-                                                                if (!window.electronAPI?.calendarRefresh) return;
-                                                                setIsCalendarRefreshing(true);
-                                                                try {
-                                                                    await window.electronAPI.calendarRefresh();
-                                                                    const events = await window.electronAPI.getUpcomingEvents();
-                                                                    setCalendarEvents(events || []);
-                                                                } catch (e) {
-                                                                    console.error(e);
-                                                                } finally {
-                                                                    setIsCalendarRefreshing(false);
-                                                                }
-                                                            }}
-                                                            disabled={isCalendarRefreshing}
-                                                            aria-label={t("Refresh upcoming events")}
-                                                            className="group h-8 w-8 rounded-full bg-white/[0.04] hover:bg-white/[0.08] ring-1 ring-white/[0.07] text-text-secondary hover:text-text-primary transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.92] flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-                                                        >
-                                                            <RefreshCw
-                                                                size={12}
-                                                                className={`transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${isCalendarRefreshing ? 'animate-spin' : 'group-hover:rotate-[60deg]'}`}
-                                                            />
-                                                        </button>
-                                                    </div>
-
-                                                    {calendarEvents.length === 0 ? (
-                                                        /* Empty state — composed, not a placeholder */
-                                                        <div className="relative px-6 pt-2 pb-7">
-                                                            <div className="rounded-[1.25rem] p-[1px] bg-gradient-to-b from-white/[0.06] to-white/[0.02]">
-                                                                <div className="rounded-[calc(1.25rem-1px)] bg-bg-card/50 backdrop-blur-md ring-1 ring-white/[0.04] px-6 py-9 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                                                                    <div className="mx-auto w-11 h-11 rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.06] flex items-center justify-center mb-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                                                                        <Calendar size={18} className="text-text-tertiary" strokeWidth={1.5} />
-                                                                    </div>
-                                                                    <p className="text-[13px] text-text-primary tracking-[-0.01em]">{t('Nothing scheduled.')}</p>
-                                                                    <p className="text-[11px] text-text-tertiary mt-1">{t('Your week is clear for now.')}</p>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <ul className="relative px-3 pb-4 space-y-1.5">
-                                                            {calendarEvents.map(ev => {
-                                                                const start = new Date(ev.startTime);
-                                                                const end = new Date(ev.endTime);
-                                                                const now = new Date();
-                                                                const tomorrow = new Date(now.getTime() + 86400000);
-                                                                const isToday = start.toDateString() === now.toDateString();
-                                                                const isTomorrow = start.toDateString() === tomorrow.toDateString();
-
-                                                                const diffMs = start.getTime() - now.getTime();
-                                                                const diffMin = diffMs / 60000;
-                                                                const durationMin = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
-                                                                const durationLabel = durationMin >= 60
-                                                                    ? `${Math.floor(durationMin / 60)}h${durationMin % 60 ? ` ${durationMin % 60}m` : ''}`
-                                                                    : `${durationMin}m`;
-
-                                                                // Urgency-tinted accent for the time chip
-                                                                let chipTone: { text: string; ring: string; bg: string };
-                                                                if (diffMin <= 30) chipTone = { text: 'text-red-300', ring: 'ring-red-400/25', bg: 'bg-red-500/[0.08]' };
-                                                                else if (diffMin <= 4 * 60) chipTone = { text: 'text-amber-200', ring: 'ring-amber-300/25', bg: 'bg-amber-400/[0.08]' };
-                                                                else chipTone = { text: 'text-text-secondary', ring: 'ring-white/[0.06]', bg: 'bg-white/[0.04]' };
-
-                                                                // Smart relative label
-                                                                let chipLabel: string;
-                                                                if (diffMin <= 0) chipLabel = t('Now');
-                                                                else if (diffMin < 60) chipLabel = `${t('in')} ${Math.ceil(diffMin)}m`;
-                                                                else if (diffMin < 4 * 60) {
-                                                                    const h = Math.floor(diffMin / 60);
-                                                                    const m = Math.round(diffMin - h * 60);
-                                                                    chipLabel = m > 0 ? `${t('in')} ${h}h ${m}m` : `${t('in')} ${h}h`;
-                                                                } else if (isToday) chipLabel = t('Today');
-                                                                else if (isTomorrow) chipLabel = t('Tomorrow');
-                                                                else chipLabel = start.toLocaleDateString([], { weekday: 'short' });
-
-                                                                const timeRange = `${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
-
-                                                                // Boarding-pass style date stub
-                                                                const dayNum = start.getDate();
-                                                                const monthAbbrev = start.toLocaleDateString([], { month: 'short' }).toUpperCase();
-
-                                                                // Provider detection
-                                                                let provider: string | null = null;
-                                                                if (ev.link) {
-                                                                    const u = ev.link.toLowerCase();
-                                                                    if (u.includes('meet.google.com')) provider = 'Meet';
-                                                                    else if (u.includes('zoom.us')) provider = 'Zoom';
-                                                                    else if (u.includes('teams.microsoft.com')) provider = 'Teams';
-                                                                    else if (u.includes('webex.com')) provider = 'Webex';
-                                                                }
-
-                                                                return (
-                                                                    <li
-                                                                        key={ev.id}
-                                                                        className="group/row relative rounded-[1.1rem] p-[1px] bg-gradient-to-b from-white/[0.06] to-white/[0.015] transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:from-white/[0.1] hover:to-white/[0.03]"
-                                                                    >
-                                                                        <div className="relative rounded-[calc(1.1rem-1px)] bg-bg-card/40 backdrop-blur-md ring-1 ring-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] flex items-stretch gap-3 pl-3 pr-3 py-3 transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/row:bg-bg-card/60">
-                                                                            {/* Date stub — boarding-pass style */}
-                                                                            <div className="shrink-0 w-12 flex flex-col items-center justify-center rounded-[0.85rem] bg-white/[0.03] ring-1 ring-white/[0.05] py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                                                                                <span className="text-[9px] font-medium uppercase tracking-[0.16em] text-text-tertiary leading-none">
-                                                                                    {monthAbbrev}
-                                                                                </span>
-                                                                                <span className="text-[20px] font-semibold tracking-[-0.02em] text-text-primary tabular-nums leading-none mt-1">
-                                                                                    {dayNum}
-                                                                                </span>
-                                                                            </div>
-
-                                                                            {/* Body */}
-                                                                            <div className="min-w-0 flex-1 flex flex-col justify-center">
-                                                                                <div className="flex items-center gap-2 mb-1">
-                                                                                    <span className={`shrink-0 inline-flex items-center rounded-full px-1.5 py-[1px] text-[9px] font-medium tracking-[0.06em] ring-1 ${chipTone.bg} ${chipTone.text} ${chipTone.ring} tabular-nums`}>
-                                                                                        {chipLabel}
-                                                                                    </span>
-                                                                                    {provider && (
-                                                                                        <span className="shrink-0 inline-flex items-center rounded-full px-1.5 py-[1px] text-[9px] font-medium tracking-[0.06em] bg-white/[0.04] text-text-secondary ring-1 ring-white/[0.05]">
-                                                                                            {provider}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                                <h4 className="text-[13.5px] font-medium text-text-primary tracking-[-0.01em] leading-snug truncate [text-wrap:balance]">
-                                                                                    {ev.title}
-                                                                                </h4>
-                                                                                <p className="text-[11px] text-text-tertiary tabular-nums mt-0.5">
-                                                                                    <span className="text-text-secondary">{timeRange}</span>
-                                                                                    <span className="mx-1.5 opacity-50">·</span>
-                                                                                    <span>{durationLabel}</span>
-                                                                                </p>
-                                                                            </div>
-
-                                                                            {/* Trailing action — magnetic button */}
-                                                                            {ev.link ? (
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => window.electronAPI?.openExternal(ev.link!)}
-                                                                                    title={ev.link}
-                                                                                    className="self-center shrink-0 group/btn inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1.5 bg-white/[0.05] hover:bg-white/[0.1] ring-1 ring-white/[0.07] text-text-primary text-[11px] font-medium transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.97] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-                                                                                >
-                                                                                    <span>{t('Join')}</span>
-                                                                                    <span className="w-5 h-5 rounded-full bg-white/[0.08] ring-1 ring-white/[0.08] flex items-center justify-center transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/btn:translate-x-[1px] group-hover/btn:-translate-y-[1px]">
-                                                                                        <ExternalLink size={9} strokeWidth={2} />
-                                                                                    </span>
-                                                                                </button>
-                                                                            ) : (
-                                                                                <span
-                                                                                    aria-label={t("No meeting link")}
-                                                                                    className="self-center shrink-0 inline-flex items-center justify-center w-2 h-2 rounded-full bg-white/[0.08] mr-3"
-                                                                                />
-                                                                            )}
-                                                                        </div>
-                                                                    </li>
-                                                                );
-                                                            })}
-                                                        </ul>
-                                                    )}
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <div className="w-full p-6">
-                                                <div className="mb-4">
-                                                    <Calendar size={24} className="text-text-tertiary mb-3" />
-                                                    <h4 className="text-sm font-bold text-text-primary mb-1">{t('No calendars')}</h4>
-                                                    <p className="text-xs text-text-secondary">{t('Get started by connecting a Google account.')}</p>
-                                                </div>
-
-                                                <button
-                                                    onClick={async () => {
-                                                        setIsCalendarsLoading(true);
-                                                        try {
-                                                            const res = await window.electronAPI.calendarConnect();
-                                                            if (res.success) {
-                                                                const status = await window.electronAPI.getCalendarStatus();
-                                                                setCalendarStatus(status);
-                                                            }
-                                                        } catch (e) {
-                                                            console.error(e);
-                                                        } finally {
-                                                            setIsCalendarsLoading(false);
-                                                        }
-                                                    }}
-                                                    disabled={isCalendarsLoading}
-                                                    className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2.5 ${isLight ? 'bg-bg-component hover:bg-bg-item-surface text-text-primary border border-border-subtle' : 'bg-[#303033] hover:bg-[#3A3A3D] text-white'}`}
-                                                >
-                                                    <svg viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
-                                                        <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
-                                                            <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
-                                                            <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
-                                                            <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.734 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" />
-                                                            <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
-                                                        </g>
-                                                    </svg>
-                                                    {isCalendarsLoading ? t('Connecting...') : t('Connect Google')}
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
+                            {activeTab === 'calendar' && <CalendarSettings />}
 
                             {activeTab === 'phone-mirror' && (
                                 <PhoneMirrorSettings />
