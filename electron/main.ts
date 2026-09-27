@@ -1227,6 +1227,7 @@ import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
 import { buildJudgePrompt } from "./intelligence/autoAnswer/AutoAnswerJudge"
 import { SimpleAutoAnswerEngine } from "./intelligence/autoAnswer/SimpleAutoAnswer"
+import { AutoAnswerUsageTelemetry } from "./intelligence/autoAnswer/AutoAnswerUsageTelemetry"
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
@@ -3329,6 +3330,7 @@ export class AppState {
         const { name, meetingGeneration, provider, ...properties } = event;
         telemetryService.track({ name, provider, properties: { meetingGeneration, ...properties } });
       } catch { /* telemetry must never break the pipeline */ }
+      this.autoAnswerUsage.observe(event);
     },
     log: (line) => { if (this._verboseLogging) console.log(line); },
     // review#10 parity (2026-08-25): boot on the registry's no-mode default
@@ -3336,8 +3338,41 @@ export class AppState {
   }, undefined, resolveAutoAnswerThresholds(null));
   private autoAnswerEmbedder: { embed(text: string): Promise<number[]> } | null = null;
 
+  /**
+   * The same Auto Answer events, sent to Pro operational telemetry: one row per
+   * automatic answer, one per meeting, counts and labels only. The engine hook
+   * above also writes them to TelemetryService, whose only active sink is a
+   * local JSONL file. See AutoAnswerUsageTelemetry.ts.
+   */
+  private readonly autoAnswerUsage = new AutoAnswerUsageTelemetry({
+    sink: (row) => {
+      // The same setting TelemetryService honours.
+      if (SettingsManager.getInstance().get('telemetryEnabled') === false) return;
+      const { usageOutbox } = require('./services/UsageOutbox');
+      usageOutbox.recordTelemetry(row);
+    },
+    // The template id (a fixed enum, never the user's mode name); a user mode
+    // is marked custom because it can carry any prompt.
+    mode: () => {
+      const { ModesManager } = require('./services/ModesManager');
+      const am = ModesManager.getInstance().getActiveMode();
+      if (!am) return null;
+      return am.isBuiltin ? am.templateType : `custom:${am.templateType}`;
+    },
+    answerModel: () => {
+      const selection = this.processingHelper?.getLLMHelper?.()?.getDirectAssistSelection?.();
+      if (!selection) return null;
+      // A custom or cURL provider's "model" is the user's own config id.
+      return selection.provider === 'custom' || selection.provider === 'curl'
+        ? { provider: selection.provider }
+        : { provider: selection.provider, model: selection.model };
+    },
+  });
+
   /** A manual What-to-Answer started (hotkey / button / accepted offer): the offer card is committed. */
   public onManualWhatToAnswer(): void {
+    // What streams next is the manual answer, not the automatic one.
+    this.autoAnswerUsage.stopAwaitingAnswer();
     this.simpleAutoAnswer.onManualAnswerStarted();
   }
 
@@ -6390,6 +6425,7 @@ export class AppState {
 
     const meetingGeneration = ++this._meetingGeneration;
     this.isMeetingActive = true;
+    this.autoAnswerUsage.meetingStarted();
     this.broadcastMeetingState()
     if (metadata) {
       this.intelligenceManager.setMeetingMetadata(metadata);
@@ -6633,6 +6669,7 @@ export class AppState {
     }
 
     this.cancelAutoAnswer();
+    this.autoAnswerUsage.meetingEnded();
     // Cover the window between here and `_pendingTeardown` assignment, during which
     // the new in-flight-audio-init await below yields the event loop.
     this._endMeetingInFlight = true;
@@ -7029,6 +7066,7 @@ export class AppState {
       // TurnPlan. Falls back to 'General knowledge' for legacy emitters
       // (fallback paths, code-hint, brainstorm) that don't compute it.
       flushBatchesBeforeFinal();
+      this.autoAnswerUsage.answerShown();
       const win = mainWindow()
       // emittedAt (2026-07-31): WTA supersession is generation-relative only —
       // a slow generation stays "current" through any number of manual turns
@@ -7045,6 +7083,7 @@ export class AppState {
       // drop a batch belonging to a superseded live answer. Undefined for the
       // other live streams (code hint / brainstorm) — id-less items are accepted.
       queueBatch('suggested_answer', { token, question, confidence, generationId });
+      this.autoAnswerUsage.answerShown();
     })
 
     // Orphaned-scaffold fix: a what-to-answer stream that already showed a
@@ -7052,6 +7091,7 @@ export class AppState {
     // Tell the renderer to drop the open scaffold row. Flush pending token
     // batches first so a late scaffold batch can't re-mount the row afterwards.
     this.intelligenceManager.on('suggested_answer_discard', (reason: string) => {
+      this.autoAnswerUsage.stopAwaitingAnswer();
       flushBatchesBeforeFinal();
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-suggested-answer-discard', { reason })
