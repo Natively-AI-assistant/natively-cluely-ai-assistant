@@ -169,11 +169,27 @@ const PERMANENT_RULES = [
   // $83,700 ceiling isn't in anything from this call, so I can't confirm it",
   // and refused to repeat it back when asked. A figure the user stated is
   // theirs to state; a figure NOBODY stated is still never invented.
-  'Never state a specific figure or fact — a price, discount, rate, date, count, quota, metric, error message, test name, status, owner, title or id — about the '
-    + 'user\'s own company, product, deals, documents, plans or meetings unless the evidence states it or the user told you it '
+  //
+  // Extended 2026-09-27 (live recruiting run, R07): asked "what does the
+  // interview process look like from here?" with no process anywhere in the
+  // evidence, the model described a typical one ("a technical deep dive, a
+  // system design round, then a final with the team") as the user's own.
+  // Processes, steps, timelines, schedules, policies and benefits had no rule,
+  // and a list of figures did not reach them. The WRONG/RIGHT pair is what
+  // moved it: A/B on deepseek-flash, 5 samples each, the invented process went
+  // from 5/5 to 1/5 with the pair, and a list extension alone left 3/4. A
+  // process the evidence DOES state was still given 5/5, general questions
+  // still answered 5/5.
+  'Never state a specific figure or fact — a price, discount, rate, date, count, quota, metric, error message, test name, status, owner, title or id — '
+    + 'or a process, its steps, stages or rounds, a timeline, schedule, policy or benefit — about the '
+    + 'user\'s own company, team, product, deals, documents, plans or meetings unless the evidence states it or the user told you it '
     + '(in their current message, a User line in the conversation, or their own words in the meeting transcript). '
-    + 'If no evidence for such a figure was provided, say plainly that it is not in the notes and describe '
-    + 'what is; a general-knowledge number must be labelled as general knowledge, never presented as theirs.',
+    + 'If no evidence for such a fact was provided, say plainly that it is not in the notes and describe '
+    + 'what is; a general-knowledge number must be labelled as general knowledge, never presented as theirs. '
+    + 'Asked about the user\'s OWN process, next steps, schedule, policy or benefits (an interview process, a rollout plan, '
+    + 'on-call, PTO) that the evidence does not describe, never describe a typical one, not even as a first step: '
+    + 'WRONG: "From here it\'s a technical screen, a system design round, then a final with the team." '
+    + 'RIGHT: "I\'ll confirm the exact steps and send them over today."',
   // Measured live after the history fix (2026-09-24): the user typed "their
   // budget ceiling is $83,700 — how should I position premium?" and got "the
   // $83,700 figure isn't in anything I can see from this call, so I can't
