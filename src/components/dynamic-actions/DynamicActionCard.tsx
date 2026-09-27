@@ -193,63 +193,75 @@ export const DynamicActionCard = forwardRef<HTMLDivElement, Props>(function Dyna
       data-testid={`dynamic-action-card-${action.id}`}
     >
       <div
-        className="action-cue-row relative py-[3px] no-drag select-none"
+        className="action-cue-row py-[3px] no-drag select-none"
         data-shortcut={shortcut ? 'true' : 'false'}
         data-pressing={pressing ? 'true' : undefined}
       >
-        <button
-          type="button"
-          className="overlay-chip-surface action-cue w-full flex items-center gap-2.5 h-9 pl-3 pr-2 rounded-[12px] border text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--overlay-border)]"
+        {/* The chip surface is this wrapper, so the accept button and the
+            dismiss × can be SIBLINGS (a button can't hold a button) while the
+            keycap and the × share one box: the trailing zone below. */}
+        <div
+          className="overlay-chip-surface action-cue flex items-center h-9 pr-2 rounded-[12px] border"
           style={surfaceStyle}
-          title={action.description ?? action.label}
-          onClick={async () => {
-            if (busy) return
-            setBusy(true)
-            try {
-              await onAccept(action)
-            } finally {
-              setBusy(false)
-            }
-          }}
         >
-          <Icon aria-hidden className="action-cue-glyph w-3.5 h-3.5 shrink-0 text-[var(--overlay-text-muted)]" strokeWidth={1.75} />
-          <span className="action-cue-label shrink-0 text-[12.5px] font-medium text-[var(--overlay-text-primary)]">
-            {action.label}
-          </span>
-          {snippet && (
-            <span className="min-w-0 flex-1 truncate text-[12px] italic text-[var(--overlay-text-secondary)] opacity-80">
-              {snippet}
+          <button
+            type="button"
+            className="action-cue-main flex min-w-0 flex-1 items-center gap-2.5 self-stretch pl-3 pr-2 rounded-l-[12px] text-left cursor-pointer bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--overlay-border)]"
+            title={action.description ?? action.label}
+            onClick={async () => {
+              if (busy) return
+              setBusy(true)
+              try {
+                await onAccept(action)
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            <Icon aria-hidden className="action-cue-glyph w-3.5 h-3.5 shrink-0 text-[var(--overlay-text-muted)]" strokeWidth={1.75} />
+            <span className="action-cue-label shrink-0 text-[12.5px] font-medium text-[var(--overlay-text-primary)]">
+              {action.label}
             </span>
-          )}
-          <span className="ml-auto flex shrink-0 items-center gap-2">
+            {snippet && (
+              <span className="min-w-0 flex-1 truncate text-[12px] italic text-[var(--overlay-text-secondary)] opacity-80">
+                {snippet}
+              </span>
+            )}
             {waiting > 0 && (
               <span
                 key={waiting}
-                className="action-cue-more text-[11px] tabular-nums font-medium text-[var(--overlay-text-muted)]"
+                className="action-cue-more ml-auto shrink-0 text-[11px] tabular-nums font-medium text-[var(--overlay-text-muted)]"
                 aria-label={`${waiting} more ${waiting === 1 ? 'suggestion' : 'suggestions'} waiting`}
                 title={`${waiting} more ${waiting === 1 ? 'suggestion' : 'suggestions'} waiting`}
               >
                 +{waiting}
               </span>
             )}
-            <span className="flex min-w-[24px] justify-end">
-              {shortcut && (
-                <kbd className="action-cue-key inline-flex items-center h-[18px] px-1.5 rounded-[5px] border text-[10px] font-medium leading-none tracking-[0.02em] whitespace-nowrap text-[var(--overlay-text-muted)] border-[var(--overlay-border-soft)] bg-[var(--overlay-control-bg)]">
-                  {shortcut}
-                </kbd>
-              )}
-            </span>
+          </button>
+          {/* ONE box for the keycap and the ×: the × fills exactly the
+              keycap's rectangle, so the swap is a cross-fade in place. Two
+              boxes of different sizes (a 33px keycap under a 24px circle
+              pinned to the row's edge) left the keycap's edges showing around
+              the × — "overlapping and cutting off partially". */}
+          <span className="action-cue-trail relative grid shrink-0 place-items-center">
+            {shortcut ? (
+              <kbd aria-hidden className="action-cue-key inline-flex items-center justify-center h-[20px] min-w-[24px] px-1.5 rounded-[6px] border text-[10px] font-medium leading-none tracking-[0.02em] whitespace-nowrap text-[var(--overlay-text-muted)] border-[var(--overlay-border-soft)] bg-[var(--overlay-control-bg)]">
+                {shortcut}
+              </kbd>
+            ) : (
+              <span aria-hidden className="block h-[20px] w-[24px]" />
+            )}
+            <button
+              type="button"
+              onClick={() => onDismiss(action.id)}
+              className="action-cue-dismiss absolute inset-0 grid place-items-center rounded-[6px] text-[var(--overlay-text-muted)] hover:text-[var(--overlay-text-primary)] hover:bg-[var(--overlay-icon-hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--overlay-border)]"
+              title="Dismiss"
+              aria-label={`Dismiss ${action.label}`}
+            >
+              <X className="w-3 h-3" strokeWidth={2} />
+            </button>
           </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => onDismiss(action.id)}
-          className="action-cue-dismiss absolute right-2 top-1/2 grid h-6 w-6 place-items-center rounded-full text-[var(--overlay-text-muted)] hover:text-[var(--overlay-text-primary)] hover:bg-[var(--overlay-icon-hover-bg)]"
-          title="Dismiss"
-          aria-label={`Dismiss ${action.label}`}
-        >
-          <X className="w-3 h-3" strokeWidth={2} />
-        </button>
+        </div>
       </div>
     </motion.div>
   )

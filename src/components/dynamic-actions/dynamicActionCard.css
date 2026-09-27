@@ -16,6 +16,12 @@
 .action-cue-row[data-pressing="true"] .overlay-chip-surface.action-cue {
   transform: translateY(0) scale(0.99);
 }
+/* The surface is the wrapper, so :active also reaches it when the × is
+   pressed. Dismissing is not accepting: the row stays put. */
+[data-interface-theme] .overlay-chip-surface.action-cue:has(.action-cue-dismiss:active),
+.overlay-chip-surface.action-cue:has(.action-cue-dismiss:active) {
+  transform: none;
+}
 
 .action-cue {
   transition:
@@ -66,16 +72,18 @@
   transition-duration: 150ms, 150ms, 150ms, 80ms, 80ms;
 }
 
+/* The × fills the keycap's own box (.action-cue-trail), so the two swap in
+   one rectangle and never show each other's edges. */
 .action-cue-dismiss {
   opacity: 0;
-  transform: translateY(-50%) scale(0.8);
+  transform: scale(0.8);
   filter: blur(2px);
   pointer-events: none;
 }
 .action-cue-row:hover .action-cue-dismiss,
 .action-cue-dismiss:focus-visible {
   opacity: 1;
-  transform: translateY(-50%) scale(1);
+  transform: scale(1);
   filter: blur(0);
   pointer-events: auto;
   transition-duration: 150ms, 150ms, 150ms, 80ms, 80ms;
@@ -112,7 +120,7 @@
   }
   .action-cue-row .action-cue-dismiss,
   .action-cue-row:hover .action-cue-dismiss {
-    transform: translateY(-50%);
+    transform: none;
     filter: none;
   }
   .overlay-chip-surface.action-cue:active,
