@@ -988,11 +988,15 @@ describe('the three answer surfaces read their deadline through that answer\'s o
   });
 
   test('phone mirror: the same, on phoneController', () => {
-    assert.match(ipc, /llmHelper\.streamChat\(message, undefined, context, [^\n]*, \[\], phoneController\.signal, undefined, phoneRouteOptions\)/);
+    // The phone's photos and the overlay's attached screenshots ride the phone
+    // question (2026-09-27), so the image argument is no longer `undefined`.
+    assert.match(ipc, /llmHelper\.streamChat\(message, phoneImagePaths\.length \? phoneImagePaths : undefined, context, [^\n]*, \[\], phoneController\.signal, undefined, phoneRouteOptions\)/);
     const site = between(ipc, 'const phoneLlm = llmHelper.textTurn?.(phoneController.signal) ?? llmHelper;', 'onCleanup: () => { try { phoneController.abort()');
     assert.doesNotMatch(site, READS);
-    assert.match(site, /performanceHooks\(\{\s*llmHelper: phoneLlm as any/);
-    assert.match(site, /\{ llmHelper: phoneLlm as any, hasImages: false/);
+    assert.match(site, /performanceHooks\(\{\s*llmHelper: phoneLlm as any,\s*hasImages: phoneHasImages/);
+    assert.match(site, /\{ llmHelper: phoneLlm as any, hasImages: phoneHasImages/);
+    // ...and an image question gets the vision deadline, as the desktop's does.
+    assert.match(site, /phoneHasImages\s*\?\s*totalHardTimeoutMs\(\{ isLocal: phoneUsingLocalLlm, isVisionTurn: true/);
   });
 
   test('Auto Answer: keyed by the run\'s own cancellation token, which generateStream hands streamChat', () => {

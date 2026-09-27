@@ -174,6 +174,17 @@ export function classifyStreamError(err: any, timedOut: boolean): StreamErrorCla
     msg.includes('api key') || msg.includes('api_key') || msg.includes('invalid_api') ||
     msg.includes('expired') || msg.includes('quota') || msg.includes('insufficient_quota')
   ) return 'auth';
+  // Billing / credit exhaustion. OpenAI now says "429 You have no credits
+  // remaining" (no "quota"), which read as a rate limit: a key with no credits
+  // was retried three times with backoff before the chain moved on, ~13 s on
+  // the first screenshot or photo of a session and again after every cooldown
+  // (2026-09-27). It will not self-heal. This engine stays import-free, so this
+  // is a copy of the billing branch of providerErrorClassifier's
+  // isPermanentKeyError; NoCreditsIsNotARateLimit2026_09_27 keeps them agreeing.
+  if (
+    status === 402 || /\b402\b/.test(msg) ||
+    /billing|insufficient[_ ]?(?:credit|quota|funds)|no credits?|out of credits?|payment required|account.*(?:suspend|disabled|deactivat)|failed_precondition.*billing/.test(msg)
+  ) return 'auth';
   // AFTER auth, deliberately: a 403 that also happens to mention a model name
   // is a credentials problem, and demoting the provider for 24h would be the
   // wrong remedy. The observed Groq body carries none of the auth tokens

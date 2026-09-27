@@ -1949,6 +1949,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [attachedContext, setAttachedContext] = useState<Array<{ path: string; preview: string }>>(
     [],
   );
+  // Phone Mirror: preview → path of every screenshot the tray held lately, so a
+  // sent question card (which keeps only previews) can name its screenshots.
+  const phoneShotPathsRef = useRef(new Map<string, string>());
+  const phoneSentShotCardsRef = useRef(new Set<string>());
+  // The tray as of the last render, for listeners registered once.
+  const attachedContextRef = useRef(attachedContext);
 
   // Settings State with Persistence
   const [isUndetectable, setIsUndetectable] = useState(false);
@@ -7392,6 +7398,49 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     };
   }, []);
 
+  // Phone Mirror shows this tray too. The tray is only ever changed here, so
+  // the whole list is reported on every change (added, removed, cleared, sent),
+  // including the empty one on mount, which clears a tray left by a reload.
+  useEffect(() => {
+    attachedContextRef.current = attachedContext;
+    const known = phoneShotPathsRef.current;
+    for (const shot of attachedContext) {
+      known.delete(shot.preview);
+      known.set(shot.preview, shot.path);
+    }
+    while (known.size > 20) known.delete(known.keys().next().value as string);
+    window.electronAPI?.phoneMirrorSetAttachments?.(
+      attachedContext.map(({ path, preview }) => ({ path, preview })),
+    );
+  }, [attachedContext]);
+
+  // The phone took one off its tray (it shows this tray), so it leaves here.
+  useEffect(() => {
+    return window.electronAPI?.onPhoneMirrorDetach?.(({ path }) => {
+      setAttachedContext((prev) => prev.filter((shot) => shot.path !== path));
+    });
+  }, []);
+
+  // ...and, like the question card here, the screenshots a question was sent
+  // with. Only the newest cards can be new; main ignores screenshots the tray
+  // never held (a card restored after a reload, say).
+  useEffect(() => {
+    const reported = phoneSentShotCardsRef.current;
+    for (const msg of messages.slice(-8)) {
+      if (msg.role !== 'user' || !msg.hasScreenshot || reported.has(msg.id)) continue;
+      reported.add(msg.id);
+      const previews = msg.screenshotPreviews?.length
+        ? msg.screenshotPreviews
+        : msg.screenshotPreview
+          ? [msg.screenshotPreview]
+          : [];
+      const paths = previews
+        .map((preview) => phoneShotPathsRef.current.get(preview))
+        .filter((path): path is string => !!path);
+      if (paths.length) window.electronAPI?.phoneMirrorImagesSent?.(msg.id, paths);
+    }
+  }, [messages]);
+
   // Quick Actions - Updated to use new Intelligence APIs
 
   // PERF: useCallback so the reference is stable between renders. MessageRow
@@ -8166,6 +8215,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // event adds the user turn + streaming placeholder before tokens arrive.
     cleanups.push(
       window.electronAPI.onPhoneMirrorIncomingChat(({ message }) => {
+        // Main sent the attached screenshots with this question (the phone
+        // shows the same tray), so it takes them as a question typed here
+        // does, even while a Direct answer keeps the question off this chat.
+        const shots = attachedContextRef.current;
+        if (shots.length) setAttachedContext([]);
         if (activeDirectAssistRef.current) return;
         flushToken();
         requestStartTimeRef.current = Date.now();
@@ -8177,7 +8231,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         streamingNodeRef.current = null;
         setMessages((prev) => [
           ...prev,
-          { id: userId, role: 'user', text: message },
+          shots.length
+            ? {
+                id: userId,
+                role: 'user',
+                text: message,
+                hasScreenshot: true,
+                screenshotPreview: shots[0].preview,
+                screenshotPreviews: shots.map((shot) => shot.preview).filter(Boolean),
+              }
+            : { id: userId, role: 'user', text: message },
           {
             id: placeholderId,
             role: 'system',
@@ -9707,6 +9770,8 @@ Provide only the answer, nothing else.`;
       // could fire before setAttachedContext had flushed, leaving handleWhatToSay
       // with an empty attachedContext and causing silent failures.
       pendingCaptureRef.current = data;
+      // The answer can start before the tray effect records this one.
+      phoneShotPathsRef.current.set(data.preview, data.path);
 
       setAttachedContext((prev) => {
         if (prev.some((s) => s.path === data.path)) return prev;

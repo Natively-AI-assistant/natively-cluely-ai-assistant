@@ -1318,6 +1318,8 @@ try {
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
 import { PhoneMirrorService, shouldStartPhoneMirrorOnBoot } from "./services/PhoneMirrorService"
+import { PHONE_IMAGE_PREFIX } from "./utils/phoneImage"
+import { renderPhoneAnswer } from "./services/phoneMirrorMarkdown"
 import { describePageCaptureFallback, describeDoubleCaptureFailure, PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL } from "./services/pageCaptureFallback"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
@@ -2305,6 +2307,10 @@ export class AppState {
     const helper = this.getWindowHelper();
     this.sendToWindow(helper.getLauncherWindow(), 'native-audio-transcript', payload);
     this.sendToWindow(helper.getOverlayWindow(), 'native-audio-transcript', payload);
+    // Phone mirror shows the same live transcript (no-op when it isn't running).
+    try {
+      PhoneMirrorService.getInstance().publishTranscript(payload);
+    } catch { /* mirror only */ }
   }
 
   /**
@@ -2421,6 +2427,12 @@ export class AppState {
 
   private broadcastMeetingState(): void {
     this.broadcast('meeting-state-changed', { isActive: this.isMeetingActive });
+    // A new meeting starts without the last one's phone images, as the overlay
+    // starts without its attachments (session-reset).
+    if (this.isMeetingActive) this.phoneImages = [];
+    try {
+      PhoneMirrorService.getInstance().publishMeetingState(this.isMeetingActive);
+    } catch { /* mirror only */ }
   }
 
   // Public so the reference-file upload IPC handler can kick a retry for a
@@ -7664,6 +7676,67 @@ export class AppState {
     return this.screenshotHelper.getImagePreview(filepath)
   }
 
+  // Images the phone sent (uploads, and desktop captures it asked for), kept
+  // for the phone's own typed questions: the overlay gets each one through
+  // screenshot-attached, but a phone question never goes through the overlay.
+  // Cleared at meeting start, when the overlay drops its attachments too.
+  private phoneImages: Array<{ path: string; at: number; used: boolean }> = []
+  private static readonly PHONE_IMAGE_TTL_MS = 15 * 60 * 1000
+
+  /** Save a photo or screenshot sent from the phone and attach it to the next answer. */
+  public async receivePhoneImage(image: { data: Buffer; ext: 'jpg' | 'png' | 'webp' }): Promise<string> {
+    // The prefix tells the vision path it is a phone photo/screenshot, which it
+    // sends at a higher resolution than a capture of this screen.
+    const imagePath = await this.screenshotHelper.addExternalImage(image.data, image.ext, {
+      namePrefix: PHONE_IMAGE_PREFIX,
+    })
+    await this.attachImageToMeeting(imagePath)
+    return imagePath
+  }
+
+  /**
+   * Attach an image to the next answer the way a capture taken on this machine
+   * is (the overlay lists it and sends it with its next request), and remember
+   * it for the phone's next typed question. Returns whether a meeting surface
+   * received it.
+   */
+  public async attachImageToMeeting(imagePath: string): Promise<boolean> {
+    let preview = ''
+    try {
+      preview = await this.getImagePreview(imagePath)
+    } catch {
+      // The preview is only the thumbnail; answers read the file itself.
+    }
+    const helper = this.getWindowHelper()
+    const sent = new Set<number>()
+    let delivered = false
+    for (const win of [helper.getLauncherWindow(), helper.getOverlayWindow()]) {
+      if (!win || sent.has(win.id)) continue
+      if (this.sendToWindow(win, 'screenshot-attached', { path: imagePath, preview })) {
+        sent.add(win.id)
+        delivered = true
+      }
+    }
+    this.phoneImages.push({ path: imagePath, at: Date.now(), used: false })
+    if (this.phoneImages.length > 5) this.phoneImages = this.phoneImages.slice(-5)
+    return delivered
+  }
+
+  /** The phone took this image off the tray: no phone question may use it after this. */
+  public dropPhoneImage(imagePath: string): void {
+    for (const img of this.phoneImages) if (img.path === imagePath) img.used = true
+  }
+
+  /** Images the phone sent that no phone question has used yet (recent, still on disk); marks them used. */
+  public takePhoneChatImages(): string[] {
+    const now = Date.now()
+    const fresh = this.phoneImages.filter(
+      (img) => !img.used && now - img.at < AppState.PHONE_IMAGE_TTL_MS && fs.existsSync(img.path),
+    )
+    for (const img of fresh) img.used = true
+    return fresh.map((img) => img.path)
+  }
+
   public async deleteScreenshot(
     path: string
   ): Promise<{ success: boolean; error?: string }> {
@@ -9216,6 +9289,12 @@ if (process.env.THINKING_MATRIX === '1') {
   // server so the phone/companion extension can't connect. If the leak vanishes,
   // PhoneMirror connect is confirmed as the trigger.
   const disablePhoneMirrorOnBoot = process.env.NATIVELY_DISABLE_PHONE_MIRROR === '1';
+  // Photos and screenshots sent from the phone join the screenshot queue and
+  // attach to the next answer, like a capture taken on this machine.
+  PhoneMirrorService.getInstance().setPhoneImageHandler((image) => appState.receivePhoneImage(image));
+  // Answers reach the phone rendered as the overlay renders them: markdown,
+  // tables, math and the [[GIST]] chip.
+  PhoneMirrorService.getInstance().setAnswerRenderer(renderPhoneAnswer);
   if (
     shouldStartPhoneMirrorOnBoot({
       disablePhoneMirror: disablePhoneMirrorOnBoot,

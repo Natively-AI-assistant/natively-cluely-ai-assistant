@@ -3,7 +3,7 @@
 import * as crypto from 'crypto';
 import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
-import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, nativeImage, shell, systemPreferences } from 'electron';
 import { setOpenAtLogin, getOpenAtLogin } from './utils/windowsTaskbarPolicy';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
@@ -21,7 +21,7 @@ import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manag
 import { AppState } from './main';
 import { CodexCliService, getCodexAuthStatus, isCodexAuthError } from './services/CodexCliService';
 import { describeServiceAccountRejection } from './services/googleServiceAccount';
-import { PhoneMirrorService } from './services/PhoneMirrorService';
+import { PHONE_THUMB_MAX_CHARS, PhoneMirrorService } from './services/PhoneMirrorService';
 import { sanitizeContextEnvelope } from './services/browser-context/sanitize';
 import { formatEnvelopeForPrompt } from './services/browser-context/formatEnvelopeForPrompt';
 import { BrowserMetadataClassifierService } from './services/browser-context/BrowserMetadataClassifierService';
@@ -1787,6 +1787,13 @@ export function initializeIpcHandlers(appState: AppState): void {
           // dedicated V3 surface owns them.
           const callerOwnsPrompt = options?.skipSystemPrompt === true && Boolean(context);
           if (!callerOwnsPrompt && isContextIntelligenceV3Enabled()) {
+            // The phone shows the question now, with Thinking under it, as the
+            // overlay does: everything below (screen understanding, retrieval,
+            // the prompt) can take seconds before a first word, and the phone
+            // used to get the question only with the finished answer.
+            try {
+              PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), String(message || ''), { awaitingAnswer: true });
+            } catch { /* mirror only */ }
             const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
             const { resolveModePolicy, isModeId, resolveModeIdOrWarn } = require('./context-intelligence/policies/mode-policy-registry');
             const { ModesManager } = require('./services/ModesManager');
@@ -2296,6 +2303,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               for await (const tok of v3Stream.stream) {
                 if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
                   finishDebug(finalText, false, 'superseded_by_newer_stream');
+                  try { PhoneMirrorService.getInstance().publishError(String(myStreamId), 'a newer question replaced it'); } catch { /* mirror only */ }
                   return null;
                 }
                 if (!v3SawFirstToken) {
@@ -2304,6 +2312,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                 }
                 finalText += tok;
                 event.sender.send('gemini-stream-token', tok, { streamId: myStreamId });
+                // Streamed to the phone as it is written, like the legacy path.
+                try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), tok); } catch { /* mirror only */ }
               }
             } catch (streamErr) {
               // Finalize the debug record with the partial answer, then let the
@@ -2367,6 +2377,12 @@ export function initializeIpcHandlers(appState: AppState): void {
               incomplete: v3Truncated,
               incompleteReason: v3Truncated ? v3Stream.outcome.reason : undefined,
             });
+            // The phone watched it stream: end it as the overlay does (a cut-off
+            // answer keeps its words and says it stopped).
+            try {
+              if (v3Truncated) PhoneMirrorService.getInstance().publishError(String(myStreamId), 'it was cut off');
+              else PhoneMirrorService.getInstance().publishDone(String(myStreamId), finalText);
+            } catch { /* mirror only */ }
             finishDebug(finalText, !v3Truncated, v3Truncated ? 'stream_truncated' : null);
 
             // ── Record the turn (V3 previously recorded NOTHING) ────────────
@@ -2470,10 +2486,6 @@ export function initializeIpcHandlers(appState: AppState): void {
                   im?.logUsage?.('chat', String(message || ''), finalText);
                 }
               } catch { /* session transcript only */ }
-              try {
-                PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), String(message || ''));
-                if (!v3Truncated) PhoneMirrorService.getInstance().publishAssistantMessage(String(myStreamId), finalText, 'Chat');
-              } catch { /* mirror only */ }
             }
 
             return null;
@@ -2551,7 +2563,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               true,
             );
             try {
-              PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message);
+              PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message, { awaitingAnswer: true });
             } catch (_) {
               /* noop */
             }
@@ -2629,9 +2641,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           true,
         );
 
-        // Mirror to phone (no-op if PhoneMirrorService isn't running).
+        // Mirror to phone (no-op if PhoneMirrorService isn't running). Already
+        // published if the V3 path ran first and fell through; published once.
         try {
-          PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message);
+          PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), message, { awaitingAnswer: true });
         } catch (_) {
           /* noop */
         }
@@ -18236,8 +18249,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Stealth screenshot capture triggered from the phone UI.
   // Takes a screenshot on the PC (adding it to the screenshot queue so it can
   // be used in the next AI prompt), then broadcasts an ack so the phone shows
-  // a confirmation toast.  The image is NOT sent to the phone — the phone is
-  // just a remote shutter; the screenshot stays on the desktop for AI use.
+  // a confirmation toast. The phone only sees a thumbnail, and only once the
+  // overlay attaches the capture (phone-mirror:attachments below).
   safeHandle('phone-mirror:push-screenshot', async (_, screenshotPath?: string) => {
     try {
       const imgPath = screenshotPath || (await appState.takeScreenshot(false));
@@ -18249,6 +18262,79 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e: any) {
       console.error('[IPC] phone-mirror:push-screenshot error:', e);
       return { error: e?.message || 'failed to capture screenshot' };
+    }
+  });
+
+  // The overlay's attached-screenshot tray, mirrored on the phone, and the
+  // screenshots each question was sent with. The overlay owns the tray, so only
+  // its window may report it. Paths only name screenshots: nothing is read from
+  // disk here, and the phone never sees a path.
+  const phoneTrayReporters = new WeakSet<object>();
+  // While an overlay reports its tray, that tray is THE list of what goes with
+  // the next answer, the phone's photos included (see the phone chat below).
+  let overlayTrayLive = false;
+  const fromOverlayWindow = (event: any): boolean => {
+    const overlay = appState.getWindowHelper().getOverlayWindow();
+    if (!overlay || overlay.isDestroyed() || event?.sender !== overlay.webContents) return false;
+    overlayTrayLive = true;
+    if (!phoneTrayReporters.has(event.sender)) {
+      phoneTrayReporters.add(event.sender);
+      // A closed overlay has no tray; the phone must not keep showing one.
+      event.sender.once('destroyed', () => {
+        overlayTrayLive = false;
+        try { PhoneMirrorService.getInstance().setAttachments([]); } catch { /* mirror only */ }
+      });
+    }
+    return true;
+  };
+  // Previews are 480 px JPEGs, except when sharp is missing: then they are the
+  // full-size capture (megabytes), shrunk here to the same size, once per path.
+  const oversizedThumbs = new Map<string, string>();
+  const phoneThumb = (path: string, preview: unknown): string => {
+    if (typeof preview !== 'string' || !preview.startsWith('data:image/')) return '';
+    if (preview.length <= PHONE_THUMB_MAX_CHARS) return preview;
+    const cached = oversizedThumbs.get(path);
+    if (cached !== undefined) return cached;
+    let thumb = '';
+    try {
+      const image = nativeImage.createFromDataURL(preview);
+      if (!image.isEmpty()) {
+        const { width, height } = image.getSize();
+        const scale = Math.min(1, 480 / Math.max(width, height));
+        const small = image.resize({
+          width: Math.max(1, Math.round(width * scale)),
+          height: Math.max(1, Math.round(height * scale)),
+          quality: 'good',
+        });
+        thumb = 'data:image/jpeg;base64,' + small.toJPEG(72).toString('base64');
+      }
+    } catch { /* no thumbnail; the phone skips this one */ }
+    oversizedThumbs.set(path, thumb);
+    if (oversizedThumbs.size > 12) oversizedThumbs.delete(oversizedThumbs.keys().next().value as string);
+    return thumb;
+  };
+  safeOn('phone-mirror:attachments', (event, items: unknown) => {
+    if (!fromOverlayWindow(event) || !Array.isArray(items)) return;
+    try {
+      PhoneMirrorService.getInstance().setAttachments(
+        items.slice(-5).map((item: any) => {
+          const path = typeof item?.path === 'string' ? item.path : '';
+          return { path, thumb: path ? phoneThumb(path, item?.preview) : '' };
+        }),
+      );
+    } catch (e) {
+      console.warn('[PhoneMirror] attachments mirror failed:', e);
+    }
+  });
+  safeOn('phone-mirror:images-sent', (event, id: unknown, paths: unknown) => {
+    if (!fromOverlayWindow(event) || typeof id !== 'string' || !Array.isArray(paths)) return;
+    try {
+      PhoneMirrorService.getInstance().publishSentImages(
+        id.slice(0, 80),
+        paths.filter((p): p is string => typeof p === 'string').slice(0, 5),
+      );
+    } catch (e) {
+      console.warn('[PhoneMirror] sent screenshots mirror failed:', e);
     }
   });
 
@@ -18528,7 +18614,26 @@ export function initializeIpcHandlers(appState: AppState): void {
           // Best-effort — never break the phone path on the ownership check.
           if (isIntelligenceFlagEnabled('trace')) console.warn('[SOURCE-GUARD] phone ownership check skipped (non-fatal):', pOwnErr?.message);
         }
-        const stream = llmHelper.streamChat(message, undefined, context, resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({ answerType: phoneRouteOptions?.answerType as any, question: message })), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
+        // The screenshots attached in the overlay ride this question: the tray
+        // the phone shows too, which the overlay clears when it shows the
+        // question, as it does for a question typed there. Photos the phone
+        // sent are in that tray until sent or removed, so they go only while
+        // it still holds them; with no overlay to hold them they go by
+        // themselves. streamChat applies the same vision policy (private
+        // vision, denied screenshot scope, vision-only) as the desktop's
+        // typed chat, which passes its attachments the same way.
+        const phoneImagePaths = (() => {
+          try {
+            const { validateImagePath } = require('./utils/curlUtils');
+            const userDataDir = require('electron').app.getPath('userData');
+            const phonePhotos = appState.takePhoneChatImages();
+            const paths = overlayTrayLive ? phoneMirror.getAttachmentPaths() : phonePhotos;
+            return [...new Set(paths)].filter((p: string) => validateImagePath(p, userDataDir).isValid);
+          } catch {
+            return [] as string[];
+          }
+        })();
+        const stream = llmHelper.streamChat(message, phoneImagePaths.length ? phoneImagePaths : undefined, context, resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({ answerType: phoneRouteOptions?.answerType as any, question: message })), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
         let full = '';
         let phoneSuperseded = false;
         // Deadline-guarded (Issue 1) — this is a live streaming surface too: a hung
@@ -18550,6 +18655,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         // signal the answer call carries), so the deadline and the profile name
         // the model the dispatch uses — see the manual-chat site.
         const phoneLlm = llmHelper.textTurn?.(phoneController.signal) ?? llmHelper;
+        // Photos and attached screenshots make this a vision turn, timed like
+        // the desktop's screenshot questions (see the manual-chat site).
+        const phoneHasImages = phoneImagePaths.length > 0;
         const phoneUsingLocalLlm = phoneLlm.isUsingOllama() || phoneLlm.isUsingCodexCli();
         const phoneViaServerCascade = phoneLlm.isUsingNativelyServerCascade?.() === true;
         const phoneUsingUserEndpoint = phoneLlm.isUsingUserEndpoint?.() === true;
@@ -18570,7 +18678,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // from, which is the silent-divergence failure this area keeps producing.
         const phonePerf = performanceHooks({
           llmHelper: phoneLlm as any,
-          hasImages: false,
+          hasImages: phoneHasImages,
           inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`),
           isUserCancelled: () => phoneSuperseded,
           onDiagnostics: (record) => {
@@ -18583,8 +18691,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           observe: phonePerf.observe,
           interTokenStallMs: phonePerf.interTokenStallMs,
           firstUsefulDeadlineMs: applyAdaptiveTtft(
-            firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade, phoneUsingUserEndpoint, phoneObservedLatency),
-            { llmHelper: phoneLlm as any, hasImages: false, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
+            phoneHasImages
+              ? totalHardTimeoutMs({ isLocal: phoneUsingLocalLlm, isVisionTurn: true, viaServerCascade: phoneViaServerCascade })
+              : firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade, phoneUsingUserEndpoint, phoneObservedLatency),
+            { llmHelper: phoneLlm as any, hasImages: phoneHasImages, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
           ),
           isUsefulYet: () => full.trim().length >= 5,
           shouldAbort: () => {
@@ -18647,10 +18757,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     } else if (cmd.type === 'screenshot') {
       // Stealth screenshot: capture on PC → add to screenshot queue → ack to phone.
-      // The image is NOT sent to the phone — it stays on the desktop for AI use.
-      // The phone simply acts as a remote shutter button.
+      // The phone sees it only as the overlay's tray lists it (a thumbnail).
       try {
-        await appState.takeScreenshot(false);
+        const capturedPath = await appState.takeScreenshot(false);
+        // Attach it like a capture taken here, so the next answer (overlay or
+        // phone question) actually uses it. Queued alone, only Code Hint and
+        // Brainstorm ever read it.
+        await appState.attachImageToMeeting(capturedPath);
         PhoneMirrorService.getInstance().publishAck(
           'screenshot',
           'Screenshot captured — queued for AI',
@@ -18659,6 +18772,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         console.error('[PhoneMirror] phone screenshot request failed:', e);
         PhoneMirrorService.getInstance().publishAck('screenshot', 'Screenshot failed');
       }
+    } else if (cmd.type === 'detach') {
+      // The phone took a screenshot or photo off its tray. The overlay owns the
+      // tray, so it removes it there and reports the tray back; a phone photo
+      // must not then ride a later phone question on its own either.
+      appState.dropPhoneImage(cmd.path);
+      const overlay = appState.getWindowHelper().getOverlayWindow();
+      if (overlay && !overlay.isDestroyed()) overlay.webContents.send('phone-mirror:detach', { path: cmd.path });
     }
   });
 

@@ -287,8 +287,15 @@ const bracketDisplayInline = {
   },
 };
 
+/**
+ * The math extensions the streaming renderer uses, exported so the Phone
+ * Mirror page's desktop-side renderer (electron/services/phoneMirrorMarkdown.ts)
+ * parses math by exactly the same rules as the overlay.
+ */
+export const STREAMING_MATH_EXTENSIONS = [inlineMath, inlineDollarDisplay, bracketDisplayInline];
+
 const streamingMarked = new Marked({
-  extensions: [inlineMath, inlineDollarDisplay, bracketDisplayInline],
+  extensions: STREAMING_MATH_EXTENSIONS,
 });
 
 /**

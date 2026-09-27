@@ -1597,6 +1597,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   phoneMirrorRequestAutoContext: () => ipcRenderer.invoke('phone-mirror:request-auto-context'),
   phoneMirrorPushScreenshot: (screenshotPath?: string) =>
     ipcRenderer.invoke('phone-mirror:push-screenshot', screenshotPath),
+  // The overlay's attached-screenshot tray, and the screenshots a question was
+  // sent with, mirrored on the phone (overlay window only; main checks).
+  phoneMirrorSetAttachments: (items: Array<{ path: string; preview: string }>) =>
+    ipcRenderer.send('phone-mirror:attachments', items),
+  phoneMirrorImagesSent: (id: string, paths: string[]) =>
+    ipcRenderer.send('phone-mirror:images-sent', id, paths),
+  // The phone took a screenshot or photo off the tray; the overlay removes it.
+  onPhoneMirrorDetach: (callback: (data: { path: string }) => void) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('phone-mirror:detach', subscription);
+    return () => {
+      ipcRenderer.removeListener('phone-mirror:detach', subscription);
+    };
+  },
   // Smart Browser Context v2 — auto-capture settings.
   browserContextGetSettings: () => ipcRenderer.invoke('browser-context:get-settings'),
   browserContextSetSettings: (patch: Record<string, boolean>) =>

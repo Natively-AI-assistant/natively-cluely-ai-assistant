@@ -1125,6 +1125,11 @@ export interface ElectronAPI {
   // when a coding page was auto-attached (arrives via onDomContextReceived), else
   // attached:false (answer proceeds without browser context).
   phoneMirrorRequestAutoContext: () => Promise<{ attached: boolean; reason?: string; category?: string }>;
+  // Phone Mirror shows the overlay's attached-screenshot tray and, once a
+  // question is sent, the screenshots it was sent with. Overlay window only.
+  phoneMirrorSetAttachments?: (items: Array<{ path: string; preview: string }>) => void;
+  phoneMirrorImagesSent?: (id: string, paths: string[]) => void;
+  onPhoneMirrorDetach?: (callback: (data: { path: string }) => void) => () => void;
   // Smart Browser Context v2 — auto-capture settings.
   browserContextGetSettings: () => Promise<BrowserContextSettings | { error: string }>;
   browserContextSetSettings: (

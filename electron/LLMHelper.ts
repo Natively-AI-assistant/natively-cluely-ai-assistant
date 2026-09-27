@@ -61,6 +61,7 @@ import type { ActiveModeDocumentGroundingInfo } from "./services/ModesManager"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
 import { applyCurlVariables, getByPath, injectImageIntoMessages, flattenStructuredJsonAnswer, blockedInfrastructureHost } from './utils/curlUtils';
 import { getImageOptimizer } from './services/screen/ImageOptimizer';
+import { isPhoneImagePath, visionImageEdge } from './utils/phoneImage';
 import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
 import { TRIAL_SENTINEL_KEY } from './config/constants';
@@ -3675,8 +3676,10 @@ ${IMAGE_TRUST_TRAILER}`;
       // preset size (1024px @ q78). This is the path every built-in vision
       // adapter (OpenAI, Claude, Gemini, Groq, Antigravity, Fluxion …) uses; the
       // switch used to reach only the Custom/cURL paths.
+      // Photos/screenshots sent from the phone go at 2048px: small print in a
+      // phone photo needs it (see visionImageEdge).
       const shrink = this.imageProfileFor('balanced', 0) === 'fast';
-      const edge = shrink ? 1024 : 1536;
+      const edge = visionImageEdge({ shrink, phoneImage: isPhoneImagePath(path) });
       const processedBuffer = await sharp(imageBuffer)
         .resize({
           width: edge,
