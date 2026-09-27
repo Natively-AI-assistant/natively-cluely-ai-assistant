@@ -133,6 +133,7 @@ export const JA_GENERATED: Record<string, string> = {
     'Better template available': 'より適切なテンプレートが利用可能です',
     'Brainstorm': 'ブレインストーム',
     'Brainstorm Approaches': 'アプローチのブレインストーム',
+    'Use Suggestion': '提案を使う',
     'Browse the Templates Gallery for ready-made personas': 'すぐに使えるペルソナが揃ったテンプレートギャラリーを閲覧',
     'Browser Extension': 'ブラウザ拡張機能',
     'By connecting your Google Calendar directly to Natively, the AI automatically gains context on your upcoming meetings, syncs the event data, and reads attendee lists to hyper-personalize your interactions.': 'Google カレンダーを Natively に直接連携すると、AI が今後の会議のコンテキストを自動的に取得し、イベントデータを同期し、出席者リストを読み取ってやり取りをハイパーパーソナライズします。',

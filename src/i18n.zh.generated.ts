@@ -133,6 +133,7 @@ export const ZH_GENERATED: Record<string, string> = {
     "Better template available": "有更好的模板可用",
     "Brainstorm": "头脑风暴",
     "Brainstorm Approaches": "Brainstorm Approaches",
+    "Use Suggestion": "使用建议",
     "Browse the Templates Gallery for ready-made personas": "Browse the Templates Gallery for ready-made personas",
     "Browser Extension": "浏览器扩展",
     "By connecting your Google Calendar directly to Natively, the AI automatically gains context on your upcoming meetings, syncs the event data, and reads attendee lists to hyper-personalize your interactions.": "By connecting your Google Calendar directly to Natively, the AI automatically gains context on your upcoming meetings, syncs the event data, and reads attendee lists to hyper-personalize your interactions.",

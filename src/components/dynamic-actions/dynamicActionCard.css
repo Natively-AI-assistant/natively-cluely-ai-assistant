@@ -1,6 +1,6 @@
 /* Micro-interactions of the action cue row (DynamicActionCard). The slot's
    own open / close lives in the component's Framer variants; this file is the
-   hover, press and Tab states.
+   hover, press and accept-shortcut states.
 
    transitions.dev tokens, written as literals like the rest of the renderer:
    --duration-micro 80ms, --duration-quick 150ms, --duration-fast 250ms,
@@ -33,14 +33,18 @@
   transition-duration: 150ms;
 }
 
-/* A card promoted to primary (the one above it left) brightens its label. */
-.action-cue-label {
-  transition: color 250ms ease-in-out;
+/* "+2": how many suggestions wait behind this one. Keyed on the number, so a
+   change re-enters with a short fade and rise (--duration-quick, 2px). */
+.action-cue-more {
+  animation: action-cue-more-in 150ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes action-cue-more-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
 }
 
-/* Tab keycap <-> dismiss ×: one slot, transitions.dev's icon swap (cross-fade,
-   scale 0.8 and a 2px blur). The keycap also fades in when a card becomes
-   primary. */
+/* Shortcut keycap <-> dismiss ×: one spot, transitions.dev's icon swap
+   (cross-fade, scale 0.8 and a 2px blur). */
 .action-cue-key,
 .action-cue-dismiss {
   transition:
@@ -55,13 +59,10 @@
   transform: scale(1);
   filter: blur(0);
 }
-.action-cue-row[data-primary="false"] .action-cue-key,
 .action-cue-row:hover .action-cue-key {
   opacity: 0;
   transform: scale(0.8);
   filter: blur(2px);
-}
-.action-cue-row:hover .action-cue-key {
   transition-duration: 150ms, 150ms, 150ms, 80ms, 80ms;
 }
 
@@ -80,8 +81,8 @@
   transition-duration: 150ms, 150ms, 150ms, 80ms, 80ms;
 }
 
-/* Tab pressed: the keycap goes down (--duration-micro) before the card
-   leaves, so the key you pressed visibly did something. */
+/* Accept shortcut pressed: the keycap goes down (--duration-micro) before the
+   card leaves, so the key you pressed visibly did something. */
 .action-cue-row[data-pressing="true"] .action-cue-key {
   opacity: 1;
   transform: scale(0.9);
@@ -92,6 +93,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .action-cue-more {
+    animation: none;
+  }
   .action-cue,
   .action-cue-glyph,
   .action-cue-key,

@@ -134,6 +134,7 @@ export const ES_GENERATED: Record<string, string> = {
     "Better template available": "Hay una plantilla mejor disponible",
     "Brainstorm": "Lluvia de ideas",
     "Brainstorm Approaches": "Brainstorm Approaches",
+    "Use Suggestion": "Usar sugerencia",
     "Browse the Templates Gallery for ready-made personas": "Browse the Templates Gallery for ready-made personas",
     "Browser Extension": "Extensión del navegador",
     "By connecting your Google Calendar directly to Natively, the AI automatically gains context on your upcoming meetings, syncs the event data, and reads attendee lists to hyper-personalize your interactions.": "By connecting your Google Calendar directly to Natively, the AI automatically gains context on your upcoming meetings, syncs the event data, and reads attendee lists to hyper-personalize your interactions.",

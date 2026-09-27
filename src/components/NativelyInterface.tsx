@@ -1286,7 +1286,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [availableSkills, setAvailableSkills] = useState<SkillSummary[]>([]);
   const [skillPickerIndex, setSkillPickerIndex] = useState(0);
-  const { shortcuts, isShortcutPressed } = useShortcuts();
+  const { shortcuts, isShortcutPressed, conflicts: shortcutConflicts, globalShortcutsEnabled } = useShortcuts();
   const [messages, setMessages] = useState<Message[]>([]);
   // Keep chat history visible once an answer lands until explicit clear / session reset.
   const [answerPanelPinned, setAnswerPanelPinned] = useState(false);
@@ -10678,6 +10678,11 @@ Provide only the answer, nothing else.`;
                 }}
                 surfaceStyle={appearance.chipStyle}
                 requestHeightMotion={requestChromeHeightMotion}
+                // The keycap names the shortcut only when pressing it will
+                // actually fire: global shortcuts on, and the chord not taken
+                // by another app (useShortcuts' registration conflicts).
+                shortcutKeys={globalShortcutsEnabled && !shortcutConflicts.has('acceptSuggestion') ? shortcuts.acceptSuggestion : []}
+                shortcutEnabled={isExpanded}
               />
 
               {/* Rolling Transcript Bar — live transcript + on-demand diagnostics

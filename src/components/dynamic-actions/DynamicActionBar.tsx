@@ -1,46 +1,66 @@
 import type { DynamicActionPayload } from '@/types/electron';
 import { AnimatePresence, useReducedMotion } from 'framer-motion';
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { CARD_ENTER_MS, DynamicActionCard, cardExitMs, type CardExitReason, type CardExits } from './DynamicActionCard';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  CARD_ENTER_MS,
+  DynamicActionCard,
+  SuggestionSlot,
+  cardExitMs,
+  type CardExitReason,
+  type CardExits,
+} from './DynamicActionCard';
 
 interface Props {
-  // Called when the user accepts (or hits Tab on the primary). Parent should
-  // kick off the live answer stream using action.promptInstruction.
+  // Called when the user accepts (the accept shortcut, or a click). Parent
+  // should kick off the live answer stream using action.promptInstruction.
   onAcceptAction: (action: DynamicActionPayload) => void;
-  // Optional: max actions to keep visible. Cluely-style cap at 3.
-  maxVisible?: number;
   // Optional: how long actions stay visible without user interaction (ms).
   // Server side already expires; this is the renderer-side cap.
   staleAfterMs?: number;
-  // The overlay's opacity-scaled chip fill (appearance.chipStyle), so a card
+  // The overlay's opacity-scaled chip fill (appearance.chipStyle), so the card
   // reads as the quick actions do at every overlay opacity.
   surfaceStyle?: React.CSSProperties;
-  // Asks the overlay to own the window height while a card's slot tweens open
+  // The accept shortcut's keys as the card shows them (["⌘", "8"]). Empty when
+  // it would not fire: unbound, global shortcuts off, or taken by another app.
+  shortcutKeys?: string[];
+  // Whether the accept shortcut may act now. False while the overlay is hidden
+  // (Cmd+B): a global chord must never answer a card the user cannot see.
+  shortcutEnabled?: boolean;
+  // Asks the overlay to own the window height while the slot tweens open
   // (growPx > 0) or closed: one window resize up front, none per frame. Returns
   // the settle to call when the tween is DONE, or null when the overlay can't
   // hold the channel (an answer is streaming, another transition holds it); an
-  // exit then collapses its slot in one step.
+  // emptied slot then folds in one step.
   requestHeightMotion?: (growPx: number, durationMs: number) => (() => void) | null;
 }
 
-/** A card's slot: the 36px row plus its 3px above and below. */
+/** The slot: the 36px row plus its 3px above and below. */
 const CARD_SLOT_PX = 42;
-/** How long a Tab-accepted card shows its pressed keycap before it leaves (--duration-micro + a frame). */
-const TAB_PRESS_MS = 110;
+/** How long an accepted card shows its pressed keycap before it leaves (--duration-micro + a frame). */
+const PRESS_MS = 110;
+/** Suggestions kept waiting behind the one on show. */
+const QUEUE_MAX = 4;
 
-// DynamicActionBar — Cluely-style live action card row.
+// DynamicActionBar — the overlay's live suggestion.
 // Subscribes to intelligence-dynamic-action events from the main process,
-// dedupes by id, expires stale cards, and renders up to maxVisible cards.
-// Tab keypress accepts the primary (highest-priority) card.
+// dedupes by id, expires stale ones, and shows ONE at a time: the
+// highest-priority suggestion, with a quiet "+N" for the ones waiting behind
+// it. Accepting, dismissing or expiring it brings the next one up in place.
 //
-// The bar stays mounted when it is empty: returning null used to unmount the
-// AnimatePresence with the last card still inside it, so the last card could
-// never play its exit and everything below snapped up in one frame.
+// Accepted with the global "Use Suggestion" shortcut (default Cmd/Ctrl+8, set
+// in Settings > Keybinds), never Tab. The overlay is a no-activate panel that
+// never takes keyboard focus during a meeting, so an in-page key listener
+// never heard Tab while Zoom or Meet had focus — and when it did, it took Tab
+// away from the page.
+//
+// The bar stays mounted when it is empty, so the last card can still animate
+// out (returning null unmounted the AnimatePresence with it inside).
 export const DynamicActionBar: React.FC<Props> = ({
   onAcceptAction,
-  maxVisible = 3,
   staleAfterMs = 60_000,
   surfaceStyle,
+  shortcutKeys = [],
+  shortcutEnabled = true,
   requestHeightMotion,
 }) => {
   const [actions, setActions] = useState<DynamicActionPayload[]>([]);
@@ -51,23 +71,29 @@ export const DynamicActionBar: React.FC<Props> = ({
   reduceRef.current = reduceMotion;
   const requestRef = useRef(requestHeightMotion);
   requestRef.current = requestHeightMotion;
+  const shortcutEnabledRef = useRef(shortcutEnabled);
+  shortcutEnabledRef.current = shortcutEnabled;
   // Why each card left. Written BEFORE the removal: a removed card never sees
   // new props, so its exit reads this through AnimatePresence's `custom`.
   const exitsRef = useRef<CardExits>({});
   const [pressingId, setPressingId] = useState<string | null>(null);
   const pressingRef = useRef<string | null>(null);
 
+  // Record how these cards leave. Only the one on show animates; one waiting
+  // in the queue just drops the count. When the one on show is the LAST, the
+  // slot folds, and the overlay is asked to hold the window height for it.
   const markExit = useCallback((ids: string[], reason: CardExitReason) => {
-    const shown = new Set(actionsRef.current.slice(0, maxVisible).map((a) => a.id));
-    const leaving = ids.filter((id) => shown.has(id));
-    if (leaving.length === 0) return;
+    const current = actionsRef.current;
+    const shown = current[0]?.id;
+    if (!shown || !ids.includes(shown)) return;
+    const empties = current.every((a) => ids.includes(a.id));
     // Accept starts an answer in the same moment, and the overlay must keep
-    // reporting that growth; so an accepted card never holds the height channel.
-    const settle = reason !== 'accept' && !reduceRef.current
+    // reporting that growth, so an accept never holds the height channel.
+    const settle = empties && reason !== 'accept' && !reduceRef.current
       ? (requestRef.current?.(0, cardExitMs(reason)) ?? null)
       : null;
-    for (const id of leaving) exitsRef.current[id] = { reason, tween: settle !== null, settle: settle ?? undefined };
-  }, [maxVisible]);
+    exitsRef.current[shown] = { reason, tween: settle !== null, settle: settle ?? undefined };
+  }, []);
 
   const handleIncoming = useCallback(
     (action: DynamicActionPayload) => {
@@ -75,14 +101,17 @@ export const DynamicActionBar: React.FC<Props> = ({
         // Dedupe by id (engine has already deduped at backend, but renderer
         // may receive late-arriving duplicates after a window restore).
         if (prev.some((a) => a.id === action.id)) return prev;
-        // Sort by priority desc, then createdAt desc (newer first when tied).
-        const next = [...prev, action]
-          .filter((a) => Date.now() - a.createdAt < staleAfterMs)
-          .sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt);
-        return next.slice(0, maxVisible * 2); // keep a small buffer past the visible cap
+        const now = Date.now();
+        const fresh = prev.filter((a) => now - a.createdAt < staleAfterMs);
+        // The one on show stays put: a new, higher-priority suggestion must
+        // not yank it away mid-read. The waiting ones sort by priority desc,
+        // then createdAt desc (newer first when tied).
+        const [shown, ...waiting] = fresh;
+        const queue = [...waiting, action].sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt);
+        return (shown ? [shown, ...queue] : queue).slice(0, QUEUE_MAX + 1);
       });
     },
-    [staleAfterMs, maxVisible],
+    [staleAfterMs],
   );
 
   const dismiss = useCallback((id: string) => {
@@ -99,8 +128,8 @@ export const DynamicActionBar: React.FC<Props> = ({
         markExit([action.id], 'accept');
         setActions((prev) => prev.filter((a) => a.id !== action.id));
       };
-      // A click is its own press; Tab shows the keycap going down first. The
-      // answer starts NOW either way — only the card's departure waits.
+      // A click is its own press; the shortcut shows the keycap going down
+      // first. The answer starts NOW either way — only the departure waits.
       if (holdMs > 0) {
         window.setTimeout(() => {
           remove();
@@ -144,30 +173,32 @@ export const DynamicActionBar: React.FC<Props> = ({
     };
   }, [handleIncoming, markExit]);
 
-  // Keyboard: Tab accepts primary
+  // The global "Use Suggestion" shortcut (KeybindManager chat:acceptSuggestion,
+  // relayed by main as a global-shortcut action). It works whichever app has
+  // focus, like What to Answer.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
-      const visible = actionsRef.current.slice(0, maxVisible);
-      if (visible.length === 0) return;
-      // Don't hijack Tab if focus is in an editable element — the user is typing.
-      const target = e.target as HTMLElement | null;
-      if (target) {
-        const tag = target.tagName?.toLowerCase();
-        if (tag === 'input' || tag === 'textarea' || target.isContentEditable) return;
+    const off = window.electronAPI?.onGlobalShortcut?.(({ action }) => {
+      if (action !== 'acceptSuggestion' || !shortcutEnabledRef.current) return;
+      const shown = actionsRef.current[0];
+      // One press, one answer: a second press during the press beat would
+      // accept the same, still-visible card again.
+      if (!shown || pressingRef.current) return;
+      if (reduceRef.current) {
+        accept(shown);
+        return;
       }
-      e.preventDefault();
-      // A second Tab during the press would accept the same, still-visible
-      // card again: one Tab, one answer.
-      if (pressingRef.current) return;
-      pressingRef.current = visible[0].id;
-      setPressingId(visible[0].id);
-      accept(visible[0], reduceRef.current ? 0 : TAB_PRESS_MS);
-      if (reduceRef.current) pressingRef.current = null;
+      pressingRef.current = shown.id;
+      setPressingId(shown.id);
+      accept(shown, PRESS_MS);
+    });
+    return () => {
+      try {
+        off?.();
+      } catch {
+        /* ignore */
+      }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [accept, maxVisible]);
+  }, [accept]);
 
   // Periodic stale prune (cheap) — only run when actions exist
   useEffect(() => {
@@ -185,29 +216,30 @@ export const DynamicActionBar: React.FC<Props> = ({
     return () => clearInterval(t);
   }, [staleAfterMs, actions.length, markExit]);
 
-  const visible = useMemo(() => actions.slice(0, maxVisible), [actions, maxVisible]);
+  const shown = actions[0] ?? null;
+  const waiting = Math.max(0, actions.length - 1);
 
-  // A card whose slot is about to open: the window must LEAD that growth.
-  // Runs after the new card is in the DOM at height 0, before it paints.
-  const shownIdsRef = useRef<string[]>([]);
-  const enterSettleRef = useRef<Record<string, () => void>>({});
+  // The slot is about to open: the window must LEAD that growth. Runs after
+  // the slot is in the DOM at height 0, before it paints. A suggestion that
+  // REPLACES another opens nothing — the slot is already open.
+  const wasOpenRef = useRef(false);
+  const enterSettleRef = useRef<(() => void) | null>(null);
   useLayoutEffect(() => {
-    const before = new Set(shownIdsRef.current);
-    const added = visible.filter((a) => !before.has(a.id));
-    shownIdsRef.current = visible.map((a) => a.id);
-    if (added.length === 0 || reduceRef.current) return;
-    const settle = requestRef.current?.(added.length * CARD_SLOT_PX, CARD_ENTER_MS);
-    if (settle) for (const a of added) enterSettleRef.current[a.id] = settle;
-  }, [visible]);
-  const entered = useCallback((id: string) => {
-    const settle = enterSettleRef.current[id];
-    delete enterSettleRef.current[id];
+    const open = shown !== null;
+    const opening = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (!opening || reduceRef.current) return;
+    enterSettleRef.current = requestRef.current?.(CARD_SLOT_PX, CARD_ENTER_MS) ?? null;
+  }, [shown]);
+  const entered = useCallback(() => {
+    const settle = enterSettleRef.current;
+    enterSettleRef.current = null;
     settle?.();
   }, []);
 
   return (
     <div
-      className="flex flex-col px-3 w-full"
+      className="relative flex flex-col px-3 w-full"
       data-testid="dynamic-action-bar"
       aria-label="Suggested actions"
     >
@@ -215,29 +247,33 @@ export const DynamicActionBar: React.FC<Props> = ({
         initial={false}
         custom={exitsRef.current}
         onExitComplete={() => {
-          // Every exiting card is done: settle the window height their tween held.
+          // The slot folded: settle the window height its tween held, and
+          // forget the exits of cards that are gone.
+          entered();   // it may have folded before it finished opening
           const live = new Set(actionsRef.current.map((a) => a.id));
           for (const id of Object.keys(exitsRef.current)) {
             if (live.has(id)) continue;
             exitsRef.current[id].settle?.();
-            enterSettleRef.current[id]?.();   // left before it finished opening
             delete exitsRef.current[id];
-            delete enterSettleRef.current[id];
           }
         }}
       >
-        {visible.map((a, i) => (
-          <DynamicActionCard
-            key={a.id}
-            action={a}
-            isPrimary={i === 0}
-            pressing={pressingId === a.id}
-            onAccept={(action) => accept(action)}
-            onDismiss={dismiss}
-            surfaceStyle={surfaceStyle}
-            onEntered={() => entered(a.id)}
-          />
-        ))}
+        {shown && (
+          <SuggestionSlot key="slot" cardId={shown.id} onEntered={entered}>
+            <AnimatePresence initial={false} mode="popLayout" custom={exitsRef.current}>
+              <DynamicActionCard
+                key={shown.id}
+                action={shown}
+                waiting={waiting}
+                shortcutKeys={shortcutKeys}
+                pressing={pressingId === shown.id}
+                onAccept={(action) => accept(action)}
+                onDismiss={dismiss}
+                surfaceStyle={surfaceStyle}
+              />
+            </AnimatePresence>
+          </SuggestionSlot>
+        )}
       </AnimatePresence>
     </div>
   );

@@ -135,6 +135,7 @@ export const RU_GENERATED: Record<string, string> = {
     'Answer / Record': 'Ответить / Записать',
     'Get Code Hint': 'Подсказка по коду',
     'Brainstorm Approaches': 'Обдумать подходы',
+    'Use Suggestion': 'Использовать подсказку',
     'Scroll Up': 'Прокрутить вверх',
     'Scroll Down': 'Прокрутить вниз',
     'Scroll Left (code block)': 'Прокрутить влево (блок кода)',

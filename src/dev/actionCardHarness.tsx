@@ -9,7 +9,7 @@
 // suggestion-chip direction and the old bolt card.
 //
 // ?motion=1 instead mounts the REAL DynamicActionBar in one shell, over a
-// stubbed electronAPI, and exposes window.__cards (push / retract) and
+// stubbed electronAPI, and exposes window.__cards (push / retract / shortcut) and
 // window.__heightCalls (every requestHeightMotion the bar made), so a script
 // can drive enter, hover, Tab, dismiss and expiry and record the frames.
 //
@@ -75,7 +75,7 @@ function Block({ theme, mode, opacity, variant }: { theme: Theme; mode: Mode; op
   const shellRef = React.useRef<HTMLDivElement | null>(null);
   const isGlass = theme === 'liquid-glass';
   const appearance = isGlass ? getGlassOverlayAppearance() : getOverlayAppearance(opacity, mode);
-  const [primary, second] = ACTIONS;
+  const [primary] = ACTIONS;
   return (
     <div
       data-interface-theme={theme}
@@ -100,10 +100,9 @@ function Block({ theme, mode, opacity, variant }: { theme: Theme; mode: Mode; op
         {isGlass && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
         <div className="relative z-10 pt-3">
           {(
-            <div className="flex flex-col gap-1.5 px-3 pt-1 pb-1 w-full">
+            <div className="flex flex-col px-3 w-full">
               <AnimatePresence initial={false}>
-                <RealCard key={primary.id} action={primary} isPrimary onAccept={() => {}} onDismiss={() => {}} surfaceStyle={appearance.chipStyle} />
-                <RealCard key={second.id} action={second} isPrimary={false} onAccept={() => {}} onDismiss={() => {}} surfaceStyle={appearance.chipStyle} />
+                <RealCard key={primary.id} action={primary} waiting={1} shortcutKeys={['⌘', '8']} onAccept={() => {}} onDismiss={() => {}} surfaceStyle={appearance.chipStyle} />
               </AnimatePresence>
             </div>
           )}
@@ -141,10 +140,11 @@ function Harness() {
 type Listener = ((data: any) => void) | null;
 const motionMode = new URLSearchParams(location.search).get('motion') === '1';
 if (motionMode) {
-  const listeners: { action: Listener; retract: Listener } = { action: null, retract: null };
+  const listeners: { action: Listener; retract: Listener; shortcut: Listener } = { action: null, retract: null, shortcut: null };
   (window as any).electronAPI = {
     onIntelligenceDynamicAction: (cb: Listener) => { listeners.action = cb; return () => { listeners.action = null; }; },
     onIntelligenceDynamicActionRetract: (cb: Listener) => { listeners.retract = cb; return () => { listeners.retract = null; }; },
+    onGlobalShortcut: (cb: Listener) => { listeners.shortcut = cb; return () => { listeners.shortcut = null; }; },
     acceptDynamicAction: async () => {},
     dismissDynamicAction: async () => {},
   };
@@ -154,6 +154,8 @@ if (motionMode) {
     push: (id: string, type: string, label: string, quote: string, priority: number) =>
       listeners.action?.({ action: { ...mk(id, type, label, quote, priority), createdAt: Date.now() } }),
     retract: (id: string) => listeners.retract?.({ id }),
+    // What main relays when the "Use Suggestion" global chord fires.
+    shortcut: () => listeners.shortcut?.({ action: 'acceptSuggestion' }),
   };
 }
 
@@ -176,6 +178,7 @@ function MotionScene() {
         {isGlass && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
         <div className="relative z-10 pt-3">
           <DynamicActionBar
+            shortcutKeys={['⌘', '8']}
             onAcceptAction={(a) => { (window as any).__accepted.push({ id: a.id, t: performance.now() }); }}
             surfaceStyle={appearance.chipStyle}
             requestHeightMotion={(growPx, durationMs) => { const call = { growPx, durationMs, t: performance.now(), settledAt: null as number | null }; (window as any).__heightCalls.push(call); return grant ? () => { call.settledAt ??= performance.now(); } : null; }}

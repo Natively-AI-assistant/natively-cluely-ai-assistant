@@ -12,6 +12,7 @@ export interface ShortcutConfig {
     answer: string[];
     codeHint: string[];
     brainstorm: string[];
+    acceptSuggestion: string[];
     shorten: string[];
     recap: string[];
     scrollUp: string[];
@@ -47,6 +48,7 @@ function buildDefaultShortcuts(): ShortcutConfig {
         answer: [mod, '5'],
         codeHint: [mod, '6'],
         brainstorm: [mod, '7'],
+        acceptSuggestion: [mod, '8'],
         shorten: [],
         recap: [],
         scrollUp: [mod, '↑'],
@@ -95,6 +97,7 @@ const BACKEND_ID_TO_ACTION: Partial<Record<string, keyof ShortcutConfig>> = {
     'chat:answer': 'answer',
     'chat:codeHint': 'codeHint',
     'chat:brainstorm': 'brainstorm',
+    'chat:acceptSuggestion': 'acceptSuggestion',
     'chat:shorten': 'shorten',
     'chat:recap': 'recap',
     'chat:scrollUp': 'scrollUp',
@@ -293,6 +296,7 @@ export const useShortcuts = () => {
             case 'answer': backendId = 'chat:answer'; break;
             case 'codeHint': backendId = 'chat:codeHint'; break;
             case 'brainstorm': backendId = 'chat:brainstorm'; break;
+            case 'acceptSuggestion': backendId = 'chat:acceptSuggestion'; break;
             case 'shorten': backendId = 'chat:shorten'; break;
             case 'recap': backendId = 'chat:recap'; break;
             case 'scrollUp': backendId = 'chat:scrollUp'; break;
