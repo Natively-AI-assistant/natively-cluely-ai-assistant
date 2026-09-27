@@ -51,6 +51,8 @@ import { GenieModal } from "./components/ui/GenieModal"
 import { GENIE_CLOSE_MS } from "./components/onboarding/useGenieCard"
 import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
 import { useResolvedTheme } from "./hooks/useResolvedTheme"
+import { WelcomeScreen } from "./components/onboarding/WelcomeScreen"
+import { shouldShowWelcome, WELCOME_SEEN_KEY, LEGACY_PERMS_SHOWN_KEY } from "./lib/onboarding/welcomeGate.mjs"
 
 
 // DEV-ONLY: should the launcher mount an uncontrolled ReviewPromptHost?
@@ -190,6 +192,40 @@ const App: React.FC = () => {
   // Memoizing to [] makes the splash timers arm exactly once.
   const dismissStartup = useCallback(() => setShowStartup(false), []);
 
+  // First-launch welcome, shown after the splash and before the launcher on a
+  // fresh install only (src/lib/onboarding/welcomeGate.mjs). null = not decided
+  // yet: the splash holds until it is, because showing the launcher first let
+  // it mount and start the orchestrator's clock, so the permissions card opened
+  // on top of the welcome when the flag read landed after the 2.2s splash (a
+  // busy first boot). WELCOME_DECIDE_TIMEOUT_MS below bounds the wait.
+  const [showWelcome, setShowWelcome] = useState<boolean | null>(null);
+  const readWelcomeLocal = useCallback(() => {
+    try {
+      return {
+        welcomeSeen: localStorage.getItem(WELCOME_SEEN_KEY) === '1',
+        permsShown: localStorage.getItem(LEGACY_PERMS_SHOWN_KEY) === '1',
+      };
+    } catch {
+      // No storage: treat as seen rather than risk showing it every launch.
+      return { welcomeSeen: true, permsShown: false };
+    }
+  }, []);
+  const finishWelcome = useCallback(() => {
+    try { localStorage.setItem(WELCOME_SEEN_KEY, '1'); } catch {}
+    window.electronAPI?.onboardingSetFlag?.('seenStartup', true).catch(() => {});
+    setShowWelcome(false);
+  }, []);
+  // A hung flag read must never trap the user on the splash: decide from the
+  // local mirrors alone. Functional update, so a real answer that already
+  // landed is kept.
+  useEffect(() => {
+    const WELCOME_DECIDE_TIMEOUT_MS = 4000;
+    const t = setTimeout(() => {
+      setShowWelcome(prev => prev ?? shouldShowWelcome(null, readWelcomeLocal()));
+    }, WELCOME_DECIDE_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [readWelcomeLocal]);
+
   /**
    * Tell main the boot reveal has landed, so it can restore background
    * throttling on this window.
@@ -225,10 +261,10 @@ const App: React.FC = () => {
   // during the startup animation or while the main UI is still settling.
   const [showHindsightBanner, setShowHindsightBanner] = useState(false);
   useEffect(() => {
-    if (showStartup) return; // never schedule while startup is up
+    if (showStartup || showWelcome !== false) return; // never schedule while startup or the welcome is up
     const t = setTimeout(() => setShowHindsightBanner(true), 3000);
     return () => clearTimeout(t);
-  }, [showStartup]);
+  }, [showStartup, showWelcome]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   /* Settings deep-link target, plus a sequence number that increments on EVERY
      request even when the tab is unchanged.
@@ -382,7 +418,7 @@ const App: React.FC = () => {
       ? { opacity: 0, transition: { duration: 0 } }
       : { opacity: 0, x: -6, transition: { duration: 0.14, ease: MANAGER_EASE } },
   };
-  const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && !isSettingsOpen && !isManagerOpen && isLauncherMainView;
+  const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && showWelcome === false && !isSettingsOpen && !isManagerOpen && isLauncherMainView;
 
   // Gate useAdCampaigns behind orchestrator eligibility. Ads only self-schedule
   // when (a) the orchestrator is ready (no other toaster active) and (b) the
@@ -534,14 +570,17 @@ const App: React.FC = () => {
     const fallbackLocal = () => {
       // The classic launch animation is intentionally shown on every launcher
       // startup, matching the older app behavior from 93ee4a21.
+      setShowWelcome(shouldShowWelcome(null, readWelcomeLocal()));
     };
 
     if (window.electronAPI?.onboardingGetFlags) {
       window.electronAPI.onboardingGetFlags()
         .then((flags) => {
           if (flags) {
-            // 1. seenStartup intentionally no longer suppresses the classic
-            // black-logo launch animation; the old app played it every launch.
+            // 1. seenStartup no longer suppresses the classic black-logo launch
+            // animation (the old app played it every launch); it now marks the
+            // first-launch welcome as seen.
+            setShowWelcome(shouldShowWelcome(flags, readWelcomeLocal()));
 
             // 2. seenModesOnboarding
             if (flags.seenModesOnboarding) {
@@ -1147,7 +1186,7 @@ const App: React.FC = () => {
         </div>
       )}
       <AnimatePresence>
-        {showStartup ? (
+        {showStartup || showWelcome === null ? (
           <motion.div
             key="startup"
             className="h-full w-full"
@@ -1156,6 +1195,16 @@ const App: React.FC = () => {
             exit={{ opacity: 0, scale: 1.04, pointerEvents: "none", transition: { duration: 0.55, ease: [0.4, 0, 0.2, 1] } }}
           >
             <StartupSequence onComplete={dismissStartup} />
+          </motion.div>
+        ) : showWelcome ? (
+          <motion.div
+            key="welcome"
+            className="h-full w-full"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: { duration: 0.45, ease: [0.23, 1, 0.32, 1] } }}
+            exit={{ opacity: 0, scale: 0.99, pointerEvents: "none", transition: { duration: 0.35, ease: [0.4, 0, 0.2, 1] } }}
+          >
+            <WelcomeScreen onGetStarted={finishWelcome} />
           </motion.div>
         ) : (
           <motion.div
@@ -1279,7 +1328,8 @@ const App: React.FC = () => {
         {!isolateGlobalSurfaces && <NativelyQuotaBanner />}
 
         {/* Orchestrated onboarding toasters (single-slot, controlled by OnboardingOrchestrator) */}
-        {!isolateOnboarding && (
+        {/* Not under the first-launch welcome: its cards follow Get started. */}
+        {!isolateOnboarding && showWelcome === false && (
           <OrchestratorProvider>
             <OrchestratedToasterHost />
           </OrchestratorProvider>
