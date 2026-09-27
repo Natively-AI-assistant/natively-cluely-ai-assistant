@@ -47,7 +47,10 @@ const { resolveAutoAnswerThresholds } = dist('context-intelligence/policies/mode
 const PROVIDER = process.env.JUDGE_EVAL_PROVIDER ?? 'gemini';
 const MODEL = process.env.JUDGE_EVAL_MODEL ?? ({ gemini: 'gemini-3.1-flash-lite', natively: 'server-decision-tier', deepseek: 'deepseek-flash', openrouter: 'google/gemini-3.1-flash-lite' }[PROVIDER] ?? 'gpt-5.4-mini');
 const { getOpenAiReasoningEffort } = dist('llm/modelCapabilities.js');
-const CONCURRENCY = 6;
+// JUDGE_EVAL_CONCURRENCY: the gate runs at 1. At 6 the Natively rung makes
+// ~240 calls a minute, over natively-api's 120/min per key: 10% of calls came
+// back rate-limited and the eval measured the limiter, not the judge.
+const CONCURRENCY = Math.max(1, Number(process.env.JUDGE_EVAL_CONCURRENCY ?? 6));
 /**
  * The Gemini request's generationConfig. Default = the client's direct judge
  * rung (LLMHelper.generateJudgeVerdict). JUDGE_EVAL_GEMINI_CONFIG selects an
@@ -99,6 +102,7 @@ function apiKey() {
 const KEY = apiKey();
 
 async function judge(c) {
+  let lastError = 'unknown';
   const prompt = buildJudgePrompt({
     candidateText: c.text,
     recentTurns: (c.ctx ?? []).map((t, i) => ({ ...t, timestamp: i })),
@@ -121,8 +125,8 @@ async function judge(c) {
           method: 'POST', headers: { 'content-type': 'application/json', 'x-natively-key': KEY },
           body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], purpose: 'decision' }),
         });
-        const j = await res.json();
-        if (!res.ok || j.error) { await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); continue; }
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok || j.error) { lastError = `http_${res.status}`; await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); continue; }
         raw = j.content ?? null;
       } else if (PROVIDER === 'openrouter') {
         // The gateway judge rung (LLMHelper.judgeGatewayModel): temperature 0, no JSON mode.
@@ -171,9 +175,9 @@ async function judge(c) {
       // The judge's own action decides (2026-08-25); the thresholds only ever
       // demote. "fires" here means it would draft an answer unasked.
       return { fires: r?.route === 'evaluate' && r.action === 'answer', act: v?.act ?? 'UNPARSED', ans: v?.answerability ?? null, action: v?.action, ms };
-    } catch { await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); }
+    } catch (e) { lastError = e?.name ?? 'exception'; await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); }
   }
-  return { fires: false, act: 'ERROR', ans: null };
+  return { fires: false, act: 'ERROR', ans: null, error: lastError };
 }
 
 let anyProblem = false;
@@ -202,5 +206,15 @@ for (const SET_PATH of SET_PATHS) {
   for (const f of falses) console.log(`  FALSE FIRE #${f.i} [${f.act} ${f.action} ${f.ans}] ${JSON.stringify(f.text)}${f.note ? '\n     note: ' + f.note : ''}`);
   for (const m of misses) console.log(`  MISS      #${m.i} [${m.act} ${m.action} ${m.ans}] ${JSON.stringify(m.text)}${m.note ? '\n     note: ' + m.note : ''}`);
   if (fp || fn) anyProblem = true;
+  // JUDGE_EVAL_JSON: one machine-readable line per set, for judgeEvalGate.mjs.
+  if (process.env.JUDGE_EVAL_JSON) {
+    fs.appendFileSync(process.env.JUDGE_EVAL_JSON, JSON.stringify({
+      set: path.basename(SET_PATH), provider: PROVIDER, model: MODEL, n: SET.length,
+      tp, fp, fn, tn, precision: prec, recall: rec, p50: pct(0.5), p90: pct(0.9),
+      falseFires: falses.map(f => f.i), misses: misses.map(m => m.i),
+      errors: results.filter(r => r.act === 'ERROR').length,
+      errorKinds: [...new Set(results.filter(r => r.act === 'ERROR').map(r => r.error))],
+    }) + '\n');
+  }
 }
 process.exitCode = anyProblem ? 1 : 0;

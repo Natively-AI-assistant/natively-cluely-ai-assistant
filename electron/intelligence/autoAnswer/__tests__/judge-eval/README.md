@@ -23,3 +23,18 @@ Baseline at the time of writing: wordle 1.000/1.000, interview 0.750/1.000 with
 one documented false fire (a candidate cut mid-phrase, reachable only in the
 pessimistic per-final segmentation). Any prompt edit should hold these or
 explain the trade.
+
+## Regression gate (nightly)
+
+    npm run test:auto-answer:judge-gate              # every set, 3 passes, Natively rung
+    node electron/intelligence/autoAnswer/__tests__/judgeEvalGate.mjs --update-floors
+
+`judgeEvalGate.mjs` averages several passes per set and compares precision and
+recall with `../judge-eval-floors.json` (per provider; baseline mean minus
+0.035, about one case). Exit 0 = at or above every floor, 1 = a set regressed
+(the flipped case numbers are printed), 2 = the run itself failed (no key, or
+more than 5% of calls errored — that measures the network, not the judge).
+It runs one call at a time: at 6 in flight the Natively rung exceeded
+natively-api's 120 requests/minute and 10% of calls came back rate-limited.
+Re-baseline with `--update-floors` only after a deliberate prompt or model
+change, and say why in the commit.
