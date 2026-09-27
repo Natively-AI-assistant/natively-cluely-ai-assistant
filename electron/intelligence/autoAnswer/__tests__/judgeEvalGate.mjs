@@ -1,22 +1,26 @@
 /**
  * Judge regression GATE (2026-09-27). Runs every judge-eval set against the
  * live judge RUNS times, averages precision and recall per set, and fails when
- * any set falls below its committed floor (judge-eval-floors.json). Meant to
+ * any set falls below its committed baseline (judge-eval-baseline.json). Meant to
  * run unattended (nightly), so a model swap or a server-side decision-tier
  * change that silently moves the judge is caught before users meet it.
  *
  *   npm run test:auto-answer:judge-gate                       # Natively rung, 3 runs
  *   JUDGE_GATE_RUNS=5 JUDGE_EVAL_PROVIDER=deepseek npm run test:auto-answer:judge-gate
- *   node …/judgeEvalGate.mjs --update-floors                  # re-baseline after a deliberate change
+ *   node …/judgeEvalGate.mjs --update-baseline                # re-baseline after a deliberate change
  *
- * Exit codes: 0 all sets at or above their floor, 1 a regression, 2 the run
- * itself failed (no key, network, calls that errored). A set without a floor
- * for this provider is reported, never failed.
+ * Exit codes: 0 no set regressed, 1 a regression, 2 the run itself failed (no
+ * key, network, calls that errored). A set without a baseline for this
+ * provider is reported, never failed.
  *
- * Why runs are AVERAGED: the judge is not deterministic at the edges (live
- * lec 7/8 then 8/8 on the same script). A floor compares against the mean of
- * RUNS passes, and floors are set a notch under the baseline mean (FLOOR_SLACK)
- * so one borderline case flipping in one run is not a page.
+ * What counts as a regression is COUNTED, not a rate: the mean number of false
+ * fires, or of misses, rose by more than one case in one pass. The judge is not
+ * deterministic at the edges (live lec 7/8 then 8/8 on the same script), and
+ * several sets hold only 3-4 asks, where one case moves precision by 0.15-0.25
+ * and not linearly: any fixed rate margin either pages on a single flake or
+ * misses a real flip. One case flipped in every pass is +1 and fails; one
+ * flake in one pass is +1/RUNS and does not. (With RUNS=1 one case is always
+ * tolerated: a single pass cannot tell a flake from a flip.)
  *
  * Node only (child_process with an argument array, no shell), so it runs the
  * same on macOS and Windows. Real model, real key: never part of `npm test`.
@@ -31,12 +35,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Overridable only so JudgeEvalGate2026_09_27.test.mjs can run the gate on a
 // stand-in eval with no key and no network.
 const EVAL = process.env.JUDGE_GATE_EVAL ?? path.join(__dirname, 'judgeEval.mjs');
-const FLOORS = process.env.JUDGE_GATE_FLOORS ?? path.join(__dirname, 'judge-eval-floors.json');
+const BASELINE = process.env.JUDGE_GATE_BASELINE ?? path.join(__dirname, 'judge-eval-baseline.json');
 const RUNS = Math.max(1, Number(process.env.JUDGE_GATE_RUNS ?? 3));
 const PROVIDER = process.env.JUDGE_EVAL_PROVIDER ?? 'natively';
-/** How far under the baseline mean a new floor sits: about one case in a 30-case set. */
-const FLOOR_SLACK = 0.035;
-const UPDATE = process.argv.includes('--update-floors');
+const UPDATE = process.argv.includes('--update-baseline');
 /**
  * Calls in flight. 1 keeps the Natively rung near 50 calls a minute, well under
  * natively-api's 120/min per key (at 6, 10% of calls were rate-limited). This
@@ -80,43 +82,47 @@ if (errors / calls > MAX_ERROR_SHARE) {
 }
 
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
-const floors = fs.existsSync(FLOORS) ? JSON.parse(fs.readFileSync(FLOORS, 'utf8')) : {};
-const mine = floors[PROVIDER] ?? {};
+const baseline = fs.existsSync(BASELINE) ? JSON.parse(fs.readFileSync(BASELINE, 'utf8')) : {};
+const mine = baseline[PROVIDER] ?? {};
 const regressions = [];
 const summary = [];
 for (const [set, e] of [...bySet].sort()) {
   const p = mean(e.runs.map((r) => r.precision));
   const rc = mean(e.runs.map((r) => r.recall));
-  const f = mine[set];
-  const bad = f && (p < f.precision - 1e-9 || rc < f.recall - 1e-9);
+  const fp = mean(e.runs.map((r) => r.fp));
+  const fn = mean(e.runs.map((r) => r.fn));
+  // A baseline for a different set size belongs to an edited set: stale, not failed.
+  const b = mine[set] && mine[set].n === e.n ? mine[set] : null;
+  const stale = Boolean(mine[set] && !b);
+  const allowed = 1 / RUNS + 1e-9;
+  const bad = Boolean(b && (fp - b.fp > allowed || fn - b.fn > allowed));
   if (bad) regressions.push(set);
   // Which cases flipped, across runs: the thing to read when a set regresses.
   const flips = (key) => [...new Set(e.runs.flatMap((r) => r[key]))].sort((a, b) => a - b);
-  summary.push({ set, n: e.n, precision: p, recall: rc, floor: f ?? null, bad, falseFires: flips('falseFires'), misses: flips('misses') });
+  summary.push({ set, n: e.n, precision: p, recall: rc, fp, fn, base: b, stale, bad, falseFires: flips('falseFires'), misses: flips('misses') });
   if (UPDATE) {
-    mine[set] = {
-      precision: Math.max(0, Number((p - FLOOR_SLACK).toFixed(3))),
-      recall: Math.max(0, Number((rc - FLOOR_SLACK).toFixed(3))),
-    };
+    mine[set] = { n: e.n, fp: Number(fp.toFixed(3)), fn: Number(fn.toFixed(3)), precision: Number(p.toFixed(3)), recall: Number(rc.toFixed(3)) };
   }
 }
 
 console.log(`\nJudge gate · ${PROVIDER}/${[...bySet.values()][0]?.model} · ${RUNS} run(s) · ${calls} calls`);
 for (const s of summary) {
-  const fl = s.floor ? `floor P≥${s.floor.precision.toFixed(3)} R≥${s.floor.recall.toFixed(3)}` : 'no floor';
+  const fl = s.base
+    ? `false fires ${s.fp.toFixed(2)} (baseline ${s.base.fp}), misses ${s.fn.toFixed(2)} (baseline ${s.base.fn})`
+    : s.stale ? 'baseline is for a different set size: re-baseline' : 'no baseline';
   console.log(`${s.bad ? 'REGRESSED' : 'ok       '} ${s.set.padEnd(38)} P=${s.precision.toFixed(3)} R=${s.recall.toFixed(3)}  ${fl}`
     + (s.falseFires.length ? `  false fires #${s.falseFires.join(',#')}` : '')
     + (s.misses.length ? `  misses #${s.misses.join(',#')}` : ''));
 }
 
 if (UPDATE) {
-  floors[PROVIDER] = mine;
-  fs.writeFileSync(FLOORS, JSON.stringify(floors, null, 2) + '\n');
-  console.log(`\nfloors for ${PROVIDER} written to ${path.relative(process.cwd(), FLOORS)} (baseline mean − ${FLOOR_SLACK})`);
+  baseline[PROVIDER] = mine;
+  fs.writeFileSync(BASELINE, JSON.stringify(baseline, null, 2) + '\n');
+  console.log(`\nbaseline for ${PROVIDER} written to ${path.relative(process.cwd(), BASELINE)}`);
   process.exit(0);
 }
 if (regressions.length) {
-  console.error(`\n${regressions.length} set(s) below floor: ${regressions.join(', ')}`);
+  console.error(`\n${regressions.length} set(s) regressed (more than one case in one pass): ${regressions.join(', ')}`);
   process.exit(1);
 }
-console.log('\nall sets at or above their floors');
+console.log('\nno set regressed');
