@@ -792,6 +792,10 @@ interface ElectronAPI {
   onSettingsWindowShown: (callback: () => void) => () => void;
   onGroqFastTextChanged: (callback: (enabled: boolean) => void) => () => void;
   onModelChanged: (callback: (modelId: string) => void) => () => void;
+  /** The model dropdown window was just shown (it is reused, never remounted). */
+  onModelSelectorShown: (callback: () => void) => () => void;
+  /** Tallest the model dropdown panel may be where it now sits, in DIPs. */
+  onModelSelectorHeightBudget: (callback: (maxHeight: number) => void) => () => void;
 
   // Ollama
   onOllamaPullProgress: (
@@ -2570,6 +2574,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('model-changed', subscription);
     return () => {
       ipcRenderer.removeListener('model-changed', subscription);
+    };
+  },
+
+  onModelSelectorShown: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on('model-selector:shown', subscription);
+    return () => {
+      ipcRenderer.removeListener('model-selector:shown', subscription);
+    };
+  },
+
+  onModelSelectorHeightBudget: (callback: (maxHeight: number) => void) => {
+    const subscription = (_: any, maxHeight: number) => callback(maxHeight);
+    ipcRenderer.on('model-selector:height-budget', subscription);
+    return () => {
+      ipcRenderer.removeListener('model-selector:height-budget', subscription);
     };
   },
 

@@ -1138,6 +1138,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const overlayWin = appState.getWindowHelper().getOverlayWindow();
       const launcherWin = appState.getWindowHelper().getLauncherWindow();
       const pillWin = appState.getWindowHelper().getPillWindow();
+      const modelSelectorWin = appState.modelSelectorWindowHelper?.getWindow?.();
 
       if (
         pillWin &&
@@ -1153,6 +1154,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         settingsWin.webContents.id === senderWebContents.id
       ) {
         appState.settingsWindowHelper.setWindowDimensions(settingsWin, width, height);
+      } else if (
+        modelSelectorWin &&
+        !modelSelectorWin.isDestroyed() &&
+        modelSelectorWin.webContents.id === senderWebContents.id
+      ) {
+        // Model dropdown: the window hugs the panel, whose height follows the list.
+        appState.modelSelectorWindowHelper.setContentSize(width, height);
       } else if (
         overlayWin &&
         !overlayWin.isDestroyed() &&

@@ -870,6 +870,8 @@ export interface ElectronAPI {
   onUndetectableChanged: (callback: (state: boolean) => void) => () => void;
   onGroqFastTextChanged: (callback: (enabled: boolean) => void) => () => void;
   onModelChanged: (callback: (modelId: string) => void) => () => void;
+  onModelSelectorShown: (callback: () => void) => () => void;
+  onModelSelectorHeightBudget: (callback: (maxHeight: number) => void) => () => void;
 
   onOllamaPullProgress: (callback: (data: { status: string; percent: number }) => void) => () => void;
   onOllamaPullComplete: (callback: () => void) => () => void;

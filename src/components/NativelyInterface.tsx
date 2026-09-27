@@ -420,6 +420,7 @@ import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { OverlayBanner, OverlayBannerButton } from './ui/OverlayBanner';
 import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
+import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
 import RollingTranscript from './ui/RollingTranscript';
 import SwapText from './ui/SwapText';
 import ScreenshotTray from './overlay/ScreenshotTray';
@@ -11501,13 +11502,13 @@ Provide only the answer, nothing else.`;
                         window.electronAPI.toggleModelSelector({ x, y, activate: false });
                       }}
                       className={`
-                                                flex items-center gap-2 px-3 h-7
+                                                flex items-center gap-1 pl-3 pr-1.5 h-7
                                                 border rounded-lg transition-colors
-                                                text-xs font-medium min-w-[140px]
+                                                text-xs font-medium text-left shrink-0
                                                 interaction-base interaction-press
                                                 ${controlSurfaceClass}
                                             `}
-                      style={appearance.controlStyle}
+                      style={{ ...appearance.controlStyle, width: MODEL_SELECTOR_WIDTH }}
                     >
                       <ModelSelectorLabel>
                         {(() => {
@@ -11563,7 +11564,7 @@ Provide only the answer, nothing else.`;
                           return m;
                         })()}
                       </ModelSelectorLabel>
-                      <ChevronDown size={14} className="shrink-0 transition-transform" />
+                      <ChevronDown size={12} className="shrink-0 transition-transform" />
                     </button>
 
                     <div className="relative">

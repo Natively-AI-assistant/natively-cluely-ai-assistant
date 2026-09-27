@@ -779,12 +779,10 @@
   background: var(--overlay-control-hover-bg) !important;
 }
 
+/* The checked model is marked by its check alone, as in a native menu: a
+   filled selected row next to a filled hovered row read as two selections. */
 [data-interface-theme="liquid-glass"] .model-selector-row-selected {
   color: var(--overlay-text-primary) !important;
-  background: var(--overlay-control-bg) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.36),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.12) !important;
 }
 
 [data-interface-theme="liquid-glass"] .glass-shortcut-key,
@@ -807,11 +805,6 @@
 
 [data-interface-theme="modern"] .model-selector-row-selected {
   color: var(--overlay-text-primary) !important;
-  background: var(--overlay-control-bg) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
-    0 2px 8px rgba(0, 0, 0, 0.18) !important;
 }
 
 [data-interface-theme="modern"] .glass-shortcut-key,

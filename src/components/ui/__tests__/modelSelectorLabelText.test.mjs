@@ -34,3 +34,34 @@ test('a cut that lands after a space does not leave a trailing space', () => {
 test('an astral character counts as one and is never split', () => {
     assert.equal(modelSelectorLabelText('🚀 local-model-xyz-long'), '🚀 local-model-xy');
 });
+
+// The toolbar button and the dropdown it opens share one width. A literal
+// width creeping back into either would split them again.
+test('the button, its Settings preview and the dropdown all use MODEL_SELECTOR_WIDTH', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+    const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+    const { MODEL_SELECTOR_WIDTH } = await import('../modelSelectorLabelText.ts');
+    assert.equal(MODEL_SELECTOR_WIDTH, 141);
+
+    const overlay = read('src/components/NativelyInterface.tsx');
+    // The attribute on the <button> itself (an earlier copy is a closest() selector).
+    const start = overlay.search(/data-model-selector-toggle="true"\s*\n/);
+    assert.ok(start > 0);
+    const toggle = overlay.slice(start, overlay.indexOf('<ModelSelectorLabel>', start));
+    assert.match(toggle, /width: MODEL_SELECTOR_WIDTH/);
+    assert.doesNotMatch(toggle, /min-w-\[/);
+
+    const preview = read('src/components/SettingsOverlay.tsx');
+    const previewChip = preview.slice(preview.lastIndexOf('<div', preview.indexOf('<ModelSelectorLabel>')), preview.indexOf('<ModelSelectorLabel>'));
+    assert.match(previewChip, /width: MODEL_SELECTOR_WIDTH/);
+
+    const dropdown = read('src/components/ModelSelectorWindow.tsx');
+    assert.match(dropdown, /shellStyle, width: MODEL_SELECTOR_WIDTH/);
+    assert.doesNotMatch(dropdown, /w-max|max-w-\[/);
+
+    // The window's starting width, before the renderer reports in.
+    assert.match(read('electron/ModelSelectorWindowHelper.ts'), new RegExp(`width: ${MODEL_SELECTOR_WIDTH},`));
+});
