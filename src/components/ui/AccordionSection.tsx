@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import './AccordionSection.css';
@@ -11,19 +11,39 @@ import './AccordionSection.css';
 // AccordionSection below is the title+icon convenience wrapper for the
 // common case.
 
-/** Animated height/opacity wrapper for disclosure content. Respects reduced motion. */
-export const Disclosure: React.FC<{ open: boolean; children: React.ReactNode }> = ({ open, children }) => {
+/**
+ * Animated height/opacity wrapper for disclosure content. Respects reduced motion.
+ * The height tween needs overflow:hidden, so content is clipped while it moves.
+ * `unclipWhenOpen` lifts the clip once the open tween settles and puts it back
+ * the moment the close starts, so a dropdown inside the panel can hang past its
+ * bottom edge. Off by default: other panels may rely on the clip.
+ */
+export const Disclosure: React.FC<{ open: boolean; unclipWhenOpen?: boolean; children: React.ReactNode }> = ({ open, unclipWhenOpen = false, children }) => {
   const reduce = useReducedMotion();
+  // React state, not framer's transitionEnd: transitionEnd on the height:auto
+  // tween missed on some re-opens and left the panel clipped for good.
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (!open) setSettled(false);
+  }, [open]);
+  const overflow = unclipWhenOpen && settled ? 'visible' : 'hidden';
+  const variants = {
+    shut: reduce ? { opacity: 0, overflow: 'hidden' } : { height: 0, opacity: 0, overflow: 'hidden' },
+    shown: reduce ? { opacity: 1, overflow } : { height: 'auto', opacity: 1, overflow },
+  };
   return (
     <AnimatePresence initial={false}>
       {open ? (
         <motion.div
           key="disclosure"
-          initial={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-          animate={reduce ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
-          exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-          style={{ overflow: 'hidden' }}
+          variants={variants}
+          initial="shut"
+          animate="shown"
+          exit="shut"
+          onAnimationComplete={(definition) => {
+            if (unclipWhenOpen && definition === 'shown') setSettled(true);
+          }}
+          transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
         >
           {children}
         </motion.div>
@@ -34,7 +54,7 @@ export const Disclosure: React.FC<{ open: boolean; children: React.ReactNode }> 
 
 /** A chevron that rotates (rather than swaps glyphs) between collapsed/expanded. */
 export const DisclosureChevron: React.FC<{ open: boolean }> = ({ open }) => (
-  <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ease-apple-ease motion-reduce:transition-none ${open ? 'rotate-0' : '-rotate-90'}`} />
+  <ChevronDown size={14} className={`shrink-0 transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${open ? 'rotate-0' : '-rotate-90'}`} />
 );
 
 interface AccordionSectionProps {

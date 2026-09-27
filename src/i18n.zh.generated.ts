@@ -916,7 +916,7 @@ export const ZH_GENERATED: Record<string, string> = {
     "Use your ChatGPT Plus/Pro subscription as an AI provider — no API key needed.": "使用你的 ChatGPT Plus/Pro 订阅作为 AI 提供商 — 无需 API 密钥。",
     "Uses a Service Account JSON instead of an API Key. You must build a GCP Project, activate the Cloud Speech API, and create a Service Account under IAM. Download the JSON Key, and drag-and-drop it into the box in the Audio Settings.": "Uses a Service Account JSON instead of an API Key. You must build a GCP Project, activate the Cloud Speech API, and create a Service Account under IAM. Download the JSON Key, and drag-and-drop it into the box in the Audio Settings.",
     "Uses standard OpenAI keys": "Uses standard OpenAI keys",
-    "Verbose debug logging": "Verbose debug logging",
+    "Debug logging": "调试日志",
     "Version": "版本",
     "Via Docker (One command with local PostgreSQL):": "Via Docker (One command with local PostgreSQL):",
     "Via Pip (Bare metal Python service):": "Via Pip (Bare metal Python service):",

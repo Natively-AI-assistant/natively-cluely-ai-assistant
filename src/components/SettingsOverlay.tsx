@@ -899,12 +899,33 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             }
         };
 
+        // Escape closes the open menu and hands focus back to its trigger, like
+        // CustomSelect. Capture phase + stopPropagation, so it never reaches the
+        // window-level Escape that closes all of Settings.
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            const open = [
+                [isThemeDropdownOpen, themeDropdownRef, setIsThemeDropdownOpen],
+                [isAiLangDropdownOpen, aiLangDropdownRef, setIsAiLangDropdownOpen],
+                [isInterfaceThemeDropdownOpen, interfaceThemeDropdownRef, setIsInterfaceThemeDropdownOpen],
+                [isLangDropdownOpen, langDropdownRef, setIsLangDropdownOpen],
+            ] as const;
+            for (const [isOpen, ref, setOpen] of open) {
+                if (!isOpen) continue;
+                event.stopPropagation();
+                setOpen(false);
+                ref.current?.querySelector('button')?.focus();
+            }
+        };
+
         if (isThemeDropdownOpen || isAiLangDropdownOpen || isInterfaceThemeDropdownOpen || isLangDropdownOpen) {
             document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('keydown', handleEscape, true);
         }
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape, true);
         };
     }, [isThemeDropdownOpen, isAiLangDropdownOpen, isInterfaceThemeDropdownOpen, isLangDropdownOpen]);
 
@@ -2870,67 +2891,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         {showAdvancedSettings ? t('Hide advanced settings') : t('Show advanced settings')}
                                                     </LabelSwap>
                                                 </button>
-                                                <Disclosure open={showAdvancedSettings}>
+                                                <Disclosure open={showAdvancedSettings} unclipWhenOpen>
                                                 <div className="mt-1">
-                                                    {/* Meeting Interface Style */}
-                                                    <div className="flex items-center justify-between px-4 py-3">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                                <Layout size={20} />
-                                                            </div>
-                                                            <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Meeting Interface Style')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">
-                                                                    <Presence kind="text" id={meetingInterfaceTheme}>
-                                                                        {meetingInterfaceTheme === 'liquid-glass'
-                                                                            ? t('Liquid glass — Apple-inspired transparent overlay')
-                                                                            : meetingInterfaceTheme === 'modern'
-                                                                                ? t('Modern — polished dark glass with cobalt accents')
-                                                                                : t('Default overlay appearance')}
-                                                                    </Presence>
-                                                                </p>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="relative" ref={interfaceThemeDropdownRef}>
-                                                            <button
-                                                                onClick={() => setIsInterfaceThemeDropdownOpen(!isInterfaceThemeDropdownOpen)}
-                                                                className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 min-w-[105px] justify-between"
-                                                            >
-                                                                <span className="text-ellipsis overflow-hidden whitespace-nowrap">
-                                                                    <Presence kind="text" id={meetingInterfaceTheme}>
-                                                                        {meetingInterfaceTheme === 'liquid-glass'
-                                                                            ? 'Liquid Glass'
-                                                                            : meetingInterfaceTheme === 'modern'
-                                                                                ? 'Modern'
-                                                                                : t('Default')}
-                                                                    </Presence>
-                                                                </span>
-                                                                <ChevronDown size={12} className={`shrink-0 transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
-                                                            </button>
-
-                                                            <SettingsMenu open={isInterfaceThemeDropdownOpen} origin="top right" className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 select-none">
-                                                                {([
-                                                                    { mode: 'default' as MeetingInterfaceTheme, label: 'Default' },
-                                                                    { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass' },
-                                                                    { mode: 'modern' as MeetingInterfaceTheme, label: 'Modern' },
-                                                                ] as const).map((option) => (
-                                                                    <button
-                                                                        key={option.mode}
-                                                                        onClick={() => {
-                                                                            setMeetingInterfaceTheme(option.mode);
-                                                                            setMeetingInterfaceThemeState(option.mode);
-                                                                            setIsInterfaceThemeDropdownOpen(false);
-                                                                        }}
-                                                                        className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center gap-2 transition-colors ${meetingInterfaceTheme === option.mode ? 'text-text-primary bg-[color:color-mix(in_srgb,var(--bg-item-active)_50%,transparent)]' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                                                    >
-                                                                        <span className="font-medium">{t(option.label)}</span>
-                                                                    </button>
-                                                                ))}
-                                                            </SettingsMenu>
-                                                        </div>
-                                                    </div>
-
                                                     {/* Mouse Passthrough Toggle — Adapted from public PR #113 */}
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
@@ -2954,116 +2916,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             }}
                                                             className={isMousePassthrough ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                         />
-                                                    </div>
-
-                                                    {/* Debug Logging */}
-                                                    <div className="flex items-center justify-between px-4 py-3">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                                <Terminal size={20} />
-                                                            </div>
-                                                            <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Verbose debug logging')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">
-                                                                    {t('Record everything: audio, STT, routing, and the questions and answers themselves. API keys are always removed.')}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                        <SettingsToggle
-                                                            checked={verboseLogging}
-                                                            label={t('Verbose debug logging')}
-                                                            onChange={() => {
-                                                                const newState = !verboseLogging;
-                                                                setVerboseLogging(newState);
-                                                                window.electronAPI?.setVerboseLogging?.(newState);
-                                                                if (newState) setShowVerboseToast(true);
-                                                            }}
-                                                            className={verboseLogging ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
-                                                        />
-                                                    </div>
-
-
-                                                    {/* Verbose logging notice — the log location AND the
-                                                        full-capture privacy disclosure as ONE card, shown for
-                                                        10s when the user turns logging on. */}
-                                                    <AnimatePresence>
-                                                        {showVerboseToast && (
-                                                            <motion.div
-                                                                key="verbose-toast"
-                                                                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, height: 0 }}
-                                                                animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, height: 'auto' }}
-                                                                exit={reduceMotion
-                                                                    ? { opacity: 0, transition: { duration: 0.15 } }
-                                                                    : { opacity: 0, y: -4, height: 0, transition: { duration: 0.15, ease: [0.22, 1, 0.36, 1] } }}
-                                                                transition={{ duration: reduceMotion ? 0.15 : 0.25, ease: [0.22, 1, 0.36, 1] }}
-                                                                className="mx-4 mb-1 overflow-hidden"
-                                                            >
-                                                                <div className="px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                                                                    <div className="flex items-center justify-between gap-3">
-                                                                        <div className="flex items-center gap-2.5 min-w-0">
-                                                                            <Terminal size={14} className="text-amber-400 shrink-0" />
-                                                                            <p className="text-xs text-amber-200/80 leading-snug truncate">
-                                                                                Logs → <span className="font-mono text-amber-300">~/Documents/natively_debug.log</span>
-                                                                            </p>
-                                                                        </div>
-                                                                        <button
-                                                                            onClick={() => window.electronAPI?.openLogFile?.()}
-                                                                            className="shrink-0 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25"
-                                                                        >
-                                                                            Open
-                                                                        </button>
-                                                                    </div>
-                                                                    <p className="text-xs text-amber-200/80 leading-snug mt-2">
-                                                                        {t('Full capture records your transcripts, questions, and answers in plaintext on this device. API keys and tokens are always removed. Review a log before sharing it.')}
-                                                                    </p>
-                                                                </div>
-                                                            </motion.div>
-                                                        )}
-                                                    </AnimatePresence>
-
-                                                    {/* Export debug logs — collects the main log, the previous
-                                                        session, the structured JSONL records and a system-info
-                                                        header into one folder and reveals it. */}
-                                                    <div className="flex items-center justify-between px-4 py-3">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                                <Download size={20} />
-                                                            </div>
-                                                            <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Export debug logs')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">
-                                                                    <Presence kind="text" id={exportResult ?? 'idle'}>
-                                                                        {exportResult ?? t('Collect this session\u2019s logs into one folder to share')}
-                                                                    </Presence>
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            disabled={exportingLogs}
-                                                            onClick={async () => {
-                                                                setExportingLogs(true);
-                                                                setExportResult(null);
-                                                                try {
-                                                                    const r = await window.electronAPI?.exportDebugLogs?.();
-                                                                    setExportResult(r?.success
-                                                                        ? t('Exported {{n}} file(s) \u2014 revealed in your file manager').replace('{{n}}', String(r.files?.length ?? 0))
-                                                                        : t('Export failed: {{e}}').replace('{{e}}', r?.error ?? 'unknown'));
-                                                                } catch (e: any) {
-                                                                    setExportResult(t('Export failed: {{e}}').replace('{{e}}', e?.message ?? 'unknown'));
-                                                                } finally {
-                                                                    setExportingLogs(false);
-                                                                }
-                                                            }}
-                                                            className="shrink-0 min-w-[105px] text-xs font-medium px-2.5 py-1.5 rounded-lg bg-bg-item-surface border border-border-subtle text-text-primary hover:bg-[color:var(--bg-row-hover)] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 disabled:opacity-50"
-                                                        >
-                                                            {/* min-w-[105px] + px-2.5 like every other control in this
-                                                                column; it also holds "Exporting…", so the swap can't
-                                                                resize the box. */}
-                                                            <LabelSwap id={exportingLogs ? 'exporting' : 'idle'}>
-                                                                {exportingLogs ? t('Exporting\u2026') : t('Export')}
-                                                            </LabelSwap>
-                                                        </button>
                                                     </div>
 
                                                     {/* Code Verification — runs LLM-generated code against test cases + one-shot correction */}
@@ -3114,6 +2966,184 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             }}
                                                             className={showTranscript ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                         />
+                                                    </div>
+
+                                                    {/* Debug Logging */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Terminal size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Debug logging')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {t('Logs audio, STT, routing, questions and answers. API keys removed.')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <SettingsToggle
+                                                            checked={verboseLogging}
+                                                            label={t('Debug logging')}
+                                                            onChange={() => {
+                                                                const newState = !verboseLogging;
+                                                                setVerboseLogging(newState);
+                                                                window.electronAPI?.setVerboseLogging?.(newState);
+                                                                if (newState) setShowVerboseToast(true);
+                                                            }}
+                                                            className={verboseLogging ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
+                                                    </div>
+
+
+                                                    {/* Verbose logging notice — the log location AND the
+                                                        full-capture privacy disclosure as ONE card, shown for
+                                                        10s when the user turns logging on. */}
+                                                    <AnimatePresence>
+                                                        {showVerboseToast && (
+                                                            <motion.div
+                                                                key="verbose-toast"
+                                                                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, height: 0 }}
+                                                                animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, height: 'auto' }}
+                                                                exit={reduceMotion
+                                                                    ? { opacity: 0, transition: { duration: 0.15 } }
+                                                                    : { opacity: 0, y: -4, height: 0, transition: { duration: 0.15, ease: [0.22, 1, 0.36, 1] } }}
+                                                                transition={{ duration: reduceMotion ? 0.15 : 0.25, ease: [0.22, 1, 0.36, 1] }}
+                                                                className="mx-4 mb-1 overflow-hidden"
+                                                            >
+                                                                <div className="px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                                                                    <div className="flex items-center justify-between gap-3">
+                                                                        <div className="flex items-center gap-2.5 min-w-0">
+                                                                            <Terminal size={14} className={`${isLight ? 'text-amber-700' : 'text-amber-400'} shrink-0`} />
+                                                                            <p className={`text-xs ${isLight ? 'text-amber-800' : 'text-amber-200/80'} leading-snug truncate`}>
+                                                                                Logs → <span className={`font-mono ${isLight ? 'text-amber-900' : 'text-amber-300'}`}>~/Documents/natively_debug.log</span>
+                                                                            </p>
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => window.electronAPI?.openLogFile?.()}
+                                                                            className={`shrink-0 text-[11px] font-medium ${isLight ? 'text-amber-800 hover:text-amber-900' : 'text-amber-400 hover:text-amber-300'} transition-colors px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25`}
+                                                                        >
+                                                                            Open
+                                                                        </button>
+                                                                    </div>
+                                                                    <p className={`text-xs ${isLight ? 'text-amber-800' : 'text-amber-200/80'} leading-snug mt-2`}>
+                                                                        {t('Full capture records your transcripts, questions, and answers in plaintext on this device. API keys and tokens are always removed. Review a log before sharing it.')}
+                                                                    </p>
+                                                                </div>
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
+
+                                                    {/* Meeting Interface Style */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Layout size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Meeting Interface Style')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    <Presence kind="text" id={meetingInterfaceTheme}>
+                                                                        {meetingInterfaceTheme === 'liquid-glass'
+                                                                            ? t('Liquid glass — Apple-inspired transparent overlay')
+                                                                            : meetingInterfaceTheme === 'modern'
+                                                                                ? t('Modern — polished dark glass with cobalt accents')
+                                                                                : t('Default overlay appearance')}
+                                                                    </Presence>
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="relative" ref={interfaceThemeDropdownRef}>
+                                                            {/* Centred like Language's picker: two spacers share the free
+                                                                space, and the right one holds the chevron and never gets
+                                                                narrower than the chevron plus the old 8px gap, so
+                                                                "Liquid Glass" slides left instead of under it. */}
+                                                            <button
+                                                                onClick={() => setIsInterfaceThemeDropdownOpen(!isInterfaceThemeDropdownOpen)}
+                                                                className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center min-w-[105px]"
+                                                            >
+                                                                <span aria-hidden="true" className="flex-1 basis-0 min-w-0" />
+                                                                <span className="min-w-0 text-ellipsis overflow-hidden whitespace-nowrap">
+                                                                    <Presence kind="text" id={meetingInterfaceTheme}>
+                                                                        {meetingInterfaceTheme === 'liquid-glass'
+                                                                            ? 'Liquid Glass'
+                                                                            : meetingInterfaceTheme === 'modern'
+                                                                                ? 'Modern'
+                                                                                : t('Default')}
+                                                                    </Presence>
+                                                                </span>
+                                                                <span aria-hidden="true" className="flex-1 basis-0 min-w-[20px] flex justify-end">
+                                                                    <ChevronDown size={12} className={`shrink-0 transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
+                                                                </span>
+                                                            </button>
+
+                                                            {/* Opens down past the Export row: the advanced Disclosure is
+                                                                unclipWhenOpen, so the menu is not cut off at its edge. */}
+                                                            <SettingsMenu open={isInterfaceThemeDropdownOpen} origin="top right" className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 select-none">
+                                                                {([
+                                                                    { mode: 'default' as MeetingInterfaceTheme, label: 'Default' },
+                                                                    { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass' },
+                                                                    { mode: 'modern' as MeetingInterfaceTheme, label: 'Modern' },
+                                                                ] as const).map((option) => (
+                                                                    <button
+                                                                        key={option.mode}
+                                                                        onClick={() => {
+                                                                            setMeetingInterfaceTheme(option.mode);
+                                                                            setMeetingInterfaceThemeState(option.mode);
+                                                                            setIsInterfaceThemeDropdownOpen(false);
+                                                                        }}
+                                                                        className={`w-full text-center px-2.5 py-1.5 rounded-md text-xs flex items-center justify-center transition-colors ${meetingInterfaceTheme === option.mode ? 'text-text-primary bg-[color:color-mix(in_srgb,var(--bg-item-active)_50%,transparent)]' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                                                    >
+                                                                        <span className="font-medium">{t(option.label)}</span>
+                                                                    </button>
+                                                                ))}
+                                                            </SettingsMenu>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Export debug logs — collects the main log, the previous
+                                                        session, the structured JSONL records and a system-info
+                                                        header into one folder and reveals it. */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Download size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Export debug logs')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    <Presence kind="text" id={exportResult ?? 'idle'}>
+                                                                        {exportResult ?? t('Collect this session\u2019s logs into one folder to share')}
+                                                                    </Presence>
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            disabled={exportingLogs}
+                                                            onClick={async () => {
+                                                                setExportingLogs(true);
+                                                                setExportResult(null);
+                                                                try {
+                                                                    const r = await window.electronAPI?.exportDebugLogs?.();
+                                                                    setExportResult(r?.success
+                                                                        ? t('Exported {{n}} file(s) \u2014 revealed in your file manager').replace('{{n}}', String(r.files?.length ?? 0))
+                                                                        : t('Export failed: {{e}}').replace('{{e}}', r?.error ?? 'unknown'));
+                                                                } catch (e: any) {
+                                                                    setExportResult(t('Export failed: {{e}}').replace('{{e}}', e?.message ?? 'unknown'));
+                                                                } finally {
+                                                                    setExportingLogs(false);
+                                                                }
+                                                            }}
+                                                            className="shrink-0 min-w-[105px] text-xs font-medium px-2.5 py-1.5 rounded-lg bg-bg-item-surface border border-border-subtle text-text-primary hover:bg-[color:var(--bg-row-hover)] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 disabled:opacity-50"
+                                                        >
+                                                            {/* min-w-[105px] + px-2.5 like every other control in this
+                                                                column; it also holds "Exporting…", so the swap can't
+                                                                resize the box. */}
+                                                            <LabelSwap id={exportingLogs ? 'exporting' : 'idle'}>
+                                                                {exportingLogs ? t('Exporting\u2026') : t('Export')}
+                                                            </LabelSwap>
+                                                        </button>
                                                     </div>
                                                 </div>
                                                 </Disclosure>

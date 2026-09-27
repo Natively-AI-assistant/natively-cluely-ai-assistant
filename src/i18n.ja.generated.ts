@@ -916,7 +916,7 @@ export const JA_GENERATED: Record<string, string> = {
     'Use your ChatGPT Plus/Pro subscription as an AI provider — no API key needed.': 'ChatGPT Plus/Pro サブスクリプションを AI プロバイダーとして使用 — API キーは不要です。',
     'Uses a Service Account JSON instead of an API Key. You must build a GCP Project, activate the Cloud Speech API, and create a Service Account under IAM. Download the JSON Key, and drag-and-drop it into the box in the Audio Settings.': 'API キーの代わりにサービスアカウント JSON を使用します。GCP プロジェクトを作成し、Cloud Speech API を有効化して、IAM でサービスアカウントを作成する必要があります。JSON キーをダウンロードし、Audio 設定のボックスにドラッグ＆ドロップしてください。',
     'Uses standard OpenAI keys': '標準的な OpenAI キーを使用',
-    'Verbose debug logging': '詳細なデバッグログ',
+    'Debug logging': 'デバッグログ',
     'Version': 'バージョン',
     'Via Docker (One command with local PostgreSQL):': 'Docker 経由（ローカル PostgreSQL と一緒に 1 コマンドで）：',
     'Via Pip (Bare metal Python service):': 'Pip 経由（ベアメタルの Python サービス）：',

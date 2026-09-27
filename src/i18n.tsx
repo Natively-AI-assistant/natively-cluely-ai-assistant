@@ -259,7 +259,7 @@ const RU: Record<string, string> = {
     'When enabled, live assistance works but transcripts, summaries, and history are discarded when the meeting ends':
         'Когда включено, живая помощь работает, но транскрипты, резюме и история удаляются по завершении встречи',
     'Do not save meetings': 'Не сохранять встречи',
-    'Verbose debug logging': 'Подробное журналирование',
+    'Debug logging': 'Отладочное журналирование',
     'Print detailed audio, STT, and pipeline diagnostics': 'Выводить подробную диагностику звука, STT и пайплайна',
     'Interviewer Transcript': 'Транскрипт интервьюера',
     'Show real-time transcription of the interviewer': 'Показывать транскрипцию интервьюера в реальном времени',

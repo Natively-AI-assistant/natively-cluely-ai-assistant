@@ -917,7 +917,7 @@ export const ES_GENERATED: Record<string, string> = {
     "Use your ChatGPT Plus/Pro subscription as an AI provider — no API key needed.": "Usa tu suscripción a ChatGPT Plus/Pro como proveedor de IA — no se necesita clave de API.",
     "Uses a Service Account JSON instead of an API Key. You must build a GCP Project, activate the Cloud Speech API, and create a Service Account under IAM. Download the JSON Key, and drag-and-drop it into the box in the Audio Settings.": "Uses a Service Account JSON instead of an API Key. You must build a GCP Project, activate the Cloud Speech API, and create a Service Account under IAM. Download the JSON Key, and drag-and-drop it into the box in the Audio Settings.",
     "Uses standard OpenAI keys": "Uses standard OpenAI keys",
-    "Verbose debug logging": "Verbose debug logging",
+    "Debug logging": "Registro de depuración",
     "Version": "Versión",
     "Via Docker (One command with local PostgreSQL):": "Via Docker (One command with local PostgreSQL):",
     "Via Pip (Bare metal Python service):": "Via Pip (Bare metal Python service):",
