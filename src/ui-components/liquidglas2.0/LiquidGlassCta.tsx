@@ -1,5 +1,5 @@
 import React from 'react';
-import GlassSurface from './GlassSurface';
+import GlassSurface from '../GlassSurface';
 import './LiquidGlassCta.css';
 
 export interface LiquidGlassCtaProps {
@@ -16,8 +16,7 @@ export interface LiquidGlassCtaProps {
 /**
  * The hero call-to-action in the REFRACTIVE Liquid Glass material — the
  * translucent lens of Figma's community "Liquid Glass Button", as opposed to
- * {@link LiquidGlassButton}'s measured flat-body pill (see design.md, "A lens,
- * not a plate: `LiquidGlassCta`").
+ * {@link LiquidGlassButton}'s measured flat-body pill (see ./design.md).
  *
  * Four things make it read as glass rather than a purple plate, and the last is
  * easy to forget:
@@ -27,8 +26,8 @@ export interface LiquidGlassCtaProps {
  *  3. a directional edge: a bright hairline on the top-left and bottom-right,
  *     an inner bevel, and a specular bloom;
  *  4. something LUMINOUS BEHIND IT. Glass over a flat page has nothing to bend,
- *     so the CTA carries its own aura — two soft light pools and a pair of arcs
- *     that visibly kink where they cross the rim.
+ *     so the CTA carries its own aura: two soft light pools (lavender, blue)
+ *     for the lens to refract. Curved lines behind it were tried and dropped.
  */
 export const LiquidGlassCta: React.FC<LiquidGlassCtaProps> = ({
     width,
@@ -43,11 +42,6 @@ export const LiquidGlassCta: React.FC<LiquidGlassCtaProps> = ({
             <span className="glass-cta-aura" aria-hidden="true">
                 <i className="glass-cta-aura__pool glass-cta-aura__pool--a" />
                 <i className="glass-cta-aura__pool glass-cta-aura__pool--b" />
-                <svg className="glass-cta-aura__arcs" viewBox="0 0 400 120" preserveAspectRatio="xMidYMid slice">
-                    <path d="M -30 132 C 90 -36, 250 150, 430 -28" className="glass-cta-aura__band" />
-                    <path d="M -30 132 C 90 -36, 250 150, 430 -28" className="glass-cta-aura__line" />
-                    <path d="M 60 140 C 170 20, 300 90, 440 20" className="glass-cta-aura__line glass-cta-aura__line--soft" />
-                </svg>
             </span>
             <button
                 type="button"

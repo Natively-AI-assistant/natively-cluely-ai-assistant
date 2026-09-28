@@ -10,7 +10,7 @@ import cardLight from '../../assets/welcome/card-light.webp';
 import cardDark from '../../assets/welcome/card-dark.webp';
 import meetingVideo from '../../assets/welcome/meeting.webm';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { LiquidGlassCta } from '../../ui-components/LiquidGlassCta';
+import { LiquidGlassCta } from '../../ui-components/liquidglas2.0/LiquidGlassCta';
 import WindowControls from '../WindowControls';
 import { DemoOverlay } from './DemoOverlay';
 

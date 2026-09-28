@@ -460,48 +460,13 @@ the current fill reaches 5.31:1 without touching the colour at all.
 
 Tokens: `--lg-sky-bg`, `--lg-sky-hover`, `--lg-sky-fg`.
 
-### A lens, not a plate: `LiquidGlassCta`
+### The refractive lens lives in `liquidglas2.0/`
 
-The first-launch welcome and tour's call to action, and the one place this
-folder reproduces a *different* reference: Figma's community **Liquid Glass
-Button** (Matt Medley) — a translucent pill that bends whatever is behind it,
-lit from a corner. It is the refractive material of `GlassSurface`, dressed as
-a button, and it is deliberately not built on `.lg-button`.
-
-Two earlier cuts are recorded because both were wrong in instructive ways:
-
-| Cut | What it was | Why it failed |
-| --- | --- | --- |
-| translucent tint + 42% white ramp + backdrop blur | a glossy gradient | "matte purple plate with no rim" — the exact thing the first section says the material is not |
-| `.lg-lavender`: a flat opaque `#7C5CE6` on `.lg-action`'s structure | correct to the *measured* material | "too flat, doesn't feel like liquid glass" — the measured pill is a plate with a hairline rim; it has no lens |
-
-The reference has four ingredients and the CTA carries all of them:
-
-1. **A tinted, translucent body** — `rgba(124,92,230,.42)` dark; the page shows through.
-2. **Real refraction** — `GlassSurface`'s SVG displacement map as the
-   `backdrop-filter`, thin (`borderWidth .3`, `blur 3`, `distortionScale -46`).
-   Wider or stronger and the interior smears into horizontal streaks; the
-   reference is clean in the middle and bends only at the rim.
-3. **A directional edge** — a 1.5px ring brightest at the top-left and
-   bottom-right (`120deg`, `.95 → .07 → .95`) and nearly gone between, an inner
-   bevel (light pooled `inset 3px 4px` top-left and `inset -3px -4px`
-   bottom-right), and a specular bloom upper-left.
-4. **Something luminous behind it.** Glass over a flat page has nothing to bend
-   — `GlassSurface`'s own notes say the same ("at rest there is nothing behind
-   the pill to refract"). The CTA brings its own aura: two blurred light pools
-   (lavender, blue) and two arcs that visibly kink as they cross the rim. The
-   arcs are masked to fade out, so a small button never shows a round cap.
-
-Light theme is a denser body (`rgba(104,72,220,.88)`, white label 5.0:1) with a
-white edge and a lavender-tinted aura; on a light page the lens is mostly tint.
-Dark: the label sits over a composite of about 11:1.
-
-```tsx
-<LiquidGlassCta width={320} height={48} onClick={next}>Get started</LiquidGlassCta>
-```
-
-Derived from the reference by eye and by screenshot, not measured; no
-mean-absolute-error figure is claimed. Rendered on macOS only.
+A translucent, tinted pill that bends what is behind it, after Figma's community
+Liquid Glass Button. It is a different material from everything in this document
+and is not built on `.lg-button`; see [`liquidglas2.0/design.md`](./liquidglas2.0/design.md)
+and `liquidglas2.0/LiquidGlassCta.tsx`. Reach for it for a hero call to action
+over a surface you control; reach for `.lg-button` for a control.
 
 ### A clear body removes the body from the model
 

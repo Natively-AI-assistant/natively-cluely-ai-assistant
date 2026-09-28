@@ -22,9 +22,6 @@
     --cta-bevel-b: rgba(255, 255, 255, 0.32);
     --cta-pool-a: rgba(150, 112, 255, 0.85);
     --cta-pool-b: rgba(72, 132, 255, 0.70);
-    --cta-arc: rgba(255, 255, 255, 0.5);
-    --cta-arc-soft: rgba(255, 255, 255, 0.24);
-    --cta-band: rgba(255, 255, 255, 0.14);
 }
 
 [data-theme='light'] .glass-cta-wrap {
@@ -35,9 +32,6 @@
     --cta-glow: rgba(104, 72, 220, 0.38);
     --cta-pool-a: rgba(140, 104, 250, 0.55);
     --cta-pool-b: rgba(90, 140, 255, 0.45);
-    --cta-arc: rgba(255, 255, 255, 0.85);
-    --cta-arc-soft: rgba(255, 255, 255, 0.55);
-    --cta-band: rgba(70, 40, 180, 0.16);
 }
 
 /* ── The light behind the glass ───────────────────────────────────────────── */
@@ -65,21 +59,6 @@
     right: 4%; top: 16%; width: 50%; height: 78%;
     background: radial-gradient(closest-side, var(--cta-pool-b), transparent);
 }
-.glass-cta-aura__arcs {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    overflow: visible;
-    fill: none;
-    /* the arcs end inside a small button's aura: fade them out rather than
-       let a round cap show */
-    -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 42%, transparent 100%);
-            mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 42%, transparent 100%);
-}
-.glass-cta-aura__band { stroke: var(--cta-band); stroke-width: 16; stroke-linecap: round; }
-.glass-cta-aura__line { stroke: var(--cta-arc); stroke-width: 2.4; stroke-linecap: round; }
-.glass-cta-aura__line--soft { stroke: var(--cta-arc-soft); stroke-width: 1.6; }
 
 /* ── The lens ─────────────────────────────────────────────────────────────── */
 
