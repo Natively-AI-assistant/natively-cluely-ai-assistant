@@ -1,0 +1,18 @@
+export const LIST_MARKER_RE: RegExp;
+export const TECHNIQUE_MAX: number;
+export function firstSentence(text: string): string;
+export function leadingItem(body: string): string;
+export function techniqueLabel(body: string): string;
+export function latexToPlain(text: string): string;
+export function extractComplexity(body: string): string | null;
+export function isNotApplicable(body: string | null | undefined): boolean;
+export function splitTrailingAnswer(body: string): { body: string; tail: string };
+export function plainTitle(title: string): string;
+export function breakGluedLines(text: string): string;
+export function fixBoldSpacing(text: string): string;
+export function stripLeadingReasoning(text: string): string;
+export function stripStrayGistLines(text: string): string;
+export function plainEmailText(text: string): string;
+export function plainMeetingTitle(title: string | null | undefined): string;
+export function latexParensToDollars(text: string): string;
+export function reflowFlattenedList(text: string): string;

@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { Search, Sparkles, FileText, Brain } from 'lucide-react';
 import { motion, AnimatePresence, useIsPresent } from 'framer-motion';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { plainMeetingTitle } from '../lib/codingAnswer.mjs';
 
 // ============================================
 // Types
@@ -579,7 +580,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                         </div>
                                                                         <div className="flex-1 min-w-0">
                                                                             <div className="text-[13px] text-text-primary truncate">
-                                                                                {result.title}
+                                                                                {plainMeetingTitle(result.title)}
                                                                             </div>
                                                                             {result.subtitle && (
                                                                                 <div className="text-[11px] text-text-tertiary">
@@ -604,7 +605,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                                                     const itemIndex = linkedIndex >= 0 ? 2 + sessionResults.length + linkedIndex : -1;
                                                                     const when = shortDate(memory.date);
                                                                     const subtitle = memory.meetingId
-                                                                        ? [memory.meetingTitle || t('Meeting'), when].filter(Boolean).join(' · ')
+                                                                        ? [plainMeetingTitle(memory.meetingTitle) || t('Meeting'), when].filter(Boolean).join(' · ')
                                                                         : [t('Long-term memory'), when].filter(Boolean).join(' · ');
                                                                     const body = (
                                                                         <>

@@ -1069,4 +1069,5 @@ export const ZH_GENERATED: Record<string, string> = {
     "With": "与",
     "min": "分钟",
     "hr": "小时",
+    "Technique": "技术",
 };

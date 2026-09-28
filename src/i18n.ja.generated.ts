@@ -1055,4 +1055,5 @@ export const JA_GENERATED: Record<string, string> = {
     "Generating…": "生成中…",
     "Couldn't write the draft. Try again.": "下書きを作成できませんでした。もう一度お試しください。",
     "Write a follow-up from these notes when you need one.": "必要なときに、このメモからフォローアップを作成できます。",
+    "Technique": "手法",
 };

@@ -1070,4 +1070,5 @@ export const ES_GENERATED: Record<string, string> = {
     "With": "Con",
     "min": "min",
     "hr": "h",
+    "Technique": "Técnica",
 };

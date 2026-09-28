@@ -20,6 +20,7 @@ import { APP_FEATURE_VERSION } from '../utils/appVersion';
 import WindowControls from './WindowControls';
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import { emitOrchestratorEvent, setUserState as setOrchestratorUserState } from './onboarding/OrchestratedToasterHost';
+import { plainMeetingTitle } from '../lib/codingAnswer.mjs';
 
 interface Meeting {
     id: string;
@@ -1177,7 +1178,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                             onClick={() => handleOpenMeeting(m)}
                                                         >
                                                             <div className={`font-medium text-[14px] max-w-[60%] truncate ${m.title === 'Processing...' ? 'text-blue-400 italic animate-pulse' : 'text-text-primary'}`}>
-                                                                {m.title}
+                                                                {plainMeetingTitle(m.title)}
                                                             </div>
 
                                                             {/* Time & Duration Section */}

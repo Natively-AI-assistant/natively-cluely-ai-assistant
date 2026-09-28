@@ -540,4 +540,5 @@ export const RU_GENERATED: Record<string, string> = {
     "Generating…": "Создание…",
     "Couldn't write the draft. Try again.": "Не удалось написать черновик. Попробуйте ещё раз.",
     "Write a follow-up from these notes when you need one.": "Когда понадобится, создайте письмо по этим заметкам.",
+    "Technique": "Метод",
 };

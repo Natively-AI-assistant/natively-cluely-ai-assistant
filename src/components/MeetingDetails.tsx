@@ -20,6 +20,10 @@ import { vividDarkCodeTheme } from '../lib/codeTheme';
 import { splitGistLine } from '../lib/displayMarkup';
 import { splitIntoWordRuns } from '../lib/textRevealAnimation.mjs';
 import { followUpRecipients, recipientSummary, gmailComposeUrl } from '../lib/followUpRecipients.mjs';
+import { reflowFlattenedList, leadingItem, techniqueLabel, extractComplexity, isNotApplicable, splitTrailingAnswer, plainTitle, breakGluedLines, fixBoldSpacing, latexParensToDollars, stripLeadingReasoning, stripStrayGistLines, plainEmailText, plainMeetingTitle } from '../lib/codingAnswer.mjs';
+import { normalizeFinalizedMarkdownMath } from '../lib/streamingMarkdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { CalendarLinkChip, type CalendarEventSnapshot } from './meeting/CalendarLinkChip';
 
 registerPrismLanguages();
@@ -112,57 +116,6 @@ const formatDuration = (ms: number) => {
     return `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
 };
 
-// Some stored answers arrive with their list newlines collapsed to spaces, so a
-// bullet list becomes a run-on line ("- a. - b - c"). remark then parses that as
-// ONE list item with literal inline dashes. Re-break mid-line bullet markers onto
-// their own lines so the list renders. Heavily gated to avoid corrupting prose:
-// only fires when the text actually looks like a flattened list, protects code,
-// and never splits number ranges ("3 - 1") or hyphenated words ("state-of-art").
-const reflowFlattenedList = (text: string): string => {
-    // Detect a list whose newlines were collapsed to spaces upstream, e.g.
-    // "Here's the plan: - Build it. - Test it." or "Steps: 1. Do x. 2. Do y.".
-    // remark then parses that run-on as a single paragraph / single list item.
-    // We re-break the inline markers onto their own lines so it renders as a list.
-    //
-    // Gating (to avoid corrupting prose): require at least TWO inline markers of
-    // the same kind. Bullets must be space-surrounded with a non-digit neighbour
-    // (so "3 - 1" ranges and "state-of-art" are untouched); numbered items match
-    // " N. Capital" runs (so "version 2. x" mid-sentence is unlikely to trip).
-    const bulletRun = /(^|\s)[-*\u2022]\s+(?=[^\d\s])/g;
-    const numberRun = /(^|\s)\d{1,2}[.)]\s+(?=[A-Z(`])/g;
-    const bulletCount = (text.match(bulletRun) || []).length;
-    const numberCount = (text.match(numberRun) || []).length;
-    const looksBullet = bulletCount >= 2;
-    const looksNumber = numberCount >= 2;
-    if (!looksBullet && !looksNumber) return text;
-    // If it already has real newlines separating most markers, leave it alone.
-    if (/\n\s*(?:[-*\u2022]|\d{1,2}[.)])\s+/.test(text) && !/\S[ \t]+(?:[-*\u2022]|\d{1,2}[.)])[ \t]+/.test(text)) {
-        return text;
-    }
-
-    // Protect fenced + inline code so a marker inside code is never broken.
-    const stash: string[] = [];
-    const put = (m: string): string => {
-        stash.push(m);
-        return '\u0001' + (stash.length - 1) + '\u0001';
-    };
-    let out = text
-        .replace(/```[\s\S]*?```/g, put)
-        .replace(/`[^`]*`/g, put);
-
-    if (looksBullet) {
-        // Break " <char> <marker> <non-digit>" onto a new bullet line.
-        out = out.replace(/([^\d\s])[ \t]+([-*\u2022])[ \t]+(?=[^\d\s])/g, '$1\n$2 ');
-    }
-    if (looksNumber) {
-        // Break " N. Capital" onto a new numbered line (keep the number).
-        out = out.replace(/([^\s])[ \t]+(\d{1,2}[.)])[ \t]+(?=[A-Z(\u0001])/g, '$1\n$2 ');
-    }
-
-    // Restore code.
-    return out.replace(/\u0001(\d+)\u0001/g, (_m, i) => stash[Number(i)] || '');
-};
-
 const cleanMarkdown = (content: string) => {
     if (!content) return '';
     // Ensure code blocks are on new lines to fix rendering issues
@@ -180,12 +133,12 @@ interface CodingSection {
 
 type DetailKind = 'approach' | 'dry-run' | 'complexity' | 'followup';
 
-// Ordered labels for the detail pill strip. "Approach" only appears when the full
+// Ordered labels for the detail pill strip. Complexity is not here: it is the cost
+// chip under the code. "Approach" only appears when the full
 // reasoning is longer than the one-line thesis we already show above the code.
 const DETAIL_PILLS: { kind: DetailKind; label: string }[] = [
     { kind: 'approach',   label: 'Approach'       },
     { kind: 'dry-run',    label: 'Dry run'        },
-    { kind: 'complexity', label: 'Complexity'     },
     { kind: 'followup',   label: 'Follow-up tips' },
 ];
 
@@ -213,46 +166,6 @@ const MOUNT_CHILD_REDUCED = {
 // it renders instantly. This module-scope set persists across tab unmount/remount
 // within the session, which is exactly the lifetime we want.
 const seenInteractionIds = new Set<string>();
-
-// Pull the first sentence from the approach so we can lead with a one-line thesis
-// and tuck the full reasoning into a pill. Avoids cutting on common false
-// terminators — decimals (3.4x), abbreviations (e.g., i.e., etc.), and single
-// initials — by requiring the terminator to be followed by a space + a capital or
-// end-of-string, and rejecting matches that end in a known abbreviation. Falls
-// back to a length cap so a run-on paragraph never becomes the whole thesis.
-const ABBREV_RE = /(?:^|\s)(?:e\.g|i\.e|etc|vs|approx|Dr|Mr|Ms|Mrs|Fig|No|cf|al)\.$/i;
-function firstSentence(text: string): string {
-    const flat = text.replace(/\s+/g, ' ').trim();
-    // Terminator = .!? not preceded by a digit (decimals) and followed by space +
-    // uppercase/quote/end. Scan for the first that isn't a known abbreviation.
-    const re = /(?<!\d)[.!?](?=\s+["'“(]?[A-Z0-9]|\s*$)/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(flat)) !== null) {
-        const candidate = flat.slice(0, m.index + 1);
-        if (!ABBREV_RE.test(candidate)) {
-            return candidate.trim();
-        }
-    }
-    // No clean sentence boundary — cap length so the thesis stays one line.
-    return flat.length > 160 ? flat.slice(0, 157).trimEnd() + '…' : flat;
-}
-
-// Extract a compact "O(n) time · O(1) space" chip from the complexity section so
-// the single most-scanned fact is never hidden behind a click. Returns null when
-// nothing parseable is found (caller then keeps complexity as a pill).
-function extractComplexity(body: string): string | null {
-    // NOTE: a negated class like [^O] under /i also excludes lowercase 'o', which
-    // breaks on the common phrasing "Time complexity: O(n)" (the 'o' in
-    // "complexity" blocks the lazy scan). Match Big-O on the SAME line as the
-    // time/space keyword instead, so any prose in between is fine.
-    const time  = /time[^\n]*?(O\([^)]*\))/i.exec(body)?.[1];
-    const space = /space[^\n]*?(O\([^)]*\))/i.exec(body)?.[1];
-    if (time || space) {
-        return [time && `${time} time`, space && `${space} space`].filter(Boolean).join(' · ');
-    }
-    const bare = body.match(/O\([^)]*\)/g);
-    return bare && bare.length ? Array.from(new Set(bare)).slice(0, 2).join(' · ') : null;
-}
 
 // Render a complexity string with real superscripts: "O(N^2 2^N)" → O(N²2ᴺ) via
 // <sup>, plus the middot separator styled down. The exponent after ^ is the run
@@ -282,16 +195,6 @@ function extractCodeBlock(body: string): { lang: string; code: string } | null {
     const m = matches[0];
     if (trimmed.replace(m[0], '').trim().length > 0) return null; // prose outside fence
     return { lang: m[1] || '', code: m[2].replace(/\n$/, '') };
-}
-
-// Short, single-line label for the technique chip in the code header.
-function techniqueLabel(body: string): string {
-    return body
-        .replace(/[`*_#>]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .replace(/^(via|using|use|technique[:\s-]*)\s*/i, '')
-        .slice(0, 48);
 }
 
 // Copy-to-clipboard control for the code hero. Ghosted until hover on desktop,
@@ -336,7 +239,12 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
     );
 };
 
-function classifySection(title: string): 'approach' | 'technique' | 'code' | DetailKind | 'other' {
+// Title of the synthetic section holding the answer-to-say-out-loud that follows the
+// last template section (see splitTrailingAnswer).
+const SPOKEN_TITLE = '\u0000spoken';
+
+function classifySection(title: string): 'approach' | 'technique' | 'code' | 'spoken' | DetailKind | 'other' {
+    if (title === SPOKEN_TITLE) return 'spoken';
     const t = title.toLowerCase().trim();
     if (/approach/.test(t))                            return 'approach';
     if (/technique|data.?structure|algorithm/.test(t)) return 'technique';
@@ -367,6 +275,14 @@ function parseCodingTemplate(answer: string): CodingSection[] | null {
         }
     }
     if (current) sections.push(current);
+
+    // The last section may be followed by the spoken answer; lift it out so it is
+    // not buried inside the Follow-up pill.
+    const last = sections[sections.length - 1];
+    if (last && classifySection(last.title) === 'followup') {
+        const { body, tail } = splitTrailingAnswer(last.body);
+        if (tail) { last.body = body; sections.push({ title: SPOKEN_TITLE, body: tail }); }
+    }
 
     const KNOWN = new Set(['approach','technique','code','dry-run','complexity','followup']);
     const knownCount = sections.filter(s => KNOWN.has(classifySection(s.title))).length;
@@ -419,6 +335,33 @@ const mdComponents = {
     },
 };
 
+// The thesis line inside CodingAnswerBlock: the wrapping <p> already styles it, so
+// the markdown paragraph collapses to a fragment; bold reads brighter than the
+// surrounding text-primary body the way it does everywhere else.
+const THESIS_MD_COMPONENTS = {
+    p: ({ children }: any) => <>{children}</>,
+    strong: mdComponents.strong,
+    code: mdComponents.code,
+};
+
+// Markdown for a Usage answer: the shared components plus KaTeX ($$…$$, $…$, and
+// \(…\) converted to $…$), and "**Label:**" lines kept on their own lines.
+// Same math pipeline as the overlay (NativelyInterface).
+const KATEX_OPTIONS = { throwOnError: false, strict: false, errorColor: '#cc0000' };
+const ANSWER_REMARK = [remarkGfm, remarkMath];
+const ANSWER_REHYPE = [[rehypeKatex, KATEX_OPTIONS]] as any;
+const answerMarkdown = (text: string) => normalizeFinalizedMarkdownMath(latexParensToDollars(breakGluedLines(fixBoldSpacing(cleanMarkdown(text)))));
+
+// What the Usage tab shows and copies for a stored answer: no leaked <think> block,
+// the trailing [[GIST]] split off (it becomes a chip elsewhere), and no [[GIST]] lines
+// left in the middle of a multi-part answer.
+const usageAnswerText = (raw?: string | null): string => raw ? stripStrayGistLines(splitGistLine(stripLeadingReasoning(raw)).body) : '';
+const AnswerMarkdown: React.FC<{ children: string }> = ({ children }) => (
+    <ReactMarkdown remarkPlugins={ANSWER_REMARK} rehypePlugins={ANSWER_REHYPE} components={mdComponents}>
+        {answerMarkdown(children)}
+    </ReactMarkdown>
+);
+
 // Bespoke code hero: custom header (language label · technique chip · copy button),
 // inner top-edge highlight instead of a drop shadow, line numbers only past 8 lines.
 // FIXED WIDTH: the card is always w-full and never grows with content — a long
@@ -450,8 +393,8 @@ const CodeHero: React.FC<{ lang: string; code: string; technique?: string }> = (
                 </span>
                 <div className="flex-1" />
                 {technique && (
-                    <span className="hidden sm:inline-flex items-center max-w-[220px] truncate text-[11px] font-medium text-white/45 select-none cursor-default">
-                        {technique}
+                    <span className="hidden sm:flex min-w-0 max-w-[340px] items-center text-[11px] font-medium text-white/45 select-none cursor-default" title={technique}>
+                        <span className="truncate">{technique}</span>
                     </span>
                 )}
                 <CopyButton text={code} />
@@ -503,9 +446,11 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
     const approach  = tagged.find(s => s.kind === 'approach');
     const technique = tagged.find(s => s.kind === 'technique');
     const code      = tagged.find(s => s.kind === 'code');
-    const others    = tagged.filter(s => s.kind === 'other');
+    const spoken    = tagged.find(s => s.kind === 'spoken');
+    // Sections that only say "N/A" are not shown.
+    const others    = tagged.filter(s => s.kind === 'other' && !isNotApplicable(s.body));
 
-    const thesis = approach ? firstSentence(approach.body.trim()) : '';
+    const thesis = approach ? leadingItem(approach.body.trim()) : '';
     // Only surface the full approach as a pill when it says more than the thesis.
     const approachIsRicher = approach ? approach.body.trim().length > thesis.length + 24 : false;
 
@@ -515,15 +460,14 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
     const complexitySection = tagged.find(s => s.kind === 'complexity');
     const complexityChip = complexitySection ? extractComplexity(complexitySection.body) : null;
 
-    // Build the ordered detail map. Approach (full) is optional; complexity stays a
-    // pill only when we couldn't distil a chip from it.
+    // Build the ordered detail map. Approach (full) is optional. Complexity is never a
+    // pill: it is the cost chip, or nothing when the section has no Big-O in it.
     const detailMap = new Map<DetailKind, CodingSection>();
     if (approach && approachIsRicher) detailMap.set('approach', approach);
     const dryRun = tagged.find(s => s.kind === 'dry-run');
-    if (dryRun) detailMap.set('dry-run', dryRun);
-    if (complexitySection && !complexityChip) detailMap.set('complexity', complexitySection);
+    if (dryRun && !isNotApplicable(dryRun.body)) detailMap.set('dry-run', dryRun);
     const followup = tagged.find(s => s.kind === 'followup');
-    if (followup) detailMap.set('followup', followup);
+    if (followup && !isNotApplicable(followup.body)) detailMap.set('followup', followup);
 
     const availablePills = DETAIL_PILLS.filter(p => detailMap.has(p.kind));
     const activeSection  = activeDetail != null ? detailMap.get(activeDetail) : undefined;
@@ -572,8 +516,18 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
             {/* Thesis — one-line claim, the answer at a glance */}
             {thesis && (
                 <motion.p variants={childVariant} className="text-[15px] leading-[1.6] text-text-primary m-0 select-text">
-                    {thesis}
+                    {/* Inline markdown: the thesis can carry **bold** and `code`. */}
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={THESIS_MD_COMPONENTS}>{thesis}</ReactMarkdown>
                 </motion.p>
+            )}
+
+            {/* Technique — normally the chip in the code card's header. With no code card
+                to carry it, it gets its own line so it is never silently dropped. */}
+            {technique && !parsedCode && !isNotApplicable(technique.body) && (
+                <motion.div variants={childVariant} className="flex flex-col gap-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/20 select-none cursor-default">{t('Technique')}</p>
+                    <AnswerMarkdown>{technique.body.trim()}</AnswerMarkdown>
+                </motion.div>
             )}
 
             {/* Code — hero block with technique chip + copy button */}
@@ -581,11 +535,9 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
                 <motion.div variants={childVariant} className="min-w-0 w-full">
                     <CodeHero lang={parsedCode.lang} code={parsedCode.code} technique={techniqueChip} />
                 </motion.div>
-            ) : code ? (
+            ) : code && !isNotApplicable(code.body) ? (
                 <motion.div variants={childVariant} className="flex flex-col gap-3 min-w-0 w-full">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                        {cleanMarkdown(code.body.trim())}
-                    </ReactMarkdown>
+                    <AnswerMarkdown>{code.body.trim()}</AnswerMarkdown>
                 </motion.div>
             ) : null}
 
@@ -600,12 +552,17 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
             {/* Unrecognised sections — graceful fallthrough */}
             {others.map(s => (
                 <motion.div key={s.title} variants={childVariant} className="flex flex-col gap-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/20 select-none cursor-default">{s.title}</p>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                        {cleanMarkdown(s.body.trim())}
-                    </ReactMarkdown>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-white/20 select-none cursor-default">{plainTitle(s.title)}</p>
+                    <AnswerMarkdown>{s.body.trim()}</AnswerMarkdown>
                 </motion.div>
             ))}
+
+            {/* The answer to say out loud, when the model wrote it after the template. */}
+            {spoken && (
+                <motion.div variants={childVariant} className="min-w-0 w-full">
+                    <AnswerMarkdown>{spoken.body}</AnswerMarkdown>
+                </motion.div>
+            )}
 
             {/* Detail pill strip + continuous-height panel */}
             {availablePills.length > 0 && (
@@ -677,9 +634,7 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
                                         transition={{ duration: 0.18, ease: CROSSFADE_EASE, delay: reduce ? 0 : 0.04 }}
                                     >
                                         <div className="rounded-xl px-4 py-3.5 bg-white/[0.025] border border-white/[0.05] ring-1 ring-inset ring-white/[0.02]">
-                                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                                                {cleanMarkdown(activeSection.body.trim())}
-                                            </ReactMarkdown>
+                                            <AnswerMarkdown>{activeSection.body.trim()}</AnswerMarkdown>
                                         </div>
                                     </motion.div>
                                 )}
@@ -691,6 +646,11 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
         </motion.div>
     );
 };
+
+// The timestamp row under a question bubble and under an answer. One string so
+// the two can never drift: h-6 (the row the removed Copy button set) + mt-2 gives
+// both the same gap from the card above and the same space before the next one.
+const USAGE_TIME_ROW = 'flex items-center h-6 mt-2 opacity-0 translate-y-1 [@media(hover:none)]:opacity-100 transition-all duration-[160ms] ease-out select-none';
 
 // One Q&A pair in the usage/history tab. Owns its first-view entrance (question
 // enters from the right, answer settles just after) and the answer's
@@ -710,7 +670,7 @@ const UsageInteraction: React.FC<{
     // Persisted answers can end with the live overlay's [[GIST]] line. History has
     // no use for it, so it is stripped before either renderer sees the answer —
     // no chip, and no stray marker line at the end of a coding answer's last section.
-    const answerBody = interaction.answer ? splitGistLine(interaction.answer).body : '';
+    const answerBody = usageAnswerText(interaction.answer);
     const codingSections = answerBody ? parseCodingTemplate(answerBody) : null;
 
     const enter = (offset: { x?: number; y?: number }, delay: number) => {
@@ -735,31 +695,31 @@ const UsageInteraction: React.FC<{
                     <motion.div {...enter({ x: 8 }, staggerDelay)} className="lg-bubble px-5 py-2.5 rounded-2xl rounded-tr-sm max-w-[80%] text-[15px] leading-relaxed select-text">
                         {interaction.question}
                     </motion.div>
-                    <span className="mt-1 pr-1 text-[11px] text-text-tertiary select-none cursor-default opacity-0 translate-y-1 group-hover/q:opacity-100 group-hover/q:translate-y-0 transition-all duration-[160ms] ease-out">
-                        {formatTime(interaction.timestamp)}
-                    </span>
+                    {/* Same row as the answer's timestamp below (USAGE_TIME_ROW): equal
+                        height, equal gap from the card above, same reveal rules. */}
+                    <div className={`${USAGE_TIME_ROW} justify-end pr-1 [@media(hover:hover)]:group-hover/q:opacity-100 [@media(hover:hover)]:group-hover/q:translate-y-0 group-focus-within/q:opacity-100 group-focus-within/q:translate-y-0`}>
+                        <span className="text-[11px] text-text-tertiary cursor-default">{formatTime(interaction.timestamp)}</span>
+                    </div>
                 </div>
             )}
 
-            {/* AI answer — open canvas (no bubble), avatar + body + hover action bar */}
+            {/* AI answer — open canvas (no bubble): a small logo + name line, then the
+                body full width beneath it, then the hover-revealed timestamp. */}
             {interaction.answer && (
-                <motion.div {...enter({ y: 8 }, staggerDelay + 0.08)} className="group/a flex items-start gap-4">
-                    <div className="mt-1 w-6 h-6 rounded-full bg-bg-input flex items-center justify-center border border-border-subtle shrink-0 select-none opacity-40 group-hover/a:opacity-60 transition-opacity duration-[160ms]">
-                        <img src={NativelyLogo} alt="" aria-hidden="true" className="w-4 h-4 object-contain force-black-icon" />
+                <motion.div {...enter({ y: 8 }, staggerDelay + 0.08)} className="group/a">
+                    <div className="mb-2 flex items-center gap-2 select-none">
+                        <img src={NativelyLogo} alt="" aria-hidden="true" className="w-4 h-4 object-contain force-black-icon opacity-60" />
+                        <span className="text-[13px] font-medium leading-none text-text-secondary">Natively</span>
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0">
                         <div className="text-text-secondary text-[15px] leading-relaxed max-w-none select-text">
                             {codingSections
                                 ? <CodingAnswerBlock sections={codingSections} firstView={firstView} />
-                                : (
-                                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                                        {cleanMarkdown(answerBody)}
-                                    </ReactMarkdown>
-                                )}
+                                : <AnswerMarkdown>{answerBody}</AnswerMarkdown>}
                         </div>
-                        {/* Timestamp — bottom-left, revealed on hover/focus-within. h-6 is the
-                            row the removed Copy button set, so the gap between answers holds. */}
-                        <div className="flex items-center h-6 mt-2 opacity-0 translate-y-1 [@media(hover:hover)]:group-hover/a:opacity-100 [@media(hover:hover)]:group-hover/a:translate-y-0 group-focus-within/a:opacity-100 group-focus-within/a:translate-y-0 [@media(hover:none)]:opacity-100 transition-all duration-[160ms] ease-out select-none">
+                        {/* Timestamp — bottom-left, revealed on hover/focus-within. Same row
+                            as the question's (USAGE_TIME_ROW). */}
+                        <div className={`${USAGE_TIME_ROW} [@media(hover:hover)]:group-hover/a:opacity-100 [@media(hover:hover)]:group-hover/a:translate-y-0 group-focus-within/a:opacity-100 group-focus-within/a:translate-y-0`}>
                             <span className="text-[11px] text-text-tertiary cursor-default">{formatTime(interaction.timestamp)}</span>
                         </div>
                     </div>
@@ -1605,7 +1565,8 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
 
     // Normalize follow-up draft (object in V3, legacy string).
     const rawFollowUp = meeting.detailedSummary?.followUpDraft;
-    const followUpBody = typeof rawFollowUp === 'string' ? rawFollowUp : (rawFollowUp?.body || '');
+    // An email: plain text on screen, in Copy and in the Gmail link, so model markdown (**Problem:**) is stripped once, here.
+    const followUpBody = plainEmailText(typeof rawFollowUp === 'string' ? rawFollowUp : (rawFollowUp?.body || ''));
     const followUpSubject = typeof rawFollowUp === 'string' ? undefined : rawFollowUp?.subject;
     const followUpDraftTone = (typeof rawFollowUp === 'string' ? undefined : rawFollowUp?.tone) as 'professional' | 'warm' | 'concise' | 'friendly' | undefined;
     const hasFollowUpDraft = followUpBody.trim().length > 0;
@@ -2171,7 +2132,7 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         if (activeTab === 'summary' && meeting.detailedSummary) {
             if (meeting.detailedSummary.schemaVersion === 3) {
                 textToCopy = `
-Meeting: ${meeting.title}
+Meeting: ${plainMeetingTitle(meeting.title)}
 Date: ${new Date(meeting.date).toLocaleDateString()}
 
 TLDR:
@@ -2198,7 +2159,7 @@ ${followUpBody.trim() ? `\nFOLLOW-UP DRAFT:\n${followUpSubject ? `Subject: ${fol
                 `.trim();
             } else {
                 textToCopy = `
-Meeting: ${meeting.title}
+Meeting: ${plainMeetingTitle(meeting.title)}
 Date: ${new Date(meeting.date).toLocaleDateString()}
 
 OVERVIEW:
@@ -2215,7 +2176,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
             textToCopy = meeting.transcript.map(t => `[${formatTime(t.timestamp)}] ${resolveSpeakerName(t.speakerId || t.speaker)}: ${t.text}`).join('\n');
         } else if (activeTab === 'usage' && meeting.usage) {
             // Without the overlay's [[GIST]] line, as the tab shows it.
-            textToCopy = meeting.usage.map(u => `Q: ${u.question || ''}\nA: ${splitGistLine(u.answer || '').body}`).join('\n\n');
+            textToCopy = meeting.usage.map(u => `Q: ${u.question || ''}\nA: ${usageAnswerText(u.answer)}`).join('\n\n');
         }
 
         if (!textToCopy) return;
@@ -2371,7 +2332,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     ) : (
                                         <motion.div key="title" {...(() => { const r = revealLead(); return { className: r.cls.trim() || undefined, style: r.style }; })()}>
                                             <EditableTextBlock
-                                                initialValue={meeting.title}
+                                                initialValue={plainMeetingTitle(meeting.title)}
                                                 onSave={handleTitleSave}
                                                 tagName="h1"
                                                 className="text-3xl font-bold text-text-primary tracking-tight -ml-2 px-2 py-1 rounded-md transition-colors"
