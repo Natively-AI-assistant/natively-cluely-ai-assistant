@@ -1326,6 +1326,7 @@ import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
 import { linkSessionToCalendar, cancelSessionCalendarLink } from './services/calendar/SessionCalendarLinker'
 import { wireExtensionMeetingTabs } from './services/meetingDetection/extensionMeetingTabs'
+import { SHORTCUT_TOUR_ACTIONS } from './services/shortcutTourActions'
 import { wireMeetingDetection, registerMeetingDetection, electronNotify, type MeetingStartRequest } from './services/meetingDetection/wireMeetingDetection'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
@@ -1466,6 +1467,43 @@ export class AppState {
   // before booting a new session so the shared STT instances are not torn down
   // mid-meeting by a stale teardown task.
   private _pendingTeardown: Promise<void> | null = null;
+  // First-launch shortcut tour (src/components/onboarding/ShortcutTour.tsx).
+  // While it is up, the shortcuts it teaches are practice presses: they go to
+  // the tour's renderer instead of hiding the launcher it is drawn in or taking
+  // a real screenshot. Cleared the moment that renderer reloads or goes away,
+  // so a crashed tour can never leave the real shortcuts disabled.
+  private shortcutTourContents: Electron.WebContents | null = null;
+  private detachShortcutTour: (() => void) | null = null;
+
+  public setShortcutTour(active: boolean, contents: Electron.WebContents): void {
+    if (!active) {
+      if (this.shortcutTourContents === contents) this.clearShortcutTour();
+      return;
+    }
+    this.clearShortcutTour();
+    this.shortcutTourContents = contents;
+    const clear = () => {
+      if (this.shortcutTourContents === contents) this.clearShortcutTour();
+    };
+    contents.on('did-start-loading', clear);
+    contents.on('destroyed', clear);
+    contents.on('render-process-gone', clear);
+    // Removed with the routing, so re-arming (the tour re-subscribes when its
+    // bindings load) never stacks listeners on the same WebContents.
+    this.detachShortcutTour = () => {
+      contents.removeListener('did-start-loading', clear);
+      contents.removeListener('destroyed', clear);
+      contents.removeListener('render-process-gone', clear);
+    };
+  }
+
+  private clearShortcutTour(): void {
+    this.shortcutTourContents = null;
+    const detach = this.detachShortcutTour;
+    this.detachShortcutTour = null;
+    detach?.();
+  }
+
   // Tracks meeting IDs currently being processed by processCompletedMeetingForRAG.
   // Without this guard, a rapid stop→start→stop cycle could enqueue the same
   // meeting for RAG twice (e.g. recovery retry + normal completion), duplicating
@@ -1863,6 +1901,11 @@ export class AppState {
 
     keybindManager.onShortcutTriggered(async (actionId) => {
       console.log(`[Main] Global shortcut triggered: ${actionId}`);
+      const tour = this.shortcutTourContents;
+      if (tour && !tour.isDestroyed() && SHORTCUT_TOUR_ACTIONS.has(actionId)) {
+        tour.send('onboarding:tour-shortcut', actionId);
+        return;
+      }
       try {
         if (actionId === 'general:toggle-visibility') {
           this.toggleMainWindow();

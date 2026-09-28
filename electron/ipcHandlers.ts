@@ -8146,8 +8146,14 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Onboarding & gate persistent backup flags
   safeHandle('onboarding:get-flags', async () => {
     const sm = SettingsManager.getInstance();
+    // An agent instance (scripts/dev-agent.mjs) starts on a blank profile, and
+    // the first-launch welcome would sit in front of every launcher check.
+    // NATIVELY_AGENT_WELCOME=1 keeps it for the agent that is testing it.
+    const agentSkipsWelcome = !app.isPackaged
+      && !!process.env.NATIVELY_AGENT_USER_DATA
+      && process.env.NATIVELY_AGENT_WELCOME !== '1';
     return {
-      seenStartup: sm.get('seenStartup') ?? false,
+      seenStartup: agentSkipsWelcome || (sm.get('seenStartup') ?? false),
       seenProfileOnboarding: sm.get('seenProfileOnboarding') ?? false,
       seenModesOnboarding: sm.get('seenModesOnboarding') ?? false,
       permsShown: sm.get('permsShown') ?? false,
@@ -8165,6 +8171,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     }
     return { success: false, error: 'invalid_key' };
+  });
+
+  // First-launch shortcut tour: route the shortcuts it teaches to the calling
+  // renderer as practice presses (AppState.setShortcutTour). Bound to the
+  // sender, and dropped automatically when that renderer reloads or dies.
+  safeHandle('onboarding:set-shortcut-tour', async (event, active: boolean) => {
+    appState.setShortcutTour(active === true, event.sender);
+    return { success: true };
   });
 
   safeHandle('get-log-file-path', async () => {

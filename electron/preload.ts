@@ -1137,6 +1137,9 @@ interface ElectronAPI {
     key: 'seenStartup' | 'seenProfileOnboarding' | 'seenModesOnboarding' | 'permsShown',
     value: boolean,
   ) => Promise<{ success: boolean; error?: string }>;
+  /** First-launch shortcut tour: taught shortcuts become practice presses. */
+  onboardingSetShortcutTour: (active: boolean) => Promise<{ success: boolean }>;
+  onOnboardingTourShortcut: (callback: (actionId: string) => void) => () => void;
 
   // Arch
   getArch: () => Promise<string>;
@@ -3053,6 +3056,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     key: 'seenStartup' | 'seenProfileOnboarding' | 'seenModesOnboarding' | 'permsShown',
     value: boolean
   ) => ipcRenderer.invoke('onboarding:set-flag', key, value),
+  onboardingSetShortcutTour: (active: boolean) => ipcRenderer.invoke('onboarding:set-shortcut-tour', active),
+  onOnboardingTourShortcut: (callback: (actionId: string) => void) => {
+    const subscription = (_: any, actionId: string) => callback(actionId);
+    ipcRenderer.on('onboarding:tour-shortcut', subscription);
+    return () => {
+      ipcRenderer.removeListener('onboarding:tour-shortcut', subscription);
+    };
+  },
 
   // Arch
   getArch: () => ipcRenderer.invoke('get-arch'),
