@@ -52,6 +52,7 @@ import { GENIE_CLOSE_MS } from "./components/onboarding/useGenieCard"
 import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
 import { useResolvedTheme } from "./hooks/useResolvedTheme"
 import { WelcomeScreen } from "./components/onboarding/WelcomeScreen"
+import { ShortcutTour } from "./components/onboarding/ShortcutTour"
 import { shouldShowWelcome, WELCOME_SEEN_KEY, LEGACY_PERMS_SHOWN_KEY } from "./lib/onboarding/welcomeGate.mjs"
 
 
@@ -210,6 +211,9 @@ const App: React.FC = () => {
       return { welcomeSeen: true, permsShown: false };
     }
   }, []);
+  // Welcome, then the shortcut tour. Marked seen only when the tour ends
+  // (finished or skipped), so quitting halfway brings the welcome back.
+  const [welcomeStep, setWelcomeStep] = useState<'welcome' | 'tour'>('welcome');
   const finishWelcome = useCallback(() => {
     try { localStorage.setItem(WELCOME_SEEN_KEY, '1'); } catch {}
     window.electronAPI?.onboardingSetFlag?.('seenStartup', true).catch(() => {});
@@ -1204,7 +1208,19 @@ const App: React.FC = () => {
             animate={{ opacity: 1, transition: { duration: 0.45, ease: [0.23, 1, 0.32, 1] } }}
             exit={{ opacity: 0, scale: 0.99, pointerEvents: "none", transition: { duration: 0.35, ease: [0.4, 0, 0.2, 1] } }}
           >
-            <WelcomeScreen onGetStarted={finishWelcome} />
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={welcomeStep}
+                className="h-full w-full"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { duration: 0.35, ease: [0.23, 1, 0.32, 1] } }}
+                exit={{ opacity: 0, transition: { duration: 0.2, ease: [0.4, 0, 0.2, 1] } }}
+              >
+                {welcomeStep === 'welcome'
+                  ? <WelcomeScreen onGetStarted={() => setWelcomeStep('tour')} />
+                  : <ShortcutTour onDone={finishWelcome} />}
+              </motion.div>
+            </AnimatePresence>
           </motion.div>
         ) : (
           <motion.div
