@@ -11568,7 +11568,7 @@ Provide only the answer, nothing else.`;
                       }}
                       className={`
                                                 flex items-center gap-1 pl-3 pr-1.5 h-7
-                                                border rounded-lg transition-colors
+                                                border rounded-[9px] transition-colors
                                                 text-xs font-medium text-left shrink-0
                                                 interaction-base interaction-press
                                                 ${controlSurfaceClass}
@@ -11659,7 +11659,7 @@ Provide only the answer, nothing else.`;
                           window.electronAPI.toggleSettingsWindow({ x, y });
                         }}
                         className={`
-                                            w-7 h-7 flex items-center justify-center rounded-lg border
+                                            w-7 h-7 flex items-center justify-center rounded-[9px] border
                                             interaction-base interaction-press
                                             ${
                                               isSettingsOpen
@@ -11682,7 +11682,7 @@ Provide only the answer, nothing else.`;
                           window.electronAPI?.setOverlayMousePassthrough?.(newState);
                         }}
                         className={`
-                                                    w-7 h-7 flex items-center justify-center rounded-lg border
+                                                    w-7 h-7 flex items-center justify-center rounded-[9px] border
                                                     interaction-base interaction-press
                                                     ${
                                                       isMousePassthrough

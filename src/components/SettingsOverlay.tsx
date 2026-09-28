@@ -218,11 +218,11 @@ const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: M
                             {/* Bottom Row */}
                             <div className="flex items-center justify-between mt-3 px-0.5">
                                 <div className="flex items-center gap-1.5">
-                                    <div className="flex items-center gap-1 pl-3 pr-1.5 h-7 border rounded-lg text-xs font-medium text-left shrink-0 overlay-control-surface overlay-text-interactive" style={{ ...appearance.controlStyle, width: MODEL_SELECTOR_WIDTH }}>
+                                    <div className="flex items-center gap-1 pl-3 pr-1.5 h-7 border rounded-[9px] text-xs font-medium text-left shrink-0 overlay-control-surface overlay-text-interactive" style={{ ...appearance.controlStyle, width: MODEL_SELECTOR_WIDTH }}>
                                         <ModelSelectorLabel>Gemini 3 Flash</ModelSelectorLabel>
                                         <ChevronDown size={12} className="shrink-0" />
                                     </div>
-                                    <div className="w-7 h-7 flex items-center justify-center rounded-lg border overlay-control-surface overlay-text-muted" style={appearance.controlStyle}>
+                                    <div className="w-7 h-7 flex items-center justify-center rounded-[9px] border overlay-control-surface overlay-text-muted" style={appearance.controlStyle}>
                                         <SlidersHorizontal className="w-3.5 h-3.5" />
                                     </div>
                                 </div>
