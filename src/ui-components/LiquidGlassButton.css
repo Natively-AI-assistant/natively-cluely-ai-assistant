@@ -280,48 +280,38 @@
 .lg-button.lg-sky::after { opacity: .30; }
 
 /*
-  .lg-lavender — the website's primary action, ported for the first-launch
-  welcome so the app and the site share one CTA material.
+  .lg-lavender — the material in the first-launch welcome's action colour, so
+  the welcome and the tour carry the same lavender as the website's primary
+  action.
 
-  A TINT, not a colour: rgba(156,111,243,.24) lets most of what is behind the
-  pill through, and the backdrop pass blurs and over-saturates it. Like .lg-sky
-  it is a light body, so the specular sits on the top face only.
+  Built exactly as .lg-action is, only the fill differs: a FLAT, opaque body
+  with a soft .09 sheen on the top and bottom faces, and the three-ring specular
+  rim (white, .148/.118/.134) aimed at the top and bottom faces by ::before and
+  left to die across the caps. No top-lit gradient and no backdrop blur — the
+  depth is the rim, not a glossy ramp (design.md, "What Liquid Glass actually
+  is"). An earlier cut used a translucent tint over a 42% white ramp with a
+  backdrop blur; on the plain welcome page there is nothing behind it to blur,
+  so it read as a matte purple plate with no rim at all.
 
-  The label is a deep lavender, not white: on the light-theme composite
-  (~#E3D5FB) white runs about 1.3:1. A dark host re-tints it through the
-  --lg-lav-* tokens rather than a second variant.
+  The body is #7C5CE6: white on it is 4.64:1, over the 4.5:1 AA floor for a
+  14px label. Hover walks the same hue lighter (#8768EC). Tokens: --lg-lav-bg,
+  --lg-lav-hover, --lg-lav-fg.
 */
 .lg-button.lg-lavender {
     background:
         linear-gradient(180deg,
-            rgba(255, 255, 255, .42) 0%, rgba(255, 255, 255, .10) 18%,
-            rgba(255, 255, 255, 0) 100%),
-        var(--lg-lav-bg, rgba(156, 111, 243, .24));
-    --lg-tint-hover: var(--lg-lav-hover, rgba(156, 111, 243, .36));
-    --lg-lens-tint: rgba(255, 255, 255, .30);
-    --lg-lens-rim: rgba(255, 255, 255, .78);
-    --lg-lens-rim-soft: rgba(156, 111, 243, .26);
-    --lg-rim-1: var(--lg-lav-rim, rgba(255, 255, 255, .78));
-    --lg-rim-2: rgba(156, 111, 243, .30);
-    --lg-rim-3: rgba(156, 111, 243, .12);
-    -webkit-backdrop-filter: blur(20px) saturate(190%);
-            backdrop-filter: blur(20px) saturate(190%);
-    box-shadow:
-        inset 0 -1px 0 rgba(90, 43, 176, .14),
-        0 1px 2px rgba(78, 46, 150, .10),
-        0 14px 30px -12px var(--lg-lav-glow, rgba(156, 111, 243, .55));
+            rgba(255, 255, 255, .090) 0%, rgba(255, 255, 255, 0) 11%,
+            rgba(255, 255, 255, 0) 89%, rgba(255, 255, 255, .090) 100%),
+        var(--lg-lav-bg, #7c5ce6);
+    --lg-tint-hover: var(--lg-lav-hover, #8768ec);
+    --lg-lens-tint: rgba(238, 232, 255, .07);
+    --lg-lens-rim: rgba(240, 235, 255, .30);
+    --lg-lens-rim-soft: rgba(240, 235, 255, .13);
+    --lg-rim-1: rgba(240, 235, 255, .148);
+    --lg-rim-2: rgba(240, 235, 255, .118);
+    --lg-rim-3: rgba(240, 235, 255, .134);
 }
-.lg-lavender .lg-content { color: var(--lg-lav-fg, #3F2593); }
-.lg-button.lg-lavender::before {
-    -webkit-mask-image:
-        linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
-        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
-    mask-image:
-        linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
-        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
-}
-/* the cap shadow is a black gradient; on glass this clear it reads as dirt */
-.lg-button.lg-lavender::after { opacity: .10; }
+.lg-lavender .lg-content { color: var(--lg-lav-fg, #ffffff); }
 
 /*
   .lg-clear — the material with NO body of its own.
@@ -423,6 +413,24 @@
 /* the underside shadow already reads; a full cap ring would double it */
 [data-theme='light'] .lg-button.lg-action::after { opacity: .55; }
 [data-theme='light'] .lg-button.lg-action.lg-sm::after { opacity: .32; }
+
+/* .lg-lavender in light mode — the same derived treatment as .lg-action */
+[data-theme='light'] .lg-button.lg-lavender {
+    box-shadow:
+        inset 0 -1px 0 rgba(0, 0, 0, .20),
+        0 1px 2px rgba(40, 24, 90, .18),
+        0 4px 10px rgba(40, 24, 90, .12);
+}
+[data-theme='light'] .lg-button.lg-lavender::before {
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 26%, transparent 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 26%, transparent 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+}
+[data-theme='light'] .lg-button.lg-lavender::after { opacity: .55; }
+[data-theme='light'] .lg-button.lg-lavender.lg-sm::after { opacity: .32; }
 
 /*
   .lg-clear in light mode — the one place the layer STRUCTURE has to change.

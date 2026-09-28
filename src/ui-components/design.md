@@ -460,6 +460,30 @@ the current fill reaches 5.31:1 without touching the colour at all.
 
 Tokens: `--lg-sky-bg`, `--lg-sky-hover`, `--lg-sky-fg`.
 
+### An opaque body in another hue: `.lg-lavender`
+
+The first-launch welcome and shortcut tour's action colour, built the way
+`.lg-action` is built and differing only in the fill. A flat opaque body
+(`#7C5CE6`), the soft `.09` sheen on the top and bottom faces, the three-ring
+white rim aimed at the top and bottom faces, the caps in shadow. Light mode is
+`.lg-action`'s derived treatment: specular on the top face only, the underside
+darkened, a contact shadow. Use it with `lg-sm lg-wide` and set `--lg-pill-h`
+and `--lg-label-size` for the box (the CTAs are 40 and 48px tall, where the
+`.lg-sm` hairline is 2-2.5% of the height, the reference's own proportion).
+
+The first cut was a **translucent tint over a 42% white ramp with a backdrop
+blur**, and that is the mistake this document opens with: a glossy top-lit
+gradient. On a plain page there is nothing behind the pill to blur, so it read
+as a matte purple plate with no rim. Nothing about a colour that sits in the
+lavender range calls for a different structure; only the fill changes.
+
+White on `#7C5CE6` is 4.64:1, over the 4.5:1 AA floor for the 14-15px labels
+(`#9C6FF3`, the website's colour, is 3.51:1). Hover walks the same hue lighter
+(`#8768EC`).
+
+Derived, not measured, like `.lg-action`'s light mode. Tokens: `--lg-lav-bg`,
+`--lg-lav-hover`, `--lg-lav-fg`.
+
 ### A clear body removes the body from the model
 
 `.lg-clear` is the material with **no fill of its own** — the host's surface

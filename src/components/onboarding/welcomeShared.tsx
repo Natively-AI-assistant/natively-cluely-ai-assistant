@@ -22,21 +22,12 @@ const THEME = {
     bg: '#F7F8FC', strong: '#0B1020', body: 'rgba(11,16,32,0.68)', quiet: 'rgba(11,16,32,0.66)', faint: 'rgba(11,16,32,0.58)',
     plate: '#EEF1F8', grid: 'rgba(11,16,32,0.035)', card: cardLight, markFilter: 'invert(1)',
     kcBg: '#FFFFFF', kcRim: 'rgba(11,16,32,0.14)', kcUnder: 'rgba(11,16,32,0.14)', dot: 'rgba(11,16,32,0.14)',
-    button: {},
   },
   dark: {
     // A step under the #232327 plate, so the plate still reads as inset.
     bg: '#161618', strong: '#F2F2F4', body: 'rgba(255,255,255,0.66)', quiet: 'rgba(255,255,255,0.56)', faint: 'rgba(255,255,255,0.50)',
     plate: '#232327', grid: 'rgba(255,255,255,0.035)', card: cardDark, markFilter: 'none',
     kcBg: 'rgba(255,255,255,0.07)', kcRim: 'rgba(255,255,255,0.16)', kcUnder: 'rgba(0,0,0,0.45)', dot: 'rgba(255,255,255,0.14)',
-    // The same glass on a dark page: a thicker tint, a light label, a softer rim.
-    button: {
-      '--lg-lav-bg': 'rgba(156,111,243,0.34)',
-      '--lg-lav-hover': 'rgba(156,111,243,0.46)',
-      '--lg-lav-fg': '#F4EEFF',
-      '--lg-lav-rim': 'rgba(255,255,255,0.30)',
-      '--lg-lav-glow': 'rgba(124,77,230,0.60)',
-    },
   },
 } as const;
 
@@ -73,7 +64,7 @@ export const WelcomeFrame: React.FC<React.HTMLAttributes<HTMLDivElement> & { t: 
   </div>
 );
 
-export const LavenderButton: React.FC<{ t: WelcomeTheme; width: number; height?: number; labelSize?: number; onClick: () => void; children: React.ReactNode }> = ({ t, width, height = 48, labelSize = 15, onClick, children }) => (
+export const LavenderButton: React.FC<{ width: number; height?: number; labelSize?: number; onClick: () => void; children: React.ReactNode }> = ({ width, height = 48, labelSize = 15, onClick, children }) => (
   <LiquidGlassButton
     variant="lavender"
     className="lg-sm lg-wide"
@@ -83,7 +74,6 @@ export const LavenderButton: React.FC<{ t: WelcomeTheme; width: number; height?:
       // lg-sm's box is a 30px settings row; a CTA sets its own height.
       ['--lg-pill-h' as string]: `${height}px`,
       ['--lg-label-size' as string]: `${labelSize}px`,
-      ...t.button,
     } as React.CSSProperties}
   >
     <span className="inline-flex items-center gap-2">{children}</span>
