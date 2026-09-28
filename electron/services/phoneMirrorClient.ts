@@ -626,9 +626,10 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         animation: thinking-sweep 1.6s ease-in-out infinite;
       }
       .thinking.is-inline { padding: 0; font-size: inherit; line-height: inherit; }
+      /* Left to right, matching index.css natively-thinking-sweep. */
       @keyframes thinking-sweep {
-        0% { background-position: 0% 0; }
-        100% { background-position: 100% 0; }
+        0% { background-position: 100% 0; }
+        100% { background-position: 0% 0; }
       }
 
       /* User message */

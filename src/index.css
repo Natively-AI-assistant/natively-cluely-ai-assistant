@@ -2462,9 +2462,13 @@ body {
   will-change: background-position;
 }
 
+/* Sweeps LEFT → RIGHT, in reading direction. With an image wider than the
+   element, a rising background-position slides the image LEFT, so 0% → 100%
+   ran the band right-to-left; 100% → 0% is the reading-direction pass.
+   Shared with .settings-listening; phoneMirrorClient.ts keeps its own copy. */
 @keyframes natively-thinking-sweep {
-  0% { background-position: 0% 0; }
-  100% { background-position: 100% 0; }
+  0% { background-position: 100% 0; }
+  100% { background-position: 0% 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
