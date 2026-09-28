@@ -1056,4 +1056,18 @@ export const ES_GENERATED: Record<string, string> = {
     "Generating…": "Generando…",
     "Couldn't write the draft. Try again.": "No se pudo redactar el borrador. Inténtalo de nuevo.",
     "Write a follow-up from these notes when you need one.": "Redacta un seguimiento a partir de estas notas cuando lo necesites.",
+    // Meeting notes: the calendar-event menu (meeting/CalendarLinkChip).
+    "Link to calendar event": "Vincular a un evento del calendario",
+    "Linked calendar event": "Evento del calendario vinculado",
+    "Which calendar event was this?": "¿Qué evento del calendario era?",
+    "Looking at your calendar…": "Revisando tu calendario…",
+    "No calendar events around this time.": "No hay eventos del calendario cerca de esta hora.",
+    "Not a calendar meeting": "No es una reunión del calendario",
+    "This recording": "Esta grabación",
+    "During this recording": "Durante esta grabación",
+    "Around it": "Alrededor",
+    "Just you": "Solo tú",
+    "With": "Con",
+    "min": "min",
+    "hr": "h",
 };

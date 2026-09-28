@@ -1055,4 +1055,18 @@ export const ZH_GENERATED: Record<string, string> = {
     "Generating…": "正在生成…",
     "Couldn't write the draft. Try again.": "无法撰写草稿。请重试。",
     "Write a follow-up from these notes when you need one.": "需要时，可根据这些笔记生成跟进草稿。",
+    // Meeting notes: the calendar-event menu (meeting/CalendarLinkChip).
+    "Link to calendar event": "关联日历活动",
+    "Linked calendar event": "已关联的日历活动",
+    "Which calendar event was this?": "这是哪个日历活动？",
+    "Looking at your calendar…": "正在查看你的日历…",
+    "No calendar events around this time.": "这段时间前后没有日历活动。",
+    "Not a calendar meeting": "不是日历会议",
+    "This recording": "本次录制",
+    "During this recording": "录制期间",
+    "Around it": "前后",
+    "Just you": "只有你",
+    "With": "与",
+    "min": "分钟",
+    "hr": "小时",
 };

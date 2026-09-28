@@ -743,6 +743,7 @@ interface ElectronAPI {
   extractEmailsFromTranscript: (transcript: Array<{ text: string }>) => Promise<string[]>;
   getCalendarAttendees: (eventId: string) => Promise<Array<{ email: string; name: string }>>;
   getMeetingCalendarCandidates: (meetingId: string) => Promise<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string; attendees: Array<{ email: string; name?: string; response?: string }>; linkedBy: string }>>;
+  getMeetingRecordingSpan: (meetingId: string) => Promise<{ startMs: number; endMs: number } | null>;
   setMeetingCalendarEvent: (meetingId: string, eventId: string | null) => Promise<{ success: boolean }>;
   openMailto: (params: {
     to: string;
@@ -2512,6 +2513,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('extract-emails-from-transcript', transcript),
   getCalendarAttendees: (eventId: string) => ipcRenderer.invoke('get-calendar-attendees', eventId),
   getMeetingCalendarCandidates: (meetingId: string) => ipcRenderer.invoke('meeting-calendar-candidates', meetingId),
+  getMeetingRecordingSpan: (meetingId: string) => ipcRenderer.invoke('meeting-recording-span', meetingId),
   setMeetingCalendarEvent: (meetingId: string, eventId: string | null) => ipcRenderer.invoke('meeting-set-calendar-event', { meetingId, eventId }),
   openMailto: (params: { to: string; subject: string; body: string }) =>
     ipcRenderer.invoke('open-mailto', params),

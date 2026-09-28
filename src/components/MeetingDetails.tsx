@@ -2344,9 +2344,6 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         · {t('With')} {participantsSummary(meeting.detailedSummary.callParticipants)}
                                     </span>
                                 )}
-                                {/* Which calendar event this was: shown when linked, offered when
-                                    a calendar is connected. See meeting/CalendarLinkChip. */}
-                                <CalendarLinkChip meetingId={meeting.id} event={meeting.calendarEvent} isLight={isLight} onChanged={reloadMeeting} />
                             </div>
 
                             {/* Editable Title — a bar while the note is being written. The
@@ -2433,19 +2430,25 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         {(() => {
                             const copyLabel = activeTab === 'summary' ? t('Copy full summary') : activeTab === 'transcript' ? t('Copy full transcript') : t('Copy usage');
                             return (
-                                <button
-                                    onClick={handleCopy}
-                                    disabled={activeTab === 'summary' && isSummaryGenerating}
-                                    className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-[color,opacity] disabled:opacity-40 disabled:cursor-default disabled:hover:text-text-secondary"
-                                >
-                                    <span className="t-icon-swap w-3.5 h-3.5" data-state={isCopied ? 'b' : 'a'} aria-hidden="true">
-                                        <Copy className="t-icon w-3.5 h-3.5" data-icon="a" size={14} />
-                                        <Check className="t-icon w-3.5 h-3.5 text-emerald-500" data-icon="b" size={14} />
-                                    </span>
-                                    <SwapText value={isCopied ? 'copied' : activeTab} sizers={[copyLabel, t('Copied')]}>
-                                        {isCopied ? t('Copied') : copyLabel}
-                                    </SwapText>
-                                </button>
+                                <div className="flex items-center gap-5 min-w-0">
+                                    {/* Which calendar event this was: linked, or offered when a calendar
+                                        is connected. A meeting-level action, so it sits with Copy rather
+                                        than on the date line. See meeting/CalendarLinkChip. */}
+                                    <CalendarLinkChip meetingId={meeting.id} meetingTitle={meeting.title} event={meeting.calendarEvent} isLight={isLight} onChanged={reloadMeeting} />
+                                    <button
+                                        onClick={handleCopy}
+                                        disabled={activeTab === 'summary' && isSummaryGenerating}
+                                        className="shrink-0 flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-[color,opacity] disabled:opacity-40 disabled:cursor-default disabled:hover:text-text-secondary"
+                                    >
+                                        <span className="t-icon-swap w-3.5 h-3.5" data-state={isCopied ? 'b' : 'a'} aria-hidden="true">
+                                            <Copy className="t-icon w-3.5 h-3.5" data-icon="a" size={14} />
+                                            <Check className="t-icon w-3.5 h-3.5 text-emerald-500" data-icon="b" size={14} />
+                                        </span>
+                                        <SwapText value={isCopied ? 'copied' : activeTab} sizers={[copyLabel, t('Copied')]}>
+                                            {isCopied ? t('Copied') : copyLabel}
+                                        </SwapText>
+                                    </button>
+                                </div>
                             );
                         })()}
                     </div>

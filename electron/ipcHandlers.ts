@@ -15395,6 +15395,20 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // When the recording ran, so the notes' calendar menu can show which events it
+  // overlapped. The renderer's meeting.date is when the notes were saved.
+  safeHandle('meeting-recording-span', async (_, meetingId: string) => {
+    try {
+      if (typeof meetingId !== 'string' || !meetingId) return null;
+      const times = DatabaseManager.getInstance().getMeetingTimes(meetingId);
+      if (!times || !times.startMs) return null;
+      return { startMs: times.startMs, endMs: times.startMs + Math.max(0, times.durationMs) };
+    } catch (error: any) {
+      console.error('[IPC] meeting-recording-span failed:', error?.message);
+      return null;
+    }
+  });
+
   safeHandle('meeting-set-calendar-event', async (_, { meetingId, eventId }: { meetingId: string; eventId: string | null }) => {
     try {
       if (typeof meetingId !== 'string' || !meetingId) return { success: false };

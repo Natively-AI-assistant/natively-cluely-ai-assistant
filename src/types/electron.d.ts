@@ -851,6 +851,8 @@ export interface ElectronAPI {
   getCalendarAttendees: (eventId: string) => Promise<Array<{ email: string; name: string }>>;
   /** Calendar events overlapping a saved meeting, nearest start first (the notes' "which event was this"). */
   getMeetingCalendarCandidates: (meetingId: string) => Promise<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string; attendees: Array<{ email: string; name?: string; response?: string }>; linkedBy: string }>>;
+  /** When a saved meeting's recording ran (epoch ms), or null when unknown. */
+  getMeetingRecordingSpan: (meetingId: string) => Promise<{ startMs: number; endMs: number } | null>;
   /** Link a saved meeting to one of those events, or unlink it (null). */
   setMeetingCalendarEvent: (meetingId: string, eventId: string | null) => Promise<{ success: boolean }>;
   openMailto: (params: { to: string; subject: string; body: string }) => Promise<{ success: boolean; error?: string }>;
