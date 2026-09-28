@@ -50,7 +50,7 @@ export const WelcomeScreen: React.FC<Props> = ({ onGetStarted }) => {
             Natively listens along, answers the question in front of you, and can stay hidden from screen sharing.
           </motion.p>
           <motion.div {...rise(0.24)} style={{ marginTop: 16 }}>
-            <LavenderButton width={320} onClick={onGetStarted}>
+            <LavenderButton t={t} width={320} onClick={onGetStarted}>
               Get started <ArrowRight size={15} strokeWidth={2} aria-hidden />
             </LavenderButton>
           </motion.div>

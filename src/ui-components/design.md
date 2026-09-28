@@ -460,14 +460,6 @@ the current fill reaches 5.31:1 without touching the colour at all.
 
 Tokens: `--lg-sky-bg`, `--lg-sky-hover`, `--lg-sky-fg`.
 
-### The refractive lens lives in `liquidglas2.0/`
-
-A translucent, tinted pill that bends what is behind it, after Figma's community
-Liquid Glass Button. It is a different material from everything in this document
-and is not built on `.lg-button`; see [`liquidglas2.0/design.md`](./liquidglas2.0/design.md)
-and `liquidglas2.0/LiquidGlassCta.tsx`. Reach for it for a hero call to action
-over a surface you control; reach for `.lg-button` for a control.
-
 ### A clear body removes the body from the model
 
 `.lg-clear` is the material with **no fill of its own** — the host's surface

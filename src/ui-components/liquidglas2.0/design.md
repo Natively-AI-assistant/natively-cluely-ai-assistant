@@ -146,9 +146,11 @@ box's own pixels. The silhouette is a pill (`radius = height / 2`). The wrapper
 is `inline-block` and its aura overflows it, so leave 52px either side and 40px
 above and below clear of anything that should not be lit.
 
-Used by the first-launch welcome and shortcut tour
-(`src/components/onboarding/welcomeShared.tsx`, `LavenderButton`) at 320x48,
-132x40 and 210x40.
+**Not currently used.** It was built for the first-launch welcome and shortcut
+tour (`LavenderButton` in `src/components/onboarding/welcomeShared.tsx`, at
+320x48, 132x40 and 210x40) and then taken out: the onboarding is back on PR 620's
+own `.lg-lavender` button (`LiquidGlassButton.css`). Kept as a reference for the
+refractive material.
 
 ---
 

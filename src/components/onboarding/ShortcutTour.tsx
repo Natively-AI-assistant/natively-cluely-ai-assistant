@@ -194,11 +194,11 @@ export const ShortcutTour: React.FC<Props> = ({ onDone }) => {
             </button>
           )}
           {isLast ? (
-            <LavenderButton width={210} height={40} labelSize={14} onClick={onDone}>
+            <LavenderButton t={t} width={210} height={40} labelSize={14} onClick={onDone}>
               Start using Natively <ArrowRight size={15} strokeWidth={2} aria-hidden />
             </LavenderButton>
           ) : (
-            <LavenderButton width={132} height={40} labelSize={14} onClick={() => setLesson(l => l + 1)}>
+            <LavenderButton t={t} width={132} height={40} labelSize={14} onClick={() => setLesson(l => l + 1)}>
               Next <ArrowRight size={15} strokeWidth={2} aria-hidden />
             </LavenderButton>
           )}
