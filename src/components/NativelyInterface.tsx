@@ -291,6 +291,12 @@ import {
 } from '../lib/overlayActionDedup.mjs';
 import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
 import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
+import {
+  detectExternalUpwardScroll,
+  isAutoScrollSuppressed as isAutoScrollSuppressedFor,
+  shouldArmFromWheel,
+  suppressionKeyForArm,
+} from '../lib/scrollFollow.mjs';
 import { decideStreamingHeightCommit } from '../lib/streamingHeightDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
 import { createTranscriptTailWaiter } from '../lib/answerTailWait.mjs';
@@ -1706,11 +1712,74 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // active interrupt in effect, regardless of the raw distance-from-bottom
   // at that instant). Declared once here rather than duplicated inline at
   // both call sites.
-  const isAutoScrollSuppressed = useCallback(() => {
-    const suppressedId = autoScrollSuppressedForMsgIdRef.current;
+  const isAutoScrollSuppressed = useCallback(
+    () => isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current, streamingMsgIdRef.current),
+    [],
+  );
+
+  // THE one place a scroll-up detaches the chat from the bottom. Every input
+  // path calls it synchronously, at the moment of the gesture — wheel, the
+  // held-key scroll, the global-shortcut inertial kick, the edge-strip wheel
+  // forward, and the scroll listener's delta check — rather than each path
+  // hoping the rAF-deferred scroll listener still sees a negative delta by the
+  // time it runs. That listener loses the race as soon as anything else writes
+  // scrollTop first, which the per-frame stream follow below now does on every
+  // frame. Arming keys suppression to the live stream, or to the idle sentinel
+  // when nothing is streaming (see suppressionKeyForArm).
+  const armAutoScrollInterrupt = useCallback(() => {
+    const alreadySuppressed = isAutoScrollSuppressedFor(
+      autoScrollSuppressedForMsgIdRef.current,
+      streamingMsgIdRef.current,
+    );
     const streamingId = streamingMsgIdRef.current;
-    return suppressedId !== null && (streamingId === null || streamingId === suppressedId);
-  }, []);
+    autoScrollSuppressedForMsgIdRef.current = suppressionKeyForArm(streamingId);
+    // Stop the width/height-transition sticky-bottom pin from re-fighting the
+    // user through that other path too.
+    wasAtBottomRef.current = false;
+    // Snapshot the headroom baseline only on the FIRST tick of a gesture: a
+    // multi-tick flick would otherwise keep moving the start of the escape
+    // forward and defeat reserveScrollHeadroomIfNeeded.
+    if (!alreadySuppressed) {
+      const c = scrollContainerRef.current;
+      if (c) clientHeightAtInterruptRef.current = c.clientHeight;
+    }
+    // The pill promises "there is live output you are not seeing". While idle
+    // there isn't any yet — the messages effect raises it if content arrives.
+    if (streamingId !== null) setJumpToLatestVisible(true);
+  }, [setJumpToLatestVisible]);
+
+  // Every path that hands control back to auto-follow: scrolled back to the
+  // bottom by hand, the pill, a user send. Also puts the width/height
+  // transition pin back — arming turns wasAtBottomRef off and no re-arm path
+  // used to turn it on again, so a code block expanding right after a re-arm
+  // left the chat unpinned. Inlines the headroom reset for the same TDZ
+  // reason the messages effect below does.
+  const resumeAutoScroll = useCallback(() => {
+    autoScrollSuppressedForMsgIdRef.current = null;
+    wasAtBottomRef.current = true;
+    setJumpToLatestVisible(false);
+    if (scrollSpacerRef.current) scrollSpacerRef.current.style.height = '0px';
+    clientHeightAtInterruptRef.current = 0;
+  }, [setJumpToLatestVisible]);
+
+  // Follow the bottom for the frame that just painted. Called by the reveal
+  // ticker after every imperative (plain-text) paint: those tokens bypass
+  // React, so the [messages] effect below never runs for them and nothing
+  // followed the answer while it streamed — the view sat still until finalize
+  // and then jumped. Anything that moved scrollTop UP since our last write is
+  // by definition not us, so it detaches instead of being undone.
+  const followStreamBottom = useCallback(() => {
+    const c = scrollContainerRef.current;
+    if (!c) return;
+    if (isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current, streamingMsgIdRef.current)) return;
+    const max = c.scrollHeight - c.clientHeight;
+    if (detectExternalUpwardScroll({ scrollTop: c.scrollTop, lastScrollTop: lastScrollTopRef.current, maxScroll: max })) {
+      armAutoScrollInterrupt();
+      return;
+    }
+    if (c.scrollTop < max) c.scrollTop = max;
+    lastScrollTopRef.current = c.scrollTop;
+  }, [armAutoScrollInterrupt]);
 
   // Auto-scroll to bottom on every messages update, unless a scroll-up
   // interrupt is currently active for this message (see isAutoScrollSuppressed
@@ -1734,23 +1803,35 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // suppression naturally lifts without any explicit "new message" handling.
   useEffect(() => {
     if (messages.length === 0) return;
-    if (isAutoScrollSuppressed()) return;
+    const c = scrollContainerRef.current;
+    // A scroll-up that no input path announced (see armAutoScrollInterrupt)
+    // still shows up as scrollTop sitting below our last write — adopt it here
+    // rather than overwrite it.
+    if (
+      c &&
+      !isAutoScrollSuppressed() &&
+      detectExternalUpwardScroll({
+        scrollTop: c.scrollTop,
+        lastScrollTop: lastScrollTopRef.current,
+        maxScroll: c.scrollHeight - c.clientHeight,
+      })
+    ) {
+      armAutoScrollInterrupt();
+    }
+    if (isAutoScrollSuppressed()) {
+      // Content changed while the user is reading elsewhere: leave the view
+      // alone and make sure the way back is on screen.
+      setJumpToLatestVisible(true);
+      return;
+    }
     // Not (or no longer) suppressed — clear any stale suppression/pill state
     // left over from a prior message and resume following the stream.
-    autoScrollSuppressedForMsgIdRef.current = null;
-    setJumpToLatestVisible(false);
-    // Inlined clearScrollHeadroom's body rather than calling it — that
-    // function is declared later in the component (near pinScrollBottomIfNeeded)
-    // and referencing it from this effect's dependency array would be a TDZ
-    // read, same class of issue already worked around for the refs above.
-    if (scrollSpacerRef.current) scrollSpacerRef.current.style.height = '0px';
-    clientHeightAtInterruptRef.current = 0;
-    const c = scrollContainerRef.current;
+    resumeAutoScroll();
     if (c) {
       c.scrollTop = c.scrollHeight - c.clientHeight;
       lastScrollTopRef.current = c.scrollTop;
     }
-  }, [messages, setJumpToLatestVisible, isAutoScrollSuppressed]);
+  }, [messages, setJumpToLatestVisible, isAutoScrollSuppressed, armAutoScrollInterrupt, resumeAutoScroll]);
 
   const hasActiveSystemAnswer = useMemo(
     () =>
@@ -3663,14 +3744,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (growth > 0) spacer.style.height = `${growth}px`;
   }, []);
 
-  // Re-arm counterpart: drop the reserved headroom back to 0. Called from
-  // every path that clears autoScrollSuppressedForMsgIdRef (wheel-down,
-  // geometry re-arm, the jump-to-latest click, and a fresh message starting).
-  const clearScrollHeadroom = useCallback(() => {
-    if (scrollSpacerRef.current) scrollSpacerRef.current.style.height = '0px';
-    clientHeightAtInterruptRef.current = 0;
-  }, []);
-
   const startTransition = useCallback(
     (targetWidth: number) => {
       // The user's drag owns `shellWidth` for its duration. Without this the
@@ -4725,16 +4798,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (decision === 'arm') {
       // User-initiated upward scroll (our own auto-scroll writes only ever
       // increase/hold scrollTop, see the streaming effect + pinScrollBottomIfNeeded).
-      autoScrollSuppressedForMsgIdRef.current = streamingMsgIdRef.current;
-      // Stop the width/height-transition sticky-bottom pin from re-fighting
-      // the user through that other path too (e.g. a code block auto-
-      // expanding mid-stream).
-      wasAtBottomRef.current = false;
-      clientHeightAtInterruptRef.current = container.clientHeight;
-      // Only show the pill when there's an actual active stream being
-      // withheld — scrolling up in a finished, static conversation must not
-      // surface a pill with no suppression behind it.
-      setJumpToLatestVisible(streamingMsgIdRef.current !== null);
+      // The pill only appears when there is a live stream being withheld;
+      // scrolling up in a finished, static conversation surfaces none until
+      // content actually arrives.
+      armAutoScrollInterrupt();
       return;
     }
 
@@ -4742,23 +4809,71 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // Lets a user who scrolled up, read, then scrolled back down
       // themselves resume live-following without waiting for the next
       // message.
-      autoScrollSuppressedForMsgIdRef.current = null;
-      setJumpToLatestVisible(false);
-      clearScrollHeadroom();
+      resumeAutoScroll();
     }
-  }, [setJumpToLatestVisible, clearScrollHeadroom, isAutoScrollSuppressed]);
+  }, [armAutoScrollInterrupt, resumeAutoScroll, isAutoScrollSuppressed]);
+
+  // A wheel gesture on the chat, from any element that feeds it — the
+  // container's own listener and the edge strip that forwards to it. Raw input,
+  // read in the tick it fires, so it cannot lose to a scrollTop write. Upward
+  // detaches; a downward tick that lands within reach of the bottom hands
+  // control back (a native clamp from a growing panel can look identical to
+  // that by geometry alone, so only a real wheel-down may clear it).
+  const handleWheelIntent = useCallback(
+    (deltaY: number, deltaX = 0) => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      if (deltaY < 0) {
+        if (
+          shouldArmFromWheel({
+            deltaX,
+            deltaY,
+            scrollTop: container.scrollTop,
+            scrollHeight: container.scrollHeight,
+            clientHeight: container.clientHeight,
+          })
+        ) {
+          armAutoScrollInterrupt();
+        }
+        return;
+      }
+      if (deltaY > 0) {
+        const distanceFromBottom =
+          container.scrollHeight - (container.scrollTop + container.clientHeight);
+        if (distanceFromBottom <= 28) resumeAutoScroll();
+      }
+    },
+    [armAutoScrollInterrupt, resumeAutoScroll],
+  );
 
   // "Jump to latest" pill click handler — the ONE place `behavior: 'smooth'`
   // is used for this scroll container. The per-frame streaming chase (step 4)
   // stays a direct scrollTop write; smooth-scrolling every frame would
   // restart the animation each time and never reach bottom.
   const handleJumpToLatest = useCallback(() => {
-    autoScrollSuppressedForMsgIdRef.current = null;
-    setJumpToLatestVisible(false);
-    clearScrollHeadroom();
+    resumeAutoScroll();
     const c = scrollContainerRef.current;
     if (c) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
-  }, [setJumpToLatestVisible, clearScrollHeadroom]);
+  }, [resumeAutoScroll]);
+
+  // "Show me the newest thing": the user just sent something, or otherwise
+  // asked to be at the bottom. Replaces six bare messagesEndRef.scrollIntoView
+  // calls that bypassed the interrupt state machine altogether — they left
+  // suppression and the pill armed, animated smooth against the direct
+  // scrollTop writes, and could scroll ancestors of a click-through overlay.
+  // Hands control back synchronously (so the messages effect for the row that
+  // was just appended already follows), then settles once layout has caught up.
+  const scrollToLatest = useCallback(() => {
+    resumeAutoScroll();
+    const settle = () => {
+      const c = scrollContainerRef.current;
+      if (!c || isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current, streamingMsgIdRef.current)) return;
+      c.scrollTop = c.scrollHeight - c.clientHeight;
+      lastScrollTopRef.current = c.scrollTop;
+    };
+    settle();
+    setTimeout(settle, 50);
+  }, [resumeAutoScroll]);
 
   // (Re)attach the scroll listener whenever the scroll container mounts.
   // The OUTER shell (the always-mounted `data-shell-root` motion.div) now
@@ -4818,49 +4933,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // upward wheel motion counts. handleScrollInterrupt's own delta<0 check
     // remains a secondary signal for input that doesn't fire wheel events
     // (e.g. dragging the scrollbar thumb directly).
-    const onWheel = (e: WheelEvent) => {
-      if (e.deltaY < 0) {
-        // Upward tick — interrupt, no threshold. Mirrors handleScrollInterrupt's
-        // direction check but reads raw input directly (see the effect-level
-        // comment above for why that avoids the streaming-write race).
-        const alreadySuppressed = isAutoScrollSuppressed();
-        autoScrollSuppressedForMsgIdRef.current = streamingMsgIdRef.current;
-        wasAtBottomRef.current = false;
-        // Snapshot the headroom baseline only on the FIRST tick of a gesture
-        // — a multi-tick trackpad flick fires several wheel events in quick
-        // succession, and re-snapshotting on each one would keep moving the
-        // "start of the escape" baseline forward, defeating
-        // reserveScrollHeadroomIfNeeded the same way a re-snapshot loop did
-        // in handleScrollInterrupt (see its comment for the full mechanism).
-        if (!alreadySuppressed) {
-          const container = scrollContainerRef.current;
-          if (container) clientHeightAtInterruptRef.current = container.clientHeight;
-        }
-        setJumpToLatestVisible(streamingMsgIdRef.current !== null);
-        return;
-      }
-      if (e.deltaY > 0) {
-        // Downward tick — a genuine user-driven re-arm signal, checked here
-        // (not only via handleScrollInterrupt's geometry-only re-arm below)
-        // because a width/height transition growing clientHeight can pull
-        // scrollTop toward the bottom via the BROWSER'S OWN native clamping
-        // (max scrollable position shrinking as the visible area grows) with
-        // no user input at all — that native clamp is indistinguishable from
-        // "the user scrolled back to bottom" by geometry alone, and would
-        // silently clear a real interrupt. A wheel-down tick is unambiguous:
-        // it can only originate from the user.
-        const container = scrollContainerRef.current;
-        if (container) {
-          const distanceFromBottom =
-            container.scrollHeight - (container.scrollTop + container.clientHeight);
-          if (distanceFromBottom <= 28) {
-            autoScrollSuppressedForMsgIdRef.current = null;
-            setJumpToLatestVisible(false);
-            clearScrollHeadroom();
-          }
-        }
-      }
-    };
+    const onWheel = (e: WheelEvent) => handleWheelIntent(e.deltaY, e.deltaX);
     container.addEventListener('scroll', onScroll, { passive: true });
     container.addEventListener('wheel', onWheel, { passive: true });
     return () => {
@@ -4872,9 +4945,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     scrollContainerMounted,
     checkCodeVisibility,
     handleScrollInterrupt,
-    setJumpToLatestVisible,
-    clearScrollHeadroom,
-    isAutoScrollSuppressed,
+    handleWheelIntent,
   ]);
 
   // Cancel all in-flight async work on unmount.
@@ -4993,8 +5064,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // hide so these stay meaningful.
       const c = scrollContainerRef.current;
       if (c) {
+        // A user who detached from the bottom is not "at the bottom" for this
+        // purpose even if they happen to be within a few px of it.
         wasAtBottomBeforeHideRef.current =
-          c.scrollHeight - (c.scrollTop + c.clientHeight) <= 8;
+          c.scrollHeight - (c.scrollTop + c.clientHeight) <= 8 && !isAutoScrollSuppressed();
         scrollHeightBeforeHideRef.current = c.scrollHeight;
       } else {
         wasAtBottomBeforeHideRef.current = false;
@@ -5011,7 +5084,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const hideTimer = setTimeout(() => window.electronAPI.hideWindow(), 400);
       return () => clearTimeout(hideTimer);
     }
-  }, [isExpanded]);
+  }, [isExpanded, isAutoScrollSuppressed]);
 
   // On Cmd+B re-expand: jump the chat to the bottom ONLY when the user was
   // already pinned to the bottom before hiding AND new content streamed in
@@ -5034,10 +5107,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const grewWhileHidden = c.scrollHeight > scrollHeightBeforeHideRef.current + 1;
     if (!grewWhileHidden) return;
     const rafId = requestAnimationFrame(() => {
-      c.scrollTop = c.scrollHeight;
+      // Re-read the node and re-check intent a frame later: the container can
+      // have remounted while hidden, and the user can have detached since.
+      const live = scrollContainerRef.current;
+      if (!live || isAutoScrollSuppressed()) return;
+      live.scrollTop = live.scrollHeight - live.clientHeight;
+      lastScrollTopRef.current = live.scrollTop;
     });
     return () => cancelAnimationFrame(rafId);
-  }, [isExpanded]);
+  }, [isExpanded, isAutoScrollSuppressed]);
 
   // Keyboard shortcut to toggle expanded state (via Main Process)
   useEffect(() => {
@@ -5846,6 +5924,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         commitRevealedCodeText(msgId, fullText.slice(0, pacer.revealedLen));
       } else {
         paintRevealedNow(ts);
+        // These tokens never touch React state, so nothing else scrolls for
+        // them — chase the bottom in the same frame they are painted.
+        followStreamBottom();
       }
     }
     // Caught up to everything that has arrived: stop rescheduling instead of
@@ -5908,7 +5989,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       return;
     }
     streamingRafRef.current = requestAnimationFrame(revealTick);
-  }, [paintRevealedNow, commitRevealedCodeText, sealPendingStream]);
+  }, [paintRevealedNow, commitRevealedCodeText, sealPendingStream, followStreamBottom]);
 
   // Ensure the reveal ticker is running for `msgId`. A new msgId resets the
   // pacer to a fresh state (see createPacerState — starts the initial
@@ -7512,9 +7593,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         },
       ]);
       // Scroll to bottom when user sends message
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
+      scrollToLatest();
     } else {
       // No screenshot attached — still show a question card so the answer
       // never appears with no preceding "question" bubble.
@@ -7888,9 +7967,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         },
       ]);
       // Scroll to bottom when user sends message
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
+      scrollToLatest();
     } else {
       // No screenshot attached — still show a question card so the answer
       // never appears with no preceding "question" bubble.
@@ -7943,9 +8020,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         },
       ]);
       // Scroll to bottom when user sends message
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
+      scrollToLatest();
     } else {
       // No screenshot attached — still show a question card so the answer
       // never appears with no preceding "question" bubble.
@@ -8252,9 +8327,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         setIsExpanded(true);
         setIsProcessing(true);
         pinAnswerPanel();
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 50);
+        scrollToLatest();
       }),
     );
 
@@ -8439,7 +8512,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     });
 
     return () => cleanups.forEach((fn) => fn());
-  }, [currentModel, queueToken, flushToken]); // Ensure tracking captures correct model
+  }, [currentModel, queueToken, flushToken, scrollToLatest]); // Ensure tracking captures correct model
 
   const handleAnswerNow = async () => {
     if (isManualRecording) {
@@ -8546,9 +8619,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           },
         ]);
 
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 50);
+        scrollToLatest();
 
         if (directAssistEnabled) {
           const directPageContext = consumeDirectPageContext();
@@ -8768,9 +8839,7 @@ Provide only the answer, nothing else.`;
     ]);
 
     // Scroll to bottom when user sends message
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
+    scrollToLatest();
 
     if (directAssistEnabled) {
       try {
@@ -9582,6 +9651,8 @@ Provide only the answer, nothing else.`;
         handleBrainstorm();
       } else if (isShortcutPressed(e, 'scrollUp')) {
         e.preventDefault();
+        // Detach from the bottom now, not after the scroll listener notices.
+        armAutoScrollInterrupt();
         upHeld = true;
         recomputeDirection();
         startScrollLoop();
@@ -9622,7 +9693,7 @@ Provide only the answer, nothing else.`;
       window.removeEventListener('blur', handleBlur);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [isShortcutPressed]);
+  }, [isShortcutPressed, armAutoScrollInterrupt]);
 
   // General Global Shortcuts (Rebindable)
   // We listen here to handle them when the window is focused (renderer side)
@@ -9890,6 +9961,10 @@ Provide only the answer, nothing else.`;
 
       let target: HTMLElement | null;
       if (axis === 'vert') {
+        // The global-shortcut path is how the overlay is scrolled while it is
+        // click-through (native wheel never arrives), so it must detach the
+        // chat itself; only an upward kick that can actually move counts.
+        if (direction < 0 && container.scrollTop > 0) armAutoScrollInterrupt();
         target = container;
       } else {
         target = resolveHorizontalTarget(container);
@@ -9917,7 +9992,7 @@ Provide only the answer, nothing else.`;
       if (state.raf !== null) cancelAnimationFrame(state.raf);
       inertialScrollRef.current = null;
     };
-  }, []);
+  }, [armAutoScrollInterrupt]);
 
   // Stealth Global Shortcuts Handler
   // Listens for shortcuts triggered when the app is in the background
@@ -11732,6 +11807,9 @@ Provide only the answer, nothing else.`;
                 // SIBLING of the scroll container, so a wheel over it would
                 // otherwise do nothing at all. Forward it by hand.
                 onWheel={(e) => {
+                  // Detach before scrolling: the forwarded scrollBy is not a
+                  // wheel event on the container, so its listener never sees it.
+                  handleWheelIntent(e.deltaY, e.deltaX);
                   scrollContainerRef.current?.scrollBy({ top: e.deltaY });
                 }}
               />
