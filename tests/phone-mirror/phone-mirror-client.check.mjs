@@ -813,8 +813,12 @@ async function meetingStateScenario(dev, scheme) {
     const chipsIdle = await page.$$eval('.chip[data-needs-meeting]', (ns) => ns.map((n) => n.classList.contains('needs-meeting')));
     check(tag, 'no meeting: conversation buttons look quieter', chipsIdle.length === 4 && chipsIdle.every(Boolean), JSON.stringify(chipsIdle));
     await page.click('.chip[data-action="recap"]');
+    const shook = await page.$eval('.chip[data-action="recap"]', (n) => n.classList.contains('is-shaking') && getComputedStyle(n).animationName);
     await sleep(250);
     const idleTap = await page.evaluate(() => ({ toast: document.getElementById('toastText').textContent, pending: !!document.querySelector('.answer.is-pending') }));
+    await sleep(200);
+    const settled = await page.$eval('.chip[data-action="recap"]', (n) => n.classList.contains('is-shaking'));
+    check(tag, 'a denied tap shakes the button once, then clears for the next', shook === 't-input-shake' && !settled, JSON.stringify({ shook, settled }));
     check(tag, 'tapping one says a meeting is needed, sends nothing', idleTap.toast === 'Start a meeting on your Mac first' && !idleTap.pending, JSON.stringify(idleTap));
     setDesktopTray([{ path: '/Users/someone/natively/screenshots/cap-x.png', thumb: 'data:image/jpeg;base64,/9j/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/yQALCAABAAEBAREA/8wABgAQEAX/2gAIAQEAAD8A0s8g/9k=' }]);
     await sleep(300);

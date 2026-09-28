@@ -60,9 +60,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         --toast-blur: 2px;
         --toast-scale: 0.97;
         --toast-ease: cubic-bezier(0.22, 1, 0.36, 1);
-        --shimmer-dur: 2000ms;
-        --shimmer-band: 400%;
-        --shimmer-ease: linear;
         --stagger-dur: 500ms;
         --stagger-distance: 12px;
         --stagger-stagger: 40ms;
@@ -86,6 +83,11 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         --reveal-dur: 400ms;
         --reveal-blur: 2px;
         --reveal-ease: ease-in-out;
+        --shake-distance: 6px;
+        --shake-overshoot: 4px;
+        --shake-dur-a: 80ms;
+        --shake-dur-b: 60ms;
+        --shake-ease: cubic-bezier(0.22, 1, 0.36, 1);
         --acc-chevron: 250ms;
         --acc-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
@@ -156,8 +158,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         --menu-bg: rgba(40, 40, 44, 0.84);
         --scrim: rgba(0, 0, 0, 0.46);
         --shadow-float: 0 14px 34px rgba(0, 0, 0, 0.46), 0 2px 8px rgba(0, 0, 0, 0.3);
-        --shimmer-base: rgba(235, 235, 245, 0.42);
-        --shimmer-highlight: #ffffff;
         --code-bg: #0d0e11;
         --logo-filter: none;
       }
@@ -193,8 +193,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           --menu-bg: rgba(252, 252, 253, 0.88);
           --scrim: rgba(0, 0, 0, 0.16);
           --shadow-float: 0 12px 30px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
-          --shimmer-base: rgba(60, 60, 67, 0.5);
-          --shimmer-highlight: #1c1c1e;
           --logo-filter: invert(1);
         }
       }
@@ -276,7 +274,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       }
       /* Reconnecting: the pill is a retry button. */
       .app[data-conn="reconnecting"] .conn { cursor: pointer; }
-      .conn.is-pressed { transform: scale(0.95); }
+      .conn.is-pressed { transform: scale(0.96); }
       .conn-dot {
         flex: 0 0 auto;
         width: 7px;
@@ -302,7 +300,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         transition: background-color var(--duration-quick) var(--ease-out), transform var(--duration-quick) var(--ease-out), color var(--duration-quick) var(--ease-out);
       }
       .icon-btn::after { content: ""; position: absolute; inset: -4px; }
-      .icon-btn:active, .icon-btn.is-pressed { background: var(--fill-2); transform: scale(0.94); transition-duration: 60ms; }
+      .icon-btn:active, .icon-btn.is-pressed { background: var(--fill-2); transform: scale(0.94); transition-duration: var(--duration-micro); }
       .icon-btn[aria-expanded="true"] { background: var(--fill-2); color: var(--label); }
 
       /* Chrome material: content scrolls underneath, and instead of a hard
@@ -627,41 +625,10 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         -webkit-text-fill-color: transparent;
         animation: thinking-sweep 1.6s ease-in-out infinite;
       }
+      .thinking.is-inline { padding: 0; font-size: inherit; line-height: inherit; }
       @keyframes thinking-sweep {
         0% { background-position: 0% 0; }
         100% { background-position: 100% 0; }
-      }
-
-      /* Shimmer text (transitions.dev). */
-      .t-shimmer {
-        position: relative;
-        display: inline-block;
-        color: var(--shimmer-base);
-      }
-      .t-shimmer::before {
-        content: attr(data-text);
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background-image: linear-gradient(
-          90deg,
-          transparent          0%,
-          transparent         40%,
-          var(--shimmer-highlight) 50%,
-          transparent         60%,
-          transparent        100%
-        );
-        background-size: var(--shimmer-band) 100%;
-        background-repeat: no-repeat;
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        -webkit-text-fill-color: transparent;
-        animation: t-shimmer var(--shimmer-dur) var(--shimmer-ease) infinite;
-      }
-      @keyframes t-shimmer {
-        0%   { background-position: 100% 0; }
-        100% { background-position: 0% 0; }
       }
 
       /* User message */
@@ -858,12 +825,24 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       }
       .chip::after { content: ""; position: absolute; left: -4px; right: -4px; top: -5px; bottom: -5px; }
       .chip.is-primary { background: var(--accent-tint); color: var(--accent); box-shadow: none; }
-      .chip:active, .chip.is-pressed { transform: scale(0.96); background: var(--fill-press); transition-duration: 60ms; }
+      .chip:active, .chip.is-pressed { transform: scale(0.96); background: var(--fill-press); transition-duration: var(--duration-micro); }
       .chip.is-primary:active, .chip.is-primary.is-pressed { background: var(--accent-tint-2); }
       .chip.is-sent { background: var(--accent-tint-2); color: var(--accent); }
       .chip:disabled { opacity: 0.4; }
       /* Needs a meeting and none is running: still tappable, it says why. */
       .chip.needs-meeting { opacity: 0.45; }
+      /* Tapped anyway: a short shake says no (transitions.dev error state
+         shake; stops are cumulative 80 + 60 + 80 + 60 ms of 280). */
+      .chip.is-shaking {
+        animation: t-input-shake calc(var(--shake-dur-a) * 2 + var(--shake-dur-b) * 2) linear;
+      }
+      @keyframes t-input-shake {
+        0%      { transform: translateX(0);                                 animation-timing-function: var(--shake-ease); }
+        28.57%  { transform: translateX(var(--shake-distance));             animation-timing-function: var(--shake-ease); }
+        57.14%  { transform: translateX(calc(var(--shake-distance) * -1)); animation-timing-function: var(--shake-ease); }
+        78.57%  { transform: translateX(var(--shake-overshoot));            animation-timing-function: var(--shake-ease); }
+        100%    { transform: translateX(0); }
+      }
       .composer { display: flex; align-items: flex-end; gap: var(--s2); padding: 0 var(--gr) 0 var(--gl); }
       .composer .icon-btn { width: 44px; height: 44px; flex: 0 0 44px; background: var(--fill-1); color: var(--label-2); }
       .composer .icon-btn:disabled, .composer .icon-btn.is-disabled { opacity: 0.4; }
@@ -926,13 +905,13 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       .tray-thumbs::-webkit-scrollbar { display: none; }
       .tray-thumb { position: relative; flex: 0 0 auto; height: 44px; border-radius: var(--r-sm); overflow: hidden; background: var(--fill-2); }
       .tray-thumb img { display: block; height: 100%; width: auto; min-width: 44px; max-width: 96px; object-fit: cover; }
-      .tray-thumb.is-new { animation: thumb-in var(--duration-fast) var(--ease-smooth-out) both; }
+      .tray-thumb.is-new { animation: thumb-in var(--duration-fast) var(--ease-bounce) both; }
       @keyframes thumb-in { from { opacity: 0; transform: scale(0.9); } }
       .tray-thumb.is-leaving {
         width: 0 !important;
         margin-left: -6px;
         opacity: 0;
-        transform: scale(0.85);
+        transform: scale(0.9);
         pointer-events: none;
         transition: width var(--duration-fast) var(--ease-smooth-out), margin var(--duration-fast) var(--ease-smooth-out), opacity var(--duration-quick) var(--ease-out), transform var(--duration-fast) var(--ease-smooth-out);
       }
@@ -998,7 +977,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         transition: background-color var(--duration-fast) var(--ease-smooth-out), color var(--duration-fast) var(--ease-smooth-out), transform var(--duration-quick) var(--ease-out);
       }
       .send:disabled { background: var(--fill-2); color: var(--label-3); }
-      .send:not(:disabled):active, .send.is-pressed { transform: scale(0.9); transition-duration: 60ms; }
+      .send:not(:disabled):active, .send.is-pressed { transform: scale(0.9); transition-duration: var(--duration-micro); }
 
       /* Icon swap (transitions.dev). */
       .t-icon-swap {
@@ -1276,7 +1255,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         .tray-wrap { transition: opacity var(--duration-fast) var(--ease-out); }
         .tray-thumb.is-new { animation: fade-in var(--duration-fast) var(--ease-out) both; }
         .t-stagger-line { transition: none !important; }
-        .t-shimmer::before { animation: none !important; }
+        .chip.is-shaking { animation: none !important; }
         .tk-line { scroll-behavior: auto; }
         .app[data-meeting="live"][data-speaking="true"] .tk-dot { animation: none; }
         .t-icon-swap .t-icon { transition: none !important; }
@@ -2088,9 +2067,8 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         }
         function setShimmer(node, text) {
           node.textContent = '';
-          var s = el('span', 't-shimmer', text);
-          s.dataset.text = text;
-          node.append(s);
+          // The overlay's Thinking sweep, the page's one progress shimmer.
+          node.append(el('span', 'thinking is-inline', text));
         }
         function renderAnswerBody(entry, streaming) {
           var body = entry.el.querySelector('.answer-body');
@@ -3256,11 +3234,18 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
 
         // ───── Actions ────────────────────────────────────────────────────
         Array.prototype.forEach.call(document.querySelectorAll('.chip[data-action]'), function (chip) {
+          chip.addEventListener('animationend', function () { chip.classList.remove('is-shaking'); });
           chip.addEventListener('click', function () {
             var action = chip.dataset.action;
             // Answers from the conversation need one running (an attached
             // screenshot is something to answer from on its own).
-            if (chip.classList.contains('needs-meeting')) { showToast('Start a meeting on your Mac first'); return; }
+            if (chip.classList.contains('needs-meeting')) {
+              chip.classList.remove('is-shaking');
+              void chip.offsetWidth;   // replay on a second tap
+              chip.classList.add('is-shaking');
+              showToast('Start a meeting on your Mac first');
+              return;
+            }
             if (!sendCommand({ type: 'action', action: action })) { showToast('Not connected to your desktop', true); return; }
             var spec = ACTIONS[action];
             // The chip's own flash confirms the send. A toast here landed on
