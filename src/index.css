@@ -807,6 +807,25 @@
   color: var(--overlay-text-primary) !important;
 }
 
+/* Popover windows (the overlay's settings and model dropdowns) are sized to
+   exactly their panel, so anything painted OUTSIDE the panel's rounded box
+   lands only in the window's four square corners: an outer shadow there makes
+   the corners stop following the 14px radius. Keep everything inside the shape.
+   The panels no longer carry `shadow-2xl`: under [data-theme='light'] that
+   class becomes an !important three-layer drop shadow (the "Level 3 —
+   Dropdowns" rule below), which filled those corners and also replaced the
+   glass and modern inset highlights. This rule is the backstop.
+   Liquid glass: its own rule is more specific and all-inset already, so it
+   wins and is left alone. Modern: keeps its inset top highlight and drops only
+   its 0.5px outer ring. */
+.overlay-popover-surface {
+  box-shadow: none !important;
+}
+
+[data-interface-theme="modern"] .overlay-shell-surface.overlay-popover-surface {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
 [data-interface-theme="modern"] .glass-shortcut-key,
 [data-interface-theme="modern"] .glass-toggle-track {
   background: var(--overlay-control-bg) !important;

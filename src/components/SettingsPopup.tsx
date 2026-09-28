@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import { MessageSquare, Camera, Zap, User } from 'lucide-react';
+import { MessageSquare, Camera, Zap, Eye } from 'lucide-react';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getModifierSymbol } from '../utils/platformUtils';
@@ -76,21 +76,6 @@ const SettingsPopup = () => {
     const [useGroqFastText, setUseGroqFastText] = useState(() => {
         return localStorage.getItem('natively_groq_fast_text') === 'true';
     });
-    const [profileMode, setProfileMode] = useState(false);
-    // Context Intelligence V3 (Phase 7): when the V3 flag is on, the Profile
-    // Mode toggle is HIDDEN — under V3 source authority decides per turn when
-    // profile evidence applies, and a global override is the compensation
-    // control §6 removes. Flag off (the default) renders it unchanged.
-    const [ciV3Enabled, setCiV3Enabled] = useState(false);
-    useEffect(() => {
-        // All decisions main-side; this only reads the flag.
-        (window.electronAPI as any)?.answerPolicyGet?.({ templateType: 'general' })
-            .then((st: any) => setCiV3Enabled(Boolean(st?.v3Enabled)))
-            .catch(() => setCiV3Enabled(false));
-    }, []);
-    const [hasProfile, setHasProfile] = useState(false);
-    const [isPremium, setIsPremium] = useState(false);
-
     const isFirstRender = React.useRef(true);
 
     // Same rule as AI Providers' canUseFastMode: a Background Model pick, a key
@@ -145,23 +130,6 @@ const SettingsPopup = () => {
         const handleFocus = () => loadCredentials();
         window.addEventListener('focus', handleFocus);
 
-        // Load profile status
-        const loadProfile = async () => {
-            try {
-                // @ts-ignore
-                const status = await window.electronAPI?.profileGetStatus?.();
-                if (status) {
-                    setHasProfile(status.hasProfile);
-                    setProfileMode(status.profileMode);
-                }
-                // Check premium status
-                const premium = await window.electronAPI?.licenseCheckPremium?.();
-                setIsPremium(!!premium);
-            } catch (e) { console.warn('[SettingsPopup] Failed to load profile/premium status:', e); }
-
-        };
-        loadProfile();
-
         // Settings staleness fix (2026-08-21): this window mounts ONCE at app
         // start and is hidden/shown afterwards, so the mount fetches above go
         // stale. The focus handler never fires for the overlay-anchored
@@ -172,16 +140,10 @@ const SettingsPopup = () => {
         // @ts-ignore
         const unsubscribeShown = window.electronAPI?.onSettingsWindowShown?.(() => {
             loadCredentials();
-            loadProfile();
             try {
                 // Undetectable's INITIAL fetch is mount-only; its change
                 // listener only covers changes made while this window exists.
                 window.electronAPI?.getUndetectable?.().then((state: boolean) => setIsUndetectable(state));
-            } catch { /* non-fatal */ }
-            try {
-                (window.electronAPI as any)?.answerPolicyGet?.({ templateType: 'general' })
-                    .then((st: any) => setCiV3Enabled(Boolean(st?.v3Enabled)))
-                    .catch(() => { /* keep last known */ });
             } catch { /* non-fatal */ }
         });
 
@@ -317,68 +279,78 @@ const SettingsPopup = () => {
 
     const contentRef = useRef<HTMLDivElement>(null);
 
-    // Auto-resize Window
+    // Auto-resize Window. The window hugs the panel, so it is told the panel's
+    // size: the computed border-box, rounded UP. Not getBoundingClientRect —
+    // the open animation scales the panel, and a mid-animation rect
+    // under-reports (it measured 175x228 for a 180x235 panel) — and not
+    // offsetWidth, which rounds to the nearest pixel.
     useLayoutEffect(() => {
-        if (!contentRef.current) return;
-
-        const observer = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                const rect = entry.target.getBoundingClientRect();
-                // Send exact dimensions to Electron
-                try {
-                    // @ts-ignore
-                    window.electronAPI?.updateContentDimensions({
-                        width: Math.ceil(rect.width),
-                        height: Math.ceil(rect.height)
-                    });
-                } catch (e) {
-                    console.warn("Failed to update dimensions", e);
-                }
+        const panel = contentRef.current;
+        if (!panel) return;
+        const report = () => {
+            const style = getComputedStyle(panel);
+            try {
+                window.electronAPI?.updateContentDimensions?.({
+                    width: Math.ceil(parseFloat(style.width)),
+                    height: Math.ceil(parseFloat(style.height)),
+                })?.catch?.(() => {});
+            } catch (e) {
+                console.warn("Failed to update dimensions", e);
             }
-        });
-
-        observer.observe(contentRef.current);
+        };
+        report();
+        const observer = new ResizeObserver(report);
+        observer.observe(panel);
         return () => observer.disconnect();
+    }, []);
+
+    // The window is pre-warmed once and then only hidden and shown, so a mount
+    // animation played a single time, offscreen. Replay it on every open.
+    useEffect(() => {
+        // @ts-ignore
+        const unsubscribe = window.electronAPI?.onSettingsWindowShown?.(() => {
+            const panel = contentRef.current;
+            if (!panel || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            panel.animate(
+                [
+                    { opacity: 0, transform: 'translateY(-4px) scale(0.98)' },
+                    { opacity: 1, transform: 'none' },
+                ],
+                { duration: 160, easing: 'cubic-bezier(0.2, 0, 0, 1)' },
+            );
+        });
+        return () => unsubscribe?.();
     }, []);
 
     // Determine if the background is dark (glass themes are always dark glass)
     const isDarkBg = interfaceTheme === 'liquid-glass' || interfaceTheme === 'modern' || !isLightTheme;
 
     const popupPanelClass = isDarkBg
-        ? 'bg-[#1E1E1E]/80 border-white/10 shadow-black/40'
-        : 'bg-[#F3F4F6]/92 border-black/10 shadow-black/10';
-    const itemHoverClass = isDarkBg ? 'hover:bg-white/5' : 'hover:bg-black/[0.04]';
-    const glassRowClass = 'glass-popup-row';
+        ? 'bg-[#1E1E1E]/80 border-white/10'
+        : 'bg-[#F3F4F6]/92 border-black/10';
+    // Same row metrics and hover as the model dropdown next to it
+    // (ModelSelectorWindow), so the two popovers read as one family.
+    const itemHoverClass = isDarkBg ? 'hover:bg-white/[0.07]' : 'hover:bg-black/[0.05]';
     const labelColorClass = isDarkBg ? 'text-white' : 'text-slate-900';
-    const inactiveIconColorClass = isDarkBg
-        ? 'text-white/60 group-hover:text-white/90'
-        : 'text-slate-500 group-hover:text-slate-800';
-    const dividerClass = isDarkBg ? 'bg-white/[0.04]' : 'bg-black/[0.06]';
+    // An icon is lit when its switch is on and muted when it is off; the
+    // switch carries the state, so the icon never fills or takes the accent.
+    const iconOnClass = isDarkBg ? 'text-white' : 'text-slate-900';
+    const iconOffClass = isDarkBg ? 'text-white/55' : 'text-slate-500';
+    const headerColor = isDarkBg ? 'var(--overlay-text-muted)' : 'rgba(60, 60, 67, 0.64)';
     const shortcutKeyClass = isDarkBg
-        ? 'border-white/10 bg-white/5 text-slate-400 glass-shortcut-key'
+        ? 'border-white/10 bg-white/[0.06] text-white/70 glass-shortcut-key'
         : 'border-black/10 bg-black/[0.04] text-slate-600 glass-shortcut-key';
     const defaultToggleTrackClass = isDarkBg ? 'bg-white/10 glass-toggle-track' : 'bg-black/[0.22] glass-toggle-track';
+    const accentTrackClass = 'bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]';
 
     // Real per-theme panel material — same computation NativelyInterface uses
-    // for its own shell (NativelyInterface.tsx ~1531-1537) and ResizeToggle
-    // uses for itself (ResizeToggle.tsx): isGlassTheme ?
-    // getGlassOverlayAppearance() : getOverlayAppearance(opacity, theme).
-    // Applied as an inline style on the contentRef div below, alongside the
-    // existing overlay-shell-surface class + popupPanelClass. This is what
-    // makes DEFAULT theme (and light/dark within it) actually track the live
-    // overlay-opacity slider and getOverlayAppearance()'s real recipe,
-    // instead of the static bg-[#1E1E1E]/80 / bg-[#F3F4F6]/92 fixed-opacity
-    // classes popupPanelClass has always used. For liquid-glass this
-    // resolves to {} (no inline properties) — the ancestor
-    // [data-interface-theme="liquid-glass"] .overlay-shell-surface
-    // !important CSS rule (index.css ~407, matched via the data-interface-
-    // theme attribute App.tsx already puts on an ancestor of <SettingsPopup/>
-    // in the isSettingsWindow branch) already governs this correctly with no
-    // changes needed — verified below. For modern this is non-empty but the
-    // !important [data-interface-theme="modern"] .overlay-shell-surface rule
-    // (index.css ~1320) still wins over it the same way (stylesheet
-    // !important always beats inline normal-priority), also already correct
-    // before this change.
+    // for its own shell: isGlassTheme ? getGlassOverlayAppearance() :
+    // getOverlayAppearance(opacity, theme), applied inline alongside the
+    // overlay-shell-surface class so the DEFAULT theme tracks the live
+    // overlay-opacity slider. For liquid-glass this resolves to {} and the
+    // [data-interface-theme="liquid-glass"] .overlay-shell-surface !important
+    // rule governs; for modern its own !important rule wins over the inline
+    // style the same way.
     const isGlassTheme = interfaceTheme === 'liquid-glass';
     const appearance = useMemo(
         () =>
@@ -388,189 +360,169 @@ const SettingsPopup = () => {
         [isGlassTheme, overlayOpacity, isLightTheme]
     );
 
+    // A plain render function, not a component: a component declared here
+    // would be a new type every render, remounting each switch and cutting
+    // its slide short.
+    const renderToggleRow = (row: {
+        key: string;
+        icon: React.ReactNode;
+        label: string;
+        checked: boolean;
+        onToggle: () => void;
+        onClassName: string;
+        disabled?: boolean;
+    }) => (
+        <div
+            key={row.key}
+            // The whole row flips the switch, not only the 30px track. A click
+            // on the switch itself (PopupToggle, marked data-on) is left to the
+            // switch, or it would flip twice.
+            onClick={(e) => {
+                if (row.disabled) return;
+                if ((e.target as HTMLElement).closest('[data-on]')) return;
+                row.onToggle();
+            }}
+            className={`h-[30px] px-2 flex items-center gap-2 rounded-[10px] select-none cursor-default transition-colors duration-100 ${row.disabled ? 'opacity-45' : `${itemHoverClass} glass-popup-row`}`}
+        >
+            <span className={`w-3.5 h-3.5 shrink-0 flex items-center justify-center transition-colors ${row.checked && !row.disabled ? iconOnClass : iconOffClass}`}>
+                {row.icon}
+            </span>
+            <span className={`flex-1 min-w-0 truncate text-[12px] font-medium ${labelColorClass}`}>{row.label}</span>
+            <PopupToggle
+                checked={row.checked}
+                label={row.label}
+                disabled={row.disabled}
+                onChange={row.onToggle}
+                onClassName={row.onClassName}
+                offClassName={defaultToggleTrackClass}
+            />
+        </div>
+    );
+
+    const renderShortcutRow = (row: { key: string; icon: React.ReactNode; label: string; keys: string[] }) => (
+        // Not clickable, so no hover or press: the keys are the information.
+        <div key={row.key} className="h-[30px] px-2 flex items-center gap-2 select-none cursor-default">
+            <span className={`w-3.5 h-3.5 shrink-0 flex items-center justify-center ${iconOffClass}`}>{row.icon}</span>
+            <span className={`flex-1 min-w-0 truncate text-[12px] font-medium ${labelColorClass}`}>{row.label}</span>
+            <span className="flex items-center gap-[3px] shrink-0">
+                {row.keys.map((key, index) => (
+                    <kbd
+                        key={index}
+                        className={`min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-[5px] border font-sans text-[10px] font-medium leading-none ${shortcutKeyClass}`}
+                    >
+                        {key}
+                    </kbd>
+                ))}
+            </span>
+        </div>
+    );
+
+    const iconClass = 'w-3.5 h-3.5';
+
     return (
         <div className="w-fit h-fit bg-transparent flex flex-col">
             <div
                 ref={contentRef}
-                className={`w-[180px] backdrop-blur-md border rounded-[14px] overflow-hidden shadow-2xl p-1.5 flex flex-col animate-scale-in origin-top-left overlay-shell-surface ${popupPanelClass}`}
+                className={`w-[180px] backdrop-blur-md border rounded-[14px] overflow-hidden p-1 flex flex-col origin-top-left overlay-shell-surface overlay-popover-surface ${popupPanelClass}`}
                 style={{ ...appearance.shellStyle }}
             >
                 <div className="relative z-[1] flex flex-col">
-
-                {/* Undetectability */}
-                <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group cursor-default ${itemHoverClass} ${glassRowClass}`}>
-                    <div className="flex items-center gap-2.5">
-                        <CustomGhost
-                            className={`w-4 h-4 transition-colors ${isUndetectable ? (isDarkBg ? 'text-white' : 'text-slate-900') : inactiveIconColorClass}`}
-                            fill={isUndetectable ? "currentColor" : "none"}
-                            stroke={isUndetectable ? "none" : "currentColor"}
-                            eyeColor={isUndetectable ? (isDarkBg ? "black" : "white") : (isDarkBg ? "white" : "#334155")}
-                        />
-                        <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>{isUndetectable ? 'Undetectable' : 'Detectable'}</span>
-                    </div>
-                    <PopupToggle
-                        checked={isUndetectable}
-                        label={isUndetectable ? 'Undetectable' : 'Detectable'}
-                        onChange={() => {
+                    {renderToggleRow({
+                        key: 'undetectable',
+                        icon: <CustomGhost className={iconClass} />,
+                        label: isUndetectable ? 'Undetectable' : 'Detectable',
+                        checked: isUndetectable,
+                        onToggle: () => {
                             const newState = !isUndetectable;
                             setIsUndetectable(newState);
                             localStorage.setItem('natively_undetectable', String(newState));
                             window.electronAPI?.setUndetectable(newState);
-                        }}
-                        onClassName={isDarkBg
+                        },
+                        onClassName: isDarkBg
                             ? 'bg-white shadow-[0_2px_8px_rgba(255,255,255,0.2)]'
-                            : 'bg-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.18)]'}
-                        offClassName={defaultToggleTrackClass}
-                    />
-                </div>
+                            : 'bg-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.18)]',
+                    })}
 
-
-                {/* Fast Response Toggle — see fastResponseAvailable */}
-                <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${!fastResponseAvailable ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} ${glassRowClass} cursor-default`}`} title={!fastResponseAvailable ? "Connect a cloud provider, or pick a Background Model in AI Providers" : ""}>
-                    <div className="flex items-center gap-2.5">
-                        <Zap
-                            className={`w-4 h-4 transition-colors ${useGroqFastText ? 'text-accent-primary' : inactiveIconColorClass}`}
-                            fill={useGroqFastText ? "currentColor" : "none"}
-                        />
-                        <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Fast Response</span>
-                    </div>
-                    <PopupToggle
-                        checked={useGroqFastText}
-                        label="Fast Response"
-                        disabled={!fastResponseAvailable}
-                        onChange={() => {
+                    {/* See fastResponseAvailable. */}
+                    {renderToggleRow({
+                        key: 'fast-response',
+                        icon: <Zap className={iconClass} />,
+                        label: 'Fast Response',
+                        checked: useGroqFastText,
+                        disabled: !fastResponseAvailable,
+                        onToggle: () => {
                             if (!fastResponseAvailable) return;
                             setUseGroqFastText(!useGroqFastText);
-                        }}
-                        onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
-                        offClassName={defaultToggleTrackClass}
-                    />
-                </div>
+                        },
+                        onClassName: accentTrackClass,
+                    })}
 
-                {/* Interviewer Transcript Toggle */}
-                <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group cursor-default ${itemHoverClass} ${glassRowClass}`}>
-                    <div className="flex items-center gap-2.5">
-                        <MessageSquare
-                            className={`w-3.5 h-3.5 transition-colors ${showTranscript ? 'text-accent-primary' : inactiveIconColorClass}`}
-                            fill={showTranscript ? "currentColor" : "none"}
-                        />
-                        <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Transcript</span>
-                    </div>
-                    <PopupToggle
-                        checked={showTranscript}
-                        label="Transcript"
-                        onChange={() => {
+                    {renderToggleRow({
+                        key: 'transcript',
+                        icon: <MessageSquare className={iconClass} />,
+                        label: 'Transcript',
+                        checked: showTranscript,
+                        onToggle: () => {
                             const newState = !showTranscript;
                             setShowTranscript(newState);
                             localStorage.setItem('natively_interviewer_transcript', String(newState));
                             // Dispatch event for same-window listeners
                             window.dispatchEvent(new Event('storage'));
-                        }}
-                        onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
-                        offClassName={defaultToggleTrackClass}
-                    />
-                </div>
+                        },
+                        onClassName: accentTrackClass,
+                    })}
 
-                {/* Interview Mode (Brainstorm) Toggle */}
-                <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group cursor-default ${itemHoverClass} ${glassRowClass}`}>
-                    <div className="flex items-center gap-2.5">
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className={`w-3.5 h-3.5 transition-colors ${actionButtonMode === 'brainstorm' ? 'text-accent-primary' : inactiveIconColorClass}`}
-                        >
-                            <line x1="6" y1="3" x2="6" y2="15" />
-                            <circle cx="18" cy="6" r="3" />
-                            <circle cx="6" cy="18" r="3" />
-                            <path d="M18 9a9 9 0 0 1-9 9" />
-                        </svg>
-                        <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Interview Mode</span>
-                    </div>
-                    <PopupToggle
-                        checked={actionButtonMode === 'brainstorm'}
-                        label="Interview Mode"
-                        onChange={async () => {
+                    {/* Interview Mode = the Brainstorm action button. */}
+                    {renderToggleRow({
+                        key: 'interview-mode',
+                        icon: (
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className={iconClass}
+                            >
+                                <line x1="6" y1="3" x2="6" y2="15" />
+                                <circle cx="18" cy="6" r="3" />
+                                <circle cx="6" cy="18" r="3" />
+                                <path d="M18 9a9 9 0 0 1-9 9" />
+                            </svg>
+                        ),
+                        label: 'Interview Mode',
+                        checked: actionButtonMode === 'brainstorm',
+                        onToggle: async () => {
                             const newMode: 'recap' | 'brainstorm' = actionButtonMode === 'brainstorm' ? 'recap' : 'brainstorm';
                             setActionButtonModeState(newMode);
                             try {
                                 // @ts-ignore
                                 await window.electronAPI?.setActionButtonMode?.(newMode);
                             } catch (e) { console.error(e); }
-                        }}
-                        onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
-                        offClassName={defaultToggleTrackClass}
-                    />
-                </div>
+                        },
+                        onClassName: accentTrackClass,
+                    })}
 
-                {/* Profile Mode Toggle — hidden under Context Intelligence V3,
-                    where source authority replaces the global override (§6). */}
-                {hasProfile && !ciV3Enabled && (
-                    <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${!isPremium ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} ${glassRowClass} cursor-default`}`} title={!isPremium ? 'Requires Pro license to be active' : ''}>
-                        <div className="flex items-center gap-2.5">
-                            <User
-                                className={`w-3.5 h-3.5 transition-colors ${profileMode && isPremium ? 'text-accent-primary' : inactiveIconColorClass}`}
-                                fill={profileMode && isPremium ? "currentColor" : "none"}
-                            />
-                            <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Profile Mode</span>
-                        </div>
-                        <PopupToggle
-                            checked={profileMode && isPremium}
-                            label="Profile Mode"
-                            disabled={!isPremium}
-                            onChange={async () => {
-                                if (!isPremium) return;
-                                const newState = !profileMode;
-                                setProfileMode(newState);
-                                try {
-                                    // @ts-ignore
-                                    await window.electronAPI?.profileSetMode?.(newState);
-                                } catch (e) { console.error(e); }
-                            }}
-                            onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
-                            offClassName={defaultToggleTrackClass}
-                        />
-                    </div>
-                )}
+                    {/* Profile Mode lives in Settings › Profile Intelligence only;
+                        it was dropped from this popup by owner request. */}
 
-                <div className={`h-px my-0.5 mx-1.5 ${dividerClass}`} />
-
-                {/* Show/Hide Natively */}
-                <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group interaction-base interaction-press ${itemHoverClass} ${glassRowClass}`}>
-                    <div className="flex items-center gap-2.5">
-                        <MessageSquare className={`w-3.5 h-3.5 transition-colors ${inactiveIconColorClass}`} />
-                        <span className={`text-[12px] transition-colors ${labelColorClass}`}>Show/Hide</span>
+                    <div className="px-2 pt-2 pb-0.5 text-[11px] leading-4 font-semibold select-none" style={{ color: headerColor }}>
+                        Shortcuts
                     </div>
-                    <div className="flex gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                        {/* Dynamic Keys for Toggle Visibility */}
-                        {(shortcuts.toggleVisibility || [getModifierSymbol('cmd'), 'B']).map((key, index) => (
-                            <div key={index} className={`px-1.5 py-0.5 rounded border text-[10px] font-medium min-w-[20px] text-center ${shortcutKeyClass}`}>
-                                {key}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Screenshot */}
-                <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group interaction-base interaction-press ${itemHoverClass} ${glassRowClass}`}>
-                    <div className="flex items-center gap-2.5">
-                        <Camera className={`w-3.5 h-3.5 transition-colors ${inactiveIconColorClass}`} />
-                        <span className={`text-[12px] transition-colors ${labelColorClass}`}>Screenshot</span>
-                    </div>
-                    <div className="flex gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                        {/* Dynamic Keys for Take Screenshot */}
-                        {(shortcuts.takeScreenshot || [getModifierSymbol('cmd'), 'H']).map((key, index) => (
-                            <div key={index} className={`px-1.5 py-0.5 rounded border text-[10px] font-medium min-w-[20px] text-center ${shortcutKeyClass}`}>
-                                {key}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
+                    {renderShortcutRow({
+                        key: 'show-hide',
+                        icon: <Eye className={iconClass} />,
+                        label: 'Show/Hide',
+                        keys: shortcuts.toggleVisibility || [getModifierSymbol('cmd'), 'B'],
+                    })}
+                    {renderShortcutRow({
+                        key: 'screenshot',
+                        icon: <Camera className={iconClass} />,
+                        label: 'Screenshot',
+                        keys: shortcuts.takeScreenshot || [getModifierSymbol('cmd'), 'H'],
+                    })}
                 </div>
             </div>
         </div>

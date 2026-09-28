@@ -327,8 +327,8 @@ const ModelSelectorWindow = () => {
     // panel, unreadable low-contrast.
     const isDarkBg = interfaceTheme === 'liquid-glass' || interfaceTheme === 'modern' || !isLight;
     const panelClass = isDarkBg
-        ? 'bg-[#1E1E1E]/80 border-white/10 shadow-black/40'
-        : 'bg-[#F3F4F6]/92 border-black/10 shadow-black/10';
+        ? 'bg-[#1E1E1E]/80 border-white/10'
+        : 'bg-[#F3F4F6]/92 border-black/10';
     // Glass and modern repaint rows from index.css (.model-selector-row), so
     // these only decide the default theme.
     const rowHoverClass = isDarkBg ? 'hover:bg-white/[0.07]' : 'hover:bg-black/[0.05]';
@@ -429,7 +429,7 @@ const ModelSelectorWindow = () => {
         <div className="w-fit h-fit bg-transparent flex flex-col">
             <div
                 ref={panelRef}
-                className={`backdrop-blur-md border rounded-[14px] overflow-hidden shadow-2xl p-1 flex flex-col origin-top-left overlay-shell-surface ${panelClass}`}
+                className={`backdrop-blur-md border rounded-[14px] overflow-hidden p-1 flex flex-col origin-top-left overlay-shell-surface overlay-popover-surface ${panelClass}`}
                 // Same width as the toolbar button that opens it.
                 style={{ ...appearance.shellStyle, width: MODEL_SELECTOR_WIDTH }}
             >
@@ -441,8 +441,8 @@ const ModelSelectorWindow = () => {
                         </div>
                     ) : availableModels.length === 0 ? (
                         <div className="px-2 py-2">
-                            <div className="text-[12px] font-medium overlay-text-primary">No models connected</div>
-                            <div className="text-[11px] mt-0.5 overlay-text-muted">Connect one in Settings.</div>
+                            <div className="text-[12px] leading-[18px] font-medium overlay-text-primary">No models connected</div>
+                            <div className="text-[11px] leading-4 mt-0.5 overlay-text-muted">Connect one in Settings.</div>
                         </div>
                     ) : (
                         <div
@@ -461,7 +461,7 @@ const ModelSelectorWindow = () => {
                                     className={groupIndex > 0 ? 'mt-1' : undefined}
                                 >
                                     {showHeaders && group.showHeader && (
-                                        <div className="px-2 pt-1 pb-0.5 text-[11px] font-semibold select-none" style={{ color: headerColor }}>
+                                        <div className="px-2 pt-1 pb-0.5 text-[11px] leading-4 font-semibold select-none" style={{ color: headerColor }}>
                                             {group.label}
                                         </div>
                                     )}
