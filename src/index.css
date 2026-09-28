@@ -9122,6 +9122,37 @@ html[data-platform="linux"][data-window="launcher"] body {
   .t-dropdown { transition: none !important; }
 }
 
+/* The notes' calendar menu (meeting/CalendarLinkChip): "Looking at your
+   calendar…" gives way to the timeline strip and the events. The body eases to
+   its new height (resize: --duration-fast, --ease-smooth-out) while the content
+   settles in with the skeleton-reveal cross-blur (--duration-slow,
+   --ease-in-out, --blur-small), each item --cal-reveal-delay later (40 ms
+   apart, set inline). */
+.cal-link {
+  /* The trigger's label swap (ui/SwapText): #04's values, as in .mn-followup. */
+  --text-swap-dur: 150ms;
+  --text-swap-translate-y: 4px;
+  --text-swap-blur: 2px;
+  --text-swap-ease: ease-in-out;
+}
+/* The swap span is the button's flex item; let it shrink so a long label truncates. */
+.cal-link .t-text-swap { min-width: 0; }
+.cal-menu-body {
+  overflow: hidden;
+  transition: height 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes cal-reveal-in {
+  from { opacity: 0; filter: blur(2px); }
+}
+.cal-reveal-in {
+  animation: cal-reveal-in 400ms ease-in-out both;
+  animation-delay: var(--cal-reveal-delay, 0ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cal-menu-body { transition: none; }
+  .cal-reveal-in { animation: none; }
+}
+
 /* Text states swap (transitions.dev #04), for React: the snippet's timing and
    its exit-up-then-enter-from-below order, as keyframes on keyed spans rather
    than a class toggled on one node. Every label the slot can show is stacked

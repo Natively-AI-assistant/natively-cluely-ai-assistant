@@ -1,6 +1,7 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { CalendarDays, CalendarPlus, Check, ChevronDown } from 'lucide-react';
 import { useT } from '../../i18n';
+import SwapText from '../ui/SwapText';
 import {
     durationParts, eventMs, firstName, initials, namesAndRest, otherAttendees,
     splitByRecording, timelineLayout, type RecordingSpan,
@@ -37,6 +38,10 @@ export interface CalendarEventSnapshot {
 }
 
 const MENU_CLOSE_MS = 150;
+// The list settles in with the skeleton-reveal cross-blur (.cal-reveal-in), one
+// --duration-stagger (40 ms) apart, capped so the last starts by 240 ms.
+const REVEAL_STAGGER_MS = 40;
+const REVEAL_STAGGER_CAP = 6;
 const clock = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 const range = (a: number, b: number) => (b > a ? clock.formatRange(new Date(a), new Date(b)) : clock.format(new Date(a))).toLowerCase();
 // "10:00", "9:30": the menu's header carries the am/pm.
@@ -68,6 +73,24 @@ export const CalendarLinkChip: React.FC<{
     const triggerRef = useRef<HTMLButtonElement>(null);
     const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    // The last list for this meeting: a reopen shows it at once and refreshes it quietly,
+    // so "Looking at your calendar…" is only ever seen the first time.
+    const cacheRef = useRef<{ meetingId: string; list: CalendarEventSnapshot[] } | null>(null);
+    const meetingIdRef = useRef(meetingId);
+    meetingIdRef.current = meetingId;
+    const focusedThisOpen = useRef(false);
+    // The menu body's height, measured, so it eases to a new size (.cal-menu-body)
+    // instead of jumping when the list replaces the loading line.
+    const [bodyHeight, setBodyHeight] = useState<number | null>(null);
+    const resizeObserver = useRef<ResizeObserver | null>(null);
+    const measureBody = useCallback((el: HTMLDivElement | null) => {
+        resizeObserver.current?.disconnect();
+        resizeObserver.current = null;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(() => setBodyHeight(el.offsetHeight));
+        ro.observe(el);
+        resizeObserver.current = ro;
+    }, []);
 
     // Only offered with a calendar to look in; a linked meeting always shows its event.
     // CalendarManager already drops the user's own attendee entry (Google's `self`), in
@@ -94,10 +117,20 @@ export const CalendarLinkChip: React.FC<{
         setClosing(false);
         setOpen(true);
         setHot(null);
-        setCandidates(null);
+        focusedThisOpen.current = false;
+        const cached = cacheRef.current?.meetingId === meetingId ? cacheRef.current.list : null;
+        setCandidates(cached);
+        const asked = meetingId;
+        const settle = (list: CalendarEventSnapshot[]) => {
+            if (meetingIdRef.current !== asked) return;
+            // An unchanged refresh keeps the rendered rows (and their hover and focus) as they are.
+            if (cached && JSON.stringify(cached) === JSON.stringify(list)) return;
+            cacheRef.current = { meetingId: asked, list };
+            setCandidates(list);
+        };
         window.electronAPI?.getMeetingCalendarCandidates?.(meetingId)
-            .then((list) => setCandidates(list || []))
-            .catch(() => setCandidates([]));
+            .then((list) => settle(list || []))
+            .catch(() => { if (!cached) settle([]); });
     };
     const close = (refocus: boolean) => {
         setOpen(false);
@@ -122,8 +155,10 @@ export const CalendarLinkChip: React.FC<{
     const ordered = [...during, ...around];
 
     // Focus the current event (or the first row) once the list is in, so the arrow keys work at once.
+    // Once per open: a quiet refresh must not pull focus back from where the arrows took it.
     useEffect(() => {
-        if (!open || candidates === null) return;
+        if (!open || candidates === null || focusedThisOpen.current) return;
+        focusedThisOpen.current = true;
         const current = ordered.findIndex((c) => c.id === event?.id);
         itemRefs.current[Math.max(0, current)]?.focus({ preventScroll: true });
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -177,6 +212,11 @@ export const CalendarLinkChip: React.FC<{
 
     const layout = timelineLayout(rows, span);
     itemRefs.current = [];
+    // Stagger slots in render order (strip, section labels, rows). The animation only
+    // plays when an element mounts: the first list after "Looking at your calendar…",
+    // or a row a refresh adds; a reopen from the cache shows everything at rest.
+    let revealStep = 0;
+    const reveal = () => ({ '--cal-reveal-delay': `${Math.min(revealStep++, REVEAL_STAGGER_CAP) * REVEAL_STAGGER_MS}ms` } as React.CSSProperties);
 
     const renderRow = (c: CalendarEventSnapshot, i: number) => {
         const selected = c.id === event?.id;
@@ -199,7 +239,8 @@ export const CalendarLinkChip: React.FC<{
                 // Keyboard focus lights the lane; the focus placed on open (after a click) doesn't.
                 onFocus={(e) => { if (e.currentTarget.matches(':focus-visible')) setHot(c.id); }}
                 onBlur={() => setHot(null)}
-                className={`w-full flex items-center gap-2.5 px-2 py-[7px] rounded-[7px] text-left focus-visible:outline-none transition-colors duration-150 ${hover}`}
+                style={reveal()}
+                className={`cal-reveal-in w-full flex items-center gap-2.5 px-2 py-[7px] rounded-[7px] text-left focus-visible:outline-none transition-colors duration-150 ${hover}`}
             >
                 <span className="w-[42px] shrink-0 self-start pt-px text-right tabular-nums leading-tight">
                     <span className={`block text-[11.5px] font-medium ${solo ? 'text-text-tertiary' : 'text-text-secondary'}`}>{shortClock(a)}</span>
@@ -237,11 +278,11 @@ export const CalendarLinkChip: React.FC<{
     };
 
     const sectionLabel = (text: string) => (
-        <p className="px-2 pt-2 pb-1 text-[10.5px] font-medium text-text-tertiary">{text}</p>
+        <p key={text} style={reveal()} className="cal-reveal-in px-2 pt-2 pb-1 text-[10.5px] font-medium text-text-tertiary">{text}</p>
     );
 
     return (
-        <div ref={rootRef} className="relative inline-flex min-w-0">
+        <div ref={rootRef} className="cal-link relative inline-flex min-w-0">
             <button
                 ref={triggerRef}
                 type="button"
@@ -254,12 +295,19 @@ export const CalendarLinkChip: React.FC<{
                 title={event ? `${t('Linked calendar event')}: ${event.title}` : undefined}
                 className={`min-w-0 max-w-[240px] inline-flex items-center gap-2 text-xs font-medium hover:text-text-primary disabled:opacity-50 transition-colors ${open ? 'text-text-primary' : 'text-text-secondary'}`}
             >
-                {event ? <CalendarDays className="w-3.5 h-3.5 shrink-0" strokeWidth={2} /> : <CalendarPlus className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />}
-                <span className="truncate">{label}</span>
+                {/* Linking, relinking or unlinking swaps the icon and label together, the
+                    way Copy beside it swaps to Copied (transitions.dev #04, ui/SwapText). */}
+                <SwapText swapKey={`${event ? 'linked' : 'unlinked'}:${label}`}>
+                    <span className="flex items-center gap-2 min-w-0">
+                        {event ? <CalendarDays className="w-3.5 h-3.5 shrink-0" strokeWidth={2} /> : <CalendarPlus className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />}
+                        <span className="truncate">{label}</span>
+                    </span>
+                </SwapText>
                 <ChevronDown
                     className="w-3 h-3 shrink-0 text-text-tertiary"
                     strokeWidth={2.5}
-                    style={{ transform: `scaleY(${open ? -1 : 1})`, transition: 'transform var(--dropdown-open-dur) var(--dropdown-ease)' }}
+                    // Flips with the menu: the open's 250 ms, and the close's quicker 150 ms.
+                    style={{ transform: `scaleY(${open ? -1 : 1})`, transition: `transform ${open ? 'var(--dropdown-open-dur)' : 'var(--dropdown-close-dur)'} var(--dropdown-ease)` }}
                 />
             </button>
             <div
@@ -276,9 +324,13 @@ export const CalendarLinkChip: React.FC<{
                 <p className="px-2 pt-1.5 pb-0.5 text-[11px] font-medium text-text-secondary tabular-nums">
                     {span ? `${t('This recording')} · ${range(span.startMs, span.endMs)}` : t('Which calendar event was this?')}
                 </p>
+                {/* The body eases to its measured height, so the list replacing the loading
+                    line grows the menu rather than snapping it (.cal-menu-body). */}
+                <div className="cal-menu-body" style={bodyHeight === null ? undefined : { height: bodyHeight }}>
+                <div ref={measureBody} className="flow-root">
                 {layout && (
                     // The recording against every event, one lane each in start order.
-                    <div aria-hidden="true" className={`mx-1 mt-1 mb-1.5 px-2 pt-2 pb-1.5 rounded-[8px] border ${isLight ? 'border-black/[0.07] bg-black/[0.02]' : 'border-white/[0.07] bg-white/[0.025]'}`}>
+                    <div aria-hidden="true" style={reveal()} className={`cal-reveal-in mx-1 mt-1 mb-1.5 px-2 pt-2 pb-1.5 rounded-[8px] border ${isLight ? 'border-black/[0.07] bg-black/[0.02]' : 'border-white/[0.07] bg-white/[0.025]'}`}>
                         <div className="relative" style={{ height: layout.lanes.length * 7 + 4 }}>
                             <div
                                 className="absolute top-0 bottom-0 rounded-[3px]"
@@ -326,7 +378,7 @@ export const CalendarLinkChip: React.FC<{
                 {candidates === null ? (
                     <p className="px-2 py-2 text-[11px] text-text-tertiary">{t('Looking at your calendar…')}</p>
                 ) : rows.length === 0 ? (
-                    <p className="px-2 py-2 text-[11px] text-text-tertiary">{t('No calendar events around this time.')}</p>
+                    <p style={reveal()} className="cal-reveal-in px-2 py-2 text-[11px] text-text-tertiary">{t('No calendar events around this time.')}</p>
                 ) : (
                     <>
                         {during.length > 0 && sectionLabel(t('During this recording'))}
@@ -335,6 +387,10 @@ export const CalendarLinkChip: React.FC<{
                         {around.map((c, i) => renderRow(c, during.length + i))}
                     </>
                 )}
+                </div>
+                </div>
+                {/* Outside the growing body, so it rides down with the menu's edge rather
+                    than being clipped and reappearing. */}
                 {event && (
                     <>
                         <div className={`mx-1 my-1 h-px ${isLight ? 'bg-black/[0.06]' : 'bg-white/[0.06]'}`} />
