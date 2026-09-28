@@ -280,6 +280,50 @@
 .lg-button.lg-sky::after { opacity: .30; }
 
 /*
+  .lg-lavender — the website's primary action, ported for the first-launch
+  welcome so the app and the site share one CTA material.
+
+  A TINT, not a colour: rgba(156,111,243,.24) lets most of what is behind the
+  pill through, and the backdrop pass blurs and over-saturates it. Like .lg-sky
+  it is a light body, so the specular sits on the top face only.
+
+  The label is a deep lavender, not white: on the light-theme composite
+  (~#E3D5FB) white runs about 1.3:1. A dark host re-tints it through the
+  --lg-lav-* tokens rather than a second variant.
+*/
+.lg-button.lg-lavender {
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .42) 0%, rgba(255, 255, 255, .10) 18%,
+            rgba(255, 255, 255, 0) 100%),
+        var(--lg-lav-bg, rgba(156, 111, 243, .24));
+    --lg-tint-hover: var(--lg-lav-hover, rgba(156, 111, 243, .36));
+    --lg-lens-tint: rgba(255, 255, 255, .30);
+    --lg-lens-rim: rgba(255, 255, 255, .78);
+    --lg-lens-rim-soft: rgba(156, 111, 243, .26);
+    --lg-rim-1: var(--lg-lav-rim, rgba(255, 255, 255, .78));
+    --lg-rim-2: rgba(156, 111, 243, .30);
+    --lg-rim-3: rgba(156, 111, 243, .12);
+    -webkit-backdrop-filter: blur(20px) saturate(190%);
+            backdrop-filter: blur(20px) saturate(190%);
+    box-shadow:
+        inset 0 -1px 0 rgba(90, 43, 176, .14),
+        0 1px 2px rgba(78, 46, 150, .10),
+        0 14px 30px -12px var(--lg-lav-glow, rgba(156, 111, 243, .55));
+}
+.lg-lavender .lg-content { color: var(--lg-lav-fg, #3F2593); }
+.lg-button.lg-lavender::before {
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+}
+/* the cap shadow is a black gradient; on glass this clear it reads as dirt */
+.lg-button.lg-lavender::after { opacity: .10; }
+
+/*
   .lg-clear — the material with NO body of its own.
 
   DERIVED, not measured. The reference screenshot is a dark stage with opaque

@@ -1446,6 +1446,32 @@ export class AppState {
   // before booting a new session so the shared STT instances are not torn down
   // mid-meeting by a stale teardown task.
   private _pendingTeardown: Promise<void> | null = null;
+  // First-launch shortcut tour (src/components/onboarding/ShortcutTour.tsx).
+  // While it is up, the shortcuts it teaches are practice presses: they go to
+  // the tour's renderer instead of hiding the launcher it is drawn in or taking
+  // a real screenshot. Cleared the moment that renderer reloads or goes away,
+  // so a crashed tour can never leave the real shortcuts disabled.
+  private shortcutTourContents: Electron.WebContents | null = null;
+  private static readonly SHORTCUT_TOUR_ACTIONS = new Set([
+    'general:toggle-visibility',
+    'general:take-screenshot',
+    'chat:whatToAnswer',
+  ]);
+
+  public setShortcutTour(active: boolean, contents: Electron.WebContents): void {
+    if (!active) {
+      if (this.shortcutTourContents === contents) this.shortcutTourContents = null;
+      return;
+    }
+    this.shortcutTourContents = contents;
+    const clear = () => {
+      if (this.shortcutTourContents === contents) this.shortcutTourContents = null;
+    };
+    contents.once('did-start-loading', clear);
+    contents.once('destroyed', clear);
+    contents.once('render-process-gone', clear);
+  }
+
   // Tracks meeting IDs currently being processed by processCompletedMeetingForRAG.
   // Without this guard, a rapid stop→start→stop cycle could enqueue the same
   // meeting for RAG twice (e.g. recovery retry + normal completion), duplicating
@@ -1843,6 +1869,11 @@ export class AppState {
 
     keybindManager.onShortcutTriggered(async (actionId) => {
       console.log(`[Main] Global shortcut triggered: ${actionId}`);
+      const tour = this.shortcutTourContents;
+      if (tour && !tour.isDestroyed() && AppState.SHORTCUT_TOUR_ACTIONS.has(actionId)) {
+        tour.send('onboarding:tour-shortcut', actionId);
+        return;
+      }
       try {
         if (actionId === 'general:toggle-visibility') {
           this.toggleMainWindow();
