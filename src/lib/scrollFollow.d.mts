@@ -6,10 +6,16 @@ export function detectExternalUpwardScroll(input: {
   lastScrollTop: number;
   maxScroll: number;
   tolerancePx?: number;
+  viewportResized?: boolean;
 }): boolean;
 export function shouldArmFromWheel(input: {
   deltaX: number;
   deltaY: number;
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+}): boolean;
+export function canScrollUp(input: {
   scrollTop: number;
   scrollHeight: number;
   clientHeight: number;

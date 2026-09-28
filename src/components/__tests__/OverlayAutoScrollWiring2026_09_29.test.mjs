@@ -46,11 +46,12 @@ test('the wheel listener and the edge-strip forward share one wheel intent handl
 test('the held-key scroll-up detaches the chat', () => {
   const branch = between(code, "isShortcutPressed(e, 'scrollUp')", 'startScrollLoop();');
   assert.ok(branch.includes('armAutoScrollInterrupt()'));
+  assert.ok(branch.includes('canScrollUp('), 'only arm when there is somewhere to scroll up to');
 });
 
 test('the global-shortcut inertial kick detaches the chat on an upward vertical kick', () => {
   const kick = between(code, "const kick = (axis: 'vert' | 'horiz', direction: -1 | 1) => {", 'inertialScrollRef.current = { kick };');
-  assert.match(kick, /direction < 0 && container\.scrollTop > 0\) armAutoScrollInterrupt\(\)/);
+  assert.match(kick, /direction < 0 && canScrollUp\(container\)\) armAutoScrollInterrupt\(\)/);
 });
 
 test('the scroll listener arms and re-arms through the shared helpers', () => {

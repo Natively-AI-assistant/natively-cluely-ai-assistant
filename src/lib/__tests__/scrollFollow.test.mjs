@@ -6,6 +6,7 @@ import {
   isAutoScrollSuppressed,
   detectExternalUpwardScroll,
   shouldArmFromWheel,
+  canScrollUp,
 } from '../scrollFollow.mjs';
 
 describe('suppressionKeyForArm', () => {
@@ -129,6 +130,40 @@ describe('shouldArmFromWheel', () => {
     assert.equal(
       shouldArmFromWheel({ deltaX: 0, deltaY: -40, scrollTop: 0, scrollHeight: 1000, clientHeight: 500 }),
       false,
+    );
+  });
+});
+
+describe('canScrollUp', () => {
+  test('true when scrolled below the top of a scrollable container', () => {
+    assert.equal(canScrollUp({ scrollTop: 120, scrollHeight: 1000, clientHeight: 500 }), true);
+  });
+
+  test('false at the very top', () => {
+    assert.equal(canScrollUp({ scrollTop: 0, scrollHeight: 1000, clientHeight: 500 }), false);
+  });
+
+  // A chat that fits its viewport has nowhere to go: arming there would hold
+  // the next row back and raise a pill on something that is not scrolled.
+  test('false when the content fits', () => {
+    assert.equal(canScrollUp({ scrollTop: 0, scrollHeight: 300, clientHeight: 300 }), false);
+    assert.equal(canScrollUp({ scrollTop: 0.4, scrollHeight: 300.5, clientHeight: 300 }), false);
+  });
+});
+
+// Regression (found by streaming prose-then-code through the real overlay with
+// no user input): the viewport grew 335 -> 560px while the answer streamed, the
+// browser clamped scrollTop down to fit, content grew again in the same frames,
+// and the "moved up without us" check read the clamp as the user scrolling up.
+describe('a viewport resize is never the user', () => {
+  test('detectExternalUpwardScroll ignores a frame where the viewport height changed', () => {
+    assert.equal(
+      detectExternalUpwardScroll({ scrollTop: 256, lastScrollTop: 278, maxScroll: 259, viewportResized: true }),
+      false,
+    );
+    assert.equal(
+      detectExternalUpwardScroll({ scrollTop: 256, lastScrollTop: 278, maxScroll: 259, viewportResized: false }),
+      true,
     );
   });
 });

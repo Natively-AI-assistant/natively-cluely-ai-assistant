@@ -292,6 +292,7 @@ import {
 import { shouldDedupeManualSubmit } from '../lib/overlaySubmitDedup.mjs';
 import { decideScrollInterrupt } from '../lib/scrollInterruptDecision.mjs';
 import {
+  canScrollUp,
   detectExternalUpwardScroll,
   isAutoScrollSuppressed as isAutoScrollSuppressedFor,
   shouldArmFromWheel,
@@ -1768,18 +1769,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // followed the answer while it streamed — the view sat still until finalize
   // and then jumped. Anything that moved scrollTop UP since our last write is
   // by definition not us, so it detaches instead of being undone.
+  // Did the scroller's own height change since the last time anything looked?
+  // Growing it makes the browser clamp scrollTop down by itself (see
+  // detectExternalUpwardScroll), so callers must not read that as the user.
+  // Whoever looks first consumes the change; each also resyncs lastScrollTopRef.
+  const lastClientHeightRef = useRef<number>(0);
+  const noteViewportResize = useCallback((c: HTMLElement) => {
+    const resized = c.clientHeight !== lastClientHeightRef.current;
+    lastClientHeightRef.current = c.clientHeight;
+    return resized;
+  }, []);
+
   const followStreamBottom = useCallback(() => {
     const c = scrollContainerRef.current;
     if (!c) return;
     if (isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current, streamingMsgIdRef.current)) return;
     const max = c.scrollHeight - c.clientHeight;
-    if (detectExternalUpwardScroll({ scrollTop: c.scrollTop, lastScrollTop: lastScrollTopRef.current, maxScroll: max })) {
+    if (detectExternalUpwardScroll({ scrollTop: c.scrollTop, lastScrollTop: lastScrollTopRef.current, maxScroll: max, viewportResized: noteViewportResize(c) })) {
       armAutoScrollInterrupt();
       return;
     }
     if (c.scrollTop < max) c.scrollTop = max;
     lastScrollTopRef.current = c.scrollTop;
-  }, [armAutoScrollInterrupt]);
+  }, [armAutoScrollInterrupt, noteViewportResize]);
 
   // Auto-scroll to bottom on every messages update, unless a scroll-up
   // interrupt is currently active for this message (see isAutoScrollSuppressed
@@ -1814,6 +1826,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         scrollTop: c.scrollTop,
         lastScrollTop: lastScrollTopRef.current,
         maxScroll: c.scrollHeight - c.clientHeight,
+        viewportResized: noteViewportResize(c),
       })
     ) {
       armAutoScrollInterrupt();
@@ -1831,7 +1844,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       c.scrollTop = c.scrollHeight - c.clientHeight;
       lastScrollTopRef.current = c.scrollTop;
     }
-  }, [messages, setJumpToLatestVisible, isAutoScrollSuppressed, armAutoScrollInterrupt, resumeAutoScroll]);
+  }, [messages, setJumpToLatestVisible, isAutoScrollSuppressed, armAutoScrollInterrupt, resumeAutoScroll, noteViewportResize]);
 
   const hasActiveSystemAnswer = useMemo(
     () =>
@@ -4793,6 +4806,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       distanceFromBottom,
       alreadySuppressed: isAutoScrollSuppressed(),
       transitionInFlight,
+      viewportResized: noteViewportResize(container),
     });
 
     if (decision === 'arm') {
@@ -4811,7 +4825,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // message.
       resumeAutoScroll();
     }
-  }, [armAutoScrollInterrupt, resumeAutoScroll, isAutoScrollSuppressed]);
+  }, [armAutoScrollInterrupt, resumeAutoScroll, isAutoScrollSuppressed, noteViewportResize]);
 
   // A wheel gesture on the chat, from any element that feeds it — the
   // container's own listener and the edge strip that forwards to it. Raw input,
@@ -9651,8 +9665,10 @@ Provide only the answer, nothing else.`;
         handleBrainstorm();
       } else if (isShortcutPressed(e, 'scrollUp')) {
         e.preventDefault();
-        // Detach from the bottom now, not after the scroll listener notices.
-        armAutoScrollInterrupt();
+        // Detach from the bottom now, not after the scroll listener notices —
+        // but only if the chat can actually scroll up.
+        const chat = scrollContainerRef.current;
+        if (chat && canScrollUp(chat)) armAutoScrollInterrupt();
         upHeld = true;
         recomputeDirection();
         startScrollLoop();
@@ -9964,7 +9980,7 @@ Provide only the answer, nothing else.`;
         // The global-shortcut path is how the overlay is scrolled while it is
         // click-through (native wheel never arrives), so it must detach the
         // chat itself; only an upward kick that can actually move counts.
-        if (direction < 0 && container.scrollTop > 0) armAutoScrollInterrupt();
+        if (direction < 0 && canScrollUp(container)) armAutoScrollInterrupt();
         target = container;
       } else {
         target = resolveHorizontalTarget(container);

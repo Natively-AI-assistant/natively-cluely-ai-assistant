@@ -39,9 +39,15 @@ export function isAutoScrollSuppressed(suppressedId, streamingId) {
  * browser's own clamp after the content shrank (scrollTop lowered to fit) is
  * not mistaken for the user.
  *
- * @param {{ scrollTop: number, lastScrollTop: number, maxScroll: number, tolerancePx?: number }} input
+ * A frame where the viewport's own height changed is never judged: growing it
+ * makes the browser clamp scrollTop down to fit, and content growing in the
+ * same frames lifts `maxScroll` back above the clamped value, which is
+ * indistinguishable from a real scroll-up by position alone.
+ *
+ * @param {{ scrollTop: number, lastScrollTop: number, maxScroll: number, tolerancePx?: number, viewportResized?: boolean }} input
  */
-export function detectExternalUpwardScroll({ scrollTop, lastScrollTop, maxScroll, tolerancePx = 2 }) {
+export function detectExternalUpwardScroll({ scrollTop, lastScrollTop, maxScroll, tolerancePx = 2, viewportResized = false }) {
+  if (viewportResized) return false;
   return scrollTop < Math.min(lastScrollTop, maxScroll) - tolerancePx;
 }
 
@@ -59,4 +65,16 @@ export function shouldArmFromWheel({ deltaX, deltaY, scrollTop, scrollHeight, cl
   if (Math.abs(deltaX) > Math.abs(deltaY)) return false;
   if (scrollHeight - clientHeight <= 1) return false;
   return scrollTop > 0;
+}
+
+/**
+ * Whether there is anywhere above the current position to scroll to. Gates
+ * every "the user scrolled up" arm that comes from an input path (wheel is
+ * covered by shouldArmFromWheel), so a chat that fits its viewport is never
+ * put into a held state it cannot leave by scrolling.
+ *
+ * @param {{ scrollTop: number, scrollHeight: number, clientHeight: number }} input
+ */
+export function canScrollUp({ scrollTop, scrollHeight, clientHeight }) {
+  return scrollHeight - clientHeight > 1 && scrollTop > 0;
 }
