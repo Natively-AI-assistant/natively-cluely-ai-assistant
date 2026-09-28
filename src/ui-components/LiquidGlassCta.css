@@ -1,0 +1,209 @@
+/* src/ui-components/LiquidGlassCta.css
+ *
+ * The refractive hero CTA: a tinted lens over its own light. Reference is
+ * Figma's community "Liquid Glass Button" (a translucent pill that bends what
+ * sits behind it, lit from the top-left and bottom-right), not the measured
+ * flat-body material in LiquidGlassButton.css.
+ */
+
+.glass-cta-wrap {
+    position: relative;
+    display: inline-block;
+    isolation: isolate;
+    flex: none;
+    --cta-tint: rgba(124, 92, 230, 0.42);
+    --cta-tint-hover: rgba(138, 108, 240, 0.54);
+    --cta-glow: rgba(124, 92, 230, 0.55);
+    --cta-label: #ffffff;
+    --cta-edge-hi: rgba(255, 255, 255, 0.95);
+    --cta-edge-mid: rgba(255, 255, 255, 0.38);
+    --cta-edge-lo: rgba(255, 255, 255, 0.07);
+    --cta-bevel-a: rgba(255, 255, 255, 0.55);
+    --cta-bevel-b: rgba(255, 255, 255, 0.32);
+    --cta-pool-a: rgba(150, 112, 255, 0.85);
+    --cta-pool-b: rgba(72, 132, 255, 0.70);
+    --cta-arc: rgba(255, 255, 255, 0.5);
+    --cta-arc-soft: rgba(255, 255, 255, 0.24);
+    --cta-band: rgba(255, 255, 255, 0.14);
+}
+
+[data-theme='light'] .glass-cta-wrap {
+    /* A light page needs a denser body for the white label (5.0:1 over the
+       composite), so the lens is more tint than window here. */
+    --cta-tint: rgba(104, 72, 220, 0.88);
+    --cta-tint-hover: rgba(116, 84, 232, 0.94);
+    --cta-glow: rgba(104, 72, 220, 0.38);
+    --cta-pool-a: rgba(140, 104, 250, 0.55);
+    --cta-pool-b: rgba(90, 140, 255, 0.45);
+    --cta-arc: rgba(255, 255, 255, 0.85);
+    --cta-arc-soft: rgba(255, 255, 255, 0.55);
+    --cta-band: rgba(70, 40, 180, 0.16);
+}
+
+/* ── The light behind the glass ───────────────────────────────────────────── */
+
+.glass-cta-aura {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: calc(100% + 104px);
+    height: calc(100% + 80px);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 0;
+}
+.glass-cta-aura__pool {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(14px);
+}
+.glass-cta-aura__pool--a {
+    left: 6%; top: 8%; width: 54%; height: 84%;
+    background: radial-gradient(closest-side, var(--cta-pool-a), transparent);
+}
+.glass-cta-aura__pool--b {
+    right: 4%; top: 16%; width: 50%; height: 78%;
+    background: radial-gradient(closest-side, var(--cta-pool-b), transparent);
+}
+.glass-cta-aura__arcs {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    fill: none;
+    /* the arcs end inside a small button's aura: fade them out rather than
+       let a round cap show */
+    -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 42%, transparent 100%);
+            mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, #000 42%, transparent 100%);
+}
+.glass-cta-aura__band { stroke: var(--cta-band); stroke-width: 16; stroke-linecap: round; }
+.glass-cta-aura__line { stroke: var(--cta-arc); stroke-width: 2.4; stroke-linecap: round; }
+.glass-cta-aura__line--soft { stroke: var(--cta-arc-soft); stroke-width: 1.6; }
+
+/* ── The lens ─────────────────────────────────────────────────────────────── */
+
+.glass-cta {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: block;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    color: var(--cta-label);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+        "Segoe UI Variable Display", "Segoe UI", InterVariable, Inter, system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+    box-shadow:
+        0 1px 2px rgba(20, 8, 60, 0.28),
+        0 10px 26px -10px var(--cta-glow);
+    transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 300ms cubic-bezier(0.37, 0, 0.63, 1);
+}
+
+/* GlassSurface ships a drop shadow and a themed rim of its own; this button
+   supplies both, so drop them and hand it the tint. */
+.glass-cta .glass-cta__glass.glass-surface--svg,
+[data-theme='light'] .glass-cta .glass-cta__glass.glass-surface--svg {
+    position: absolute;
+    inset: 0;
+    background: var(--cta-tint);
+    box-shadow: none;
+    transition: background-color 300ms cubic-bezier(0.37, 0, 0.63, 1);
+}
+.glass-cta .glass-cta__glass.glass-surface--fallback {
+    position: absolute;
+    inset: 0;
+    background: var(--cta-tint);
+    border: 0;
+    box-shadow: none;
+}
+
+/* Inner bevel: light pooling along the top-left and bottom-right inside faces,
+   a hairline all round, and a soft sheen down from the top face. */
+.glass-cta__bevel {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow:
+        inset 3px 4px 7px -3px var(--cta-bevel-a),
+        inset -3px -4px 7px -3px var(--cta-bevel-b),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.10),
+        inset 0 14px 16px -12px rgba(255, 255, 255, 0.30);
+}
+
+/* The specular bloom, upper left, where the key light lands. */
+.glass-cta__sheen {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+        radial-gradient(ellipse 34% 90% at 16% 14%, rgba(255, 255, 255, 0.34), transparent 70%),
+        radial-gradient(ellipse 22% 70% at 88% 92%, rgba(255, 255, 255, 0.16), transparent 70%);
+}
+
+/* The directional edge: a 1.5px ring that is brightest on the top-left and
+   bottom-right and nearly gone between, so the pill reads lit from a corner. */
+.glass-cta__edge {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1.5px;
+    pointer-events: none;
+    background: linear-gradient(120deg,
+        var(--cta-edge-hi) 0%,
+        var(--cta-edge-mid) 18%,
+        var(--cta-edge-lo) 42%,
+        var(--cta-edge-lo) 58%,
+        var(--cta-edge-mid) 82%,
+        var(--cta-edge-hi) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask-composite: exclude;
+}
+
+.glass-cta__label {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    white-space: nowrap;
+    text-shadow: 0 1px 2px rgba(30, 10, 80, 0.38);
+    pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .glass-cta:hover .glass-cta__glass.glass-surface--svg { background: var(--cta-tint-hover); }
+    .glass-cta:hover {
+        box-shadow:
+            0 1px 2px rgba(20, 8, 60, 0.28),
+            0 14px 30px -10px var(--cta-glow);
+    }
+}
+.glass-cta:active { transform: scale(0.985); }
+.glass-cta:focus-visible { outline: none; }
+.glass-cta:focus-visible .glass-cta__bevel {
+    box-shadow:
+        inset 0 0 0 2px rgba(255, 255, 255, 0.85),
+        inset 3px 4px 7px -3px var(--cta-bevel-a),
+        inset -3px -4px 7px -3px var(--cta-bevel-b);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .glass-cta, .glass-cta .glass-cta__glass { transition: none; }
+    .glass-cta:active { transform: none; }
+}
+
+@media (prefers-contrast: more) {
+    .glass-cta-wrap { --cta-tint: rgba(78, 52, 190, 0.96); --cta-tint-hover: rgba(78, 52, 190, 1); }
+    .glass-cta__edge { background: rgba(255, 255, 255, 0.9); }
+}

@@ -460,29 +460,48 @@ the current fill reaches 5.31:1 without touching the colour at all.
 
 Tokens: `--lg-sky-bg`, `--lg-sky-hover`, `--lg-sky-fg`.
 
-### An opaque body in another hue: `.lg-lavender`
+### A lens, not a plate: `LiquidGlassCta`
 
-The first-launch welcome and shortcut tour's action colour, built the way
-`.lg-action` is built and differing only in the fill. A flat opaque body
-(`#7C5CE6`), the soft `.09` sheen on the top and bottom faces, the three-ring
-white rim aimed at the top and bottom faces, the caps in shadow. Light mode is
-`.lg-action`'s derived treatment: specular on the top face only, the underside
-darkened, a contact shadow. Use it with `lg-sm lg-wide` and set `--lg-pill-h`
-and `--lg-label-size` for the box (the CTAs are 40 and 48px tall, where the
-`.lg-sm` hairline is 2-2.5% of the height, the reference's own proportion).
+The first-launch welcome and tour's call to action, and the one place this
+folder reproduces a *different* reference: Figma's community **Liquid Glass
+Button** (Matt Medley) — a translucent pill that bends whatever is behind it,
+lit from a corner. It is the refractive material of `GlassSurface`, dressed as
+a button, and it is deliberately not built on `.lg-button`.
 
-The first cut was a **translucent tint over a 42% white ramp with a backdrop
-blur**, and that is the mistake this document opens with: a glossy top-lit
-gradient. On a plain page there is nothing behind the pill to blur, so it read
-as a matte purple plate with no rim. Nothing about a colour that sits in the
-lavender range calls for a different structure; only the fill changes.
+Two earlier cuts are recorded because both were wrong in instructive ways:
 
-White on `#7C5CE6` is 4.64:1, over the 4.5:1 AA floor for the 14-15px labels
-(`#9C6FF3`, the website's colour, is 3.51:1). Hover walks the same hue lighter
-(`#8768EC`).
+| Cut | What it was | Why it failed |
+| --- | --- | --- |
+| translucent tint + 42% white ramp + backdrop blur | a glossy gradient | "matte purple plate with no rim" — the exact thing the first section says the material is not |
+| `.lg-lavender`: a flat opaque `#7C5CE6` on `.lg-action`'s structure | correct to the *measured* material | "too flat, doesn't feel like liquid glass" — the measured pill is a plate with a hairline rim; it has no lens |
 
-Derived, not measured, like `.lg-action`'s light mode. Tokens: `--lg-lav-bg`,
-`--lg-lav-hover`, `--lg-lav-fg`.
+The reference has four ingredients and the CTA carries all of them:
+
+1. **A tinted, translucent body** — `rgba(124,92,230,.42)` dark; the page shows through.
+2. **Real refraction** — `GlassSurface`'s SVG displacement map as the
+   `backdrop-filter`, thin (`borderWidth .3`, `blur 3`, `distortionScale -46`).
+   Wider or stronger and the interior smears into horizontal streaks; the
+   reference is clean in the middle and bends only at the rim.
+3. **A directional edge** — a 1.5px ring brightest at the top-left and
+   bottom-right (`120deg`, `.95 → .07 → .95`) and nearly gone between, an inner
+   bevel (light pooled `inset 3px 4px` top-left and `inset -3px -4px`
+   bottom-right), and a specular bloom upper-left.
+4. **Something luminous behind it.** Glass over a flat page has nothing to bend
+   — `GlassSurface`'s own notes say the same ("at rest there is nothing behind
+   the pill to refract"). The CTA brings its own aura: two blurred light pools
+   (lavender, blue) and two arcs that visibly kink as they cross the rim. The
+   arcs are masked to fade out, so a small button never shows a round cap.
+
+Light theme is a denser body (`rgba(104,72,220,.88)`, white label 5.0:1) with a
+white edge and a lavender-tinted aura; on a light page the lens is mostly tint.
+Dark: the label sits over a composite of about 11:1.
+
+```tsx
+<LiquidGlassCta width={320} height={48} onClick={next}>Get started</LiquidGlassCta>
+```
+
+Derived from the reference by eye and by screenshot, not measured; no
+mean-absolute-error figure is claimed. Rendered on macOS only.
 
 ### A clear body removes the body from the model
 

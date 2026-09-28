@@ -10,7 +10,7 @@ import cardLight from '../../assets/welcome/card-light.webp';
 import cardDark from '../../assets/welcome/card-dark.webp';
 import meetingVideo from '../../assets/welcome/meeting.webm';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
+import { LiquidGlassCta } from '../../ui-components/LiquidGlassCta';
 import WindowControls from '../WindowControls';
 import { DemoOverlay } from './DemoOverlay';
 
@@ -64,20 +64,8 @@ export const WelcomeFrame: React.FC<React.HTMLAttributes<HTMLDivElement> & { t: 
   </div>
 );
 
-export const LavenderButton: React.FC<{ width: number; height?: number; labelSize?: number; onClick: () => void; children: React.ReactNode }> = ({ width, height = 48, labelSize = 15, onClick, children }) => (
-  <LiquidGlassButton
-    variant="lavender"
-    className="lg-sm lg-wide"
-    onClick={onClick}
-    style={{
-      width,
-      // lg-sm's box is a 30px settings row; a CTA sets its own height.
-      ['--lg-pill-h' as string]: `${height}px`,
-      ['--lg-label-size' as string]: `${labelSize}px`,
-    } as React.CSSProperties}
-  >
-    <span className="inline-flex items-center gap-2">{children}</span>
-  </LiquidGlassButton>
+export const LavenderButton: React.FC<{ width: number; height?: number; labelSize?: number; onClick: () => void; children: React.ReactNode }> = (props) => (
+  <LiquidGlassCta {...props} />
 );
 
 /** Keycaps for one shortcut: ['⌘', 'B'] → ⌘ + B. */

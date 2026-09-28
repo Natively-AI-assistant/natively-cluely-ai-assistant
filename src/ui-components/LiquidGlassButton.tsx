@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import './LiquidGlassButton.css';
 
-export type LiquidGlassVariant = 'neutral' | 'green' | 'action' | 'sky' | 'clear' | 'lavender';
+export type LiquidGlassVariant = 'neutral' | 'green' | 'action' | 'sky' | 'clear';
 
 export interface LiquidGlassButtonProps
     extends React.ButtonHTMLAttributes<HTMLButtonElement> {
