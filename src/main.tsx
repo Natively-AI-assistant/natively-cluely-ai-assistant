@@ -1,6 +1,7 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
 import "./index.css"
+import { THEME_CACHE_KEY, applyResolvedTheme } from "./lib/themeTransition.mjs"
 import { createSwitchableTooltipGuard, installNativeTooltipGuard, shouldSuppressNativeTooltips } from "./lib/nativeTooltipGuard.mjs"
 
 // ── Renderer crash/hang diagnostics ─────────────────────────────────────────
@@ -26,7 +27,6 @@ window.addEventListener('unhandledrejection', (event) => {
 // eslint-disable-next-line no-console
 console.log('[renderer] main.tsx evaluating');
 
-const THEME_CACHE_KEY = 'natively_resolved_theme';
 const launcherIsolation = new URLSearchParams(window.location.search).get('isolate');
 
 if (launcherIsolation === 'shell') {
@@ -79,14 +79,14 @@ document.documentElement.setAttribute('data-theme', cachedTheme ?? 'dark');
 
 // Step 2: Confirm/correct from main process (authoritative) and keep cache in sync.
 if (window.electronAPI?.getThemeMode) {
+  // The authoritative re-read is a correction to first paint, not a change the
+  // user made — it snaps. Only a change event dissolves.
   window.electronAPI.getThemeMode().then(({ resolved }) => {
-    document.documentElement.setAttribute('data-theme', resolved);
-    localStorage.setItem(THEME_CACHE_KEY, resolved);
+    applyResolvedTheme(resolved, { animate: false });
   }).catch(() => {});
 
   window.electronAPI?.onThemeChanged?.(({ resolved }) => {
-    document.documentElement.setAttribute('data-theme', resolved);
-    localStorage.setItem(THEME_CACHE_KEY, resolved);
+    applyResolvedTheme(resolved);
   });
 }
 

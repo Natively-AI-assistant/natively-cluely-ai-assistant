@@ -11358,3 +11358,37 @@ html[data-platform="linux"][data-window="launcher"] body {
   }
 }
 /* @overlay-motion:end */
+
+/* ── Theme switch: one tight dissolve of the whole window ───────────────────
+   lib/themeTransition.mjs flips html[data-theme] inside a View Transition and
+   sets data-theme-switching for its lifetime. The UA cross-fades the old
+   snapshot into the live page (plus-lighter, which stays exact for the
+   translucent glass surfaces and the transparent overlay window); these rules
+   only set the timing.
+
+   240ms on cubic-bezier(0.77, 0, 0.175, 1) — a strong ease-in-out. A window-wide
+   swap is not an open/close, so it takes the symmetric curve; the strong shape
+   holds the first ~60ms almost still and lands the change in the middle, so it
+   reads as one decisive dissolve rather than a slow fade. Rare event, so it may
+   animate, but it stays under 300ms. No blur, no movement: a colour change
+   never blurs. Old and new share the group's duration and easing via the UA
+   sheet's `inherit`.
+
+   The live page underneath must not ALSO animate its colours (the toggles'
+   `transition-all 300ms`, the ask-bar pill, every `transition-colors`), or they
+   would land out of step with the rest. That is handled in themeTransition.mjs
+   by finishing colour transitions as they start — NOT with a universal
+   `transition: none` rule here, which forces a full-document style recalc as the
+   dissolve begins and dropped 54-83ms frames on the launcher. */
+:root[data-theme-switching]::view-transition-group(root) {
+  animation-duration: 240ms;
+  animation-timing-function: cubic-bezier(0.77, 0, 0.175, 1);
+}
+/* Reduced motion keeps the dissolve — opacity only, the gentle equivalent, so
+   the brightness change is still eased — but shorter. */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme-switching]::view-transition-group(root) {
+    animation-duration: 160ms;
+    animation-timing-function: ease-in-out;
+  }
+}
