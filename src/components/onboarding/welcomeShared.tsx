@@ -193,15 +193,14 @@ export const Keycaps: React.FC<{ t: WelcomeTheme; keys: string[]; size?: 'sm' | 
 // The stage the overlay sits in: 520 wide, 340 tall (the overlay is 600 laid out,
 // zoomed to fit). It is fixed so the call under it never moves.
 const CARD = { w: 520, h: 340 };
-// The call is 528px wide; the overlay is laid out 600px wide and zoomed to sit a
-// little INSIDE it (600 * 0.84 = 504, 12px each side), so it reads as a window
-// resting on the call rather than a lid the same width as it.
+// The call is 528px wide; the overlay is laid out 600px wide and zoomed so it is
+// a little WIDER than the call (600 * 0.92 = 552, 12px overhang each side): the
+// overlay is the subject and the call is what it sits over.
 const VIDEO_W = 528;
-const OVERLAY_ZOOM = 0.84;
-// How far the call tucks up under the overlay. 150 at zoom 0.88; the smaller
-// overlay ends 16px higher, so the call rises 16px with it to keep the same
-// overlap (the frost still sits over the faces).
-const CALL = { w: VIDEO_W, tuck: 150 + 16 };
+const OVERLAY_ZOOM = 0.92;
+// How far the call tucks up under the overlay. 150 at zoom 0.88; the larger
+// overlay ends 14px lower, so the call drops 14px with it to keep the same overlap.
+const CALL = { w: VIDEO_W, tuck: 150 - 14 };
 const EASE = [0.23, 1, 0.32, 1] as const;
 
 /** What drives the demo overlay: the tour's presses. */
