@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
+import { BUNDLED_LOCAL_EMBEDDING, bundledLocalEmbeddingFiles } from '../rag/bundledLocalEmbedding';
 
 export type RequiredLocalAssetKind = 'model_file' | 'package_dir' | 'worker_file' | 'native_binary';
 
@@ -19,15 +20,29 @@ export interface LocalAssetResolution {
   message: string;
 }
 
+// The preflight checks the model LocalEmbeddingProvider actually loads. Derived
+// from bundledLocalEmbedding.ts so a model swap cannot leave this list pointing
+// at files nothing opens — which would report "assets ready" for an embedder
+// that then fails to load. (Before 2026-09-22 this named MiniLM literally.)
+const [EMBED_CONFIG, EMBED_TOKENIZER, EMBED_TOKENIZER_CONFIG, EMBED_ONNX] = bundledLocalEmbeddingFiles();
 export const REQUIRED_MODEL_FILES: RequiredLocalAsset[] = [
-  { id: 'minilm-config', kind: 'model_file', relativePath: 'Xenova/all-MiniLM-L6-v2/config.json', description: 'MiniLM embedding config' },
-  { id: 'minilm-tokenizer', kind: 'model_file', relativePath: 'Xenova/all-MiniLM-L6-v2/tokenizer.json', description: 'MiniLM embedding tokenizer' },
-  { id: 'minilm-tokenizer-config', kind: 'model_file', relativePath: 'Xenova/all-MiniLM-L6-v2/tokenizer_config.json', description: 'MiniLM embedding tokenizer config' },
-  { id: 'minilm-onnx', kind: 'model_file', relativePath: 'Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx', description: 'MiniLM quantized ONNX model' },
-  { id: 'mobilebert-config', kind: 'model_file', relativePath: 'Xenova/mobilebert-uncased-mnli/config.json', description: 'MobileBERT classifier config' },
-  { id: 'mobilebert-tokenizer', kind: 'model_file', relativePath: 'Xenova/mobilebert-uncased-mnli/tokenizer.json', description: 'MobileBERT classifier tokenizer' },
-  { id: 'mobilebert-tokenizer-config', kind: 'model_file', relativePath: 'Xenova/mobilebert-uncased-mnli/tokenizer_config.json', description: 'MobileBERT classifier tokenizer config' },
-  { id: 'mobilebert-onnx', kind: 'model_file', relativePath: 'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx', description: 'MobileBERT quantized ONNX model' },
+  { id: 'local-embedding-config', kind: 'model_file', relativePath: EMBED_CONFIG, description: `${BUNDLED_LOCAL_EMBEDDING.label} embedding config` },
+  { id: 'local-embedding-tokenizer', kind: 'model_file', relativePath: EMBED_TOKENIZER, description: `${BUNDLED_LOCAL_EMBEDDING.label} embedding tokenizer` },
+  { id: 'local-embedding-tokenizer-config', kind: 'model_file', relativePath: EMBED_TOKENIZER_CONFIG, description: `${BUNDLED_LOCAL_EMBEDDING.label} embedding tokenizer config` },
+  { id: 'local-embedding-onnx', kind: 'model_file', relativePath: EMBED_ONNX, description: `${BUNDLED_LOCAL_EMBEDDING.label} quantized ONNX model` },
+];
+
+/**
+ * OPTIONAL model assets (review#9, 2026-08-24): the runtime degrades gracefully
+ * without them, so their absence must never fail install, preflight, or a dev
+ * checkout. Packaging still bundles them when present, and the RELEASE gate
+ * (scripts/verify-packaged-local-assets.mjs) still requires them so shipped
+ * builds are complete.
+ */
+export const OPTIONAL_MODEL_FILES: RequiredLocalAsset[] = [
+  // Auto Answer V3 TurnPredictor: predict() returns null when this is missing
+  // and the deterministic endpoint path is unaffected (spec V2 §38).
+  { id: 'smart-turn-onnx', kind: 'model_file', relativePath: 'pipecat-ai/smart-turn-v3/smart-turn-v3.1-cpu.onnx', description: 'Smart Turn v3.1 int8 ONNX (audio end-of-turn) — optional' },
 ];
 
 export function getAppPathSafe(): string {

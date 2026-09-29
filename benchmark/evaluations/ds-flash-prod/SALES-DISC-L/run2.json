@@ -1,0 +1,343 @@
+{
+ "blind_id": "S-62ba87b1",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 57214,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 33388,
+  "candidatesTokenCount": 2480,
+  "totalTokenCount": 42281,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 33388
+   }
+  ],
+  "thoughtsTokenCount": 6413,
+  "serviceTier": "standard"
+ },
+ "fact_count": 67,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 4,
+  "hallucination_control": 8,
+  "action_item_retention": 4,
+  "decision_retention": 6,
+  "speaker_attribution": 6,
+  "numeric_accuracy": 3,
+  "entity_retention": 7,
+  "timeline_accuracy": 7,
+  "conclusion_accuracy": 6,
+  "structure": 3,
+  "conciseness": 2,
+  "readability": 4,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Failed to capture the correction to 140 seats, repeatedly stating 120 agents.",
+   "Failed to capture the correction that Priya's approval limit is $40,000 and Greg must approve, stating instead that she owns the $50,000 budget.",
+   "Completely omitted the pricing quoted ($39/agent, $65,520 total, $9,500 implementation).",
+   "Completely omitted the POC scope and success criteria (10,000 tickets, 85% accuracy).",
+   "Failed to resolve 'Me' and 'Speaker 3' to their actual names in the action items.",
+   "Included numerous statements of fact as action items (e.g., 'Ideal go-live around October 15', 'Priya targets 90%')."
+  ],
+  "missing_important_information": [
+   "The 140 seat count.",
+   "The $40,000 CFO approval threshold.",
+   "The quoted price of $39 per agent per month, $65,520 annual total, and $9,500 implementation fee.",
+   "The POC scope of 10,000 tickets and the 85% accuracy success criterion.",
+   "The requirement for a SOC 2 Type II report and the Frankfurt EU region.",
+   "Action items for Jon to send the NDA and security questionnaire.",
+   "Action item for Tomas to export the 10,000 tickets."
+  ],
+  "hallucinated_information": [
+   "Stated 'A proof of concept is in progress' when it was only just agreed upon."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C01",
+    "reported": "The support team is about 120 agents split between Columbus and Rotterdam"
+   },
+   {
+    "correction_id": "C11",
+    "reported": "Priya has set aside $50,000 for year one... budget sits in customer operations and Priya owns it"
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Rotterdam is a customer site and there is a June offsite where herring is expected.",
+   "Marcus is based in Stockholm, so 3 PM Eastern is 9 PM his time."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "contradicted"
+   },
+   {
+    "id": "F03",
+    "status": "missing"
+   },
+   {
+    "id": "F04",
+    "status": "partial"
+   },
+   {
+    "id": "F05",
+    "status": "partial"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "partial"
+   },
+   {
+    "id": "F11",
+    "status": "missing"
+   },
+   {
+    "id": "F12",
+    "status": "missing"
+   },
+   {
+    "id": "F13",
+    "status": "partial"
+   },
+   {
+    "id": "F14",
+    "status": "missing"
+   },
+   {
+    "id": "F15",
+    "status": "missing"
+   },
+   {
+    "id": "F16",
+    "status": "partial"
+   },
+   {
+    "id": "F17",
+    "status": "missing"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "partial"
+   },
+   {
+    "id": "F21",
+    "status": "missing"
+   },
+   {
+    "id": "F22",
+    "status": "missing"
+   },
+   {
+    "id": "F23",
+    "status": "missing"
+   },
+   {
+    "id": "F24",
+    "status": "missing"
+   },
+   {
+    "id": "F25",
+    "status": "partial"
+   },
+   {
+    "id": "F26",
+    "status": "missing"
+   },
+   {
+    "id": "F27",
+    "status": "partial"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   },
+   {
+    "id": "F30",
+    "status": "partial"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "partial"
+   },
+   {
+    "id": "F34",
+    "status": "missing"
+   },
+   {
+    "id": "F35",
+    "status": "missing"
+   },
+   {
+    "id": "F36",
+    "status": "contradicted"
+   },
+   {
+    "id": "F37",
+    "status": "missing"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "present"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "present"
+   },
+   {
+    "id": "F44",
+    "status": "partial"
+   },
+   {
+    "id": "F45",
+    "status": "present"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "partial"
+   },
+   {
+    "id": "F51",
+    "status": "partial"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "present"
+   },
+   {
+    "id": "F56",
+    "status": "present"
+   },
+   {
+    "id": "F57",
+    "status": "partial"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "missing"
+   },
+   {
+    "id": "F60",
+    "status": "missing"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   },
+   {
+    "id": "F62",
+    "status": "present"
+   },
+   {
+    "id": "F63",
+    "status": "present"
+   },
+   {
+    "id": "F64",
+    "status": "present"
+   },
+   {
+    "id": "F65",
+    "status": "present"
+   },
+   {
+    "id": "F66",
+    "status": "partial"
+   },
+   {
+    "id": "F67",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes suffer from severe structural and conciseness issues, repeating the same facts across almost every section. Critically, they miss the most important commercial details of the call: the quoted price, the corrected 140 seat count, the $40,000 CFO approval limit, and the specific scope and success criteria of the proof of concept. The action items list is poorly formatted, leaving speaker labels like 'Me' and 'Speaker 3' unresolved, and includes numerous statements of fact that are not action items. While the notes capture the timeline changes well, the omission of pricing and the failure to capture corrections make them largely unusable as a system of record for a sales deal."
+ }
+}

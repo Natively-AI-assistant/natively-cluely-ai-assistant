@@ -1,0 +1,292 @@
+# Provider brand marks
+
+Official brand marks for the AI providers listed in Settings → AI Providers,
+and for the speech providers listed in Settings → Audio. Used nominatively — to
+identify the provider a card or dropdown row configures — not as endorsement or
+affiliation.
+
+## Provenance
+
+Sixteen SVGs are vendored from [`@lobehub/icons-static-svg`][pkg] v1.94.0
+(MIT, © 2023 LobeHub — full text in `LICENSE` beside this file).
+
+```
+gemini.svg       ← gemini-color.svg
+claude.svg       ← claude-color.svg
+deepseek.svg     ← deepseek-color.svg
+groq.svg         ← groq.svg
+openai.svg       ← openai.svg
+ollama.svg       ← ollama.svg
+googlecloud.svg  ← googlecloud-color.svg
+azure.svg        ← azure-color.svg
+ibm.svg          ← ibm.svg
+elevenlabs.svg   ← elevenlabs.svg
+apple.svg        ← apple.svg
+microsoft.svg    ← microsoft-color.svg   (title corrected, see below)
+nvidia.svg       ← nvidia-color.svg
+openrouter.svg   ← openrouter.svg       (monochrome, see below)
+voyage.svg       ← voyage.svg           (monochrome, see below)
+jina.svg         ← jina.svg             (monochrome, only variant upstream)
+```
+
+The last four were added for the speech provider selector, and the variant taken
+differs per brand on purpose: `googlecloud` and `azure` are the upstream
+`-color` files because those brands ARE multicolour, while `ibm` and
+`elevenlabs` exist upstream only as monochrome, which is also how those brands
+reproduce. See "Colour vs monochrome" below.
+
+`nvidia.svg` serves BOTH surfaces — the Nvidia Nim card in AI Providers and the
+Nvidia Nim row in the speech selector. The `-color` variant is taken (as for
+`gemini`) because NVIDIA's mark is green, not monochrome: upstream ships the
+fill hardcoded as `#74B71B`, so it needs no `BRAND_COLORS` entry and renders
+identically in both themes. It arrives already `1em`-sized, so unlike
+`deepgram.svg` it needed no local modification.
+
+Before this file existed the provider rendered an `NI` monogram, which the
+speech-selector coverage test flagged as an unrecorded fallback.
+
+### 9Router
+
+`ninerouter.png` is the **digit 9** from 9Router's own favicon
+(`public/favicon.svg` in `decolua/9router`, MIT — full text in
+`LICENSE.ninerouter` beside this file), rendered to raster and kept white on
+transparency.
+
+Their published mark is that digit in white on a rounded square filled with an
+orange gradient (`#f97815` -> `#c2590a`). Only the **glyph** is vendored, not
+the tile: every mark here sits on the panel's OWN tile, which already applies a
+brand wash, so shipping their tile too would nest one rounded square inside
+another. The wash colour is the gradient's start stop, recorded in
+`AI_PROVIDER_BRANDS` — so the pair reproduces their mark rather than replacing
+it.
+
+It is therefore in `WHITE_ON_TRANSPARENT_MARKS`: the art is genuinely white, so
+the light theme needs the `brightness(0)` flatten to make it visible. That set
+is opt-in precisely because the same filter destroys a full-colour mark, which
+is why the orange never enters the PNG.
+
+Their other official variant, `public/icons/icon-512.svg`, is a white "9R" on
+near-black — the same glyph idea with a second letter and no brand colour. The
+favicon is taken because the wash needs a brand hex, and because one character
+reads better than two at the 16px the tile actually renders.
+
+### Fluxion AI
+
+The one mark here that is not from lobehub — Fluxion is a small aggregator
+gateway with no entry in any icon set. `fluxion.png` is the **F monogram** taken
+from their own wordmark logo (`https://fluxionai.world/logo.png`), cropped away
+from the "FluxionAPI" lettering with the white plate unpremultiplied to alpha.
+
+**Why not their orbital-galaxy brand mark** (`docs.fluxionai.world/brand-logo-mark.png`),
+which is the image Fluxion themselves lead with: the tile renders a **16px**
+glyph, and the galaxy is an illustration, not an icon. Rendered at true size it
+is a faint smudge on the dark tile and an unrecognisable grey blob in the light
+one — measured, not assumed. Every other mark here is a simple glyph (a star, an
+asterisk, a monogram) for exactly this reason. The only published copy is also
+flattened onto white, and since the artwork's highlights are white, unflattening
+it to alpha cannot recover the glow that carries the design.
+
+**A third asset to avoid:** `https://fluxionai.world/logo.svg` is an
+interlocking-S glyph whose own `<title>` reads **"Sub2API"** — artwork predating
+the Fluxion branding. It shipped here briefly by mistake.
+
+If Fluxion ever publishes a simplified icon-sized mark, prefer it over the
+monogram. No licence statement accompanies any of these assets, so the mark is
+used purely nominatively, as stated at the top of this file.
+
+### Jina
+
+Added for the hosted Jina reranker in Settings → Reranker, which is the only way
+to run `jina-reranker-v3.5` without a 410 MB download. Upstream ships this mark
+in monochrome ONLY — there is no `jina-color.svg` — so the variant choice made
+itself, and `currentColor` adapts to both themes as with `groq` and `openai`.
+
+The `AI_PROVIDER_BRANDS` hex is `#009191`, which is NOT lobehub's published
+`COLOR_PRIMARY` for this brand (`#000`). A black wash is invisible on the dark
+tile — the failure the legibility rule below describes — so the hex is taken
+from Jina's own favicon instead: `#009191` is its dominant non-neutral colour
+(5758 of ~16k pixels), and `api.jina.ai`'s docs theme uses the same value.
+
+### OpenRouter and Voyage — why the monochrome variant
+
+Both were added for the embedding providers in Settings → Embeddings, and both
+ship upstream in `-color` as well. Neither `-color` file is usable here, for
+opposite reasons, and both fail the legibility rule this file already states:
+
+```
+openrouter-color.svg   fill="#C8FF00"   lime — illegible on the LIGHT tile
+voyage-color.svg       fill="#012E33"   near-black teal — vanishes on the DARK tile
+```
+
+`.aip-tile--mark` paints `var(--aip-btn-bg)`, which follows the theme, so a mark
+pinned to either extreme is unreadable in one of them. NVIDIA's `#74B71B` survives
+both because it is mid-tone; lime and near-black do not. The monochrome variants
+paint `currentColor` and adapt for free — the same treatment `groq`, `openai` and
+`ollama` already get, and for the same reason.
+
+The published hexes are still recorded in `AI_PROVIDER_BRANDS` (`#C8FF00`,
+`#012E33`) because that field drives the tile *wash* and the monogram fallback,
+not the mark's own fill.
+
+`deepgram.svg` comes from [simple-icons][si] v16.28.0, which licenses its icons
+under **CC0-1.0** — a different licence from the lobehub set, so its full text
+lives separately in `LICENSE.simple-icons`. Deepgram publishes no mark in the
+lobehub package.
+
+### The platform marks, and the Windows gap
+
+`apple.svg` and `microsoft.svg` are the host-OS marks for the **Local Models**
+row: those models run on the user's own machine, so the platform is the identity.
+`isMac` picks between them at the call site in `SettingsOverlay.tsx`.
+
+**There is no Windows logo here because none is available under a compatible
+licence.** simple-icons carries no Windows or Microsoft entry at all — they were
+removed on trademark request, and only unrelated projects like "Git for Windows"
+remain — and lobehub ships no `windows.svg` either. What lobehub does ship is the
+**Microsoft corporate four-square mark**, which is a *different mark* from the
+Windows flag. That is what `microsoft.svg` is, and it is a deliberate
+second-best: universally read as "Windows/Microsoft", but not literally the
+Windows logo. If a licence-clean Windows mark ever appears, this is the file to
+replace.
+
+One local modification: upstream `microsoft-color.svg` has `<title>Azure</title>`
+— a mislabel in the package, since the file is unmistakably the Microsoft
+four-square. The title is corrected to `Microsoft` on vendoring. Nothing else
+about the file changed.
+
+### Local modifications to `deepgram.svg`
+
+This is the one vendored asset that is **not** byte-identical to upstream. Two
+attributes were added to the root `<svg>`:
+
+```
+fill="currentColor"      simple-icons ships no fill, so it defaults to black
+                         and the mark vanishes against the dark theme
+width="1em" height="1em" simple-icons ships it dimensionless; every lobehub mark
+                         is 1em, and <BrandMark> sizes marks by setting
+                         font-size, which a dimensionless SVG ignores
+```
+
+Re-vendoring this file without re-applying both attributes silently reintroduces
+an invisible, mis-sized icon. CC0 imposes no attribution or no-derivatives
+condition, so the edit is permitted; it is recorded here for maintenance, not
+compliance.
+
+`litellm.png` comes from [BerriAI/litellm][ll] — `litellm/proxy/swagger/favicon.png`,
+a 160×160 RGBA PNG. MIT (© 2023 Berri AI), full text in `LICENSE.litellm`. Their
+LICENSE opens "Portions of this software are licensed as follows" and carves out
+only the `enterprise/` directory; this file sits outside it, so the MIT grant
+applies. LiteLLM publishes no vector mark — this favicon is the highest-resolution
+form they ship.
+
+Vendored deliberately rather than imported from a CDN. An earlier attempt fetched
+these from `unpkg.com/@lobehub/icons-static-svg@latest` at render time, which
+(a) leaked the user's IP and their configured-provider set to a third-party host
+on every settings render, (b) broke the panel's icons offline, and (c) pinned to
+`@latest`, so the asset could change underneath a shipped build.
+
+`@latest` is also why the version above is pinned here in writing: these are a
+snapshot, not a live dependency. To refresh, re-run
+`npm pack @lobehub/icons-static-svg@<version>` and update this file.
+
+## Inlined SVG vs `<img>`
+
+The SVGs are imported with `?raw` and inlined, because most of them paint with
+`fill="currentColor"` — and `currentColor` does not resolve inside an `<img>`,
+which is a separate document context. They would render black and disappear
+against the dark theme.
+
+Raster marks have no `currentColor` to resolve, so they are imported as URLs and
+rendered with `<img>`. Both consumers split their registries along that line:
+`AI_PROVIDER_MARKS` / `AI_PROVIDER_MARK_IMAGES` in `ui/aiProviderMarks.ts` (for
+`litellm.png` and the Natively app icon), and `BRAND_MARKS` /
+`BRAND_MARK_IMAGES` in `BrandMark.tsx`. Both renderers resolve the vector
+registry first, so an id must not appear in both — the coverage test enforces
+that.
+
+## Colour vs monochrome
+
+The two consumers make opposite choices, for reasons specific to the surface
+each one renders onto. Neither is an inconsistency to be tidied up.
+
+**AI providers** (`AI_PROVIDER_MARKS`) matches each brand: `gemini`, `claude`
+and `deepseek` carry their own colours; `groq`, `openai` and `ollama` are
+`currentColor` because those marks *are* monochrome, so they adapt to the light
+and dark themes for free. Do not "fix" this by tinting the monochrome three or
+flattening the colour three.
+
+**Speech providers** (`BRAND_MARKS` in `src/components/ui/BrandMark.tsx`) shows
+every mark in its own brand colour, and takes whichever upstream variant is
+faithful to the brand: the `-color` files for `googlecloud` and `azure`, the
+monochrome ones for `ibm` and `elevenlabs`.
+
+Because those marks carry their own colour, rows that have one get a NEUTRAL
+tile (`neutralTile: true` on the option, which routes `getIconStyle` past the
+tint). The per-provider tint is reserved for rows whose icon has no colour of
+its own — currently just the Soniox monogram, where the tint is the only colour
+present. The two treatments are mutually exclusive, and the coverage test
+enforces both directions.
+
+For a monochrome mark, `currentColor` is the correct reproduction rather than a
+compromise. `BRAND_COLORS` supplies a published brand hex where one is cited
+(Deepgram `#13EF93`, from simple-icons); everything else inherits the tile's
+text colour, so a black-and-white brand like OpenAI, Groq or ElevenLabs stays
+legible in both themes instead of being pinned to a black that vanishes on dark.
+IBM inherits because no authoritative hex is citable — simple-icons carries no
+IBM entry and lobehub ships only the monochrome mark, so pinning one would mean
+inventing a brand colour.
+
+## Not included, and why
+
+- **Custom Providers** — user-defined endpoints have no brand. Renders a monogram
+  from the provider's own name.
+- **ChatGPT / Codex** — reuses `openai.svg`; it is the same brand.
+- **Soniox** — publishes no mark in either source package, and no other
+  licence-compatible vector exists. Renders the `SO` monogram. Recorded in
+  `BRAND_MARK_EXEMPT` so the coverage test can tell this apart from an oversight.
+- **Natively** — our own brand, so nothing is vendored here. The speech selector
+  uses the app icon at the repo root (`assets/icon-512.png`) via
+  `BRAND_MARK_IMAGES`, the raster registry in `BrandMark.tsx`. There is also
+  `src/components/NativelyLogoMark.tsx`, a `currentColor` vector logomark, if a
+  surface needs one that tints.
+- **Local Models** — not a brand. It is a set of on-device engines (Moonshine,
+  Distil-Whisper, Whisper), so it renders the HOST OS mark instead: `apple` on
+  macOS, `microsoft` on Windows. It previously carried `openai.svg`, which
+  stopped being defensible once the row was renamed from "Local Whisper" to the
+  generic "Local Models" — an OpenAI logo against models that are mostly not
+  OpenAI's. Because the provider is a platform expression rather than a literal,
+  the coverage test resolves BOTH branches; a Windows-only breakage would
+  otherwise be invisible from a Mac.
+
+## Adding a mark later
+
+Drop the SVG here, add the key to the registry for the surface you are adding to
+— `AI_PROVIDER_MARKS` in `src/components/ui/aiProviderMarks.ts` for AI/model
+providers, `BRAND_MARKS` in `src/components/ui/BrandMark.tsx` for speech
+providers — and record its source and licence above.
+
+`AI_PROVIDER_MARKS` is ONE registry with two renderers over it, and adding a
+provider to it covers both surfaces at once: `<AipProviderMark>` draws the tiled
+version for Settings > AI Providers (it needs `AIP_CSS`, which is scoped to that
+panel), and `<ProviderMark>` draws the bare glyph everywhere else — currently the
+overlay's model picker. `AIProvidersSettings.tsx` re-exports the maps under their
+original `AIP_*` names, so existing call sites still resolve.
+
+The model picker is why the split exists: it rendered a generic `<Cloud>` glyph
+for every provider except Gemini, so `Nvidia Nim`, `OpenAI`, `Claude`, `DeepSeek`
+and `Groq` all shipped with no brand. `ModelPickerProviderMarkCoverage.test.mjs`
+now fails if a provider reachable from `STANDARD_CLOUD_MODELS` has no mark.
+
+For a speech provider, also set `neutralTile: true` on its option in
+`SettingsOverlay.tsx`, and normalise the asset to `width="1em" height="1em"`
+(`<BrandMark>` sizes by font-size). `src/components/__tests__/SpeechProviderBrandMarkCoverage.test.mjs`
+checks all of this and will tell you which step was missed.
+
+Anything without a clear, compatible licence stays a monogram, listed in
+`BRAND_MARK_EXEMPT` with the reason. AGPL-3.0 requires every shipped asset to be
+licence-compatible, and a stock-vector-site download of a company's logo does not
+qualify.
+
+[pkg]: https://github.com/lobehub/lobe-icons
+[ll]: https://github.com/BerriAI/litellm
+[si]: https://github.com/simple-icons/simple-icons

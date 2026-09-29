@@ -1,0 +1,319 @@
+{
+ "blind_id": "S-542515a8",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 71520,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 20000,
+  "candidatesTokenCount": 2185,
+  "totalTokenCount": 30446,
+  "cachedContentTokenCount": 12231,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 20000
+   }
+  ],
+  "cacheTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 12231
+   }
+  ],
+  "thoughtsTokenCount": 8261,
+  "serviceTier": "standard"
+ },
+ "fact_count": 61,
+ "evaluation": {
+  "factual_accuracy": 4,
+  "important_information_retention": 8,
+  "hallucination_control": 4,
+  "action_item_retention": 9,
+  "decision_retention": 9,
+  "speaker_attribution": 8,
+  "numeric_accuracy": 4,
+  "entity_retention": 9,
+  "timeline_accuracy": 8,
+  "conclusion_accuracy": 4,
+  "structure": 6,
+  "conciseness": 3,
+  "readability": 5,
+  "overall_summary_quality": 4,
+  "critical_errors": [
+   "Claims that Maya's $155,000 target exceeding the $128,000-$146,000 band is an unresolved open question, contradicting the corrected band and updated target.",
+   "Claims that the benefits package was not covered and not yet discussed, contradicting the detailed benefits information provided elsewhere in the notes."
+  ],
+  "missing_important_information": [
+   "Brightlane's return to office policy driving Maya's job search.",
+   "The sequencing of Dana's interview and the portfolio review before Maya's trip.",
+   "The ride-alongs during onboarding."
+  ],
+  "hallucinated_information": [
+   "The benefits package was not covered in this portion of the conversation.",
+   "The benefits package was not yet discussed because Maya asked about benefits at the end of the chunk.",
+   "Whether Corvella can accommodate Maya’s approximately $155,000 base target despite the stated $128,000–$146,000 band remains unresolved."
+  ],
+  "superseded_values_reported": [
+   {
+    "correction_id": "C02",
+    "reported": "Whether Corvella can accommodate Maya’s approximately $155,000 base target despite the stated $128,000–$146,000 band remains unresolved."
+   },
+   {
+    "correction_id": "C03",
+    "reported": "Maya’s desired base salary of approximately $155,000 exceeds the top of the stated compensation band."
+   }
+  ],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Extreme repetition of the same facts (e.g., the portfolio review replacing the take-home, the start date, the salary correction) across Overview, Summary, Opportunity Summary, Company details, Decisions, and Action Items."
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "partial"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "partial"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "partial"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "partial"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "missing"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "missing"
+   },
+   {
+    "id": "F23",
+    "status": "partial"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "contradicted"
+   },
+   {
+    "id": "F30",
+    "status": "contradicted"
+   },
+   {
+    "id": "F31",
+    "status": "present"
+   },
+   {
+    "id": "F32",
+    "status": "present"
+   },
+   {
+    "id": "F33",
+    "status": "present"
+   },
+   {
+    "id": "F34",
+    "status": "present"
+   },
+   {
+    "id": "F35",
+    "status": "present"
+   },
+   {
+    "id": "F36",
+    "status": "contradicted"
+   },
+   {
+    "id": "F37",
+    "status": "contradicted"
+   },
+   {
+    "id": "F38",
+    "status": "present"
+   },
+   {
+    "id": "F39",
+    "status": "present"
+   },
+   {
+    "id": "F40",
+    "status": "present"
+   },
+   {
+    "id": "F41",
+    "status": "partial"
+   },
+   {
+    "id": "F42",
+    "status": "present"
+   },
+   {
+    "id": "F43",
+    "status": "partial"
+   },
+   {
+    "id": "F44",
+    "status": "present"
+   },
+   {
+    "id": "F45",
+    "status": "partial"
+   },
+   {
+    "id": "F46",
+    "status": "present"
+   },
+   {
+    "id": "F47",
+    "status": "present"
+   },
+   {
+    "id": "F48",
+    "status": "present"
+   },
+   {
+    "id": "F49",
+    "status": "present"
+   },
+   {
+    "id": "F50",
+    "status": "present"
+   },
+   {
+    "id": "F51",
+    "status": "present"
+   },
+   {
+    "id": "F52",
+    "status": "present"
+   },
+   {
+    "id": "F53",
+    "status": "present"
+   },
+   {
+    "id": "F54",
+    "status": "present"
+   },
+   {
+    "id": "F55",
+    "status": "missing"
+   },
+   {
+    "id": "F56",
+    "status": "partial"
+   },
+   {
+    "id": "F57",
+    "status": "present"
+   },
+   {
+    "id": "F58",
+    "status": "present"
+   },
+   {
+    "id": "F59",
+    "status": "present"
+   },
+   {
+    "id": "F60",
+    "status": "present"
+   },
+   {
+    "id": "F61",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture a large amount of the transcript's detail but suffer from severe internal contradictions and hallucinations. They correctly report the updated salary band and target in one section, but then list the superseded salary figures as an unresolved open question and a risk. Similarly, they accurately list the benefits package, but later hallucinate that benefits were not discussed. Furthermore, the notes are extremely repetitive, stating the same facts across multiple sections, which severely impacts conciseness and readability."
+ }
+}

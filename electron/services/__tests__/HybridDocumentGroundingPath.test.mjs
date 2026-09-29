@@ -124,10 +124,26 @@ test('hybrid retriever no longer short-circuits forceDocumentGrounding to lexica
 
 test('WhatToAnswerLLM retrieves by planned question, not whole transcript blob', () => {
   const src = read('electron/llm/WhatToAnswerLLM.ts');
+  // Pin updated 2026-08-19 (HDFC leak): the query is now derived ONCE by
+  // retrievalQueryPolicy.deriveRetrievalQuery — planned question first, then
+  // NON-assistant transcript lines, then captured screen text; never the raw
+  // transcript blob (whose only content on a blind turn is the assistant's
+  // own previous answer). The invariant this test protects is unchanged and
+  // strictly stronger: question-first, and the whole-blob fallback is gone.
   assert.match(
     src,
-    /const retrievalQuery = answerPlan\?\.question\?\.trim\(\) \|\| cleanedTranscript;/,
+    /extractedQuestion: answerPlan\?\.question,/,
     'WTA retrieval must use the latest/planned question as the primary query',
+  );
+  assert.match(
+    src,
+    /const retrievalQuery = retrievalQueryDecision\.query;/,
+    'WTA retrieval queries must come from the user-originated provenance policy',
+  );
+  assert.doesNotMatch(
+    src,
+    /const retrievalQuery = answerPlan\?\.question\?\.trim\(\) \|\| cleanedTranscript;/,
+    'the raw transcript-blob fallback (assistant self-echo, HDFC leak) must not return',
   );
   assert.doesNotMatch(
     src,
@@ -141,5 +157,23 @@ test('IntelligenceEngine wires document-grounded WTA validation and repair', () 
   assert.match(src, /validateDocumentGroundedAnswer/, 'WTA must call the document-grounded answer validator');
   assert.match(src, /completenessRegenFabricates/, 'WTA repair must reject fabricated numeric values');
   assert.match(src, /doc_grounded_repair_applied/, 'WTA must have a successful document-grounded repair path');
-  assert.match(src, /doc_grounded_safe_refusal_after_repair_reject/, 'WTA must fail closed when repair cannot be trusted');
+  // 2026-09-07 (always answer): a rejected repair keeps the streamed answer
+  // instead of failing closed to the canonical refusal.
+  assert.match(src, /doc_grounded_kept_original_over_refusal/, 'WTA must keep the streamed answer when the coverage check fails');
+  assert.doesNotMatch(src, /doc_grounded_safe_refusal_after_repair_reject/, 'the fail-closed refusal path must be gone');
+});
+
+test('IntelligenceEngine WTA repair has a non-regression length floor (root-cause fix, 2026-07-23)', () => {
+  const src = read('electron/IntelligenceEngine.ts');
+  assert.match(src, /wtaRepairIsLengthDowngrade/, 'WTA repair acceptance must check for a length-downgrade regression vs the pre-repair answer');
+  assert.match(
+    src,
+    /repairedTrim\.length < wtaOriginalForCompare\.length \* 0\.6/,
+    'the length-downgrade check must compare the repaired answer against the ORIGINAL pre-repair answer length',
+  );
+  assert.match(
+    src,
+    /!wtaRepairIsLengthDowngrade[\s\S]{0,400}validateDocumentGroundedAnswer/,
+    'the length-downgrade guard must gate repair acceptance alongside the fabrication/artifact checks',
+  );
 });

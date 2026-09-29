@@ -96,7 +96,11 @@ describe('#3 stream id is emitted on the wire (backward-compatible 2nd arg)', ()
       'desktop sendChunk must include streamId');
   });
   test('phone tokens carry { streamId }', () => {
-    assert.match(src, /send\('gemini-stream-token',\s*token,\s*\{\s*streamId:\s*myStreamId\s*\}\)/,
+    // F-303: the phone payload also carries `source: 'phone'` so the renderer
+    // can scope supersession to a surface. The invariant this test protects is
+    // that phone tokens carry a streamId — assert that without pinning the
+    // payload to EXACTLY one field.
+    assert.match(src, /send\('gemini-stream-token',\s*token,\s*\{\s*streamId:\s*myStreamId\b/,
       'phone onToken must include streamId');
   });
 });

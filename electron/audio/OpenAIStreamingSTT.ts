@@ -2,9 +2,10 @@
  * OpenAIStreamingSTT - WebSocket-first, REST-fallback Speech-to-Text for OpenAI
  *
  * Priority chain (automatic, with audio buffering during transitions):
- *   1. WebSocket Realtime API → gpt-4o-transcribe        (server VAD, noise reduction)
- *   2. WebSocket Realtime API → gpt-4o-mini-transcribe   (server VAD, noise reduction)
- *   3. REST API              → whisper-1                 (client VAD flush)
+ *   1. WebSocket Realtime API → gpt-live-transcribe      (streams while speaking; client commit at local VAD end)
+ *   2. WebSocket Realtime API → gpt-4o-transcribe        (server VAD, noise reduction)
+ *   3. WebSocket Realtime API → gpt-4o-mini-transcribe   (server VAD, noise reduction)
+ *   4. REST API              → whisper-1                 (client VAD flush)
  *
  * Implements the same EventEmitter interface as all other STT providers:
  *   Events:  'transcript' ({ text, isFinal, confidence }), 'error' (Error)
@@ -14,11 +15,14 @@
 
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
+import { safeDetachAndClose } from './wsSafeTeardown';
 import axios from 'axios';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { streamingStttWsOptions } from './dnsHelpers';
 import { OpenAITranscriptTurnCoalescer } from './openaiTranscriptTurnCoalescer';
+import { OpenAILiveTranscriptItems } from './openaiLiveTranscriptItems';
+import { RealtimeSilenceTail } from './realtimeSilenceTail';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -36,9 +40,30 @@ function deriveRestEndpoint(baseUrl: string): string {
         : `${trimmed}/v1/audio/transcriptions`;
 }
 
-/** WebSocket model priority order */
-const WS_MODELS = ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe'] as const;
+/**
+ * WebSocket model priority order.
+ *
+ * gpt-live-transcribe leads (2026-09-23): it "returns transcript deltas as
+ * speech arrives", where gpt-4o-transcribe emits deltas only "after a committed
+ * audio turn" (developers.openai.com, Realtime transcription — which names the
+ * live model as the recommended starting point). With gpt-4o-transcribe the
+ * first word of a transcript could not exist until the server VAD had heard a
+ * full second of silence. The live model takes no server VAD, so turns are
+ * committed by the client at the native VAD's speech end (notifySpeechEnded).
+ */
+const LIVE_WS_MODEL = 'gpt-live-transcribe';
+const WS_MODELS = [LIVE_WS_MODEL, 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe'] as const;
 type WsModel = typeof WS_MODELS[number];
+/** "low: live captions" — the documented setting for text shown while people talk. */
+export const OPENAI_LIVE_TRANSCRIBE_DELAY = 'low';
+/** Real-time silence after speech end for the server-VAD models: hangover (>= 500) + 700 >= silence_duration_ms 1000. See realtimeSilenceTail.ts. */
+export const OPENAI_SILENCE_TAIL_MS = 700;
+/** The API rejects a commit of less than 100 ms of audio. */
+const LIVE_COMMIT_MIN_SAMPLES = 2_400;
+/** One monologue without a 0.5 s pause still gets a final every 30 s. */
+const LIVE_MAX_UNCOMMITTED_SAMPLES = 24_000 * 30;
+/** With no server VAD nothing drains a silence-only buffer; clear it every 30 s. */
+const LIVE_SILENCE_CLEAR_SAMPLES = 24_000 * 30;
 
 /** Max consecutive WebSocket failures before advancing to next model / REST */
 const MAX_WS_FAILURES_PER_MODEL = 3;
@@ -60,8 +85,14 @@ const REST_SAFETY_NET_MS = 10_000;
 /** Minimum buffered bytes before attempting a REST upload */
 const REST_MIN_UPLOAD_BYTES = 4_000;
 
-/** WebSocket Audio Batching: Number of 24kHz samples to accumulate before sending to prevent rate limits (~250ms) */
-const SEND_THRESHOLD_SAMPLES = 6000;
+/**
+ * WebSocket audio batching: 24 kHz samples per append (100 ms). It was 250 ms,
+ * which held every chunk back by up to a quarter second — and during the native
+ * keepalive cadence (20 ms of audio per 100 ms) took ~1.25 s to fill, delaying
+ * the very silence the server VAD waits for. Ten appends a second is well
+ * inside what the Realtime API takes.
+ */
+export const SEND_THRESHOLD_SAMPLES = 2400;
 
 /** Silence RMS threshold — skip REST uploads for silent buffers */
 const SILENCE_RMS_THRESHOLD = 50;
@@ -136,6 +167,22 @@ export class OpenAIStreamingSTT extends EventEmitter {
 
     // Coalesce word-level GA completed events into one final turn per utterance.
     private turnCoalescer = new OpenAITranscriptTurnCoalescer();
+    // gpt-live-transcribe: per-item deltas, final on the item's completed event.
+    private liveItems = new OpenAILiveTranscriptItems();
+    // Set once the server acknowledges our session.update; a config error
+    // before that on the live model means the account/endpoint can't use it.
+    private sessionConfigAcked = false;
+    // Live model: audio appended since the last commit, and whether any of it
+    // was more than the native keepalive's all-zero frames.
+    private appendedSinceCommitSamples = 0;
+    private speechSinceCommit = false;
+    /** Process-wide: this account rejected the live model once; don't pay that per meeting. */
+    private static liveModelRejected = false;
+    private readonly silenceTail = new RealtimeSilenceTail({
+        tailMs: OPENAI_SILENCE_TAIL_MS,
+        format: () => ({ sampleRate: this.inputSampleRate, channels: this.numChannels }),
+        sink: (pcm) => this._writeAudio(pcm),
+    });
 
     // Suppress duplicate final emits (finalize flush + speech_stopped, etc.).
     private lastFinalEmitText = '';
@@ -153,7 +200,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
             this.isCustomEndpoint = true;
             console.log(`[OpenAIStreaming] Initialized — custom endpoint (REST only): ${this.restEndpoint}`);
         } else {
-            console.log('[OpenAIStreaming] Initialized — WebSocket priority (gpt-4o-transcribe → gpt-4o-mini-transcribe → whisper-1 REST)');
+            console.log('[OpenAIStreaming] Initialized — WebSocket priority (gpt-live-transcribe → gpt-4o-transcribe → gpt-4o-mini-transcribe → whisper-1 REST)');
         }
     }
 
@@ -208,7 +255,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
         console.log('[OpenAIStreaming] Starting...');
         this.isActive       = true;
         this.shouldReconnect = true;
-        this.wsModelIndex   = 0;
+        this.wsModelIndex   = OpenAIStreamingSTT.liveModelRejected ? WS_MODELS.indexOf('gpt-4o-transcribe') : 0;
         this.wsFailures     = 0;
         this.reconnectAttempts = 0;
         this.ringEvictedThisSession = false;
@@ -220,6 +267,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
         this.restIsUploading  = false;
         this.restFlushPending = false;
         this.turnCoalescer.reset();
+        this.liveItems.reset();
 
         // Custom endpoints (e.g. Speaches) don't implement OpenAI's Realtime WebSocket
         // protocol. Go straight to REST mode for them.
@@ -236,7 +284,11 @@ export class OpenAIStreamingSTT extends EventEmitter {
     public stop(): void {
         if (!this.isActive) return;
         console.log('[OpenAIStreaming] Stopping...');
+        this.silenceTail.cancel();
         this._flushTurnCoalescer();
+        // Nothing more will complete on this socket: pending live text is final.
+        const livePending = this.liveItems.flush();
+        if (livePending) this._emitTranscript(livePending, true);
         this.isActive        = false;
         this.shouldReconnect = false;
 
@@ -298,6 +350,12 @@ export class OpenAIStreamingSTT extends EventEmitter {
 
     public write(chunk: Buffer): void {
         if (!this.isActive) return;
+        this.silenceTail.observe(chunk);
+        this._writeAudio(chunk);
+    }
+
+    private _writeAudio(chunk: Buffer): void {
+        if (!this.isActive) return;
 
         if (this.mode === 'ws') {
             // Always push to ring-buffer while not yet connected (pre-buffer)
@@ -319,7 +377,10 @@ export class OpenAIStreamingSTT extends EventEmitter {
 
     /**
      * Called by Rust native VAD when speech ends.
-     * On WebSocket path: server handles VAD — this is a no-op.
+     * On the live model: this IS the turn boundary — commit, and the item's
+     *   completed event becomes the final.
+     * On the server-VAD models: keep the audio clock real-time so the server's
+     *   silence_duration_ms elapses in wall time (realtimeSilenceTail.ts).
      * On REST fallback path: triggers immediate flush.
      */
     public notifySpeechEnded(): void {
@@ -327,8 +388,40 @@ export class OpenAIStreamingSTT extends EventEmitter {
         if (this.mode === 'rest') {
             console.log('[OpenAIStreaming][REST] Speech ended — flushing buffer');
             this._restFlushAndUpload();
+            return;
         }
-        // WebSocket path: server VAD handles this; nothing to do.
+        if (this._isLiveModel()) {
+            this._commitLiveTurn();
+        } else {
+            this.silenceTail.start();
+        }
+    }
+
+    private _currentWsModel(): WsModel {
+        return WS_MODELS[this.wsModelIndex] ?? WS_MODELS[0];
+    }
+
+    private _isLiveModel(): boolean {
+        return this._currentWsModel() === LIVE_WS_MODEL;
+    }
+
+    /**
+     * Live model turn boundary. Guarded: a commit of < 100 ms, or of nothing
+     * but keepalive zeros, is rejected by the API as an 'error' — and every
+     * emitted error advances main.ts's consecutive-error counter.
+     */
+    private _commitLiveTurn(): void {
+        if (this.ws?.readyState !== WebSocket.OPEN || !this.isSessionReady) return;
+        this._sendAccumulated();
+        if (!this.speechSinceCommit || this.appendedSinceCommitSamples < LIVE_COMMIT_MIN_SAMPLES) return;
+        try {
+            this.ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+        } catch (err) {
+            console.warn('[OpenAIStreaming][WS] Live commit failed:', err);
+            return;
+        }
+        this.appendedSinceCommitSamples = 0;
+        this.speechSinceCommit = false;
     }
 
     public finalize(): void {
@@ -361,9 +454,12 @@ export class OpenAIStreamingSTT extends EventEmitter {
         } catch (err) {
             console.error('[OpenAIStreaming][WS] Finalize append failed (continuing to commit):', err);
         }
+        this.silenceTail.cancel();
         try {
             this.ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
             console.log('[OpenAIStreaming][WS] Finalize — committed input buffer');
+            this.appendedSinceCommitSamples = 0;
+            this.speechSinceCommit = false;
         } catch (err) {
             console.error('[OpenAIStreaming][WS] Finalize commit failed:', err);
         }
@@ -378,6 +474,9 @@ export class OpenAIStreamingSTT extends EventEmitter {
         if (this.isConnecting || !this.shouldReconnect) return;
         this.isConnecting  = true;
         this.isSessionReady = false;
+        this.sessionConfigAcked = false;
+        this.appendedSinceCommitSamples = 0;
+        this.speechSinceCommit = false;
 
         // Defensive: ensure no stale timers from a previous connect attempt
         // remain armed against the next socket. _closeWs() should have cleared
@@ -386,7 +485,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
         // new socket out of nowhere.
         this._clearConnectAndSessionTimers();
 
-        const model: WsModel = WS_MODELS[this.wsModelIndex] ?? WS_MODELS[0];
+        const model: WsModel = this._currentWsModel();
         console.log(`[OpenAIStreaming] Connecting WebSocket (model=${model}, attempt=${this.reconnectAttempts + 1})...`);
 
         // streamingStttWsOptions: IPv4-only DNS + 15s handshake cap (dnsHelpers.ts).
@@ -400,8 +499,11 @@ export class OpenAIStreamingSTT extends EventEmitter {
         this.connectionTimeoutTimer = setTimeout(() => {
             console.warn(`[OpenAIStreaming] WebSocket connection timed out after 10s (attempt=${this.reconnectAttempts + 1})`);
             if (this.ws) {
-                this.ws.removeAllListeners();
-                this.ws.close();
+                // safeDetachAndClose (F-201): the socket is CONNECTING here by
+                // construction (this timer is cleared in 'open'), and a bare
+                // strip-then-close turns ws's abort error into an
+                // uncaughtException → irreversible emergencyCloseDatabase.
+                safeDetachAndClose(this.ws);
                 this.ws = null;
                 this.isConnecting = false;
                 this._handleWsClose(1006, Buffer.from('Connection Timeout'));
@@ -425,47 +527,17 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 // isConnecting — _handleWsClose will also clear it, but the
                 // symmetry guards against a refactor that breaks one path.
                 if (this.ws) {
-                    this.ws.removeAllListeners();
-                    this.ws.close();
+                    // safeDetachAndClose (F-201): socket is OPEN here, but a
+                    // socket error during the close handshake would also
+                    // escape a listener-less emitter.
+                    safeDetachAndClose(this.ws);
                     this.ws = null;
                     this.isConnecting = false;
                     this._handleWsClose(1008, Buffer.from('Session Setup Timeout'));
                 }
             }, 5_000);
 
-            // Configure the transcription session
-            // 'auto' key → empty string so Whisper/gpt-4o-transcribe auto-detects the language
-            const lang = (this.languageKey && this.languageKey !== 'auto')
-                ? (RECOGNITION_LANGUAGES[this.languageKey]?.iso639 ?? '')
-                : '';
-
-            const transcription: { model: string; language?: string } = { model };
-            if (lang) transcription.language = lang;
-
-            this.ws!.send(JSON.stringify({
-                type: 'session.update',
-                session: {
-                    type: 'transcription',
-                    audio: {
-                        input: {
-                            format: {
-                                type: 'audio/pcm',
-                                rate: WS_SAMPLE_RATE,
-                            },
-                            transcription,
-                            noise_reduction: { type: 'near_field' },
-                            turn_detection: {
-                                type:                'server_vad',
-                                threshold:           0.5,
-                                prefix_padding_ms:   300,
-                                // 1000ms reduces micro-turns that fragment one sentence into
-                                // many word-sized completed events (overlay queue rows).
-                                silence_duration_ms: 1000,
-                            },
-                        },
-                    },
-                },
-            }));
+            this.ws!.send(JSON.stringify(this._buildSessionUpdate(model)));
         });
 
         this.ws.on('message', (raw: WebSocket.Data) => {
@@ -496,6 +568,58 @@ export class OpenAIStreamingSTT extends EventEmitter {
         this.ws.on('close', (code: number, reason: Buffer) => {
             this._handleWsClose(code, reason);
         });
+    }
+
+    /** The session.update sent on open, per model (the live model's shape differs). */
+    private _buildSessionUpdate(model: WsModel): Record<string, unknown> {
+        // Configure the transcription session
+        // 'auto' key → empty string so Whisper/gpt-4o-transcribe auto-detects the language
+        const lang = (this.languageKey && this.languageKey !== 'auto')
+            ? (RECOGNITION_LANGUAGES[this.languageKey]?.iso639 ?? '')
+            : '';
+
+        const live = model === LIVE_WS_MODEL;
+        const transcription: { model: string; language?: string; languages?: string[]; delay?: string } = { model };
+        if (live) {
+            // The live model takes `languages` (a list) and `delay`; the
+            // documented example is exactly this shape.
+            transcription.delay = OPENAI_LIVE_TRANSCRIBE_DELAY;
+            if (lang) transcription.languages = [lang];
+        } else if (lang) {
+            transcription.language = lang;
+        }
+
+        return {
+            type: 'session.update',
+            session: {
+                type: 'transcription',
+                audio: {
+                    input: {
+                        format: {
+                            type: 'audio/pcm',
+                            rate: WS_SAMPLE_RATE,
+                        },
+                        transcription,
+                        // Live model: turn_detection MUST be null ("doesn't
+                        // support server_vad or semantic_vad"), and
+                        // noise_reduction is left out — the documented live
+                        // session carries neither, and an unknown field there
+                        // would cost the whole session, not just the feature.
+                        ...(live ? { turn_detection: null } : {
+                            noise_reduction: { type: 'near_field' },
+                            turn_detection: {
+                                type:                'server_vad',
+                                threshold:           0.5,
+                                prefix_padding_ms:   300,
+                                // 1000ms reduces micro-turns that fragment one sentence into
+                                // many word-sized completed events (overlay queue rows).
+                                silence_duration_ms: 1000,
+                            },
+                        }),
+                    },
+                },
+            },
+        };
     }
 
     private _handleWsClose(code: number, reason: Buffer): void {
@@ -562,6 +686,11 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 break;
 
             case 'conversation.item.input_audio_transcription.delta': {
+                if (this._isLiveModel()) {
+                    const preview = this.liveItems.onDelta(msg.item_id, msg.delta ?? '');
+                    if (preview) this._emitTranscript(preview, false);
+                    break;
+                }
                 const partial = this.turnCoalescer.onDelta(msg.delta ?? '');
                 if (partial) {
                     this._emitTranscript(partial, false);
@@ -570,8 +699,24 @@ export class OpenAIStreamingSTT extends EventEmitter {
             }
 
             case 'conversation.item.input_audio_transcription.completed': {
+                if (this._isLiveModel()) {
+                    // No server VAD on the live model: the completed item IS the
+                    // turn's final, and the turn's end is the endpoint.
+                    const finalText = this.liveItems.onCompleted(msg.item_id, msg.transcript ?? '');
+                    if (finalText) this._emitTranscript(finalText, true);
+                    const stillPending = this.liveItems.preview();
+                    if (stillPending) this._emitTranscript(stillPending, false);
+                    try { this.emit('endpoint', { type: 'utterance_end' }); } catch { /* never break the socket */ }
+                    break;
+                }
                 const preview = this.turnCoalescer.onCompleted(msg.transcript ?? '');
-                if (preview) {
+                // speech_stopped came first (it is what commits the audio), so
+                // this completed IS the stopped turn's final — see
+                // OpenAITranscriptTurnCoalescer "ORDER".
+                const awaited = this.turnCoalescer.takeAwaitedFinal();
+                if (awaited) {
+                    this._emitTranscript(awaited, true);
+                } else if (preview) {
                     this._emitTranscript(preview, false);
                 }
                 break;
@@ -615,6 +760,7 @@ export class OpenAIStreamingSTT extends EventEmitter {
             // applied our requested config — log only, no behavior change required.
             case 'session.updated':
             case 'transcription_session.updated':
+                this.sessionConfigAcked = true;
                 console.log('[OpenAIStreaming] Session config applied by server');
                 break;
 
@@ -634,6 +780,8 @@ export class OpenAIStreamingSTT extends EventEmitter {
                     console.log(`[OpenAIStreaming] Final transcript received`, { length: finalText.length });
                     this._emitTranscript(finalText, true);
                 }
+                // Auto Answer V3 endpoint normalization (additive): server VAD end.
+                try { this.emit('endpoint', { type: 'utterance_end' }); } catch { /* never break the socket */ }
                 break;
             }
             case 'input_audio_buffer.committed':
@@ -647,6 +795,22 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 // log or propagate the secret. Mirrors the STT key scrubbing posture
                 // from the May 24 telemetry change.
                 const errMsg = OpenAIStreamingSTT._scrubBearerTokens(rawErrMsg);
+                if (this._isLiveModel() && !this.sessionConfigAcked &&
+                    /model|transcription|delay|turn_detection|languages/i.test(`${msg.error?.param ?? ''} ${rawErrMsg}`)) {
+                    // The session.update itself was refused on the live model
+                    // (no access on this account, or a proxy that predates it).
+                    // Not a user-facing STT failure: step down to the server-VAD
+                    // model and remember, so later meetings start there.
+                    console.warn(`[OpenAIStreaming] ${LIVE_WS_MODEL} rejected (${errMsg}) — using gpt-4o-transcribe`);
+                    OpenAIStreamingSTT.liveModelRejected = true;
+                    this.wsModelIndex = WS_MODELS.indexOf('gpt-4o-transcribe');
+                    this.wsFailures = 0;
+                    this.reconnectAttempts = 0;
+                    this.liveItems.reset();
+                    this._closeWs(false);
+                    this._connectWs();
+                    break;
+                }
                 console.error(`[OpenAIStreaming] Server error: ${errMsg}`);
                 this.emit('error', new Error(errMsg));
                 break;
@@ -691,6 +855,12 @@ export class OpenAIStreamingSTT extends EventEmitter {
     private _sendWsAudioChunk(pcmChunk: Buffer): void {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
+        // The native keepalive is bit-exact zeros; anything else is audio worth
+        // committing (live model). Short-circuits once true.
+        if (!this.speechSinceCommit && !OpenAIStreamingSTT._isAllZero(pcmChunk)) {
+            this.speechSinceCommit = true;
+        }
+
         // Downsample if necessary (e.g. 48kHz → 24kHz for Realtime API)
         const pcm16 = this._resamplePcm16(pcmChunk, WS_SAMPLE_RATE);
 
@@ -700,29 +870,56 @@ export class OpenAIStreamingSTT extends EventEmitter {
         this.pcmAccumulatorLen += inputS16.length;
 
         if (this.pcmAccumulatorLen >= SEND_THRESHOLD_SAMPLES) {
-            // Combine accumulated chunks
-            const combined = new Int16Array(this.pcmAccumulatorLen);
-            let offset = 0;
-            for (const arr of this.pcmAccumulator) {
-                combined.set(arr, offset);
-                offset += arr.length;
-            }
-
-            // Reset accumulator
-            this.pcmAccumulator = [];
-            this.pcmAccumulatorLen = 0;
-
-            const base64 = Buffer.from(combined.buffer).toString('base64');
-
-            try {
-                this.ws.send(JSON.stringify({
-                    type:  'input_audio_buffer.append',
-                    audio: base64,
-                }));
-            } catch (err) {
-                console.warn('[OpenAIStreaming] WS send failed:', err);
-            }
+            this._sendAccumulated();
+            if (this._isLiveModel()) this._liveBufferHousekeeping();
         }
+    }
+
+    /** Send whatever is accumulated as one input_audio_buffer.append. */
+    private _sendAccumulated(): void {
+        if (this.pcmAccumulatorLen === 0 || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        // Combine accumulated chunks
+        const combined = new Int16Array(this.pcmAccumulatorLen);
+        let offset = 0;
+        for (const arr of this.pcmAccumulator) {
+            combined.set(arr, offset);
+            offset += arr.length;
+        }
+
+        // Reset accumulator
+        this.pcmAccumulator = [];
+        this.pcmAccumulatorLen = 0;
+
+        const base64 = Buffer.from(combined.buffer).toString('base64');
+
+        try {
+            this.ws.send(JSON.stringify({
+                type:  'input_audio_buffer.append',
+                audio: base64,
+            }));
+            this.appendedSinceCommitSamples += combined.length;
+        } catch (err) {
+            console.warn('[OpenAIStreaming] WS send failed:', err);
+        }
+    }
+
+    /**
+     * Live model only — with no server VAD nothing ever drains the input
+     * buffer on the server's side. A monologue with no local speech end still
+     * gets a final every 30 s; 30 s of nothing but keepalive zeros is cleared.
+     */
+    private _liveBufferHousekeeping(): void {
+        if (this.speechSinceCommit && this.appendedSinceCommitSamples >= LIVE_MAX_UNCOMMITTED_SAMPLES) {
+            this._commitLiveTurn();
+        } else if (!this.speechSinceCommit && this.appendedSinceCommitSamples >= LIVE_SILENCE_CLEAR_SAMPLES) {
+            try { this.ws?.send(JSON.stringify({ type: 'input_audio_buffer.clear' })); } catch { /* next tick retries */ }
+            this.appendedSinceCommitSamples = 0;
+        }
+    }
+
+    private static _isAllZero(buf: Buffer): boolean {
+        for (let i = 0; i < buf.length; i++) if (buf[i] !== 0) return false;
+        return true;
     }
 
     private _closeWs(graceful: boolean): void {
@@ -763,8 +960,10 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 console.warn('[OpenAIStreaming][WS] Graceful commit failed:', err);
             }
         }
-        this.ws.removeAllListeners();
-        this.ws.close();
+        // safeDetachAndClose (F-201): reachable mid-handshake from
+        // setRecognitionLanguage / setApiKey / stop() — a CONNECTING socket
+        // here would otherwise escalate the abort error to uncaughtException.
+        safeDetachAndClose(this.ws);
         this.ws = null;
         this.isSessionReady = false;
         this.isConnecting = false; // Allow immediate reconnect (e.g. language change)

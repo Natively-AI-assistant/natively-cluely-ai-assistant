@@ -20,8 +20,7 @@
  *     CUSAT" maps the word "role" → `experience`, so leadership stayed hidden and
  *     the model saw only full-time roles → denied the org.
  *
- * Fixes (source-pinned, NOT a classification-pattern hack — the anti-thrash rule
- * forbids that):
+ * Fixes:
  *  - ProfileCardTemplates: new §6b leadership card section (candidate_leadership).
  *  - KnowledgeOrchestrator.buildStructuredCategoryPack: leadership also emits
  *    when the question NAMES a leadership org (dynamic — org strings come from
@@ -29,6 +28,21 @@
  *  - KnowledgeOrchestrator.buildExperienceFallbackPack: seeds leadership into the
  *    zero-node fallback so org-named questions with no category keyword still
  *    ground.
+ *
+ * Phase 6 Slice 3/4 prep (context-rebuild, 2026-07-25): the two
+ * `KnowledgeOrchestrator.ts`-source-pinned describe blocks that used to live
+ * in this file (testing buildStructuredCategoryPack/buildExperienceFallbackPack/
+ * namesLeadershipOrg) were converted to REAL behavioral tests against a live
+ * processQuestion() call — see
+ * LeadershipGroundingFixBehavioral2026_07_25.test.mjs. That conversion was a
+ * migration-plan pre-requisite: Slice 4 rewrites exactly the injection-
+ * decision logic those assertions pinned, and a source-pinned assertion
+ * would have broken on line/text changes regardless of whether the
+ * refactored behavior was correct. The 3 tests below (main-repo files
+ * ProfileCardTemplates.ts/types.ts/OkfMarkdownExporter.ts, not the premium
+ * submodule) are NOT touched by Slice 4 and remain source-pinned — one of
+ * them (candidate_leadership's KnowledgeCardType union membership) has no
+ * runtime equivalent at all, since TS union types don't exist at runtime.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -37,8 +51,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const orchSrc = readFileSync(
-  path.resolve(__dirname, '../../../premium/electron/knowledge/KnowledgeOrchestrator.ts'), 'utf8');
 const cardSrc = readFileSync(
   path.resolve(__dirname, '../../services/knowledge/ProfileCardTemplates.ts'), 'utf8');
 const typesSrc = readFileSync(
@@ -70,32 +82,8 @@ describe('RC6: leadership[] is carded at ingestion', () => {
   });
 });
 
-describe('RC6: the deterministic runtime pack surfaces leadership for org-named questions', () => {
-  test('buildStructuredCategoryPack emits leadership when the question names the org, not only on the "leadership" keyword', () => {
-    const fn = orchSrc.slice(
-      orchSrc.indexOf('private buildStructuredCategoryPack'),
-      orchSrc.indexOf('private buildStructuredCategoryPack') + 8000);
-    // The gate must be: wants('leadership') OR the question names a leadership org.
-    assert.match(fn, /namesLeadershipOrg/);
-    assert.match(fn, /if \(!wants\('leadership'\) && !namesLeadershipOrg\(/);
-  });
-
-  test('org matching is dynamic (reads org strings off the resume, not a hardcoded SEDS/TEDx pattern)', () => {
-    // Scope to the namesLeadershipOrg closure body — the actual matcher.
-    const start = orchSrc.indexOf('const namesLeadershipOrg');
-    const fn = orchSrc.slice(start, start + 700);
-    // no hardcoded org names in the matcher itself
-    assert.doesNotMatch(fn, /SEDS|TEDx/);
-    // matches on the resume-provided org string / its distinctive tokens
-    assert.match(fn, /qLower\.includes\(o\)/);
-    assert.match(fn, /tokens\.some\(\(t\) => qLower\.includes\(t\)\)/);
-  });
-
-  test('buildExperienceFallbackPack seeds leadership so a zero-keyword org question still grounds', () => {
-    const fn = orchSrc.slice(
-      orchSrc.indexOf('private buildExperienceFallbackPack'),
-      orchSrc.indexOf('private buildStructuredCategoryPack'));
-    assert.match(fn, /Array\.isArray\(resume\.leadership\)/);
-    assert.match(fn, /category: 'leadership'/);
-  });
-});
+// The former "RC6: the deterministic runtime pack surfaces leadership for
+// org-named questions" describe block (3 tests, source-pinning
+// KnowledgeOrchestrator.ts's buildStructuredCategoryPack/
+// buildExperienceFallbackPack/namesLeadershipOrg) was converted to real
+// behavioral tests — see LeadershipGroundingFixBehavioral2026_07_25.test.mjs.

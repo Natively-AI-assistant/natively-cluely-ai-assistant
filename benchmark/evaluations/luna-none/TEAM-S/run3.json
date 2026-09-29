@@ -1,0 +1,162 @@
+{
+ "blind_id": "S-58ab08a5",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 36699,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 9904,
+  "candidatesTokenCount": 788,
+  "totalTokenCount": 15088,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 9904
+   }
+  ],
+  "thoughtsTokenCount": 4396,
+  "serviceTier": "standard"
+ },
+ "fact_count": 29,
+ "evaluation": {
+  "factual_accuracy": 9,
+  "important_information_retention": 9,
+  "hallucination_control": 10,
+  "action_item_retention": 9,
+  "decision_retention": 10,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 9,
+  "entity_retention": 9,
+  "timeline_accuracy": 9,
+  "conclusion_accuracy": 9,
+  "structure": 7,
+  "conciseness": 3,
+  "readability": 5,
+  "overall_summary_quality": 6,
+  "critical_errors": [],
+  "missing_important_information": [],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "partial"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "partial"
+   },
+   {
+    "id": "F24",
+    "status": "partial"
+   },
+   {
+    "id": "F25",
+    "status": "missing"
+   },
+   {
+    "id": "F26",
+    "status": "missing"
+   },
+   {
+    "id": "F27",
+    "status": "partial"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "partial"
+   }
+  ],
+  "rationale": "The notes capture almost all critical and important information accurately, with no hallucinations or superseded values reported as final. However, the notes suffer from severe repetition. Exact sentences (e.g., regarding MOB-1423, the branch cut timing, and the MOB-1440 hotfix decision) are copy-pasted across the Overview, Summary, Progress, and Decisions sections. This significantly degrades conciseness and readability."
+ }
+}

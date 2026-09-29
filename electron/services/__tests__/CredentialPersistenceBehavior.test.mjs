@@ -13,6 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import os from 'node:os';
 import Module from 'node:module';
@@ -20,7 +21,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const COMPILED = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   '../../../dist-electron/electron/services/CredentialsManager.js',
 );
 
@@ -70,6 +71,13 @@ function freshManager(env) {
   const mod = require(COMPILED);
   // Reset the singleton in case the class object was cached elsewhere.
   if (mod.CredentialsManager.instance) mod.CredentialsManager.instance = undefined;
+  // getInstance() anchors the singleton on globalThis, not on the static field —
+  // 22 dist bundles each carry a copy of the class, and per-bundle instances meant
+  // a revoked key kept being served from a stale copy. Clearing only the static
+  // field leaves getInstance() returning the FIRST env's manager, which still holds
+  // that env's CREDENTIALS_PATH/FALLBACK_PATH and safeStorage mock — so every
+  // "restart" after the first silently read and wrote the first test's directory.
+  delete globalThis.__nativelyCredentialsManagerV1__;
   const cm = mod.CredentialsManager.getInstance();
   cm.init();
   return cm;
@@ -125,16 +133,13 @@ test('disk-write failure is reported (success=false), never a false "Saved"', ()
 
   const cm = freshManager(env);
 
-  // The on-disk paths were fixed (from this temp dir) at module load, so to force a
-  // real write failure we make the directory itself unwritable. The fallback (and
-  // its salt) write then throws EACCES inside saveCredentials → must return false.
-  fs.chmodSync(env.userData, 0o500); // r-x, no write for owner
-  try {
-    const persisted = cm.setDeepgramApiKey(SECRET);
-    assert.equal(persisted, false, 'a failed disk write must return false, not a false success');
-  } finally {
-    fs.chmodSync(env.userData, 0o700); // restore so temp cleanup works
-  }
+  // Warm up once so the per-install salt exists, then make the atomic temp-file
+  // path a directory. writeFileSync must reject that on every supported OS;
+  // chmod-based fault injection is ineffective on Windows.
+  assert.equal(cm.setSonioxApiKey('warmup'), true);
+  fs.mkdirSync(path.join(env.userData, 'credentials.fallback.enc.tmp'));
+  const persisted = cm.setDeepgramApiKey(SECRET);
+  assert.equal(persisted, false, 'a failed disk write must return false, not a false success');
 });
 
 test('keyring becomes available → fallback migrates up and is deleted', () => {
@@ -284,14 +289,12 @@ test('setSttProvider returns false when the disk write fails (M2 contract — mi
 
   const cm = freshManager(env);
 
-  // Force a real write failure (EACCES) — the setter must report it.
-  fs.chmodSync(env.userData, 0o500);
-  try {
-    const persisted = cm.setSttProvider('deepgram');
-    assert.equal(persisted, false, 'setSttProvider must return false on write failure');
-  } finally {
-    fs.chmodSync(env.userData, 0o700);
-  }
+  // Use a directory at the atomic temp-file path for a deterministic failure
+  // on Windows, macOS, and Linux.
+  assert.equal(cm.setSttProvider('soniox'), true);
+  fs.mkdirSync(path.join(env.userData, 'credentials.fallback.enc.tmp'));
+  const persisted = cm.setSttProvider('deepgram');
+  assert.equal(persisted, false, 'setSttProvider must return false on write failure');
 });
 
 test('getStoredSttKeyForProvider dispatches the persisted key by provider (P1 contract)', () => {
@@ -313,7 +316,7 @@ test('process.platform is NOT in the fallback key material (P5 hardening)', () =
   // process.platform was removed from the fallback key derivation. This pins
   // the comment block at CredentialsManager.ts:822-847 against future regressions.
   const src = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../CredentialsManager.ts'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../CredentialsManager.ts'),
     'utf8',
   );
   // Locate the getFallbackKey body — everything from "private getFallbackKey"
@@ -327,7 +330,7 @@ test('process.platform is NOT in the fallback key material (P5 hardening)', () =
 
 test('STT key setter source normalizes empty string to undefined (P2 source guard)', () => {
   const src = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../CredentialsManager.ts'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../CredentialsManager.ts'),
     'utf8',
   );
   for (const { name, setter } of STT_KEY_SETTERS) {
@@ -346,7 +349,7 @@ test('STT key setter source normalizes empty string to undefined (P2 source guar
 
 test('LLM key setter source normalizes empty string to undefined (M-2 follow-up — matches STT pattern)', () => {
   const src = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../CredentialsManager.ts'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../CredentialsManager.ts'),
     'utf8',
   );
   // The 4 LLM key setters that originally stored `''` verbatim. setNativelyApiKey
@@ -379,34 +382,42 @@ test('LLM key setters: empty-string resave clears the stored key (M-2 behavioral
   assert.equal(cm2.getGeminiApiKey(), undefined, 'empty resave must clear the persisted LLM key');
 });
 
-test('local-whisper is in the set-stt-provider IPC + preload + types unions (P4 contract)', () => {
+test('local providers are in the set-stt-provider IPC + preload + types unions (P4 contract)', () => {
   const ipc = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../ipcHandlers.ts'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../ipcHandlers.ts'),
     'utf8',
   );
-  // The handler signature must include 'local-whisper'.
+  // The handler signature must include every local provider.
   const handlerStart = ipc.indexOf("safeHandle(\n    'set-stt-provider'");
   assert.ok(handlerStart >= 0, 'set-stt-provider IPC handler must exist');
   const handlerEnd = ipc.indexOf("safeHandle(", handlerStart + 1);
   const handlerBlock = handlerEnd > handlerStart ? ipc.slice(handlerStart, handlerEnd) : ipc.slice(handlerStart, handlerStart + 1500);
   assert.match(handlerBlock, /'local-whisper'/, 'set-stt-provider IPC handler union must include local-whisper');
+  assert.match(handlerBlock, /'apple-speech'/, 'set-stt-provider IPC handler union must include apple-speech');
 
   const preload = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../preload.ts'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../preload.ts'),
     'utf8',
   );
   assert.match(preload, /'local-whisper'/, 'preload setSttProvider union must include local-whisper');
+  assert.match(preload, /'apple-speech'/, 'preload setSttProvider union must include apple-speech');
 
   const types = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../src/types/electron.d.ts'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../src/types/electron.d.ts'),
     'utf8',
   );
   assert.match(types, /setSttProvider[^]*'local-whisper'/, 'electron.d.ts setSttProvider union must include local-whisper');
+  assert.match(types, /setSttProvider[^]*'apple-speech'/, 'electron.d.ts setSttProvider union must include apple-speech');
+  const storedCredentialsTypeStart = types.indexOf('getStoredCredentials:');
+  assert.ok(storedCredentialsTypeStart >= 0, 'electron.d.ts getStoredCredentials type must exist');
+  const storedCredentialsType = types.slice(storedCredentialsTypeStart, storedCredentialsTypeStart + 3500);
+  assert.match(storedCredentialsType, /sttProvider:[^}]*'local-whisper'/, 'stored provider union must include local-whisper');
+  assert.match(storedCredentialsType, /sttProvider:[^}]*'apple-speech'/, 'stored provider union must include apple-speech');
 });
 
 test('SettingsOverlay sends USE_STORED sentinel when input empty but key on disk (P1 renderer guard)', () => {
   const src = fs.readFileSync(
-    path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../src/components/SettingsOverlay.tsx'),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../src/components/SettingsOverlay.tsx'),
     'utf8',
   );
   // The sentinel constant must appear in the renderer (it matches what the IPC resolves).
@@ -471,7 +482,7 @@ test('PR #370: keyring-throws save leaves NO stale credentials.enc on disk', () 
     'a successful fallback save must unlink any pre-existing stale credentials.enc');
 });
 
-test('PR #370: loadCredentials detects stale-keyring state via mtime and unlinks before read', () => {
+test('R-10: a newer fallback is PREFERRED but never unlinks the keyring (was PR #370 unlink)', () => {
   const env = makeEnv();
 
   // Pre-populate BOTH stores with mtimes that make the fallback strictly newer
@@ -489,13 +500,23 @@ test('PR #370: loadCredentials detects stale-keyring state via mtime and unlinks
   // Keyring reports available (the normal macOS/healthy-Windows state).
   env.state.keyringAvailable = true;
 
-  // Cold-start: loadCredentials must detect the mtime inversion and unlink the
-  // stale keyring BEFORE attempting to decrypt it (otherwise it would either
-  // corrupt the credential set or shadow the fallback).
-  freshManager(env);
+  // CONTRACT CHANGED 2026-08-19 (audit R-10). PR #370 unlinked the keyring here.
+  // That is a data-loss bug: mtime cannot tell "a fallback save whose cleanup
+  // failed" from "a whole-profile restore dropped an OLD fallback beside CURRENT
+  // keyring credentials" (Time Machine, Migration Assistant, synced AppData). In
+  // the restore case the unlink silently destroyed the user's live API keys, with
+  // no error. Provenance does not rescue it either — a whole-profile restore
+  // carries the provenance record along with the blobs.
+  //
+  // Note this fixture's own fallback is 'garbage-encrypted-blob', i.e. it does
+  // NOT decrypt. Unlinking the keyring therefore left the user with nothing at
+  // all. The keyring must survive, and its contents must load.
+  const mgr = freshManager(env);
 
-  assert.ok(!fs.existsSync(keyringPath),
-    'a keyring older than the fallback must be unlinked before load attempts to decrypt it');
+  assert.ok(fs.existsSync(keyringPath),
+    'the keyring must be PRESERVED — an undecryptable fallback is no evidence it is stale');
+  assert.equal(mgr.getAllCredentials().deepgramApiKey, 'OLD-STALE-VALUE',
+    'an unreadable fallback must fall back to the keyring rather than leaving the user empty');
 });
 
 test('PR #370: loadCredentials does NOT discard a fresh keyring when fallback is older (legitimate round-trip)', () => {

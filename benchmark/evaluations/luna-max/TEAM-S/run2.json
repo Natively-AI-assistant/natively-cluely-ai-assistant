@@ -1,0 +1,164 @@
+{
+ "blind_id": "S-508f971d",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 35995,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 10786,
+  "candidatesTokenCount": 861,
+  "totalTokenCount": 15860,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 10786
+   }
+  ],
+  "thoughtsTokenCount": 4213,
+  "serviceTier": "standard"
+ },
+ "fact_count": 29,
+ "evaluation": {
+  "factual_accuracy": 10,
+  "important_information_retention": 10,
+  "hallucination_control": 10,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 10,
+  "entity_retention": 10,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 10,
+  "structure": 6,
+  "conciseness": 2,
+  "readability": 5,
+  "overall_summary_quality": 6,
+  "critical_errors": [],
+  "missing_important_information": [],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Cherry-picking lost the analytics fix in 4.10"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "partial"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "partial"
+   },
+   {
+    "id": "F25",
+    "status": "missing"
+   },
+   {
+    "id": "F26",
+    "status": "missing"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture the transcript's facts with exceptional accuracy, retaining all critical and important information, action items, and decisions. Speaker attribution, numeric accuracy, and timeline accuracy are flawless. However, the notes suffer from severe repetition, restating the same points (e.g., the branch cut moving to Thursday, the deferred hotfix, QA rerunning on build 321) up to five or six times across the Overview, Summary, Decisions, Dependencies, Risks, and Follow-up draft sections. This extreme bloat significantly impacts conciseness and readability. Additionally, a minor distractor regarding the 4.10 analytics fix was included."
+ }
+}

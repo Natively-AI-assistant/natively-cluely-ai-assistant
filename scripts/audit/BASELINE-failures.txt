@@ -1,0 +1,172 @@
+✖ 10. SettingsOverlay.tsx binds the level bar width to `systemAudioLevel`
+✖ 8. SettingsOverlay.tsx subscribes to onAudioTestSystemLevel AND onAudioTestSystemError
+✖ 9. SettingsOverlay.tsx renders the literal "System Audio Level" label
+✖ A.10: pick="none" for gpt-5.4 → wire carries -c model_reasoning_effort="none"
+✖ A.1: happy path gpt-5.4 + xhigh → wire carries -c model_reasoning_effort="xhigh"
+✖ A.2: gpt-5.3-codex + xhigh → resolver downgrades to low on the wire
+✖ A.3: 1.5s pre-token delay survives a 2.5s budget (proves 30s local deadline, not 7s cloud)
+✖ A.4: ENOENT on stale path → resolvePathOrAutoDetect falls back to auto-detect
+✖ A.5: partial-line chunk boundary recovers full text via lineBuffer
+✖ A.6: codex error event surfaces the REAL message in run() and stream() (no canned fallback)
+✖ A.7: timeoutMs=500 fires near 500ms (not earlier, not later)
+✖ A.8: AbortSignal at 100ms aborts the in-flight spawn within 2s
+✖ A.9: --image <path> flag repeated for each image in imagePaths
+✖ A: 8s cold-start mock survives a 60_000ms service timeout (Codex service deadline is independent of live-deadline)
+✖ AIProvidersSettings credential synchronization
+✖ AppState sends model-changed only to current model listeners
+✖ B5: dev-mode TCC bypass is opt-in (NATIVELY_DEV_BYPASS_SCREEN_TCC=1) only
+✖ B: --image <path> flag is emitted for EACH image in imagePaths
+✖ BUG-MODE-BLEEDING: Async post-call summary mode snapshot
+✖ BrainstormLLM: every streamChat() call passes ignoreKnowledgeMode=true
+✖ Bug 1: internal action LLMs must not go through the knowledge-mode intent gate
+✖ C: real codex error message reaches the caller (not the canned fallback)
+✖ ClarifyLLM: every streamChat() call passes ignoreKnowledgeMode=true
+✖ Codex active-model and fast-mode options require enabled config AND signed-in OAuth
+✖ CodexCliService: AbortSignal + deadline both propagate to the fetch + reader
+✖ Context OS — multi-family coordinator admission predicate (2026-07-18)
+✖ D: full agent_message.delta stream yields the concatenated text via stream()
+✖ FALLBACK fall-through: an undecryptable keyring file no longer strands a readable fallback
+✖ FIX-003: ModeHybridRetriever batches chunk embeddings
+✖ FIX: manual-chat and WTA short-circuits prefer the specific legacy message over the generic kernel one
+✖ G.1: gpt-5.4 + xhigh → wire carries -c model_reasoning_effort="xhigh" (no downgrade for 5.4)
+✖ G.2: gpt-5.3-codex + xhigh → resolver downgrades to "low" on the wire (smoking-gun)
+✖ G.3: gpt-5-codex + none → resolver downgrades to "low" (codex variants reject "none")
+✖ HindsightManager.getHindsightConfig
+✖ INCIDENT REGRESSION: a mode created, THEN given a prompt + reference file, migrates correctly (not frozen at the empty-mode default)
+✖ IPC and meeting summary logs avoid answer and LLM response snippets
+✖ IPC handler captures pdf-parse data.pages array
+✖ IPC handler captures pdf-parse data.total as pdfReportedPageCount
+✖ IPC handler counts extracted pages (pages with non-empty text)
+✖ IPC handler threads pageCount + extractedPageCount through addReferenceFile
+✖ Issue #303: skill picker dropdown in overlay chat input
+✖ KnowledgeOrchestrator ingestion uses producer embedding space metadata
+✖ KnowledgeOrchestrator.resolveQueryEmbedder space-gating (real compiled method)
+✖ LocalEmbeddingProvider — real bundled model, real Worker (no mocks)
+✖ LocalFallbackPreflight — dev mode gating (2026-07-07)
+✖ LocalReranker.isCached() resolves true against a SIMULATED packaged-build resourcesPath layout
+✖ ModeContextRetriever includes reference grounding guard with retrieved snippets
+✖ ModesManager.getOrMigrateSourceContract — create-then-update migration timing bug (2026-07-11)
+✖ NativelyInterface.tsx renders a Repair Permissions button gated by isMac
+✖ PERMANENT: 3 distinct cold-start decrypt failures escalate to needsCredentialReentry
+✖ PR #370: keyring AVAILABLE but encryptString throws → save falls through to fallback (returns true, NOT false)
+✖ PR #370: loadCredentials detects stale-keyring state via mtime and unlinks before read
+✖ PR #370: loadCredentials does NOT discard a fresh keyring when fallback is older (legitimate round-trip)
+✖ Phase 1: local cross-encoder rerank escalation (wiring)
+✖ Phase 4 — Hybrid RAG default in WhatToAnswerLLM
+✖ Phase 6 — TelemetryService production emission sites
+✖ Profile Intelligence renderer: click-time Pro gate
+✖ RE-ENTER heals: saving a real key during permanent-fail persists and clears the banner
+✖ RE-RUN (simulated relaunch) is idempotent: no double-application, no clobber
+✖ REAL v0→v16 migration on a persisted file DB (mandate #2)
+✖ REPRO (side door 2): PhoneMirror ext-token mint during an unreadable session must not clobber the store
+✖ REPRO (side door): a single-field auto-populate during an unreadable session must not clobber the store
+✖ REPRO: a save during a keychain-decrypt-FAILED session must not permanently destroy the stored key
+✖ SessionTracker logs transcript and assistant message metadata without text snippets
+✖ SettingsOverlay renders a real do-not-save meetings control
+✖ TRANSIENT: ≤2 decrypt failures do NOT trigger re-entry, then a healthy launch recovers
+✖ UX4: audio test probes system audio in parallel with the mic
+✖ VERIFIED-HEALED: a recovery re-key KEEPS the fallback until a cold-start decrypt proves the keyring readable
+✖ WIRING (manual chat): the clarification short-circuit checks manualOwnership.shouldClarifyInsteadOfProfile before buildSourceClarification
+✖ WhatToAnswerLLM prefers async hybrid when method exists, falls back to sync
+✖ WhatToAnswerLLM: document-grounded custom mode fails closed when reference-files scope is denied before provider dispatch
+✖ a PDF parse timeout cancels the underlying parse and never emits an unhandled rejection
+✖ a call site that omits the `allowed` parameter fails tsc --noEmit with the expected diagnostic
+✖ a decrypt failure does NOT destroy a recoverable fallback (no migrate of empty creds)
+✖ a document-grounded custom-mode answer with scaffold-shaped headings never triggers this guard's repair stream (doc-grounded exclusion)
+✖ a free-form no-content hallucination with no shared vocabulary is regenerated into a real answer
+✖ a genuinely empty transcript keeps the legitimate "nothing captured" claim untouched
+✖ a long real answer past the char cap is still classified without throwing
+✖ a long real answer whose specific content lands only in the TAIL (past the head-only cap) is still recognized as relevant
+✖ a newer WTA request aborts the prior provider signal and suppresses its final result
+✖ all 7 known-good real answers are never flagged (zero false positives — the critical property)
+✖ answer-relevance guard — flag ON (opt-in): full regeneration behavior
+✖ at least 8 of 9 known-bad no-content hallucinations are flagged (one accepted miss, see threshold comment)
+✖ both upload cards render a pi-upload-pill__pro-badge for non-Pro users
+✖ calls getEmbeddings(texts[]) once for all chunks when the provider supports it
+✖ calls parser.destroy() exactly once on a successful PDF parse
+✖ chatWithGemini: intro shortcut PASSES THROUGH even in lecture mode
+✖ checkAnswerRelevance — corpus regression pin (2026-07-19)
+✖ cloud→local fallback during ingest stamps saved nodes with local space, not pre-call active cloud space
+✖ coordinator throw → legacy path resets coordinatorGovernedProfileEvidence and manualContextOsGeneration
+✖ curl provider save handlers validate renderer payloads before persistence
+✖ data persists across a CLOSE+REOPEN of the file (not :memory:)
+✖ dev mode: preflight does NOT publish missing_required_asset for native-audio
+✖ disk-write failure is reported (success=false), never a false "Saved"
+✖ does not fall through session.created to transcription_session.created handler
+✖ electron/llm/__tests__/AnswerQualityJudge2026_06_08.test.mjs
+✖ electron/llm/__tests__/AnswerRelevanceCalibration2026_07_20.test.mjs
+✖ electron/services/__tests__/ZerofillDetectorPeakToPeak.test.mjs
+✖ embed() delegates to the actual worker_threads.Worker and produces normalized, semantically-sane vectors
+✖ embedBatch() batches multiple texts through the same worker round-trip
+✖ endMeeting clears the overlay AFTER hiding it (setWindowMode(launcher)), so the clear is off-screen
+✖ endMeeting sends session-reset to the overlay so its hidden tree is cleared before the next meeting
+✖ every call site that passes a `mac-` PermissionReason is gated on darwin
+✖ evidence-execution-repair: EvidenceResolver wiring identity (a524329 regression guard)
+✖ extracts real DOCX resume text via the mammoth branch
+✖ extracts real PDF resume text via the pdf-parse/pdfjs-dist branch
+✖ falls back to Promise.all(map(getEmbedding)) when pipeline lacks getEmbeddings
+✖ flag ON + allowRerank + low-confidence: reranker reorders selection
+✖ gemini-chat-stream handler supersedes only the current sender and passes signal to streamChat
+✖ generate-what-to-say IPC forwards promptInstruction option to IntelligenceManager
+✖ getStoredSttKeyForProvider dispatches the persisted key by provider (P1 contract)
+✖ governed turn missing immutable question fails closed without legacy retrieval or provider dispatch
+✖ governed turn: EvidenceResolver is constructed with a hybridRetriever wired to modesMgr.retrieveHybridRaw, not an orphaned ModeContextRetriever instance
+✖ governed turn: EvidenceResolver.resolve() is called EXACTLY ONCE, legacy retrieval is NEVER called
+✖ governed turn: resolver request carries the real turnId/contract/activeMode (wiring reaches the resolver with real data, not stubs)
+✖ inbound session.created (general-intent event) is inert on transcription session
+✖ initializeApp does not request a second single-instance lock
+✖ intelligence token batch flush cancels its pending setImmediate so trailing tokens cannot land after a final answer
+✖ ipcHandlers: Hindsight live recall is gated off for document-grounded turns under docGroundedStrictIsolation
+✖ ipcHandlers: defers first-paint on the doc-grounded lecture path to avoid the refusal flash
+✖ ipcHandlers: defines SYSTEM_REFUSAL_RE for the system own refusal phrase
+✖ ipcHandlers: strong-evidence = entity evidence OR matched high-signal entity OR tier; shouldRepair uses it directly
+✖ issue #252: Open Settings button does not unconditionally fire x-apple.systempreferences
+✖ job description upload button (calls profileUploadJD) gates at click via setIsPremiumModalOpen before profileSelectFile
+✖ keyring becomes available → fallback migrates up and is deleted
+✖ local-whisper-start-download IPC blocks download on macOS 12
+✖ main acquires the single-instance lock before native ABI recovery can rebuild or relaunch
+✖ model-changed call sites use the targeted helper
+✖ no fastQueryEmbedFn → returns embedFn directly
+✖ no source file repo-wide imports/calls assertNoAuthorityContradiction
+✖ numeral equivalence
+✖ observe-only relevance check must not block the answer pipeline
+✖ open-external IPC only allows known external destinations
+✖ parallel fallback: getEmbedding calls overlap (Promise.all) rather than serializing
+✖ preload and renderer type expose promptInstruction option on generateWhatToSay
+✖ processQuestionGated's third parameter is a REAL compile-time requirement
+✖ profile:delete clears both tiers via the transactional entrypoint
+✖ profile:delete-jd clears both tiers via the transactional entrypoint
+✖ race / late-arrival safety
+✖ renderer button calls window.electronAPI?.repairTccPermissions
+✖ reset aborts an in-flight WTA request without delivering a final answer
+✖ resolveMacScreenCaptureCapability calls isDevTccBypassEnabled() and has no bare !app.isPackaged early-return
+✖ resolver throws → governed turn refuses without legacy retrieval or provider dispatch
+✖ resources/models/Xenova/bge-reranker-base is actually present on disk and git-tracked
+✖ resume upload button (calls profileUploadResume) gates at click via setIsPremiumModalOpen before profileSelectFile
+✖ returns null when hindsightExplicitlyDisabled is set (user opted out)
+✖ runWhatShouldISay resolves while the detached classifier check is still pending
+✖ selectSkill sets inputValue to /skill-id with trailing space
+✖ sends transcription_session.update not session.update
+✖ setSttProvider returns false when the disk write fails (M2 contract — mirrors STT key guard)
+✖ stopMeeting snapshots active mode before session.reset() is called
+✖ streamChat declares an abortSignal local typed as AbortSignal
+✖ streamChat extracts trailing arg as AbortSignal via args[args.length - 1] and instanceof check
+✖ streamChat gates each yield with `if (abortSignal?.aborted) return;` BEFORE yielding
+✖ streamChat: custom CHAT_MODE_PROMPT still injects custom mode prompt and reference context
+✖ streamChat: document-grounded custom mode fails closed if reference-file scope is denied
+✖ streamChat: intro shortcut FIRES in looking-for-work mode (regression guard)
+✖ streamChat: intro shortcut PASSES THROUGH even in technical-interview mode
+✖ telemetry calls are wrapped in try/catch (must never break app)
+✖ the base transformation chain is preserved
+✖ the build bakes keychainGroupEntitled so telemetry can prove the entitlement shipped
+✖ the handler delegates to deleteProfileTransactional for jd, covering both tiers in one transaction
+✖ the handler delegates to deleteProfileTransactional for resume, covering both tiers in one transaction
+✖ the handler exists and is isolated correctly
+✖ the specific unambiguous hallucinations (no plausible real-answer reading) are always flagged
+✖ tokenizer.json, config.json, and the quantized onnx model all exist with non-zero size
+✖ top-level entitlements declare the exact keychain-access-group
+✖ unrecovered scaffold contamination fallback — bounded regeneration
+✖ uses GA input_audio_format field not beta audio.input.format
+✖ wasExistingStoreUnreadable() reports true ONLY during an undecryptable-store launch
+✖ wire format
+✖ with app.isPackaged=true and resourcesPath pointing at a copy mirroring extraResources' output layout, isCached() is true and rerank() actually runs (not a silent no-op)

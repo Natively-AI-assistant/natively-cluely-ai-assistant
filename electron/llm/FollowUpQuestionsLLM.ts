@@ -1,6 +1,7 @@
 import { LLMHelper } from "../LLMHelper";
 import { UNIVERSAL_FOLLOW_UP_QUESTIONS_PROMPT } from "./prompts";
 import { TINY_FOLLOW_UP_QUESTIONS_PROMPT } from "./tinyPrompts";
+import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
 
 export class FollowUpQuestionsLLM {
     private llmHelper: LLMHelper;
@@ -10,7 +11,8 @@ export class FollowUpQuestionsLLM {
     }
 
     private resolvePrompt(): string {
-        return this.llmHelper.getPromptTier() === 'tiny' ? TINY_FOLLOW_UP_QUESTIONS_PROMPT : UNIVERSAL_FOLLOW_UP_QUESTIONS_PROMPT;
+        return resolveV2SystemPrompt({ action: 'follow_up_questions', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()) })
+            ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_FOLLOW_UP_QUESTIONS_PROMPT : UNIVERSAL_FOLLOW_UP_QUESTIONS_PROMPT);
     }
 
     async generate(context: string): Promise<string> {

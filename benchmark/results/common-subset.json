@@ -1,0 +1,92 @@
+{
+ "conversations": [
+  "INT-M",
+  "INT-TECH-L",
+  "LECT-VL",
+  "REAL-LECT-VL",
+  "SALES-DISC-L",
+  "SALES-S",
+  "TEAM-S",
+  "TECH-DISC-L"
+ ],
+ "by_config": {
+  "ds-flash-prod": {
+   "runs": 24,
+   "judged": 24,
+   "fact_retention_weighted": 0.9288695464785027,
+   "fact_retention_critical": 0.9441768794942007,
+   "q_overall_summary_quality": 4.791666666666667,
+   "facts_contradicted": 0.4166666666666667,
+   "pipeline_ms_p50": 44988,
+   "cost_cold_offpeak_usd": 0.02730876875,
+   "cost_cold_peak_usd": 0.0546175375,
+   "paired_diff_fact_retention_vs_ds_prod": null,
+   "conversations_where_worse_than_ds_prod": null
+  },
+  "ds-flash-thinking": {
+   "runs": 24,
+   "judged": 23,
+   "fact_retention_weighted": 0.9640154346013283,
+   "fact_retention_critical": 0.9683201985796656,
+   "q_overall_summary_quality": 4.770833333333333,
+   "facts_contradicted": 0.5,
+   "pipeline_ms_p50": 116495,
+   "cost_cold_offpeak_usd": 0.05097429375,
+   "cost_cold_peak_usd": 0.1019485875,
+   "paired_diff_fact_retention_vs_ds_prod": 0.03514588812282561,
+   "conversations_where_worse_than_ds_prod": 1
+  },
+  "luna-max": {
+   "runs": 18,
+   "judged": 15,
+   "fact_retention_weighted": 0.956394043031118,
+   "fact_retention_critical": 0.9635548153342683,
+   "q_overall_summary_quality": 4.770833333333333,
+   "facts_contradicted": 0.75,
+   "pipeline_ms_p50": 641855.5,
+   "cost_cold_offpeak_usd": 0.22695994583333334,
+   "cost_cold_peak_usd": 0.22695994583333334,
+   "paired_diff_fact_retention_vs_ds_prod": 0.027524496552615296,
+   "conversations_where_worse_than_ds_prod": 3
+  },
+  "luna-medium": {
+   "runs": 24,
+   "judged": 21,
+   "fact_retention_weighted": 0.8798982831374862,
+   "fact_retention_critical": 0.919850070404506,
+   "q_overall_summary_quality": 5.5,
+   "facts_contradicted": 1.25,
+   "pipeline_ms_p50": 109223.5,
+   "cost_cold_offpeak_usd": 0.05109759166666667,
+   "cost_cold_peak_usd": 0.05109759166666667,
+   "paired_diff_fact_retention_vs_ds_prod": -0.04897126334101641,
+   "conversations_where_worse_than_ds_prod": 7
+  },
+  "luna-low": {
+   "runs": 24,
+   "judged": 23,
+   "fact_retention_weighted": 0.8812156313225716,
+   "fact_retention_critical": 0.9266469227943632,
+   "q_overall_summary_quality": 4.937499999999999,
+   "facts_contradicted": 0.7499999999999999,
+   "pipeline_ms_p50": 95896.5,
+   "cost_cold_offpeak_usd": 0.04520115000000001,
+   "cost_cold_peak_usd": 0.04520115000000001,
+   "paired_diff_fact_retention_vs_ds_prod": -0.047653915155931065,
+   "conversations_where_worse_than_ds_prod": 7
+  },
+  "luna-none": {
+   "runs": 24,
+   "judged": 21,
+   "fact_retention_weighted": 0.8911930368479088,
+   "fact_retention_critical": 0.930964903492954,
+   "q_overall_summary_quality": 4.729166666666667,
+   "facts_contradicted": 0.3333333333333333,
+   "pipeline_ms_p50": 100872.5,
+   "cost_cold_offpeak_usd": 0.050086341666666666,
+   "cost_cold_peak_usd": 0.050086341666666666,
+   "paired_diff_fact_retention_vs_ds_prod": -0.037676509630593935,
+   "conversations_where_worse_than_ds_prod": 7
+  }
+ }
+}

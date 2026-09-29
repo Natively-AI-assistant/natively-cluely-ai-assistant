@@ -34,6 +34,7 @@ const {
     clearLoadSentinel,
     consumePoisonedOnnxLoad,
     isSentinelWithinTtl,
+    __simulateNewLaunchForTests,
     ONNX_LOAD_SENTINEL_TTL_MS,
 } = await import(pathToFileURL(sentinelPath).href);
 
@@ -69,6 +70,10 @@ test('write → consume returns the record + removes the file', () => {
     clearLoadSentinel('intent');
     writeLoadSentinel('intent', 'Xenova/mobilebert-uncased-mnli');
     assert.ok(fs.existsSync(fileFor('intent')));
+    // The record models a PREVIOUS launch that died mid-load, so the consume
+    // runs as the next launch. Since 2026-09-22 a launch does not report its
+    // own in-flight record (OnnxSentinelSelfPoison2026_09_22.test.mjs).
+    __simulateNewLaunchForTests();
     const consumed = consumePoisonedOnnxLoad('intent');
     assert.ok(consumed, 'consume should return the record');
     assert.equal(consumed.family, 'intent');
@@ -91,6 +96,10 @@ test('repeated writes for the same modelId increment attempt', () => {
     writeLoadSentinel('intent', 'Xenova/mobilebert-uncased-mnli');
     writeLoadSentinel('intent', 'Xenova/mobilebert-uncased-mnli');
     writeLoadSentinel('intent', 'Xenova/mobilebert-uncased-mnli');
+    // The record models a PREVIOUS launch that died mid-load, so the consume
+    // runs as the next launch. Since 2026-09-22 a launch does not report its
+    // own in-flight record (OnnxSentinelSelfPoison2026_09_22.test.mjs).
+    __simulateNewLaunchForTests();
     const consumed = consumePoisonedOnnxLoad('intent');
     assert.equal(consumed.attempt, 3);
 });
@@ -107,6 +116,10 @@ test('clearLoadSentinel(family, modelId) does not clobber a different modelId', 
 test('consume is idempotent across calls', () => {
     clearLoadSentinel('reranker');
     writeLoadSentinel('reranker', 'Xenova/bge-reranker-base');
+    // The record models a PREVIOUS launch that died mid-load, so the consume
+    // runs as the next launch. Since 2026-09-22 a launch does not report its
+    // own in-flight record (OnnxSentinelSelfPoison2026_09_22.test.mjs).
+    __simulateNewLaunchForTests();
     const first = consumePoisonedOnnxLoad('reranker');
     assert.ok(first);
     const second = consumePoisonedOnnxLoad('reranker');
@@ -131,6 +144,10 @@ test('cross-family isolation: writing one family does not touch another', () => 
     writeLoadSentinel('intent', 'Xenova/mobilebert-uncased-mnli');
     writeLoadSentinel('embeddings', 'Xenova/all-MiniLM-L6-v2');
     writeLoadSentinel('reranker', 'Xenova/bge-reranker-base');
+    // The record models a PREVIOUS launch that died mid-load, so the consume
+    // runs as the next launch. Since 2026-09-22 a launch does not report its
+    // own in-flight record (OnnxSentinelSelfPoison2026_09_22.test.mjs).
+    __simulateNewLaunchForTests();
 
     // Consuming one must not affect any other.
     assert.ok(consumePoisonedOnnxLoad('whisper'));

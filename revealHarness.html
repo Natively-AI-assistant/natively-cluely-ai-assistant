@@ -1,0 +1,320 @@
+<!doctype html>
+<!--
+  Visual + assertion harness for the streaming word-materialization animation.
+  Precedent: thinkingDotHarness.html. Dev-only, not shipped.
+
+  It exists to check the things that cannot be verified by reading code:
+    1. `filter: blur()` animates on NON-REPLACED INLINE elements, so the
+       spans need no display change and cost no layout.
+    2. Wrapping / unwrapping trailing words every frame shifts nothing.
+    3. Opacity and blur really are two separate animations with the two
+       durations the module declares.
+    4. The last word is fully settled at the instant the row seals.
+
+  Run: npx vite --port 5199   then open /revealHarness.html
+
+  The CHECKS run on synthetic timestamps in one synchronous loop, and inspect
+  animation state via getAnimations().currentTime rather than sleeping. A
+  background tab pauses both rAF and CSS animations, which made every
+  wall-clock assertion a coin flip on whether the tab happened to be focused.
+  The visual replay below still uses the real rAF path, for eyeballing only.
+
+  NOTE: animateTail() is a COPY of animateRevealedTail() in
+  NativelyInterface.tsx (that one is closed over inside the component), and
+  the CSS below is a COPY of the shipped rules in src/index.css. Keep both in
+  sync — otherwise this keeps passing while testing the old design. The pure
+  logic it calls (textRevealAnimation.mjs) IS the real module, and the CSS
+  durations are asserted against it.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Reveal animation harness</title>
+<style>
+  body { background:#14141a; color:#ECECEC; font:16px/1.65 system-ui, sans-serif; padding:32px; max-width:720px; margin:0 auto; }
+  h2 { font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:#8a8a99; margin:28px 0 8px; }
+  #out { min-height:240px; border:1px solid #2a2a35; border-radius:10px; padding:16px; }
+  #probe { color:#7dd3fc; }
+  #verdict { white-space:pre-wrap; font-family:ui-monospace,monospace; font-size:12.5px; border-radius:10px; padding:12px 14px; background:#1b1b24; }
+  button { font:inherit; background:#2a2a35; color:#ECECEC; border:1px solid #3a3a48; border-radius:8px; padding:6px 14px; cursor:pointer; transition:transform 160ms cubic-bezier(0.23,1,0.32,1); }
+  button:active { transform:scale(0.97); }
+  .pass { color:#86efac; } .fail { color:#fca5a5; }
+
+  /* ── COPY of the shipped rules in src/index.css ───────────────────────── */
+  @keyframes reveal-word-opacity { from { opacity:0; } to { opacity:1; } }
+  @keyframes reveal-word-blur { from { filter:blur(2px); } to { filter:blur(0); } }
+  .reveal-word {
+    animation:
+      reveal-word-opacity 90ms cubic-bezier(0.23, 1, 0.32, 1) forwards,
+      reveal-word-blur 160ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+    opacity:1;
+  }
+  @keyframes reveal-gist-in {
+    from { opacity:0; filter:blur(3px); }
+    to   { opacity:1; filter:blur(0); }
+  }
+  .overlay-gist-chip[style*="animation-delay"] {
+    animation: reveal-gist-in 220ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  }
+  @keyframes reveal-block-in { from { opacity:0; } to { opacity:1; } }
+  .natively-reveal-block-fade { animation: reveal-block-in 140ms ease forwards; }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal-word { animation:none; opacity:1; filter:none; }
+    .overlay-gist-chip[style*="animation-delay"] { animation: reveal-block-in 140ms ease forwards; }
+  }
+
+  /* Chip presentation only (the shipped one lives in index.css). */
+  .overlay-gist-chip {
+    display:inline-flex; align-items:baseline; gap:6px; margin-top:10px;
+    padding:3px 10px; border-radius:9999px; font-size:12px;
+    color:#a8a8b8; background:rgba(196,181,253,.12);
+    border:1px solid rgba(196,181,253,.24);
+  }
+</style>
+</head>
+<body>
+<h2 id="title">Streaming reveal</h2>
+<div id="out"></div>
+<p><button id="replay">Replay</button></p>
+<h2>Automated checks</h2>
+<div id="verdict">running…</div>
+
+<script type="module">
+import { createPacerState, tickPacer, MAX_REVEAL_CHARACTERS_PER_SECOND } from '/src/lib/textRevealPacing.mjs';
+import {
+  createRevealHistory, resetRevealHistory, pushRevealSample,
+  revealTimeForIndex, animatedTailStart, splitIntoWordRuns, remainingFadeMs,
+  WORD_FADE_DURATION_MS, WORD_OPACITY_DURATION_MS, MAX_ANIMATED_WORDS,
+  GIST_CHIP_FADE_MS, REVEAL_WORD_CLASS,
+} from '/src/lib/textRevealAnimation.mjs';
+
+const TEXT = `Sure. The core tradeoff is latency versus accuracy. A larger model gives you better reasoning on ambiguous questions, but the extra round-trip shows up directly in how responsive the overlay feels during a live conversation. In practice we route short factual lookups to the fast model and reserve the larger one for anything that needs multi-step reasoning. That keeps the median response under a second while still handling the hard cases correctly.`;
+const GIST = 'route fast vs large by reasoning depth';
+const FRAME = 1000 / 60;
+
+const out = document.getElementById('out');
+const verdict = document.getElementById('verdict');
+document.getElementById('title').textContent =
+  `Streaming reveal — ${MAX_REVEAL_CHARACTERS_PER_SECOND} chars/s cap, ` +
+  `${WORD_OPACITY_DURATION_MS}ms opacity / ${WORD_FADE_DURATION_MS}ms blur`;
+
+// getComputedStyle reports a settled blur in SCIENTIFIC notation
+// ("blur(6.0359105e-06px)"). Stripping non-digits turns that into 6.03 — a
+// parser bug that reads as a 6px blur and fails a check the product passes.
+// Capture the numeric token whole, exponent included.
+function parseBlurPx(filter) {
+  if (!filter || filter === 'none') return 0;
+  const m = /blur\(\s*([-+0-9.eE]+)px\s*\)/.exec(filter);
+  return m ? Math.abs(parseFloat(m[1])) || 0 : 0;
+}
+
+// animationDuration is a LIST once opacity and blur are separate animations
+// ("0.09s, 0.16s"). Return every leg so BOTH can be verified against the
+// module, not just whichever parseFloat reaches first.
+function cssFadeDurations() {
+  const probe = document.createElement('span');
+  probe.className = REVEAL_WORD_CLASS;
+  probe.textContent = 'x';
+  out.appendChild(probe);
+  const list = getComputedStyle(probe).animationDuration
+    .split(',').map((d) => Math.round(parseFloat(d) * 1000));
+  probe.remove();
+  return list;
+}
+
+// Mirrors animateRevealedTail in NativelyInterface.tsx.
+function animateTail(node, revealedLen, nowMs, history) {
+  const tailStart = animatedTailStart(history, nowMs, revealedLen, WORD_FADE_DURATION_MS);
+  const tailChars = revealedLen - tailStart;
+  if (tailChars <= 0) return;
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {
+    acceptNode(t) {
+      return t.parentElement?.closest('.overlay-gist-chip, pre') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  const nodes = []; let total = 0;
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) { nodes.push(n); total += n.data.length; }
+  if (!total) return;
+  const renderedTailStart = Math.max(0, total - tailChars);
+  const edits = []; let budget = MAX_ANIMATED_WORDS; let cursor = total;
+  for (let i = nodes.length - 1; i >= 0 && budget > 0; i--) {
+    const tn = nodes[i];
+    const nodeStart = cursor - tn.data.length; cursor = nodeStart;
+    if (nodeStart + tn.data.length <= renderedTailStart) break;
+    let off = 0;
+    const decisions = splitIntoWordRuns(tn.data).map((run) => {
+      const start = nodeStart + off; off += run.text.length;
+      return { run, start, delayMs: null };
+    });
+    let animated = 0;
+    for (let d = decisions.length - 1; d >= 0 && budget > 0; d--) {
+      const dec = decisions[d];
+      if (!dec.run.isWord || dec.start < renderedTailStart) continue;
+      const src = revealedLen - (total - dec.start);
+      if (src < 0) continue;
+      const at = revealTimeForIndex(history, src);
+      if (at === null) continue;
+      const age = nowMs - at;
+      if (age >= WORD_FADE_DURATION_MS || age < 0) continue;
+      dec.delayMs = -age; budget--; animated++;
+    }
+    if (!animated) continue;
+    const frag = document.createDocumentFragment();
+    for (const dec of decisions) {
+      if (dec.delayMs === null) frag.appendChild(document.createTextNode(dec.run.text));
+      else {
+        const s = document.createElement('span');
+        s.className = REVEAL_WORD_CLASS;
+        s.style.animationDelay = `${dec.delayMs}ms`;
+        s.textContent = dec.run.text;
+        frag.appendChild(s);
+      }
+    }
+    edits.push({ target: tn, frag });
+  }
+  for (const e of edits) e.target.replaceWith(e.frag);
+}
+
+function paintFrame(revealedLen, ts, history, gistState) {
+  out.innerHTML = `<span id="probe">▍</span> ${TEXT.slice(0, revealedLen)}`;
+  animateTail(out, revealedLen, ts, history);
+  // Gist chip appears near the end of the answer and resumes its own
+  // one-shot materialize by negative delay, exactly as paintRevealedNow does.
+  if (revealedLen > TEXT.length * 0.75) {
+    const chip = document.createElement('div');
+    chip.className = 'overlay-gist-chip';
+    chip.textContent = GIST;
+    out.appendChild(chip);
+    if (gistState.firstSeen === null) gistState.firstSeen = ts;
+    const age = ts - gistState.firstSeen;
+    if (age < GIST_CHIP_FADE_MS) {
+      chip.style.animationDelay = `${-Math.max(0, age)}ms`;
+      gistState.animated = true;
+    }
+  }
+}
+
+function runChecks() {
+  const pacer = createPacerState();
+  const history = createRevealHistory();
+  resetRevealHistory(history);
+  const gistState = { firstSeen: null, animated: false };
+
+  let arrived = 0, ts = 0, frames = 0, maxSpans = 0;
+  let sawBlur = false, sawInline = true;
+  const paintCost = [];
+
+  out.innerHTML = '';
+  while (pacer.revealedLen < TEXT.length && ts < 60000) {
+    ts += FRAME;
+    if (frames % 7 === 0) arrived = Math.min(TEXT.length, arrived + 70); // bursty, deterministic
+    const prev = pacer.revealedLen;
+    tickPacer(pacer, TEXT.slice(0, arrived), ts, FRAME, { reducedMotion: false });
+    if (pacer.revealedLen === prev) continue;
+
+    pushRevealSample(history, ts, pacer.revealedLen, WORD_FADE_DURATION_MS);
+    const t0 = performance.now();
+    paintFrame(pacer.revealedLen, ts, history, gistState);
+    const spans = out.querySelectorAll('.' + REVEAL_WORD_CLASS);
+    maxSpans = Math.max(maxSpans, spans.length);
+    if (spans.length) {
+      const cs = getComputedStyle(spans[spans.length - 1]); // forces style recalc
+      if (cs.filter && cs.filter !== 'none') sawBlur = true;
+      if (cs.display !== 'inline') sawInline = false;
+    }
+    paintCost.push(performance.now() - t0);
+    frames++;
+  }
+
+  // ── Seal: is the last word settled at the instant of the React handoff? ──
+  const holdMs = remainingFadeMs(history, ts, pacer.revealedLen, WORD_FADE_DURATION_MS);
+  const allSpans = out.querySelectorAll('.' + REVEAL_WORD_CLASS);
+  const lastSpan = allSpans[allSpans.length - 1];
+  let sealOpacity = null, sealBlur = null, sealAnimCount = 0;
+  if (lastSpan) {
+    const anims = lastSpan.getAnimations();
+    sealAnimCount = anims.length;
+    const elapsed = -parseFloat(lastSpan.style.animationDelay || '0');
+    // Advance to exactly the seal moment instead of sleeping and hoping the
+    // tab stayed awake.
+    for (const a of anims) a.currentTime = elapsed + holdMs;
+    const cs = getComputedStyle(lastSpan);
+    sealOpacity = parseFloat(cs.opacity);
+    sealBlur = parseBlurPx(cs.filter);
+  }
+
+  // ── Layout stability: identical text, with and without a wrapped tail ──
+  const plain = `<span id="probe">▍</span> ${TEXT}`;
+  out.innerHTML = plain;
+  const before = document.getElementById('probe').getBoundingClientRect();
+  const beforeH = out.getBoundingClientRect().height;
+  const h2 = createRevealHistory();
+  pushRevealSample(h2, 0, TEXT.length - 60, WORD_FADE_DURATION_MS);
+  pushRevealSample(h2, 100, TEXT.length, WORD_FADE_DURATION_MS);
+  out.innerHTML = plain;
+  animateTail(out, TEXT.length, 120, h2);
+  const wrappedSpans = out.querySelectorAll('.' + REVEAL_WORD_CLASS).length;
+  const after = document.getElementById('probe').getBoundingClientRect();
+  const afterH = out.getBoundingClientRect().height;
+
+  const durations = cssFadeDurations();
+  const c = [...paintCost].sort((a, b) => a - b);
+  const at = (q) => (c[Math.floor(c.length * q)] ?? 0).toFixed(2);
+
+  const checks = [
+    ['blur applied to inline spans', sawBlur],
+    ['spans stayed display:inline (no inline-block)', sawInline],
+    [`span count capped at ${MAX_ANIMATED_WORDS} (peak ${maxSpans})`, maxSpans > 0 && maxSpans <= MAX_ANIMATED_WORDS],
+    [`opacity and blur are SEPARATE animations (${sealAnimCount} on the last word)`, sealAnimCount === 2],
+    [`CSS durations [${durations.join(', ')}]ms match module opacity ${WORD_OPACITY_DURATION_MS} + blur ${WORD_FADE_DURATION_MS}`,
+      durations.length === 2 && durations.includes(WORD_OPACITY_DURATION_MS) && durations.includes(WORD_FADE_DURATION_MS)],
+    [`opacity settles BEFORE blur — presence precedes focus`, WORD_OPACITY_DURATION_MS < WORD_FADE_DURATION_MS],
+    ['gist chip materialized via negative delay (not snapped in)', gistState.animated],
+    [`seal hold ${holdMs.toFixed(0)}ms, within one fade (${WORD_FADE_DURATION_MS}ms)`, holdMs >= 0 && holdMs <= WORD_FADE_DURATION_MS],
+    [`last word FULLY SETTLED at seal time (opacity ${sealOpacity}, blur ${sealBlur}px) — no pop`,
+      sealOpacity !== null && sealOpacity > 0.99 && sealBlur < 0.05],
+    [`wrapping caused ZERO layout shift (probe x ${before.x.toFixed(3)}→${after.x.toFixed(3)}, y ${before.y.toFixed(3)}→${after.y.toFixed(3)})`,
+      Math.abs(before.x - after.x) < 0.01 && Math.abs(before.y - after.y) < 0.01],
+    [`container height unchanged (${beforeH.toFixed(3)} → ${afterH.toFixed(3)})`, Math.abs(beforeH - afterH) < 0.01],
+    [`wrapped ${wrappedSpans} words in the settle check`, wrappedSpans > 0],
+    [`paint cost p50 ${at(0.5)}ms / p95 ${at(0.95)}ms / max ${(c[c.length - 1] ?? 0).toFixed(2)}ms  (16.7ms budget)`,
+      (c[Math.floor(c.length * 0.95)] ?? 0) < 8],
+    [`ran ${frames} synthetic paint frames`, frames > 20],
+  ];
+
+  verdict.innerHTML = checks.map(([label, ok]) =>
+    `<span class="${ok ? 'pass' : 'fail'}">${ok ? 'PASS' : 'FAIL'}</span>  ${label}`).join('\n')
+    + `\n\ncap = ${MAX_REVEAL_CHARACTERS_PER_SECOND} chars/s   opacity ${WORD_OPACITY_DURATION_MS}ms   blur ${WORD_FADE_DURATION_MS}ms`;
+}
+
+// ── Visual replay (real rAF) — for eyeballing, never for assertions ───────
+function runVisual() {
+  out.innerHTML = '';
+  const pacer = createPacerState();
+  const history = createRevealHistory();
+  const gistState = { firstSeen: null, animated: false };
+  let arrived = 0, last = null;
+  const timer = setInterval(() => {
+    arrived = Math.min(TEXT.length, arrived + 40 + Math.floor(Math.random() * 60));
+  }, 120);
+  function frame(ts) {
+    const delta = last === null ? 16 : Math.max(0, ts - last);
+    last = ts;
+    const prev = pacer.revealedLen;
+    tickPacer(pacer, TEXT.slice(0, arrived), ts, delta, { reducedMotion: false });
+    if (pacer.revealedLen !== prev) {
+      pushRevealSample(history, ts, pacer.revealedLen, WORD_FADE_DURATION_MS);
+      paintFrame(pacer.revealedLen, ts, history, gistState);
+    }
+    if (pacer.revealedLen >= TEXT.length && arrived >= TEXT.length) { clearInterval(timer); return; }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+document.getElementById('replay').addEventListener('click', runVisual);
+runChecks();
+runVisual();
+</script>
+</body>
+</html>

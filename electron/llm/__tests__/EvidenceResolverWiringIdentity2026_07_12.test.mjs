@@ -47,9 +47,10 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import Module from 'node:module';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { NODE_MODULES_LINK_TYPE, removeIsolatedDistTree } from '../../services/__tests__/isolatedDistTree.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -74,13 +75,18 @@ const distDir = (() => {
   fs.symlinkSync(
     path.join(repoRoot, 'node_modules'),
     path.join(target, 'node_modules'),
-    process.platform === 'win32' ? 'junction' : 'dir',
+    NODE_MODULES_LINK_TYPE,
   );
   try {
-    execSync(`node node_modules/.bin/tsc -p electron/tsconfig.json --outDir ${target}`, {
-      cwd: repoRoot,
-      stdio: 'pipe',
-    });
+    execFileSync(process.execPath, [
+      // lib/tsc.js, not bin/tsc: bin/tsc is EXTENSIONLESS and contains `import`,
+    // and Node only treats an extensionless entry as ESM from >=22.7 (module
+    // detection). lib/tsc.js is a real .js under "type": "module", so it is ESM
+    // on every Node version. This repo declares no `engines` floor.
+    path.join('node_modules', 'typescript7', 'lib', 'tsc.js'),
+      '-p', path.join('electron', 'tsconfig.emit.json'),
+      '--outDir', target,
+    ], { cwd: repoRoot, stdio: 'pipe' });
   } catch (_tscErr) {
     // expected — tsc returns 1 on type errors in unrelated files; we only
     // need LLMHelper.js + its direct deps to have emitted cleanly.
@@ -308,7 +314,10 @@ async function drainStream(generator) {
 
 after(() => {
   if (isolatedDistDir) {
-    fs.rmSync(isolatedDistDir, { recursive: true, force: true });
+    // NOT a bare rmSync: this tree links the REAL node_modules, and on Windows
+    // that link is a junction a recursive delete can traverse. See
+    // ../../services/__tests__/isolatedDistTree.mjs for the CI timeline.
+    removeIsolatedDistTree(isolatedDistDir);
   }
 });
 
@@ -476,7 +485,12 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
     assert.equal(cogCtx.evidencePack, null, 'evidencePack must remain untouched (null) when govern is false');
   });
 
-  test('governed turn missing immutable question fails closed without legacy retrieval or provider dispatch', async () => {
+  // Re-pinned 2026-09-07 (always answer): a governed turn whose governance
+  // context carries no immutable question no longer fails closed — that throw
+  // surfaced live as "could you rephrase the question?" whenever diarization
+  // labelled every turn as the user. The user's message IS the turn question;
+  // the resolver runs against it and the provider is dispatched.
+  test('governed turn missing immutable question falls back to the user message (always answer)', async () => {
     resolveCalls = 0;
     resolveArgsSeen = null;
     throwOnResolve = false;
@@ -507,10 +521,9 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
       { answerType: 'list_answer', contextOsGeneration: cogCtx },
     ));
 
-    assert.equal(resolveCalls, 0, 'a missing immutable question must fail before retrieval');
-    assert.equal(hybridLegacyCalls, 0, 'a governed missing-question failure must never fall back to legacy hybrid retrieval');
-    assert.equal(lexicalLegacyCalls, 0, 'a governed missing-question failure must never fall back to legacy lexical retrieval');
-    assert.equal(calls.find(c => c.via === 'executeCustomProvider'), undefined, 'a governed missing-question failure must not dispatch a provider');
+    assert.ok(resolveCalls >= 1, 'the resolver must run against the user message');
+    assert.equal(hybridLegacyCalls + lexicalLegacyCalls, 0, 'a governed turn still never falls back to legacy retrieval');
+    assert.ok(calls.find(c => c.via === 'executeCustomProvider'), 'the provider must be dispatched — the turn is answered');
   });
 
   test('resolver throws → governed turn refuses without legacy retrieval or provider dispatch', async () => {

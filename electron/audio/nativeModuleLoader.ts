@@ -26,16 +26,40 @@ export interface NativeModule {
   // rebuild — WindowHelper checks `typeof` and degrades to plain panel
   // type if missing. Caller passes BrowserWindow.getNativeWindowHandle().
   applyStealthToWindow?: (handle: Buffer) => void;
-  // macOS-only: Accessibility permission gate for CGEventTap. Returns
-  // true if the process is currently trusted; false otherwise. Cheap;
-  // safe to poll to drive UI state.
+  // Permission gate for the stealth keyboard capture. macOS: CGEventTap
+  // Accessibility trust (true if granted). Windows: always true — a
+  // WH_KEYBOARD_LL hook needs no OS permission. Cheap; safe to poll to
+  // drive UI state.
   isAccessibilityGranted?: () => boolean;
-  // macOS-only: CGEventTap-backed stealth keyboard interception.
-  // Engaged by StealthKeyboardManager; the foreground app does NOT
-  // receive any keystroke while the tap is active. Optional: requires
-  // binary rebuild AND Accessibility permission at runtime.
+  // Windows-only: true when the active keyboard layout is a CJK IME
+  // (Chinese/Japanese/Korean). The WH_KEYBOARD_LL hook swallows keystrokes
+  // before IMM32/TSF can compose them, so stealth typing must be reported
+  // UNAVAILABLE for these users — they fall back to normal focusable typing.
+  // macOS makes the same call from ImeDetector.ts. Optional: requires a binary
+  // rebuild; callers must `typeof`-check and treat a missing export as "no IME"
+  // so a stale binary keeps today's behaviour.
+  isImeKeyboardActive?: () => boolean;
+  // Stealth keyboard interception. macOS: CGEventTap. Windows:
+  // WH_KEYBOARD_LL low-level hook (native-module/src/keyboard_hook_windows.rs)
+  // exposing this IDENTICAL surface. Engaged by StealthKeyboardManager; the
+  // foreground app does NOT receive any keystroke while active, so the user
+  // types into the overlay without it taking OS focus. Optional: requires a
+  // binary rebuild (macOS additionally needs Accessibility permission).
   StealthKeyboardTap?: new () => {
-    start(callback: (err: Error | null, ev: CapturedKey) => void, overlayBounds?: OverlayBoundsInput | null): boolean;
+    start(
+      callback: (err: Error | null, ev: CapturedKey) => void,
+      // The app's own global shortcuts (printable-leak subset) the native hook
+      // should swallow + self-dispatch so they can't leak into the foreground
+      // app while a RegisterHotKey registration is temporarily dropped. Pass []
+      // to disable. Ignored on macOS (shortcuts are consumed by Carbon/IOKit
+      // before the tap); honoured by the Windows WH_KEYBOARD_LL hook.
+      appChords: Array<{ vk: number; mods: number; id: string }>,
+      // When true, engage shortcut-guard mode: swallow only the app's own chords,
+      // pass all other keys through, and install no outside-click/Alt+Tab hooks.
+      // When false, the full stealth-typing tap. Ignored on macOS.
+      shortcutOnly: boolean,
+      overlayBounds?: OverlayBoundsInput | null,
+    ): boolean;
     stop(): void;
     readonly isActive: boolean;
   };
@@ -65,6 +89,13 @@ export interface CapturedKey {
   flags: number;
   isKeyDown: boolean;
   isOutsideMouseDown?: boolean;
+  /**
+   * Non-empty ⟹ this event is the app's OWN global shortcut firing, swallowed
+   * by the native hook (Windows) so it can never leak into the foreground app.
+   * The value is the KeybindManager action id; StealthKeyboardManager dispatches
+   * it instead of typing. Always absent/empty on macOS.
+   */
+  appChordId?: string;
 }
 
 // Hard-required: crash the module load if any of these are missing.

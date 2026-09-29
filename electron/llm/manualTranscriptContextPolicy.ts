@@ -62,7 +62,7 @@ export function extractLatestPriorAssistantTurn(snapshot: string): string | unde
       latest = current;
       continue;
     }
-    if (/^\[(?:ME|INTERVIEWER)\]:/.test(line)) {
+    if (/^\[[^\]\r\n]+\]:/.test(line)) {
       current = undefined;
       continue;
     }

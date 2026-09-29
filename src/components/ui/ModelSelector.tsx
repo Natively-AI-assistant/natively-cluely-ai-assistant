@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Check, Cloud, Terminal, Monitor, Server, Plus } from 'lucide-react';
+import { ChevronDown, Check, Cloud, Terminal, Server, Plus } from 'lucide-react';
 import { getCodexCliModelDisplayName, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { useT } from '../../i18n';
+import { ProviderMark } from './ProviderMark';
 
 interface ModelSelectorProps {
     currentModel: string;
@@ -85,15 +86,27 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
     };
 
     const getModelDisplayName = (model: string) => {
+        if (model.startsWith('antigravity:')) return `${model.slice('antigravity:'.length)} (Antigravity)`;
         const codexCliName = getCodexCliModelDisplayName(model);
         if (codexCliName) return codexCliName;
         if (model.startsWith('ollama-')) return model.replace('ollama-', '');
-        if (model === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
+        if (model === 'gemini-3.8-flash') return 'Gemini 3.8 Flash';
+        // Legacy: users who selected 3.7- or 3.6-flash before a bump still have it
+        // persisted. Each remains a valid, working model, so name it rather than
+        // rendering the raw slug — this list only ever grows.
+        if (model === 'gemini-3.7-flash') return 'Gemini 3.7 Flash';
+        if (model === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
         if (model === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
         if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
-        if (model === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
+        if (model === 'qwen/qwen3.8-27b') return 'Groq Qwen 3.8';
+        if (model === 'qwen/qwen3.6-27b') return 'Groq Qwen 3.6';
+        if (model === 'openai/gpt-oss-120b') return 'Groq GPT-OSS 120B';
+        if (model === 'openai/gpt-oss-20b') return 'Groq GPT-OSS 20B';
         if (model === 'gpt-5.4') return 'GPT 5.4';
         if (model === 'claude-sonnet-4-6') return 'Sonnet 4.6';
+        // Legacy: DeepSeek retired deepseek-v4-flash on 2026-09-10 and now serves
+        // it as deepseek-flash (V4.1), which is what a persisted pick actually gets.
+        if (model === 'deepseek-v4-flash') return 'DeepSeek V4.1 Flash';
 
         // Check dynamic cloud models
         const cloud = cloudModels.find(m => m.id === model);
@@ -155,7 +168,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                                     cloudModels.map((m, idx) => {
                                         const prevProvider = idx > 0 ? cloudModels[idx - 1].provider : null;
                                         const showDivider = prevProvider && prevProvider !== m.provider;
-                                        const icon = m.provider === 'gemini' ? <Monitor size={14} /> : <Cloud size={14} />;
+                                        // Real brand mark per provider. This used to be
+                                        // `provider === 'gemini' ? <Monitor/> : <Cloud/>`, so every
+                                        // Nvidia Nim, OpenAI, Claude, DeepSeek and Groq row shipped
+                                        // with a generic cloud glyph and no brand at all — and even
+                                        // Gemini got a monitor icon rather than its own mark.
+                                        const icon = <ProviderMark provider={m.provider} size={14} fallback={<Cloud size={14} />} />;
                                         return (
                                             <React.Fragment key={m.id}>
                                                 {showDivider && <div className="h-px bg-border-subtle my-1" />}
@@ -240,10 +258,10 @@ interface ModelOptionProps {
 const ModelOption: React.FC<ModelOptionProps> = ({ name, desc, icon, selected, onSelect }) => (
     <button
         onClick={onSelect}
-        className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors group ${selected ? 'bg-accent-primary/10' : 'hover:bg-bg-input'}`}
+        className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors group ${selected ? 'bg-accent-subtle' : 'hover:bg-bg-input'}`}
     >
         <div className="flex items-center gap-3">
-            <div className={`p-1.5 rounded-md ${selected ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-elevated text-text-secondary group-hover:text-text-primary'}`}>
+            <div className={`p-1.5 rounded-md ${selected ? 'bg-accent-muted text-accent-primary' : 'bg-bg-elevated text-text-secondary group-hover:text-text-primary'}`}>
                 {icon}
             </div>
             <div className="text-left">

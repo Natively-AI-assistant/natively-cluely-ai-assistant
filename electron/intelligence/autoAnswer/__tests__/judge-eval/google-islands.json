@@ -1,0 +1,449 @@
+[
+ {
+  "text": "islands exist on the map. In other words, given the grid representing the map, return the number of separate land masses you can find. So I have an example there, uh you're going to be given a 2D array which represent a grid. And for this exact example, we'll be returning three.",
+  "ctx": [],
+  "lastAnswered": null,
+  "modeName": "Technical Interview",
+  "expect": "ask"
+ },
+ {
+  "text": ">> You can assume it's a 2D array of numbers",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "So uh this is the input. This is the"
+   },
+   {
+    "role": "user",
+    "text": "output. Okay. Can I ask some questions"
+   },
+   {
+    "role": "user",
+    "text": "about the inputs?"
+   },
+   {
+    "role": "interviewer",
+    "text": ">> Yeah, go ahead."
+   },
+   {
+    "role": "user",
+    "text": ">> So, first of all, is this a list of a 2D"
+   },
+   {
+    "role": "user",
+    "text": "array of strings or a 2D array of"
+   },
+   {
+    "role": "user",
+    "text": "numbers?"
+   },
+   {
+    "role": "user",
+    "text": ">> and there will only ever be numbers in"
+   }
+  ],
+  "lastAnswered": "islands exist on the map. In other words, given the grid representing the map, return the number of separate land masses you can find. So I have an example there, uh you're going to be given a 2D array which represent a grid. And for this exact example, we'll be returning three.",
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> You can assume it's a 2D array of numbers >> Yeah, it will only ever be number one or number zero.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "output. Okay. Can I ask some questions"
+   },
+   {
+    "role": "user",
+    "text": "about the inputs?"
+   },
+   {
+    "role": "interviewer",
+    "text": ">> Yeah, go ahead."
+   },
+   {
+    "role": "user",
+    "text": ">> So, first of all, is this a list of a 2D"
+   },
+   {
+    "role": "user",
+    "text": "array of strings or a 2D array of"
+   },
+   {
+    "role": "user",
+    "text": "numbers?"
+   },
+   {
+    "role": "user",
+    "text": ">> and there will only ever be numbers in"
+   },
+   {
+    "role": "user",
+    "text": "there."
+   }
+  ],
+  "lastAnswered": "islands exist on the map. In other words, given the grid representing the map, return the number of separate land masses you can find. So I have an example there, uh you're going to be given a 2D array which represent a grid. And for this exact example, we'll be returning three.",
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> No, you wouldn't. Yeah, it will be consistent across the grid. You'll have n rows and m columns.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "there."
+   },
+   {
+    "role": "interviewer",
+    "text": ">> Yeah, it will only ever be number one or"
+   },
+   {
+    "role": "interviewer",
+    "text": "number zero."
+   },
+   {
+    "role": "user",
+    "text": ">> All right. Um also is there uh for the"
+   },
+   {
+    "role": "user",
+    "text": "grid can I assume that the number of"
+   },
+   {
+    "role": "user",
+    "text": "columns"
+   },
+   {
+    "role": "user",
+    "text": "will be consistent across like the rows"
+   },
+   {
+    "role": "user",
+    "text": ">> like this?"
+   }
+  ],
+  "lastAnswered": "islands exist on the map. In other words, given the grid representing the map, return the number of separate land masses you can find. So I have an example there, uh you're going to be given a 2D array which represent a grid. And for this exact example, we'll be returning three.",
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> Yes, you could. Yes, you could. You could be in a situation where the list is empty.",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "consistent across the grid. You'll have"
+   },
+   {
+    "role": "interviewer",
+    "text": "n rows and m columns."
+   },
+   {
+    "role": "user",
+    "text": ">> Okay. Consistent columns, consistent"
+   },
+   {
+    "role": "user",
+    "text": "rows. All right."
+   },
+   {
+    "role": "user",
+    "text": "And is it for the inputs? Is it possible"
+   },
+   {
+    "role": "user",
+    "text": "that I would run into"
+   },
+   {
+    "role": "user",
+    "text": "a situation where there are no islands"
+   },
+   {
+    "role": "user",
+    "text": "or will there always be one island?"
+   }
+  ],
+  "lastAnswered": "islands exist on the map. In other words, given the grid representing the map, return the number of separate land masses you can find. So I have an example there, uh you're going to be given a 2D array which represent a grid. And for this exact example, we'll be returning three.",
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> You could you could have both too.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "that I would run into"
+   },
+   {
+    "role": "user",
+    "text": "a situation where there are no islands"
+   },
+   {
+    "role": "user",
+    "text": "or will there always be one island?"
+   },
+   {
+    "role": "interviewer",
+    "text": ">> Yes, you could. Yes, you could. You"
+   },
+   {
+    "role": "interviewer",
+    "text": "could be in a situation where the list"
+   },
+   {
+    "role": "interviewer",
+    "text": "is empty."
+   },
+   {
+    "role": "user",
+    "text": ">> Okay. Yeah, list is empty or maybe it"
+   },
+   {
+    "role": "user",
+    "text": "was just like an all zero like it was."
+   }
+  ],
+  "lastAnswered": "islands exist on the map. In other words, given the grid representing the map, return the number of separate land masses you can find. So I have an example there, uh you're going to be given a 2D array which represent a grid. And for this exact example, we'll be returning three.",
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> Yeah, that sounds like a pretty good approach. Um, um, >> let's see how you code out, then.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "let's track, uh, basically the the"
+   },
+   {
+    "role": "user",
+    "text": "pieces of land that we're visiting that"
+   },
+   {
+    "role": "user",
+    "text": "we've seen, and then if we come across a"
+   },
+   {
+    "role": "user",
+    "text": "piece of land that we've seen before,"
+   },
+   {
+    "role": "user",
+    "text": "we'll just ignore it."
+   },
+   {
+    "role": "interviewer",
+    "text": ">> Okay."
+   },
+   {
+    "role": "user",
+    "text": ">> Oh, just break out. Um,"
+   },
+   {
+    "role": "user",
+    "text": "yeah. How does that sound?"
+   }
+  ],
+  "lastAnswered": "islands exist on the map. In other words, given the grid representing the map, return the number of separate land masses you can find. So I have an example there, uh you're going to be given a 2D array which represent a grid. And for this exact example, we'll be returning three.",
+  "modeName": "Technical Interview",
+  "expect": "ask"
+ },
+ {
+  "text": ">> I do have one question though. Um, as we process each land and we we we call explore like a pirate as you said. >> What are we doing once we hit a cell? Like, let's say we hit the cell 0. Once we hit that cell, what are we doing? How do we know? What are we doing with our counts? Are we doing anything or are we just exploring and that's it?",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "um,"
+   },
+   {
+    "role": "interviewer",
+    "text": ">> let's see how you code out, then."
+   },
+   {
+    "role": "user",
+    "text": ">> All right. So, I'm going to use Python"
+   },
+   {
+    "role": "user",
+    "text": "or Python like syntax. Hopefully, I"
+   },
+   {
+    "role": "user",
+    "text": "don't hopefully I don't run into any"
+   },
+   {
+    "role": "user",
+    "text": "like syntax stuff, but they should be"
+   },
+   {
+    "role": "user",
+    "text": "mine. Um,"
+   },
+   {
+    "role": "user",
+    "text": ">> Yeah."
+   }
+  ],
+  "lastAnswered": "let's see how you code out, then.",
+  "modeName": "Technical Interview",
+  "expect": "ask"
+ },
+ {
+  "text": ">> I don't think you could highlight it like Yeah. Yeah, that's good.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "exploring, we'll just increment like a"
+   },
+   {
+    "role": "user",
+    "text": "variable that says, okay, we've hit some"
+   },
+   {
+    "role": "user",
+    "text": "island, right? Okay,"
+   },
+   {
+    "role": "user",
+    "text": ">> basically the goal here is that when we"
+   },
+   {
+    "role": "user",
+    "text": "hit here, we would go uh we start here,"
+   },
+   {
+    "role": "user",
+    "text": "go right. Basically, we'll find all of"
+   },
+   {
+    "role": "user",
+    "text": "this and then this whole patch over"
+   },
+   {
+    "role": "user",
+    "text": "here. If I can just like highlight."
+   }
+  ],
+  "lastAnswered": "I do have one question though. Um, as we process each land and we we we call explore like a pirate as you said. >> What are we doing once we hit a cell? Like, let's say we hit the cell 0. Once we hit that cell, what are we doing? How do we know? What are we doing with our counts? Are we doing anything or are we just exploring and that's it?",
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ },
+ {
+  "text": ">> Okay. Uh could you tell me why you're going for a depth first search and not a breath first search?",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": ">> Okay."
+   },
+   {
+    "role": "user",
+    "text": ">> Yeah. Because Yeah. Maybe I because I I"
+   },
+   {
+    "role": "user",
+    "text": "think I would use death first search. So"
+   },
+   {
+    "role": "user",
+    "text": "probably I would just go with recursion"
+   },
+   {
+    "role": "user",
+    "text": "here. Um but you could do this"
+   },
+   {
+    "role": "user",
+    "text": "iteratively with like a breath first"
+   },
+   {
+    "role": "user",
+    "text": "search as well. Um with like a Q or"
+   },
+   {
+    "role": "user",
+    "text": "something. Yeah."
+   }
+  ],
+  "lastAnswered": "I do have one question though. Um, as we process each land and we we we call explore like a pirate as you said. >> What are we doing once we hit a cell? Like, let's say we hit the cell 0. Once we hit that cell, what are we doing? How do we know? What are we doing with our counts? Are we doing anything or are we just exploring and that's it?",
+  "modeName": "Technical Interview",
+  "expect": "ask"
+ },
+ {
+  "text": ">> Yeah, it looks makes a lot of sense. Just want to see how you play this together into code. Yeah.",
+  "ctx": [
+   {
+    "role": "interviewer",
+    "text": "breath first search?"
+   },
+   {
+    "role": "user",
+    "text": ">> Just Yeah, just perfect."
+   },
+   {
+    "role": "interviewer",
+    "text": ">> Go ahead."
+   },
+   {
+    "role": "user",
+    "text": ">> Um"
+   },
+   {
+    "role": "user",
+    "text": "so"
+   },
+   {
+    "role": "user",
+    "text": "yeah, so let me let me let me get"
+   },
+   {
+    "role": "user",
+    "text": "started on a function. How does that"
+   },
+   {
+    "role": "user",
+    "text": "solution look to you?"
+   }
+  ],
+  "lastAnswered": "could you tell me why you're going for a depth first search and not a breath first search?",
+  "modeName": "Technical Interview",
+  "expect": "ask"
+ },
+ {
+  "text": ">> Yeah, should be.",
+  "ctx": [
+   {
+    "role": "user",
+    "text": "the problem here is to find"
+   },
+   {
+    "role": "user",
+    "text": "num the number of distinct islands. So,"
+   },
+   {
+    "role": "user",
+    "text": "let's call this nondistinct"
+   },
+   {
+    "role": "user",
+    "text": "islands"
+   },
+   {
+    "role": "user",
+    "text": "and it takes an input."
+   },
+   {
+    "role": "user",
+    "text": "Yeah, let me just use some type"
+   },
+   {
+    "role": "user",
+    "text": "annotations."
+   },
+   {
+    "role": "user",
+    "text": "I think in Python it's int actually."
+   }
+  ],
+  "lastAnswered": "Just want to see how you play this together into code.",
+  "modeName": "Technical Interview",
+  "expect": "silent"
+ }
+]

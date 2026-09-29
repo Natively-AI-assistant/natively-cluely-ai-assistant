@@ -119,6 +119,14 @@ describe('manual transcript context policy', () => {
     assert.equal(extractLatestPriorAssistantTurn('[INTERVIEWER]: No prior answer'), undefined);
   });
 
+  test('unknown speaker tags cannot leak into a prior assistant answer', () => {
+    assert.equal(extractLatestPriorAssistantTurn([
+      '[ASSISTANT (PREVIOUS SUGGESTION)]: Keep this answer',
+      '[GUEST]: unrelated speech',
+      'continued speech',
+    ].join('\n')), 'Keep this answer');
+  });
+
   test('active modes do not turn standalone typed questions into transcript follow-ups', () => {
     const salesMode = { id: 'm', templateType: 'sales', name: 'Sales', isCustom: false };
     const meetingMode = { id: 'm', templateType: 'team-meet', name: 'Team Meeting', isCustom: false };
@@ -138,7 +146,7 @@ describe('manual transcript context policy wiring', () => {
   test('desktop manual chat gates autoContextSnapshot through the policy helper', () => {
     assert.match(
       ipcSrc,
-      /else if \(!context && autoContextSnapshot && shouldAutoAttachManualTranscriptContext\(message, answerPlan\)\) \{[\s\S]*let snapshotForContext = autoContextSnapshot;[\s\S]*stripPriorAssistantTurns\(autoContextSnapshot\);[\s\S]*context = snapshotForContext;/,
+      /else if \(autoContextSnapshot && shouldAutoAttachManualTranscriptContext\(message, answerPlan\)\) \{[\s\S]*let snapshotForContext = autoContextSnapshot;[\s\S]*stripPriorAssistantTurns\(autoContextSnapshot\);[\s\S]*context = context \? `\$\{snapshotForContext\}\\n\\n\$\{context\}` : snapshotForContext;/,
     );
     assert.match(ipcSrc, /Skipped 100s transcript context for standalone manual chat/);
     assert.match(
@@ -162,5 +170,45 @@ describe('manual transcript context policy wiring', () => {
     );
     assert.match(ipcSrc, /extractLatestPriorAssistantTurn\(snap\)/);
     assert.match(ipcSrc, /\[PhoneMirror\] Injected latest prior assistant answer for refinement; rolling transcript excluded/);
+  });
+});
+
+// Execute the actual attachment branch with synthetic boundaries. This catches
+// loss of #552 conversation history as well as transcript leakage after merging.
+describe('manual transcript integration with existing chat history', () => {
+  const ipc = readFileSync(path.resolve(__dirname, '../../ipcHandlers.ts'), 'utf8');
+  const start = ipc.indexOf('} else if (!context && autoContextSnapshot && isRefinementFollowUp(message)');
+  const end = ipc.indexOf('// MANUAL REGRESSION FIX', start);
+  assert.ok(start > 0 && end > start);
+  const branch = ipc.slice(start, end).replace(/^} else if/, 'if');
+  function route(message, initialContext, documentGrounded = false) {
+    return new Function('message', 'context', 'autoContextSnapshot', 'answerPlan',
+      'isRefinementFollowUp', 'isTranscriptBoundManualQuestion', 'shouldAutoAttachManualTranscriptContext',
+      'extractLatestPriorAssistantTurn', 'manualActiveMode', 'turnContract', 'isDocGroundedAnswerType',
+      'stripPriorAssistantTurns', 'isIntelligenceFlagEnabled', 'console', 'iTrace',
+      branch + '; return context;')(
+        message, initialContext, '[INTERVIEWER]: Meeting fact\n[ASSISTANT (PREVIOUS SUGGESTION)]: Prior answer', plan(message),
+        (text) => text === 'make that shorter', isTranscriptBoundManualQuestion,
+        shouldAutoAttachManualTranscriptContext, extractLatestPriorAssistantTurn,
+        { documentGroundedCustomModeActive: documentGrounded }, null, () => documentGrounded,
+        (snapshot) => snapshot.split('\n').filter(line => !line.startsWith('[ASSISTANT')).join('\n'),
+        () => false, { log() {} }, { noteContext() {} });
+  }
+  test('standalone questions preserve chat history without adding live speech', () => {
+    assert.equal(route('what is BFS?', 'Chat history'), 'Chat history');
+    assert.equal(route('what is BFS?', undefined), undefined);
+  });
+  test('explicit meeting questions prepend relevant transcript and preserve chat history', () => {
+    assert.equal(route('summarize the meeting', 'Chat history'),
+      '[INTERVIEWER]: Meeting fact\n[ASSISTANT (PREVIOUS SUGGESTION)]: Prior answer\n\nChat history');
+  });
+  test('document grounding strips prior assistant turns before merging', () => {
+    assert.equal(route('summarize the meeting', 'Chat history', true), '[INTERVIEWER]: Meeting fact\n\nChat history');
+  });
+  test('refinement without chat history recovers the prior answer alone', () => {
+    const output = route('make that shorter', undefined);
+    assert.match(output, /Prior answer/);
+    assert.doesNotMatch(output, /Meeting fact/);
+    assert.equal(route('make that shorter', 'Chat history'), 'Chat history');
   });
 });

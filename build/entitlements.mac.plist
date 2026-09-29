@@ -34,6 +34,36 @@
     <true/>
 
     <!--
+      KEYCHAIN ACCESS GROUP — REMOVED 2026-08-19. DO NOT RE-ADD WITHOUT A PROFILE.
+
+      `keychain-access-groups` is a RESTRICTED (profile-requiring) entitlement. macOS only
+      honours it when the signed bundle embeds a matching provisioning profile. This build signs
+      with `provisioningProfile=none`, so AMFI rejected the binary at exec:
+
+        amfid: ... not valid: AppleMobileFileIntegrityError Code=-413 "No matching profile found"
+        kernel AMFI: Code has restricted entitlements, but the validation of its code
+          signature failed.  Unsatisfied Entitlements:
+        kernel: proc NNNN: load code signature error 4 for file "Natively"
+
+      The kernel kills the process before dyld runs, so NOTHING catches this: no crash report is
+      written, and `spctl -a`, a strict deep `codesign` verify and `stapler validate` all keep
+      reporting the bundle as perfect. 2.8.6 signed, notarized and stapled cleanly and still could
+      not launch — `open` reported only `RBSRequestErrorDomain Code=5` / POSIX 163 "Launchd job
+      spawn failed". Proven by A/B: two copies of an identical trivial binary signed with the same
+      Developer ID identity, differing ONLY by this entitlement — the one carrying it is SIGKILLed
+      (exit 137), the other runs.
+
+      This does NOT resolve issue #322; it restores the 2.8.5 status quo. The recovery path
+      (three failed cold starts escalate to needsCredentialReentry rather than an unrecoverable
+      empty state) is untouched and remains the mitigation. Re-adding this entitlement REQUIRES
+      registering an App ID for com.electron.meeting-notes with Keychain Sharing, generating a
+      Developer ID provisioning profile, and wiring mac.provisioningProfile in
+      electron-builder.signed.cjs — and that route carries its own reported risk of a
+      login-keychain prompt on every launch (electron/electron#47341), so it must be verified on a
+      signed build BEFORE it ships. KeychainEntitlement.test.mjs pins the absence.
+    -->
+
+    <!--
       INTENTIONALLY OMITTED (verified against Apple docs + codebase audit, 2026-05-29):
         * com.apple.security.screen-capture        — NOT a real Apple entitlement.
           ScreenCaptureKit + the CoreAudio process tap are pure-TCC (Screen & System

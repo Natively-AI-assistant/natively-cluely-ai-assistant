@@ -1,0 +1,2358 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { AlertCircle, Check, ChevronDown, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, RefreshCw, Search, Server, ShieldAlert, Trash2, X } from 'lucide-react';
+import { useT } from '../../i18n';
+import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSelect, AipSwitch, type AipSelectOption, type AipTone } from './AIProvidersSettings';
+import { isMac, isWindows } from '../../utils/platformUtils';
+import { candidateControlApplies, candidateControlRationale } from '../../lib/rerankCandidateControl.mjs';
+
+/**
+ * "Built-in" / Local model tile mark matching EmbeddingSettings design.
+ */
+/**
+ * A model gets TWO names — the same rule EmbeddingSettings uses, and the reason
+ * these two panels finally read alike.
+ *
+ * Closed, the trigger is a statement of fact: the model you are using. Open,
+ * the list is a comparison, and there the qualifier is the whole point — the
+ * same reranker is reachable locally, through OpenRouter and through Jina, and
+ * the rows have to be told apart.
+ *
+ * `voyage/rerank-2.5-lite` -> `rerank-2.5-lite`. The LAST path segment: taking
+ * the first type-checks, passes a curated-label case, and silently renames
+ * every hosted model to its vendor.
+ */
+const bareModelName = (label: string): string => {
+    // TWO prefix shapes, because the two catalogues store different things.
+    //
+    // openrouterRerankModels.ts sets `label` from OpenRouter's `name`, which is
+    // a DISPLAY name of the form `Vendor: Model` — "Voyage AI by MongoDB:
+    // Rerank 2.5 Lite". openrouterEmbeddingModels.ts sets `label` from the id
+    // instead (`voyage/voyage-4-lite`), which is why the embedding panel only
+    // ever needed the slash case and this one does not.
+    //
+    // Strip the vendor prefix first, then any path namespace. Missing this made
+    // the closed trigger read "Voyage AI by MongoDB: Rerank 2.5 Lite" — the
+    // vendor said twice over, in the one place that should name only the model.
+    const colon = label.indexOf(': ');
+    const afterVendor = colon > 0 ? label.slice(colon + 2) : label;
+    const segments = afterVendor.split('/');
+    return segments[segments.length - 1] || afterVendor;
+};
+
+/**
+ * Drop the acquirer from a vendor's name.
+ *
+ * OpenRouter writes the full corporate attribution into its display label —
+ * "Voyage AI by MongoDB: Rerank 2.5 Lite", "Qwen by Alibaba: ...". Who owns the
+ * lab is not what someone picking a reranker is choosing between, and it pushes
+ * the actual model out of a narrow control.
+ *
+ * Only the VENDOR segment is touched, never the model: the split is on the
+ * first `: `, so a model whose own name contains " by " survives.
+ */
+const trimVendorAttribution = (label: string): string => {
+    const colon = label.indexOf(': ');
+    if (colon <= 0) return label;
+    const vendor = label.slice(0, colon).replace(/ by .+$/, '');
+    return vendor + label.slice(colon);
+};
+
+/**
+ * `provider/model`, for the open menu. Provider IDs, not display names, because
+ * a path segment is built from the short single tokens the catalogue defines —
+ * `local`, `openrouter`, `jina`, `extension`, `custom`.
+ *
+ * Qualifying the BARE name matters: a hosted label may already be namespaced
+ * (`voyage/rerank-2.5-lite`), and qualifying that raw would render
+ * `openrouter/voyage/rerank-2.5-lite` — three names for one model.
+ */
+const qualifiedModelName = (providerId: string, label: string): string =>
+    `${providerId}/${bareModelName(label)}`;
+
+const PlatformMark: React.FC = () => (
+    <span className="aip-tile aip-tile--mark" aria-hidden="true" title={isMac ? 'macOS' : isWindows ? 'Windows' : 'This device'}>
+        {isMac ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+            </svg>
+        ) : isWindows ? (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path d="M1.5 3.2 7 2.4v5.1H1.5V3.2Zm0 8.3H7v5.1l-5.5-.8V8.5Zm6.5-6.2 6.5-.9v6.4H8V2.3Zm0 6.2h6.5v6.4L8 14V8.5Z" />
+            </svg>
+        ) : (
+            <Monitor size={16} strokeWidth={1.75} />
+        )}
+    </span>
+);
+
+/** The user-hosted endpoint has no vendor; a server glyph beats a monogram. */
+const CustomEndpointMark: React.FC = () => (
+    <span className="aip-tile aip-tile--mark" aria-hidden="true" title="Custom endpoint">
+        <Server size={16} strokeWidth={1.75} />
+    </span>
+);
+
+type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom';
+type ModelGroup = 'recommended' | 'quality' | 'fast' | 'multimodal' | 'other';
+
+interface CatalogModel {
+    id: string;
+    label: string;
+    vendor: string;
+    contextLength?: number;
+    free: boolean;
+    multimodal: boolean;
+    group: ModelGroup;
+    note?: string;
+    description?: string;
+}
+
+interface RerankerStatus {
+    provider: RerankerProvider;
+    openrouterModel: string | null;
+    jinaModel: string | null;
+    voyageModel?: string | null;
+    nativelyModel: string | null;
+    customModel: string | null;
+    customEndpoint: string | null;
+    hasCustomKey: boolean;
+    /** The model id for whichever hosted provider is selected. */
+    hostedModel: string | null;
+    candidateCount: number | null;
+    /** The pool an untouched install reranks. Reported by the main process so
+     *  this panel never displays a default retrieval does not use. */
+    candidateCountDefault: number;
+    fallbackToLocal: boolean;
+    hasApiKey: boolean;
+    eligible: boolean;
+    ineligibleReason: string | null;
+    ineligibleMessage: string | null;
+    builtIn: { id: string; name: string; bundled: boolean; cached?: boolean; available?: boolean };
+    selectedLocal: { id: string; name: string } | null;
+    effective: { kind: 'local' | 'extension' | 'natively' | 'openrouter' | 'jina' | 'voyage' | 'custom'; id: string | null };
+    lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null;
+}
+
+interface LocalCatalogModel {
+    id: string;
+    name: string;
+    runtime: 'onnx' | 'gguf';
+    repo: string;
+    params: string;
+    note: string;
+    bytes: number;
+    recommended: boolean;
+    license: { spdx: string; url: string; commercialUseRestricted: boolean; requiresAcknowledgement: boolean };
+    state: 'not-installed' | 'partial' | 'installed';
+    bytesOnDisk: number;
+    selected: boolean;
+    extensionId: string | null;
+    extensionInstalled: boolean | null;
+    requiresBinary: string | null;
+    supported: boolean;
+    unsupportedReason: string | null;
+    activatable: boolean;
+}
+
+interface ExtensionModel {
+    key: string;
+    format: string;
+    approxBytes: number;
+    state: 'not-downloaded' | 'downloading' | 'ready' | 'verification-failed' | 'blocked-unacknowledged';
+    bytes: number | null;
+    reason: string | null;
+    license: {
+        spdx: string;
+        url: string;
+        commercialUseRestricted: boolean;
+        requiresAcknowledgement: boolean;
+        acknowledged: boolean;
+    };
+}
+
+/**
+ * Where the reranker extensions are published. The app does not fetch a
+ * catalogue or install anything over the network: this opens the repository so
+ * the source can be read, and a release downloaded and installed by hand
+ * through "Install from folder".
+ */
+const EXTENSIONS_REPO_URL = 'https://github.com/Brosski224/natively-extensions';
+
+interface InstalledExtension {
+    id: string;
+    name: string;
+    version: string;
+    type: string;
+    author: string;
+    homepage: string;
+    source: string;
+    enabled: boolean;
+    running: boolean;
+    disabledReason: string | null;
+    permissions: string[];
+    models: ExtensionModel[];
+}
+
+interface ExtensionVariantGroup {
+    id: string;
+    label: string;
+    files: ExtensionModel[];
+    totalBytes: number;
+    allReady: boolean;
+    anyDownloading: boolean;
+    anyBlocked: boolean;
+    anyFailed: boolean;
+    unacknowledgedLicense: ExtensionModel['license'] | null;
+    format: string;
+    spdx: string;
+    commercialUseRestricted: boolean;
+}
+
+function formatModelKeyLabel(rawKey: string): string {
+    // 1. Strip file suffixes
+    let str = rawKey.replace(/-(model|tokenizer|config|weights|bin|safetensors|vocab|json)$/i, '');
+
+    // 2. Normalize quantization tokens: Q4_K_M, q4_k_m, Q4KM, q4km -> Q4
+    str = str.replace(/[-_]?(q4_k_m|q4km|q4_0|q4_1)/i, ' Q4');
+    str = str.replace(/[-_]?(q8_0|q8km|q8_1)/i, ' Q8');
+    str = str.replace(/[-_]?(q5_k_m|q5km|q5_0)/i, ' Q5');
+
+    // Split by hyphens, underscores, or spaces
+    const parts = str.split(/[-_\s]+/).filter(Boolean);
+
+    return parts.map(p => {
+        const lower = p.toLowerCase();
+        if (/^\d+(\.\d+)?[mbk]$/i.test(p)) return p.toUpperCase();
+        if (/^v\d+(\.\d+)?$/i.test(p)) return lower;
+        if (lower === 'bge') return 'BGE';
+        if (lower === 'qwen3' || lower === 'qwen') return 'Qwen3';
+        if (lower === 'jina') return 'Jina';
+        if (lower === 'ettin') return 'Ettin';
+        if (lower === 'mxbai') return 'mxbai';
+        if (lower === 'reranker' || lower === 'rerank') return 'Reranker';
+        if (lower === 'q4' || lower === 'q8' || lower === 'q5') return lower.toUpperCase();
+        return p.charAt(0).toUpperCase() + p.slice(1);
+    }).join(' ');
+}
+
+function getExtensionVariantGroups(models: ExtensionModel[]): ExtensionVariantGroup[] {
+    const groupMap = new Map<string, ExtensionModel[]>();
+    for (const m of models) {
+        const baseId = m.key.replace(/-(model|tokenizer|config|weights|bin|safetensors|vocab|json)$/i, '');
+        if (!groupMap.has(baseId)) groupMap.set(baseId, []);
+        groupMap.get(baseId)!.push(m);
+    }
+
+    const groups: ExtensionVariantGroup[] = [];
+    groupMap.forEach((files, baseId) => {
+        const totalBytes = files.reduce((acc, f) => acc + (f.bytes ?? f.approxBytes ?? 0), 0);
+        const allReady = files.every(f => f.state === 'ready');
+        const anyDownloading = files.some(f => f.state === 'downloading');
+        const anyBlocked = files.some(f => f.state === 'blocked-unacknowledged');
+        const anyFailed = files.some(f => f.state === 'verification-failed');
+        const unack = files.find(f => f.license.requiresAcknowledgement && !f.license.acknowledged)?.license ?? null;
+        const format = files[0]?.format?.toUpperCase() || 'ONNX';
+        const spdx = files[0]?.license.spdx || 'Apache-2.0';
+        const commercialUseRestricted = files.some(f => f.license.commercialUseRestricted);
+
+        const label = formatModelKeyLabel(files.length === 1 ? files[0].key : baseId);
+
+        groups.push({
+            id: baseId,
+            label,
+            files,
+            totalBytes,
+            allReady,
+            anyDownloading,
+            anyBlocked,
+            anyFailed,
+            unacknowledgedLicense: unack,
+            format,
+            spdx,
+            commercialUseRestricted,
+        });
+    });
+
+    return groups;
+}
+
+interface TestResult {
+    success: boolean;
+    latencyMs?: number;
+    costUsd?: number | null;
+    message?: string;
+    error?: string;
+    /**
+     * Whether the measured latency can actually rerank inside the budget.
+     * A probe that says "ok, 2052ms" without this reported success for a model
+     * that lost its race on every query and changed nothing.
+     */
+    budgetFit?: {
+        liveBudgetMs: number;
+        manualBudgetMs: number;
+        fitsLive: boolean;
+        fitsManual: boolean;
+        warning?: string;
+    };
+}
+
+// 30 is the retriever's RERANK_CANDIDATE_POOL — the pool an untouched install
+// already reranks. It has to be reachable: without it every choice here
+// LOWERED the pool, so the control could only ever narrow retrieval.
+const CANDIDATE_CHOICES = [5, 10, 15, 20, 30];
+
+function humanBytes(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '—';
+    if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+    if (bytes >= 1e6) return `${Math.round(bytes / 1e6)} MB`;
+    return `${Math.round(bytes / 1e3)} KB`;
+}
+
+interface FloatingSelectOption {
+    id: string;
+    name: string;
+    /** Shown on the CLOSED trigger instead of `name`. See bareModelName. */
+    triggerName?: string;
+}
+
+interface FloatingSelectProps {
+    value: string;
+    options: FloatingSelectOption[];
+    onChange: (value: string) => void;
+    placeholder?: string;
+    disabled?: boolean;
+    className?: string;
+    containerClassName?: string;
+    ariaLabel?: string;
+    title?: string;
+    disabledHint?: string;
+    displayLabel?: string;
+}
+
+/**
+ * Floating select matching EmbeddingModelSelect design in EmbeddingSettings.
+ * Menu floats absolutely so opening it does NOT expand or stretch the parent card container.
+ */
+const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
+    value,
+    displayLabel,
+    options,
+    onChange,
+    placeholder,
+    disabled = false,
+    className = '',
+    containerClassName = AIP_ACTIVE_SELECT_CONTAINER,
+    ariaLabel,
+    title,
+    disabledHint,
+}) => {
+    const t = useT();
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const selectedOption = options.find(o => o.id === value);
+    // triggerName first: closed, the control names the model, not the route.
+    const resolvedLabel = displayLabel
+        || (selectedOption ? (selectedOption.triggerName || selectedOption.name) : null)
+        || (value && value.includes('::') ? bareModelName(value.split('::').slice(1).join('::')) : null)
+        || (placeholder || t('Select reranker'));
+
+    return (
+        <div className={containerClassName} ref={containerRef}>
+            <button
+                type="button"
+                onClick={() => !disabled && setIsOpen(!isOpen)}
+                aria-expanded={isOpen}
+                aria-haspopup="listbox"
+                aria-label={ariaLabel}
+                title={disabled ? disabledHint || title : title}
+                disabled={disabled}
+                className={`aip-select-trigger cursor-pointer flex items-center justify-between w-full ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+            >
+                {/* Exactly EmbeddingSettings' trigger label: `text-xs`, nothing
+                    else. The `font-medium text-white` this carried made the
+                    Active Reranker read brighter and heavier than Active
+                    Embedding Model directly above it on the Retrieval page —
+                    and `text-white` is a hard-coded colour that overrode
+                    `.aip-select-trigger`'s themed `var(--aip-primary)`, so in
+                    LIGHT theme the label stayed pure white on a light button
+                    and was invisible (measured: embedding flipped to
+                    rgb(55,65,81), this stayed rgb(255,255,255)). */}
+                <span className="truncate pr-2 text-xs">{resolvedLabel}</span>
+                <ChevronDown size={14} strokeWidth={1.75} className={`aip-select-chevron transition-transform duration-150 shrink-0 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+            </button>
+
+            {isOpen && (
+                <div
+                    role="listbox"
+                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1.5 w-full min-w-[180px] z-50 max-h-64 p-1 custom-scrollbar shadow-2xl rounded-md border border-white/10 bg-[#161618]"
+                >
+                    {options.map((option) => (
+                        <button
+                            key={option.id}
+                            type="button"
+                            role="option"
+                            aria-selected={value === option.id}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onChange(option.id);
+                                setIsOpen(false);
+                            }}
+                            className={`aip-select-option flex items-center justify-between w-full text-left px-3 py-2 rounded-md text-xs cursor-pointer transition-colors hover:bg-white/10 ${value === option.id ? 'aip-text font-medium bg-white/5' : ''}`}
+                        >
+                            <span className="truncate flex-1">{option.name}</span>
+                            {value === option.id && (
+                                <Check size={13} strokeWidth={1.75} className="aip-accent-fg shrink-0 ml-2" aria-hidden="true" />
+                            )}
+                        </button>
+                    ))}
+                    {options.length === 0 && (
+                        <div className="aip-select-empty px-3 py-2 text-xs aip-muted">{t('No rerankers available')}</div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+interface CandidatesSlidingTabsProps {
+    value: number;
+    choices: number[];
+    onChange: (choice: number) => void;
+}
+
+/**
+ * Tab switcher for candidate count. ONE pill that never unmounts, springing `x`
+ * across equal columns: the Retrieval tab pill's construction and spring. It
+ * used to be a per-button `layoutId` pill, the shared-layout projection that
+ * clamped the Settings scroller back to the top when AI Providers' tablist
+ * used one (see RetrievalSettings.tsx), and it had no reduced-motion path.
+ */
+const CandidatesSlidingTabs: React.FC<CandidatesSlidingTabsProps> = ({ value, choices, onChange }) => {
+    const theme = useResolvedTheme();
+    const isLight = theme === 'light';
+    const reduceMotion = useReducedMotion();
+    const index = choices.indexOf(value);
+
+    return (
+        <div className={`p-1 rounded-xl inline-flex border shrink-0 ${isLight ? 'bg-[#E5E5EA] border-black/[0.04]' : 'bg-[#0D0D0F] border-white/[0.08]'}`}>
+            <div className="relative inline-grid" style={{ gridTemplateColumns: `repeat(${choices.length}, 1fr)` }}>
+                <motion.div
+                    aria-hidden="true"
+                    className={`absolute inset-y-0 left-0 rounded-lg shadow-sm will-change-transform ${isLight ? 'bg-white' : 'bg-[#3A3A3C]'}`}
+                    style={{ width: `${100 / Math.max(1, choices.length)}%` }}
+                    initial={false}
+                    animate={{ x: `${Math.max(0, index) * 100}%`, opacity: index < 0 ? 0 : 1 }}
+                    transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
+                />
+                {choices.map((n) => {
+                    const isSelected = value === n;
+                    return (
+                        <button
+                            key={n}
+                            type="button"
+                            onClick={() => onChange(n)}
+                            className={`
+                                relative z-10 px-3 py-1 text-xs font-medium rounded-lg transition-[color,transform] duration-200 active:scale-[0.97] motion-reduce:active:scale-100 select-none
+                                ${isSelected ? (isLight ? 'text-black' : 'text-[#E9E9E9]') : (isLight ? 'text-black/60 hover:text-black' : 'text-white/40 hover:text-white/80')}
+                            `}
+                        >
+                            {n}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+
+/**
+ * What the panel shows before the first IPC reply lands.
+ *
+ * AI Providers renders immediately and fills in; this does the same. The
+ * alternative — gating the whole panel on a status call — is what made this tab
+ * sit on skeletons whenever that call was slow, and the call turned out to be
+ * loading a model.
+ *
+ * Every value here is the conservative truth for an unconfigured install, so a
+ * first paint that is replaced a moment later never says anything false.
+ */
+const INITIAL_STATUS: RerankerStatus = {
+    provider: 'local',
+    openrouterModel: null,
+    jinaModel: null,
+    nativelyModel: null,
+    customModel: null,
+    customEndpoint: null,
+    hasCustomKey: false,
+    hostedModel: null,
+    candidateCount: null,
+    // The retriever's ceiling. Replaced by the real value on the first IPC
+    // reply; until then this is the pool an unconfigured install uses.
+    candidateCountDefault: 30,
+    fallbackToLocal: false,
+    hasApiKey: false,
+    eligible: false,
+    ineligibleReason: null,
+    ineligibleMessage: null,
+    // The placeholder shown before reranker:get-status answers. It named
+    // bge-reranker-base, which is no longer bundled — so the built-in row read
+    // as the wrong model for the first frame of every visit to this panel.
+    builtIn: { id: 'ms-marco-MiniLM-L-6-v2', name: 'MS MARCO MiniLM L6', bundled: true },
+    selectedLocal: null,
+    effective: { kind: 'local', id: 'ms-marco-MiniLM-L-6-v2' },
+    lastTest: null,
+};
+
+/**
+ * The panel split the way the combined Retrieval page needs it.
+ *
+ * `hero` is the Active Reranker card plus the hosted-fallback toggle, which
+ * answers "what happens when the hosted service fails" and is therefore a
+ * question about the ACTIVE choice. `panel` is everything you configure: the
+ * local model library, the hosted providers, extensions, candidate count and
+ * the privacy notice.
+ *
+ * The section heading is NOT a part: Retrieval carries one header for both
+ * halves, so a `header` part would be built every render for a caller that
+ * never renders it. It lives in the standalone return below.
+ *
+ * A render prop on ONE instance, not two mounts of a `section` prop: both
+ * halves read the same `status`, so a second instance would leave the hero
+ * card stale the moment a card below it changed the active reranker.
+ */
+export interface RerankerSettingsParts {
+    /** Active Reranker card + the hosted-fallback toggle. */
+    hero: React.ReactNode;
+    /** Local library, hosted providers, extensions, candidates, privacy note. */
+    panel: React.ReactNode;
+}
+
+interface RerankerSettingsProps {
+    /**
+     * Optional. Absent — the standalone Reranker panel and the dev harness —
+     * renders the original single-column layout, wrapper and styles included.
+     */
+    renderParts?: (parts: RerankerSettingsParts) => React.ReactNode;
+}
+
+export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts }) => {
+    const t = useT();
+    const aipTheme = useResolvedTheme();
+
+    const [status, setStatus] = useState<RerankerStatus>(INITIAL_STATUS);
+
+    /**
+     * The pool size this install actually reranks.
+     *
+     * One value for the whole candidates card. It used to be spelled
+     * `status.candidateCount ?? 15` at six separate sites, and the literal was
+     * wrong: nothing writes a default candidateCount, so an untouched install
+     * reranks the retriever's full pool while the panel displayed 15 — and the
+     * "recommended default" label therefore invited a click that HALVED the
+     * pool. The main process reports the real ceiling now.
+     */
+    const candidateCount = status.candidateCount ?? status.candidateCountDefault;
+    const [catalog, setCatalog] = useState<CatalogModel[]>([]);
+    const [catalogStale, setCatalogStale] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    // Keyed by provider id, not a single draft: OpenRouter and Jina each have
+    // their own credential, and one shared draft would let a keystroke meant
+    // for one card be saved into the other.
+    const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
+    const [savingKeyFor, setSavingKeyFor] = useState<string | null>(null);
+    const [savedKeyFor, setSavedKeyFor] = useState<string | null>(null);
+    const [testing, setTesting] = useState(false);
+    const [testResult, setTestResult] = useState<TestResult | null>(null);
+    const [extensions, setExtensions] = useState<InstalledExtension[]>([]);
+    const [extensionsAvailable, setExtensionsAvailable] = useState(true);
+    const [progress, setProgress] = useState<Record<string, number>>({});
+    const [busyModel, setBusyModel] = useState<string | null>(null);
+    const [installing, setInstalling] = useState(false);
+    const [installError, setInstallError] = useState<string | null>(null);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [catalogModels, setCatalogModels] = useState<LocalCatalogModel[]>([]);
+    const [builtInSelected, setBuiltInSelected] = useState(true);
+    const [modelProgress, setModelProgress] = useState<Record<string, { fraction: number; file: string }>>({});
+    const [busyCatalogId, setBusyCatalogId] = useState<string | null>(null);
+    const [catalogError, setCatalogError] = useState<string | null>(null);
+    const [hostedProviders, setHostedProviders] = useState<Array<{
+        id: 'natively' | 'openrouter' | 'jina' | 'voyage'; name: string; keyUrl: string; keyPlaceholder: string;
+        staticCatalogue: boolean; hasApiKey: boolean;
+        models: Array<{ id: string; label: string; note?: string; recommended?: boolean }>;
+    }>>([]);
+
+    // Model Library UI Optimization States
+    const [filterTab, setFilterTab] = useState<'all' | 'installed' | 'recommended'>('all');
+    const [modelQuery, setModelQuery] = useState('');
+    const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+    const [expandedFileDrawers, setExpandedFileDrawers] = useState<Record<string, boolean>>({});
+
+    // Custom local endpoint states
+    const [customEndpointDraft, setCustomEndpointDraft] = useState('');
+    const [customApiKeyDraft, setCustomApiKeyDraft] = useState('');
+    const [customSaving, setCustomSaving] = useState(false);
+    const [customSaved, setCustomSaved] = useState(false);
+    const [customNote, setCustomNote] = useState<string | null>(null);
+    const [customModels, setCustomModels] = useState<Array<{ id: string; label: string; note?: string }>>([]);
+    const [customRefreshing, setCustomRefreshing] = useState(false);
+
+    const refreshStatus = useCallback(async () => {
+        const next = (await window.electronAPI.getRerankerStatus?.()) as RerankerStatus | undefined;
+        if (next) {
+            setStatus(next);
+            if (next.customEndpoint) {
+                setCustomEndpointDraft(cur => cur ? cur : next.customEndpoint!);
+            }
+        }
+    }, []);
+
+    const loadCustomModels = useCallback(async (_refresh?: boolean) => {
+        setCustomRefreshing(true);
+        try {
+            const models = await window.electronAPI.getCustomRerankerModels?.();
+            if (Array.isArray(models)) setCustomModels(models);
+        } catch { /* best-effort */ } finally {
+            setCustomRefreshing(false);
+        }
+    }, []);
+
+    const saveCustomEndpoint = useCallback(async () => {
+        setCustomSaving(true);
+        setCustomNote(null);
+        setCustomSaved(false);
+        try {
+            const r = await window.electronAPI.setRerankerCustomEndpoint?.({
+                url: customEndpointDraft,
+                apiKey: customApiKeyDraft || undefined,
+            });
+            if (!r?.success) {
+                setCustomNote(r?.message || t('Could not save that endpoint.'));
+                return;
+            }
+            setCustomSaved(true);
+            setTimeout(() => setCustomSaved(false), 3000);
+            if (customEndpointDraft.trim() && !r.reachable) {
+                setCustomNote(t('Saved, but no reranking models were found there. Check that the server is running and serving a reranking API.'));
+            }
+            if (r.models) setCustomModels(r.models);
+            await refreshStatus();
+        } finally {
+            setCustomSaving(false);
+        }
+    }, [customEndpointDraft, customApiKeyDraft, refreshStatus, t]);
+
+    // Every hosted card is rendered from this list, so an empty list means no
+    // key field at all — the failure that made Jina v3.5 unreachable. If
+    // discovery fails, fall back to the one provider whose shape this panel
+    // has always known, rather than rendering nothing.
+    const loadHostedProviders = useCallback(async () => {
+        try {
+            const res = await window.electronAPI.getRerankerHostedProviders?.();
+            if (res?.providers?.length) { setHostedProviders(res.providers as never); return; }
+        } catch { /* fall through to the built-in descriptor */ }
+        // Mirrors HOSTED_RERANK_PROVIDERS. Listing OpenRouter alone here meant
+        // that when discovery degraded, the Jina card vanished AND the fallback
+        // copy (built from this list) went back to naming one provider for a
+        // switch that governs both. Models stay empty on this path — a name and
+        // a key field is the useful degradation; the catalogue is not.
+        setHostedProviders(cur => (cur.length ? cur : [{
+            // Natively is listed here for the same reason Jina is: leaving a
+            // provider out of THIS list is what makes its card vanish when
+            // discovery degrades, and the managed reranker is the one a customer
+            // can use without going and getting a second account.
+            id: 'natively', name: 'Natively',
+            keyUrl: 'https://natively.software', keyPlaceholder: 'natively_sk_…',
+            staticCatalogue: true, hasApiKey: false, models: [],
+        }, {
+            id: 'openrouter', name: 'OpenRouter',
+            keyUrl: 'https://openrouter.ai/keys', keyPlaceholder: 'sk-or-v1-…',
+            staticCatalogue: false, hasApiKey: false, models: [],
+        }, {
+            id: 'jina', name: 'Jina AI',
+            keyUrl: 'https://jina.ai/api-dashboard/', keyPlaceholder: 'jina_…',
+            staticCatalogue: true, hasApiKey: false, models: [],
+        }, {
+            id: 'voyage', name: 'Voyage AI',
+            keyUrl: 'https://dashboard.voyageai.com/', keyPlaceholder: 'pa-…',
+            staticCatalogue: true, hasApiKey: false, models: [],
+        }]));
+    }, []);
+
+    const loadCatalogModels = useCallback(async () => {
+        const res = await window.electronAPI.listLocalRerankerModels?.();
+        if (!res) return;
+        setCatalogModels((res.models ?? []) as LocalCatalogModel[]);
+        setBuiltInSelected(Boolean(res.builtInSelected));
+    }, []);
+
+    useEffect(() => {
+        const off = window.electronAPI.onLocalRerankerModelProgress?.(({ id, fraction, currentFile }) => {
+            setModelProgress(prev => ({ ...prev, [id]: { fraction, file: currentFile } }));
+        });
+        return () => { off?.(); };
+    }, []);
+
+    const loadExtensions = useCallback(async () => {
+        const res = await window.electronAPI.listExtensions?.();
+        if (!res) return;
+        setExtensionsAvailable(Boolean(res.available));
+        setExtensions((res.extensions ?? []) as InstalledExtension[]);
+    }, []);
+
+    useEffect(() => {
+        const off = window.electronAPI.onExtensionModelProgress?.(({ id, modelKey, fraction }) => {
+            setProgress(prev => ({ ...prev, [`${id}::${modelKey}`]: fraction }));
+        });
+        return () => { off?.(); };
+    }, []);
+
+    const loadCatalog = useCallback(async (refresh = false) => {
+        const res = await window.electronAPI.getRerankerCatalog?.({ refresh });
+        if (!res) return;
+        setCatalog((res.models ?? []) as CatalogModel[]);
+        setCatalogStale(Boolean(res.stale));
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions(), loadCatalogModels(), loadHostedProviders()]);
+            } catch (e) {
+                // safeHandle does not wrap handler bodies, so a throwing IPC
+                // handler rejects here. The panel is already on screen; this
+                // only adds the strip that explains why parts of it are empty.
+                if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e));
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [refreshStatus, loadCatalog, loadExtensions, loadCatalogModels, loadHostedProviders]);
+
+    const setConfig = useCallback(async (next: Parameters<NonNullable<typeof window.electronAPI.setRerankerConfig>>[0]) => {
+        await window.electronAPI.setRerankerConfig?.(next);
+        await refreshStatus();
+    }, [refreshStatus]);
+
+    // One arm per hosted provider. A two-way ternary here used to send every
+    // non-Jina pick to OpenRouter, which would have written a Voyage model id
+    // into openrouterModel and switched the provider to OpenRouter.
+    const hostedModelConfig = (providerId: string, model: string): Parameters<NonNullable<typeof window.electronAPI.setRerankerConfig>>[0] => {
+        switch (providerId) {
+            case 'jina': return { provider: 'jina', jinaModel: model };
+            case 'voyage': return { provider: 'voyage', voyageModel: model };
+            case 'natively': return { provider: 'natively', nativelyModel: model };
+            default: return { provider: 'openrouter', openrouterModel: model };
+        }
+    };
+
+    const activeOptions: AipSelectOption[] = useMemo(() => {
+        // Every row: `provider/model` open, bare model closed. One helper so a
+        // new provider cannot invent a fourth label format — this panel had
+        // three (` — Included`, ` — Extension`, ` — OpenRouter`) while
+        // EmbeddingSettings used `provider/model` for the same job.
+        const opt = (id: string, providerId: string, label: string): AipSelectOption => ({
+            id,
+            name: qualifiedModelName(providerId, label),
+            triggerName: bareModelName(label),
+        });
+
+        const options: AipSelectOption[] = [
+            // No `?? 'MS MARCO MiniLM L6'` here: `status` is typed non-nullable and
+            // initialised from INITIAL_STATUS, so that branch was unreachable — a
+            // fourth copy of the bundled model's name that could only ever go stale.
+            opt('local::built-in', 'local', status.builtIn.name),
+        ];
+
+        for (const m of catalogModels) {
+            if (!m.activatable || m.state !== 'installed') continue;
+            options.push(opt(`local::${m.id}`, 'local', m.name));
+        }
+
+        for (const ext of extensions.filter(e => e.type === 'reranker')) {
+            if (!ext.models.every(m => m.state === 'ready')) continue;
+            options.push(opt(`extension::${ext.id}`, 'extension', ext.name));
+        }
+
+        // OpenRouter's catalogue is discovered live; Jina publishes a fixed
+        // enum. Both are offered only once their own key is configured, since
+        // selecting one without a key would activate something that cannot run.
+        const openrouter = hostedProviders.find(p => p.id === 'openrouter');
+        if (openrouter?.hasApiKey ?? status?.hasApiKey) {
+            for (const m of catalog) {
+                options.push(opt(`openrouter::${m.id}`, 'openrouter', m.label));
+            }
+        }
+        for (const provider of hostedProviders.filter(p => p.staticCatalogue && p.hasApiKey)) {
+            for (const m of provider.models) {
+                options.push(opt(`${provider.id}::${m.id}`, provider.id, m.label));
+            }
+        }
+
+        // Custom local endpoint models (LM Studio, TEI, llama-server, etc.)
+        for (const m of customModels) {
+            options.push(opt(`custom::${m.id}`, 'custom', m.label || m.id));
+        }
+        if (status?.effective.kind === 'custom' && status?.effective.id && !customModels.some(m => m.id === status.effective.id)) {
+            options.push(opt(`custom::${status.effective.id}`, 'custom', status.effective.id));
+        }
+
+        if (status?.selectedLocal && !options.some(o => o.id === `local::${status.selectedLocal!.id}`)) {
+            options.push(opt(`local::${status.selectedLocal.id}`, 'local', status.selectedLocal.name || status.selectedLocal.id));
+        }
+        if (status?.effective?.kind && status.effective.id) {
+            const effOptId = `${status.effective.kind}::${status.effective.id}`;
+            if (!options.some(o => o.id === effOptId)) {
+                options.push(opt(effOptId, status.effective.kind, status.effective.id));
+            }
+        }
+
+        return options;
+    }, [status?.builtIn.name, status?.hasApiKey, status?.effective, status?.selectedLocal, catalogModels, extensions, catalog, hostedProviders, customModels, t]);
+
+    const activeOptionId = useMemo(() => {
+        if (!status?.effective) return 'local::built-in';
+        if (status.effective.kind === 'natively'
+            || status.effective.kind === 'openrouter'
+            || status.effective.kind === 'jina'
+            || status.effective.kind === 'voyage') {
+            return `${status.effective.kind}::${status.effective.id ?? ''}`;
+        }
+        if (status.effective.kind === 'custom') return `custom::${status.effective.id ?? ''}`;
+        if (status.effective.kind === 'extension') return `extension::${status.effective.id ?? ''}`;
+        if (status.selectedLocal?.id) return `local::${status.selectedLocal.id}`;
+        const selected = catalogModels.find(m => m.selected);
+        if (selected) return `local::${selected.id}`;
+        if (status.effective.id && status.effective.id !== status.builtIn.id && status.effective.id !== 'built-in') {
+            return `local::${status.effective.id}`;
+        }
+        return 'local::built-in';
+    }, [status?.effective, status?.selectedLocal, status?.builtIn, catalogModels]);
+
+    const activeDisplayLabel = useMemo(() => {
+        const matched = activeOptions.find(o => o.id === activeOptionId);
+        if (matched) return matched.triggerName || matched.name;
+        if (status?.selectedLocal?.name) return status.selectedLocal.name;
+        if (status?.effective?.id) return bareModelName(status.effective.id);
+        return status?.builtIn?.name || t('Select reranker');
+    }, [activeOptionId, activeOptions, status?.selectedLocal, status?.effective, status?.builtIn, t]);
+
+    const chooseActive = useCallback(async (optionId: string) => {
+        const [kind, ...rest] = optionId.split('::');
+        const id = rest.join('::');
+        setBusyCatalogId(optionId);
+        setCatalogError(null);
+        try {
+            if (kind === 'natively') {
+                // Its own arm, not the trailing `else`. Without one, picking the
+                // managed reranker fell through to the local branch and silently
+                // set provider:'local' — the picker would show a selection the
+                // app was not using.
+                await window.electronAPI.setRerankerConfig?.({ provider: 'natively', nativelyModel: id });
+            } else if (kind === 'openrouter') {
+                await window.electronAPI.setRerankerConfig?.({ provider: 'openrouter', openrouterModel: id });
+            } else if (kind === 'jina') {
+                await window.electronAPI.setRerankerConfig?.({ provider: 'jina', jinaModel: id });
+            } else if (kind === 'voyage') {
+                await window.electronAPI.setRerankerConfig?.({ provider: 'voyage', voyageModel: id });
+            } else if (kind === 'custom') {
+                await window.electronAPI.setRerankerConfig?.({ provider: 'custom', customModel: id });
+            } else if (kind === 'extension') {
+                await window.electronAPI.setRerankerConfig?.({ provider: 'local' });
+                for (const ext of extensions.filter(e => e.type === 'reranker' && e.enabled && e.id !== id)) {
+                    await window.electronAPI.setExtensionEnabled?.(ext.id, false);
+                }
+                await window.electronAPI.setExtensionEnabled?.(id, true);
+            } else {
+                await window.electronAPI.setRerankerConfig?.({ provider: 'local' });
+                for (const ext of extensions.filter(e => e.type === 'reranker' && e.enabled)) {
+                    await window.electronAPI.setExtensionEnabled?.(ext.id, false);
+                }
+                const res = await window.electronAPI.useLocalRerankerModel?.(id === 'built-in' ? null : id);
+                if (res && !res.success) {
+                    setCatalogError(res.message || res.error || t('Could not activate this reranker.'));
+                }
+            }
+            await Promise.all([refreshStatus(), loadCatalogModels(), loadExtensions(), loadHostedProviders(), loadCustomModels()]);
+        } finally {
+            setBusyCatalogId(null);
+        }
+    }, [extensions, refreshStatus, loadCatalogModels, loadExtensions, loadHostedProviders, loadCustomModels, t]);
+
+    const activeDetail = useMemo(() => {
+        if (!status) return '';
+        const parts: string[] = [];
+
+        if (status.effective.kind === 'natively') {
+            // Says where the text goes, the question this option raises. The
+            // billing half ("Uses your plan's Knowledge allowance") is NOT
+            // repeated here — the Natively provider card below already states
+            // it, and on the combined Retrieval page this line sits directly
+            // above that card.
+            parts.push(t('Hosted'), t('Document text is sent to Natively'));
+            if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
+        } else if (status.effective.kind === 'openrouter') {
+            parts.push(t('Hosted'), t('Document text is sent to OpenRouter'));
+            if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
+        } else if (status.effective.kind === 'jina' || status.effective.kind === 'voyage') {
+            parts.push(t('Hosted'), status.effective.kind === 'jina' ? t('Document text is sent to Jina AI') : t('Document text is sent to Voyage AI'));
+            if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
+        } else if (status.effective.kind === 'custom') {
+            parts.push(t('On-device'), t('Custom endpoint'));
+            if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
+        } else if (status.effective.kind === 'extension') {
+            parts.push(t('On-device'), t('Provided by an extension'));
+        } else {
+            const selected = catalogModels.find(m => m.selected);
+            const localName = status.selectedLocal?.name || (selected ? selected.name : null);
+            parts.push(t('On-device'));
+            if (localName) parts.push(localName);
+            parts.push(selected ? humanBytes(selected.bytesOnDisk || selected.bytes) : t('Included with Natively'));
+        }
+        return parts.join(' · ');
+    }, [status, catalogModels, t]);
+
+    const rerankerExtensions = useMemo(
+        () => extensions.filter(e => e.type === 'reranker'),
+        [extensions],
+    );
+
+    const enabledRerankerCount = useMemo(
+        () => rerankerExtensions.filter(e => e.enabled).length,
+        [rerankerExtensions],
+    );
+
+    // Model Library statistics & filtering logic
+    const installedCount = useMemo(() => {
+        let count = builtInSelected || status?.builtIn.available ? 1 : 0;
+        count += catalogModels.filter(m => m.state === 'installed').length;
+        return count;
+    }, [builtInSelected, status?.builtIn.available, catalogModels]);
+
+    const totalCount = useMemo(() => 1 + catalogModels.length, [catalogModels]);
+
+    const installedBytes = useMemo(() => {
+        return catalogModels.filter(m => m.state === 'installed').reduce((acc, m) => acc + (m.bytesOnDisk || m.bytes), 0);
+    }, [catalogModels]);
+
+    /**
+     * The one model named in "Best for this Mac".
+     *
+     * Several entries carry the Recommended badge, so this used to be whichever
+     * one happened to sit earliest in the catalogue array — a headline
+     * recommendation decided by array order.
+     *
+     * The rule, stated: prefer a recommended model the user can actually use
+     * WITHOUT a licence problem. jina-reranker-v3.5 is the strongest local
+     * reranker measured (MRR 0.9514 against a 0.8368 no-reranker baseline, and
+     * it never moved a query down), but it is CC-BY-NC — putting it in a
+     * headline inside a commercial product recommends a licence the user
+     * probably cannot honour. It keeps its badge and its note; the headline
+     * goes to the strongest Apache-licensed model instead.
+     *
+     * The fallback is deliberate rather than defensive: if the catalogue ever
+     * recommends only restricted models, naming one is still better than
+     * naming none.
+     */
+    const recommendedModelName = useMemo(() => {
+        const recommended = catalogModels.filter(m => m.recommended && m.supported);
+        const unrestricted = recommended.find(m => !m.license?.commercialUseRestricted);
+        return (unrestricted ?? recommended[0])?.name ?? 'mxbai Rerank XSmall';
+    }, [catalogModels]);
+
+    const filteredCatalogModels = useMemo(() => {
+        return catalogModels.filter(m => {
+            if (filterTab === 'installed' && m.state !== 'installed') return false;
+            if (filterTab === 'recommended' && !m.recommended) return false;
+            if (modelQuery.trim()) {
+                const q = modelQuery.toLowerCase().trim();
+                const matchesName = m.name.toLowerCase().includes(q);
+                const matchesParams = m.params.toLowerCase().includes(q);
+                const matchesNote = m.note?.toLowerCase().includes(q) ?? false;
+                return matchesName || matchesParams || matchesNote;
+            }
+            return true;
+        });
+    }, [catalogModels, filterTab, modelQuery]);
+
+    const filteredOnnxModels = useMemo(() => filteredCatalogModels.filter(m => m.runtime === 'onnx'), [filteredCatalogModels]);
+    const filteredGgufModels = useMemo(() => filteredCatalogModels.filter(m => m.runtime === 'gguf'), [filteredCatalogModels]);
+
+    const installCatalogModel = useCallback(async (id: string) => {
+        setBusyCatalogId(id);
+        setCatalogError(null);
+        try {
+            const res = await window.electronAPI.installLocalRerankerModel?.(id);
+            if (res && !res.success) {
+                setCatalogError(res.message || res.error || t('Download failed.'));
+            }
+            await loadCatalogModels();
+        } finally {
+            setBusyCatalogId(null);
+            setModelProgress(prev => { const next = { ...prev }; delete next[id]; return next; });
+        }
+    }, [loadCatalogModels, t]);
+
+    const useCatalogModel = useCallback(async (id: string | null) => {
+        setBusyCatalogId(id ?? 'built-in');
+        setCatalogError(null);
+        try {
+            const res = await window.electronAPI.useLocalRerankerModel?.(id);
+            if (res && !res.success) setCatalogError(res.message || res.error || t('Could not activate this reranker.'));
+            await Promise.all([loadCatalogModels(), refreshStatus()]);
+        } finally {
+            setBusyCatalogId(null);
+        }
+    }, [loadCatalogModels, refreshStatus, t]);
+
+    const removeCatalogModel = useCallback(async (id: string) => {
+        setBusyCatalogId(id);
+        setCatalogError(null);
+        try {
+            const res = await window.electronAPI.removeLocalRerankerModel?.(id);
+            if (res && !res.success) setCatalogError(res.message || res.error || t('Could not remove this model.'));
+            await loadCatalogModels();
+        } finally {
+            setBusyCatalogId(null);
+        }
+    }, [loadCatalogModels, t]);
+
+    const installFromFolder = useCallback(async () => {
+        setInstalling(true);
+        setInstallError(null);
+        try {
+            const res = await window.electronAPI.installExtensionFromFolder?.();
+            if (res && !res.success && res.error !== 'cancelled') {
+                setInstallError(res.errors?.join('; ') || res.error || 'Install failed.');
+            }
+            await loadExtensions();
+        } finally {
+            setInstalling(false);
+        }
+    }, [loadExtensions]);
+
+    const downloadModel = useCallback(async (id: string, modelKey: string) => {
+        const key = `${id}::${modelKey}`;
+        setBusyModel(key);
+        try {
+            const res = await window.electronAPI.downloadExtensionModel?.(id, modelKey);
+            if (res && !res.success) setInstallError(res.message || res.error || 'Download failed.');
+            await loadExtensions();
+        } finally {
+            setBusyModel(null);
+            setProgress(prev => { const next = { ...prev }; delete next[key]; return next; });
+        }
+    }, [loadExtensions]);
+
+    const downloadExtensionGroup = useCallback(async (extId: string, files: ExtensionModel[]) => {
+        for (const m of files) {
+            if (m.state !== 'ready') {
+                await downloadModel(extId, m.key);
+            }
+        }
+    }, [downloadModel]);
+
+    const cancelExtensionGroup = useCallback(async (extId: string, files: ExtensionModel[]) => {
+        for (const m of files) {
+            const key = `${extId}::${m.key}`;
+            if (busyModel === key || m.state === 'downloading') {
+                await window.electronAPI.cancelExtensionModelDownload?.(extId, m.key);
+            }
+        }
+    }, [busyModel]);
+
+    const groupProgressFraction = useCallback((extId: string, files: ExtensionModel[]) => {
+        let totalBytes = 0;
+        let downloadedBytes = 0;
+        for (const m of files) {
+            const bytes = m.bytes ?? m.approxBytes ?? 0;
+            totalBytes += bytes;
+            if (m.state === 'ready') {
+                downloadedBytes += bytes;
+            } else {
+                const key = `${extId}::${m.key}`;
+                const pct = progress[key];
+                if (typeof pct === 'number') {
+                    downloadedBytes += pct * bytes;
+                }
+            }
+        }
+        return totalBytes > 0 ? Math.min(1, downloadedBytes / totalBytes) : 0;
+    }, [progress]);
+
+    const selectedMissing = useMemo(() => {
+        const id = status?.openrouterModel;
+        if (!id || catalog.length === 0) return false;
+        return !catalog.some(m => m.id === id);
+    }, [status?.openrouterModel, catalog]);
+
+    // No loading gate, and no skeleton gate. AI Providers renders immediately
+    // and fills in as its data lands; this now does the same. A failure is the
+    // one thing worth interrupting for, and it is shown as a strip ABOVE the
+    // panel rather than instead of it — the rest of the settings still work.
+
+    // Both writes go through the provider-generic channel. OpenRouter's own
+    // catalogue is discovered with the key, so it is refetched after a save;
+    // a static catalogue has nothing to refetch.
+    const saveKey = async (providerId: string, staticCatalogue: boolean) => {
+        const draft = (keyDrafts[providerId] ?? '').trim();
+        if (!draft) return;
+        setSavingKeyFor(providerId);
+        setSavedKeyFor(null);
+        setInstallError(null);
+        try {
+            const res = await window.electronAPI.setRerankerHostedKey?.(providerId, draft);
+            if (res && res.success === false) {
+                setInstallError(res.message || res.error || t('Could not save the key.'));
+                return;
+            }
+            setSavedKeyFor(providerId);
+            setKeyDrafts(prev => ({ ...prev, [providerId]: '' }));
+            setTimeout(() => setSavedKeyFor(cur => (cur === providerId ? null : cur)), 3000);
+            await Promise.all([
+                refreshStatus(),
+                loadHostedProviders(),
+                ...(staticCatalogue ? [] : [loadCatalog(true)]),
+            ]);
+        } finally {
+            setSavingKeyFor(null);
+        }
+    };
+
+    const removeKey = async (providerId: string, staticCatalogue: boolean) => {
+        setSavingKeyFor(providerId);
+        setInstallError(null);
+        try {
+            await window.electronAPI.setRerankerHostedKey?.(providerId, '');
+            setKeyDrafts(prev => ({ ...prev, [providerId]: '' }));
+            await Promise.all([
+                refreshStatus(),
+                loadHostedProviders(),
+                ...(staticCatalogue ? [] : [loadCatalog(true)]),
+            ]);
+        } finally {
+            setSavingKeyFor(null);
+        }
+    };
+
+    // The main process tests whichever provider is SELECTED — it does not take
+    // one as an argument, and it must not, because probing a provider would
+    // otherwise mean quietly switching to it. So Test is offered only on the
+    // card that is already active.
+    const runTest = async (override?: { provider?: RerankerProvider; model?: string; apiKey?: string; endpoint?: string }) => {
+        setTesting(true);
+        setTestResult(null);
+        try {
+            const res = await window.electronAPI.testReranker?.(override ?? {});
+            setTestResult((res ?? { success: false, message: t('No response.') }) as TestResult);
+            await refreshStatus();
+        } finally {
+            setTesting(false);
+        }
+    };
+
+    const renderCatalogModelRow = (m: LocalCatalogModel) => {
+        const prog = modelProgress[m.id];
+        const busy = busyCatalogId === m.id;
+        const installed = m.state === 'installed';
+        // Only an entry that actually names an extension needs one. GGUF runs
+        // in Core now; this used to fire on every GGUF model and disable its
+        // Download button while claiming an extension was missing.
+        const needsExtension = m.extensionId != null && m.extensionInstalled === false;
+
+        return (
+            <div
+                key={m.id}
+                className="aip-card p-3 space-y-1.5 transition-colors hover:bg-white/[0.03]"
+                data-active={m.selected ? 'true' : undefined}
+                data-off={m.supported ? undefined : 'true'}
+            >
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap sm:flex-nowrap">
+                        <span
+                            aria-hidden="true"
+                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{
+                                background: m.selected ? 'var(--aip-accent)' : installed ? 'var(--aip-tertiary)' : 'transparent',
+                                border: installed || m.selected ? undefined : '1px solid var(--aip-border-strong)',
+                            }}
+                        />
+                        <span className="text-xs font-semibold aip-hero truncate">{m.name}</span>
+                        {m.selected && <AipBadge tone="ok" label={t('In use')} />}
+                        {installed && !m.selected && !m.supported && (
+                            <AipBadge tone="warn" label={t('Downloaded · not usable yet')} />
+                        )}
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-1.5">
+                        {!installed && (
+                            busy ? (
+                                <button
+                                    type="button"
+                                    className="aip-btn"
+                                    data-size="sm"
+                                    onClick={() => void window.electronAPI.cancelLocalRerankerModel?.(m.id)}
+                                >
+                                    <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                                    <span>{t('Cancel')}</span>
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="aip-btn"
+                                    data-size="sm"
+                                    disabled={busyCatalogId !== null || needsExtension}
+                                    onClick={() => void installCatalogModel(m.id)}
+                                >
+                                    <Download size={12} strokeWidth={1.75} aria-hidden="true" />
+                                    <span>{t('Download')}</span>
+                                </button>
+                            )
+                        )}
+                        {installed && m.activatable && !m.selected && (
+                            <button
+                                type="button"
+                                className="aip-btn"
+                                data-size="sm"
+                                disabled={busyCatalogId !== null}
+                                onClick={() => void useCatalogModel(m.id)}
+                            >
+                                {busy ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" /> : null}
+                                <span>{t('Use')}</span>
+                            </button>
+                        )}
+                        {installed && !m.selected && (
+                            <button
+                                type="button"
+                                className="aip-btn"
+                                data-size="sm"
+                                data-variant="danger-ghost"
+                                disabled={busyCatalogId !== null}
+                                onClick={() => void removeCatalogModel(m.id)}
+                                title={t('Remove model')}
+                            >
+                                <Trash2 size={12} strokeWidth={1.75} aria-hidden="true" />
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                <div className="text-[10.5px] aip-muted pl-3.5 flex items-center gap-2 flex-wrap">
+                    <span>
+                        {[m.params, humanBytes(m.bytes), m.license.spdx, m.license.commercialUseRestricted ? t('non-commercial') : null]
+                            .filter(Boolean).join(' · ')}
+                    </span>
+                </div>
+
+                {m.note && (
+                    <p className="text-[10px] aip-muted leading-relaxed pl-3.5">
+                        {m.note}
+                    </p>
+                )}
+
+                {!m.supported && m.unsupportedReason && (
+                    <div className="aip-inline-warn flex items-start gap-2 ml-3.5 mt-1" role="status">
+                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                        <span className="min-w-0">{m.unsupportedReason}</span>
+                    </div>
+                )}
+
+                {needsExtension && (
+                    <p className="text-[10px] aip-muted ml-3.5">
+                        {t('Runs through the')} <code className="px-1.5 py-0.5 rounded bg-[var(--aip-item-active)] text-[9.5px] font-mono">{m.extensionId}</code> {t('extension, which is not installed yet.')}
+                        {m.requiresBinary ? ` ${t('It also needs')} ${m.requiresBinary} ${t('on your PATH.')}` : ''}
+                    </p>
+                )}
+
+                {busy && prog && (
+                    <div className="space-y-1 pl-3.5 pt-1">
+                        <div className="h-1 w-full bg-[var(--aip-item-active)] rounded-full overflow-hidden">
+                            <div className="h-full w-full origin-left bg-[var(--aip-accent)] transition-transform duration-150 ease-linear" style={{ transform: `scaleX(${Math.min(1, Math.max(0, prog.fraction))})` }} />
+                        </div>
+                        <div className="text-[10px] aip-muted flex justify-between">
+                            <span>{`${Math.round(prog.fraction * 100)}% · ${prog.file}`}</span>
+                            <span>{`${humanBytes(Math.round(prog.fraction * m.bytes))} / ${humanBytes(m.bytes)}`}</span>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    /**
+     * Who the hosted fallback actually covers.
+     *
+     * The switch is wired to RerankerRegistry.resolveHostedPort, which wraps
+     * WHICHEVER hosted provider is selected — so the old label ("if OpenRouter
+     * is unavailable") was wrong the moment Jina shipped: a failed Jina rerank
+     * took the same branch while the UI said nothing about it. Built from the
+     * live provider list rather than a hardcoded pair, so a third hosted
+     * provider needs no copy change.
+     */
+    const hostedFallbackSubject = useMemo(() => {
+        const names = hostedProviders.map(p => p.name).filter(Boolean);
+        if (names.length === 0) return t('a hosted reranker');
+        if (names.length === 1) return names[0];
+        return `${names.slice(0, -1).join(', ')} ${t('or')} ${names[names.length - 1]}`;
+    }, [hostedProviders, t]);
+
+    /* Active Reranker and the hosted-fallback toggle. On the combined Retrieval
+       page this sits above the Embedding/Reranker switcher. */
+    const hero = (
+        <>
+            {loadError && (
+                <div className="aip-card p-3 flex items-start gap-2" role="status">
+                    <AlertCircle size={13} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                    <span className="aip-muted text-xs flex-1">{loadError}</span>
+                    <button
+                        type="button"
+                        className="aip-btn"
+                        data-size="sm"
+                        onClick={() => {
+                            setLoadError(null);
+                            void (async () => {
+                                try {
+                                    await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions(), loadCatalogModels(), loadHostedProviders()]);
+                                } catch (e) {
+                                    setLoadError(e instanceof Error ? e.message : String(e));
+                                }
+                            })();
+                        }}
+                    >
+                        {t('Try again')}
+                    </button>
+                </div>
+            )}
+
+            {/* Active Reranker Hero Card — matching EmbeddingSettings */}
+            <div className="aip-card p-5">
+                <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
+                    <div className="min-w-0 flex-1">
+                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">
+                            {t('Active Reranker Model')}
+                        </label>
+                        <p className="text-[10px] aip-muted mt-0.5">
+                            {activeDetail}
+                        </p>
+                    </div>
+
+                    <div className="shrink-0 relative">
+                        <RerankerModelSelect
+                            ariaLabel={t('Active Reranker Model')}
+                            value={activeOptionId}
+                            displayLabel={activeDisplayLabel}
+                            options={activeOptions}
+                            placeholder={t('No rerankers available')}
+                            disabled={busyCatalogId !== null}
+                            disabledHint={busyCatalogId !== null ? t('Switching…') : undefined}
+                            onChange={(id) => { void chooseActive(id); }}
+                        />
+                    </div>
+                </div>
+
+                {catalogError && (
+                    <div className="aip-inline-warn flex items-start gap-2 pt-3" role="status">
+                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                        <span className="min-w-0">{catalogError}</span>
+                    </div>
+                )}
+
+                {status.provider === 'openrouter' && !status.eligible && (
+                    <div className="aip-inline-warn flex items-start gap-2 pt-3" role="status">
+                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                        <span className="min-w-0">
+                            {status.ineligibleMessage}{' '}
+                            {t('Your local reranker is being used until this is resolved.')}
+                        </span>
+                    </div>
+                )}
+            </div>
+
+            {/* Hosted fallback — its own card, directly under Active Reranker.
+                It answers "what happens when the hosted service fails", which is
+                a question about the ACTIVE choice. It used to ride along at the
+                bottom of the candidates card, where it read as a footnote to a
+                setting it has nothing to do with. */}
+            <div className="aip-card p-5">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1 space-y-1">
+                        <span className="block text-xs font-medium uppercase tracking-wide aip-hero">
+                            {t('Fall back to the local reranker')}
+                        </span>
+                        <p className="text-[10px] aip-muted">
+                            {`${t('Off by default. If')} ${hostedFallbackSubject} ${t('fails, rerank locally instead of keeping the original order.')}`}
+                        </p>
+                    </div>
+                    <div className="shrink-0">
+                        <AipSwitch
+                            label={t('Fall back to the local reranker')}
+                            checked={status.fallbackToLocal}
+                            onChange={(next) => void setConfig({ fallbackToLocal: next })}
+                        />
+                    </div>
+                </div>
+
+                {/* Both halves matter. `provider` is what was SELECTED, `effective.kind`
+                    is what actually runs, and they diverge in two states this hint
+                    would otherwise lie in: a selected-but-ineligible hosted provider
+                    (effective falls to local — the hero card already explains that
+                    one), and an enabled reranker EXTENSION (on-device, but "choose a
+                    hosted one" is the wrong instruction for someone who just
+                    installed one). */}
+                {status.provider === 'local' && status.effective.kind === 'local' && (
+                    <p className="text-[10px] aip-muted pt-3">
+                        {t('Your active reranker already runs on this device, so this changes nothing until you choose a hosted one.')}
+                    </p>
+                )}
+            </div>
+        </>
+    );
+
+    /* Everything you configure. On the Retrieval page this is the body of the
+       Reranker sub-tab. */
+    const panel = (
+        <>
+            {/* Provider Card 3+: hosted rerankers, one card per provider.
+                OpenRouter discovers its catalogue live; Jina publishes a fixed
+                enum. Jina was added for jina-reranker-v3.5 when that model could
+                only run hosted. It runs locally now — Core implements the
+                listwise protocol and the catalogue entry downloads the projector
+                — so the hosted card is the no-download, no-warm-up route to the
+                same model, not the only one.
+                Natively gets no card (owner decision, 2026-09-22): the server
+                pins its model and the key comes from the Natively plan, so there
+                is nothing to configure. It stays selectable in Active Reranker. */}
+            {hostedProviders.filter(p => p.id !== 'natively').map(p => {
+                const isActive = status.effective.kind === p.id;
+                const isSelected = status.provider === p.id;
+                // status.hasApiKey is the presence flag for the SELECTED
+                // provider. Preferring the per-provider flag but falling back
+                // to it keeps the key field honest if discovery degraded.
+                const hasKey = p.hasApiKey || (isSelected && status.hasApiKey);
+                const draft = keyDrafts[p.id] ?? '';
+                const saving = savingKeyFor === p.id;
+                const saved = savedKeyFor === p.id;
+                const selectedModel = p.id === 'natively'
+                    ? status.nativelyModel
+                    : p.id === 'jina' ? status.jinaModel
+                    : p.id === 'voyage' ? (status.voyageModel ?? null)
+                    : status.openrouterModel;
+                // Natively runs on the API key the user already configured, so
+                // this card must not offer a key field. Rendering one would
+                // invite a paste that reranker:set-hosted-key now refuses
+                // ('not_byok'), and a Remove button that would delete nothing.
+                const byok = p.id !== 'natively';
+                // A live catalogue arrives from OpenRouter; a static one ships
+                // with the app and is listed even before a key exists, so the
+                // user can see what a key would buy them.
+                const models = p.staticCatalogue
+                    ? p.models.map(m => ({ id: m.id, label: m.label }))
+                    : catalog.map(m => ({ id: m.id, label: trimVendorAttribution(m.label) }));
+
+                return (
+                    <div className="aip-card aip-provider" key={p.id}>
+                        {/* Header */}
+                        <div className="aip-provider-head">
+                            <AipProviderMark provider={p.id} name={p.name} />
+                            <h4 className="aip-card-title truncate min-w-0">{t(p.name)}</h4>
+                            <div className="ml-auto flex items-center gap-2 shrink-0">
+                                {byok && (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        data-variant="ghost"
+                                        onClick={() => window.electronAPI.openExternal?.(p.keyUrl)}
+                                        title={`Get ${p.name} API Key`}
+                                    >
+                                        <span className="uppercase tracking-wide">{t('Get Key')}</span>
+                                        <ExternalLink size={12} strokeWidth={1.75} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Not BYOK: say which key it uses and where that lives, rather
+                            than showing an input for a credential this card does not own. */}
+                        {!byok && (
+                            <div className="aip-provider-row">
+                                <p className="text-[11px] text-white/45 leading-relaxed">
+                                    {hasKey
+                                        ? t('Runs on your Natively API key. Reranking counts toward your plan\u2019s Knowledge allowance.')
+                                        : t('Requires a Natively API key. Add one in the Natively API section to use the managed reranker.')}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* API Key Credential Row matching EmbeddingSettings */}
+                        {byok && (
+                        <div className="aip-provider-row">
+                            <div className="aip-provider-field">
+                                <div className="aip-field">
+                                    <KeyRound size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                                    <input
+                                        type="password"
+                                        className="aip-input"
+                                        value={draft}
+                                        placeholder={hasKey ? '••••••••••••••••' : p.keyPlaceholder}
+                                        onChange={(e) => {
+                                            const v = e.target.value;
+                                            setKeyDrafts(prev => ({ ...prev, [p.id]: v }));
+                                            setSavedKeyFor(cur => (cur === p.id ? null : cur));
+                                        }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') void saveKey(p.id, p.staticCatalogue); }}
+                                        autoComplete="off"
+                                        spellCheck={false}
+                                        aria-label={`${p.name} ${t('API key')}`}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => void saveKey(p.id, p.staticCatalogue)}
+                                        disabled={saving || !draft.trim()}
+                                        className="aip-btn-seg aip-field-seg"
+                                        data-tone={saved ? 'ok' : undefined}
+                                    >
+                                        {saving
+                                            ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
+                                            : saved
+                                                ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
+                                                : t('Save')}
+                                    </button>
+                                </div>
+                                {hasKey && (
+                                    <button
+                                        type="button"
+                                        onClick={() => void removeKey(p.id, p.staticCatalogue)}
+                                        className="aip-btn shrink-0"
+                                        data-icon="true"
+                                        data-variant="danger-ghost"
+                                        title={t('Remove API Key')}
+                                    >
+                                        <Trash2 size={14} strokeWidth={1.75} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        )}
+
+                        {/* Action Row: Test Connection & Model List Selector matching EmbeddingSettings */}
+                        {(hasKey || models.length > 0) && (
+                            <div className="aip-provider-row">
+                                {hasKey && (
+                                    <button
+                                        type="button"
+                                        onClick={() => void runTest()}
+                                        disabled={testing || !isSelected || !selectedModel}
+                                        className="aip-btn shrink-0"
+                                        data-tone={isSelected && testResult?.success ? 'ok' : isSelected && testResult ? 'danger' : undefined}
+                                        title={!isSelected
+                                            ? t('Pick a model from this provider first — testing sends a real request through whichever provider is selected.')
+                                            : (testResult?.message || t('Test Connection'))}
+                                    >
+                                        {testing && isSelected
+                                            ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
+                                            : isSelected && testResult?.success
+                                                ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
+                                                : isSelected && testResult
+                                                    ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
+                                                    : <>{t('Test Connection')}</>}
+                                    </button>
+                                )}
+
+                                {isSelected && testResult?.success && testResult.budgetFit?.warning && (
+                                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                                        <span className="min-w-0">{t(testResult.budgetFit.warning)}</span>
+                                    </div>
+                                )}
+
+                                {/* Provider Model Selector matching EmbeddingSettings */}
+                                {models.length > 0 && (
+                                    <AipModelList
+                                        models={models}
+                                        optIn
+                                        enabled={isActive && selectedModel ? [selectedModel] : []}
+                                        defaultId={isActive ? (selectedModel ?? undefined) : undefined}
+                                        onToggle={(id) => void setConfig(
+                                            hostedModelConfig(p.id, id))}
+                                        onSetDefault={(id) => void setConfig(
+                                            hostedModelConfig(p.id, id))}
+                                        onReset={() => {}}
+                                        refreshing={p.staticCatalogue ? false : refreshing}
+                                        onRefresh={p.staticCatalogue
+                                            ? undefined
+                                            : async () => { setRefreshing(true); try { await loadCatalog(true); } finally { setRefreshing(false); } }}
+                                    />
+                                )}
+                            </div>
+                        )}
+
+                        {/* Notes carried by a static catalogue are the whole reason it is
+                            static: they say what the model is for, and for v3.5 that it
+                            cannot be run any other way. */}
+                        {p.staticCatalogue && p.models.some(m => m.note) && (
+                            <div className="px-1 space-y-1">
+                                {p.models.filter(m => m.note).map(m => (
+                                    <p key={m.id} className="aip-meta aip-provider-note">
+                                        <span className="font-medium">{m.label}</span>{' — '}{t(m.note as string)}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
+
+                        {!p.staticCatalogue && catalogStale && (
+                            <p className="aip-meta aip-provider-note">
+                                {t('Could not reach OpenRouter. Showing the models from the last successful check.')}
+                            </p>
+                        )}
+
+                        {!p.staticCatalogue && selectedMissing && (
+                            <p className="aip-meta aip-provider-note">
+                                {t('The selected reranker is no longer offered by OpenRouter. Your local reranker will be used until you pick another.')}
+                            </p>
+                        )}
+                    </div>
+                );
+            })}
+            {/* Local Reranker & Model Library — below the hosted cards. */}
+            <div className="aip-card aip-provider space-y-3">
+                <div className="aip-provider-head">
+                    <PlatformMark />
+                    <h4 className="aip-card-title truncate min-w-0">{t('Local Reranker')}</h4>
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                        <span className="aip-meta inline-flex items-center gap-1.5">
+                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
+                        </span>
+                        {/* No "Downloaded" state (owner request): a cached-but-unloaded
+                            model shows no badge; Ready once loaded, Local when absent. */}
+                        {(status.builtIn.available || !status.builtIn.cached) && (
+                            <AipBadge
+                                tone={status.builtIn.available ? 'ok' : 'neutral'}
+                                label={status.builtIn.available ? t('Ready') : t('Local')}
+                            />
+                        )}
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 flex-wrap text-[10px] aip-muted px-1">
+                    <p className="min-w-0 flex-1">
+                        {t('Runs on this device with zero data sent externally. Built-in BGE model shipped with Natively, or download open models directly from Hugging Face.')}
+                    </p>
+                    <span className="shrink-0 font-medium tabular-nums aip-text">
+                        {installedCount}/{totalCount} {t('installed')}
+                        {installedBytes > 0 && <> · {humanBytes(installedBytes)}</>}
+                    </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
+                    {recommendedModelName ? (
+                        <p className="text-[11px] px-1" style={{ color: 'var(--aip-tertiary)' }}>
+                            {t('Best for this')} {isMac ? 'Mac' : 'PC'}: <span className="font-medium" style={{ color: 'var(--aip-secondary)' }}>{recommendedModelName}</span>
+                        </p>
+                    ) : <div />}
+
+                    {/* Filter Tabs. Theme tokens, not white literals: white text
+                        and a 10%-white pill vanished on the light card.
+                        --aip-pill-bg is exactly the old 10% white in dark and a
+                        raised white chip in light. */}
+                    <div className="flex items-center gap-1 bg-[var(--aip-btn-bg)] p-0.5 rounded-md text-[11px]">
+                        <button
+                            type="button"
+                            className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100"
+                            style={{
+                                background: filterTab === 'all' ? 'var(--aip-pill-bg)' : undefined,
+                                boxShadow: filterTab === 'all' ? 'var(--aip-pill-shadow)' : 'none',
+                                fontWeight: filterTab === 'all' ? 600 : 400,
+                            }}
+                            onClick={() => setFilterTab('all')}
+                        >
+                            {t('All')} ({totalCount})
+                        </button>
+                        <button
+                            type="button"
+                            className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100"
+                            style={{
+                                background: filterTab === 'installed' ? 'var(--aip-pill-bg)' : undefined,
+                                boxShadow: filterTab === 'installed' ? 'var(--aip-pill-shadow)' : 'none',
+                                fontWeight: filterTab === 'installed' ? 600 : 400,
+                            }}
+                            onClick={() => setFilterTab('installed')}
+                        >
+                            {t('Installed')} ({installedCount})
+                        </button>
+                        <button
+                            type="button"
+                            className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100"
+                            style={{
+                                background: filterTab === 'recommended' ? 'var(--aip-pill-bg)' : undefined,
+                                boxShadow: filterTab === 'recommended' ? 'var(--aip-pill-shadow)' : 'none',
+                                fontWeight: filterTab === 'recommended' ? 600 : 400,
+                            }}
+                            onClick={() => setFilterTab('recommended')}
+                        >
+                            {t('Recommended')}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Instant Search Bar */}
+                <div className="aip-field">
+                    <Search size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                    <input
+                        type="text"
+                        className="aip-input"
+                        value={modelQuery}
+                        placeholder={t('Filter models by name, size, or format…')}
+                        onChange={(e) => setModelQuery(e.target.value)}
+                    />
+                    {modelQuery && (
+                        <button
+                            type="button"
+                            className="aip-btn text-[10px] shrink-0"
+                            data-size="sm"
+                            data-variant="ghost"
+                            onClick={() => setModelQuery('')}
+                        >
+                            <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
+                    )}
+                </div>
+
+                {/* Scrollable Model Library Container */}
+                <div className="aip-well aip-scroll-y p-2.5 space-y-3.5" style={{ maxHeight: 380 }}>
+                    {/* Section 1: Bundled Models */}
+                    {(filterTab === 'all' || filterTab === 'installed') && !modelQuery && (
+                        <section className="space-y-1.5">
+                            <header className="flex items-baseline justify-between gap-3 px-1">
+                                <h5 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
+                                    {t('Bundled with Natively')}
+                                </h5>
+                                <span className="text-[10px] tabular-nums" style={{ color: 'var(--aip-tertiary)' }}>1/1</span>
+                            </header>
+
+                            <div className="aip-card flex items-center justify-between gap-3 p-2.5" data-active={builtInSelected ? 'true' : undefined}>
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                    <span
+                                        aria-hidden="true"
+                                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                                        style={{ background: builtInSelected ? 'var(--aip-accent)' : 'var(--aip-tertiary)' }}
+                                    />
+                                    <span className="text-xs font-semibold aip-hero truncate">{status.builtIn.name}</span>
+                                    <AipBadge tone="neutral" label={t('Included')} />
+                                    {builtInSelected && <AipBadge tone="ok" label={t('In use')} />}
+                                </div>
+                                <div className="shrink-0">
+                                    {!builtInSelected && (
+                                        <button
+                                            type="button"
+                                            className="aip-btn"
+                                            data-size="sm"
+                                            disabled={busyCatalogId !== null}
+                                            onClick={() => void useCatalogModel(null)}
+                                        >
+                                            <span>{t('Use')}</span>
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </section>
+                    )}
+
+                    {/* Section 2: ONNX Models */}
+                    {filteredOnnxModels.length > 0 && (
+                        <section className="space-y-1.5">
+                            <header className="flex items-baseline justify-between gap-3 px-1">
+                                <h5 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
+                                    {t('Hugging Face ONNX Models')}
+                                </h5>
+                                <span className="text-[10px] tabular-nums" style={{ color: 'var(--aip-tertiary)' }}>
+                                    {filteredOnnxModels.filter(m => m.state === 'installed').length}/{filteredOnnxModels.length}
+                                </span>
+                            </header>
+                            <div className="space-y-1.5">
+                                {filteredOnnxModels.map(renderCatalogModelRow)}
+                            </div>
+                        </section>
+                    )}
+
+                    {/* Section 3: GGUF Extension Models */}
+                    {filteredGgufModels.length > 0 && (
+                        <section className="space-y-1.5">
+                            <header className="flex items-baseline justify-between gap-3 px-1">
+                                <h5 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
+                                    {t('Extension Rerankers (GGUF)')}
+                                </h5>
+                                <span className="text-[10px] tabular-nums" style={{ color: 'var(--aip-tertiary)' }}>
+                                    {filteredGgufModels.filter(m => m.state === 'installed').length}/{filteredGgufModels.length}
+                                </span>
+                            </header>
+                            <div className="space-y-1.5">
+                                {filteredGgufModels.map(renderCatalogModelRow)}
+                            </div>
+                        </section>
+                    )}
+
+                    {filteredCatalogModels.length === 0 && (
+                        <p className="text-[10px] aip-muted text-center py-4">
+                            {t('No models match your current filter query.')}
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            {/* Provider Card 2: Custom Local Endpoint */}
+            <div className="aip-card aip-provider space-y-3">
+                <div className="aip-provider-head">
+                    <CustomEndpointMark />
+                    <h4 className="aip-card-title truncate min-w-0">{t('Custom Endpoint')}</h4>
+                    <AipBadge
+                        tone={status.customEndpoint ? 'ok' : 'neutral'}
+                        label={status.customEndpoint ? (status.customModel ? t('Configured') : t('Connected')) : t('Not configured')}
+                    />
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                        <span className="aip-meta inline-flex items-center gap-1.5">
+                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
+                        </span>
+                    </div>
+                </div>
+
+                <div className="text-[10px] aip-muted px-1">
+                    <p>
+                        {t('Connect any local or self-hosted reranker service (e.g. Text Embeddings Inference / TEI, LM Studio, Infinity, or a local proxy) using the Cohere/OpenAI-compatible /rerank endpoint.')}
+                    </p>
+                </div>
+
+                {/* Server URL Input */}
+                <div className="aip-provider-row flex-col sm:flex-row gap-2">
+                    <div className="aip-provider-field flex-1">
+                        <div className="aip-field">
+                            <Server size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                            <input
+                                type="text"
+                                value={customEndpointDraft}
+                                onChange={(e) => {
+                                    setCustomEndpointDraft(e.target.value);
+                                    setCustomSaved(false);
+                                }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') void saveCustomEndpoint(); }}
+                                autoComplete="off"
+                                spellCheck={false}
+                                aria-label={t('Custom reranker endpoint URL')}
+                                placeholder="http://localhost:8080"
+                                className="aip-input"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => { void saveCustomEndpoint(); }}
+                                disabled={customSaving}
+                                className="aip-field-seg"
+                                data-tone={customSaved ? 'ok' : undefined}
+                            >
+                                {customSaving
+                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
+                                    : customSaved
+                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
+                                        : t('Save')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Optional API Key Input */}
+                <div className="aip-provider-row">
+                    <div className="aip-provider-field">
+                        <div className="aip-field">
+                            <KeyRound size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                            <input
+                                type="password"
+                                value={customApiKeyDraft}
+                                onChange={(e) => {
+                                    setCustomApiKeyDraft(e.target.value);
+                                    setCustomSaved(false);
+                                }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') void saveCustomEndpoint(); }}
+                                autoComplete="off"
+                                spellCheck={false}
+                                aria-label={t('Custom reranker API key (optional)')}
+                                placeholder={status.hasCustomKey ? '••••••••••••••••' : t('API key (optional for local servers)')}
+                                className="aip-input"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => { void saveCustomEndpoint(); }}
+                                disabled={customSaving}
+                                className="aip-btn-seg aip-field-seg"
+                                data-tone={customSaved ? 'ok' : undefined}
+                            >
+                                {customSaving
+                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
+                                    : customSaved
+                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
+                                        : t('Save')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Action row: Test Connection & Models List */}
+                {(status.customEndpoint || customEndpointDraft.trim()) && (
+                    <div className="aip-provider-row">
+                        <button
+                            type="button"
+                            onClick={() => void runTest({
+                                provider: 'custom',
+                                endpoint: customEndpointDraft.trim() || status.customEndpoint || undefined,
+                                apiKey: customApiKeyDraft.trim() || undefined,
+                                model: status.customModel || customModels[0]?.id || undefined,
+                            })}
+                            disabled={testing}
+                            className="aip-btn shrink-0"
+                            data-tone={testResult?.success ? 'ok' : testResult ? 'danger' : undefined}
+                            title={t('Test Connection')}
+                        >
+                            {testing
+                                ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
+                                : testResult?.success
+                                    ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
+                                    : testResult
+                                        ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
+                                        : <>{t('Test Connection')}</>}
+                        </button>
+
+                        {customModels.length > 0 && (
+                            <AipModelList
+                                models={customModels.map(m => ({
+                                    id: m.id,
+                                    label: m.label,
+                                }))}
+                                optIn
+                                enabled={status.provider === 'custom' && status.customModel ? [status.customModel] : []}
+                                defaultId={status.provider === 'custom' ? (status.customModel ?? undefined) : undefined}
+                                onToggle={(id) => { void setConfig({ provider: 'custom', customModel: id }); }}
+                                onSetDefault={(id) => { void setConfig({ provider: 'custom', customModel: id }); }}
+                                onReset={() => { }}
+                                refreshing={customRefreshing}
+                                onRefresh={() => { void loadCustomModels(true); }}
+                            />
+                        )}
+                    </div>
+                )}
+
+                {customNote && (
+                    <p className="aip-meta aip-provider-note" style={{ color: 'var(--aip-tertiary)' }}>
+                        {customNote}
+                    </p>
+                )}
+
+                {testResult && !testResult.success && (
+                    <p className="aip-meta aip-danger-fg aip-provider-note">
+                        {testResult.message || t('Connection test failed. Verify the server is running and accepts /rerank requests.')}
+                    </p>
+                )}
+
+                {!status.customEndpoint && (
+                    <p className="aip-meta aip-provider-note">
+                        {t('Runs on your local machine or local network without sending data externally. Example: Text Embeddings Inference (TEI) with --model-id BAAI/bge-reranker-large on port 8080.')}
+                    </p>
+                )}
+            </div>
+
+            {/* Provider Card 4: Community Extensions — High-End Minimalist Design */}
+            <div className="aip-card aip-provider space-y-3">
+                <div className="aip-provider-head">
+                    <AipProviderMark provider="natively" name={t('Reranker Extensions')} />
+                    <h4 className="aip-card-title truncate min-w-0">{t('Reranker Extensions')}</h4>
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                        {/* Opens the repository these are published from, so the
+                            source can be read and a release downloaded and
+                            installed by hand. */}
+                        <button
+                            type="button"
+                            className="aip-meta inline-flex items-center gap-1.5 hover:underline"
+                            title={EXTENSIONS_REPO_URL}
+                            onClick={() => { void window.electronAPI.openExternal?.(EXTENSIONS_REPO_URL); }}
+                        >
+                            <ExternalLink size={12} strokeWidth={1.75} aria-hidden="true" /> {t('GitHub')}
+                        </button>
+                        <button
+                            type="button"
+                            className="aip-btn"
+                            data-size="sm"
+                            data-variant="ghost"
+                            disabled={installing || !extensionsAvailable}
+                            onClick={() => void installFromFolder()}
+                        >
+                            {installing ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" />
+                                : <FolderOpen size={12} strokeWidth={1.75} aria-hidden="true" />}
+                            <span>{t('Install from folder')}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <p className="text-[10px] aip-muted px-1">
+                    {t('An extension teaches Natively to use custom reranking models. Extensions run locally with full data privacy.')}
+                </p>
+
+                {installError && (
+                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                        <span className="min-w-0">{installError}</span>
+                    </div>
+                )}
+
+                {enabledRerankerCount > 1 && (
+                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                        <span>{t('More than one reranker extension is turned on, so none of them is being used. Turn off all but one.')}</span>
+                    </div>
+                )}
+
+                <div className="aip-well p-2.5 space-y-2.5">
+                    {rerankerExtensions.length === 0 ? (
+                        <div className="text-center py-6 px-4 space-y-2 border border-dashed border-[var(--aip-border-strong)] rounded-md">
+                            <p className="text-xs aip-text font-medium">{t('No custom extensions installed')}</p>
+                            <p className="text-[10px] aip-muted max-w-xs mx-auto">
+                                {t('Install a local reranker extension from a folder to use custom scoring models.')}
+                            </p>
+                            <button
+                                type="button"
+                                className="aip-btn mt-2"
+                                data-size="sm"
+                                disabled={installing || !extensionsAvailable}
+                                onClick={() => void installFromFolder()}
+                            >
+                                <FolderOpen size={12} strokeWidth={1.75} aria-hidden="true" />
+                                <span>{t('Install Extension')}</span>
+                            </button>
+                        </div>
+                    ) : (
+                        rerankerExtensions.map(ext => {
+                            const modelsReady = ext.models.every(m => m.state === 'ready');
+                            const groups = getExtensionVariantGroups(ext.models);
+                            return (
+                                <div key={ext.id} className="aip-card p-3 space-y-2.5 transition-colors hover:bg-white/[0.02]">
+                                    {/* Extension Header Row */}
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0 flex-1 flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                                            <span
+                                                aria-hidden="true"
+                                                className="w-1.5 h-1.5 rounded-full shrink-0"
+                                                style={{
+                                                    background: ext.running ? 'var(--aip-accent)' : ext.enabled ? 'var(--aip-tertiary)' : 'transparent',
+                                                    border: ext.enabled || ext.running ? undefined : '1px solid var(--aip-border-strong)',
+                                                }}
+                                            />
+                                            <span className="text-xs font-semibold aip-hero truncate">{ext.name}</span>
+                                            <span className="text-[10px] aip-muted font-mono">{ext.version}</span>
+                                            <AipBadge
+                                                tone={ext.running ? 'ok' : ext.enabled ? 'info' : 'neutral'}
+                                                label={ext.running ? t('Running') : ext.enabled ? t('Starting') : t('Off')}
+                                            />
+                                        </div>
+
+                                        {/* Header Controls: Switch Toggle & Delete */}
+                                        <div className="shrink-0 flex items-center gap-3">
+                                            <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                                                <AipSwitch
+                                                    label={`${t('Use')} ${ext.name}`}
+                                                    checked={ext.enabled}
+                                                    disabled={!ext.enabled && !modelsReady}
+                                                    onChange={async (next) => {
+                                                        await window.electronAPI.setExtensionEnabled?.(ext.id, next);
+                                                        await Promise.all([loadExtensions(), refreshStatus()]);
+                                                    }}
+                                                />
+                                            </label>
+                                            <button
+                                                type="button"
+                                                className="aip-btn shrink-0"
+                                                data-size="sm"
+                                                data-variant="danger-ghost"
+                                                disabled={ext.enabled}
+                                                title={ext.enabled ? t('Turn off before removing') : t('Remove extension')}
+                                                onClick={async () => {
+                                                    await window.electronAPI.removeExtension?.(ext.id);
+                                                    await Promise.all([loadExtensions(), refreshStatus()]);
+                                                }}
+                                            >
+                                                <Trash2 size={12} strokeWidth={1.75} aria-hidden="true" />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {ext.disabledReason && (
+                                        <p className="text-[10px] aip-muted pl-3.5">{t('Turned off')}: {ext.disabledReason}</p>
+                                    )}
+
+                                    {/* Extension Model Variant Groups */}
+                                    {groups.map(group => {
+                                        const drawerKey = `${ext.id}::${group.id}`;
+                                        const isExpanded = expandedFileDrawers[drawerKey] ?? false;
+                                        const isDownloading = group.anyDownloading || group.files.some(f => busyModel === `${ext.id}::${f.key}`);
+                                        const pctFraction = groupProgressFraction(ext.id, group.files);
+
+                                        return (
+                                            <div key={group.id} className="space-y-1.5 pl-3.5 pt-2 border-t border-[var(--aip-divider)]">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[11px] font-semibold aip-hero truncate">{group.label}</span>
+                                                            {group.files.length > 1 && (
+                                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--aip-item-active)] aip-text font-mono shrink-0">
+                                                                    {group.files.length} {t('files')}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-[10px] aip-muted truncate mt-0.5">
+                                                            {[
+                                                                group.format,
+                                                                humanBytes(group.totalBytes),
+                                                                group.spdx,
+                                                                group.commercialUseRestricted ? t('non-commercial') : null,
+                                                            ].filter(Boolean).join(' · ')}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="shrink-0 flex items-center gap-1.5">
+                                                        {group.files.length > 1 && (
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn text-[9.5px] px-1.5 py-0.5"
+                                                                data-size="sm"
+                                                                data-variant="ghost"
+                                                                onClick={() => setExpandedFileDrawers(prev => ({ ...prev, [drawerKey]: !prev[drawerKey] }))}
+                                                            >
+                                                                <ChevronDown size={11} strokeWidth={1.75} className={`transition-transform duration-150 ${isExpanded ? 'rotate-180' : ''}`} aria-hidden="true" />
+                                                                <span>{isExpanded ? t('Less') : t('Files')}</span>
+                                                            </button>
+                                                        )}
+
+                                                        {group.allReady ? (
+                                                            <AipBadge tone="ok" label={t('Ready')} />
+                                                        ) : isDownloading ? (
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn"
+                                                                data-size="sm"
+                                                                onClick={() => void cancelExtensionGroup(ext.id, group.files)}
+                                                            >
+                                                                <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                                <span>{t('Cancel')}</span>
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn"
+                                                                data-size="sm"
+                                                                disabled={group.anyBlocked || busyCatalogId !== null || busyModel !== null}
+                                                                title={group.anyBlocked ? (group.files.find(f => f.reason)?.reason ?? undefined) : undefined}
+                                                                onClick={() => void downloadExtensionGroup(ext.id, group.files)}
+                                                            >
+                                                                <Download size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                                <span>{t('Download')}</span>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Aggregate Download Progress Bar */}
+                                                {isDownloading && (
+                                                    <div className="space-y-1 pt-1">
+                                                        <div className="h-1 w-full bg-[var(--aip-item-active)] rounded-full overflow-hidden">
+                                                            <div
+                                                                className="h-full w-full origin-left bg-[var(--aip-accent)] transition-transform duration-150 ease-linear"
+                                                                style={{ transform: `scaleX(${Math.min(1, Math.max(0, pctFraction))})` }}
+                                                            />
+                                                        </div>
+                                                        <div className="text-[10px] aip-muted flex justify-between">
+                                                            <span>{`${Math.round(pctFraction * 100)}%`}</span>
+                                                            <span>{`${humanBytes(Math.round(pctFraction * group.totalBytes))} / ${humanBytes(group.totalBytes)}`}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Verification Failure Warning */}
+                                                {group.anyFailed && (
+                                                    <div className="aip-inline-warn flex items-start gap-2 mt-1" role="status">
+                                                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                                                        <span className="min-w-0">
+                                                            {group.files.find(f => f.reason)?.reason ?? t('The downloaded file did not match its expected checksum.')}
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                {/* License Acceptance Banner */}
+                                                {group.unacknowledgedLicense && (
+                                                    <div className="space-y-1.5 p-2 rounded bg-[var(--aip-btn-bg)] border border-[var(--aip-divider)] mt-1">
+                                                        <p className="text-[10px] aip-muted">
+                                                            {t('This model requires licence acceptance')} ({group.unacknowledgedLicense.spdx})
+                                                            {group.unacknowledgedLicense.commercialUseRestricted ? ` — ${t('non-commercial use only')}` : ''}.
+                                                        </p>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn"
+                                                                data-size="sm"
+                                                                data-variant="ghost"
+                                                                onClick={() => window.electronAPI.openExternal?.(group.unacknowledgedLicense!.url)}
+                                                            >
+                                                                <ExternalLink size={12} strokeWidth={1.75} />
+                                                                <span>{t('Read licence')}</span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn"
+                                                                data-size="sm"
+                                                                onClick={async () => {
+                                                                    for (const f of group.files) {
+                                                                        if (f.license.requiresAcknowledgement && !f.license.acknowledged) {
+                                                                            await window.electronAPI.acknowledgeExtensionLicense?.(ext.id, f.key);
+                                                                        }
+                                                                    }
+                                                                    await loadExtensions();
+                                                                }}
+                                                            >
+                                                                <Check size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                                <span>{t('Accept terms')}</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Collapsible Individual Files Breakdown */}
+                                                {group.files.length > 1 && (
+                                                    <div className="aip-reveal" data-open={isExpanded ? 'true' : 'false'}>
+                                                    <div>
+                                                    <div className="pt-1">
+                                                    <div className="space-y-1 pl-2 border-l-2 border-[var(--aip-border-strong)] py-1 bg-white/[0.01] rounded-r">
+                                                        {group.files.map(m => {
+                                                            const key = `${ext.id}::${m.key}`;
+                                                            const pct = progress[key];
+                                                            const fileDownloading = busyModel === key || m.state === 'downloading';
+
+                                                            return (
+                                                                <div key={m.key} className="flex items-center justify-between text-[10px] py-1 px-1.5 rounded transition-colors duration-150 hover:bg-[color:var(--aip-item-hover)]">
+                                                                    <div className="min-w-0 flex-1 flex items-center gap-2">
+                                                                        <span className="font-mono aip-text truncate">{m.key}</span>
+                                                                        <span className="aip-muted">{humanBytes(m.bytes ?? m.approxBytes)}</span>
+                                                                    </div>
+                                                                    <div className="shrink-0 flex items-center gap-1.5">
+                                                                        {m.state === 'ready' ? (
+                                                                            <span className="text-[9.5px] text-[var(--aip-accent)] font-medium">{t('Ready')}</span>
+                                                                        ) : fileDownloading ? (
+                                                                            <span className="text-[9.5px] aip-muted">
+                                                                                {typeof pct === 'number' ? `${Math.round(pct * 100)}%` : t('Downloading…')}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <button
+                                                                                type="button"
+                                                                                className="aip-btn text-[9.5px] px-1.5 py-0.5"
+                                                                                data-size="sm"
+                                                                                disabled={busyModel !== null}
+                                                                                onClick={() => void downloadModel(ext.id, m.key)}
+                                                                            >
+                                                                                {t('Download')}
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    </div>
+                                                    </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            </div>
+
+            {/* Provider Card 5: Candidates Selector — High-End Segmented Control.
+                Shown only where the pool size decides something: a hosted or
+                extension port scores the whole pool in ONE call, so this is
+                passages billed and round-trip latency. The local cross-encoder
+                batches its forward passes well inside its budget, where every
+                choice here would only cost recall. See rerankCandidateControl. */}
+            {candidateControlApplies(status.effective.kind) && (
+            <div className="aip-card p-5 space-y-3">
+                <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
+                    <div>
+                        <label className="block text-xs font-medium uppercase tracking-wide aip-hero">
+                            {t('Candidates to rerank')}
+                        </label>
+                        <p className="text-[10px] aip-muted mt-0.5">
+                            {t(candidateControlRationale(status.effective.kind)
+                                || 'Number of initial retrieved passages scored by the reranker.')}
+                        </p>
+                    </div>
+
+                    <CandidatesSlidingTabs
+                        value={candidateCount}
+                        choices={CANDIDATE_CHOICES}
+                        onChange={(n) => void setConfig({ candidateCount: n })}
+                    />
+                </div>
+
+                <div className="pt-2 border-t border-[var(--aip-divider)] text-[10.5px] aip-muted">
+                    {candidateCount <= 5 && t('Fast & low latency — best for quick queries.')}
+                    {candidateCount > 5 && candidateCount <= 10 && t('Balanced speed and recall.')}
+                    {candidateCount > 10 && candidateCount < status.candidateCountDefault
+                        && t('A smaller pool than the default — less to pay for and less to wait on with a hosted reranker, at some cost to recall.')}
+                    {candidateCount >= status.candidateCountDefault
+                        && t('The full pool — every candidate retrieval found. This is the default.')}
+                </div>
+            </div>
+            )}
+
+            {/* Provider Card 6: Privacy Notice */}
+            <div className="aip-card p-4 flex items-start gap-3">
+                <ShieldAlert size={14} strokeWidth={1.75} className="shrink-0 mt-0.5 aip-muted" aria-hidden="true" />
+                <p className="text-[10px] aip-muted">
+                    {t('Only your question and the retrieved passages are sent — never whole files, and never your file names or paths. For fully local retrieval, choose the Local provider.')}
+                </p>
+            </div>
+
+        </>
+    );
+
+    /* The caller that places the parts owns the wrapper and the style tag —
+       Retrieval mounts this alongside EmbeddingSettings, and two copies of
+       AIP_CSS in one subtree is a duplicate stylesheet, not a merge. */
+    if (renderParts) return <>{renderParts({ hero, panel })}</>;
+
+    return (
+        <div className="aip-root space-y-5 pb-10" data-theme={aipTheme} data-settings-stagger>
+            <header className="space-y-1">
+                <h3 className="aip-title">{t('Reranker')}</h3>
+                <p className="aip-subtitle">
+                    {t('After Natively searches your documents, the reranker decides which passages actually answer the question. It is chosen separately from your embedding model and your AI model.')}
+                </p>
+            </header>
+            {hero}
+            {panel}
+            <style>{AIP_CSS}</style>
+        </div>
+    );
+};
+
+export default RerankerSettings;

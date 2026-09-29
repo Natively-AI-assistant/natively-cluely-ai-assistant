@@ -16,6 +16,60 @@ const ARCH_VERIFY_TARGETS = [
     path.join('keytar', 'build', 'Release', 'keytar.node'),
 ];
 
+// ─── Per-arch package-family guard ───
+// The guard above catches a binary built for the WRONG arch, but deliberately
+// TOLERATES a missing file. That hole shipped v2.8.7's Intel DMG: families that
+// resolve their binding by arch (`<name>-darwin-x64` / `-arm64`) come from npm
+// optional deps, npm installs only the HOST arch, and electron-builder packs
+// whatever is on disk — so the x64 pack contained ONLY
+// @napi-rs/canvas-darwin-arm64. Nothing was mis-built, so nothing was flagged;
+// every Intel user's PDF text extraction then failed at runtime with
+// "DOMMatrix is not defined". A MISSING target-arch member of one of these
+// families is fatal, because the pack cannot possibly work on that chip.
+// scripts/ensure-*-mac-deps.js prevent it; this catches it if they regress.
+const ARCH_FAMILY_TARGETS = [
+    { family: '@napi-rs/canvas', pkg: (a) => `@napi-rs/canvas-darwin-${a}` },
+    { family: 'sharp', pkg: (a) => `@img/sharp-darwin-${a}` },
+    { family: 'sharp-libvips', pkg: (a) => `@img/sharp-libvips-darwin-${a}` },
+    { family: 'sqlite-vec', pkg: (a) => `sqlite-vec-darwin-${a}` },
+];
+
+/**
+ * Assert the packed app contains the TARGET arch's member of every per-arch
+ * package family. A family absent from the pack entirely is skipped (the dep may
+ * legitimately not ship); a family present for the OTHER arch but missing the
+ * target's is fatal — that is precisely the v2.8.7 canvas shape.
+ */
+function verifyPackedArchFamilies(appPath, targetArchName) {
+    if (targetArchName !== 'x64' && targetArchName !== 'arm64') return;
+    const otherArch = targetArchName === 'x64' ? 'arm64' : 'x64';
+    const unpackedModules = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked', 'node_modules');
+    const broken = [];
+    for (const { family, pkg } of ARCH_FAMILY_TARGETS) {
+        const wantDir = path.join(unpackedModules, ...pkg(targetArchName).split('/'));
+        const otherDir = path.join(unpackedModules, ...pkg(otherArch).split('/'));
+        const haveWant = fs.existsSync(path.join(wantDir, 'package.json'));
+        const haveOther = fs.existsSync(path.join(otherDir, 'package.json'));
+        if (haveWant) {
+            console.log(`[Arch Guard] OK ${pkg(targetArchName)} present (target ${targetArchName})`);
+        } else if (haveOther) {
+            broken.push({ family, want: pkg(targetArchName), other: pkg(otherArch) });
+        } else {
+            console.warn(`[Arch Guard] ${family}: neither arch packed — skipping (dep may not ship here).`);
+        }
+    }
+    if (broken.length > 0) {
+        const lines = broken.map((b) => `  - ${b.want} MISSING, but ${b.other} IS packed`);
+        throw new Error(
+            `[Arch Guard] FATAL: the ${targetArchName} pack is missing per-arch native packages:\n` +
+            lines.join('\n') +
+            `\n\nThese resolve their binding by arch, so the ${targetArchName === 'x64' ? 'Intel' : 'Apple-Silicon'} ` +
+            `build would fail at runtime when the feature is used (v2.8.7 shipped exactly this and broke ` +
+            `PDF text extraction on every Intel Mac). Run the matching scripts/ensure-*-mac-deps.js before packing.`
+        );
+    }
+}
+
 /** electron-builder ArchType enum / string → Node arch string. */
 function ebArchToName(arch) {
     if (arch === 1 || arch === 'x64' || arch === 'x86_64') return 'x64';
@@ -145,6 +199,9 @@ exports.default = async function (context) {
     // means the DMG for this arch would crash on launch — fail loudly now.
     const targetArchName = ebArchToName(context.arch);
     verifyPackedNativeArch(appPath, targetArchName);
+    // Same stage, different failure shape: a per-arch package family whose
+    // target-arch member was never installed (v2.8.7's Intel canvas gap).
+    verifyPackedArchFamilies(appPath, targetArchName);
 
     // ── Step 1: Disguise helper display names (before signing) ──
     // This MUST run regardless of the signing path: it edits helper Info.plist
@@ -227,3 +284,8 @@ exports.default = async function (context) {
         }
     }
 };
+
+// Exported for scripts/__tests__ — electron-builder only ever calls the default
+// hook above, so the extra properties are inert at build time.
+module.exports.verifyPackedArchFamilies = verifyPackedArchFamilies;
+module.exports.verifyPackedNativeArch = verifyPackedNativeArch;

@@ -1,0 +1,232 @@
+/**
+ * Auto Answer subsystem types (spec V2 §4 verbatim, plus the V3 additions:
+ * TranscriptEndpointEvent.confidence, the user-channel skip reasons — retired
+ * 2026-09-03, see AutoAnswerSkipReason — and the ternary dispatch action
+ * 'offer').
+ *
+ * Nothing in this file has behaviour. Every threshold lives next to the code
+ * that applies it, as a named constant, commented as unfitted.
+ */
+
+import type { TranscriptSegment } from '../../SessionTracker';
+
+export type AutoAnswerState =
+    | 'idle'
+    | 'listening'
+    | 'possible_question'
+    | 'question_complete'
+    | 'speculating'
+    | 'queued'
+    | 'answering';
+
+export type AutoAnswerDialogueAct =
+    | 'answerable_question'
+    | 'follow_up_question'
+    | 'coding_question'
+    | 'behavioral_question'
+    | 'technical_question'
+    | 'general_question'
+    | 'statement'
+    | 'backchannel'
+    | 'social'
+    | 'rhetorical'
+    | 'pause_request'
+    | 'confirmation'
+    | 'incomplete';
+
+export type AutoAnswerEndpointSource =
+    | 'provider'
+    | 'speech_final'
+    | 'utterance_end'
+    | 'vad'
+    | 'quiet_window'
+    | 'semantic';
+
+export type AutoAnswerPace = 'fast' | 'balanced' | 'relaxed';
+
+export interface AutoAnswerQuestion {
+    /** Meeting-local identity: `${meetingGeneration}-q${sequence}` (V2 §20). Never the text. */
+    id: string;
+    text: string;
+
+    /** 0..1 that the text is a real interviewer question (extractor scale). */
+    confidence: number;
+    /** 0..1 composite: question shape + completion + directedness − negatives (V2 §12). */
+    answerability: number;
+    /** 0..1 that the utterance is finished (endpoint source + incompleteness cues). */
+    completionConfidence: number;
+
+    dialogueAct: AutoAnswerDialogueAct;
+
+    isFollowUp: boolean;
+    followUpTarget: string;
+
+    startedAt: number;
+    lastUpdatedAt: number;
+    committedAt?: number;
+
+    endpointSource?: AutoAnswerEndpointSource;
+
+    /** Indices (timestamps) of the finalized segments that built the text. */
+    sourceSegments: number[];
+
+    /** Generation counters for the stale-answer guards (V2 §28/§46). */
+    candidateGeneration: number;
+    meetingGeneration: number;
+}
+
+/** The detector's verdict on a candidate (V2 §4, §9). */
+export interface AutoAnswerDecision {
+    action: 'ignore' | 'wait' | 'speculate' | 'answer' | 'queue';
+    reason: string;
+    question?: AutoAnswerQuestion;
+}
+
+/** Provider-independent endpoint signal (V2 §6; V3 Amendment 3 adds confidence). */
+export interface TranscriptEndpointEvent {
+    type:
+        | 'segment_final'
+        | 'speech_final'
+        | 'utterance_end'
+        | 'speech_started'
+        | 'partial';
+    timestamp: number;
+    /** Provider's own end-of-turn confidence where it has one (Flux eot, AssemblyAI end_of_turn_confidence). */
+    confidence?: number;
+}
+
+export type AutoAnswerSkipReason =
+    | 'disabled'
+    | 'meeting_inactive'
+    | 'not_interviewer'
+    | 'incomplete'
+    | 'not_question'
+    | 'social'
+    | 'backchannel'
+    | 'rhetorical'
+    | 'pause_request'
+    | 'low_answerability'
+    | 'duplicate'
+    | 'manual_answer_active'
+    | 'cooldown'
+    | 'stale_generation'
+    | 'queue_full'
+    // ── RETIRED 2026-09-03: the user channel is inert ─────────────────────
+    // Nothing emits these three any more. The user answers the moment the
+    // question lands, so their own speech no longer suppresses, cancels or
+    // barges in (SimpleAutoAnswer's header records the decision), and the
+    // mic-echo policy that needed the third went with it.
+    //
+    // They stay in the union because telemetry is PERSISTED: real
+    // `logs/telemetry.jsonl` files under the app's user-data directory carry
+    // these values, and `docs/triage/replay.mjs` still filters on them.
+    // Removing them would make this type wrong about data that exists. If the
+    // user-channel policy is ever revived, the emitters come back — not these.
+    | 'user_answering'
+    | 'user_barge_in'
+    /** The user channel is carrying the interviewer's audio (speakers, not headphones). */
+    | 'mic_echo'
+    // ── end retired ───────────────────────────────────────────────────────
+    /** A dispatch parked behind a busy engine was superseded by newer interviewer speech before the engine freed up. */
+    | 'superseded_while_parked'
+    // Lifecycle reasons carried over from the PR #497 gate and the Phase 1 pending slot
+    | 'no_question'
+    | 'already_answered'
+    | 'engine_busy_or_cooling'
+    | 'pending_expired'
+    | 'pending_superseded';
+
+/** The ternary policy output (V3 Amendment 4) plus the orthogonal V2 actions. */
+export type AutoAnswerPolicyAction = 'auto' | 'offer' | 'silent' | 'wait' | 'speculate' | 'queue';
+
+export interface AutoAnswerPolicyDecision {
+    action: AutoAnswerPolicyAction;
+    reason: AutoAnswerSkipReason | 'ok';
+    question?: AutoAnswerQuestion;
+}
+
+/** What the TurnManager hands downstream when a quiet window or endpoint commits. */
+export interface AutoAnswerCandidate {
+    text: string;
+    segments: TranscriptSegment[];
+    startedAt: number;
+    lastUpdatedAt: number;
+    /** Bumped on every meaningful revision of the text (V2 §5). */
+    generation: number;
+    endpointSource: AutoAnswerEndpointSource;
+    /** From the provider endpoint that committed this candidate, if any. */
+    endpointConfidence?: number;
+    punctuationSource?: string;
+    sttProvider?: string;
+    /** `_meetingGeneration` when the accumulation STARTED (the stale-meeting guard compares against now). */
+    meetingGeneration?: number;
+}
+
+/** Structured telemetry (V2 §29). NO transcript text, by construction. */
+export type AutoAnswerTelemetryEventName =
+    | 'auto_answer_candidate'
+    | 'auto_answer_endpoint'
+    | 'auto_answer_decision'
+    | 'auto_answer_ignored'
+    | 'auto_answer_speculative'
+    | 'auto_answer_committed'
+    | 'auto_answer_queued'
+    | 'auto_answer_deduplicated'
+    | 'auto_answer_judged'
+    | 'auto_answer_feedback'
+    | 'auto_answer_cancelled'
+    | 'auto_answer_completed'
+    | 'auto_answer_offered';
+
+export interface AutoAnswerTelemetryEvent {
+    name: AutoAnswerTelemetryEventName;
+    meetingGeneration: number;
+    questionId?: string;
+    provider?: string;
+    questionType?: string;
+    dialogueAct?: AutoAnswerDialogueAct;
+    questionConfidence?: number;
+    completionConfidence?: number;
+    answerability?: number;
+    endpointSource?: AutoAnswerEndpointSource;
+    candidateWordCount?: number;
+    msFromLastSpeechToDecision?: number;
+    msFromDecisionToFirstToken?: number;
+    queueDepth?: number;
+    skipReason?: AutoAnswerSkipReason;
+    state?: AutoAnswerState;
+    action?: AutoAnswerPolicyAction;
+    /** False when NO speech_edge has ever arrived this meeting — dual-channel gating is inert (stale native module?). */
+    channelEdgesSeen?: boolean;
+    /** Dynamic-judge fields (auto_answer_judged) — verdict metadata only, never transcript text. */
+    judgeOutcome?: 'verdict' | 'timeout' | 'error' | 'unparseable' | 'stale' | 'held_applied';
+    judgeIsAsk?: boolean;
+    judgeDirectedAtUser?: boolean;
+    judgeMs?: number;
+    /**
+     * Implicit usefulness signal (2026-08-25). Nothing in this feature ever
+     * recorded whether an automatic answer was any GOOD, so every threshold
+     * stayed an unfitted guess. The cheapest honest proxy: if the user reaches
+     * for the manual What-to-Answer right after an automatic one, the
+     * automatic one did not do the job.
+     *   'superseded' — a manual answer started inside FEEDBACK_WINDOW_MS
+     *   'kept'       — the window passed with no manual press
+     */
+    feedback?: 'superseded' | 'kept';
+    /** ms from the automatic dispatch to the manual press (only on 'superseded'). */
+    feedbackMs?: number;
+    /**
+     * What invalidated a verdict (auto_answer_judged / judgeOutcome 'stale').
+     * Live run 2026-08-25 discarded 25 of 28 verdicts and the record could not
+     * say WHY: an interviewer interim (which cannot change the candidate — the
+     * candidate is built from finals only) and a genuine new final call for
+     * opposite fixes. Diagnostic only; nothing branches on it.
+     *
+     * `bumpJudgeSeq` now raises only 'interim', 'final' and 'meeting_reset';
+     * 'user_answering' is retired with the rest of the user channel and
+     * 'meeting_ended' is set directly by the staleness branch. Both are kept
+     * for the same reason as the retired skip reasons above — recorded runs
+     * contain them.
+     */
+    supersededBy?: 'interim' | 'final' | 'user_answering' | 'meeting_reset' | 'meeting_ended';
+}

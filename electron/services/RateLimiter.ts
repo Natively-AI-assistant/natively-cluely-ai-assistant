@@ -107,11 +107,34 @@ export class RateLimiter {
  */
 export function createProviderRateLimiters() {
     return {
-        groq: new RateLimiter(6, 0.1),        // 6 req/min
+        // Groq's documented free-tier ceiling for its chat models is 30 RPM
+        // (paid tiers are far higher). The previous 6/min bucket sat BELOW the
+        // provider's own limit, so it protected nothing and, because acquire()
+        // queues rather than fails, the 7th Groq request inside a minute waited
+        // up to 10 s in silence — the "fast" provider's worst latency spikes were
+        // self-inflicted (Auto Answer judge + prefetch + answer on one question
+        // is three requests). A genuine 429 is still handled where the request
+        // is made (createGroqCompletion's ladder / retry).
+        groq: new RateLimiter(30, 0.5),       // 30 req/min
         gemini: new RateLimiter(120, 2.0),    // 120 req/min
         openai: new RateLimiter(120, 2.0),    // 120 req/min
         claude: new RateLimiter(120, 2.0),    // 120 req/min
         deepseek: new RateLimiter(120, 2.0),  // OpenAI-compatible — conservative default
         litellm: new RateLimiter(120, 2.0),   // OpenAI-compatible proxy — conservative default
+        nvidia_nim: new RateLimiter(120, 2.0),
+        // OpenRouter fronts other vendors and enforces its own per-key ceiling,
+        // so this mirrors the NVIDIA budget rather than any single upstream's.
+        openrouter: new RateLimiter(120, 2.0),
+        // Fluxion publishes no rate limits at all (no documented ceiling, and
+        // its own terms reserve the right to throttle per group/channel), so
+        // this is the same conservative gateway default rather than a
+        // documented figure.
+        fluxion: new RateLimiter(120, 2.0),
+        // 9Router runs on the user's own machine, so the only ceiling that
+        // matters is the upstream it forwards to — which it chooses per
+        // request and rotates between accounts. Nothing local to rate-limit,
+        // so this is the same conservative gateway default rather than a
+        // documented figure.
+        ninerouter: new RateLimiter(120, 2.0),
     };
 }

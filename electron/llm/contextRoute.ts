@@ -16,6 +16,7 @@
 // are enforced in ONE place.
 
 import type { AnswerPlan, ContextLayer } from './AnswerPlanner';
+import { isVerificationModeEnabled } from '../intelligence/intelligenceFlags';
 
 export interface ContextRouteLayer {
   layer: ContextLayer;
@@ -112,6 +113,25 @@ export const isLayerAllowed = (plan: AnswerPlan, layer: ContextLayer): boolean =
     if ((layer === 'resume' || layer === 'jd' || layer === 'negotiation' || layer === 'ai_persona')
         && !plan.requiredContextLayers.includes(layer)) return false;
   }
+  // RC3 fix (Phase 6 Slice 2, context-rebuild, 2026-07-25): `prior_assistant_responses`
+  // flips to FAIL-CLOSED specifically — not a blanket flip across every layer
+  // (target arch §5's explicit rejection of an unaudited ~15-layer/~30-answerType
+  // blast radius). Before this fix, any answerType that named this layer in
+  // NEITHER forbiddenContextLayers NOR requiredContextLayers fell through to
+  // this function's general fail-open default below, silently ALLOWING an
+  // unrelated prior turn's content into the prompt. Every answerType that
+  // legitimately needs it (project_followup_answer; follow_up_answer when NOT
+  // document-grounded) already lists it in requiredContextLayers
+  // (AnswerPlanner.ts's requiredLayersFor), so this only blocks the previously-
+  // silent cases. This also aligns isLayerAllowed with buildContextRoute below,
+  // which was ALREADY fail-closed by default for every layer (a layer must be
+  // in requiredContextLayers to be selected) — the two routing functions no
+  // longer silently diverge for this layer, closing exactly the class of gap
+  // this module's own header comment warns against ("the two pipelines can no
+  // longer silently diverge on what context a given answer type may see").
+  if (layer === 'prior_assistant_responses' && !plan.requiredContextLayers.includes(layer)) {
+    return false;
+  }
   return !plan.forbiddenContextLayers.includes(layer);
 };
 
@@ -125,3 +145,41 @@ export const summarizeContextRoute = (route: ContextRoute): Record<string, unkno
   excluded: route.excludedLayers,
   maxTotalPromptTokens: route.maxTotalPromptTokens,
 });
+
+/**
+ * Phase 6 Slice 4 (context-rebuild, docs/context-rebuild/05_MIGRATION_PLAN.md
+ * "Slice 4" item 4): the required (not optional) dev-mode CI assertion
+ * replacing `assertNoAuthorityContradiction` (deleted Slice 0, A6— see
+ * electron/intelligence/context-os/integration.ts's removal note). No-ops
+ * unless verification mode is explicitly enabled
+ * (`NATIVELY_VERIFICATION_MODE=1`), mirroring
+ * `assertVerificationFlagsOrThrow`'s exact opt-in convention
+ * (intelligenceFlags.ts) — this NEVER affects a normal user boot, a
+ * packaged build, or an ordinary dev session. When verification mode IS on,
+ * throws immediately and loudly if a retrieval/injection path executes with
+ * `isLayerAllowed(plan, layer)===false` for the layer it JUST used — the
+ * actual condition RC1/RC2/RC3 were about (a forbidden layer's content
+ * reaching the prompt), not `assertNoAuthorityContradiction`'s narrower,
+ * unrelated `sourceOwner===clarify && finalAction==='answer'` condition.
+ *
+ * Per the plan's explicit instruction, this function itself is NOT
+ * flag-gated behind `unifiedRetriever`/any Slice 4 rollout flag — it is a
+ * compile-time-cheap, always-defined check that costs nothing at runtime
+ * when verification mode is off (a single env-var string comparison), so it
+ * ships immediately regardless of the broader retrieval-pipeline
+ * consolidation's rollout stage. Call sites are added incrementally as real
+ * retrieval/injection paths are audited — this function existing and being
+ * tested does not itself constitute "every path is now checked."
+ */
+export function assertLayerUsageAllowedOrThrow(plan: AnswerPlan, layer: ContextLayer, context?: string): void {
+  if (!isVerificationModeEnabled()) return;
+  if (!isLayerAllowed(plan, layer)) {
+    throw new Error(
+      `[LayerUsageViolation] layer "${layer}" was used for answerType "${plan.answerType}"`
+      + (context ? ` (${context})` : '')
+      + ' but isLayerAllowed forbids it for this answer type. This is the required Slice 4 CI'
+      + ' assertion (docs/context-rebuild/05_MIGRATION_PLAN.md) catching a real retrieval/injection'
+      + ' bug — set NATIVELY_VERIFICATION_MODE=0 to run without this check while investigating.',
+    );
+  }
+}

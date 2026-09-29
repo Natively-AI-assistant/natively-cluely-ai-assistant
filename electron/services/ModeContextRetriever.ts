@@ -1,4 +1,6 @@
 import { Mode, ModeReferenceFile } from './ModesManager';
+import { wordsOf } from './modes/lexicalTokens';
+import { normalizeLineEndings } from './modes/semanticChunker';
 import { ModeHybridRetriever, ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
 import { VectorStore } from '../rag/VectorStore';
 import { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
@@ -7,7 +9,7 @@ import { DatabaseManager } from '../db/DatabaseManager';
 import { classifyCustomContext, selectCustomContextForAnswer } from '../llm/customContextClassifier';
 import type { AnswerType } from '../llm/AnswerPlanner';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks, type DocumentMap } from './modes/DocumentMap';
-import { EVIDENCE_USE_RULE, retrievalDiagnosticsEnabled, diagLog, isBroadDocumentQuery, computeEvidenceCoverage, classifyDocumentQuestionShape } from '../llm/documentGroundedPrompt';
+import { EVIDENCE_USE_RULE, retrievalDiagnosticsEnabled, diagLog, isBroadDocumentQuery, computeEvidenceCoverage, classifyDocumentQuestionShape, normalizeDocumentGroundedRetrievalQuery } from '../llm/documentGroundedPrompt';
 
 /**
  * Gate the mode's raw customContext blob by answer type (Phase 3). Returns only
@@ -59,6 +61,33 @@ export interface ModeRetrievalOptions {
      * document-identity block and expands broad queries with file identity terms.
      */
     forceDocumentGrounding?: boolean;
+    /**
+     * Which deadline the calling turn is racing, for the rerank budget only.
+     * Absent means the tighter live budget — see rerankBudget.ts.
+     */
+    rerankSurface?: 'live' | 'manual';
+    /** See ModeHybridRetriever.shouldUseLexicalForLocalManualQuery. */
+    meetingActive?: boolean;
+    /**
+     * The caller's own race deadline for the whole retrieval, in ms. A rerank
+     * whose budget cannot fit inside it is skipped rather than started and
+     * discarded (rerankBudget.ts → rerankBudgetFitsDeadline). Absent = not raced.
+     */
+    rerankDeadlineMs?: number;
+    /**
+     * Widen the rerank pool for an exhaustive request (RetrievalPlan.exhaustive):
+     * the user's candidateCount × this, capped by the retriever. 1/absent =
+     * the user's setting exactly.
+     */
+    rerankPoolMultiplier?: number;
+    /**
+     * The caller's retrieval budget for query-embedding RETRIES, in ms. The V3
+     * mode port passes its RetrievalPlan.timeoutMs (1200 / 2400 exhaustive) so
+     * a slow hosted embed route degrades this turn to lexical after one attempt
+     * instead of running a 13 s retry ladder inside a live answer. Absent = the
+     * historical ladder.
+     */
+    queryEmbedRetryBudgetMs?: number;
     /**
      * Follow-up referent hint (round-7 Failure-2). A short/anaphoric follow-up
      * ("What processor controls it?", "What throughput does that give?") loses
@@ -174,23 +203,8 @@ const DOC_GROUNDED_STOPWORDS = new Set([
     // questions hinge on these exact terms.
 ]);
 
-function wordsOf(text: string): string[] {
-    return text
-        .toLowerCase()
-        // English possessive: collapse "Green's" → "green", "interviewer's" →
-        // "interviewer". Symmetrically strips the `'s` suffix on both query
-        // and chunk so a query about "interviewer's complexity" still matches
-        // a file that says "Interviewer prefers …", and a query about
-        // "Green's function" matches a file that says "Green's function".
-        .replace(/['’]s\b/g, '')
-        // Remaining in-word apostrophes (contractions like "don't", "can't"):
-        // drop them so the word stays one token ("dont", "cant") rather than
-        // being split into a dropped single-char fragment.
-        .replace(/['’]/g, '')
-        .replace(/[^a-z0-9\s-]/g, ' ')
-        .split(/\s+/)
-        .filter(word => word.length > 2);
-}
+// Tokenizer lives in ./modes/lexicalTokens so the two retrievers cannot drift.
+
 
 /**
  * Levenshtein distance with early exit when distance > maxDist.
@@ -233,6 +247,8 @@ function levenshtein1(a: string, b: string): boolean {
 }
 
 function chunkText(content: string, fineChunk: boolean = false): string[] {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     // TABULAR data (CSV/TSV) → row-aware chunks with the header repeated, so a
     // query for one entity retrieves its labelled row instead of a giant blob
     // (prose chunkers made the model fabricate dataset figures). Mirror of
@@ -256,21 +272,42 @@ function chunkText(content: string, fineChunk: boolean = false): string[] {
     //     boundaries: we never split mid-page, but we DO start a new chunk
     //     at each [Page N] marker.
     const lines = content.split('\n');
-    const sections: Array<{ heading: string | null; body: string[] }> = [];
-    let current: { heading: string | null; body: string[] } = { heading: null, body: [] };
+    // `path` (T9, 2026-08-28) is the heading ANCESTOR chain, tracked so this
+    // chunker prefixes chunks identically to the vector arm's
+    // `semanticChunker.semanticChunks`. The two must not drift: if the lexical
+    // arm keeps leaf-only headings while the vector arm carries paths, a query
+    // scores against two different texts for the same chunk. Only the PREFIX is
+    // shared — this chunker's own splitting, and in particular its round-7
+    // pathological-document safety nets, are deliberately left alone.
+    const sections: Array<{ heading: string | null; path: string[]; body: string[] }> = [];
+    let current: { heading: string | null; path: string[]; body: string[] } = { heading: null, path: [], body: [] };
+    const stack: Array<{ level: number; text: string }> = [];
 
     const headingRe = /^\s*(?:#{1,3}\s+|(?:\d+(?:\.\d+){0,2}\s+))/;
     const pageMarkerRe = /^\s*\[Page\s+\d+\]\s*$/;
 
+    /** Depth + display text, matching semanticChunker's `headingOf`. */
+    const headingParts = (line: string): { level: number; text: string } => {
+        const atx = /^\s*(#{1,6})\s+(.*)$/.exec(line);
+        if (atx) return { level: atx[1].length, text: atx[2].trim() };
+        const num = /^\s*(\d+(?:\.\d+){0,3})\s+(\S.*)$/.exec(line);
+        if (num) return { level: num[1].split('.').length, text: `${num[1]} ${num[2].trim()}` };
+        return { level: 1, text: line.trim() };
+    };
+
     const flush = () => {
         if (current.heading !== null || current.body.length > 0) sections.push(current);
-        current = { heading: null, body: [] };
+        current = { heading: null, path: [], body: [] };
     };
 
     for (const line of lines) {
         if (headingRe.test(line)) {
             // New heading → close the previous section, start a new one.
             flush();
+            const h = headingParts(line);
+            while (stack.length && stack[stack.length - 1].level >= h.level) stack.pop();
+            stack.push(h);
+            current.path = stack.map((x) => x.text);
             current.heading = line.trim();
         } else if (pageMarkerRe.test(line)) {
             // [Page N] is a SOFT boundary. We do NOT close the section here —
@@ -286,7 +323,14 @@ function chunkText(content: string, fineChunk: boolean = false): string[] {
 
     const chunks: string[] = [];
     for (const section of sections) {
-        const headingLine = section.heading ?? '';
+        // The heading-path prefix rides in FRONT of the heading line, so every
+        // chunk of "Idempotency" says which project's Idempotency it is. The
+        // document-level heading is dropped for the same reason it is in
+        // semanticChunker: identical on every chunk, so it discriminates none.
+        const ctx = section.path.length > 1
+            ? `[context: ${section.path.slice(1).join(' > ')}]`
+            : '';
+        const headingLine = [ctx, section.heading ?? ''].filter(Boolean).join(' ');
         const bodyText = section.body.join('\n').replace(/\s+/g, ' ').trim();
         const fullText = headingLine ? `${headingLine}\n${bodyText}` : bodyText;
         if (!fullText) continue;
@@ -760,6 +804,8 @@ function getCachedDocumentMap(fileId: string, content: string): DocumentMap {
  * then keeps the existing chunkText() path (flat-prose fixtures, slide decks).
  */
 function sectionAwareChunks(fileId: string, content: string): string[] | null {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     const map = getCachedDocumentMap(fileId, content);
     // Delegates to the shared chunker in DocumentMap so the lexical and hybrid
     // retrievers produce identical section-tagged chunks (single source of
@@ -830,6 +876,20 @@ function buildDocumentIdentityBlock(mode: Mode, identities: DocumentIdentity[]):
     lines.push('  </document_identity>');
     return lines.join('\n');
 }
+
+/**
+ * Index states the launch sweep (retryLexicalOnlyFiles) re-indexes.
+ *
+ * `indexing` was missing until 2026-09-22. A persisted `indexing` state at
+ * launch is left over from a process that quit or died mid-index. Live-
+ * reproduced: two files stayed `indexing`, half-embedded, after a relaunch,
+ * because only mode ACTIVATION re-indexes non-ready files and an already-active
+ * mode is never re-activated. Safe even if a file is genuinely mid-index:
+ * ModeHybridRetriever.indexFile is single-flight per file id.
+ *
+ * One exported set: ModesManager used to keep two private copies of it.
+ */
+export const RETRY_ELIGIBLE_INDEX_STATUSES: ReadonlySet<string> = new Set(['lexical_only', 'failed', 'pending', 'indexing']);
 
 export class ModeContextRetriever {
     // Expose helpers for unit testing the fuzzy-matching layer in isolation.
@@ -908,9 +968,15 @@ export class ModeContextRetriever {
                 }
             }
         }
+        // Preserve the raw question outside retrieval. The derived scoring query
+        // removes only a sentence-initial conversational wrapper in document-
+        // grounded mode, so lexical and section planning see the factual payload.
+        const documentRetrievalQuery = forceDocumentGrounding
+            ? normalizeDocumentGroundedRetrievalQuery(options.query)
+            : options.query;
         const bareQueryText = forceDocumentGrounding
-            ? `${options.query}${referentEnrichment ? '\n' + referentEnrichment : ''}`.trim()
-            : `${options.query}\n${options.transcript ?? ''}${referentEnrichment ? '\n' + referentEnrichment : ''}`.trim();
+            ? `${documentRetrievalQuery}${referentEnrichment ? '\n' + referentEnrichment : ''}`.trim()
+            : `${documentRetrievalQuery}\n${options.transcript ?? ''}${referentEnrichment ? '\n' + referentEnrichment : ''}`.trim();
         const bareQueryWords = new Set(wordsOf(bareQueryText));
         const queryText = bareQueryWords.size >= 2
             ? bareQueryText
@@ -927,8 +993,8 @@ export class ModeContextRetriever {
                 ? queryWordsRaw.filter(w => !DOC_GROUNDED_STOPWORDS.has(w))
                 : queryWordsRaw,
         );
-        const queryShape = classifyDocumentQuestionShape(options.query || '', options.followUpReferentHint);
-        const broadQuery = isBroadDocumentQuery(options.query || '');
+        const queryShape = classifyDocumentQuestionShape(documentRetrievalQuery || '', options.followUpReferentHint);
+        const broadQuery = isBroadDocumentQuery(documentRetrievalQuery || '');
         const includeDocumentIdentity = forceDocumentGrounding && broadQuery;
         const documentIdentityBlock = includeDocumentIdentity ? buildDocumentIdentityBlock(mode, documentIdentities) : '';
         diagLog('DOC-RANK identity', { queryShape, broadQuery, identityIncluded: includeDocumentIdentity, reason: includeDocumentIdentity ? 'broad_overview_query' : 'specific_query_suppressed' });
@@ -1050,8 +1116,8 @@ export class ModeContextRetriever {
         // whose child §2.3.2 holds the Jetson controller. The enrichment is
         // retrieval-side only; it never enters the model-visible prompt.
         const plannerQuery = referentEnrichment
-            ? `${options.query} ${referentEnrichment}`
-            : options.query;
+            ? `${documentRetrievalQuery} ${referentEnrichment}`
+            : documentRetrievalQuery;
         if (forceDocumentGrounding && plannerQuery) {
             for (const source of sources) {
                 if (source.type !== 'reference_file') continue;
@@ -1169,7 +1235,7 @@ export class ModeContextRetriever {
 
         // Precompute the query's entity terms ONCE (was recomputed per chunk
         // inside scoreChunk across all three scoring loops).
-        const queryEntityTerms = precomputeEntityTerms(options.query, forceDocumentGrounding);
+        const queryEntityTerms = precomputeEntityTerms(documentRetrievalQuery, forceDocumentGrounding);
 
         // Within-section tiebreak (round-6 51-bench): when the planner targets a
         // long section EVERY window gets the same section boost, so the generic
@@ -1179,8 +1245,8 @@ export class ModeContextRetriever {
         // gets a tiny bonus so the right window surfaces. Matching is PREFIX-
         // based (≥4 chars) so "parameters"/"parameter" and "format"/"formats"
         // unify without a full stemmer.
-        const queryContentStems = forceDocumentGrounding && options.query
-            ? [...new Set(wordsOf(options.query))]
+        const queryContentStems = forceDocumentGrounding && documentRetrievalQuery
+            ? [...new Set(wordsOf(documentRetrievalQuery))]
                 .filter(w => w.length >= 4 && !DOC_GROUNDED_STOPWORDS.has(w))
                 .map(w => w.slice(0, Math.max(4, w.length - 1))) // crude stem: drop trailing plural/inflection
             : [];
@@ -1201,7 +1267,7 @@ export class ModeContextRetriever {
         for (const source of sources) {
             for (const chunk of chunksForSource(source)) {
                 const navigationMatch = isMatchingNavigationChunk(source.id, chunk);
-                let score = scoreChunk(queryWords, chunk, options.query, forceDocumentGrounding, queryEntityTerms);
+                let score = scoreChunk(queryWords, chunk, documentRetrievalQuery, forceDocumentGrounding, queryEntityTerms);
                 const boost = sectionBoost(chunkSectionNum(chunk));
                 if (boost > 0) score = Math.min(1, score + boost + contentWordBonus(chunk));
                 if (navigationMatch) score = Math.max(score, 0.9);
@@ -1271,7 +1337,7 @@ export class ModeContextRetriever {
             // by an "evaluation"/"metric" sentence). NO fixture-specific terms
             // (no "teleoperation"/"Success Rate"/"MSE") are hardcoded — the boost
             // only fires when the CHUNK itself contains the generic section word.
-            const ql = `${options.query ?? ''}`.toLowerCase();
+            const ql = documentRetrievalQuery.toLowerCase();
             const sectionHints: string[] = [];
             const addHint = (...terms: string[]) => sectionHints.push(...terms);
             if (/\bphase|phases|stage|stages|step|steps|main (?:parts|components)\b/.test(ql)) addHint('objective', 'phase', 'stage', 'step');
@@ -1309,8 +1375,8 @@ export class ModeContextRetriever {
                 // "Mercury X1"). Falls through to the synonym-only rescue when
                 // no entities are present in the query (broad / vague questions),
                 // so the original behaviour is preserved for entity-less questions.
-                const ownEntityTerms = forceDocumentGrounding && options.query
-                    ? extractHighSignalEntityTerms(options.query)
+                const ownEntityTerms = forceDocumentGrounding && documentRetrievalQuery
+                    ? extractHighSignalEntityTerms(documentRetrievalQuery)
                         .filter(t => !/^\d[\d.,]*$/.test(t.trim()))   // drop pure numbers
                         .map(t => t.toLowerCase())
                     : [];
@@ -1329,7 +1395,7 @@ export class ModeContextRetriever {
                             if (!entityHit) continue;
                         }
                         const key = `${source.id}::${chunk}`;
-                        let base = scoreChunk(queryWords, chunk, options.query, forceDocumentGrounding, queryEntityTerms);
+                        let base = scoreChunk(queryWords, chunk, documentRetrievalQuery, forceDocumentGrounding, queryEntityTerms);
                         // Carry forward the section-target boost so a rescued
                         // chunk in a TARGET section isn't demoted below its
                         // first-pass rank (consistency across the two passes).
@@ -1657,7 +1723,7 @@ export class ModeContextRetriever {
         for (const file of files) {
             try {
                 const { status } = retriever.getFileIndexStatus(file.id);
-                if (status === 'lexical_only' || status === 'failed' || status === 'pending') {
+                if (RETRY_ELIGIBLE_INDEX_STATUSES.has(status)) {
                     console.log(`[ModeContextRetriever] re-indexing "${file.fileName}" (was ${status})`);
                     await retriever.indexFile(file);
                 }
@@ -1712,11 +1778,37 @@ export class ModeContextRetriever {
         await retriever.indexFile(file);
     }
 
+    /**
+     * True when the file's index was built from different content or an older
+     * chunker version. Index STATUS is read by file id and cannot see the content,
+     * so such a file reads `ready` forever; prewarm asks this as well, which is
+     * where a chunker bump re-indexes — lazily, one mode at a time, on activation
+     * (owner's choice 2026-09-19), never every file of every mode at boot.
+     */
+    referenceFileNeedsReindex(file: ModeReferenceFile): boolean {
+        try { return this.ensureHybridRetriever()?.needsReindexing(file) ?? false; } catch { return false; }
+    }
+
+    /** Corpus arbitration pass-through — see ModeHybridRetriever.probeAnchors. */
+    probeReferenceAnchors(files: ModeReferenceFile[], question: string): boolean {
+        return this.ensureHybridRetriever()?.probeAnchors(files, question) ?? false;
+    }
+
     /** Index status for the Modes Manager UI badge. */
-    getReferenceFileIndexStatus(fileId: string): { status: string; chunkCount: number } {
+    getReferenceFileIndexStatus(fileId: string): { status: string; chunkCount: number; embeddedChunkCount: number } {
         const retriever = this.ensureHybridRetriever();
-        if (!retriever) return { status: 'pending', chunkCount: 0 };
+        if (!retriever) return { status: 'pending', chunkCount: 0, embeddedChunkCount: 0 };
         return retriever.getFileIndexStatus(fileId);
+    }
+
+    /** See ModeHybridRetriever.pruneFileIndexesByPrefix. */
+    /** See ModeHybridRetriever.usesHostedEmbeddings. */
+    usesHostedEmbeddings(): boolean {
+        try { return this.ensureHybridRetriever()?.usesHostedEmbeddings() === true; } catch { return false; }
+    }
+
+    pruneReferenceFileIndexesByPrefix(prefix: string, keepId: string): number {
+        return this.ensureHybridRetriever()?.pruneFileIndexesByPrefix(prefix, keepId) ?? 0;
     }
 
     /** Drop a deleted file's persisted chunks + index state. */
@@ -1755,13 +1847,16 @@ export class ModeContextRetriever {
                 if (hintEntities.length > 0) referentEnrichment = '\n' + hintEntities.slice(0, 3).join(' ');
             }
         }
-        const queryText = `${options.query}\n${options.transcript ?? ''}${referentEnrichment}`.trim();
+        const retrievalQuery = options.forceDocumentGrounding
+            ? normalizeDocumentGroundedRetrievalQuery(options.query)
+            : options.query;
+        const queryText = `${retrievalQuery}\n${options.transcript ?? ''}${referentEnrichment}`.trim();
         // Doc-grounded retrieval must score against the actual question, not the
         // whole transcript. The transcript is useful conversational context, but in
         // a seminar session it contains generic words like "uploaded thesis material"
         // that swamp short precise queries (hardware/camera/self-awareness) and can
         // cause fallback/ranking to miss the answer-bearing reference chunk.
-        const hybridQuery = options.forceDocumentGrounding ? `${options.query}${referentEnrichment}`.trim() : queryText;
+        const hybridQuery = options.forceDocumentGrounding ? `${retrievalQuery}${referentEnrichment}`.trim() : queryText;
         const hasTranscript = !options.forceDocumentGrounding && !!options.transcript && options.transcript.trim().length > 0;
 
         const result = await this._hybridRetriever!.retrieve({
@@ -1776,6 +1871,14 @@ export class ModeContextRetriever {
             // applies the doc-grounded budget/topK upgrade (3600/12) instead of the
             // default 1800/6 — grounded answers were retrieving too small a window.
             forceDocumentGrounding: options.forceDocumentGrounding,
+            rerankSurface: options.rerankSurface,
+            // The caller's race deadline (rerankBudget.ts → rerankBudgetFitsDeadline).
+            // Measured 2026-09-07: without this hop the recap's 1000ms race still
+            // started an 8000ms-budget hosted rerank and discarded it.
+            rerankDeadlineMs: options.rerankDeadlineMs,
+            rerankPoolMultiplier: options.rerankPoolMultiplier,
+            queryEmbedRetryBudgetMs: options.queryEmbedRetryBudgetMs,
+            meetingActive: options.meetingActive,
         });
 
         diagLog('retrieveHybrid() return', { usedFallback: result.usedFallback, usedHybrid: result.usedHybrid, chunkCount: result.chunks?.length, hasContext: !!result.formattedContext });

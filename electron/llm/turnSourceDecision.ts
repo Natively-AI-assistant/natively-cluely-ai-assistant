@@ -21,6 +21,16 @@
 //   4. Multi-source comparison ('compare my résumé with the JD') requires
 //      EVERY requested family to be granted AND available. A single missing
 //      family denies the whole turn so the user gets one coherent answer.
+//   5. An absent DEFAULT source with NO explicit request never clarifies on a
+//      non-strict authority. Nothing private was asked for, so answering from
+//      the live transcript and open knowledge widens nothing; refusing would
+//      turn "no résumé uploaded yet" into "every question in this mode is
+//      refused". That was live: technical-interview and looking-for-work seed
+//      profile_only, and with no résumé every interviewer question came back
+//      as "switch to a mode that enables your résumé" before any generation.
+//      Strict authorities (invariant 3) are unchanged: their prison is the
+//      point, and refusalPolicy.clarificationIsActionable already handles the
+//      zero-file case downstream.
 //
 // The decision is consulted by:
 //   - SourceAuthorityKernel.build (issues capabilities from
@@ -188,6 +198,18 @@ function defaultDecision(
 ): TurnSourceDecision {
   if (REFERENCE_AUTHORITIES.has(authority)) {
     if (!availability.hasReferenceFiles) {
+      // Invariant 5. Non-strict reference_files_primary with nothing attached
+      // answers from the transcript; the strict variants keep failing closed.
+      if (!STRICT_AUTHORITIES.has(authority)) {
+        return result({
+          authority, contract, switches,
+          outcome: 'default',
+          owner: 'reference_files',
+          allowed: availability.hasLiveTranscript ? ['live_transcript'] : [],
+          required: [],
+          reasonCode: `${authority}:default_reference_files_absent_answer_from_context`,
+        });
+      }
       return unavailable(authority, contract, switches, [], 'default_reference_files_unavailable');
     }
     const allowed: TurnEvidenceKind[] = ['reference_files'];
@@ -208,7 +230,24 @@ function defaultDecision(
   }
   if (authority === 'profile_only' || authority === 'profile_plus_transcript') {
     if (!availability.hasProfileFacts) {
-      return unavailable(authority, contract, switches, [], 'default_profile_unavailable');
+      // Invariant 5. No résumé loaded and nothing explicitly requested: the
+      // owner is still the profile (so the answer is written in the
+      // candidate's voice), but no profile evidence is granted, nothing is
+      // required, and the turn proceeds. The kernel already resolves this
+      // case to owner=profile rather than clarify (KernelProfileOnlyNeverClarifies);
+      // this resolver disagreed with it, and the engine's clarification
+      // short-circuit read the disagreement as a refusal.
+      const allowed: TurnEvidenceKind[] = [];
+      if (availability.hasJobDescription) allowed.push('profile_jd');
+      if (authority === 'profile_plus_transcript' && availability.hasLiveTranscript) allowed.push('live_transcript');
+      return result({
+        authority, contract, switches,
+        outcome: 'default',
+        owner: 'profile',
+        allowed,
+        required: [],
+        reasonCode: `${authority}:default_profile_absent_answer_from_context`,
+      });
     }
     const allowed = profileKinds();
     if (availability.hasJobDescription) allowed.push('profile_jd');
@@ -243,13 +282,21 @@ function defaultDecision(
       reasonCode: 'transcript_only:default_transcript',
     });
   }
-  // general_mixed + ask_if_ambiguous: no canonical owner. Caller decides.
+  // general_mixed + ask_if_ambiguous: no canonical owner. Caller decides which
+  // evidence to weigh, but whatever is actually available must still be
+  // allowed to reach the prompt — otherwise a jd_fact_answer/profile-grounded
+  // question under a mixed-authority mode gets zero granted evidence and the
+  // model fabricates instead of grounding or refusing (bug fixed 2026-07-26).
+  const allowed: TurnEvidenceKind[] = [];
+  if (availability.hasProfileFacts) allowed.push(...profileKinds());
+  if (availability.hasJobDescription) allowed.push('profile_jd');
   return result({
     authority,
     contract,
     switches,
     outcome: 'default',
     owner: 'unknown',
+    allowed,
     reasonCode: `${authority}:no_explicit_owner`,
   });
 }

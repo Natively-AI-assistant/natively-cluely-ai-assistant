@@ -1,0 +1,162 @@
+{
+ "blind_id": "S-0113fe9f",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 28491,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 9613,
+  "candidatesTokenCount": 820,
+  "totalTokenCount": 13701,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 9613
+   }
+  ],
+  "thoughtsTokenCount": 3268,
+  "serviceTier": "standard"
+ },
+ "fact_count": 28,
+ "evaluation": {
+  "factual_accuracy": 10,
+  "important_information_retention": 9,
+  "hallucination_control": 10,
+  "action_item_retention": 9,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 9,
+  "entity_retention": 10,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 10,
+  "structure": 10,
+  "conciseness": 8,
+  "readability": 9,
+  "overall_summary_quality": 9,
+  "critical_errors": [],
+  "missing_important_information": [
+   "The $0.40 per gigabyte overage rate for data ingest"
+  ],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Harrow retired its mainframe two years ago; mainframe connector costs extra"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "partial"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "partial"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "missing"
+   }
+  ],
+  "rationale": "The notes are highly accurate and capture almost all important information, decisions, and action items. There are no hallucinations or contradictions. A minor omission is the $0.40 per gigabyte overage rate, and the caveat that Daniel cannot promise an answer by Thursday regarding mid-term seat pricing. The notes also include a minor distractor regarding the retired mainframe. The structure is well-maintained, though there is some repetition across sections."
+ }
+}
