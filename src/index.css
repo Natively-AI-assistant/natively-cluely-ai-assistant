@@ -9145,6 +9145,138 @@ html[data-platform="linux"][data-window="launcher"] body {
   .t-dropdown { transition: none !important; }
 }
 
+/* The notes' "Regenerate notes as …" (MeetingDetails NotesActions) and the
+   follow-up draft's Generate (.mn-generate): the same clear glass as Regenerate
+   and Show evidence at rest. On hover they turn a light ice blue and read as
+   glass: an icy wash, a bright ice rim that fades in on the edge (the glass's
+   own top/bottom-aimed ::before), and a quiet pointer lens. Everything eases on
+   the glass's hover timing (300 ms, easeInOutSine). The selectors out-rank
+   [data-theme='light'] .lg-button.lg-clear, which sets the light lens and rim. */
+.lg-button.lg-clear.lg-sm.mn-suggest,
+.lg-button.lg-clear.lg-sm.mn-generate {
+  --lg-clear-hover: rgba(176, 202, 238, .21);
+  /* The pointer lens is kept quiet (under the clear glass's own .055/.30/.13):
+     the wash and rim carry the hover, the lens only hints at where the cursor is. */
+  --lg-lens-tint: rgba(232, 244, 255, .035);
+  --lg-lens-rim: rgba(226, 241, 255, .18);
+  --lg-lens-rim-soft: rgba(226, 241, 255, .07);
+}
+.lg-button.lg-clear.lg-sm.mn-suggest,
+.lg-button.lg-clear.lg-sm.mn-generate {
+  transition:
+    transform 110ms cubic-bezier(.2, .85, .25, 1),
+    background-color var(--lg-hover-dur) var(--lg-hover-ease),
+    color var(--lg-hover-dur) var(--lg-hover-ease),
+    box-shadow var(--lg-hover-dur) var(--lg-hover-ease);
+}
+.lg-button.lg-clear.lg-sm.mn-suggest::before,
+.lg-button.lg-clear.lg-sm.mn-generate::before {
+  transition: box-shadow var(--lg-hover-dur) var(--lg-hover-ease), opacity 150ms ease-in-out;
+}
+/* Dark: the label lifts to an icy white, as if lit from inside the glass. */
+.lg-button.lg-clear.lg-sm.mn-suggest:not(:disabled):hover,
+.lg-button.lg-clear.lg-sm.mn-generate:not(:disabled):hover { color: #E3EAF4; }
+.lg-button.lg-clear.lg-sm.mn-suggest:not(:disabled):hover::before,
+.lg-button.lg-clear.lg-sm.mn-generate:not(:disabled):hover::before {
+  box-shadow: inset 0 0 0 1px rgba(214, 228, 246, .50), inset 0 0 0 2px rgba(190, 210, 240, .14);
+}
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-suggest,
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-generate {
+  --lg-clear-hover-light: rgba(174, 204, 244, .30);
+  --lg-lens-tint: rgba(255, 255, 255, .30);
+  --lg-lens-rim: rgba(255, 255, 255, .85);
+  --lg-lens-rim-soft: rgba(255, 255, 255, .40);
+  transition:
+    transform 110ms cubic-bezier(.2, .85, .25, 1),
+    background-color var(--lg-hover-dur) var(--lg-hover-ease),
+    color var(--lg-hover-dur) var(--lg-hover-ease),
+    box-shadow var(--lg-hover-dur) var(--lg-hover-ease);
+}
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-suggest:not(:disabled):hover,
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-generate:not(:disabled):hover {
+  color: inherit;
+  box-shadow: inset 0 -1px 0 rgba(60, 100, 170, .11), 0 1px 3px rgba(60, 100, 170, .07);
+}
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-suggest:not(:disabled):hover::before,
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-generate:not(:disabled):hover::before {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .90), inset 0 0 0 2px rgba(130, 165, 220, .13);
+}
+
+/* AutoWidth (MeetingDetails): a label slot whose width eases to its content —
+   a resize, so --duration-fast (250ms) on --ease-smooth-out. The inner span is
+   the measured, natural-width copy; the swap's exiting label is absolutely
+   placed, so only the label on screen sets the width. */
+.mn-autow { display: inline-block; transition: width 250ms cubic-bezier(0.22, 1, 0.36, 1); }
+.mn-autow-in { display: inline-block; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .mn-autow { transition: none; } }
+
+/* Generate while it writes: it stays lit (the shimmer says so), so the hover and
+   press that would invite a second click are held off. */
+.lg-button.mn-generate[aria-busy='true'] { cursor: default; }
+.lg-button.lg-clear.lg-sm.mn-generate[aria-busy='true']:hover { background-color: var(--lg-clear-bg, rgba(255, 255, 255, .06)); color: inherit; }
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-generate[aria-busy='true']:hover { background-color: var(--lg-clear-bg-light, rgba(17, 17, 26, .04)); box-shadow: inset 0 -1px 0 rgba(17, 17, 26, .07); }
+.lg-button.lg-clear.lg-sm.mn-generate[aria-busy='true']:hover::before { box-shadow: inset 0 0 0 1px var(--lg-rim-1); }
+.lg-button.mn-generate[aria-busy='true']:hover .lg-lens,
+.lg-button.mn-generate[aria-busy='true'] .mn-glint { opacity: 0; }
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-generate[aria-busy='true']:hover::before { box-shadow: inset 0 0 0 1px var(--lg-rim-1); }
+.lg-button.lg-sm.mn-generate[aria-busy='true']:active { transform: none; }
+
+/* The follow-up card's "Open in Gmail", on the sign-off's line (FollowUpDraftCard).
+   .mn-fu-gmail-room is an empty inline box at the end of the text, the button's
+   measured width plus a 16px gap (--mn-fu-gmail-room, set by the card), so the last line always leaves room; the button is pinned to
+   the bottom right and centred on that last line: the body's 16px bottom padding
+   plus half the 13px x 1.65 line box, less half the 30px glass pill. */
+.mn-fu-gmail-room { display: inline-block; width: var(--mn-fu-gmail-room, 156px); height: 1px; }
+.mn-fu-gmail { position: absolute; right: 12px; bottom: calc(16px + (13px * 1.65) / 2 - 15px); }
+
+/* The follow-up draft's tone + Regenerate, in the notes' clear Liquid Glass.
+   The tone pill keeps its hover wash while its menu is open, so the open menu
+   reads as coming from it. Regenerate is the same glass as a 30px circle; its
+   arrows turn half a turn on hover (400ms, as before) and spin while the draft is
+   rewritten, when it stays lit rather than dimming (aria-busy), with the hover
+   wash, lens and press held off so it does not invite a second click. */
+.lg-button.lg-clear.lg-sm.mn-tone[aria-expanded='true'] { background-color: var(--lg-tint-hover); }
+.lg-button.lg-sm.mn-fu-regen { width: 30px; padding: 0; }
+.mn-fu-regen-turn { transition: transform 400ms cubic-bezier(0.23, 1, 0.32, 1); }
+@media (hover: hover) and (pointer: fine) {
+  .lg-button.mn-fu-regen:not([aria-busy='true']):hover .mn-fu-regen-turn { transform: rotate(-180deg); }
+}
+.lg-button.mn-fu-regen[aria-busy='true'] { cursor: default; }
+.lg-button.lg-clear.lg-sm.mn-fu-regen[aria-busy='true']:hover { background-color: var(--lg-clear-bg, rgba(255, 255, 255, .06)); }
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-fu-regen[aria-busy='true']:hover { background-color: var(--lg-clear-bg-light, rgba(17, 17, 26, .04)); }
+.lg-button.mn-fu-regen[aria-busy='true']:hover .lg-lens { opacity: 0; }
+.lg-button.lg-sm.mn-fu-regen[aria-busy='true']:active { transform: none; }
+@media (prefers-reduced-motion: reduce) { .mn-fu-regen-turn { transition: none; } }
+
+/* The notes' action row (MeetingDetails NotesActions). While notes regenerate
+   the buttons dim (LiquidGlassButton's :disabled rim, cap and label opacities);
+   here that eases over 150 ms instead of snapping, both ways. Show evidence's
+   toggle-blue ink fades on the same beat as its label swap. */
+.mn-notes-actions .lg-button::after,
+.mn-notes-actions .lg-button .lg-content,
+.mn-fu-actions .lg-button::after,
+.mn-fu-actions .lg-button .lg-content {
+  transition: opacity 150ms ease-in-out;
+}
+.mn-notes-actions .lg-button::before,
+.mn-fu-actions .lg-button::before {
+  transition: opacity 150ms ease-in-out, box-shadow var(--lg-hover-dur) var(--lg-hover-ease);
+}
+.lg-button.lg-sm.mn-evidence {
+  transition:
+    transform 110ms cubic-bezier(.2, .85, .25, 1),
+    background-color var(--lg-hover-dur) var(--lg-hover-ease),
+    color 150ms ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mn-notes-actions .lg-button::before,
+  .mn-notes-actions .lg-button::after,
+  .mn-notes-actions .lg-button .lg-content,
+  .mn-fu-actions .lg-button::before,
+  .mn-fu-actions .lg-button::after,
+  .mn-fu-actions .lg-button .lg-content { transition: none; }
+}
+
 /* The notes' calendar menu (meeting/CalendarLinkChip): "Looking at your
    calendar…" gives way to the timeline strip and the events. The body eases to
    its new height (resize: --duration-fast, --ease-smooth-out) while the content

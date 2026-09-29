@@ -1070,4 +1070,10 @@ export const ZH_GENERATED: Record<string, string> = {
     "min": "分钟",
     "hr": "小时",
     "Technique": "技术",
+    // Meeting notes: the follow-up email section (renamed from "Follow-up draft").
+    "Follow-up email": "跟进邮件",
+    "Copy follow-up email": "复制跟进邮件",
+    "Write a follow-up email from these notes when you need one.": "需要时，可根据这些笔记生成跟进邮件。",
+    "Couldn't write the email. Try again.": "无法撰写邮件。请重试。",
+    "Open the email in Gmail": "在 Gmail 中打开邮件",
 };

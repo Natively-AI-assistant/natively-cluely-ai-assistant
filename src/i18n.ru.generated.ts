@@ -541,4 +541,10 @@ export const RU_GENERATED: Record<string, string> = {
     "Couldn't write the draft. Try again.": "Не удалось написать черновик. Попробуйте ещё раз.",
     "Write a follow-up from these notes when you need one.": "Когда понадобится, создайте письмо по этим заметкам.",
     "Technique": "Метод",
+    // Meeting notes: the follow-up email section (renamed from "Follow-up draft").
+    "Follow-up email": "Письмо по итогам встречи",
+    "Copy follow-up email": "Скопировать письмо",
+    "Write a follow-up email from these notes when you need one.": "Когда понадобится, создайте письмо по этим заметкам.",
+    "Couldn't write the email. Try again.": "Не удалось написать письмо. Попробуйте ещё раз.",
+    "Open the email in Gmail": "Открыть письмо в Gmail",
 };

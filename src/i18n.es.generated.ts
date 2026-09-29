@@ -1071,4 +1071,10 @@ export const ES_GENERATED: Record<string, string> = {
     "min": "min",
     "hr": "h",
     "Technique": "Técnica",
+    // Meeting notes: the follow-up email section (renamed from "Follow-up draft").
+    "Follow-up email": "Correo de seguimiento",
+    "Copy follow-up email": "Copiar correo de seguimiento",
+    "Write a follow-up email from these notes when you need one.": "Redacta un correo de seguimiento a partir de estas notas cuando lo necesites.",
+    "Couldn't write the email. Try again.": "No se pudo redactar el correo. Inténtalo de nuevo.",
+    "Open the email in Gmail": "Abrir el correo en Gmail",
 };

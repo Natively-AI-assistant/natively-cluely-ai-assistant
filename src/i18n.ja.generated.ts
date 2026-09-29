@@ -1056,4 +1056,10 @@ export const JA_GENERATED: Record<string, string> = {
     "Couldn't write the draft. Try again.": "下書きを作成できませんでした。もう一度お試しください。",
     "Write a follow-up from these notes when you need one.": "必要なときに、このメモからフォローアップを作成できます。",
     "Technique": "手法",
+    // Meeting notes: the follow-up email section (renamed from "Follow-up draft").
+    "Follow-up email": "フォローアップメール",
+    "Copy follow-up email": "フォローアップメールをコピー",
+    "Write a follow-up email from these notes when you need one.": "必要なときに、このメモからフォローアップメールを作成できます。",
+    "Couldn't write the email. Try again.": "メールを作成できませんでした。もう一度お試しください。",
+    "Open the email in Gmail": "Gmail でメールを開く",
 };

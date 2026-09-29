@@ -153,6 +153,7 @@ const RU: Record<string, string> = {
     'Transcript': 'Транскрипт',
     'Risks / Blockers': 'Риски / Блокеры',
     'Follow-up draft': 'Черновик письма',
+    'Follow-up email': 'Письмо по итогам встречи',
     'Follow-up Draft': 'Черновик письма',
     'Next Steps': 'Следующие шаги',
     'Coaching': 'Коучинг',

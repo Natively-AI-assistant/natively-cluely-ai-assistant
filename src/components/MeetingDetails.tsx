@@ -11,6 +11,7 @@ import GlassSurface from '../ui-components/GlassSurface';
 // .lg-bubble (the Usage tab's question bubble).
 // Imported here rather than left to arrive through Launcher's LiquidGlassBadge import.
 import '../ui-components/LiquidGlassButton.css';
+import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
 import EditableTextBlock from './EditableTextBlock';
 import NativelyLogo from './icon.png';
 import ReactMarkdown from 'react-markdown';
@@ -24,6 +25,8 @@ import { reflowFlattenedList, leadingItem, techniqueLabel, extractComplexity, is
 import { normalizeFinalizedMarkdownMath } from '../lib/streamingMarkdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+// Transcript turns, and which source-quality notes the page does not show. Kept pure so they are tested on their own.
+import { groupTranscriptTurns, isHiddenQualityNote } from '../lib/meetingNotesView.mjs';
 import { CalendarLinkChip, type CalendarEventSnapshot } from './meeting/CalendarLinkChip';
 
 registerPrismLanguages();
@@ -734,6 +737,111 @@ type FollowUpTone = 'professional' | 'warm' | 'concise' | 'friendly';
 /** The dropdown snippet's --dropdown-close-dur (index.css, .mn-followup). */
 const TONE_MENU_CLOSE_MS = 150;
 
+/**
+ * The notes' actions, in the app's Liquid Glass (ui-components/design.md):
+ * Regenerate and Show evidence as small clear-glass buttons — the material the
+ * Modes Manager's "New Mode" uses, rim only, the page showing through — and,
+ * when the meeting looks like another template, a third of the same at the end
+ * of the row: "Regenerate notes as …". Show evidence stays clear glass when
+ * on; its label and icon turn the Settings toggle's blue. No template name: the
+ * suggestion says what would change, and nothing else here needs it.
+ *
+ * It replaced a row of flat buttons, a pull-down, and a bordered bar. The
+ * suggestion was a solid toggle-blue glass button until 2026-09-29; it now
+ * matches its neighbours.
+ */
+const NotesActions: React.FC<{
+    isRegenerating: boolean;
+    showEvidence: boolean;
+    /** The template the meeting looks like, when it differs from the one used. */
+    suggestion: { name: string; needsPro: boolean } | null;
+    onRegenerate: () => void;
+    onRegenerateAsSuggested: () => void;
+    onToggleEvidence: () => void;
+}> = ({ isRegenerating, showEvidence, suggestion, onRegenerate, onRegenerateAsSuggested, onToggleEvidence }) => {
+    const t = useT();
+    const reduce = useReducedMotion();
+    const isLight = useResolvedTheme() === 'light';
+    // The blue here is the Settings on/off switch's, --toggle-on (#6688F5, both
+    // themes), not the glass's default action blue. As text on a light page it is
+    // darkened a little for contrast, the way Phone Mirror's toggle ink is.
+    const toggleInk = isLight ? 'color-mix(in srgb, var(--toggle-on) 80%, #000)' : 'var(--toggle-on)';
+    // The Regenerate icon finishes the turn it is on when regenerating ends, rather
+    // than snapping back upright mid-rotation: the spin class is dropped at the next
+    // iteration boundary (animate-spin is one 1s linear turn per iteration).
+    const [spinning, setSpinning] = useState(isRegenerating);
+    const regeneratingRef = useRef(isRegenerating);
+    regeneratingRef.current = isRegenerating;
+    useEffect(() => { if (isRegenerating) setSpinning(true); }, [isRegenerating]);
+    const evidenceLabel = showEvidence ? t('Hide evidence') : t('Show evidence');
+    return (
+        // .mn-notes-actions: the disabled dim eases instead of snapping (index.css).
+        <div className="mn-notes-actions w-full flex flex-wrap items-center gap-2 min-w-0">
+            <LiquidGlassButton
+                variant="clear"
+                className="lg-sm"
+                onClick={onRegenerate}
+                disabled={isRegenerating}
+                icon={
+                    <RefreshCw
+                        className={`w-3.5 h-3.5 ${spinning && !reduce ? 'animate-spin' : ''}`}
+                        strokeWidth={2.2}
+                        onAnimationIteration={() => { if (!regeneratingRef.current) setSpinning(false); }}
+                    />
+                }
+            >
+                {t('Regenerate')}
+            </LiquidGlassButton>
+            <LiquidGlassButton
+                variant="clear"
+                // mn-evidence: the toggle-blue ink fades in and out (index.css).
+                className="lg-sm mn-evidence"
+                // Inline, not a utility class: .lg-button's own `color: inherit` comes
+                // later in the cascade and would win over text-accent-primary.
+                style={showEvidence ? { color: toggleInk } : undefined}
+                onClick={onToggleEvidence}
+                aria-pressed={showEvidence}
+                // Eye ⇄ crossed eye is the icon swap Copy → Check uses (.t-icon-swap), and the
+                // label the text swap its label uses, with the width held on the longer label.
+                icon={
+                    <span className="t-icon-swap w-3.5 h-3.5" data-state={showEvidence ? 'b' : 'a'} aria-hidden="true">
+                        <EyeOff className="t-icon w-3.5 h-3.5" data-icon="a" strokeWidth={2.2} />
+                        <Eye className="t-icon w-3.5 h-3.5" data-icon="b" strokeWidth={2.2} />
+                    </span>
+                }
+            >
+                <SwapText value={showEvidence ? 'hide' : 'show'} sizers={[t('Show evidence'), t('Hide evidence')]}>
+                    {evidenceLabel}
+                </SwapText>
+            </LiquidGlassButton>
+            {/* The suggestion settles in (fade, 2px blur, 250ms) when detection offers one
+                and fades out quicker (150ms) once it has been taken. Not on the page's
+                first paint: the notes' own reveal is already playing then. */}
+            <AnimatePresence initial={false}>
+                {suggestion && (
+                    <motion.div
+                        key="suggestion"
+                        className="ml-auto max-w-full flex"
+                        initial={reduce ? { opacity: 0 } : { opacity: 0, filter: 'blur(2px)' }}
+                        animate={{ opacity: 1, filter: 'blur(0px)', transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] }, transitionEnd: { filter: 'none' } }}
+                        exit={{ opacity: 0, transition: { duration: 0.15, ease: [0.22, 1, 0.36, 1] } }}
+                    >
+                        <LiquidGlassButton
+                            variant="clear"
+                            // Clear glass like its neighbours; on hover a soft ice-blue wash (.mn-suggest, index.css).
+                            className="lg-sm mn-suggest max-w-full"
+                            onClick={onRegenerateAsSuggested}
+                            disabled={isRegenerating || suggestion.needsPro}
+                        >
+                            {suggestion.needsPro ? `${suggestion.name} ${t('notes need Natively Pro')}` : `${t('Regenerate notes as')} ${suggestion.name}`}
+                        </LiquidGlassButton>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
 // Tone picker for the follow-up draft. Picking a tone rewrites the draft in it.
 // Must be a named component (not an IIFE) so React can track its hooks stably.
 // Motion is transitions.dev's menu dropdown: the menu grows from the trigger's
@@ -755,7 +863,8 @@ const ToneDropdown: React.FC<{
     const [open, setOpen] = useState(false);
     const [closing, setClosing] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
-    const triggerRef = useRef<HTMLButtonElement>(null);
+    // LiquidGlassButton keeps its own ref (the lens), so the trigger is found in the wrapper.
+    const trigger = () => rootRef.current?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ?? null;
     const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const menuId = useId();
@@ -772,7 +881,7 @@ const ToneDropdown: React.FC<{
         setClosing(true);
         clearTimeout(closeTimer.current);
         closeTimer.current = setTimeout(() => setClosing(false), TONE_MENU_CLOSE_MS);
-        if (refocus) triggerRef.current?.focus({ preventScroll: true });
+        if (refocus) trigger()?.focus({ preventScroll: true });
     };
     useEffect(() => () => clearTimeout(closeTimer.current), []);
     // Opening moves focus onto the current tone, so the arrow keys work at once and
@@ -803,35 +912,42 @@ const ToneDropdown: React.FC<{
 
     return (
         <div ref={rootRef} className="relative">
-            <button
-                ref={triggerRef}
-                type="button"
+            {/* The notes' clear Liquid Glass pill (ui-components/LiquidGlassButton), like
+                Regenerate and Show evidence; it holds its hover wash while the menu is
+                open (.mn-tone, index.css). */}
+            <LiquidGlassButton
+                variant="clear"
+                className="lg-sm mn-tone"
                 disabled={isRegeneratingFollowUp}
                 onClick={() => (open ? close(false) : openMenu())}
                 onKeyDown={(e) => { if (e.key === 'ArrowDown' && !open) { e.preventDefault(); openMenu(); } }}
                 aria-haspopup="menu"
                 aria-expanded={open}
                 aria-controls={menuId}
-                className={`h-7 inline-flex items-center gap-1 text-[11px] font-medium pl-2.5 pr-1.5 rounded-md hover:text-text-primary disabled:opacity-50 disabled:hover:bg-transparent transition-colors focus-visible:[outline-offset:-1px] focus-visible:[outline-width:1.5px] ${isLight ? 'hover:bg-black/[0.05]' : 'hover:bg-white/[0.06]'} ${open ? `text-text-primary ${isLight ? 'bg-black/[0.05]' : 'bg-white/[0.06]'}` : 'text-text-secondary'}`}
             >
-                {/* Every tone stacked invisibly in one cell: the trigger is always as wide
-                    as the longest label, so it never jumps on a pick and the menu under
-                    it can be exactly its width. */}
-                <span className="grid text-left">
-                    {toneOptions.map(o => (
-                        <span key={o.value} aria-hidden="true" className="invisible col-start-1 row-start-1">{o.label}</span>
-                    ))}
-                    <span className="col-start-1 row-start-1">{toneOptions.find(o => o.value === followUpTone)?.label ?? t('Tone')}</span>
+                <span className="inline-flex items-center gap-1">
+                    {/* Every tone stacked invisibly in one cell: the trigger is always as wide
+                        as the longest label, so it never jumps on a pick and the menu under
+                        it can be exactly its width. */}
+                    <span className="grid text-center">
+                        {toneOptions.map(o => (
+                            <span key={o.value} aria-hidden="true" className="invisible col-start-1 row-start-1">{o.label}</span>
+                        ))}
+                        <span className="col-start-1 row-start-1">{toneOptions.find(o => o.value === followUpTone)?.label ?? t('Tone')}</span>
+                    </span>
+                    {/* Flips (scaleY) rather than turns, so the "v" becomes a "^" in place:
+                        with the menu's open (250ms), and its quicker close (150ms). */}
+                    <ChevronDown
+                        className="w-3 h-3 opacity-60"
+                        strokeWidth={2.5}
+                        style={{ transform: `scaleY(${open ? -1 : 1})`, transition: `transform ${open ? 'var(--dropdown-open-dur)' : 'var(--dropdown-close-dur)'} var(--dropdown-ease)` }}
+                    />
                 </span>
-                {/* Flips (scaleY) rather than turns, so the "v" becomes a "^" in place. */}
-                <ChevronDown
-                    className="w-3 h-3 text-text-tertiary"
-                    strokeWidth={2.5}
-                    style={{ transform: `scaleY(${open ? -1 : 1})`, transition: 'transform var(--dropdown-open-dur) var(--dropdown-ease)' }}
-                />
-            </button>
-            {/* Exactly the trigger's width (left-0 right-0 of its wrapper). The rows'
-                text starts where the trigger's does: 1px border + 3px padding + 6px. */}
+            </LiquidGlassButton>
+            {/* Exactly the trigger's width (left-0 right-0 of its wrapper). Tone names are
+                centred, and each row's centre sits under the trigger's label, not the
+                menu's middle: the trigger's chevron (12px + 4px gap) pushes its label
+                8px left, so the rows pad 16px more on the right (pl-3 / pr-7). */}
             <div
                 id={menuId}
                 role="menu"
@@ -853,7 +969,7 @@ const ToneDropdown: React.FC<{
                             aria-checked={selected}
                             tabIndex={-1}
                             onClick={() => { close(true); if (!selected) onSelect(opt.value); }}
-                            className={`w-full h-[26px] flex items-center pl-1.5 pr-1.5 rounded-[5px] text-left text-[11px] font-medium focus-visible:outline-none transition-colors ${selected
+                            className={`w-full h-[26px] flex items-center justify-center pl-3 pr-7 rounded-[5px] text-center text-[12px] font-medium focus-visible:outline-none transition-colors ${selected
                                 ? 'text-text-primary'
                                 : 'text-text-secondary hover:text-text-primary focus-visible:text-text-primary'} ${isLight
                                 ? 'hover:bg-black/[0.05] focus-visible:bg-black/[0.05]'
@@ -898,13 +1014,6 @@ const isNextStepsSectionTitle = (title?: string | null): boolean => {
     if (!t) return false;
     return /next\s*steps?\b/i.test(t) || /^what\s+happens\s+next\b/i.test(t);
 };
-
-// Not every "quality warning" is a real problem. A note like "Removed 1 empty,
-// duplicate, or interim transcript segment." is a benign cleanup log and should
-// read as low-key info — not an alarming amber warning. Anything about speaker
-// labels, coverage, or that asks the reader to verify is a genuine concern.
-const isBenignQualityNote = (warning: string): boolean =>
-    /removed|cleaned|interim|duplicate|empty/i.test(warning);
 
 interface Evidence { speakerId?: string; speakerName?: string; speaker?: string; timestampMs?: number; timestamp?: number; quote?: string; segmentId?: string }
 interface FollowUpDraftObj { type?: string; subject?: string; body: string; tone?: string }
@@ -1041,6 +1150,32 @@ const SwapText: React.FC<{ value: string; sizers: React.ReactNode[]; children: R
     );
 };
 
+/**
+ * A width that follows its content with an ease instead of a jump: the inner
+ * span is measured (ResizeObserver) and the outer one transitions to it
+ * (.mn-autow in index.css — a resize: 250ms, --ease-smooth-out). Used where a
+ * label changes length and the pill around it should grow into the new one,
+ * rather than holding the longest label's width all the time. The first
+ * measure lands without a transition, so nothing animates on first paint.
+ */
+const AutoWidth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const innerRef = useRef<HTMLSpanElement>(null);
+    const [width, setWidth] = useState<number | null>(null);
+    useLayoutEffect(() => {
+        const el = innerRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(() => setWidth(el.offsetWidth));
+        ro.observe(el);
+        setWidth(el.offsetWidth);
+        return () => ro.disconnect();
+    }, []);
+    return (
+        <span className="mn-autow" style={width === null ? undefined : { width }}>
+            <span ref={innerRef} className="mn-autow-in">{children}</span>
+        </span>
+    );
+};
+
 /** The widest the speaker rename field grows before its text scrolls. */
 const SPEAKER_INPUT_MAX_W = 200;
 
@@ -1102,26 +1237,25 @@ const SpeakerNameInput: React.FC<{
 };
 
 /** Copy for the follow-up card: Copy → Check is transitions.dev's icon swap. */
-const FollowUpCopyButton: React.FC<{ copied: boolean; onCopy: () => void; isLight: boolean }> = ({ copied, onCopy, isLight }) => {
+// The notes header's Copy, exactly: quiet text that brightens on hover, no card
+// behind it, Copy → Check icon swap and a Copy → Copied label swap.
+const FollowUpCopyButton: React.FC<{ copied: boolean; onCopy: () => void }> = ({ copied, onCopy }) => {
     const t = useT();
-    const prefersReducedMotion = useReducedMotion();
     return (
-        <motion.button
+        <button
             type="button"
             onClick={onCopy}
-            whileTap={prefersReducedMotion ? undefined : { scale: 0.96 }}
-            transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-            aria-label={copied ? t('Copied') : t('Copy follow-up draft')}
-            className={`h-7 inline-flex items-center gap-1.5 pl-2 pr-2.5 rounded-md text-[11px] font-medium text-text-secondary hover:text-text-primary transition-colors ${isLight ? 'hover:bg-black/[0.05]' : 'hover:bg-white/[0.06]'}`}
+            aria-label={copied ? t('Copied') : t('Copy follow-up email')}
+            className="shrink-0 flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-[color,opacity]"
         >
             <span className="t-icon-swap w-3.5 h-3.5" data-state={copied ? 'b' : 'a'} aria-hidden="true">
-                <Copy className="t-icon w-3.5 h-3.5" data-icon="a" strokeWidth={2} />
-                <Check className="t-icon w-3.5 h-3.5 text-emerald-500" data-icon="b" strokeWidth={2.5} />
+                <Copy className="t-icon w-3.5 h-3.5" data-icon="a" size={14} />
+                <Check className="t-icon w-3.5 h-3.5 text-emerald-500" data-icon="b" size={14} />
             </span>
             <SwapText value={copied ? 'copied' : 'copy'} sizers={[t('Copy'), t('Copied')]}>
                 {copied ? t('Copied') : t('Copy')}
             </SwapText>
-        </motion.button>
+        </button>
     );
 };
 
@@ -1153,6 +1287,18 @@ const FollowUpDraftCard: React.FC<{
     const t = useT();
     const ref = useRef<HTMLDivElement>(null);
     const [shown, setShown] = useState(!reveal);
+    // The room at the end of the text is the button's real width (labels differ by
+    // language), measured, plus a 16px gap; 156px is only the first-paint guess.
+    const gmailRef = useRef<HTMLDivElement>(null);
+    const [gmailWidth, setGmailWidth] = useState<number | null>(null);
+    useLayoutEffect(() => {
+        const el = gmailRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(() => setGmailWidth(el.offsetWidth));
+        ro.observe(el);
+        setGmailWidth(el.offsetWidth);
+        return () => ro.disconnect();
+    }, [!!onEmail]);
     useLayoutEffect(() => {
         if (shown) return;
         void ref.current?.offsetHeight;
@@ -1160,28 +1306,19 @@ const FollowUpDraftCard: React.FC<{
     }, [shown]);
     return (
         <div ref={ref} className={`t-stagger${shown ? ' is-shown' : ''}`}>
-            <div className={`t-stagger-line t-stagger-line--1 rounded-xl border overflow-hidden ${isLight ? 'border-black/[0.08] bg-black/[0.015]' : 'border-white/[0.08] bg-white/[0.02]'}`}>
-                {/* Who it goes to: the meeting's calendar invite, as Fathom's recap does. */}
+            {/* Mail rows: To (the invite, as Fathom's recap does) and Subject + Copy,
+                then the message, roomier than the rows; "Open in Gmail" is the one
+                send-like action, so it sits at the foot of the draft as a glass button. */}
+            <div className={`t-stagger-line t-stagger-line--1 rounded-2xl border overflow-hidden ${isLight ? 'border-black/[0.08] bg-white/70' : 'border-white/[0.08] bg-white/[0.025]'}`}>
                 {recipients && recipients.length > 0 && (
-                    <div className={`flex items-center gap-2.5 min-h-9 pl-3.5 pr-1.5 py-1 border-b ${isLight ? 'border-black/[0.06]' : 'border-white/[0.06]'}`}>
+                    <div className={`flex items-center gap-2.5 min-h-10 px-4 py-1.5 border-b ${isLight ? 'border-black/[0.06]' : 'border-white/[0.06]'}`}>
                         <p className="min-w-0 flex-1 truncate text-[12.5px] select-text" title={recipients.map((r) => r.email).join(', ')}>
                             <span className="text-text-tertiary mr-1">{t('To:')}</span>{' '}
                             <span className="text-text-primary">{recipientSummary(recipients)}</span>
                         </p>
-                        {onEmail && (
-                            <button
-                                type="button"
-                                onClick={onEmail}
-                                aria-label={t('Open the draft in Gmail')}
-                                className={`h-7 shrink-0 inline-flex items-center gap-1.5 pl-2 pr-2.5 rounded-md text-[11px] font-medium text-text-secondary hover:text-text-primary transition-colors ${isLight ? 'hover:bg-black/[0.05]' : 'hover:bg-white/[0.06]'}`}
-                            >
-                                <Mail className="w-3.5 h-3.5" strokeWidth={2} />
-                                {t('Open in Gmail')}
-                            </button>
-                        )}
                     </div>
                 )}
-                <div className={`flex items-center gap-2.5 min-h-10 pl-3.5 pr-1.5 py-1.5 border-b ${isLight ? 'border-black/[0.06]' : 'border-white/[0.06]'}`}>
+                <div className={`flex items-center gap-2.5 min-h-10 px-4 py-1.5 border-b ${isLight ? 'border-black/[0.06]' : 'border-white/[0.06]'}`}>
                     {subject && (
                         <p className="min-w-0 flex-1 truncate text-[12.5px] select-text" title={subjectText}>
                             {/* mr-1 on top of the literal space: a clear gap after the label that
@@ -1191,15 +1328,37 @@ const FollowUpDraftCard: React.FC<{
                         </p>
                     )}
                     <div className="ml-auto shrink-0">
-                        <FollowUpCopyButton copied={copied} onCopy={onCopy} isLight={isLight} />
+                        <FollowUpCopyButton copied={copied} onCopy={onCopy} />
                     </div>
                 </div>
-                <pre
-                    aria-busy={busy}
-                    className={`px-3.5 py-3 text-[12.5px] text-text-secondary leading-relaxed whitespace-pre-wrap font-sans select-text cursor-text transition-opacity duration-[250ms] ease-in-out ${busy ? 'opacity-50' : ''}`}
-                >
-                    <span key={bodyKey} className={`block${bodyKey > 0 ? ' mn-fu-body-in' : ''}`}>{body}</span>
-                </pre>
+                {/* "Open in Gmail" sits on the sign-off's line, at the right: the text ends
+                    with an invisible space the button's width (it wraps to a line of its
+                    own if the last line is long), and the button is pinned over that
+                    line, centred on it. Copying uses the draft text, not this DOM. */}
+                <div className="relative" style={gmailWidth ? { '--mn-fu-gmail-room': `${gmailWidth + 16}px` } as React.CSSProperties : undefined}>
+                    <pre
+                        aria-busy={busy}
+                        className={`px-4 py-4 text-[13px] text-text-secondary leading-[1.65] whitespace-pre-wrap font-sans select-text cursor-text transition-opacity duration-[250ms] ease-in-out ${busy ? 'opacity-50' : ''}`}
+                    >
+                        <span key={bodyKey} className={`block${bodyKey > 0 ? ' mn-fu-body-in' : ''}`}>
+                            {body}
+                            {onEmail && <span aria-hidden="true" className="mn-fu-gmail-room" />}
+                        </span>
+                    </pre>
+                    {onEmail && (
+                        <div ref={gmailRef} className="mn-fu-gmail">
+                            <LiquidGlassButton
+                                variant="clear"
+                                className="lg-sm"
+                                onClick={onEmail}
+                                aria-label={t('Open the email in Gmail')}
+                                icon={<Mail className="w-3.5 h-3.5" strokeWidth={2.2} />}
+                            >
+                                {t('Open in Gmail')}
+                            </LiquidGlassButton>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -1500,6 +1659,22 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [query, setQuery] = useState('');
     const [isCopied, setIsCopied] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
+    // The connected calendar account's first name: what the transcript calls the
+    // user when the meeting has no saved `me` label (resolveSpeakerName). Null = "Me".
+    // Same cleanup as the main process's calendarSpeakerLabels (never an address).
+    const [calendarUserName, setCalendarUserName] = useState<string | null>(null);
+    useEffect(() => {
+        let live = true;
+        window.electronAPI?.getCalendarStatus?.()
+            .then((s) => {
+                // First name only, like the main process's labels (firstNameOf):
+                // "Evin", not the account's "Evin John Ignatious".
+                const name = (s?.connected ? s.name ?? '' : '').replace(/\s+/g, ' ').trim();
+                if (live) setCalendarUserName(name && !name.includes('@') ? name.split(' ')[0].slice(0, 80) : null);
+            })
+            .catch(() => { if (live) setCalendarUserName(null); });
+        return () => { live = false; };
+    }, []);
     // Tell the host, and take it back on the way out: the page unmounts with
     // the chat still open when the user goes back to the list.
     useEffect(() => {
@@ -1981,12 +2156,15 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     };
 
     // Resolve a transcript segment's display name using saved speaker labels.
+    // The mic is always the user: without a saved `me` label (a rename, or the
+    // name a newer meeting saved with), it shows the connected calendar
+    // account's name, and "Me" when no calendar is connected.
     const resolveSpeakerName = (rawSpeaker: string): string => {
         const labels = meeting.detailedSummary?.speakerLabels || {};
         const lower = (rawSpeaker || '').toLowerCase();
         const id = /^(user|me)$/.test(lower) ? 'me' : (/^(interviewer|them|other|system|assistant)$/.test(lower) ? 'speaker_1' : lower.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'unknown');
         if (labels[id]) return labels[id];
-        if (id === 'me') return 'Me';
+        if (id === 'me') return calendarUserName || 'Me';
         if (id === 'speaker_1') return 'Speaker 1';
         const voice = /^speaker_(\d+)$/.exec(id);
         if (voice) return `Speaker ${voice[1]}`;
@@ -2018,7 +2196,9 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         const first = evidence?.[0];
         if (!first) return '';
         const time = formatEvidenceTime(evidenceTimestamp(evidence));
-        const who = first.speakerName || first.speaker || '';
+        const rawWho = first.speakerName || first.speaker || '';
+        // Evidence saved before the user was named says "Me": show it the way the transcript does.
+        const who = /^(me|user)$/i.test(rawWho.trim()) ? resolveSpeakerName('me') : rawWho;
         const quote = first.quote ? `“${first.quote}”` : '';
         return [time, who, quote].filter(Boolean).join(' · ');
     };
@@ -2297,12 +2477,12 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     <div className="flex items-start justify-between mb-6">
                         <div className="w-full pr-4">
                             {/* Date formatting could be improved to use meeting.date if it's an ISO string */}
-                            <div className="text-xs text-text-tertiary font-medium mb-1 flex items-center gap-2 min-w-0">
-                                <span className="shrink-0">{new Date(meeting.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
+                            <div className="text-xs text-text-tertiary font-medium mb-1">
+                                {new Date(meeting.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                                 {/* Who was in the call, from the Meet page (meetingDetection/callRoster). */}
                                 {meeting.detailedSummary?.callParticipants && meeting.detailedSummary.callParticipants.length > 0 && (
-                                    <span className="min-w-0 truncate" title={meeting.detailedSummary.callParticipants.join(', ')}>
-                                        · {t('With')} {participantsSummary(meeting.detailedSummary.callParticipants)}
+                                    <span title={meeting.detailedSummary.callParticipants.join(', ')}>
+                                        {' · '}{t('With')} {participantsSummary(meeting.detailedSummary.callParticipants)}
                                     </span>
                                 )}
                             </div>
@@ -2389,7 +2569,8 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             the pointer) and which swaps in place when the tab changes. opacity
                             joins the transition so the disabled dim fades out as notes land. */}
                         {(() => {
-                            const copyLabel = activeTab === 'summary' ? t('Copy full summary') : activeTab === 'transcript' ? t('Copy full transcript') : t('Copy usage');
+                            // One label on every tab: what it copies is the tab you are on.
+                            const copyLabel = t('Copy');
                             return (
                                 <div className="flex items-center gap-5 min-w-0">
                                     {/* Which calendar event this was: linked, or offered when a calendar
@@ -2405,7 +2586,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             <Copy className="t-icon w-3.5 h-3.5" data-icon="a" size={14} />
                                             <Check className="t-icon w-3.5 h-3.5 text-emerald-500" data-icon="b" size={14} />
                                         </span>
-                                        <SwapText value={isCopied ? 'copied' : activeTab} sizers={[copyLabel, t('Copied')]}>
+                                        <SwapText value={isCopied ? 'copied' : 'copy'} sizers={[copyLabel, t('Copied')]}>
                                             {isCopied ? t('Copied') : copyLabel}
                                         </SwapText>
                                     </button>
@@ -2492,7 +2673,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     which reads worse than the block reveal being replaced. Opacity only, because
                                     a blur here would nest under each word's own blur and compound both. */}
                                 {meeting.detailedSummary?.overview && (() => { const g = revealGuard(); return (
-                                <div className={`pb-5 border-b border-border-subtle prose prose-sm max-w-none${g.cls}`} style={g.style} data-rw={g['data-rw']}>
+                                <div className={`pb-5 prose prose-sm max-w-none${g.cls}`} style={g.style} data-rw={g['data-rw']}>
                                     <ReactMarkdown
                                         remarkPlugins={[remarkGfm]}
                                         components={{
@@ -2524,7 +2705,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 {/* 1. Source quality warning */}
                                 {isV3Summary && (() => {
                                     const sqWarnings = meeting.detailedSummary?.sourceQuality?.warnings ?? [];
-                                    const realIssues = sqWarnings.filter(w => !isBenignQualityNote(w));
+                                    const realIssues = sqWarnings.filter(w => !isHiddenQualityNote(w));
                                     if (realIssues.length === 0) return null;
                                     const c = cardIn();
                                     return (
@@ -2548,55 +2729,27 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         className={`mb-6 flex flex-wrap items-center gap-2${c.className}`}
                                         style={c.style}
                                     >
-                                        <div className="flex items-center gap-1 p-1 rounded-lg bg-white/[0.03] border border-border-subtle">
-                                            <motion.button
-                                                type="button"
-                                                onClick={() => handleRegenerate()}
-                                                disabled={isRegenerating}
-                                                initial="rest"
-                                                whileHover={prefersReducedMotion || isRegenerating ? undefined : 'hover'}
-                                                whileTap={prefersReducedMotion || isRegenerating ? undefined : { scale: 0.96 }}
-                                                transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                className="h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] disabled:opacity-50 disabled:hover:bg-transparent transition-[color,background-color,opacity]"
-                                            >
-                                                <motion.span
-                                                    className="w-3.5 h-3.5 shrink-0 inline-flex"
-                                                    variants={prefersReducedMotion ? undefined : { rest: { rotate: 0 }, hover: { rotate: -180 } }}
-                                                    transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-                                                >
-                                                    <RefreshCw
-                                                        className={`w-3.5 h-3.5 ${isRegenerating && !prefersReducedMotion ? 'animate-spin' : ''}`}
-                                                        strokeWidth={2}
-                                                    />
-                                                </motion.span>
-                                                {/* Held width: "Regenerating…" used to shrink the button and
-                                                    shove Show evidence left under the pointer. */}
-                                                <SwapText value={isRegenerating ? 'busy' : 'idle'} sizers={[t('Regenerate notes'), t('Regenerating…')]}>
-                                                    {isRegenerating ? t('Regenerating…') : t('Regenerate notes')}
-                                                </SwapText>
-                                            </motion.button>
-
-                                            <div className="w-px h-4 bg-border-subtle shrink-0" aria-hidden="true" />
-
-                                            <motion.button
-                                                type="button"
-                                                onClick={() => setShowEvidence(v => !v)}
-                                                whileTap={prefersReducedMotion ? undefined : { scale: 0.96 }}
-                                                transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                aria-pressed={showEvidence}
-                                                className={`h-7 inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 rounded-md transition-colors ${showEvidence ? 'text-accent-primary bg-accent-subtle' : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.06]'}`}
-                                            >
-                                                {/* The icon swap cross-fades both glyphs at once; the old
-                                                    wait-mode pair spent 320ms fading one out, then the other in. */}
-                                                <span className="t-icon-swap w-3.5 h-3.5 shrink-0" data-state={showEvidence ? 'b' : 'a'} aria-hidden="true">
-                                                    <EyeOff className="t-icon w-3.5 h-3.5" data-icon="a" strokeWidth={2} />
-                                                    <Eye className="t-icon w-3.5 h-3.5" data-icon="b" strokeWidth={2} />
-                                                </span>
-                                                <SwapText value={showEvidence ? 'hide' : 'show'} sizers={[t('Show evidence'), t('Hide evidence')]}>
-                                                    {showEvidence ? t('Hide evidence') : t('Show evidence')}
-                                                </SwapText>
-                                            </motion.button>
-                                        </div>
+                                        {/* The notes' actions (NotesActions): regenerate, show the evidence, and
+                                            write them again as the template the meeting looks like.
+                                            The suggestion regenerates in the DETECTED mode, by id when the
+                                            detector matched one (it always does for the built-ins); passing
+                                            `undefined` in that case once rebuilt the notes in the ORIGINAL template. */}
+                                        {(() => {
+                                            const suggested = v3Mode?.detectedModeName && v3Mode?.detectedConfidence != null && v3Mode.detectedConfidence >= 0.5
+                                                && v3Mode.detectedModeName !== v3Mode.selectedModeName;
+                                            return (
+                                                <NotesActions
+                                                    isRegenerating={isRegenerating}
+                                                    showEvidence={showEvidence}
+                                                    suggestion={suggested ? { name: v3Mode!.detectedModeName!, needsPro: detectedNeedsPro } : null}
+                                                    onRegenerate={() => handleRegenerate()}
+                                                    onRegenerateAsSuggested={() => handleRegenerate(v3Mode?.detectedModeId
+                                                        ? { modeId: v3Mode.detectedModeId }
+                                                        : { templateType: (v3Mode?.detectedModeName || '').toLowerCase() })}
+                                                    onToggleEvidence={() => setShowEvidence(v => !v)}
+                                                />
+                                            );
+                                        })()}
                                         {v3SummaryStatus && v3SummaryStatus !== 'completed' && (
                                             <span className="inline-flex items-center gap-1.5 text-[11px] text-amber-400">
                                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
@@ -2606,38 +2759,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     </div>
                                 ); })()}
 
-                                {/* 3. Mode auto-detect suggestion */}
-                                {isV3Summary && v3Mode?.detectedModeName && v3Mode?.detectedConfidence != null && v3Mode.detectedConfidence >= 0.5 &&
-                                  v3Mode.detectedModeName !== v3Mode.selectedModeName && (() => { const c = cardIn(); return (
-                                    <motion.button
-                                        type="button"
-                                        // The DETECTED mode, by id when the detector matched one
-                                        // (it always does for the built-ins). This used to pass
-                                        // `undefined` in exactly that case, so the notes were rebuilt
-                                        // in the ORIGINAL template.
-                                        onClick={() => handleRegenerate(v3Mode.detectedModeId
-                                            ? { modeId: v3Mode.detectedModeId }
-                                            : { templateType: (v3Mode.detectedModeName || '').toLowerCase() })}
-                                        disabled={isRegenerating || detectedNeedsPro}
-                                        whileTap={prefersReducedMotion || isRegenerating ? undefined : { scale: 0.99, transition: { duration: 0.1 } }}
-                                        style={c.style}
-                                        className={`mb-5 w-full text-left flex items-center justify-between gap-3 px-4 py-3.5 rounded-lg bg-white/[0.08] hover:bg-white/[0.11] active:bg-white/[0.06] disabled:opacity-40 transition-[color,background-color,opacity] duration-150 group${c.className}`}
-                                    >
-                                        <div className="min-w-0">
-                                            <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-text-tertiary mb-1">
-                                                {v3Mode.selectedModeName ? `${t('This looks like a')} ${v3Mode.detectedModeName}` : t('Better template available')}
-                                            </p>
-                                            <p className="text-[14px] font-semibold text-text-primary tracking-[-0.01em] truncate leading-tight">
-                                                {isRegenerating
-                                                    ? t('Regenerating…')
-                                                    : detectedNeedsPro
-                                                        ? <>{v3Mode.detectedModeName} {t('notes need Natively Pro')}</>
-                                                        : <>{t('Regenerate notes as')} <span className="text-accent-primary">{v3Mode.detectedModeName}</span></>}
-                                            </p>
-                                        </div>
-                                        <ChevronRight className="shrink-0 w-4 h-4 text-text-tertiary group-hover:text-accent-primary group-hover:translate-x-0.5 transition-all duration-150" strokeWidth={2} />
-                                    </motion.button>
-                                ); })()}
+                                {/* 3. Mode auto-detect suggestion: now the blue glass button at the end of the actions row above. */}
 
                                 {/* 4. Cross-meeting recall — still-open carryover from prior meetings (Phase 13). */}
                                 {isV3Summary && meeting.detailedSummary?.crossMeeting?.stillOpen && meeting.detailedSummary.crossMeeting.stillOpen.length > 0 && (() => { const c = cardIn(); return (
@@ -2846,65 +2968,64 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 {isV3Summary && (() => { const h = revealBlock(); const hasFollowUp = hasFollowUpDraft; return (
                                     <section className="mb-8 mn-followup">
                                         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                                            <h2 className={`text-lg font-semibold text-text-primary${h.cls}`} style={h.style} data-rw={h['data-rw']}>{t('Follow-up draft')}</h2>
+                                            <h2 className={`text-lg font-semibold text-text-primary${h.cls}`} style={h.style} data-rw={h['data-rw']}>{t('Follow-up email')}</h2>
                                             {/* One slot, two states that cross-fade in place: Generate before a
                                                 draft exists, the tone + Regenerate group after. */}
                                             <div className="mn-fu-actions">
                                                 <div data-active={!hasFollowUp} inert={hasFollowUp}>
                                                     {/* Generate — the only thing that writes a first draft. No tone
-                                                        argument: the mode's natural tone, changeable once it exists. */}
-                                                    <motion.button
-                                                        type="button"
-                                                        onClick={() => handleRegenerateFollowUp()}
-                                                        disabled={isRegeneratingFollowUp}
+                                                        argument: the mode's natural tone, changeable once it exists.
+                                                        Liquid Glass, the clear pill of the notes' action row with its
+                                                        ice-blue hover (.mn-generate, index.css); press feedback is the
+                                                        glass's own. While writing it stays lit and shimmers
+                                                        "Generating…" rather than dimming (aria-disabled, not disabled). */}
+                                                    <LiquidGlassButton
+                                                        variant="clear"
+                                                        className="lg-sm mn-generate"
+                                                        onClick={() => { if (!isRegeneratingFollowUp) handleRegenerateFollowUp(); }}
+                                                        aria-disabled={isRegeneratingFollowUp || undefined}
                                                         aria-busy={isRegeneratingFollowUp}
-                                                        whileTap={prefersReducedMotion || isRegeneratingFollowUp ? undefined : { scale: 0.96 }}
-                                                        transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                        className={`h-8 inline-flex items-center gap-1.5 pl-2.5 pr-3 rounded-lg border text-[12px] font-medium text-text-primary transition-colors disabled:cursor-default ${isLight
-                                                            ? 'bg-black/[0.03] border-black/[0.08] hover:bg-black/[0.06] disabled:hover:bg-black/[0.03]'
-                                                            : 'bg-white/[0.05] border-white/[0.08] hover:bg-white/[0.09] disabled:hover:bg-white/[0.05]'}`}
+                                                        icon={<SquarePen className="w-3.5 h-3.5" strokeWidth={2.2} />}
                                                     >
-                                                        <SquarePen className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
-                                                        <SwapText value={isRegeneratingFollowUp ? 'busy' : 'idle'} sizers={[t('Generate'), t('Generating…')]}>
-                                                            {isRegeneratingFollowUp
-                                                                ? <span className="t-shimmer" data-text={t('Generating…')}>{t('Generating…')}</span>
-                                                                : t('Generate')}
-                                                        </SwapText>
-                                                    </motion.button>
+                                                        {/* Sized to the label on screen: "Generate" at rest, and the pill
+                                                            grows into "Generating…" as the text swaps (AutoWidth), rather
+                                                            than reserving that width after "Generate" all the time. */}
+                                                        <AutoWidth>
+                                                            <SwapText value={isRegeneratingFollowUp ? 'busy' : 'idle'} sizers={[isRegeneratingFollowUp ? t('Generating…') : t('Generate')]}>
+                                                                {isRegeneratingFollowUp
+                                                                    ? <span className="t-shimmer" data-text={t('Generating…')}>{t('Generating…')}</span>
+                                                                    : t('Generate')}
+                                                            </SwapText>
+                                                        </AutoWidth>
+                                                    </LiquidGlassButton>
                                                 </div>
-                                                <div data-active={hasFollowUp} inert={!hasFollowUp} className="flex items-center gap-0.5 p-1 rounded-lg bg-white/[0.03] border border-border-subtle">
+                                                <div data-active={hasFollowUp} inert={!hasFollowUp} className="flex items-center gap-2">
                                                     <ToneDropdown
                                                         followUpTone={followUpTone}
                                                         isRegeneratingFollowUp={isRegeneratingFollowUp}
                                                         onSelect={(tone) => { setFollowUpTone(tone); handleRegenerateFollowUp(tone); }}
                                                     />
-                                                    <div className="w-px h-4 bg-border-subtle shrink-0" aria-hidden="true" />
-                                                    {/* Regenerate — icon-only with the committed .t-tt tooltip; turns on
-                                                        hover and spins while rewriting, like "Regenerate notes". */}
+                                                    {/* Regenerate — a round clear-glass button with the committed .t-tt
+                                                        tooltip; the arrows turn on hover and spin while rewriting. While
+                                                        rewriting it stays lit (aria-disabled, not disabled), like Generate
+                                                        (.mn-fu-regen, index.css). */}
                                                     <span className="t-tt-wrap">
-                                                        <motion.button
-                                                            type="button"
-                                                            onClick={() => handleRegenerateFollowUp()}
-                                                            disabled={isRegeneratingFollowUp}
+                                                        <LiquidGlassButton
+                                                            variant="clear"
+                                                            className="lg-sm mn-fu-regen t-tt-trigger"
+                                                            onClick={() => { if (!isRegeneratingFollowUp) handleRegenerateFollowUp(); }}
+                                                            aria-disabled={isRegeneratingFollowUp || undefined}
+                                                            aria-busy={isRegeneratingFollowUp}
                                                             aria-label={isRegeneratingFollowUp ? t('Regenerating…') : t('Regenerate')}
                                                             aria-describedby={followUpRegenTipId}
-                                                            initial="rest"
-                                                            whileHover={prefersReducedMotion || isRegeneratingFollowUp ? undefined : 'hover'}
-                                                            whileTap={prefersReducedMotion || isRegeneratingFollowUp ? undefined : { scale: 0.96 }}
-                                                            transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                                                            className="t-tt-trigger h-7 w-7 inline-flex items-center justify-center rounded-md text-text-secondary hover:text-text-primary hover:bg-white/[0.06] disabled:cursor-default disabled:hover:bg-transparent transition-colors"
                                                         >
-                                                            <motion.span
-                                                                className="w-3.5 h-3.5 inline-flex"
-                                                                variants={prefersReducedMotion ? undefined : { rest: { rotate: 0 }, hover: { rotate: -180 } }}
-                                                                transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-                                                            >
+                                                            <span className="mn-fu-regen-turn flex" aria-hidden="true">
                                                                 <RefreshCw
                                                                     className={`w-3.5 h-3.5 ${isRegeneratingFollowUp && !prefersReducedMotion ? 'animate-spin' : ''}`}
-                                                                    strokeWidth={2}
+                                                                    strokeWidth={2.2}
                                                                 />
-                                                            </motion.span>
-                                                        </motion.button>
+                                                            </span>
+                                                        </LiquidGlassButton>
                                                         <span className="t-tt" id={followUpRegenTipId} role="tooltip">{t('Regenerate')}</span>
                                                     </span>
                                                 </div>
@@ -2917,7 +3038,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             reveal cascade. */}
                                         {(() => {
                                             const hintHiding = hasFollowUp && followUpEntrance === 'armed';
-                                            const hintText = followUpFailed ? t("Couldn't write the draft. Try again.") : t('Write a follow-up from these notes when you need one.');
+                                            const hintText = followUpFailed ? t("Couldn't write the email. Try again.") : t('Write a follow-up email from these notes when you need one.');
                                             return !hasFollowUp || hintHiding ? (
                                                 <div className={`t-stagger${hintHiding ? ' is-hiding' : ' is-shown'}`}>
                                                     <p className="t-stagger-line text-[12.5px] text-text-tertiary leading-relaxed">{revealWords(hintText)}</p>
@@ -3249,23 +3370,29 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             return d < best.d ? { d, idx } : best;
                                         }, { d: Infinity, idx: -1 }).idx;
 
-                                        // The matched line is marked by .mn-ts-row's layer (index.css), and
-                                        // scrolled to by the evidence-jump effect, which finds it by
+                                        // One row per TURN, not per saved line: speech-to-text saves a line
+                                        // every few seconds, so a sentence arrived as several rows, each
+                                        // repeating the name and time (groupTranscriptTurns). Copy full
+                                        // transcript still copies every line with its own time.
+                                        const turns = groupTranscriptTurns(filteredTranscript);
+                                        // The matched line's turn is marked by .mn-ts-row's layer (index.css),
+                                        // and scrolled to by the evidence-jump effect, which finds it by
                                         // data-jump-target.
-                                        return filteredTranscript.map((entry, i) => (
+                                        const jumpTurn = scrollIndex < 0 ? -1 : turns.findIndex(turn => scrollIndex >= turn.first && scrollIndex <= turn.last);
+                                        return turns.map((turn, k) => (
                                             <div
-                                                key={i}
+                                                key={turn.first}
                                                 className="group mn-ts-row"
-                                                data-highlight={i === scrollIndex ? 'true' : undefined}
-                                                data-jump-target={i === scrollIndex ? '' : undefined}
+                                                data-highlight={k === jumpTurn ? 'true' : undefined}
+                                                data-jump-target={k === jumpTurn ? '' : undefined}
                                             >
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="text-xs font-semibold text-text-secondary">
-                                                        {resolveSpeakerName(entry.speaker)}
+                                                        {resolveSpeakerName(turn.speaker)}
                                                     </span>
-                                                    <span className="text-xs text-text-tertiary font-mono">{entry.timestamp ? formatTime(entry.timestamp) : '0:00'}</span>
+                                                    <span className="text-xs text-text-tertiary font-mono">{turn.timestamp ? formatTime(turn.timestamp) : '0:00'}</span>
                                                 </div>
-                                                <p className="text-text-secondary text-[15px] leading-relaxed transition-colors select-text cursor-text">{entry.text}</p>
+                                                <p className="text-text-secondary text-[15px] leading-relaxed transition-colors select-text cursor-text">{turn.text}</p>
                                             </div>
                                         ));
                                     })()}
