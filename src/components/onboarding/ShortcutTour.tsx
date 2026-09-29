@@ -258,7 +258,8 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
           {LESSONS.map((l, i) => (
             <span key={l.action} style={{
               height: 7, width: i === lesson ? 20 : 7, borderRadius: i === lesson ? 4 : 999,
-              background: i === lesson ? '#9C6FF3' : t.dot,
+              // the toggle's ON blue, like the buttons (was the PR's lavender #9C6FF3)
+              background: i === lesson ? '#6688F5' : t.dot,
               // --duration-fast, --ease-smooth-out (transitions-polish: was a bare 250ms ease).
               transition: 'width 250ms cubic-bezier(0.22, 1, 0.36, 1), background-color 250ms cubic-bezier(0.22, 1, 0.36, 1)',
             }} />
