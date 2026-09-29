@@ -213,25 +213,25 @@ function createHarness({
 function createBarHarness(onAcceptAction) {
   const path = resolve(here, '../dynamic-actions/DynamicActionBar.tsx');
   const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  let acceptSource;
+  const barHandlers = {};
   function visit(node) {
-    if (ts.isVariableDeclaration(node) && node.name.getText(source) === 'accept') {
-      acceptSource = node.initializer.getText(source);
+    if (ts.isVariableDeclaration(node) && ['accept', 'handleIncoming'].includes(node.name.getText(source))) {
+      barHandlers[node.name.getText(source)] = node.initializer.getText(source);
     }
     ts.forEachChild(node, visit);
   }
   visit(source);
-  assert.ok(acceptSource);
+  assert.ok(barHandlers.accept && barHandlers.handleIncoming);
   const action = { id: 'screen-action', requiresScreen: true };
   let actions = [action];
   const acknowledged = [];
   const acceptingRef = { current: false };
-  const accept = new Function('useCallback', 'onAcceptAction', 'acceptingRef', 'acceptedIdsRef', 'setActions', 'window',
-    ts.transpileModule(`const accept = ${acceptSource};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + '\nreturn accept;'
+  const handlers = new Function('useCallback', 'onAcceptAction', 'acceptingRef', 'acceptedIdsRef', 'setActions', 'window', 'maxVisible', 'staleAfterMs',
+    ts.transpileModule(Object.entries(barHandlers).map(([name, body]) => `const ${name} = ${body};`).join('\n'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + '\nreturn { accept, handleIncoming };'
   )((fn) => fn, onAcceptAction, acceptingRef, { current: new Set() },
     (update) => { actions = update(actions); },
-    { electronAPI: { acceptDynamicAction: async (id) => acknowledged.push(id) } });
-  return { accept, action, acknowledged, get actions() { return actions; } };
+    { electronAPI: { acceptDynamicAction: async (id) => acknowledged.push(id) } }, 3, 60_000);
+  return { ...handlers, action, acknowledged, get actions() { return actions; } };
 }
 
 for (const failure of ['empty', 'throw', 'busy']) {
@@ -275,6 +275,8 @@ test('bar rejects repeated click and Tab acceptance during and after capture', a
   assert.equal(harness.captureCalls, 1);
   assert.equal(harness.generateCalls.length, 1);
   assert.deepEqual(bar.acknowledged, ['screen-action']);
+  bar.handleIncoming({ ...bar.action, createdAt: Date.now(), priority: 10 });
+  assert.equal(bar.actions.length, 0, 'late duplicate must not resurrect an accepted card');
 });
 
 describe('dynamic action screenshot routing', () => {

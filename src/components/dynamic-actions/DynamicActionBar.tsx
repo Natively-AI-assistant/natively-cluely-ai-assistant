@@ -5,7 +5,8 @@ import { DynamicActionCard } from './DynamicActionCard';
 
 interface Props {
   // Called when the user accepts (or hits Tab on the primary). Parent should
-  // kick off the live answer stream using action.promptInstruction.
+  // kick off the live answer stream using action.promptInstruction and return
+  // false when the card must remain available for retry.
   onAcceptAction: (action: DynamicActionPayload) => Promise<boolean>;
   // Optional: max actions to keep visible. Cluely-style cap at 3.
   maxVisible?: number;
@@ -31,6 +32,7 @@ export const DynamicActionBar: React.FC<Props> = ({
 
   const handleIncoming = useCallback(
     (action: DynamicActionPayload) => {
+      if (acceptedIdsRef.current.has(action.id)) return;
       setActions((prev) => {
         // Dedupe by id (engine has already deduped at backend, but renderer
         // may receive late-arriving duplicates after a window restore).
