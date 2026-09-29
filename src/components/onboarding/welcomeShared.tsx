@@ -4,7 +4,7 @@
 // per theme, the window frame, the lavender CTA and the meeting demo on the
 // right. One copy, so the two screens cannot drift apart.
 
-import React, { useRef } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion, type Variants } from 'framer-motion';
 import meetingVideo from '../../assets/welcome/meeting.webm';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
@@ -114,20 +114,44 @@ export const WelcomeFrame: React.FC<React.HTMLAttributes<HTMLDivElement> & { t: 
 );
 
 /**
- * The CTA. Kept as ONE button across Next → Start using Natively: the width
- * tweens (transitions.dev #01 card resize, 250ms --ease-smooth-out) and the
- * label swaps in place (#04 text swap) instead of one button popping out for
- * another. Pass `labelKey` so a changed label animates.
+ * The CTA. Kept as ONE button across Next → Start using Natively, and it fits its
+ * label: with no `width` it measures the label (a hidden copy, same font) and
+ * tweens to that width plus padding, so it grows and shrinks with the text
+ * (transitions.dev #01 card resize: 250ms --duration-fast, --ease-smooth-out, the
+ * same both ways because it is one reversible motion) while the label swaps in
+ * place (#04 text swap). Pass `width` only for a fixed hero (the welcome's
+ * Get started). Pass `labelKey` so a changed label animates.
  */
-export const LavenderButton: React.FC<{ t: WelcomeTheme; width: number; height?: number; labelSize?: number; labelKey?: string; onClick: () => void; children: React.ReactNode }> = ({ t, width, height = 48, labelSize = 15, labelKey, onClick, children }) => {
+export const LavenderButton: React.FC<{ t: WelcomeTheme; width?: number; height?: number; labelSize?: number; labelKey?: string; onClick: () => void; children: React.ReactNode }> = ({ t, width, height = 48, labelSize = 15, labelKey, onClick, children }) => {
   const reduced = useReducedMotion() ?? false;
+  const measureRef = useRef<HTMLSpanElement>(null);
+  // Side padding scales with the button: 22px at 40 tall, 26px at 48.
+  const padX = Math.round(height * 0.55);
+  const [fit, setFit] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (width != null) return;
+    const measure = () => {
+      const el = measureRef.current;
+      if (el) setFit(Math.ceil(el.getBoundingClientRect().width) + padX * 2);
+    };
+    measure();
+    // The label's font may arrive after first paint; measure again when it does.
+    let live = true;
+    document.fonts?.ready.then(() => { if (live) measure(); });
+    return () => { live = false; };
+  }, [width, labelKey, labelSize, padX]);
+
+  // Until the first measurement lands (a single layout pass, before paint) use a
+  // width that cannot clip: the button's own 16px padding plus a roomy label.
+  const w = width ?? fit ?? 132;
   return (
     <motion.span
       className="inline-block"
       initial={false}
-      animate={{ width }}
+      animate={{ width: w }}
       transition={reduced ? { duration: 0 } : { duration: 0.25, ease: SMOOTH }}
-      style={{ width }}
+      style={{ width: w }}
     >
       <LiquidGlassButton
         variant="lavender"
@@ -142,6 +166,10 @@ export const LavenderButton: React.FC<{ t: WelcomeTheme; width: number; height?:
         } as React.CSSProperties}
       >
         <span className="relative inline-flex items-center justify-center">
+          {/* The label at its natural width, invisible: what the button fits. */}
+          <span ref={measureRef} aria-hidden className="inline-flex items-center gap-2 absolute pointer-events-none whitespace-nowrap" style={{ visibility: 'hidden' }}>
+            {children}
+          </span>
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.span
               key={labelKey ?? 'label'}

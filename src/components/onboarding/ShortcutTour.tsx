@@ -249,8 +249,8 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
             Back
           </button>
         )}
-        {/* One button for both: it widens and its label swaps in place. */}
-        <LavenderButton t={t} width={isLast ? 210 : 132} height={40} labelSize={14}
+        {/* One button for both: it fits its label and tweens between them. */}
+        <LavenderButton t={t} height={40} labelSize={14}
           labelKey={isLast ? 'start' : 'next'} onClick={isLast ? onDone : () => goTo(lesson + 1)}>
           {isLast ? 'Start using Natively' : 'Next'} <ArrowRight size={15} strokeWidth={2} aria-hidden />
         </LavenderButton>
