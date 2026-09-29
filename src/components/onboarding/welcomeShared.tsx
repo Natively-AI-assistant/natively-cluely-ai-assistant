@@ -6,8 +6,6 @@
 
 import React, { useRef } from 'react';
 import { AnimatePresence, motion, useReducedMotion, type Variants } from 'framer-motion';
-import cardLight from '../../assets/welcome/card-light.webp';
-import cardDark from '../../assets/welcome/card-dark.webp';
 import meetingVideo from '../../assets/welcome/meeting.webm';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
@@ -22,14 +20,14 @@ export const WELCOME_FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display"
 const THEME = {
   light: {
     bg: '#F7F8FC', strong: '#0B1020', body: 'rgba(11,16,32,0.68)', quiet: 'rgba(11,16,32,0.66)', faint: 'rgba(11,16,32,0.58)',
-    plate: '#EEF1F8', grid: 'rgba(11,16,32,0.09)', card: cardLight, markFilter: 'invert(1)',
+    plate: '#EEF1F8', grid: 'rgba(11,16,32,0.09)', markFilter: 'invert(1)',
     kcBg: '#FFFFFF', kcRim: 'rgba(11,16,32,0.14)', kcUnder: 'rgba(11,16,32,0.14)', dot: 'rgba(11,16,32,0.14)',
     button: WELCOME_BUTTON_TOKENS.light,
   },
   dark: {
     // A step under the #232327 plate, so the plate still reads as inset.
     bg: '#161618', strong: '#F2F2F4', body: 'rgba(255,255,255,0.66)', quiet: 'rgba(255,255,255,0.56)', faint: 'rgba(255,255,255,0.50)',
-    plate: '#232327', grid: 'rgba(255,255,255,0.035)', card: cardDark, markFilter: 'none',
+    plate: '#232327', grid: 'rgba(255,255,255,0.035)', markFilter: 'none',
     kcBg: 'rgba(255,255,255,0.07)', kcRim: 'rgba(255,255,255,0.16)', kcUnder: 'rgba(0,0,0,0.45)', dot: 'rgba(255,255,255,0.14)',
     button: WELCOME_BUTTON_TOKENS.dark,
   },
@@ -192,15 +190,14 @@ export const Keycaps: React.FC<{ t: WelcomeTheme; keys: string[]; size?: 'sm' | 
   );
 };
 
-// The captured card's geometry, in CSS px: 520 wide, 340 tall, and its glass
-// panel (below the pill) starting 48px down, 292px tall with a 24px radius.
-// The blur layer must match it exactly or the frost shows past the glass.
-const CARD = { w: 520, h: 340, panelTop: 48, panelH: 292, radius: 24 };
+// The stage the overlay sits in: 520 wide, 340 tall (the overlay is 600 laid out,
+// zoomed to fit). It is fixed so the call under it never moves.
+const CARD = { w: 520, h: 340 };
 // How far the call tucks up under the overlay.
 const CALL = { w: 520, tuck: 150 };
 const EASE = [0.23, 1, 0.32, 1] as const;
 
-/** The tour drives a working overlay (DemoOverlay) instead of the still card. */
+/** What drives the demo overlay: the tour's presses. */
 export interface LiveOverlayProps {
   hidden: boolean;
   answerKey: number;
@@ -210,8 +207,8 @@ export interface LiveOverlayProps {
 
 export interface MeetingDemoProps {
   t: WelcomeTheme;
-  /** Omitted: the still liquid-glass card (the welcome). Set: the live overlay. */
-  live?: LiveOverlayProps;
+  /** What the overlay is doing. On the welcome it rests: nothing pressed, nothing hidden. */
+  live: LiveOverlayProps;
   /** Shown in the overlay's place while it is hidden. */
   hiddenHint?: React.ReactNode;
   /** A keystroke badge along the bottom edge. */
@@ -219,15 +216,10 @@ export interface MeetingDemoProps {
 }
 
 /**
- * The right-hand plate: the Natively overlay over a live call (meeting.webm).
- *
- * Still (the welcome): a still of the website's liquid-glass
- * NativelyInterfaceCard with a grey body, captured on a TRANSPARENT ground per
- * theme. Its frost is real: a backdrop-filter layer sits exactly under the
- * card's panel and blurs the playing call through it.
- *
- * Live (the shortcut tour): DemoOverlay, the in-meeting overlay's own parts,
- * reacting to the shortcuts as the real one does.
+ * The right-hand plate: the app's own meeting overlay over a live call
+ * (meeting.webm). The overlay is DemoOverlay — the real overlay's classes and
+ * appearance, and the real RollingTranscript strip — frosting the call behind it.
+ * On the welcome it rests; the tour drives it with the shortcuts it teaches.
  */
 export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, badge }) => {
   const reduced = useReducedMotion() ?? false;
@@ -264,62 +256,26 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
           backgroundSize: '40px 40px',
         }}
       >
-        {/* One stage for both layers, so the call under them never moves when the
-            still card gives way to the live overlay (they used to be two
-            components, each mounting its own plate and restarting the video). The
-            layers are absolute inside it and cross-fade: the card out in 150ms,
-            the overlay in over 250ms (open/close asymmetry). Opacity here is
-            transient — the frost re-reads the call the moment it settles. */}
+        {/* One stage, one overlay for the whole flow: the app's own overlay
+            (DemoOverlay, built from the same classes and the real RollingTranscript),
+            frosting the call behind it. On the welcome it simply rests on its
+            opening conversation; the tour drives it. It never remounts, so the
+            call video under it keeps playing. */}
         <div className="relative" style={{ width: CARD.w, height: CARD.h, zIndex: 2 }}>
-          <AnimatePresence initial={false}>
-            {live ? (
-              // The overlay is laid out at its real 600px width and zoomed to fit
-              // the plate (zoom, unlike transform, also shrinks its layout box).
-              <motion.div
-                key="live"
-                className="absolute inset-x-0 top-0 flex justify-center"
-                initial={reduced ? { opacity: 0 } : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0, transition: { duration: 0.25, ease: SMOOTH } }}
-                exit={{ opacity: 0, transition: { duration: 0.1 } }}
-              >
-                <div style={{ zoom: 0.88 }}>
-                  <DemoOverlay
-                    isLight={isLight}
-                    hidden={live.hidden}
-                    answerKey={live.answerKey}
-                    shotKey={live.shotKey}
-                    captureFrame={captureFrame}
-                    placeholderKeys={live.placeholderKeys}
-                  />
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="still"
-                className="absolute left-0 top-0"
-                style={{ width: CARD.w, height: CARD.h }}
-                initial={false}
-                exit={{ opacity: 0, transition: { duration: 0.15, ease: SMOOTH } }}
-              >
-                <div
-                  aria-hidden
-                  className="absolute left-0"
-                  style={{
-                    top: CARD.panelTop, width: CARD.w, height: CARD.panelH, borderRadius: CARD.radius,
-                    WebkitBackdropFilter: 'blur(9px) saturate(1.6)', backdropFilter: 'blur(9px) saturate(1.6)',
-                    boxShadow: '0 24px 48px rgba(0,0,0,0.22)',
-                  }}
-                />
-                <img
-                  src={t.card}
-                  alt="The Natively overlay answering a question"
-                  draggable={false}
-                  className="absolute inset-0 block"
-                  style={{ width: CARD.w, height: CARD.h }}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <div className="absolute inset-x-0 top-0 flex justify-center">
+            {/* The overlay is laid out at its real 600px width and zoomed to fit
+                the plate (zoom, unlike transform, also shrinks its layout box). */}
+            <div style={{ zoom: 0.88 }}>
+              <DemoOverlay
+                isLight={isLight}
+                hidden={live.hidden}
+                answerKey={live.answerKey}
+                shotKey={live.shotKey}
+                captureFrame={captureFrame}
+                placeholderKeys={live.placeholderKeys}
+              />
+            </div>
+          </div>
         </div>
         <div
           className="relative overflow-hidden"
@@ -344,7 +300,7 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
         </div>
 
         <AnimatePresence>
-          {live?.hidden && hiddenHint && (
+          {live.hidden && hiddenHint && (
             <motion.div
               key="hint"
               className="absolute inset-x-0 text-center"

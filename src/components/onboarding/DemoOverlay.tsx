@@ -20,9 +20,10 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { ArrowRight, ChevronDown, HelpCircle, MessageSquare, Pencil, PointerOff, RefreshCw, SlidersHorizontal, X, Zap } from 'lucide-react';
+import { ArrowRight, ChevronDown, HelpCircle, MessageSquare, Mic, Pencil, PointerOff, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import TopPill from '../ui/TopPill';
-import { getDefaultOverlayOpacity, getOverlayAppearance } from '../../lib/overlayAppearance';
+import { getOverlayAppearance } from '../../lib/overlayAppearance';
+import RollingTranscript from '../ui/RollingTranscript';
 
 type Msg =
   | { id: number; role: 'user'; text: string; shots?: string[] }
@@ -47,6 +48,18 @@ const FALLBACK_SHOT = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   + '<rect x="24" y="24" width="200" height="222" rx="10" fill="#3a3a42"/><rect x="256" y="24" width="200" height="222" rx="10" fill="#33333b"/></svg>',
 );
 
+// The real overlay is a translucent pane over whatever is behind it. Its default
+// (0.80 dark / 0.70 light) is dense enough to hide the call; the demo sits a
+// little lighter so the frost — the blur of the call through the glass — shows.
+const DEMO_OPACITY = 0.55;
+
+// What the interviewer says, in the live transcript strip, before each answer.
+const QUESTIONS = [
+  'So why would we use Docker instead of just a VM?',
+  'How does an index make that query faster?',
+  'What is driving the numbers in the second column?',
+];
+
 const HIDE = { duration: 0.22, ease: [0.32, 0, 0.67, 0] as const };
 const SHOW = { duration: 0.34, ease: [0.23, 1, 0.32, 1] as const };
 
@@ -65,11 +78,14 @@ interface Props {
 
 export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotKey, captureFrame, placeholderKeys }) => {
   const reduced = useReducedMotion() ?? false;
-  const appearance = getOverlayAppearance(getDefaultOverlayOpacity(), isLight ? 'light' : 'dark');
+  const appearance = getOverlayAppearance(DEMO_OPACITY, isLight ? 'light' : 'dark');
 
   const [messages, setMessages] = useState<Msg[]>(SEED);
   const [tray, setTray] = useState<string[]>([]);
   const [blink, setBlink] = useState(false);
+  // The live transcript strip: the interviewer's question, arriving word by word.
+  const [qIdx, setQIdx] = useState(0);
+  const [captionWords, setCaptionWords] = useState<number>(Infinity);
   const nextId = useRef(3);
   const answerIndex = useRef(1);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -86,7 +102,10 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
     const shots = trayRef.current;
     const userId = nextId.current++;
     const answerId = nextId.current++;
-    const words = ANSWERS[answerIndex.current++ % ANSWERS.length].split(' ');
+    const k = answerIndex.current++ % ANSWERS.length;
+    const words = ANSWERS[k].split(' ');
+    setQIdx(k);
+    setCaptionWords(reduced ? Infinity : 0);
     setTray([]);
     setMessages(m => [
       ...m.slice(-4),
@@ -99,6 +118,16 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
     };
     after(reduced ? 300 : 1100, () => reveal(reduced ? words.length : 1));
   }, [answerKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The caption streams in like live captions, then holds.
+  useEffect(() => {
+    if (!Number.isFinite(captionWords)) return;
+    const total = QUESTIONS[qIdx].split(' ').length;
+    if (captionWords >= total) return;
+    const t = setTimeout(() => setCaptionWords(n => n + 1), 70);
+    return () => clearTimeout(t);
+  }, [captionWords, qIdx]);
+  const caption = Number.isFinite(captionWords) ? QUESTIONS[qIdx] : QUESTIONS[qIdx].split(' ').slice(0, captionWords).join(' ');
 
   // Take Screenshot: the overlay steps aside for the capture, then attaches it.
   useEffect(() => {
@@ -126,11 +155,11 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
   useEffect(() => { if (answerKey) atBottom.current = true; }, [answerKey]);
 
   const gone = hidden || blink;
-  const chip = 'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border whitespace-nowrap shrink-0 overlay-chip-surface overlay-text-interactive';
+  const chip = 'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all duration-200 whitespace-nowrap shrink-0 overlay-chip-surface overlay-text-interactive';
 
   return (
     <motion.div
-      className="relative flex flex-col items-center gap-2"
+      className="relative flex flex-col items-center gap-2 font-sans overlay-text-primary"
       style={{ width: 600, pointerEvents: 'none' }}
       initial={false}
       animate={gone ? { opacity: 0, y: reduced ? 0 : 6, scale: reduced ? 1 : 0.98 } : { opacity: 1, y: 0, scale: 1 }}
@@ -143,6 +172,15 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
         className="relative max-w-full w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col overlay-shell-surface overlay-shell-container overlay-text-primary"
         style={appearance.shellStyle}
       >
+        {/* The live transcript strip (the real RollingTranscript) sits above the chat */}
+        <RollingTranscript
+          text={caption}
+          isActive
+          surfaceStyle={appearance.transcriptStyle}
+          interviewerChannel={{ status: 'connected' }}
+          microphoneChannel={{ status: 'connected' }}
+        />
+
         {/* Messages */}
         {/* Scrollable like the real one; the only part of the demo that takes the pointer. */}
         <div ref={scroller} onScroll={onScroll} className="p-4 space-y-3 overflow-y-auto overscroll-contain" style={{ height: 176, scrollbarWidth: 'none', pointerEvents: gone ? 'none' : 'auto' }}>
@@ -181,7 +219,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
           <span className={chip} style={appearance.chipStyle}><MessageSquare className="w-3 h-3 opacity-70" /> Clarify</span>
           <span className={chip} style={appearance.chipStyle}><RefreshCw className="w-3 h-3 opacity-70" /> Recap</span>
           <span className={chip} style={appearance.chipStyle}><HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question</span>
-          <span className={`${chip} justify-center min-w-[74px]`} style={appearance.chipStyle}><Zap className="w-3 h-3 opacity-70" /> Answer</span>
+          <span className={`${chip} justify-center min-w-[74px]`} style={appearance.chipStyle}><Mic className="w-3 h-3 opacity-70" /> Answer</span>
         </div>
 
         {/* Input area */}
@@ -228,12 +266,12 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
 
           <div className="flex items-center justify-between mt-3 px-0.5">
             <div className="flex items-center gap-1.5">
-              <span className="flex items-center gap-2 px-3 py-1.5 border rounded-lg text-xs font-medium w-[140px] overlay-control-surface overlay-text-interactive" style={appearance.controlStyle}>
-                <span className="truncate flex-1">Natively AI</span><ChevronDown size={14} className="opacity-60" />
+              {/* Exactly the real toolbar: the model selector (h-7, 9px radius), then bare icons. */}
+              <span className="flex items-center gap-1 pl-3 pr-1.5 h-7 border rounded-[9px] text-xs font-medium text-left shrink-0 overlay-control-surface overlay-text-interactive" style={{ ...appearance.controlStyle, width: 141 }}>
+                <span className="truncate flex-1">Natively API</span><ChevronDown size={12} className="shrink-0" />
               </span>
-              <span className="w-px h-3 mx-1 overlay-divider-surface" style={appearance.dividerStyle} />
-              <span className="w-7 h-7 rounded-lg flex items-center justify-center overlay-icon-surface overlay-text-interactive" style={appearance.iconStyle}><SlidersHorizontal className="w-3.5 h-3.5" /></span>
-              <span className="w-7 h-7 rounded-lg flex items-center justify-center overlay-icon-surface overlay-text-interactive" style={appearance.iconStyle}><PointerOff className="w-3.5 h-3.5" /></span>
+              <span className="w-7 h-7 rounded-[9px] flex items-center justify-center overlay-bare-icon"><SlidersHorizontal className="w-3.5 h-3.5" /></span>
+              <span className="w-7 h-7 rounded-[9px] flex items-center justify-center overlay-bare-icon"><PointerOff className="w-3.5 h-3.5" /></span>
             </div>
             <span className="w-7 h-7 rounded-full flex items-center justify-center overlay-icon-surface overlay-text-muted" style={appearance.iconStyle}><ArrowRight className="w-3.5 h-3.5" /></span>
           </div>

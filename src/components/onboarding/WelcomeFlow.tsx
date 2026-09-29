@@ -50,9 +50,7 @@ export const WelcomeFlow: React.FC<Props> = ({ onDone }) => {
 
       <MeetingDemo
         t={t}
-        live={step === 'tour'
-          ? { hidden: tour.hidden, answerKey: tour.answerKey, shotKey: tour.shotKey, placeholderKeys: tour.placeholderKeys }
-          : undefined}
+        live={{ hidden: tour.hidden, answerKey: tour.answerKey, shotKey: tour.shotKey, placeholderKeys: tour.placeholderKeys }}
         hiddenHint={<span className="inline-flex items-center gap-2">Overlay hidden. Press <Keycaps t={t} keys={tour.toggleKeys} /> to bring it back.</span>}
         badge={tour.badge ? <Keycaps t={t} keys={tour.badge} onDark /> : undefined}
       />
