@@ -15,8 +15,8 @@
 //            "N screenshot(s) attached" tray appears above the input, 48px
 //            thumbnails, at most five.
 //
-// Nothing here talks to a model or captures the screen: the "screenshot" is
-// the current frame of the demo call, and the answers are canned.
+// Nothing here talks to a model or captures the screen: the "screenshot" is a
+// bundled image of the screen the demo's question is about, and the answers are canned.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
@@ -29,6 +29,7 @@ import { MODEL_SELECTOR_WIDTH } from '../ui/modelSelectorLabelText';
 import { OVERLAY_DEFAULT_COLLAPSED_WIDTH } from '../../lib/overlayCustomSize.mjs';
 import { useT } from '../../i18n';
 import { fmt, useWordSplitter } from './i18nText';
+import sharedScreen from '../../assets/welcome/shared-screen.jpg';
 
 // A user line reads WHAT_TO_SAY, or WHAT_TO_SAY_SHOT once screenshots ride along;
 // an answer is ANSWERS[k]. Both are put into words at render, so they follow the language.
@@ -40,7 +41,7 @@ type Msg =
 export const DEMO_OVERLAY_WIDTH = OVERLAY_DEFAULT_COLLAPSED_WIDTH;
 // The real chat area follows the window's height; the demo keeps three lines of an
 // answer in view, which is what the tour needs to show.
-const DEMO_CHAT_HEIGHT = 176;
+const DEMO_CHAT_HEIGHT = 216;
 // The chat is the card's top edge (no transcript strip above it), so text scrolling
 // off the top fades out over the first 18px instead of being cut flat. At rest it
 // only touches the 16px of padding.
@@ -61,12 +62,18 @@ const SEED: Msg[] = [
   { id: 2, role: 'answer', k: 0, shown: Infinity },
 ];
 
-// Stands in for the call frame if the canvas cannot be read back (a tainted
-// canvas throws on export), so the tray still shows what the shortcut does.
-const FALLBACK_SHOT = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270"><rect width="480" height="270" fill="#26262b"/>'
-  + '<rect x="24" y="24" width="200" height="222" rx="10" fill="#3a3a42"/><rect x="256" y="24" width="200" height="222" rx="10" fill="#33333b"/></svg>',
-);
+// What Take Screenshot captures: the screen the question is about. The demo's
+// screen-based question is "what is driving the numbers in the second column?", so
+// this is a growth report with a highlighted second column (assets/welcome, made in
+// Chrome from a page of our own, not a real product). It is bundled, so the tray
+// works with no capture and no permission.
+const SHARED_SCREEN = sharedScreen;
+
+// ANSWERS[SCREEN_ANSWER] is the one that reads what is on screen. It is what an
+// answer with a screenshot attached always says, so the screenshot and the answer
+// are about the same thing; the answers without one alternate between the others.
+const SCREEN_ANSWER = 2;
+const SCREENLESS_ANSWERS = [1, 0];
 
 // The real overlay is a translucent pane over whatever is behind it. Its default
 // (0.80 dark / 0.70 light) is dense enough to hide the call; the demo sits a step
@@ -88,13 +95,11 @@ interface Props {
   answerKey: number;
   /** Bump to take a screenshot. */
   shotKey: number;
-  /** Returns the demo "screenshot" (a frame of the call), or null (a stand-in is used). */
-  captureFrame: () => string | null;
   /** The selective-screenshot keycaps for the input placeholder. */
   placeholderKeys: string[];
 }
 
-export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotKey, captureFrame, placeholderKeys }) => {
+export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotKey, placeholderKeys }) => {
   const reduced = useReducedMotion() ?? false;
   const tr = useT();
   const split = useWordSplitter();
@@ -115,7 +120,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
   const [tray, setTray] = useState<string[]>([]);
   const [blink, setBlink] = useState(false);
   const nextId = useRef(3);
-  const answerIndex = useRef(1);
+  const answerIndex = useRef(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scroller = useRef<HTMLDivElement>(null);
   const trayRef = useRef(tray);
@@ -130,7 +135,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
     const shots = trayRef.current;
     const userId = nextId.current++;
     const answerId = nextId.current++;
-    const k = answerIndex.current++ % ANSWERS.length;
+    const k = shots.length ? SCREEN_ANSWER : SCREENLESS_ANSWERS[answerIndex.current++ % SCREENLESS_ANSWERS.length];
     const total = answerWords[k].words.length;
     setTray([]);
     setMessages(m => [
@@ -150,9 +155,8 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
     if (!shotKey) return;
     setBlink(true);
     after(120, () => {
-      const frame = captureFrame() ?? FALLBACK_SHOT;
       setBlink(false);
-      setTray(t => [...t, frame].slice(-5));
+      setTray(t => [...t, SHARED_SCREEN].slice(-5));
     });
   }, [shotKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -201,7 +205,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
                   <div className={`mb-2 grid gap-1.5 ${msg.shots.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                     {msg.shots.map((s, i) => (
                       <img key={i} src={s} alt="" className="w-full rounded-[14px] border border-white/15 object-cover object-top"
-                        style={{ height: msg.shots!.length > 1 ? 74 : 132 }} />
+                        style={{ height: msg.shots!.length > 1 ? 74 : 76 }} />
                     ))}
                   </div>
                 )}

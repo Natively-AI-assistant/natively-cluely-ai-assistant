@@ -84,3 +84,16 @@ test('the plate follows the window and the hint hangs off the call', () => {
   assert.doesNotMatch(shared, /top: 108/);
   assert.match(shared, /bottom: '100%'/);
 });
+
+test('the demo screenshot is the screen its question is about, and screenshot answers read it', () => {
+  const demo = source['DemoOverlay.tsx'];
+  assert.match(demo, /import sharedScreen from '\.\.\/\.\.\/assets\/welcome\/shared-screen\.jpg'/);
+  assert.ok(fs.existsSync(path.resolve(here, '../../../assets/welcome/shared-screen.jpg')));
+  assert.doesNotMatch(demo, /captureFrame|toDataURL/);
+  // With a screenshot attached the answer is ANSWERS[SCREEN_ANSWER]: the one about "what's on screen".
+  const answers = demo.slice(demo.indexOf('const ANSWERS = ['), demo.indexOf('];', demo.indexOf('const ANSWERS = [')))
+    .split('\n').filter(l => l.trim().startsWith("'"));
+  const screenIdx = Number(/const SCREEN_ANSWER = (\d+)/.exec(demo)[1]);
+  assert.match(answers[screenIdx], /on screen.*second column/);
+  assert.match(demo, /shots\.length \? SCREEN_ANSWER/);
+});

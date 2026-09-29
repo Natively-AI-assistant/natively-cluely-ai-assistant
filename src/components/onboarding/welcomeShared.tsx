@@ -343,7 +343,6 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
   const reduced = useReducedMotion() ?? false;
   const toast = useToastMotion();
   const isLight = useResolvedTheme() === 'light';
-  const videoRef = useRef<HTMLVideoElement>(null);
   const tr = useT();
 
   // Follow the plate: the launcher window resizes, and the stage with it.
@@ -360,20 +359,6 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-
-  // The demo "screenshot": the call's current frame. The video is a bundled,
-  // same-origin asset, so the canvas is never tainted.
-  const captureFrame = (): string | null => {
-    const v = videoRef.current;
-    if (!v || !v.videoWidth) return null;
-    const c = document.createElement('canvas');
-    c.width = 480;
-    c.height = Math.round(480 * v.videoHeight / v.videoWidth);
-    const ctx = c.getContext('2d');
-    if (!ctx) return null;
-    ctx.drawImage(v, 0, 0, c.width, c.height);
-    try { return c.toDataURL('image/jpeg', 0.82); } catch { return null; }
-  };
 
   return (
     <div className="h-full flex" style={{ flex: '0 0 50%', padding: '12px 12px 12px 0', boxSizing: 'border-box' }}>
@@ -410,7 +395,6 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
                   hidden={live.hidden}
                   answerKey={live.answerKey}
                   shotKey={live.shotKey}
-                  captureFrame={captureFrame}
                   placeholderKeys={live.placeholderKeys}
                 />
               </div>
@@ -426,7 +410,6 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
             >
               {/* Muted so it may autoplay; held on its first frame for reduced motion. */}
               <video
-                ref={videoRef}
                 src={meetingVideo}
                 autoPlay={!reduced}
                 muted
