@@ -126,6 +126,26 @@ export function applyOutcome(ledger, id, outcome, now, meta = {}) {
   }
 }
 
+/**
+ * Give a retired card a clean slate: un-retire it, clear its strikes and waiting
+ * period. Its show count and last-shown time are kept, so promotional spacing
+ * still applies. For campaigns that deliberately bring a card back (the 2026-09-29
+ * free-trial reset); never for a user's own "never ask again" on an ordinary card.
+ * Returns a NEW ledger; the input is untouched.
+ */
+export function reopenCard(ledger, id) {
+  assertCard(id);
+  return withEntry(ledger, id, {
+    ...entryOf(ledger, id),
+    strikes: 0,
+    nextEligibleAt: null,
+    retired: false,
+    retiredReason: null,
+    retiredUntil: null,
+    followUpPending: false,
+  });
+}
+
 /** Not retired, not retired-until-later, and past any waiting period. */
 export function isCardAvailable(ledger, id, now) {
   const e = entryOf(ledger, id);

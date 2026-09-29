@@ -16,6 +16,7 @@ import { app } from 'electron';
 import {
   emptyLedger,
   applyOutcome,
+  reopenCard,
   migrateLegacy,
 } from '../../../src/lib/cards/cardPolicy.mjs';
 import type { Ledger, LegacyCardHistory } from '../../../src/lib/cards/cardPolicy.mjs';
@@ -132,6 +133,19 @@ export class CardLedger {
     this.tryRecover();
     if (this.readOnly) throw new Error('ledger_unreadable');
     this.ledger = applyOutcome(this.ledger, id, outcome, this.now(), meta);
+    this.save();
+    return this.ledger;
+  }
+
+  /**
+   * Bring a retired card back (a deliberate campaign, not a user action). Returns
+   * the new ledger, or null while the file cannot be read: nothing is written then,
+   * so the caller can retry rather than believe it happened.
+   */
+  public reopen(id: string): Ledger | null {
+    this.tryRecover();
+    if (this.readOnly) return null;
+    this.ledger = reopenCard(this.ledger, id);
     this.save();
     return this.ledger;
   }

@@ -27,6 +27,7 @@ import { Presence, SettingsMotionReady, SwapLabel } from './SettingsRow';
 // monochrome glyph, so on the light theme's pale plaque an <img> would be
 // invisible. See `.natively-key-mark` in index.css.
 import nativelyLogo from '../../assets/logo.webp';
+import { isTrialClaimedLocally, markTrialClaimedLocally } from '../../lib/trialCampaign.mjs';
 import {
   formatCompact, formatMeter, formatUsd, normalizeQuota, TRIAL_FALLBACK_LIMITS,
   type NativelyQuota, type NativelyPlanLimits, type TrialUsage, type TrialLimits, type UsageMeter,
@@ -827,7 +828,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   // The offer's gate, and its process memo (see trialOfferLastSettled).
   const trialSettling = isLoading || isCheckingTrial;
   const trialClaimed =
-    trialState?.expired === true || localStorage.getItem('natively_trial_claimed') === 'true';
+    trialState?.expired === true || isTrialClaimedLocally(localStorage);
   const trialOfferSettled =
     !isSaved && (!trialState || (trialState.expired && !trialState.active)) && !trialClaimed;
   const showTrialOffer = trialSettling ? trialOfferLastSettled && !isSaved && !trialClaimed : trialOfferSettled;
@@ -935,7 +936,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     const res = await window.electronAPI?.getTrialStatus?.();
     if (!res?.ok) return;
 
-    localStorage.setItem('natively_trial_claimed', 'true');
+    markTrialClaimedLocally(localStorage);
 
     setTrialState({
       active: !(res.expired ?? false),
@@ -966,11 +967,11 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       try {
         const local = await window.electronAPI?.getLocalTrial?.();
         if (!local?.hasToken) {
-          if (local?.trialClaimed) localStorage.setItem('natively_trial_claimed', 'true');
+          if (local?.trialClaimed) markTrialClaimedLocally(localStorage);
           return;
         }
 
-        localStorage.setItem('natively_trial_claimed', 'true');
+        markTrialClaimedLocally(localStorage);
 
         if (local.expired) {
           // Token exists but expired locally — show modal immediately, confirm via server
@@ -1049,7 +1050,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       }
       if (!res?.ok) {
         if (res?.error === 'trial_ip_limit' || res?.error === 'trial_start_rate_limited') {
-          localStorage.setItem('natively_trial_claimed', 'true');
+          markTrialClaimedLocally(localStorage);
           setTrialState({
             active: false,
             expired: true,
@@ -1071,7 +1072,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         return;
       }
 
-      localStorage.setItem('natively_trial_claimed', 'true');
+      markTrialClaimedLocally(localStorage);
 
       if (res.already_used && res.expired) {
         setTrialState({
@@ -1575,7 +1576,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         {(() => {
           const isClaimed =
             trialState?.expired === true ||
-            localStorage.getItem('natively_trial_claimed') === 'true';
+            isTrialClaimedLocally(localStorage);
 
           if (isClaimed) {
             return null;

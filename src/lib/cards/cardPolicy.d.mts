@@ -55,6 +55,7 @@ export const DAY_ONE_MS: number;
 export function emptyLedger(now: number): Ledger;
 export function entryOf(ledger: Ledger, id: CardId | string): Entry;
 export function applyOutcome(ledger: Ledger, id: CardId | string, outcome: Outcome | string, now: number, meta?: { until?: number }): Ledger;
+export function reopenCard(ledger: Ledger, id: CardId | string): Ledger;
 export function isCardAvailable(ledger: Ledger, id: CardId | string, now: number): boolean;
 export function promoBudgetOpen(ledger: Ledger, now: number): boolean;
 export function dayOneOver(ledger: Ledger, now: number): boolean;

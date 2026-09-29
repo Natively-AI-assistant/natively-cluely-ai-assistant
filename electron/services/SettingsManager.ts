@@ -255,6 +255,9 @@ export interface AppSettings {
     // already removed, so the wipe runs once per trial however many windows or
     // launches notice the expiry (ipcHandlers.ts settleExpiredTrial).
     trialExpiryWipedFor?: string;
+    // The trial campaign (src/lib/trialCampaign.mjs) this install has already been
+    // through. Written only after every reset step persisted, so a failed one retries.
+    trialCampaignReset?: string;
     // Live SessionMemory rollout controls (release 2026-06-07c). Env vars take
     // precedence; these let the rollout be driven from settings without a redeploy.
     enableLiveSessionMemory?: boolean;

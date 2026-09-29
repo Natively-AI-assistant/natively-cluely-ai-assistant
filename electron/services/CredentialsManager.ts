@@ -2124,6 +2124,35 @@ export class CredentialsManager {
         console.log('[CredentialsManager] Trial token cleared');
     }
 
+    /**
+     * Forget that this device ever took a free trial: token, expiry, start AND the
+     * claimed flag that clearTrialToken deliberately keeps. Only the one-time trial
+     * campaign (src/lib/trialCampaign.mjs) calls this; every other path must keep
+     * the flag so the start card stays hidden.
+     *
+     * `persisted` is false while the credential store is degraded or the write
+     * failed, so the caller can retry next launch instead of recording a reset that
+     * did not happen. Nothing to clear counts as persisted, but ONLY on a healthy
+     * store: a degraded one decrypted nothing, so an empty memory says nothing
+     * about what the file still holds.
+     */
+    public resetTrialClaim(): { persisted: boolean } {
+        if (this.refuseWriteWhileDegraded('reset trial claim')) return { persisted: false };
+        const c = this.credentials;
+        const hadAny = c.trialToken !== undefined || c.trialExpiresAt !== undefined
+            || c.trialStartedAt !== undefined || c.trialClaimed !== undefined;
+        if (!hadAny) return { persisted: true };
+        delete c.trialToken;
+        delete c.trialExpiresAt;
+        delete c.trialStartedAt;
+        delete c.trialClaimed;
+        const persisted = this.saveCredentials();
+        console.log(persisted
+            ? '[CredentialsManager] Trial claim reset (trial campaign)'
+            : '[CredentialsManager] Trial claim reset in memory but NOT written to disk; will retry next launch');
+        return { persisted };
+    }
+
     public clearAll(): void {
         this.scrubMemory();
         if (fs.existsSync(CREDENTIALS_PATH)) {

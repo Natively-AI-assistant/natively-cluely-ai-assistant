@@ -35,6 +35,7 @@ import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity 
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { permissionsNeedAttention } from './lib/permissionAttentionPolicy.mjs'
 import { collectRendererLegacy } from './lib/cards/rendererLegacy.mjs'
+import { resetRendererTrialClaim } from './lib/trialCampaign.mjs'
 import { cardInputsFromSources } from './lib/cards/cardInputs.mjs'
 import { forcedCardFromQuery } from './lib/onboarding/devOverrides.ts'
 import { isMac } from "./utils/platformUtils"
@@ -463,6 +464,8 @@ const App: React.FC = () => {
     // every import after the first), then load the ledger. Until it loads, no
     // card stage shows.
     let legacy = {};
+    // The trial campaign first: a stale claimed flag would retire the trial promo again.
+    try { resetRendererTrialClaim(localStorage); } catch { /* storage unavailable */ }
     try { legacy = collectRendererLegacy(localStorage); } catch { /* storage unavailable */ }
     Promise.resolve(api?.cardsImportLegacy?.(legacy))
       .catch(() => undefined)

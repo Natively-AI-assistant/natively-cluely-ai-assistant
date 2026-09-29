@@ -96,6 +96,8 @@ describe('a licensed user whose old trial expired', () => {
     const local = await handlers.get('trial:get-local')({});
     assert.equal(local.showEndedCard, false, 'a paying user must never be walled in');
     assert.equal(cm.getTrialToken(), undefined);
+    // The token going is only half of it: the trial's route must not be left behind.
+    assert.notEqual(cm.getNativelyApiKey(), SENTINEL, 'the trial sentinel is reverted, not orphaned');
     assert.equal(ended().length, 1);
     assert.equal(ended()[0].data.choice, 'superseded');
   });

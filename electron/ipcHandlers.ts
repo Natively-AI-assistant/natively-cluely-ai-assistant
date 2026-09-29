@@ -9,6 +9,7 @@ import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
+import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
 import { CardLedger } from './services/cards/CardLedger';
 import { nativePromptsBlocked, UNDETECTABLE_REFUSAL_ERROR, UNDETECTABLE_REFUSAL_MESSAGES } from './services/stealthPromptGate';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
@@ -11619,9 +11620,80 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // The one-time "everyone may try again" reset (src/lib/trialCampaign.mjs). The
+  // server archived every device's trial row; this forgets the local record of it
+  // (claimed flag, expired token) and brings the trial promo card back. Runs from
+  // the first startup read, once per campaign, and never touches a live trial.
+  // Single-flight: the launcher asks for the local trial from three places at once.
+  let trialCampaignInFlight: Promise<void> | null = null;
+  // Set only when the marker could not be written (a degraded settings store): without
+  // it every Settings open would re-run the reset and undo a "never" the user just chose.
+  let trialCampaignSettledInProcess = false;
+  const applyTrialCampaignReset = (): Promise<void> => {
+    if (trialCampaignSettledInProcess) return Promise.resolve();
+    if (trialCampaignInFlight) return trialCampaignInFlight;
+    const run = (async () => {
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const cm = CredentialsManager.getInstance();
+        const sm = SettingsManager.getInstance();
+        if (sm.get('trialCampaignReset') === TRIAL_CAMPAIGN) return;
+
+        // Only someone with no licence, no real Natively key and no AI key of their own
+        // (the same three tests settleExpiredTrial applies). Everyone else is left exactly
+        // as they are, and the normal expiry flow below still settles their old trial.
+        const nativelyKey = cm.getNativelyApiKey();
+        const eligible = !isLicensed()
+          && !(!!nativelyKey && nativelyKey !== TRIAL_SENTINEL_KEY)
+          && !hasOwnAiKey(cm.getAllCredentials(), { codexReady: codexRouteReady() });
+
+        // An expired trial owes its once-only profile wipe, which clearing the token below
+        // would skip: settle it first (a no-op for a live trial). For an eligible user this
+        // never clears the token (that needs a licence or a key), so the trial sentinel is
+        // still reverted afterwards by runTrialCampaignReset's sentinelActive step.
+        if (eligible && cm.getTrialToken()) settleExpiredTrial('trial campaign reset');
+
+        const ms = (iso?: string): number => (iso ? new Date(iso).getTime() : NaN);
+        let reopened: unknown = null;
+        const result = await runTrialCampaignReset({
+          now: Date.now(),
+          getMarker: () => sm.get('trialCampaignReset'),
+          setMarker: (v: string) => { if (!sm.set('trialCampaignReset', v)) trialCampaignSettledInProcess = true; },
+          trial: {
+            hasToken: !!cm.getTrialToken(),
+            expiresAtMs: ms(cm.getTrialExpiresAt()),
+            startedAtMs: ms(cm.getTrialStartedAt()),
+          },
+          eligible,
+          sentinelActive: cm.getNativelyApiKey() === TRIAL_SENTINEL_KEY,
+          endExpiredRuntime: () => endExpiredTrialRuntime('Trial campaign reset'),
+          resetClaim: () => cm.resetTrialClaim(),
+          reopenPromo: () => {
+            reopened = CardLedger.getInstance().reopen(TRIAL_PROMO_ID);
+            return reopened !== null;
+          },
+        });
+        if (result.status !== 'ineligible') console.log(`[IPC] Trial campaign ${TRIAL_CAMPAIGN}: ${result.status}`);
+        if (result.status === 'reset') {
+          broadcastCredentialsChanged();
+          if (reopened) broadcastCardsChanged(reopened);
+        }
+      } catch (e: any) {
+        console.warn('[IPC] Trial campaign reset failed (will retry next launch):', e?.message || e);
+      }
+    })();
+    // Cleared from the promise, not from inside the function: a run that finishes
+    // without awaiting (marker already set) would otherwise clear the slot BEFORE
+    // it is assigned here, and every later call would get that stale promise.
+    trialCampaignInFlight = run;
+    void run.finally(() => { if (trialCampaignInFlight === run) trialCampaignInFlight = null; });
+    return run;
+  };
+
   // Return local trial state from credentials (no network call — safe for startup check).
   safeHandle('trial:get-local', async () => {
     try {
+      await applyTrialCampaignReset();
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
       const token = cm.getTrialToken();
