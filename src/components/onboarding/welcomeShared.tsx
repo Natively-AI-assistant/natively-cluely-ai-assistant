@@ -194,7 +194,11 @@ export const Keycaps: React.FC<{ t: WelcomeTheme; keys: string[]; size?: 'sm' | 
 // zoomed to fit). It is fixed so the call under it never moves.
 const CARD = { w: 520, h: 340 };
 // How far the call tucks up under the overlay.
-const CALL = { w: 520, tuck: 150 };
+// The overlay is laid out 600px wide and zoomed to fit; the call is exactly as
+// wide as the overlay renders (600 * 0.88 = 528), so their edges line up. It was
+// 520, which left the video 4px inside the overlay on each side.
+const OVERLAY_ZOOM = 0.88;
+const CALL = { w: Math.round(600 * OVERLAY_ZOOM), tuck: 150 };
 const EASE = [0.23, 1, 0.32, 1] as const;
 
 /** What drives the demo overlay: the tour's presses. */
@@ -265,7 +269,7 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
           <div className="absolute inset-x-0 top-0 flex justify-center">
             {/* The overlay is laid out at its real 600px width and zoomed to fit
                 the plate (zoom, unlike transform, also shrinks its layout box). */}
-            <div style={{ zoom: 0.88 }}>
+            <div style={{ zoom: OVERLAY_ZOOM }}>
               <DemoOverlay
                 isLight={isLight}
                 hidden={live.hidden}
