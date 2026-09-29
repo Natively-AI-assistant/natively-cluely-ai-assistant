@@ -132,6 +132,24 @@ export interface ModePolicy {
   };
 
   citations: 'HIDDEN' | 'OPTIONAL' | 'VISIBLE';
+
+  /**
+   * The mode's ATTACHED MATERIAL is what the conversation is about (2026-09-30).
+   *
+   * Seminar's attached paper/thesis is the primary authority for everything the
+   * examiner says, and Lecture's slides/notes are the material being taught. An
+   * examiner's challenge ("Five runs is not many — how do you know the gains are
+   * not just noise?") or a lecturer's statement is phrased as general knowledge,
+   * so the classifier sends it down the FAST path; measured 13/128 file-dependent
+   * turns reached the model with none of the file, 6 of them Seminar.
+   *
+   * When true and the turn has files attached to the mode, a non-META turn the
+   * classifier would answer from general knowledge still consults the reference
+   * files. It does NOT add a document claim: the turn stays FAST (no absence
+   * notice, answerability unchanged), and the evidence gate still decides what
+   * is admitted. Consumed once, in orchestrator.decide().
+   */
+  attachedMaterialIsPrimary: boolean;
 }
 
 // ── capability presets ──────────────────────────────────────────────────────
@@ -209,6 +227,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1500, 2400, 800, 400),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'HIDDEN',
+    attachedMaterialIsPrimary: false,
   },
 
   'call-center': {
@@ -229,6 +248,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 900, 300),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
+    attachedMaterialIsPrimary: false,
   },
 
   sales: {
@@ -245,6 +265,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 900, 300),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
+    attachedMaterialIsPrimary: false,
   },
 
   recruiting: {
@@ -262,6 +283,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 900, 200),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
+    attachedMaterialIsPrimary: false,
   },
 
   'team-meet': {
@@ -276,6 +298,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1200, 2400, 1400, 400),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'HIDDEN',
+    attachedMaterialIsPrimary: false,
   },
 
   'looking-for-work': {
@@ -298,6 +321,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 600, 200),
     autoAnswer: AUTO_ANSWER_INTERVIEW,
     citations: 'HIDDEN',
+    attachedMaterialIsPrimary: false,
   },
 
   'technical-interview': {
@@ -330,10 +354,11 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1600, 2400, 700, 800),
     autoAnswer: AUTO_ANSWER_INTERVIEW,
     citations: 'HIDDEN',
+    attachedMaterialIsPrimary: false,
   },
 
   lecture: {
-    id: 'lecture', version: '1.0.0', name: 'Lecture',
+    id: 'lecture', version: '1.1.0', name: 'Lecture',
     purpose: 'Capture key concepts and content from lectures.',
     allowedSourceTypes: ['REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
     sourcePriorities: { REFERENCE_FILE: 1, MEETING_TRANSCRIPT: 2 },
@@ -344,10 +369,11 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(24, 8), contextBudget: budget(2000, 2400, 1000, 200),
     autoAnswer: AUTO_ANSWER_LISTENING,
     citations: 'OPTIONAL',
+    attachedMaterialIsPrimary: true,
   },
 
   seminar: {
-    id: 'seminar', version: '1.0.0', name: 'Seminar',
+    id: 'seminar', version: '1.1.0', name: 'Seminar',
     purpose: 'Strict file-grounded Q&A for presentations, thesis defences and paper walkthroughs.',
     allowedSourceTypes: ['REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
     sourcePriorities: { REFERENCE_FILE: 1, MEETING_TRANSCRIPT: 2 },
@@ -370,6 +396,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     retrievalPolicy: retrieval(24, 8), contextBudget: budget(2400, 1000, 800, 200),
     autoAnswer: AUTO_ANSWER_LISTENING,
     citations: 'VISIBLE',
+    attachedMaterialIsPrimary: true,
   },
 };
 

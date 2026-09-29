@@ -682,6 +682,9 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
           admitted: a.admittedAfterScopeFilter,
           rejected: a.rejectedByScopeFilter,
           ...(a.failed ? { failed: true } : {}),
+          // A pass that ran WITHOUT vectors (2026-09-30) — e.g. the query embed
+          // hard-failed mid-turn. Previously indistinguishable from a clean pass.
+          ...(a.degraded ? { degraded: a.degraded } : {}),
         })),
         answerability: result.trace.answerability,
         fallback: result.trace.fallbackUsed,
