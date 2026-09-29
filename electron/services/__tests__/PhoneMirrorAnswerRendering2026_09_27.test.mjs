@@ -84,6 +84,9 @@ after(async () => {
 
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 const ANSWER = 'Use a **stack**: $O(n)$.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n[[GIST]] One pass with a stack';
+// 2026-09-30: `content` is the answer TEXT (what the page copies and falls
+// back to); the [[GIST]] line rides separately in `gist`.
+const ANSWER_TEXT = 'Use a **stack**: $O(n)$.\n\n| a | b |\n|---|---|\n| 1 | 2 |';
 
 beforeEach(async () => {
   if (svc.isRunning()) await svc.stop({ persist: false });
@@ -112,7 +115,7 @@ describe('answers reach the phone rendered', () => {
     svc.publishAssistantMessage('1', ANSWER, 'Code Hint');
     await settle(40);
     const [a] = phone.of('assistant');
-    assert.equal(a.content, ANSWER, 'raw markdown still sent (copy, fallback)');
+    assert.equal(a.content, ANSWER_TEXT, 'markdown text still sent (copy, fallback), without the gist line');
     assert.equal(a.gist, 'One pass with a stack');
     assert.match(a.html, /<strong>stack<\/strong>/);
     assert.match(a.html, /<table>/);
@@ -169,7 +172,8 @@ describe('answers reach the phone rendered', () => {
     svc.publishToken('s3', 'x ');
     await settle(200);
     const [a] = phone.of('assistant');
-    assert.equal(a.content, ANSWER);
+    assert.equal(a.content, ANSWER_TEXT);
+    assert.equal(a.gist, 'One pass with a stack', 'the page renders the chip from the gist field');
     assert.equal(a.html, undefined);
     assert.equal(phone.of('render').length, 0);
     phone.ws.close();
@@ -181,7 +185,8 @@ describe('answers reach the phone rendered', () => {
     svc.publishAssistantMessage('4', ANSWER, 'Clarify');
     await settle(40);
     const [a] = phone.of('assistant');
-    assert.equal(a.content, ANSWER);
+    assert.equal(a.content, ANSWER_TEXT);
+    assert.equal(a.gist, 'One pass with a stack');
     assert.equal(a.html, undefined);
     phone.ws.close();
   });
