@@ -4251,6 +4251,23 @@ export class IntelligenceEngine extends EventEmitter {
             // the emit state, so holding cannot trip a provider timeout.
             let scaffoldStreamHoldDecided = false;
             let scaffoldStreamHold = false;
+            // Meta-preamble gate (2026-09-30). The post-stream planning-preamble
+            // strip below removed "The interviewer is asking…" openers only
+            // AFTER they had painted, and the final emit then visibly swapped
+            // the row. The gate holds the opening only while it could still be
+            // such a preamble and drops it before the first paint; it shares
+            // one scanner with stripPlanningPreamble, so the streamed text and
+            // the final text agree and no swap happens. Enabled exactly where
+            // that post-stream strip runs (not speculative — completeSpeculativeRun
+            // never strips — and not coding).
+            const preambleGate = (!isSpeculative && !codingGate && !isCodingAnswerType(answerPlan.answerType))
+                ? (() => {
+                    try {
+                        const { PreambleStreamGate } = require('./llm/planningPreamble') as typeof import('./llm/planningPreamble');
+                        return new PreambleStreamGate();
+                    } catch { return null; }
+                })()
+                : null;
 
             // ── LIVE LATENCY GUARDRAIL (Phase 9) ───────────────────────────────
             // Full-JIT policy: provider stalls/failures may not be repaired with
@@ -4365,6 +4382,10 @@ export class IntelligenceEngine extends EventEmitter {
             // hold canned openers, and paint the first SAFE prefix, then stream.
             // Shared by every live token and by the adoption flush below.
             const paintBuffered = (token: string): void => {
+                if (preambleGate) {
+                    token = preambleGate.push(token);
+                    if (!token) return;
+                }
                 streamingTokenBuffer += token;
                 // RC-4: decide the hold once, on the first visible
                 // characters. A leading markdown heading on a spoken
@@ -6512,7 +6533,18 @@ export class IntelligenceEngine extends EventEmitter {
                     this.emit('suggested_answer_token', streamingTokenBuffer, question || 'inferred', confidence, generationId);
                 }
                 if (!emittedStreamingToken) {
-                    this.emit('suggested_answer_token', fullAnswer, question || 'inferred', confidence, generationId);
+                    // Nothing painted yet (a short answer, or one the gate
+                    // held to the end): paint it WITHOUT a leading preamble —
+                    // the same strip the final applies below, so the final emit
+                    // does not swap the row.
+                    let unpainted = fullAnswer;
+                    if (preambleGate) {
+                        try {
+                            const { stripPlanningPreamble } = require('./llm/planningPreamble') as typeof import('./llm/planningPreamble');
+                            unpainted = stripPlanningPreamble(fullAnswer).text;
+                        } catch { /* paint unmodified */ }
+                    }
+                    this.emit('suggested_answer_token', unpainted, question || 'inferred', confidence, generationId);
                 }
             }
             // (leaked-schema-stub / provider-transport-error guards now run much
@@ -6642,6 +6674,17 @@ export class IntelligenceEngine extends EventEmitter {
             // compatible with all existing consumers (code-hint, brainstorm,
             // legacy answerLLM, etc.).
             this.emit('suggested_answer', finalWtaAnswer, question || 'What to Answer', confidence, generationId);
+            // Compile-only syntax check of fenced JavaScript (observe-only: the
+            // turn trace + telemetry record it, the answer is never changed).
+            try {
+                const { observeAnswerJsSyntax } = require('./llm/codeVerification/syntaxCheckReport') as typeof import('./llm/codeVerification/syntaxCheckReport');
+                const syntax = observeAnswerJsSyntax(finalWtaAnswer, 'what_to_answer');
+                if (syntax) {
+                    trace.mark('code_syntax_checked' as any, {
+                        blocks: syntax.blocks, valid: syntax.valid, invalid: syntax.invalid, skipped: syntax.skipped,
+                    });
+                }
+            } catch { /* observe only */ }
             // ANSWER VISIBILITY (live session A follow-up, 2026-08-21): the
             // answer is delivered as an EVENT to the renderer and never
             // touches stdout, so a session log records the question, the
@@ -6729,6 +6772,9 @@ export class IntelligenceEngine extends EventEmitter {
                     trace,
                     generationId,
                     verificationCancellationToken.signal,
+                    // The shape the prompt asked for, so a correction never
+                    // demands sections the answer was told to leave out.
+                    (require('./llm/codingShape') as typeof import('./llm/codingShape')).detectCodingShape(answerPlan.question),
                 ).finally(() => {
                     this.whatToAnswerBackgroundCancellationTokens.delete(verificationCancellationToken);
                 });
@@ -6804,6 +6850,7 @@ export class IntelligenceEngine extends EventEmitter {
         trace: PiLatencyTrace,
         generationId: number,
         abortSignal?: AbortSignal,
+        codingShape?: import('./llm/codingContract').CodingShape,
     ): Promise<void> {
         // Supersession guard: if the user fired a newer generation while this
         // background verification ran, its result belongs to a now-abandoned
@@ -6816,6 +6863,7 @@ export class IntelligenceEngine extends EventEmitter {
                 answer: shownAnswer,
                 question,
                 screenText,
+                codingShape,
                 // Correction call: regenerate a fixed answer via the same chat path.
                 // Bounded to ONE attempt inside verifyCodingAnswer.
                 correct: async (repairPrompt: string) => {

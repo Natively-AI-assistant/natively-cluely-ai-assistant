@@ -164,7 +164,10 @@ describe('the desktop chat path publishes in that order', () => {
 
   test('each token is mirrored as it is written, and the stream is closed either way', () => {
     const loop = v3.slice(v3.indexOf('for await (const tok of v3Stream.stream)'), v3.indexOf("event.sender.send('gemini-stream-done'"));
-    assert.match(loop, /publishToken\(String\(myStreamId\), tok\)/);
+    // 2026-09-30: tokens pass the meta-preamble gate first; what the overlay
+    // is sent (emitV3Visible) is what the phone is sent.
+    assert.match(v3, /const emitV3Visible = \(visible: string\) => \{[\s\S]*?publishToken\(String\(myStreamId\), visible\)/);
+    assert.match(loop, /emitV3Visible\(v3PreambleGate \? v3PreambleGate\.push\(tok\) : tok\)/);
     assert.match(loop, /superseded_by_newer_stream[\s\S]*publishError\(String\(myStreamId\)/, 'a superseded answer is closed on the phone too');
     const end = v3.slice(v3.indexOf("event.sender.send('gemini-stream-done'"));
     assert.match(end, /if \(v3Truncated\) PhoneMirrorService\.getInstance\(\)\.publishError[\s\S]*else PhoneMirrorService\.getInstance\(\)\.publishDone\(String\(myStreamId\), finalText\)/);

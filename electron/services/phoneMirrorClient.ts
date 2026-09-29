@@ -2080,7 +2080,9 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           if (typeof html !== 'string') {
             var split = splitGist(entry.content, streaming);
             html = renderMarkdown(split.body);
-            gist = split.gist;
+            // A finished answer's content arrives without its gist line; the
+            // desktop sends the gist on its own.
+            gist = entry.gist || split.gist;
           }
           body.innerHTML = html;
           enhanceCode(body);
@@ -3411,7 +3413,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             if (e.kind === 'user') parts.push('You: ' + e.content);
             else if (e.kind === 'image') parts.push('You: [image]');
             else if (e.kind === 'shots') parts.push('You: [' + (e.images.length > 1 ? e.images.length + ' screenshots' : 'screenshot') + ']');
-            else if (e.kind === 'assistant' && e.content && !e.idle) parts.push((e.label ? '[' + e.label + '] ' : '') + e.content);
+            else if (e.kind === 'assistant' && e.content && !e.idle) parts.push((e.label ? '[' + e.label + '] ' : '') + splitGist(e.content).body);
           });
           if (!parts.length) { showToast('Nothing to copy yet', true); return; }
           copyText(parts.join(NL + NL)).then(function (ok) { showToast(ok ? 'Conversation copied' : 'Copy blocked by the browser', !ok); });

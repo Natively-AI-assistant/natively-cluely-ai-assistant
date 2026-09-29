@@ -24,7 +24,7 @@ import {
   mergeRollingTranscriptPartial,
 } from '../../electron/utils/rollingTranscriptState.ts';
 import { categorizeSttError } from '../lib/sttErrorMapper';
-import { splitGistLine, splitGistLineStreaming, collapseBlockGaps } from '../lib/displayMarkup';
+import { splitGistLine, splitGistLineStreaming, collapseBlockGaps, stripGistTrailer } from '../lib/displayMarkup';
 
 import type { SkillSummary } from '../types/electron';
 
@@ -7542,7 +7542,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // (memoized below) receives this as a prop; without a stable identity its
   // memo comparator would never match and the bailout would not fire.
   const handleCopy = useCallback((text: string) => {
-    navigator.clipboard.writeText(text);
+    // A copied answer is its text: never the [[GIST]] chip's marker line.
+    navigator.clipboard.writeText(stripGistTrailer(text));
     analytics.trackCopyAnswer();
     // Optional: Trigger a small toast or state change for visual feedback
   }, []);
@@ -9366,7 +9367,7 @@ Provide only the answer, nothing else.`;
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
             <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
               <CardCopyButton
-                text={msg.text}
+                text={gistBody}
                 onCopy={handleCopy}
                 isLightTheme={isLightTheme}
                 isModernTheme={isModernTheme}

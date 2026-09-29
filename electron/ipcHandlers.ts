@@ -9,6 +9,7 @@ import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
+import { stripGistTrailer } from '../src/lib/displayMarkup';
 import { CardLedger } from './services/cards/CardLedger';
 import { nativePromptsBlocked, UNDETECTABLE_REFUSAL_ERROR, UNDETECTABLE_REFUSAL_MESSAGES } from './services/stealthPromptGate';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
@@ -2352,6 +2353,27 @@ export function initializeIpcHandlers(appState: AppState): void {
               { v3Owned: true },
             );
 
+            // Meta-preamble gate (2026-09-30): this path has no post-stream
+            // pass, so "The interviewer's question is…" / "Here's how I'd
+            // answer:" reached the screen verbatim. The gate holds only the
+            // opening while it could still be such a preamble, drops it, and
+            // passes everything after through untouched — nothing on screen is
+            // rewritten, and finalText is exactly what was streamed. Off when
+            // the user asked ABOUT the question ("what is the interviewer
+            // asking?"), where that opening is the answer.
+            const v3PreambleGate = (() => {
+              try {
+                const pp = require('./llm/planningPreamble') as typeof import('./llm/planningPreamble');
+                return pp.asksAboutTheQuestion(String(message || '')) ? null : new pp.PreambleStreamGate();
+              } catch { return null; }
+            })();
+            const emitV3Visible = (visible: string) => {
+              if (!visible) return;
+              finalText += visible;
+              event.sender.send('gemini-stream-token', visible, { streamId: myStreamId });
+              // Streamed to the phone as it is written, like the legacy path.
+              try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), visible); } catch { /* mirror only */ }
+            };
             try {
               for await (const tok of v3Stream.stream) {
                 if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
@@ -2363,10 +2385,15 @@ export function initializeIpcHandlers(appState: AppState): void {
                   v3SawFirstToken = true;
                   try { v3DebugCollector?.recordFirstToken(); } catch { /* noop */ }
                 }
-                finalText += tok;
-                event.sender.send('gemini-stream-token', tok, { streamId: myStreamId });
-                // Streamed to the phone as it is written, like the legacy path.
-                try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), tok); } catch { /* mirror only */ }
+                emitV3Visible(v3PreambleGate ? v3PreambleGate.push(tok) : tok);
+              }
+              // End of stream: release whatever the gate still holds (a short
+              // answer, or an all-preamble one, which fails open unchanged).
+              if (v3PreambleGate) {
+                emitV3Visible(v3PreambleGate.flush());
+                if (v3PreambleGate.removedUnits > 0) {
+                  console.log('[IPC] manual chat: meta preamble held back and dropped', { streamId: myStreamId, units: v3PreambleGate.removedUnits });
+                }
               }
             } catch (streamErr) {
               // Finalize the debug record with the partial answer, then let the
@@ -2437,6 +2464,9 @@ export function initializeIpcHandlers(appState: AppState): void {
               else PhoneMirrorService.getInstance().publishDone(String(myStreamId), finalText);
             } catch { /* mirror only */ }
             finishDebug(finalText, !v3Truncated, v3Truncated ? 'stream_truncated' : null);
+            // Compile-only syntax check of fenced JavaScript (observe-only:
+            // telemetry + log, the answer is never changed).
+            try { require('./llm/codeVerification/syntaxCheckReport').observeAnswerJsSyntax(finalText, 'manual_chat_v3'); } catch { /* observe only */ }
 
             // ── Record the turn (V3 previously recorded NOTHING) ────────────
             // The short-circuit skipped every store the legacy path writes, so
@@ -4860,12 +4890,15 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // 8s regen latency is acceptable for a misfire rate of ~1/30 coding
                 // questions; a silent retry is strictly better than a stranded
                 // marker on failure.
+                // The turn's own shape: six sections only for a 'full' ask.
                 const regenContract = explicitCodingContract
                   ? buildCodingContractPrompt(explicitCodingContract)
-                  : buildCodingContractPrompt(null);
+                  : buildCodingContractPrompt(null, { codingShape: manualCodingShape });
                 const directive = explicitCodingContract === 'code_only'
                   ? 'Output ONLY the solution as a single fenced code block with a language tag. NO prose before or after, NO headings, NO explanation, NO clarifying questions.'
-                  : 'Output the full solution NOW in one fenced code block with the six-section coding format. Do NOT ask clarifying questions; produce a working implementation.';
+                  : manualCodingShape === 'full'
+                    ? 'Output the full solution NOW in one fenced code block with the six-section coding format. Do NOT ask clarifying questions; produce a working implementation.'
+                    : 'Output the solution NOW, with the code in one fenced code block, in the shape the contract above asks for. Do NOT ask clarifying questions; produce a working implementation.';
                 const regenPrompt = `${regenContract}\n\nThe previous answer did not contain any code. ${directive}\n\nProblem: ${message}`;
                 let regen = '';
                 const regenAbort = new AbortController();
@@ -4963,10 +4996,14 @@ export function initializeIpcHandlers(appState: AppState): void {
               if (!completeness.ok && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
                 piTelemetry.emit('pi_context_policy_applied', { answerType: answerPlan.answerType, via: 'code_truncation_detected', markerCount: completeness.issues.length });
                 console.warn('[IPC] code-only answer looks truncated, regenerating once', { issues: completeness.issues.map(i => i.code) });
+                // The turn's own shape (the same manualCodingShape the prompt
+                // and validateAnswerStructure use): six sections only for a
+                // 'full' ask. Passing no shape here used to demand the six
+                // sections on every truncated coding answer.
                 const regenContract = explicitCodingContract
                   ? buildCodingContractPrompt(explicitCodingContract)
-                  : buildCodingContractPrompt(null);
-                const regenPrompt = `${regenContract}\n\nThe previous answer was cut off before the code finished. Output the COMPLETE code now, nothing truncated.\n\nProblem: ${message}`;
+                  : buildCodingContractPrompt(null, { codingShape: manualCodingShape });
+                const regenPrompt = `${regenContract}\n\nThe previous answer was cut off before the code finished. Output the COMPLETE answer again in the shape above, with the code complete and nothing truncated.\n\nProblem: ${message}`;
                 let regen = '';
                 // HIGH #3 (audit 2026-06-29): iterator.return() alone can't
                 // cancel a parked fetch; without an abort the upstream
@@ -5533,7 +5570,9 @@ export function initializeIpcHandlers(appState: AppState): void {
               const priorAnswer = (intelligenceManager.getLastAssistantMessage('manual_chat') || '').trim();
               const isGreeting = GREETING_RE.test(trimmed) || /what would you like help with/i.test(trimmed);
               const isEmpty = trimmed.length < 8;
-              const isExactRepeat = priorAnswer.length > 0 && trimmed === priorAnswer;
+              // History stores answers without the [[GIST]] display line
+              // (SessionTracker), so compare like with like.
+              const isExactRepeat = priorAnswer.length > 0 && stripGistTrailer(trimmed).trim() === priorAnswer;
               // EVIDENCE-EXECUTION-REPAIR (2026-07-11): when EvidenceResolver
               // already governed this turn (manualContextOsGeneration.evidencePack
               // populated by _streamChatInner during the stream), reuse that SAME
@@ -6407,6 +6446,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             // already-streamed tokens stand. streamId (audit finding #3) lets the
             // renderer ignore a stale done from a superseded stream.
             event.sender.send('gemini-stream-done', { ...(finalText ? { finalText } : {}), streamId: myStreamId });
+            // Compile-only syntax check of fenced JavaScript (observe-only).
+            try { require('./llm/codeVerification/syntaxCheckReport').observeAnswerJsSyntax(finalText ?? fullResponse, 'manual_chat_legacy'); } catch { /* observe only */ }
             chatTrace.mark('response_completed', { chars: fullResponse.length, repaired: Boolean(finalText) });
             chatTrace.finish({ chars: fullResponse.length });
             iTrace.setProvider({ provider: 'llm', model: undefined })
@@ -6619,6 +6660,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   const outcome = await verifyCodingAnswer({
                     answer: verifyTarget,
                     question: message,
+                    codingShape: manualCodingShape,
                     correct: async (repairPrompt: string) => {
                       // Background coding-correction (post-answer). Deadline-guarded
                       // so a stalled provider can't leave a hung background task. 7s
