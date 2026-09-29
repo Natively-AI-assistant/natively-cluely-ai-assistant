@@ -72,6 +72,10 @@ export interface BridgeInput {
   /** The answer is read rather than said (the launcher's chat) — see
    *  ComposeInput.readingSurface. */
   readingSurface?: boolean;
+  /** Who said the question on what-to-answer. 'user' when the engine chose the
+   *  user's own newer spoken line over the other party's (2026-09-30): that
+   *  question's "we" is the user's side, not the other speaker's. */
+  questionSpeaker?: 'other' | 'user';
   question: string;
   /** Raw templateType from ModesManager; unknown ids fall back rather than throw. */
   modeTemplateType?: string | null;
@@ -563,7 +567,8 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       defaultLengthDirective: input.defaultLengthDirective,
       conversationSummary: convoSummary,
       // What-to-answer answers the OTHER person's question: their "I" is theirs.
-      heardQuestion: input.surface === 'what-to-answer',
+      heardQuestion: input.surface === 'what-to-answer' && input.questionSpeaker !== 'user',
+      questionSpokenByUser: input.surface === 'what-to-answer' && input.questionSpeaker === 'user',
       readingSurface: input.readingSurface === true,
       conversationHasContent: convoHasContent && Boolean(convoSummary),
       // Only TRUE when a screen line actually survived into the rendered

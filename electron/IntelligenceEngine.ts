@@ -2103,6 +2103,8 @@ export class IntelligenceEngine extends EventEmitter {
 
             const lastInterviewerTurn = this.session.getLastInterviewerTurn();
             const extractedQuestion = extractLatestQuestion(transcriptTurns);
+            // Set when the user's OWN spoken line is chosen as the question below.
+            let questionSpokenByUser = false;
             // SPEAKER-MISATTRIBUTION FALLBACK (2026-09-07, always answer). Real
             // diarization labels the other party as "user" often enough that a
             // manual press can arrive with a transcript and NO interviewer turn.
@@ -2117,6 +2119,7 @@ export class IntelligenceEngine extends EventEmitter {
                     extractedQuestion.latestQuestion = String(lastAnyTurn.text).trim();
                     extractedQuestion.confidence = Math.max(extractedQuestion.confidence ?? 0, 0.6);
                     trace.mark('repair_used', { reason: 'question_from_any_speaker', role: lastAnyTurn.role });
+                    if (lastAnyTurn.role === 'user') questionSpokenByUser = true;
                     console.log('[IntelligenceEngine] no interviewer turn — answering the latest utterance regardless of speaker label', { role: lastAnyTurn.role, chars: extractedQuestion.latestQuestion.length });
                 }
             }
@@ -2145,6 +2148,7 @@ export class IntelligenceEngine extends EventEmitter {
                     extractedQuestion.latestQuestion = userText;
                     extractedQuestion.confidence = Math.max(extractedQuestion.confidence ?? 0, 0.75);
                     trace.mark('repair_used', { reason: 'question_from_user_utterance' });
+                    questionSpokenByUser = true;
                     console.log('[IntelligenceEngine] the user asked after the other party — answering the user\'s own question', { chars: userText.length });
                 }
             }
@@ -3782,6 +3786,8 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!_ctx) return undefined;
                     const _v3 = await buildV3Prompt({
                         surface: 'what-to-answer',
+                        // The user's own spoken line was chosen above: its "we" is theirs.
+                        questionSpeaker: questionSpokenByUser && !question?.trim() ? 'user' : 'other',
                         // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
                         queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(this.llmHelper),
                         screenText: _screenDescription,

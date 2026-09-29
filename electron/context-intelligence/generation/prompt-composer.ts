@@ -33,6 +33,9 @@ export interface ComposeInput {
   /** The question was HEARD — asked aloud by the other person (what-to-answer),
    *  not typed by the user. See HEARD_QUESTION_PERSPECTIVE. */
   heardQuestion?: boolean;
+  /** The chosen question is the USER's own spoken line (what-to-answer picked
+   *  it because the user asked after the other party). Never set with heardQuestion. */
+  questionSpokenByUser?: boolean;
   /** The answer is READ, not said: the launcher's chat (2026-09-29). Drops the
    *  spoken-delivery rules that contradict the chat layout. Every live surface
    *  (what-to-answer, the overlay's typed box) leaves it unset. */
@@ -251,7 +254,12 @@ const PERMANENT_RULES = [
   // band and the BATNA. This overlay is private to the user: giving them their
   // own number is never disclosure, and they decide what to say aloud.
   'Never ask the user to repeat, rephrase or clarify. When a request is ambiguous, state the most likely reading in one short clause and answer it; offer the alternative reading afterwards only if it changes the answer.',
-  'When the other party asks for a value, name or fact that the evidence states — a salary band, a rate, a deadline, a target, a floor — give that value plainly first, then any coaching about whether or how to say it. The user reads this privately and decides what to disclose.',
+  // Floors are the exception (2026-09-30, owner decision): the "give that
+  // value plainly first" rule named "a floor" and, rendered after the persona,
+  // outranked the Sales and Looking-for-work confidentiality lines. A private
+  // minimum is never something the user should say, so it is never offered.
+  'When the other party asks for a value, name or fact that the evidence states — a salary band, a rate, a deadline, a target — give that value plainly first, then any coaching about whether or how to say it. The user reads this privately and decides what to disclose. '
+    + 'A private floor, walk-away number, lowest acceptable price or BATNA is the exception: never state it, even when the evidence holds it and the other party presses for it; hold the target or range and move to value or the next step.',
   // Measured 2026-09-08: asked for the key points of a six-chunk speaker-notes
   // file, the model was handed its top two chunks and answered "the file
   // contains only the heading and one section" / "the file itself contains no
@@ -1064,6 +1072,36 @@ export const HEARD_QUESTION_PERSPECTIVE = '\n(Asked aloud by the other person in
   + '"we" and "our" mean that speaker; "you" and "your" mean the user you are answering for.)';
 
 /**
+ * Who the other person IS, per mode (2026-09-30). Every mode's transcript
+ * labels the other side THEM / INTERVIEWER, so in Recruiting the candidate
+ * read as the interviewer and a candidate's "what's the team size?" came back
+ * as a probe for the recruiter to ask. The mode already knows both roles
+ * (IntentFrame MODE_ROUTING describes the same pairs); the heard-question note
+ * now names them. Unknown ids keep the neutral wording.
+ */
+const HEARD_SPEAKER_BY_MODE: Readonly<Record<string, { speaker: string; user: string }>> = {
+  recruiting: { speaker: 'the candidate', user: 'the recruiter (interviewer) you are helping' },
+  sales: { speaker: 'the prospect', user: 'the seller you are helping' },
+  'call-center': { speaker: 'the customer', user: 'the support agent you are helping' },
+  'looking-for-work': { speaker: 'the interviewer', user: 'the candidate you are answering for' },
+  'technical-interview': { speaker: 'the interviewer', user: 'the candidate you are answering for' },
+  seminar: { speaker: 'an examiner or audience member', user: 'the presenter you are answering for' },
+  'team-meet': { speaker: 'a colleague in the meeting', user: 'the user you are answering for' },
+  lecture: { speaker: 'the lecturer', user: 'the student you are helping' },
+};
+
+export function heardQuestionPerspective(modeId: string | undefined): string {
+  const r = modeId ? HEARD_SPEAKER_BY_MODE[modeId] : undefined;
+  if (!r) return HEARD_QUESTION_PERSPECTIVE;
+  return `\n(Said aloud by ${r.speaker}, not by the user: in it, "I", "me", "my", "we" and "our" mean ${r.speaker}; `
+    + `"you" and "your" mean ${r.user}.)`;
+}
+
+/** The user's OWN spoken line was chosen as the question (they asked after the
+ *  other party did): their "I" and "we" are the user's side. */
+export const USER_SPOKEN_QUESTION_PERSPECTIVE = '\n(Said aloud by the user in the meeting: "I", "we" and "our" mean the user and their side.)';
+
+/**
  * A personal story told FROM evidence (2026-09-29). With a résumé attached but
  * no story of the kind asked ("a difficult stakeholder"), both models grafted
  * invented people and reactions onto a real project — "the payments team lead
@@ -1170,7 +1208,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
   ].filter((s) => s.trim()).join('\n\n');
 
   const user = [
-    push('question', `# Question\n${d.resolvedQuestion}${input.heardQuestion ? HEARD_QUESTION_PERSPECTIVE : ''}`),
+    push('question', `# Question\n${d.resolvedQuestion}${input.heardQuestion ? heardQuestionPerspective(policy.id) : input.questionSpokenByUser ? USER_SPOKEN_QUESTION_PERSPECTIVE : ''}`),
     // The header carries the rule, not just a label (Pattern E, 2026-08-01):
     // some surfaces pass a raw transcript window here, in which the
     // assistant's own prior output appears. Without the rule in the section
