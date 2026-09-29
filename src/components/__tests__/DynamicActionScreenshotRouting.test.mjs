@@ -23,6 +23,7 @@ const sourceFile = ts.createSourceFile(
 );
 
 const handlerNames = [
+  'setAttachedContext',
   'handleScreenshotAttach',
   'showWhatToSayBusyMessage',
   'runWhatToSay',
@@ -116,6 +117,8 @@ function createHarness({
   const scope = {
     window: syntheticWindow,
     attachedContext: [...initialAttachments],
+    attachedContextRef: { current: [...initialAttachments] },
+    useCallback: (callback) => callback,
     pendingCaptureRef,
     dynamicActionAcceptInFlightRef,
     directAssistEnabled,
@@ -124,7 +127,7 @@ function createHarness({
     mergePendingScreenshotAttachment,
     setIsExpanded: setIsExpanded ?? (() => {}),
     setIsProcessing: () => {},
-    setAttachedContext: (update) => {
+    setAttachedContextState: (update) => {
       attachedState = typeof update === 'function' ? update(attachedState) : update;
     },
     setMessages: (update) => {
@@ -203,9 +206,76 @@ function createHarness({
     get captureCalls() { return captureCalls; },
     get messages() { return messages; },
     get attachments() { return attachedState; },
-    removeAttachments() { attachedState = []; },
+    removeAttachments() { handlers.setAttachedContext([]); },
   };
 }
+
+function createBarHarness(onAcceptAction) {
+  const path = resolve(here, '../dynamic-actions/DynamicActionBar.tsx');
+  const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let acceptSource;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(source) === 'accept') {
+      acceptSource = node.initializer.getText(source);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  assert.ok(acceptSource);
+  const action = { id: 'screen-action', requiresScreen: true };
+  let actions = [action];
+  const acknowledged = [];
+  const acceptingRef = { current: false };
+  const accept = new Function('useCallback', 'onAcceptAction', 'acceptingRef', 'acceptedIdsRef', 'setActions', 'window',
+    ts.transpileModule(`const accept = ${acceptSource};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + '\nreturn accept;'
+  )((fn) => fn, onAcceptAction, acceptingRef, { current: new Set() },
+    (update) => { actions = update(actions); },
+    { electronAPI: { acceptDynamicAction: async (id) => acknowledged.push(id) } });
+  return { accept, action, acknowledged, get actions() { return actions; } };
+}
+
+for (const failure of ['empty', 'throw', 'busy']) {
+  test(`action card remains retryable after ${failure}`, async () => {
+    let fail = true;
+    const harness = createHarness({
+      takeScreenshot: async () => {
+        if (fail) {
+          if (failure === 'throw') throw new Error('capture failed');
+          return undefined;
+        }
+        return { path: '/tmp/retry.png', preview: 'retry' };
+      },
+      initialBusy: failure === 'busy',
+    });
+    const bar = createBarHarness(harness.handlers.handleDynamicActionAccept);
+    await bar.accept(bar.action);
+    assert.equal(bar.actions.length, 1);
+    assert.deepEqual(bar.acknowledged, []);
+    assert.equal(harness.generateCalls.length, 0);
+    fail = false;
+    harness.activeActions.clear();
+    await bar.accept(bar.action);
+    assert.equal(bar.actions.length, 0);
+    assert.deepEqual(bar.acknowledged, ['screen-action']);
+    assert.equal(harness.generateCalls.length, 1);
+  });
+}
+
+test('bar rejects repeated click and Tab acceptance during and after capture', async () => {
+  const capture = deferred();
+  const harness = createHarness({ takeScreenshot: () => capture.promise });
+  const bar = createBarHarness(harness.handlers.handleDynamicActionAccept);
+  const first = bar.accept(bar.action);
+  await bar.accept(bar.action);
+  assert.equal(bar.actions.length, 1);
+  assert.equal(harness.captureCalls, 1);
+  capture.resolve({ path: '/tmp/once.png', preview: 'once' });
+  await first;
+  await bar.accept(bar.action);
+  assert.equal(harness.captureCalls, 1);
+  assert.equal(harness.generateCalls.length, 1);
+  assert.deepEqual(bar.acknowledged, ['screen-action']);
+});
 
 describe('dynamic action screenshot routing', () => {
   for (const route of ['legacy', 'direct']) {
@@ -372,6 +442,42 @@ describe('dynamic action screenshot routing', () => {
     await harness.handlers.handleDynamicActionAccept({ type: 'recap' });
     assert.equal(harness.generateCalls.length, 1);
     assert.equal(harness.activeActions.size, 0);
+  });
+
+  for (const directAssistEnabled of [false, true]) {
+    test(`immediate attachment is sent before React renders (direct=${directAssistEnabled})`, async () => {
+      const harness = createHarness({ directAssistEnabled });
+      const image = { path: '/tmp/immediate.png', preview: 'immediate' };
+      harness.handlers.handleScreenshotAttach(image);
+      harness.handlers.handleScreenshotAttach(image);
+      await harness.handlers.handleWhatToSay();
+      const paths = directAssistEnabled
+        ? harness.directCalls[0].imagePaths
+        : harness.generateCalls[0][1];
+      assert.deepEqual(paths, [image.path]);
+      assert.deepEqual(harness.attachments, []);
+      await harness.handlers.handleWhatToSay();
+      const next = directAssistEnabled
+        ? harness.directCalls[1].imagePaths
+        : harness.generateCalls[1][1];
+      assert.ok(!next || next.length === 0, 'consumed image must not be sent twice');
+    });
+  }
+
+  test('removing one attachment and clearing a pending capture update the snapshot', async () => {
+    const harness = createHarness();
+    const first = { path: '/tmp/first.png', preview: 'first' };
+    const second = { path: '/tmp/second.png', preview: 'second' };
+    harness.handlers.handleScreenshotAttach(first);
+    harness.handlers.handleScreenshotAttach(second);
+    harness.pendingCaptureRef.current = first;
+    harness.handlers.setAttachedContext((prev) => prev.filter((item) => item.path !== first.path));
+    assert.equal(harness.pendingCaptureRef.current, null);
+    await harness.handlers.handleWhatToSay();
+    assert.deepEqual(harness.generateCalls[0][1], [second.path]);
+    harness.pendingCaptureRef.current = first;
+    harness.handlers.setAttachedContext([]);
+    assert.equal(harness.pendingCaptureRef.current, null);
   });
 
   test('removed generic attachment is not resurrected through the pending ref', async () => {

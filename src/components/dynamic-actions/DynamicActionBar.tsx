@@ -6,7 +6,7 @@ import { DynamicActionCard } from './DynamicActionCard';
 interface Props {
   // Called when the user accepts (or hits Tab on the primary). Parent should
   // kick off the live answer stream using action.promptInstruction.
-  onAcceptAction: (action: DynamicActionPayload) => void;
+  onAcceptAction: (action: DynamicActionPayload) => Promise<boolean>;
   // Optional: max actions to keep visible. Cluely-style cap at 3.
   maxVisible?: number;
   // Optional: how long actions stay visible without user interaction (ms).
@@ -24,6 +24,8 @@ export const DynamicActionBar: React.FC<Props> = ({
   staleAfterMs = 60_000,
 }) => {
   const [actions, setActions] = useState<DynamicActionPayload[]>([]);
+  const acceptingRef = useRef(false);
+  const acceptedIdsRef = useRef(new Set<string>());
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
 
@@ -52,14 +54,19 @@ export const DynamicActionBar: React.FC<Props> = ({
 
   const accept = useCallback(
     async (action: DynamicActionPayload) => {
-      // Optimistically remove from the bar so the user gets immediate feedback.
-      setActions((prev) => prev.filter((a) => a.id !== action.id));
+      if (acceptingRef.current || acceptedIdsRef.current.has(action.id)) return;
+      acceptingRef.current = true;
       try {
+        // A failed capture or busy answer flow must leave the card retryable.
+        if (!await onAcceptAction(action)) return;
+        acceptedIdsRef.current.add(action.id);
+        setActions((prev) => prev.filter((a) => a.id !== action.id));
         await window.electronAPI?.acceptDynamicAction?.(action.id);
       } catch {
-        /* swallow — the parent answer flow is the source of truth */
+        /* Keep the card on parent failure; backend acknowledgement is best effort. */
+      } finally {
+        acceptingRef.current = false;
       }
-      onAcceptAction(action);
     },
     [onAcceptAction],
   );

@@ -1890,9 +1890,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const dynamicActionAcceptInFlightRef = useRef(false);
 
   // Latent Context State (Screenshots attached but not sent)
-  const [attachedContext, setAttachedContext] = useState<Array<{ path: string; preview: string }>>(
+  const [attachedContext, setAttachedContextState] = useState<Array<{ path: string; preview: string }>>(
     [],
   );
+
+  // Event handlers can run before React commits the attachment state. Keep one
+  // synchronous snapshot for every add, remove, clear and consume operation.
+  const attachedContextRef = useRef<Array<{ path: string; preview: string }>>([]);
+  const setAttachedContext = useCallback((update: React.SetStateAction<Array<{ path: string; preview: string }>>) => {
+    const next = typeof update === 'function' ? update(attachedContextRef.current) : update;
+    attachedContextRef.current = next;
+    if (pendingCaptureRef.current && !next.some((item) => item.path === pendingCaptureRef.current?.path)) {
+      pendingCaptureRef.current = null;
+    }
+    setAttachedContextState(next);
+  }, []);
 
   // Settings State with Persistence
   const [isUndetectable, setIsUndetectable] = useState(false);
@@ -7271,7 +7283,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // The question card's id — kept so the "Page attached" line can be stamped
     // onto it below, once we know whether captured page context was consumed.
     const questionCardId = genMessageId();
-    const currentAttachments = mergePendingScreenshotAttachment(attachedContext, pending);
+    const currentAttachments = mergePendingScreenshotAttachment(attachedContextRef.current, pending);
     if (pending) pendingCaptureRef.current = null;
 
     if (currentAttachments.length > 0) {
@@ -7534,21 +7546,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const data = await window.electronAPI.takeScreenshot();
     if (!data?.path) return false;
     // This capture is consumed immediately, before React may flush attachments.
-    // Ordinary attachments must stay in state only so removing one is final.
+    // Attachment mutations keep the synchronous snapshot in step with React.
     pendingCaptureRef.current = data as { path: string; preview: string };
     handleScreenshotAttach(data as { path: string; preview: string });
     return true;
   };
 
-  const handleDynamicActionAccept = async (action: DynamicActionPayload) => {
-    if (dynamicActionAcceptInFlightRef.current) return;
+  const handleDynamicActionAccept = async (action: DynamicActionPayload): Promise<boolean> => {
+    if (dynamicActionAcceptInFlightRef.current) return false;
     dynamicActionAcceptInFlightRef.current = true;
     let shouldReleaseWhatToSay = false;
 
     try {
       if (!tryBeginOverlayAction('what_to_say')) {
         showWhatToSayBusyMessage();
-        return;
+        return false;
       }
       shouldReleaseWhatToSay = true;
 
@@ -7565,7 +7577,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
                 text: 'Could not capture the screen for this action. Check screen capture permissions and try again.',
               },
             ]);
-            return;
+            return false;
           }
         } catch (err) {
           console.error('Error capturing screen for dynamic action:', err);
@@ -7578,11 +7590,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               text: 'Could not capture the screen for this action. Check screen capture permissions and try again.',
             },
           ]);
-          return;
+          return false;
         }
       }
 
       await runWhatToSay(action.promptInstruction);
+      return true;
     } finally {
       if (shouldReleaseWhatToSay) endOverlayAction('what_to_say');
       dynamicActionAcceptInFlightRef.current = false;
@@ -10682,9 +10695,7 @@ Provide only the answer, nothing else.`;
                                 actionable suggestions in their primary scan path. Bar self-hides
                                 when no actions are present. */}
               <DynamicActionBar
-                onAcceptAction={(action: DynamicActionPayload) => {
-                  void handleDynamicActionAccept(action);
-                }}
+                onAcceptAction={handleDynamicActionAccept}
               />
 
               {/* Rolling Transcript Bar — live transcript + on-demand diagnostics

@@ -24,7 +24,7 @@ test('dynamic action accept uses promptInstruction instead of display label/manu
   assert.ok(mountStart >= 0, 'DynamicActionBar should be mounted');
   const mountSource = source.slice(mountStart, source.indexOf('/>', mountStart) + 2);
 
-  assert.match(mountSource, /handleDynamicActionAccept\(action\)/);
+  assert.match(mountSource, /onAcceptAction=\{handleDynamicActionAccept\}/);
   assert.match(source, /await runWhatToSay\(action\.promptInstruction\)/);
   assert.doesNotMatch(mountSource, /setInputValue\(action\.label\)/);
   assert.doesNotMatch(mountSource, /handleManualSubmitRef\.current/);
@@ -75,7 +75,7 @@ test('immediate screenshot capture stages pending ref without retaining ordinary
   assert.ok(runStart >= 0, 'runWhatToSay should exist');
   const wtaSource = source.slice(runStart, source.indexOf('const handleWhatToSay', runStart));
   assert.match(wtaSource, /const pending = pendingCaptureRef\.current/);
-  assert.match(wtaSource, /mergePendingScreenshotAttachment\(attachedContext, pending\)/);
+  assert.match(wtaSource, /mergePendingScreenshotAttachment\(attachedContextRef\.current, pending\)/);
   assert.match(wtaSource, /if \(pending\) pendingCaptureRef\.current = null/);
   assert.match(wtaSource, /currentAttachments\.map\(\(s\) => s\.path\)/);
 
