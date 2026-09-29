@@ -9,6 +9,7 @@ import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
+import { stripGistTrailer } from '../src/lib/displayMarkup';
 import { CardLedger } from './services/cards/CardLedger';
 import { nativePromptsBlocked, UNDETECTABLE_REFUSAL_ERROR, UNDETECTABLE_REFUSAL_MESSAGES } from './services/stealthPromptGate';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
@@ -5503,7 +5504,9 @@ export function initializeIpcHandlers(appState: AppState): void {
               const priorAnswer = (intelligenceManager.getLastAssistantMessage('manual_chat') || '').trim();
               const isGreeting = GREETING_RE.test(trimmed) || /what would you like help with/i.test(trimmed);
               const isEmpty = trimmed.length < 8;
-              const isExactRepeat = priorAnswer.length > 0 && trimmed === priorAnswer;
+              // History stores answers without the [[GIST]] display line
+              // (SessionTracker), so compare like with like.
+              const isExactRepeat = priorAnswer.length > 0 && stripGistTrailer(trimmed).trim() === priorAnswer;
               // EVIDENCE-EXECUTION-REPAIR (2026-07-11): when EvidenceResolver
               // already governed this turn (manualContextOsGeneration.evidencePack
               // populated by _streamChatInner during the stream), reuse that SAME
