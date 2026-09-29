@@ -301,6 +301,12 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
         forceDocumentGrounding: true,
       });
       const chunks = (res?.chunks ?? []) as Array<Record<string, unknown>>;
+      // Why the retriever ran without vectors, when it did (2026-09-30). This
+      // seam used to read `chunks` only, so an embed that hard-failed mid-turn
+      // was invisible in the [V3] line.
+      const degraded = typeof (res as { degradedReason?: unknown } | undefined)?.degradedReason === 'string'
+        ? String((res as { degradedReason?: unknown }).degradedReason)
+        : undefined;
       // THE RERANKER'S ORDER MUST SURVIVE THIS SEAM (2026-09-07). The retriever
       // selects the pool by cross-encoder score when it reranked, but `score`
       // stays the hybrid+answerability value (Context OS reads it as a
@@ -317,7 +323,7 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
         .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
       const rerankedPool = rerankScores.length > 0;
       const tailFloor = rerankedPool ? Math.min(...rerankScores) - 1 : 0;
-      return chunks.map((c) => {
+      const mapped = chunks.map((c) => {
         const sid = String(c.sourceId ?? '');
         const status = documentStatuses.get(sid);
         const rerankScore = typeof c.rerankScore === 'number' ? c.rerankScore : undefined;
@@ -343,6 +349,7 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
           ...(status ? { metadata: { documentStatus: status } } : {}),
         };
       });
+      return degraded ? { chunks: mapped, degraded } : mapped;
     },
   });
   return {

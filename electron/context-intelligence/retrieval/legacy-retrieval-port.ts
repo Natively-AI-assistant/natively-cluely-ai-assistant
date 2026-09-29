@@ -33,7 +33,20 @@ export interface LegacyRetrieveFn {
      *  retrieval query. A port whose POLICY (intent boosts, inventory admission)
      *  depends on what was asked must read this, never `query` (2026-09-20). */
     intentQuery?: string;
-  }): Promise<LegacyChunk[]>;
+  }): Promise<LegacyChunk[] | LegacyRetrieveResult>;
+}
+
+/**
+ * A retriever may return its chunks WITH a note that the pass was degraded
+ * (2026-09-30): the mode retriever's lexical-only fallbacks used to be
+ * discarded at the port seam, so a turn whose query embed hard-failed looked,
+ * in the [V3] line, like a clean pass that found little. Plain arrays remain
+ * valid for every retriever that has nothing to report.
+ */
+export interface LegacyRetrieveResult {
+  chunks: LegacyChunk[];
+  /** Why the pass ran without its semantic arm (e.g. 'hybrid_threw'). */
+  degraded?: string;
 }
 
 export interface SourceRegistry {
@@ -140,8 +153,9 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
         const t0 = now();
         let raw: LegacyChunk[] = [];
         let failed: string | undefined;
+        let degraded: string | undefined;
         try {
-          raw = await deps.retrieve(query, {
+          const got = await deps.retrieve(query, {
             topK: decision.retrievalPlan.maximumCandidates,
             timeoutMs: decision.retrievalPlan.timeoutMs,
             sourceTypes: decision.retrievalPlan.sourceTypes,
@@ -149,6 +163,11 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
             ...(decision.retrievalPlan.exhaustive ? { exhaustive: true } : {}),
             ...(typeof decision.retrievalPlan.evidenceTokens === 'number' ? { tokenBudget: decision.retrievalPlan.evidenceTokens } : {}),
           });
+          if (Array.isArray(got)) raw = got;
+          else {
+            raw = Array.isArray(got?.chunks) ? got.chunks : [];
+            if (typeof got?.degraded === 'string' && got.degraded) degraded = got.degraded;
+          }
         } catch (e) {
           // §22.1: a retrieval failure is RECORDED, never silently converted
           // into an ungrounded answer that looks grounded.
@@ -204,6 +223,7 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
           rejections,
           durationMs: now() - t0,
           ...(failed ? { failed } : {}),
+          ...(degraded ? { degraded } : {}),
         });
 
         return kept;
