@@ -190,17 +190,22 @@ export const Keycaps: React.FC<{ t: WelcomeTheme; keys: string[]; size?: 'sm' | 
   );
 };
 
-// The stage the overlay sits in: 520 wide, 340 tall (the overlay is 600 laid out,
-// zoomed to fit). It is fixed so the call under it never moves.
-const CARD = { w: 520, h: 340 };
-// The call is 528px wide; the overlay is laid out 600px wide and zoomed so it is
-// a little WIDER than the call (600 * 0.92 = 552, 12px overhang each side): the
-// overlay is the subject and the call is what it sits over.
-const VIDEO_W = 528;
-const OVERLAY_ZOOM = 0.92;
-// How far the call tucks up under the overlay. 150 at zoom 0.88; the larger
-// overlay ends 14px lower, so the call drops 14px with it to keep the same overlap.
-const CALL = { w: VIDEO_W, tuck: 150 - 14 };
+// The demo is designed at full size and scaled as one piece by PLATE_SCALE, so the
+// overlay, the call and the gap between them keep their proportions. 0.88 leaves
+// ~51px of plate either side of the overlay (it was 18px at 1.0, edge to edge).
+const PLATE_SCALE = 0.88;
+const px = (n: number) => Math.round(n * PLATE_SCALE);
+// The stage the overlay sits in: 520 wide, 340 tall at full size (the overlay is
+// 600 laid out, zoomed to fit). It is fixed so the call under it never moves.
+const CARD = { w: px(520), h: px(340) };
+// The call is 528px wide at full size; the overlay is laid out 600px wide and
+// zoomed so it is a little WIDER than the call (600 * 0.92 = 552, 12px overhang
+// each side): the overlay is the subject and the call is what it sits over.
+const VIDEO_W = px(528);
+const OVERLAY_ZOOM = 0.92 * PLATE_SCALE;
+// How far the call tucks up under the overlay: 150 at zoom 0.88, less 14 because
+// the larger overlay ends 14px lower, so the overlap stays the same.
+const CALL = { w: VIDEO_W, tuck: px(150 - 14) };
 const EASE = [0.23, 1, 0.32, 1] as const;
 
 /** What drives the demo overlay: the tour's presses. */
