@@ -48,6 +48,11 @@ export type PiTelemetryEvent =
   // MARKER-ONLY: enums, booleans and small numbers. Never the turn, never the answer.
   | 'router_precheck_decision'
   | 'router_shadow_turn'
+  // 2026-09-30: compile-only syntax check of fenced JavaScript in a finished
+  // answer (codeVerification/syntaxCheck.ts). OBSERVE-ONLY — never rewrites.
+  // MARKER-ONLY: surface enum + block counts + V8's error line number. Never
+  // the code, never the answer, never the error message.
+  | 'code_syntax_checked'
   | 'session_memory_recall_attempted'
   | 'session_memory_recall_succeeded'
   | 'session_memory_recall_blocked_by_mode'

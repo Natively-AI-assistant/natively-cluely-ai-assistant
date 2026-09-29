@@ -6648,6 +6648,17 @@ export class IntelligenceEngine extends EventEmitter {
             // compatible with all existing consumers (code-hint, brainstorm,
             // legacy answerLLM, etc.).
             this.emit('suggested_answer', finalWtaAnswer, question || 'What to Answer', confidence, generationId);
+            // Compile-only syntax check of fenced JavaScript (observe-only: the
+            // turn trace + telemetry record it, the answer is never changed).
+            try {
+                const { observeAnswerJsSyntax } = require('./llm/codeVerification/syntaxCheckReport') as typeof import('./llm/codeVerification/syntaxCheckReport');
+                const syntax = observeAnswerJsSyntax(finalWtaAnswer, 'what_to_answer');
+                if (syntax) {
+                    trace.mark('code_syntax_checked' as any, {
+                        blocks: syntax.blocks, valid: syntax.valid, invalid: syntax.invalid, skipped: syntax.skipped,
+                    });
+                }
+            } catch { /* observe only */ }
             // ANSWER VISIBILITY (live session A follow-up, 2026-08-21): the
             // answer is delivered as an EVENT to the renderer and never
             // touches stdout, so a session log records the question, the

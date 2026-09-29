@@ -2462,6 +2462,9 @@ export function initializeIpcHandlers(appState: AppState): void {
               else PhoneMirrorService.getInstance().publishDone(String(myStreamId), finalText);
             } catch { /* mirror only */ }
             finishDebug(finalText, !v3Truncated, v3Truncated ? 'stream_truncated' : null);
+            // Compile-only syntax check of fenced JavaScript (observe-only:
+            // telemetry + log, the answer is never changed).
+            try { require('./llm/codeVerification/syntaxCheckReport').observeAnswerJsSyntax(finalText, 'manual_chat_v3'); } catch { /* observe only */ }
 
             // ── Record the turn (V3 previously recorded NOTHING) ────────────
             // The short-circuit skipped every store the legacy path writes, so
@@ -6413,6 +6416,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             // already-streamed tokens stand. streamId (audit finding #3) lets the
             // renderer ignore a stale done from a superseded stream.
             event.sender.send('gemini-stream-done', { ...(finalText ? { finalText } : {}), streamId: myStreamId });
+            // Compile-only syntax check of fenced JavaScript (observe-only).
+            try { require('./llm/codeVerification/syntaxCheckReport').observeAnswerJsSyntax(finalText ?? fullResponse, 'manual_chat_legacy'); } catch { /* observe only */ }
             chatTrace.mark('response_completed', { chars: fullResponse.length, repaired: Boolean(finalText) });
             chatTrace.finish({ chars: fullResponse.length });
             iTrace.setProvider({ provider: 'llm', model: undefined })
