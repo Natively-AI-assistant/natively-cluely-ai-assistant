@@ -86,6 +86,62 @@ const QUERY_RETRY_ATTEMPTS = 2;
 const QUERY_RETRY_BACKOFF_MS = [1_000, 3_000];
 /** Jitter so N concurrent turns do not retry in lockstep against a rate limit. */
 const QUERY_RETRY_JITTER_MS = 250;
+
+// ── Budgeted (live-turn) retry (2026-09-30) ─────────────────────────────────
+//
+// The budget guard used to be `elapsed + backoff + QUERY_EMBED_TIMEOUT_MS >
+// budget`. The V3 plan's budget is 1200 ms and the fixed attempt timeout 3000 ms,
+// so the guard could never pass: a live query embed was NEVER retried, and one
+// transient 429/5xx/reset sent the turn to lexical-only retrieval. Now:
+//   • a retry whose normal backoff plus full timeout fits is taken exactly as
+//     before (a generous budget keeps the whole ladder; unbudgeted is unchanged);
+//   • otherwise the FIRST failure may still get one SHORT retry: a short backoff
+//     (a live turn cannot wait 1 s) — a provider's own Retry-After is honoured,
+//     never shortened — and a timeout of `budget − elapsed − backoff`, attempted
+//     only if that leaves at least BUDGETED_RETRY_MIN_ATTEMPT_MS (a hosted query
+//     embed measured ~450–650 ms live), so the embed never outruns the plan.
+// This rescues FAST failures only: a first attempt that timed out at 3 s has
+// already spent more than a 1.2 s budget and is not retried.
+const BUDGETED_RETRY_MAX = 1;
+const BUDGETED_RETRY_BACKOFF_MAX_MS = 150;
+const BUDGETED_RETRY_JITTER_MS = 100;
+const BUDGETED_RETRY_MIN_ATTEMPT_MS = 500;
+
+export type QueryRetryPlan = { retry: true; waitMs: number; timeoutMs: number } | { retry: false; reason: string };
+
+/**
+ * Whether (and how) to retry a failed query embed. Pure, so the arithmetic is
+ * testable without a provider. `attempt` is the 0-based index of the attempt
+ * that just failed; `jitter` is a value in [0, 1).
+ */
+export function planQueryEmbedRetry(input: {
+    attempt: number;
+    elapsedMs: number;
+    budgetMs?: number;
+    retryAfterMs?: number | null;
+    backoffBaseMs: number;
+    jitter: number;
+}): QueryRetryPlan {
+    if (input.attempt >= QUERY_RETRY_ATTEMPTS) return { retry: false, reason: 'attempts exhausted' };
+    const budget = input.budgetMs;
+    if (typeof budget !== 'number' || !Number.isFinite(budget)) {
+        const waitMs = (input.retryAfterMs ?? input.backoffBaseMs) + Math.floor(input.jitter * QUERY_RETRY_JITTER_MS);
+        return { retry: true, waitMs, timeoutMs: QUERY_EMBED_TIMEOUT_MS };
+    }
+    const normalWait = (input.retryAfterMs ?? input.backoffBaseMs) + Math.floor(input.jitter * QUERY_RETRY_JITTER_MS);
+    if (input.elapsedMs + normalWait + QUERY_EMBED_TIMEOUT_MS <= budget) {
+        return { retry: true, waitMs: normalWait, timeoutMs: QUERY_EMBED_TIMEOUT_MS };
+    }
+    if (input.attempt >= BUDGETED_RETRY_MAX) return { retry: false, reason: `a short in-budget retry is taken at most ${BUDGETED_RETRY_MAX} time` };
+    const waitMs = typeof input.retryAfterMs === 'number'
+        ? input.retryAfterMs
+        : Math.min(input.backoffBaseMs, BUDGETED_RETRY_BACKOFF_MAX_MS) + Math.floor(input.jitter * BUDGETED_RETRY_JITTER_MS);
+    const timeoutMs = Math.min(QUERY_EMBED_TIMEOUT_MS, budget - input.elapsedMs - waitMs);
+    if (timeoutMs < BUDGETED_RETRY_MIN_ATTEMPT_MS) {
+        return { retry: false, reason: `${Math.max(0, Math.round(timeoutMs))}ms would remain of the ${budget}ms budget after ${input.elapsedMs}ms + ${waitMs}ms backoff (< ${BUDGETED_RETRY_MIN_ATTEMPT_MS}ms)` };
+    }
+    return { retry: true, waitMs, timeoutMs };
+}
 /**
  * Consecutive HARD failures (primary exhausted its retries) before a mid-session
  * promotion is allowed.
@@ -1227,12 +1283,16 @@ export class EmbeddingPipeline {
         // active at the start of the query and matches its space.
         // embedQuery() uses a query-specific prefix for asymmetric models (e.g. Nomic).
         // Wrap with a manual timeout since embedQuery is not covered by embedWithTimeout directly.
+        // The current attempt's timeout: the full QUERY_EMBED_TIMEOUT_MS, except a
+        // budgeted retry, which gets only what the caller's budget has left.
+        let attemptTimeoutMs = QUERY_EMBED_TIMEOUT_MS;
         const runQuery = (p: IEmbeddingProvider, label: string) => new Promise<number[]>((resolve, reject) => {
+            const timeoutMs = attemptTimeoutMs;
             const timer = setTimeout(() => {
                 reject(new Error(
-                    `[EmbeddingPipeline] embedQuery() timed out after ${QUERY_EMBED_TIMEOUT_MS}ms for ${label} via ${p.name}`
+                    `[EmbeddingPipeline] embedQuery() timed out after ${timeoutMs}ms for ${label} via ${p.name}`
                 ));
-            }, QUERY_EMBED_TIMEOUT_MS);
+            }, timeoutMs);
             p.embedQuery(text).then(
                 (result) => { clearTimeout(timer); resolve(result); },
                 (err)    => { clearTimeout(timer); reject(err); }
@@ -1256,19 +1316,26 @@ export class EmbeddingPipeline {
             } catch (err) {
                 primaryError = err;
                 if (attempt === QUERY_RETRY_ATTEMPTS) break;
-                const base = retryAfterMs(err) ?? this.queryRetryBackoffMs[attempt] ?? 3_000;
-                const wait = base + Math.floor(Math.random() * QUERY_RETRY_JITTER_MS);
                 const budget = opts?.retryBudgetMs;
-                if (typeof budget === 'number' && Number.isFinite(budget)
-                    && (Date.now() - queryStartedAt) + wait + QUERY_EMBED_TIMEOUT_MS > budget) {
+                const plan = planQueryEmbedRetry({
+                    attempt,
+                    elapsedMs: Date.now() - queryStartedAt,
+                    budgetMs: budget,
+                    retryAfterMs: retryAfterMs(err),
+                    backoffBaseMs: this.queryRetryBackoffMs[attempt] ?? 3_000,
+                    jitter: Math.random(),
+                });
+                if (!plan.retry) {
                     console.warn(
                         `[EmbeddingPipeline] Primary query embedding failed via ${provider.name} `
-                        + `(attempt ${attempt + 1}/${QUERY_RETRY_ATTEMPTS + 1}); no retry — the next attempt `
-                        + `(${wait}ms backoff + ${QUERY_EMBED_TIMEOUT_MS}ms) would not fit the caller's ${budget}ms budget:`,
+                        + `(attempt ${attempt + 1}/${QUERY_RETRY_ATTEMPTS + 1}); no retry within the caller's `
+                        + `${budget}ms budget — ${plan.reason}:`,
                         err instanceof Error ? err.message : err,
                     );
                     break;
                 }
+                const wait = plan.waitMs;
+                attemptTimeoutMs = plan.timeoutMs;
                 console.warn(
                     `[EmbeddingPipeline] Primary query embedding failed via ${provider.name} `
                     + `(attempt ${attempt + 1}/${QUERY_RETRY_ATTEMPTS + 1}); retrying in ${wait}ms:`,
