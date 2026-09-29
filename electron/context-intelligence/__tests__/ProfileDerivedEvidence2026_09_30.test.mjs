@@ -208,13 +208,37 @@ describe('the salary estimate never becomes PROFILE_FACT', () => {
 });
 
 describe('legacy JIT evidence route applies the same rule', () => {
-  test('an invented project description is not selected as résumé evidence', () => {
+  test('an invented project description is not selected; the project and the supported description are', () => {
     const { route } = buildManualProfileEvidenceRoute({
-      question: 'tell me about your BudgetBee project',
+      question: 'what projects have you worked on?',
       orchestrator: { activeResume: { structured_data: STRUCTURED, raw_text: RAW_RESUME }, activeJD: null },
       source: 'manual_input',
     });
-    const text = JSON.stringify(route?.items ?? []);
-    assert.doesNotMatch(text, /budgeting app|monthly spending/i);
+    assert.ok(route, 'the project question must produce a route (else this test is vacuous)');
+    const text = JSON.stringify(route.items);
+    assert.match(text, /BudgetBee/, 'the project itself is still evidence');
+    assert.match(text, /Open-source double-entry ledger service/, 'the supported description is kept');
+    assert.doesNotMatch(text, /budgeting app|monthly spending/i, 'the invented description is not');
+  });
+});
+
+// Every legacy reader that turns the structured résumé into evidence goes
+// through the same filter (source-level, like the repo's other wiring tests).
+describe('wiring: legacy structured-résumé evidence readers use the filter', () => {
+  const fs = requireDist('node:fs');
+  const src = (rel) => fs.readFileSync(path.resolve(process.cwd(), 'electron', rel), 'utf8');
+  const WRAP = /stripUnsupportedDerivedResumeFields\(\s*\(\w+ as any\)\?\.activeResume\?\.structured_data \?\? null,\s*\(\w+ as any\)\?\.activeResume\?\.raw_text,?\s*\)/;
+  test('IntelligenceEngine: WTA coordinator snapshot and WTA evidence JIT', () => {
+    const ie = src('IntelligenceEngine.ts');
+    assert.match(ie, new RegExp(`const snapshotProfileFacts = ${WRAP.source}`));
+    assert.match(ie, new RegExp(`const resume = ${WRAP.source}`));
+  });
+  test('ipcHandlers: manual coordinator arm and profile validator/repair', () => {
+    const ipc = src('ipcHandlers.ts');
+    assert.match(ipc, new RegExp(`const activeResumeStructured = ${WRAP.source}`));
+    assert.match(ipc, new RegExp(`const activeResume = ${WRAP.source}\\s*;\\s*const activeJD`));
+  });
+  test('profileAnswerBackend: manual JIT route', () => {
+    assert.match(src('llm/profileAnswerBackend.ts'), /stripUnsupportedDerivedResumeFields\(\s*orchestrator\?\.activeResume\?\.structured_data \?\? null,\s*orchestrator\?\.activeResume\?\.raw_text,?\s*\)/);
   });
 });

@@ -70,6 +70,7 @@ import { recordAttribution } from './intelligence/IntelligenceAttribution';
 import type { PromptAssemblyResult } from './premium/contracts';
 import type { AnswerType } from './llm/AnswerPlanner';
 import { isProfileIntelligenceAllowed } from './context-intelligence/policies/mode-policy-registry';
+import { stripUnsupportedDerivedResumeFields } from './context-intelligence/retrieval/profile-derived-support';
 
 /**
  * Credential-scrub a trace payload before it is stringified.
@@ -1928,7 +1929,12 @@ export class IntelligenceEngine extends EventEmitter {
         // Keep the same loaded structured-data objects that informed source
         // availability. The canonical evidence coordinator uses these snapshots,
         // never a fresh orchestrator read after a pre-stream await.
-        const snapshotProfileFacts = (snapshotKnowledge as any)?.activeResume?.structured_data ?? null;
+        // Derived-evidence hygiene (2026-09-30): only raw-text-supported
+        // project descriptions reach evidence (profile-derived-support.ts).
+        const snapshotProfileFacts = stripUnsupportedDerivedResumeFields(
+            (snapshotKnowledge as any)?.activeResume?.structured_data ?? null,
+            (snapshotKnowledge as any)?.activeResume?.raw_text,
+        );
         const snapshotJobDescriptionFacts = (snapshotKnowledge as any)?.activeJD?.structured_data ?? null;
         const snapshotSourceAvailability = Object.freeze({
             hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
@@ -3058,7 +3064,10 @@ export class IntelligenceEngine extends EventEmitter {
                 && (wtaProfileAllowed || _jdShapeAllowed)) {
                 try {
                     const orch = this.llmHelper.getKnowledgeOrchestrator?.();
-                    const resume = (orch as any)?.activeResume?.structured_data ?? null;
+                    const resume = stripUnsupportedDerivedResumeFields(
+                        (orch as any)?.activeResume?.structured_data ?? null,
+                        (orch as any)?.activeResume?.raw_text,
+                    );
                     const jd = (orch as any)?.activeJD?.structured_data ?? null;
                     // Campaign-3 fix (2026-07-19, fix/answer-policy-engine): the
                     // original gate ONLY fired on questionType ∈ {identity,

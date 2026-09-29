@@ -158,6 +158,7 @@ import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProf
 import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
 import { isProfileIntelligenceAllowed } from './context-intelligence/policies/mode-policy-registry';
+import { stripUnsupportedDerivedResumeFields } from './context-intelligence/retrieval/profile-derived-support';
 import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGroundedAnswerType, isAssistantRefusal, SYSTEM_REFUSAL_RE } from './llm/documentGroundedPrompt';
 // ONE list of provider data scopes (see ProviderRouter). The handler below used
 // to carry its own copy, which had already drifted and was erasing an enforced
@@ -4187,7 +4188,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             const { ModesManager } = require('./services/ModesManager');
             const modesMgr = ModesManager.getInstance();
             const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
-            const activeResumeStructured = (orchestrator as any)?.activeResume?.structured_data ?? null;
+            // Derived-evidence hygiene (2026-09-30): see profile-derived-support.ts.
+            const activeResumeStructured = stripUnsupportedDerivedResumeFields(
+              (orchestrator as any)?.activeResume?.structured_data ?? null,
+              (orchestrator as any)?.activeResume?.raw_text,
+            );
             const activeJdStructured = (orchestrator as any)?.activeJD?.structured_data ?? null;
             const _tc = turnContract;
 
@@ -5004,7 +5009,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             // bounded regeneration with buildProfileRepairInstruction.
             try {
               const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
-              const activeResume = (orchestrator as any)?.activeResume?.structured_data ?? null;
+              // Derived-evidence hygiene (2026-09-30): the validator's evidence and
+              // the repair's <candidate_facts> fallback use the same filtered
+              // résumé as every other profile route.
+              const activeResume = stripUnsupportedDerivedResumeFields(
+                (orchestrator as any)?.activeResume?.structured_data ?? null,
+                (orchestrator as any)?.activeResume?.raw_text,
+              );
               const activeJD = (orchestrator as any)?.activeJD?.structured_data ?? null;
               // A mode without Profile Intelligence has no profile for this
               // answer: not a candidate-directed turn, and never a repair that
