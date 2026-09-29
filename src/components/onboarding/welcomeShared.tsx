@@ -258,6 +258,9 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
           borderRadius: 22, backgroundColor: t.plate,
           backgroundImage: `linear-gradient(${t.grid} 1px, transparent 1px), linear-gradient(90deg, ${t.grid} 1px, transparent 1px)`,
           backgroundSize: '40px 40px',
+          // Centred, so the partial boxes at the left and right edges are the same
+          // width (from 0 the plate ended on a sliver: 588px is 14.7 cells).
+          backgroundPosition: '50% 0',
         }}
       >
         {/* One stage, one overlay for the whole flow: the app's own overlay
