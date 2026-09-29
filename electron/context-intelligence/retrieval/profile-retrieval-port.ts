@@ -40,6 +40,7 @@ import { Bm25Index, DEFAULT_BM25 } from './bm25';
 // Pure tokenizer/statistics module — no Electron, no DB — so the rule above holds.
 import { buildLexicalStats, anchoringChunkIndexes, anchorTerms, anchorCoverage, questionContentWords, PROBE_MIN_COVERAGE, PROBE_MIN_ANCHORS } from '../../services/modes/lexicalTokens';
 import { semanticChunks } from '../../services/modes/semanticChunker';
+import { stripUnsupportedDerivedResumeFields, isGeneratedArtifactCard, isExtractorPlaceholder, buildSupportIndex, assessDerivedSupport } from './profile-derived-support';
 
 /**
  * 'fact' (2026-08-02) carries DERIVED profile facts — things the app computed
@@ -62,6 +63,9 @@ export interface ProfileCardLike {
   title: string;
   body: string;
   approvalStatus?: string;
+  /** OKF provenance ('structured_profile' | 'aot_artifact' | …). An
+   *  'aot_artifact' card is model-composed and never served as evidence. */
+  generatedFrom?: string;
 }
 
 export interface ProfileDocLike {
@@ -318,8 +322,11 @@ function renderResumeSections(sd: Record<string, unknown>): ProfileSection[] {
 function renderJdSections(sd: Record<string, unknown>): ProfileSection[] {
   const out: ProfileSection[] = [];
 
+  // Extractor placeholders ("Unknown Role", "Unknown Location") are not in the
+  // job description; rendering them made the app's default read as a JD fact.
+  const real = (v: unknown): string => (isExtractorPlaceholder(v) ? '' : str(v));
   const role = [
-    str(sd.title), str(sd.company), str(sd.location),
+    real(sd.title), str(sd.company), real(sd.location),
     str(sd.level) ? `Level: ${str(sd.level)}` : '',
     str(sd.employment_type) ? `Employment type: ${str(sd.employment_type)}` : '',
     str(sd.description_summary),
@@ -379,63 +386,20 @@ function renderJdSections(sd: Record<string, unknown>): ProfileSection[] {
 }
 
 /**
- * DERIVED profile facts (2026-08-02). Currently the résumé-based salary
- * estimate; the shape is a list so further computed facts can join it.
+ * Profile FACTS (kind 'fact' → PROFILE_FACT): things the user stated or
+ * verified about themselves that no uploaded document holds.
  *
- * Every section states, in its own text, that the value is an ESTIMATE derived
- * from the résumé and is neither written on the résumé nor an employer offer.
- * That sentence is the whole safety property of this source: the retrieved
- * chunk is what the model sees, so the qualification has to travel WITH the
- * number, not sit in a policy the prompt might not restate.
- *
- * Never a completeInventory: one derived figure enumerates nothing, so it must
- * not license "you have no other compensation expectation" style absences.
+ * The résumé-based salary ESTIMATE rendered here from 2026-08-02 to 2026-09-30
+ * and is now refused by design, even if a caller still hands it in: it is a
+ * model's market estimate for a role and location, not the candidate's
+ * expectation, and PROFILE_FACT carries first-person authority (USER_* claims).
+ * Served as evidence, the model stated the estimate as the user's own figure.
+ * No other fact type exists yet, so this renders nothing; a future verified
+ * fact joins here, and must never be a completeInventory (one fact enumerates
+ * nothing).
  */
-function renderFactSections(sd: Record<string, unknown>): ProfileSection[] {
-  const out: ProfileSection[] = [];
-
-  const salary = (sd.salary_estimate ?? null) as Record<string, unknown> | null;
-  if (salary && typeof salary === 'object') {
-    const min = typeof salary.min === 'number' ? salary.min : null;
-    const max = typeof salary.max === 'number' ? salary.max : null;
-    const currency = str(salary.currency);
-    if (min !== null && max !== null && max > 0) {
-      const band = `${currency ? `${currency} ` : ''}${min.toLocaleString('en-US')}–${max.toLocaleString('en-US')}`;
-      const confidence = str(salary.confidence);
-      const role = str(salary.role);
-      const location = str(salary.location);
-      const factors = lines(salary.justification_factors);
-      out.push({
-        section: 'Expected salary (derived estimate)',
-        // OWN key, not 'compensation': the requirements intent rule spills a
-        // 0.3 boost onto 'compensation' (so the JD comp band surfaces on
-        // "do I meet the bar" questions — correct for the JD). A policy-only
-        // chunk keyed the same way would be admitted on every requirements
-        // question. derived_salary is boosted ONLY by the genuine
-        // salary/compensation rule below.
-        boostKey: 'derived_salary',
-        text: [
-          `Estimated market compensation for the candidate: ${band} per year.`,
-          role || location
-            ? `Basis: ${[role, location].filter(Boolean).join(' in ')}.`
-            : '',
-          confidence ? `Confidence: ${confidence}.` : '',
-          factors.length ? `Factors considered: ${factors.join('; ')}.` : '',
-          'IMPORTANT: this is a DERIVED ESTIMATE calculated from the résumé '
-            + '(role, location, skills and years of experience). It is NOT stated '
-            + 'anywhere on the résumé, and it is NOT an offer or a figure from the '
-            + 'job description. Present it as an estimate. PRECEDENCE: if the job '
-            + 'description states a salary, range, equity or bonus, THAT is what the '
-            + 'position pays — answer a question about the position\'s pay from the '
-            + 'job description, and offer this estimate only as the candidate\'s '
-            + 'market expectation, never in place of a stated figure.',
-        ].filter(Boolean).join(' '),
-        completeInventory: false,
-      });
-    }
-  }
-
-  return out;
+function renderFactSections(_sd: Record<string, unknown>): ProfileSection[] {
+  return [];
 }
 
 export function renderProfileSections(kind: ProfileDocKind, structured: unknown): ProfileSection[] {
@@ -590,13 +554,33 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
       });
     };
 
-    for (const s of renderProfileSections(doc.kind, doc.structured)) {
+    // DERIVED-EVIDENCE HYGIENE (2026-09-30, see profile-derived-support.ts): a
+    // résumé's structured extraction may hold a project description the
+    // extractor WROTE and placeholder identity values. Only what the raw
+    // résumé text supports is rendered as RESUME evidence.
+    const structured = doc.kind === 'resume'
+      ? stripUnsupportedDerivedResumeFields(doc.structured, doc.rawText)
+      : doc.structured;
+    const supportIndex = doc.kind === 'resume' ? buildSupportIndex(doc.rawText) : null;
+    for (const s of renderProfileSections(doc.kind, structured)) {
       push(s.section, s.text, s.boostKey, s.completeInventory, s.inventoryCategory);
     }
     for (const c of doc.cards ?? []) {
       if (c.approvalStatus === 'rejected') continue;
+      // AOT artifact cards (intro, pivot scripts, mock-answer keys, culture
+      // mapping, negotiation strategy) are model output about the candidate,
+      // not the document: never evidence.
+      if (isGeneratedArtifactCard(c)) continue;
       const body = str(c.body);
       if (!body) continue;
+      // A project card's body leads with the project description (card
+      // templates render it first, then "Technologies: …"): the same derived
+      // field, held to the same rule, so a card cannot smuggle it back in.
+      if (doc.kind === 'resume' && c.type === 'candidate_project') {
+        const lead = (body.split('\n')[0] ?? '').trim();
+        const isDescription = Boolean(lead) && lead !== str(c.title) && !/^technologies:/i.test(lead);
+        if (isDescription && !assessDerivedSupport(lead, supportIndex).supported) continue;
+      }
       push(c.title || 'Card', `${c.title ? `${c.title}: ` : ''}${body}`, `card_${c.type ?? 'unknown'}`, false);
     }
     // LOSSLESS raw-text sections (deep-test D1), so a fact with no schema slot

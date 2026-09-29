@@ -157,6 +157,8 @@ function resolveManualChatBasePrompt(
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
 import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
+import { isProfileIntelligenceAllowed } from './context-intelligence/policies/mode-policy-registry';
+import { stripUnsupportedDerivedResumeFields } from './context-intelligence/retrieval/profile-derived-support';
 import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGroundedAnswerType, isAssistantRefusal, SYSTEM_REFUSAL_RE } from './llm/documentGroundedPrompt';
 // ONE list of provider data scopes (see ProviderRouter). The handler below used
 // to carry its own copy, which had already drifted and was erasing an enforced
@@ -2739,6 +2741,16 @@ export function initializeIpcHandlers(appState: AppState): void {
           const { ModesManager } = require('./services/ModesManager');
           manualActiveMode = ModesManager.getInstance().getActiveModeInfo();
         } catch { /* mode prior unavailable — planAnswer stays mode-blind */ }
+        // PROFILE INTELLIGENCE GATE (2026-09-30). This legacy body also runs
+        // when V3 throws (the fallthrough above), and its three profile
+        // injections — the JIT evidence route, the TurnEvidenceCoordinator pack
+        // and the OKF profile cards — were gated only by source ownership, which
+        // grants the résumé to a General mode with a prompt or file and to a
+        // turn with no mode at all. The ONE eligibility rule (mode-policy-
+        // registry, by template type) now bounds all three and the knowledge
+        // intercept below. A null mode (none selected, or the read threw) is
+        // not eligible: fail closed.
+        const manualProfileIntelligenceAllowed = isProfileIntelligenceAllowed(manualActiveMode?.templateType ?? null);
 
         // Defense-in-depth at the LLM boundary: as of 2026-07-18, no known code path
         // injects <answer_contract>...</answer_contract> into `message` (the renderer
@@ -3566,7 +3578,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         })();
         const sourceOwnershipAllowsProfile = ((manualOwnership && !_ownerEnforcementOff)
           ? manualOwnership.profileAllowed
-          : legacyDocGuardEligible) && _contractAllowsProfile && _impossibleStateGateAllowsProfile;
+          : legacyDocGuardEligible) && _contractAllowsProfile && _impossibleStateGateAllowsProfile
+          && manualProfileIntelligenceAllowed;
         // TurnEvidenceCoordinator wiring gap fix (grounding campaign, 2026-07-18):
         // this legacy fast path and the coordinator below (`coordinatorInScopeKinds`,
         // ~line 2179) previously raced with no reconciliation. When the canonical
@@ -4110,7 +4123,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         // CONTEXT OS (Phase 7): capability check joins the legacy ownership
         // decision (narrowing only — see _contractAllowsProfile above).
         const ownershipAllowsProfileEvidence = (manualOwnership ? manualOwnership.profileAllowed : true)
-          && _contractAllowsProfile;
+          && _contractAllowsProfile
+          && manualProfileIntelligenceAllowed;
 
         // ── CONTEXT OS (2026-07-17): TurnEvidenceCoordinator multi-family pack ──
         // Extends the H1 typed-EvidencePack path — previously built ONLY for a
@@ -4174,7 +4188,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             const { ModesManager } = require('./services/ModesManager');
             const modesMgr = ModesManager.getInstance();
             const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
-            const activeResumeStructured = (orchestrator as any)?.activeResume?.structured_data ?? null;
+            // Derived-evidence hygiene (2026-09-30): see profile-derived-support.ts.
+            const activeResumeStructured = stripUnsupportedDerivedResumeFields(
+              (orchestrator as any)?.activeResume?.structured_data ?? null,
+              (orchestrator as any)?.activeResume?.raw_text,
+            );
             const activeJdStructured = (orchestrator as any)?.activeJD?.structured_data ?? null;
             const _tc = turnContract;
 
@@ -4411,7 +4429,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           // knowledge intercept at all — no profile, no intro, no candidate
           // grounding belongs in a policy redirect (release 2026-06-06b).
           const isSafetyAnswer = answerPlan.answerType === 'ethical_usage_answer';
-          const ignoreKnowledge = isCodingChat || isSafetyAnswer ? true : options?.ignoreKnowledgeMode;
+          // A mode without Profile Intelligence never runs the knowledge
+          // intercept either (LLMHelper re-checks the same rule; this keeps the
+          // decision visible in the trace line below).
+          const ignoreKnowledge = isCodingChat || isSafetyAnswer || !manualProfileIntelligenceAllowed ? true : options?.ignoreKnowledgeMode;
           iTrace.lifecycle('evidence_selected', {
             selectedEvidenceCount: selectedProfileEvidence?.items.length ?? 0,
             renderedEvidenceCount: selectedProfileEvidence?.items.length ?? 0,
@@ -4988,9 +5009,18 @@ export function initializeIpcHandlers(appState: AppState): void {
             // bounded regeneration with buildProfileRepairInstruction.
             try {
               const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
-              const activeResume = (orchestrator as any)?.activeResume?.structured_data ?? null;
+              // Derived-evidence hygiene (2026-09-30): the validator's evidence and
+              // the repair's <candidate_facts> fallback use the same filtered
+              // résumé as every other profile route.
+              const activeResume = stripUnsupportedDerivedResumeFields(
+                (orchestrator as any)?.activeResume?.structured_data ?? null,
+                (orchestrator as any)?.activeResume?.raw_text,
+              );
               const activeJD = (orchestrator as any)?.activeJD?.structured_data ?? null;
-              const profileAvailable = profileFactsReady(activeResume);
+              // A mode without Profile Intelligence has no profile for this
+              // answer: not a candidate-directed turn, and never a repair that
+              // re-injects the résumé (2026-09-30 PI gate).
+              const profileAvailable = manualProfileIntelligenceAllowed && profileFactsReady(activeResume);
               // Phase 6: evidence-aware validation. Composes the perspective /
               // identity / refusal / leak checks AND flags FABRICATED metrics
               // ("25% retention") or companies not present in the grounded facts.
