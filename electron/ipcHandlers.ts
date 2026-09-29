@@ -146,6 +146,7 @@ function resolveManualChatBasePrompt(
       codingTask: opts?.codingTask,
       codingTaskKind: opts?.codingTaskKind,
       codingFormat: opts?.codingFormat,
+      codingShape: opts?.codingShape,
       suppliedTemplate: opts?.suppliedTemplate,
       surface,
     });
@@ -2226,6 +2227,13 @@ export function initializeIpcHandlers(appState: AppState): void {
                       // dry_run_only) fire so "what's the complexity" gets the
                       // analysis instead of a full re-solve.
                       priorCodingTurnExists: !!priorProblem,
+                      // A recalled prior problem makes this a coding turn
+                      // (codingTask below) even when the planner routed the
+                      // follow-up elsewhere ("what's the brute force?").
+                      // Without this the resolver returned before deciding the
+                      // format and the shape, and the turn fell back to the
+                      // six-section default.
+                      codingTurnPromoted: !!priorProblem,
                     });
                     // ATTACHED-SCREENSHOT promotion, mirroring the WTA surface.
                     // A chat message with an attached screenshot and a question
@@ -2240,7 +2248,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                     if (!resolved.codingTask
                         && (imagePaths?.length ?? 0) > 0
                         && (!v3Question.trim() || require('./llm/codingPromptSignals').isDeicticAsk(v3Question))) {
-                      return { codingTask: true, codingTaskKind: 'dsa' } as import('./llm/codingPromptSignals').CodingPromptSignals;
+                      // The screenshot grounds the problem; the words decide
+                      // the shape ("explain this" is not "solve this").
+                      return require('./llm/codingPromptSignals').screenPromotedCodingSignals(v3Question) as import('./llm/codingPromptSignals').CodingPromptSignals;
                     }
                     return resolved;
                   } catch { return { codingTask: false } as import('./llm/codingPromptSignals').CodingPromptSignals; }
@@ -2255,6 +2265,10 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // keeps whatever format the resolver derived (complexity_only,
                   // dry_run_only, or none for "make it iterative").
                   codingFormat: (priorProblem && bareCode) ? 'code_only' : codingSignals.codingFormat,
+                  // Every coding turn gets a shape: the bridge's own coding
+                  // verdict can arrive without the resolver's.
+                  codingShape: codingSignals.codingShape
+                    ?? ((codingTask || !!priorProblem) ? (require('./llm/codingShape') as typeof import('./llm/codingShape')).detectCodingShape(v3Question) : undefined),
                   suppliedTemplate: codingSignals.suppliedTemplate,
                   surface: answerSurface,
                 });
@@ -3028,6 +3042,16 @@ export function initializeIpcHandlers(appState: AppState): void {
         // service the bare-follow-up path uses; gated on conversationMemoryV2 (flag OFF →
         // exactly the legacy behavior). All variables default to "no change".
         let explicitCodingContract: ExplicitCodingContract = detectExplicitCodingContract(message);
+        // WHAT this coding message asked for (codingShape.ts). Chooses the
+        // contract below when no explicit format was given, and tells the repair
+        // what the answer should contain.
+        const manualCodingShape = (require('./llm/codingShape') as typeof import('./llm/codingShape')).detectCodingShape(message);
+        // "Solve three sum and give me the time complexity" asks for a solution
+        // with the complexity in it, not for the complexity alone.
+        if ((explicitCodingContract === 'complexity_only' || explicitCodingContract === 'dry_run_only')
+            && ['code', 'solve', 'optimize', 'debug', 'full'].includes(manualCodingShape)) {
+          explicitCodingContract = null;
+        }
         let codingPriorProblemBlock = '';
         let codingFollowupResolved = false;
         // BARE CODE REQUEST — "code?", "show me the code" — deliberately NOT gated
@@ -3806,16 +3830,19 @@ export function initializeIpcHandlers(appState: AppState): void {
             });
             context = codingPriorProblemBlock ? `${codingContract}\n\n${codingPriorProblemBlock}` : codingContract;
           } else if (planIsCodingType) {
-            // Plain coding question (no constraint) → the EXACT proven path, byte unchanged.
-            const baseContract = formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled());
+            // Plain coding question (no constraint) → the plan's contract, with the
+            // coding template chosen by the question's shape (six sections only for
+            // an explicit full ask).
+            const baseContract = formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled(), manualCodingShape);
             context = codingPriorProblemBlock ? `${baseContract}\n\n${codingPriorProblemBlock}` : baseContract;
           } else {
             // A follow-up ("now optimize it") promoted to coding though the plan type is
-            // follow_up/unknown → use the full six-section coding contract (null builder),
-            // NOT the follow_up template, plus the prior problem.
+            // follow_up/unknown → the coding contract for the follow-up's shape (not the
+            // follow_up template), plus the prior problem.
             const codingContract = buildCodingContractPrompt(null, {
               includeVerification: isCodeVerificationEnabled(),
               verificationInstruction: CODING_VERIFICATION_INSTRUCTION,
+              codingShape: manualCodingShape,
             });
             context = codingPriorProblemBlock ? `${codingContract}\n\n${codingPriorProblemBlock}` : codingContract;
           }
@@ -4891,7 +4918,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             const validationType = isCodingAnswerType(answerPlan.answerType)
               ? answerPlan.answerType
               : 'dsa_question_answer';
-            const structureValidation = validateAnswerStructure(validationType, fullResponse, explicitCodingContract);
+            const structureValidation = validateAnswerStructure(validationType, fullResponse, explicitCodingContract, manualCodingShape);
             if (!structureValidation.ok && structureValidation.repaired) {
               console.warn('[IPC] Repaired coding chat answer structure', {
                 answerType: answerPlan.answerType,

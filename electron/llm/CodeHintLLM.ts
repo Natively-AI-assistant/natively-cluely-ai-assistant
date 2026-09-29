@@ -53,7 +53,10 @@ export class CodeHintLLM {
             );
 
             const promptOverride = v3?.system
-                ?? resolveV2SystemPrompt({ action: 'code_hint', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()) })
+                // A hint is a nudge, not a solution (2026-09-29): code_hint attaches
+                // the coding contract by itself, and without a shape that was the
+                // six mandatory sections beside "give the smallest useful nudge".
+                ?? resolveV2SystemPrompt({ action: 'code_hint', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()), codingShape: 'approach' })
                 ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_CODE_HINT_PROMPT : CODE_HINT_PROMPT);
             // V3 composed the turn content too, evidence and all, so it must not
             // be re-fitted: fitContextForCurrentModel would truncate a governed

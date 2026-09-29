@@ -1,6 +1,6 @@
 import type { IntentResult } from './PlannerDecision';
 import type { ExtractedQuestion } from './transcriptQuestionExtractor';
-import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION } from './codingContract';
+import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION, CODING_SHAPE_CONTRACTS, type CodingShape } from './codingContract';
 import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
 import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords, HARD_MAX_WORDS, SPOKEN_FULL_PROMPT_MAX_WORDS } from './speakability';
 import { analyzeUserInstructions, getRegisteredUserInstructions, userInstructionsOverrideAppLength } from './userInstructionContract';
@@ -2290,8 +2290,30 @@ export const renderLengthDirectiveForPlan = (plan: AnswerPlan): string => {
   return `LENGTH: aim for about ${t.seconds}s spoken — roughly ${t.min} to ${t.max} words (${t.guidance}). Use fewer if the question is fully answered in fewer; never pad to reach the number. Hard ceiling: never go past ${ceiling} words — if your draft runs longer, cut examples and caveats, keep the point.`;
 };
 
-export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationSpec = false): string => {
-  const verificationBlock = (includeVerificationSpec && isCodingAnswerType(plan.answerType))
+/**
+ * The STRICT RESPONSE TEMPLATE for a coding turn written to a non-`full` shape
+ * (codingShape.ts), or null to keep the plan's own template. The plan's
+ * CODING_TEMPLATE is the six-section contract, which is right only for `full`.
+ * An implementation turn asking for code keeps CODING_IMPL_TEMPLATE, which is
+ * already code-first.
+ */
+export const shapedCodingTemplate = (plan: Pick<AnswerPlan, 'answerType'>, codingShape?: CodingShape): string | null => {
+  if (!codingShape || codingShape === 'full' || !isCodingAnswerType(plan.answerType)) return null;
+  if (plan.answerType === 'coding_question_answer' && (codingShape === 'code' || codingShape === 'solve')) return null;
+  return `You are generating a live coding answer.
+
+${CODING_SHAPE_CONTRACTS[codingShape]}
+
+Additional rules:
+- Do not include resume, JD, salary, negotiation, or unrelated profile context unless explicitly asked.
+- NEVER mention "Natively", the assistant, the product, or the candidate's profile/projects anywhere in the answer. This is a pure technical answer.`;
+};
+
+export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationSpec = false, codingShape?: CodingShape): string => {
+  const shapedTemplate = shapedCodingTemplate(plan, codingShape);
+  // The hidden test block only makes sense when the answer writes new code.
+  const writesCode = !codingShape || codingShape === 'full' || codingShape === 'code' || codingShape === 'solve' || codingShape === 'optimize' || codingShape === 'debug';
+  const verificationBlock = (includeVerificationSpec && isCodingAnswerType(plan.answerType) && writesCode)
     ? `\n\n${CODING_VERIFICATION_INSTRUCTION}`
     : '';
   // Phase 2: a single explicit directive that translates the voice/policy split
@@ -2393,6 +2415,6 @@ VOICE: ${voiceLine}
 GROUNDING: ${policyLine}
 
 STRICT RESPONSE TEMPLATE:
-${plan.responseTemplate}${renderingDirective}${styleDirective}${lengthDirective}${verificationBlock}
+${shapedTemplate ?? plan.responseTemplate}${renderingDirective}${styleDirective}${lengthDirective}${verificationBlock}
 </answer_contract>`;
 };

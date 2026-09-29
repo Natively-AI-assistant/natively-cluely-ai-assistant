@@ -3963,6 +3963,20 @@ export class IntelligenceEngine extends EventEmitter {
                                         hasImages: (imagePaths?.length ?? 0) > 0,
                                         screenText: _screenText || undefined,
                                     });
+                                // The screen grounds a promoted turn; its WORDS
+                                // decide the shape ("explain this" over a
+                                // screenshot is an explanation, not a solution).
+                                const _promotedSignals = _promoted
+                                    ? (require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals')).screenPromotedCodingSignals(answerPlan.question)
+                                    : null;
+                                // The bridge's `codingTask` can be true on a V3
+                                // CODING_TASK verdict the planner did not share,
+                                // in which case the resolver returned no shape;
+                                // derive it from the same question the post-stream
+                                // validator reads, never fall back to six sections.
+                                const _codingShape = codingSignals.codingShape
+                                    ?? _promotedSignals?.codingShape
+                                    ?? (codingTask ? (require('./llm/codingShape') as typeof import('./llm/codingShape')).detectCodingShape(answerPlan.question) : undefined);
                                 // ── T3: the live spoken surface asks for SPOKEN WORDS ──
                                 //
                                 // This resolved `action: 'answer'`, which is the
@@ -4062,7 +4076,8 @@ export class IntelligenceEngine extends EventEmitter {
                                     tier: v2TierForPromptTier(this.llmHelper.getPromptTier?.()),
                                     activeMode: snapshotModeInfo ?? undefined,
                                     codingTask: codingTask || _promoted,
-                                    codingTaskKind: codingSignals.codingTaskKind ?? (_promoted ? 'dsa' : undefined),
+                                    codingTaskKind: codingSignals.codingTaskKind ?? _promotedSignals?.codingTaskKind,
+                                    codingShape: _codingShape,
                                     // `codingSignals` resolves the mode's format only
                                     // when IT judged the turn coding. Two coding
                                     // verdicts arrive from elsewhere — a screenshot
@@ -4086,10 +4101,17 @@ export class IntelligenceEngine extends EventEmitter {
                                     surface: 'live',
                                     mode: snapshotModeInfo?.templateType ?? null,
                                     codingTask: Boolean(codingTask || _promoted),
+                                    codingShape: _codingShape ?? null,
                                     v2PersonaNull: !_base,
                                 });
-                                if (!_promoted || !_base) return _base;
-                                return `${_base}\n\n<repeat_press_directive>\nThe user triggered this action with a coding problem on screen and NO new question. That is a request for the COMPLETE solution to the on-screen problem, following the coding contract's full section shape — even if a previous answer in this conversation already covered it, and even if this looks like a follow-up. Never respond with commentary on, agreement with, or a summary of an earlier answer. Produce the full answer as if asked for the first time.\n</repeat_press_directive>`;
+                                // Only a press that asks for nothing specific is a
+                                // request to solve what is on screen. "Explain
+                                // this" / "what's the complexity of this" over a
+                                // screenshot is promoted too, and this directive
+                                // used to override their shape with "the complete
+                                // solution".
+                                if (!_promoted || !_base || _codingShape !== 'solve') return _base;
+                                return `${_base}\n\n<repeat_press_directive>\nThe user triggered this action with a coding problem on screen and NO new question. That is a request for the COMPLETE solution to the on-screen problem, in the shape the coding contract asks for, even if a previous answer in this conversation already covered it, and even if this looks like a follow-up. Never respond with commentary on, agreement with, or a summary of an earlier answer. Produce the answer as if asked for the first time.\n</repeat_press_directive>`;
                             } catch { return null; } // no persona ⇒ composition unchanged
                         },
                     });
@@ -4933,8 +4955,12 @@ export class IntelligenceEngine extends EventEmitter {
                 question: answerPlan.question || question || '',
                 pinnedModeId: snapshotModeInfo?.id,
             }).codingFormat ?? null;
+            // The SAME shape the persona's contract asked for: both read
+            // answerPlan.question, so the repair can never demand sections the
+            // prompt told the model to leave out (2026-09-29).
+            const liveCodingShape = (require('./llm/codingShape') as typeof import('./llm/codingShape')).detectCodingShape(answerPlan.question);
             const structureValidation = validateAnswerStructure(
-                answerPlan.answerType, fullAnswer, liveExplicitCodingContract,
+                answerPlan.answerType, fullAnswer, liveExplicitCodingContract, liveCodingShape,
             );
             // The OUTPUT half of the [UserInstructions] trace (the bridge logs
             // what was delivered): which coding format bound this turn and what
@@ -4944,6 +4970,7 @@ export class IntelligenceEngine extends EventEmitter {
                     answerType: answerPlan.answerType,
                     modeId: snapshotModeInfo?.id ?? null,
                     codingFormat: liveExplicitCodingContract ?? 'default_contract',
+                    codingShape: liveCodingShape,
                     structureOk: structureValidation.ok,
                     willRepair: !structureValidation.ok && Boolean(structureValidation.repaired),
                     missingSections: structureValidation.missingSections.length,
@@ -7603,12 +7630,15 @@ export class IntelligenceEngine extends EventEmitter {
                     : this.session.getFormattedContext(120);
                 answer = await this.answerLLM.generate(question, context, answerPlan);
             }
+            const _manualSignals = require('./llm/codingPromptSignals').resolveCodingPromptSignals({
+                answerType: answerPlan.answerType,
+                question: answerPlan.question || question || '',
+            });
             const structureValidation = validateAnswerStructure(
                 answerPlan.answerType, answer,
-                require('./llm/codingPromptSignals').resolveCodingPromptSignals({
-                    answerType: answerPlan.answerType,
-                    question: answerPlan.question || question || '',
-                }).codingFormat ?? null,
+                _manualSignals.codingFormat ?? null,
+                // Same question AnswerLLM resolved its contract from.
+                _manualSignals.codingShape,
             );
             if (!structureValidation.ok && structureValidation.repaired) {
                 console.warn('[IntelligenceEngine] Repaired manual answer structure', {

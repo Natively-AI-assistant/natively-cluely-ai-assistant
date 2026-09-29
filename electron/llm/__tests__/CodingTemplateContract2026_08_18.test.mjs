@@ -198,7 +198,13 @@ describe('C2 — explicit format requests bind every surface', () => {
   test('a plain coding question carries no format constraint', () => {
     const signals = resolveCodingPromptSignals({ answerType: 'dsa_question_answer', question: 'solve two sum' });
     assert.equal(signals.codingFormat, undefined);
-    assert.ok(build({ codingTask: true, ...signals }).includes('Every heading is mandatory'));
+    // 2026-09-29: a plain "solve X" is the `solve` shape (approach + code +
+    // complexity), no longer the six mandatory sections; those need an explicit
+    // full ask. See CodingResponseShape2026_09_29.test.mjs.
+    assert.equal(signals.codingShape, 'solve');
+    const prompt = build({ codingTask: true, ...signals });
+    assert.ok(prompt.includes('<coding_shape name="solve">'));
+    assert.ok(!prompt.includes('Every heading is mandatory'));
   });
 });
 
@@ -215,12 +221,33 @@ describe('C2b — a continuation format must not strip a FIRST-turn answer', () 
     'write binary search and give me the big-o',
   ];
   for (const question of FIRST_TURN_FULL_ANSWERS) {
-    test(`"${question.slice(0, 44)}" still gets the full contract on a first turn`, () => {
+    test(`"${question.slice(0, 44)}" still gets a solution with code on a first turn`, () => {
       const signals = resolveCodingPromptSignals({ answerType: 'dsa_question_answer', question });
       assert.equal(signals.codingFormat, undefined, 'a continuation format leaked onto a first turn');
-      assert.ok(build({ ...signals }).includes('Every heading is mandatory'));
+      // The guarantee this pinned is "the answer still contains the code". Since
+      // 2026-09-29 that is the solve/code shape, whose contract asks for the code
+      // and the complexity (and a dry run when one was asked for), not the six
+      // mandatory sections.
+      assert.ok(['solve', 'code'].includes(signals.codingShape), signals.codingShape);
+      const prompt = build({ ...signals });
+      assert.match(prompt, /fenced block tagged with the language/);
+      assert.match(prompt, /complexity/i);
+      assert.ok(!/stated the output format explicitly/.test(prompt), 'a continuation format bound the prompt');
     });
   }
+
+  test('a solution ask keeps its code even when a prior coding turn exists', () => {
+    // The prior-turn gate only covered first turns; later in a session "solve
+    // three sum and give me the time complexity" was answered with a bare
+    // complexity line.
+    const signals = resolveCodingPromptSignals({
+      answerType: 'dsa_question_answer',
+      question: 'solve three sum and give me the time complexity',
+      priorCodingTurnExists: true,
+    });
+    assert.equal(signals.codingFormat, undefined);
+    assert.equal(signals.codingShape, 'solve');
+  });
 
   test('the same question DOES take the continuation format once a prior turn exists', () => {
     const signals = resolveCodingPromptSignals({

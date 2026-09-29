@@ -1,5 +1,5 @@
 import type { AnswerType } from './AnswerPlanner';
-import { CODING_SECTIONS as CANONICAL_CODING_SECTIONS } from './codingContract';
+import { CODING_SECTIONS as CANONICAL_CODING_SECTIONS, type CodingShape } from './codingContract';
 import type { ExplicitCodingContract } from './codingFollowup';
 
 export interface CodingAnswer {
@@ -788,6 +788,15 @@ export const validateAnswerStructure = (
   // template force-injected by repair (task Phase 11). For an explicit contract we
   // only sanity-check the user's REQUESTED shape and never rewrite into six sections.
   explicitContract: ExplicitCodingContract = null,
+  // WHAT the turn asked for (codingShape.ts), from the SAME resolver that chose
+  // the prompt's contract. Only `full` (or no shape: a caller that predates
+  // shapes) gets the six-section validator; every other shape asked for a
+  // lighter answer, and rebuilding it into six sections fabricated sections the
+  // model was told not to write. Measured live before this (2026-09-29): a
+  // correct spoken dry run wrapped into a template whose code block read
+  // "// The model did not return code. Regenerate for a complete solution."
+  // and whose complexity read "O(?)".
+  codingShape?: CodingShape,
 ): AnswerValidationResult => {
   if (!isCodingType(answerType)) {
     return {
@@ -802,6 +811,10 @@ export const validateAnswerStructure = (
     return validateExplicitCodingContract(explicitContract, answer);
   }
 
+  if (codingShape && codingShape !== 'full') {
+    return validateShapedCodingAnswer(answer);
+  }
+
   // dsa_question_answer (named algorithm problems: "reverse a linked list")
   // keeps the six-section validator. coding_question_answer (general
   // implementation: "write a React stopwatch") goes through the lighter
@@ -812,6 +825,21 @@ export const validateAnswerStructure = (
   }
 
   return validateCodingMarkdown(answer);
+};
+
+/**
+ * A coding answer written to a non-`full` shape. Nothing is ever fabricated:
+ * a missing section is the shape working, and a missing code block is a model
+ * failure no repair can invent past. The one deterministic fix kept is the
+ * implementation validator's fence-tag correction (JSX fenced as ```python),
+ * which only ever applies when there IS a code block.
+ */
+const validateShapedCodingAnswer = (answer: string): AnswerValidationResult => {
+  const trimmed = (answer || '').trim();
+  if (!extractFirstCodeBlock(trimmed)) {
+    return { ok: true, missingSections: [], hasCodeBlock: false, hasComplexity: hasComplexity(trimmed) };
+  }
+  return validateImplAnswer(trimmed);
 };
 
 /**

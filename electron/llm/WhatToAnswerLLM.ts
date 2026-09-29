@@ -16,7 +16,7 @@ import { DOM_CONTEXT_MAX_CHARS } from "../config/constants";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
 import { providerRejectionUserMessage } from "./providerErrorClassifier";
 import { formatAnswerPlanForPrompt, isCodingAnswerType } from "./AnswerPlanner";
-import { resolveCodingPromptSignals, isDeicticAsk, isPromotedScreenCodingTurn } from "./codingPromptSignals";
+import { resolveCodingPromptSignals, isDeicticAsk, isPromotedScreenCodingTurn, screenPromotedCodingSignals } from "./codingPromptSignals";
 import type { AnswerPlan, AnswerType } from "./AnswerPlanner";
 import { isLayerAllowed } from "./contextRoute";
 import { deriveRetrievalQuery } from "./retrievalQueryPolicy";
@@ -280,7 +280,8 @@ export class WhatToAnswerLLM {
                     screenText: capturedScreenText || undefined,
                 })) {
                     promotedScreenCodingTurn = true;
-                    return { codingTask: true, codingTaskKind: 'dsa' as const };
+                    // The screen grounds the problem; the words decide the shape.
+                    return screenPromotedCodingSignals(answerPlan?.question);
                 }
                 return resolved;
             })();
@@ -319,7 +320,7 @@ ${promptInstruction.trim()}
             // the signature for callers; it is not read here.
             void intentResult;
             if (answerPlan) {
-                intentContextParts.push(formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled()));
+                intentContextParts.push(formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled(), codingSignals.codingShape));
             }
             if (instructionContext) {
                 intentContextParts.push(instructionContext);

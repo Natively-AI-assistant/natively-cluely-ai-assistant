@@ -4376,7 +4376,7 @@ try {
             // shared resolver (.audit/coding-template-audit-2026-08-18.md).
             ...(() => {
               try {
-                const { resolveCodingPromptSignals, isDeicticAsk } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
+                const { resolveCodingPromptSignals, isDeicticAsk, screenPromotedCodingSignals } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
                 const resolved = resolveCodingPromptSignals({ answerType: routeOptions?.answerType, question: message });
                 // Attached-screenshot promotion (2026-08-19 channel audit): a
                 // message with an image whose text only points at it ("solve
@@ -4387,7 +4387,8 @@ try {
                 if (!resolved.codingTask
                     && (imagePaths?.length ?? 0) > 0
                     && (!message?.trim() || isDeicticAsk(message))) {
-                  return { codingTask: true, codingTaskKind: 'dsa' as const };
+                  // The screenshot grounds the problem; the words decide the shape.
+                  return screenPromotedCodingSignals(message);
                 }
                 return resolved;
               } catch { return { codingTask: false }; }
@@ -8760,7 +8761,7 @@ let isMultimodal = !!(imagePaths?.length);
             // shared resolver (.audit/coding-template-audit-2026-08-18.md).
             ...(() => {
               try {
-                const { resolveCodingPromptSignals, isDeicticAsk } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
+                const { resolveCodingPromptSignals, isDeicticAsk, screenPromotedCodingSignals } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
                 const resolved = resolveCodingPromptSignals({ answerType: routeOptions?.answerType, question: message });
                 // Attached-screenshot promotion (2026-08-19 channel audit): a
                 // message with an image whose text only points at it ("solve
@@ -8771,7 +8772,8 @@ let isMultimodal = !!(imagePaths?.length);
                 if (!resolved.codingTask
                     && (imagePaths?.length ?? 0) > 0
                     && (!message?.trim() || isDeicticAsk(message))) {
-                  return { codingTask: true, codingTaskKind: 'dsa' as const };
+                  // The screenshot grounds the problem; the words decide the shape.
+                  return screenPromotedCodingSignals(message);
                 }
                 return resolved;
               } catch { return { codingTask: false }; }

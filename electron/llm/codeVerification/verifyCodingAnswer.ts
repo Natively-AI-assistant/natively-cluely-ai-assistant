@@ -86,7 +86,7 @@ ${question ? `Problem:\n${question}\n\n` : ''}Your code:
 ${code}
 \`\`\`
 
-Fix ONLY the bug so the function returns the correct output for that input (and all others). Keep the SAME six-section coding format (## Approach / ## Technique / ## Code / ## Dry Run / ## Complexity / ## Interviewer Follow-up Points) and re-emit the hidden <verification_spec> with the same cases. Do not change the function name. Output the full corrected answer.`;
+Fix ONLY the bug so the function returns the correct output for that input (and all others). Keep the SAME format and sections as your previous answer (add none, drop none) and re-emit the hidden <verification_spec> with the same cases. Do not change the function name. Output the full corrected answer.`;
 };
 
 /** One-shot repair prompt for a SQL answer whose result set was wrong. */

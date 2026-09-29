@@ -32,6 +32,8 @@ import {
     CODING_CONTRACT_IMPL,
     CODING_TEMPLATE_CONFORMANCE,
     CODING_TEMPLATE_CONFORMANCE_TINY,
+    CODING_SHAPE_CONTRACTS,
+    type CodingShape,
 } from './codingContract';
 import { codingFormatDirective, type ExplicitCodingContract } from './codingFollowup';
 import { USER_INSTRUCTIONS_MAX_CHARS, analyzeUserInstructions, removeGroundingOverrides, renderResolvedInstructionLines } from './userInstructionContract';
@@ -88,6 +90,13 @@ export interface BuildSystemPromptV2Input {
      *  default section shape on EVERY surface — this was honoured only in
      *  manual chat before 2026-08-18. */
     codingFormat?: Exclude<ExplicitCodingContract, null>;
+    /** WHAT the coding turn asked for (codingShape.ts): code, a solution, the
+     *  approach, the complexity, a dry run, an explanation, a fix, a
+     *  walkthrough, or the full six-section template. Selects the contract, so
+     *  "write the code for odd even" is not answered with six sections. An
+     *  explicit `codingFormat` outranks it. Absent → the pre-2026-09-29
+     *  contract selection (by kind). */
+    codingShape?: CodingShape;
     /** The turn already carries a code template (signature / stub / class
      *  skeleton / starter block) the answer must be written into. Boolean only:
      *  the template text itself is already in the turn content. */
@@ -730,6 +739,31 @@ Do not add sections the user did not ask for. Do not mention Natively, the assis
     // mode/action with no routed type) keeps the DSA contract: unchanged
     // legacy behavior.
     const kind: CodingTaskKind = input.codingTaskKind ?? 'dsa';
+
+    // PRECEDENCE 3 — WHAT the turn asked for (2026-09-29). Every coding turn
+    // used to get the six sections: "write the code for odd even" came back as
+    // Approach / Technique / Code / Dry Run / Complexity / Interviewer
+    // Follow-up Points, and "what's the complexity of this?" over pasted code
+    // did too (measured live on both models). The shape is decided in code
+    // (codingShape.ts) and validated against the same value after the stream.
+    // `full` keeps the six sections for an explicit ask; a build task asking
+    // for code keeps the implementation contract below.
+    const shape = input.codingShape;
+    if (shape && shape !== 'full' && !(kind === 'impl' && (shape === 'code' || shape === 'solve'))) {
+        // The template-conformance rules are about WRITING code; an explain,
+        // complexity, or dry-run turn over the same stub must not be told to
+        // "write your solution into it".
+        const writesCode = shape === 'code' || shape === 'solve' || shape === 'optimize' || shape === 'debug';
+        return `<coding_contract>
+<coding_shape name="${shape}">
+This turn is a coding task. Answer exactly what was asked, in this shape. It outranks every default coding answer shape described elsewhere in this prompt. If the turn turns out not to be about code at all, ignore this block and answer in plain spoken prose.
+${CODING_SHAPE_CONTRACTS[shape]}
+</coding_shape>
+${writesCode ? `\n${conformance}\n${templateEmphasis(input)}` : ''}
+${universalCodingRules('The active mode shapes tone, speaker, and depth. The shape above decides which parts the answer contains: do not add sections, a dry run, follow-up points, or a second version it does not ask for.')}
+</coding_contract>`;
+    }
+
     const contract = kind === 'impl'
         ? CODING_CONTRACT_IMPL
         : (local ? CODING_CONTRACT_TINY : CODING_CONTRACT);
@@ -745,12 +779,17 @@ ${contract}
 
 ${conformance}
 ${templateEmphasis(input)}
-Universal coding rules, in every mode:
-1. The active mode shapes tone, speaker, and depth — it never removes the approach, the runnable code, the example or dry run, or the complexity from a coding answer. An explicit user format request (code only, hint only, complexity only, dry run only, explanation only) overrides this default shape.
+${universalCodingRules('The active mode shapes tone, speaker, and depth — it never removes the approach, the runnable code, the example or dry run, or the complexity from a coding answer. An explicit user format request (code only, hint only, complexity only, dry run only, explanation only) overrides this default shape.')}
+</coding_contract>`;
+}
+
+// Rules 2-4 hold for every coding shape; rule 1 is the shape-specific line.
+function universalCodingRules(rule1: string): string {
+    return `Universal coding rules, in every mode:
+1. ${rule1}
 2. A self-contained coding problem is answered directly from reliable knowledge. Never open with a materials disclaimer ("the provided materials do not cover this", "no coding sample was found", "the résumé does not contain this") and never consult résumé, job-description, or profile sources for it — use supplied files or samples only when the request itself refers to them.
 3. Use the language the user requested or the language of the supplied code; never silently switch languages. If no language is indicated and the choice materially matters, ask once — otherwise pick a common fit and name it.
-4. State complexity from the ACTUAL implementation written (nested loops, sorting, recursion depth, auxiliary storage), with meaningful variables (n for input size, k for distinct elements, V and E for graphs) — never a reflexive O(n).
-</coding_contract>`;
+4. State complexity from the ACTUAL implementation written (nested loops, sorting, recursion depth, auxiliary storage), with meaningful variables (n for input size, k for distinct elements, V and E for graphs) — never a reflexive O(n).`;
 }
 
 // When the caller's deterministic detector actually FOUND a stub/signature in
@@ -817,6 +856,8 @@ export interface V2PromptDescriptor {
     codingTaskKind?: CodingTaskKind;
     /** Explicit user format constraint carried through for the same reason. */
     codingFormat?: Exclude<ExplicitCodingContract, null>;
+    /** Coding answer shape carried through for the same reason. */
+    codingShape?: CodingShape;
     /** Supplied-template flag carried through for the same reason. */
     suppliedTemplate?: boolean;
     /** Typed-chat surface carried through for the same reason. */
@@ -921,6 +962,7 @@ export function buildSystemPromptV2(input: BuildSystemPromptV2Input): string {
         codingTask: input.codingTask || undefined,
         codingTaskKind: input.codingTaskKind,
         codingFormat: input.codingFormat,
+        codingShape: input.codingShape,
         suppliedTemplate: input.suppliedTemplate || undefined,
         chatSurface: input.chatSurface || undefined,
         surface: input.surface,
@@ -1237,6 +1279,8 @@ export interface ResolveActionPromptInput {
     codingTaskKind?: CodingTaskKind;
     /** Explicit user format constraint — see BuildSystemPromptV2Input.codingFormat. */
     codingFormat?: Exclude<ExplicitCodingContract, null>;
+    /** Coding answer shape — see BuildSystemPromptV2Input.codingShape. */
+    codingShape?: CodingShape;
     /** A code template is present in this turn — see BuildSystemPromptV2Input.suppliedTemplate. */
     suppliedTemplate?: boolean;
     /** Typed-chat surface — attaches the scannable chat layout. Set only by
@@ -1272,6 +1316,7 @@ export function resolveV2SystemPrompt(input: ResolveActionPromptInput): string |
             codingTask: input.codingTask,
             codingTaskKind: input.codingTaskKind,
             codingFormat: input.codingFormat,
+            codingShape: input.codingShape,
             suppliedTemplate: input.suppliedTemplate,
             chatSurface: input.chatSurface,
             surface: input.surface,

@@ -17,7 +17,7 @@
 // both. Pure + dependency-light (only the shared CODING_CONTRACT text), so it is fully
 // unit-testable and importable without cycle risk.
 
-import { CODING_CONTRACT } from './codingContract';
+import { CODING_CONTRACT, CODING_SHAPE_CONTRACTS, type CodingShape } from './codingContract';
 
 /**
  * An EXPLICIT coding format constraint the user stated. `null` = no explicit
@@ -48,9 +48,13 @@ const lc = (s?: string) => (s || '').toLowerCase().trim();
 const CODE_ONLY_RE =
   /\b(?:just|only)\s+(?:the\s+|me\s+the\s+)?code\b|\bcode[- ]?only\b|\bonly\s+(?:give|write|show)\s+(?:me\s+)?(?:the\s+)?code\b|\bno\s+explanation,?\s+just\b|\bgive\s+me\s+(?:only\s+)?the\s+code\b|\bcode\s+(?:and\s+)?nothing\s+else\b/i;
 
-// "dry run" / "trace through" / "walk through the code".
+// "dry run" / "trace through" / "walk through the execution".
+// "Walk me through the solution / the code" is NOT a trace (2026-09-29): it asks
+// for a spoken walkthrough of the idea, which codingShape.ts resolves to the
+// `walkthrough` shape. Treating it as dry_run_only answered "walk me through
+// your solution" with a variable-by-variable trace.
 const DRY_RUN_RE =
-  /\bdry[- ]?run\b|\btrace\s+(?:through|it|the\s+code|the\s+solution|this)\b|\bwalk\s+(?:me\s+)?through\s+(?:the|your)\s+(?:code|solution|execution)\b|\bstep\s+through\s+(?:the|your|this)\b/i;
+  /\bdry[- ]?run\b|\btrace\s+(?:through|it|the\s+code|the\s+solution|this)\b|\bwalk\s+(?:me\s+)?through\s+(?:the|your)\s+execution\b|\bstep\s+through\s+(?:the|your|this)\b/i;
 
 // "time and space complexity" / "what's the complexity" / "big-O".
 const COMPLEXITY_RE =
@@ -125,6 +129,13 @@ const CONTINUATION_STRONG_RE =
 // to the prior solution — never on word-count alone (code-review MEDIUM 2026-06-15).
 const CONTINUATION_LOOSE_RE =
   /\b(optimi[sz]e|optimal|improve|make\s+it|refactor|rewrite|convert|faster|more\s+efficient|walk\s+through)\b/i;
+
+// "Walk me through the solution / your code" (2026-09-29). This reached
+// isCodingContinuation only through DRY_RUN_RE, which no longer treats a
+// walkthrough as a trace. Kept to EXACTLY the old coverage: a bare "walk me
+// through it / that" is as likely to follow a behavioural answer ("walk me
+// through that decision") as a coding one.
+const WALKTHROUGH_CONTINUATION_RE = /\bwalk\s+(?:me\s+|us\s+)?through\s+(?:the|your)\s+(?:code|solution)\b/i;
 
 /**
  * Is `question` a coding CONTINUATION — a short follow-up that only makes sense
@@ -237,6 +248,7 @@ export function isCodingContinuation(question: string): boolean {
   if (isBareCodeRequest(q)) return true;
   if (isLanguageRequest(q) || DIRECT_ACTION_RE.test(q)) return true;
   if (detectExplicitCodingContract(q)) return true; // code_only/complexity/dry-run/explain are all continuations-or-constraints
+  if (WALKTHROUGH_CONTINUATION_RE.test(q)) return true;
   const words = q.split(/\s+/).filter(Boolean).length;
   // STRONG coding signal: a SHORT message is a follow-up on its own; a LONG one needs a
   // back-reference ("Optimize the merge step of a 200-line service…" is NOT a follow-up).
@@ -303,8 +315,23 @@ const NO_LEAK_RULES = `Additional rules:
  */
 export function buildCodingContractPrompt(
   explicitContract: ExplicitCodingContract,
-  opts?: { includeVerification?: boolean; verificationInstruction?: string },
+  opts?: { includeVerification?: boolean; verificationInstruction?: string; codingShape?: CodingShape },
 ): string {
+  // No explicit format, but the question asked for one specific thing
+  // (codingShape.ts): that shape's contract, not the six sections.
+  const shape = opts?.codingShape;
+  if (!explicitContract && shape && shape !== 'full') {
+    const writesCode = shape === 'code' || shape === 'solve' || shape === 'optimize' || shape === 'debug';
+    const verification = writesCode && opts?.includeVerification && opts.verificationInstruction
+      ? `\n\n${opts.verificationInstruction}`
+      : '';
+    return `<answer_contract>
+answerType: coding (shape: ${shape})
+${CODING_SHAPE_CONTRACTS[shape]}
+
+${NO_LEAK_RULES}${verification}
+</answer_contract>`;
+  }
   if (!explicitContract) {
     const verification = opts?.includeVerification && opts.verificationInstruction
       ? `\n\n${opts.verificationInstruction}`
