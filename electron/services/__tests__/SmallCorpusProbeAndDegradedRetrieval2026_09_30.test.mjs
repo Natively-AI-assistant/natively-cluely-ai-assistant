@@ -58,6 +58,17 @@ describe('small-pool corpus probe (lexicalTokens.smallPoolAnchorsQuestion)', () 
     assert.equal(L.smallPoolAnchorsQuestion('What is it that they did there and why does it matter?', THESIS), false);
     assert.equal(L.smallPoolAnchorsQuestion('I think people know that makes it better, right?', THESIS), false);
   });
+  test('one shared HYPHENATED term counts once, not as the compound plus its parts', () => {
+    // wordsOf() also emits "learning" and "rate"; counted separately they cleared both gates alone.
+    const thesis = 'Both models train for exactly 30,000 steps with the same learning-rate schedule and data order.';
+    assert.equal(L.smallPoolAnchorsQuestion('What is a learning-rate warmup, and why do people use one?', [thesis]), false);
+    assert.equal(L.smallPoolAnchorsQuestion('what does real-time mean', ['Our real-time dashboards refresh every second.']), false);
+  });
+  test('a compound still matches when either side writes it as two words', () => {
+    const chunk = 'We use a linear learning-rate warmup over the first 500 steps, then cosine decay.';
+    assert.equal(L.smallPoolAnchorsQuestion('why a learning rate warmup rather than cosine decay from the start', [chunk]), true);
+    assert.equal(L.smallPoolAnchorsQuestion('why a learning-rate warmup rather than cosine decay', ['We use a linear learning rate warmup, then cosine decay.']), true);
+  });
   test('one shared content word is never enough', () => {
     assert.equal(L.smallPoolAnchorsQuestion('Tell me about oxygen masks on airplanes', [SLIDES]), false);
   });

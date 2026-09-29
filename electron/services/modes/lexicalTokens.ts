@@ -465,12 +465,25 @@ function singular(w: string): string {
   return w.length > 4 && w.endsWith('s') && !/(ss|is|us)$/.test(w) ? w.slice(0, -1) : w;
 }
 
-/** Content words of a question for the small-pool probe (singularised). */
+/**
+ * Content words of a question for the small-pool probe (singularised).
+ *
+ * A hyphenated compound is ONE word here. wordsOf() adds a compound's parts as
+ * extra tokens ("learning-rate" → learning-rate, learning, rate), which is right
+ * for ranking but would let one shared compound count as three matches and
+ * clear both the match count and the share on its own — "What is a
+ * learning-rate warmup?" anchored against a thesis that merely mentions its
+ * learning-rate schedule. The parts are dropped from the question; the compound
+ * still matches a chunk that writes it as two words (see smallPoolAnchorsQuestion).
+ */
 export function smallPoolContentWords(question: string): Set<string> {
+  const words = [...questionContentWords(question)];
+  const partsOfCompounds = new Set(words.filter((w) => w.includes('-')).flatMap((w) => w.split('-')));
   const out = new Set<string>();
-  for (const w of questionContentWords(question)) {
+  for (const w of words) {
     if (SMALL_POOL_GENERIC_WORDS.has(w) || /^\d+$/.test(w) && w.length < 3) continue;
-    out.add(singular(w));
+    if (!w.includes('-') && partsOfCompounds.has(w)) continue;
+    out.add(w.includes('-') ? w : singular(w));
   }
   return out;
 }
@@ -486,7 +499,14 @@ export function smallPoolAnchorsQuestion(question: string, texts: readonly strin
   for (const text of texts) {
     const chunk = new Set(wordsOf(text, { shortNumerics: true }).map(singular));
     let hit = 0;
-    for (const w of words) if (chunk.has(w)) hit++;
+    for (const w of words) {
+      if (chunk.has(w)) { hit++; continue; }
+      // A compound the chunk writes as separate words ("learning rate").
+      if (w.includes('-')) {
+        const parts = w.split('-').filter((x) => keepToken(x));
+        if (parts.length > 0 && parts.every((x) => chunk.has(singular(x)))) hit++;
+      }
+    }
     if (hit >= SMALL_POOL_MIN_MATCHES && hit / words.size >= SMALL_POOL_MIN_SHARE) return true;
   }
   return false;
