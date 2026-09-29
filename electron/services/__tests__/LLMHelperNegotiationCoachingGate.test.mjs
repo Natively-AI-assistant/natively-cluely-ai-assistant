@@ -268,18 +268,20 @@ test('streamChat: handler IS invoked when active mode allows coaching (looking-f
   assert.deepEqual(chunks, []);
 });
 
-test('streamChat: handler IS invoked when no active mode is set (default-open)', async () => {
+// Profile Intelligence eligibility (2026-09-30): the intercept is built from
+// the résumé/JD, so it runs only in a mode whose TEMPLATE opts into PI
+// (looking-for-work, technical-interview). No active mode used to default OPEN;
+// it is now closed, like every other PI path.
+test('streamChat: handler is NOT invoked when no active mode is set (PI fails closed)', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildOrchestratorStub());
   const captured = [];
   helper.setNegotiationCoachingHandler(payload => captured.push(payload));
 
   installActiveMode(null);
-  const chunks = await drainStream(helper.streamChat('Any salary thoughts?'));
+  await drainStream(helper.streamChat('Any salary thoughts?'));
 
-  assert.equal(captured.length, 1, 'handler must fire when no mode is active');
-  assert.deepEqual(captured[0], PAYLOAD_SENTINEL);
-  assert.deepEqual(chunks, []);
+  assert.equal(captured.length, 0, 'no mode → no Profile Intelligence → no coaching card');
 });
 
 test('streamChat: handler is NOT invoked when active mode is technical-interview (issue #272)', async () => {
@@ -316,7 +318,7 @@ test('streamChat: handler is NOT invoked for team-meet or lecture either', async
   }
 });
 
-test('streamChat: handler IS invoked for the remaining coaching-eligible modes', async () => {
+test('streamChat: handler is NOT invoked in modes without Profile Intelligence (sales, recruiting, general)', async () => {
   for (const templateType of ['sales', 'recruiting', 'general']) {
     const helper = buildHelper();
     helper.setKnowledgeOrchestrator(buildOrchestratorStub());
@@ -328,10 +330,9 @@ test('streamChat: handler IS invoked for the remaining coaching-eligible modes',
 
     assert.equal(
       captured.length,
-      1,
-      `${templateType} should still allow coaching short-circuit`,
+      0,
+      `${templateType} has no Profile Intelligence — the candidate's salary coaching does not belong in it`,
     );
-    assert.deepEqual(captured[0], PAYLOAD_SENTINEL);
   }
 });
 
@@ -474,22 +475,52 @@ test('streamChat: identity recall is not mode-suppressed in technical-interview 
   assertIdentityFactReachedProvider(calls, 'technical-interview');
 });
 
-test('chatWithGemini: identity recall is not mode-suppressed in lecture mode', async () => {
-  const helper = buildHelper();
-  helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+const chatDispatchSpy = (helper) => {
   const calls = [];
   helper.customProvider = { id: 'spy-provider', name: 'spy', curlCommand: 'noop' };
   helper.executeCustomProvider = async (message, context) => {
     calls.push({ message: String(message ?? ''), context: String(context ?? '') });
     return 'PROVIDER_GENERATED';
   };
+  return calls;
+};
 
-  installActiveMode('lecture');
+test('chatWithGemini: identity recall is not mode-suppressed in technical-interview mode', async () => {
+  const helper = buildHelper();
+  helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+  const calls = chatDispatchSpy(helper);
+
+  installActiveMode('technical-interview');
   const result = await callChat(helper, 'What is my name?');
 
   assert.strictEqual(result, 'PROVIDER_GENERATED',
     'the non-streaming path must also let the provider write the answer, not return the canned intro');
-  assertIdentityFactReachedProvider(calls, 'lecture (non-streaming)');
+  assertIdentityFactReachedProvider(calls, 'technical-interview (non-streaming)');
+});
+
+// Lecture (and every other mode without Profile Intelligence) gets NO résumé
+// identity, on either transport (2026-09-30). This used to assert the opposite:
+// the intercept ran in any mode while knowledge mode was on.
+test('chatWithGemini + streamChat: no identity recall in lecture or with no mode (no Profile Intelligence)', async () => {
+  for (const templateType of ['lecture', null]) {
+    const helper = buildHelper();
+    helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+    const calls = chatDispatchSpy(helper);
+    installActiveMode(templateType);
+    await callChat(helper, 'What is my name?');
+    assert.equal(calls.length, 1);
+    assert.doesNotMatch(`${calls[0].message}\n${calls[0].context}`, /candidate_identity_fact|CANNED_INTRO_RESPONSE_SENTINEL/,
+      `${templateType ?? 'no mode'} (non-streaming) must not receive the résumé intro`);
+
+    const streamHelper = buildHelper();
+    streamHelper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+    const streamCalls = introDispatchSpy(streamHelper);
+    installActiveMode(templateType);
+    const chunks = await drainStream(streamHelper.streamChat('What is my name?'));
+    assert.ok(!chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL'));
+    assert.ok(streamCalls.every((c) => !/candidate_identity_fact|CANNED_INTRO_RESPONSE_SENTINEL/.test(`${c.message}\n${c.context}`)),
+      `${templateType ?? 'no mode'} (streaming) must not receive the résumé intro`);
+  }
 });
 
 // Helper to wire a fake customProvider + spy on the dispatch so we can read
@@ -796,20 +827,40 @@ test('chatWithGemini: premium context block is SUPPRESSED at dispatch in team-me
   assert.equal(result, 'spy-response', 'dispatch must have produced the spy response');
 });
 
-test('chatWithGemini: premium context block REACHES dispatch in recruiting (positive control)', async () => {
+test('chatWithGemini: premium context block REACHES dispatch in looking-for-work (positive control)', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildInjectionOrchestratorStub());
   const calls = attachDispatchSpy(helper);
 
-  installActiveMode('recruiting');
-  await callChatWithSystem(helper, 'How did the candidate respond?');
+  installActiveMode('looking-for-work');
+  await callChatWithSystem(helper, 'How should I answer the salary question?');
 
   const dispatched = calls.find(c => c.via === 'executeCustomProvider');
   assert.ok(dispatched, 'executeCustomProvider must be reached after the intercept');
   assert.ok(
     dispatched.context.includes('PREMIUM_CONTEXT_SENTINEL'),
-    `recruiting must inject premium context at dispatch; saw context=${JSON.stringify(dispatched.context).slice(0, 200)}`,
+    `looking-for-work must inject premium context at dispatch; saw context=${JSON.stringify(dispatched.context).slice(0, 200)}`,
   );
+});
+
+// Recruiting used to be the positive control here — and that was the leak:
+// the premium context is the USER's résumé/JD, and in recruiting the person
+// being discussed is a candidate. Profile Intelligence eligibility (2026-09-30)
+// keeps it out, like every mode whose template has no profile sources.
+test('chatWithGemini: premium context block does NOT reach dispatch in recruiting, general or with no mode', async () => {
+  for (const templateType of ['recruiting', 'general', null]) {
+    const helper = buildHelper();
+    helper.setKnowledgeOrchestrator(buildInjectionOrchestratorStub());
+    const calls = attachDispatchSpy(helper);
+
+    installActiveMode(templateType);
+    await callChatWithSystem(helper, 'How did the candidate respond?');
+
+    const dispatched = calls.find(c => c.via === 'executeCustomProvider');
+    assert.ok(dispatched, 'executeCustomProvider must be reached');
+    assert.ok(!dispatched.context.includes('PREMIUM_CONTEXT_SENTINEL'), `${templateType ?? 'no mode'}: no premium context`);
+    assert.ok(!String(dispatched.systemPrompt ?? '').includes('PREMIUM_PROMPT_SENTINEL'), `${templateType ?? 'no mode'}: no premium system prompt`);
+  }
 });
 
 test('streamChat: premium prompt injection STILL FIRES in looking-for-work (regression guard)', async () => {
