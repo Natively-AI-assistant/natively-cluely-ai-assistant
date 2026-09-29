@@ -341,9 +341,15 @@ ${promptInstruction.trim()}
             // boundary lets a "discussion turn" skip the sections. A blind
             // trigger on a problem IS a request for the full solution, every
             // time — there is no question text that could mean anything else.
-            if (promotedScreenCodingTurn) {
+            // Only a press that asks for nothing specific (shape 'solve') is a
+            // request to solve what is on screen — the same gate as the
+            // engine's V3 twin (IntelligenceEngine repeat_press_directive).
+            // "Explain this" / "what's the complexity" over a screenshot is
+            // promoted too, and this directive used to override their shape
+            // with the full solution.
+            if (promotedScreenCodingTurn && codingSignals.codingShape === 'solve') {
                 intentContextParts.push(`<repeat_press_directive>
-The user triggered this action with a coding problem on screen and NO new question. That is a request for the COMPLETE solution to the on-screen problem, following the coding contract's full section shape — even if a previous answer in this conversation already covered it, and even if this looks like a follow-up. Never respond with commentary on, agreement with, or a summary of an earlier answer. Produce the full answer as if asked for the first time.
+The user triggered this action with a coding problem on screen and NO new question. That is a request for the COMPLETE solution to the on-screen problem, in the shape the coding contract asks for, even if a previous answer in this conversation already covered it, and even if this looks like a follow-up. Never respond with commentary on, agreement with, or a summary of an earlier answer. Produce the answer as if asked for the first time.
 </repeat_press_directive>`);
             }
             const intentContext = intentContextParts.length > 0

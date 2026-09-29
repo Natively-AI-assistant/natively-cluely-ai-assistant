@@ -4866,12 +4866,15 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // 8s regen latency is acceptable for a misfire rate of ~1/30 coding
                 // questions; a silent retry is strictly better than a stranded
                 // marker on failure.
+                // The turn's own shape: six sections only for a 'full' ask.
                 const regenContract = explicitCodingContract
                   ? buildCodingContractPrompt(explicitCodingContract)
-                  : buildCodingContractPrompt(null);
+                  : buildCodingContractPrompt(null, { codingShape: manualCodingShape });
                 const directive = explicitCodingContract === 'code_only'
                   ? 'Output ONLY the solution as a single fenced code block with a language tag. NO prose before or after, NO headings, NO explanation, NO clarifying questions.'
-                  : 'Output the full solution NOW in one fenced code block with the six-section coding format. Do NOT ask clarifying questions; produce a working implementation.';
+                  : manualCodingShape === 'full'
+                    ? 'Output the full solution NOW in one fenced code block with the six-section coding format. Do NOT ask clarifying questions; produce a working implementation.'
+                    : 'Output the solution NOW, with the code in one fenced code block, in the shape the contract above asks for. Do NOT ask clarifying questions; produce a working implementation.';
                 const regenPrompt = `${regenContract}\n\nThe previous answer did not contain any code. ${directive}\n\nProblem: ${message}`;
                 let regen = '';
                 const regenAbort = new AbortController();
@@ -4969,10 +4972,14 @@ export function initializeIpcHandlers(appState: AppState): void {
               if (!completeness.ok && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
                 piTelemetry.emit('pi_context_policy_applied', { answerType: answerPlan.answerType, via: 'code_truncation_detected', markerCount: completeness.issues.length });
                 console.warn('[IPC] code-only answer looks truncated, regenerating once', { issues: completeness.issues.map(i => i.code) });
+                // The turn's own shape (the same manualCodingShape the prompt
+                // and validateAnswerStructure use): six sections only for a
+                // 'full' ask. Passing no shape here used to demand the six
+                // sections on every truncated coding answer.
                 const regenContract = explicitCodingContract
                   ? buildCodingContractPrompt(explicitCodingContract)
-                  : buildCodingContractPrompt(null);
-                const regenPrompt = `${regenContract}\n\nThe previous answer was cut off before the code finished. Output the COMPLETE code now, nothing truncated.\n\nProblem: ${message}`;
+                  : buildCodingContractPrompt(null, { codingShape: manualCodingShape });
+                const regenPrompt = `${regenContract}\n\nThe previous answer was cut off before the code finished. Output the COMPLETE answer again in the shape above, with the code complete and nothing truncated.\n\nProblem: ${message}`;
                 let regen = '';
                 // HIGH #3 (audit 2026-06-29): iterator.return() alone can't
                 // cancel a parked fetch; without an abort the upstream
@@ -6618,6 +6625,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   const outcome = await verifyCodingAnswer({
                     answer: verifyTarget,
                     question: message,
+                    codingShape: manualCodingShape,
                     correct: async (repairPrompt: string) => {
                       // Background coding-correction (post-answer). Deadline-guarded
                       // so a stalled provider can't leave a hung background task. 7s

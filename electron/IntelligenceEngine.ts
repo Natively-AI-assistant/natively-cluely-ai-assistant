@@ -6735,6 +6735,9 @@ export class IntelligenceEngine extends EventEmitter {
                     trace,
                     generationId,
                     verificationCancellationToken.signal,
+                    // The shape the prompt asked for, so a correction never
+                    // demands sections the answer was told to leave out.
+                    (require('./llm/codingShape') as typeof import('./llm/codingShape')).detectCodingShape(answerPlan.question),
                 ).finally(() => {
                     this.whatToAnswerBackgroundCancellationTokens.delete(verificationCancellationToken);
                 });
@@ -6810,6 +6813,7 @@ export class IntelligenceEngine extends EventEmitter {
         trace: PiLatencyTrace,
         generationId: number,
         abortSignal?: AbortSignal,
+        codingShape?: import('./llm/codingContract').CodingShape,
     ): Promise<void> {
         // Supersession guard: if the user fired a newer generation while this
         // background verification ran, its result belongs to a now-abandoned
@@ -6822,6 +6826,7 @@ export class IntelligenceEngine extends EventEmitter {
                 answer: shownAnswer,
                 question,
                 screenText,
+                codingShape,
                 // Correction call: regenerate a fixed answer via the same chat path.
                 // Bounded to ONE attempt inside verifyCodingAnswer.
                 correct: async (repairPrompt: string) => {
