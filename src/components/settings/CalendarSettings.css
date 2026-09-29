@@ -119,7 +119,6 @@
   background: var(--cp-card-bg);
   padding: 14px 16px;
 }
-.cp-card + .cp-card { margin-top: 16px; }
 .cp-card-header {
   display: flex;
   align-items: center;
@@ -159,7 +158,13 @@
 }
 
 /* ── Rows ("Founding Engineer · Natively ........ 2024-01 – Present") ── */
-.cp-rows { display: flex; flex-direction: column; gap: 8px; }
+/* Rows and day cards are CollapseItems, so each carries its gap as bottom
+   padding INSIDE the part that folds (a flex gap would stay behind when a row
+   folds away, and jump); the list gives the last one's back. */
+.cp-slots { margin-bottom: -8px; }
+.cp-slots > * > .cp-slot { padding-bottom: 8px; }
+.cp-slots--cards { margin-bottom: -16px; }
+.cp-slots--cards > * > .cp-slot { padding-bottom: 16px; }
 .cp-row {
   display: flex;
   align-items: center;
@@ -241,6 +246,8 @@
    replaces did. */
 .cp-pill--start { background: var(--cp-btn-bg-hover); border-color: transparent; color: var(--cp-accent); font-weight: 600; }
 .cp-pill--start:hover:not(:disabled) { background: color-mix(in srgb, var(--cp-accent) 16%, transparent); color: var(--cp-accent); }
+/* Refresh landed: the check and "Up to date" wear the accent for their moment. */
+.cp-pill.is-done { color: var(--cp-accent); }
 /* A row's Join: the same pill, smaller. */
 .cp-pill--sm { padding: 3px 10px; font-size: 11px; gap: 5px; }
 /* The empty box's call to action: PI's Upload file, which is primary-coloured text. */
@@ -319,13 +326,15 @@
 .cal-pane .cp-row { animation: cp-list-in 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards; }
 /* A day card is a large item (80ms apart); its rows follow IT at 40ms, so a
    later day's rows rise after their card arrives rather than while it is still
-   invisible. Both capped: the last row lands within 280ms. */
-.cal-pane .cp-card { --cp-card-delay: 0ms; animation-delay: var(--cp-card-delay); }
-.cal-pane .cp-card:nth-child(2) { --cp-card-delay: 80ms; }
-.cal-pane .cp-card:nth-child(n+3) { --cp-card-delay: 160ms; }
-.cal-pane .cp-row:nth-child(1) { animation-delay: calc(var(--cp-card-delay, 0ms) + 40ms); }
-.cal-pane .cp-row:nth-child(2) { animation-delay: calc(var(--cp-card-delay, 0ms) + 80ms); }
-.cal-pane .cp-row:nth-child(n+3) { animation-delay: calc(var(--cp-card-delay, 0ms) + 120ms); }
+   invisible. Both capped: the last row lands within 280ms. The steps come from
+   the pane as --cp-card-delay / --cp-row-delay (each row and card sits in its
+   own CollapseItem, so :nth-child would count 1 for every one of them). */
+.cal-pane .cp-card { animation-delay: var(--cp-card-delay, 0ms); }
+.cal-pane .cp-row { animation-delay: calc(var(--cp-card-delay, 0ms) + var(--cp-row-delay, 0ms)); }
+/* Once the week has shown, a row or day the refresh adds grows in on its own
+   (CollapseItem); the rise is the first view's alone. */
+.cal-pane[data-entered] .cp-card,
+.cal-pane[data-entered] .cp-row { animation: none; }
 
 @keyframes cp-fade-only { from { opacity: 0; } }
 /* Reduced motion only: the account area's connect/disconnect swap (see the pane). */

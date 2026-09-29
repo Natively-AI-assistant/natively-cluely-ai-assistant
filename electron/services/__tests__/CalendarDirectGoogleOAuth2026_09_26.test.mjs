@@ -57,6 +57,8 @@ function setup({ tokenResponse, savedTokens, calendarList, eventsByCalendar, env
     const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'calendar-oauth-'));
     const opened = [];
     const fetchCalls = [];
+    // Flip `net.offline` mid-test: Google's requests then fail the way fetch does with no network.
+    const net = { offline: false };
     const originalLoad = Module._load;
     const originalFetch = globalThis.fetch;
     const previousEnv = {
@@ -94,6 +96,7 @@ function setup({ tokenResponse, savedTokens, calendarList, eventsByCalendar, env
             if (r instanceof Error) throw r;
             return new Response(JSON.stringify(r.body), { status: r.status, headers: { 'Content-Type': 'application/json' } });
         }
+        if (net.offline && u.startsWith('https://www.googleapis.com/calendar/')) throw new TypeError('fetch failed');
         if (u.startsWith(CALENDAR_LIST_URL)) {
             const r = calendarList ?? { status: 200, body: { items: [{ id: 'me@example.com', primary: true, selected: true }] } };
             return new Response(JSON.stringify(r.body), { status: r.status });
@@ -132,7 +135,7 @@ function setup({ tokenResponse, savedTokens, calendarList, eventsByCalendar, env
         }
         delete require.cache[require.resolve(compiled)];
     };
-    return { cm, opened, fetchCalls, userData, restore };
+    return { cm, opened, fetchCalls, userData, net, restore };
 }
 
 async function waitFor(predicate, ms = 3000) {
@@ -433,6 +436,36 @@ test('settings: the synced calendars are listed by name, primary first; without 
         assert.deepEqual(await noList.cm.getSyncedCalendars(), [{ id: 'primary', name: 'evin@example.com', primary: true }]);
     } finally {
         await noList.restore();
+    }
+});
+
+test('offline: a failed fetch keeps the last week and calendars instead of an empty week (2026-09-27)', async () => {
+    const env = setup({
+        savedTokens: { accessToken: 'at', refreshToken: 'rt', expiryDate: Date.now() + 3_600_000, email: 'evin@example.com' },
+        calendarList: { status: 200, body: { items: [
+            { id: 'evin@example.com', summary: 'Personal', primary: true, selected: true },
+            { id: 'work@group.calendar.google.com', summary: 'Work', selected: true },
+        ] } },
+        eventsByCalendar: { 'evin@example.com': [gEvent('standup', 0)], 'work@group.calendar.google.com': [gEvent('review', 60)] },
+    });
+    try {
+        assert.deepEqual((await env.cm.getUpcomingEvents(true)).map((e) => e.title), ['standup', 'review']);
+        assert.equal(await env.cm.refreshState(), true, 'a refresh Google answered is fresh');
+        const calendars = await env.cm.getSyncedCalendars();
+        assert.equal(calendars.length, 2);
+
+        env.net.offline = true;
+        assert.deepEqual((await env.cm.getUpcomingEvents(true)).map((e) => e.title), ['standup', 'review'],
+            'offline read as "Your next 7 days are clear" in Settings and the Launcher');
+        assert.deepEqual(await env.cm.getSyncedCalendars(), calendars, 'offline shrank the list to the primary calendar');
+        assert.equal(await env.cm.refreshState(), false, 'offline, Settings must not say "Up to date"');
+
+        // Disconnecting forgets both.
+        await env.cm.disconnect();
+        assert.deepEqual(await env.cm.getUpcomingEvents(true), []);
+        assert.deepEqual(await env.cm.getSyncedCalendars(), []);
+    } finally {
+        await env.restore();
     }
 });
 

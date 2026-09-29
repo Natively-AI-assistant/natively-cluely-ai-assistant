@@ -595,6 +595,7 @@ interface ElectronAPI {
     },
   ) => Promise<boolean>;
   onMeetingsUpdated: (callback: () => void) => () => void;
+  onCalendarConnectionChanged: (callback: (connected: boolean) => void) => () => void;
 
   // Intelligence Mode Events
   onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void;
@@ -836,7 +837,7 @@ interface ElectronAPI {
       source: 'google';
     }>
   >;
-  calendarRefresh: () => Promise<{ success: boolean; error?: string }>;
+  calendarRefresh: () => Promise<{ success: boolean; error?: string; fresh?: boolean }>;
 
   // Auto-Update
   onUpdateAvailable: (callback: (info: any) => void) => () => void;
@@ -2188,6 +2189,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('meetings-updated', subscription);
     return () => {
       ipcRenderer.removeListener('meetings-updated', subscription);
+    };
+  },
+  onCalendarConnectionChanged: (callback: (connected: boolean) => void) => {
+    const subscription = (_: unknown, connected: boolean) => callback(!!connected);
+    ipcRenderer.on('calendar-connection-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('calendar-connection-changed', subscription);
     };
   },
 

@@ -15360,8 +15360,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('calendar-refresh', async () => {
     const { CalendarManager } = require('./services/CalendarManager');
-    await CalendarManager.getInstance().refreshState();
-    return { success: true };
+    const fresh = await CalendarManager.getInstance().refreshState();
+    return { success: true, fresh };
   });
 
   // ==========================================

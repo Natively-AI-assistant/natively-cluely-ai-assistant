@@ -9540,6 +9540,9 @@ if (process.env.THINKING_MATRIX === '1') {
     calMgr.setNotificationSuppressor(() => nativePromptsBlocked(() => appState.getUndetectable()));
     calMgr.init();
 
+    // The Launcher card and Settings › Calendar follow the connection wherever it changes.
+    require('./services/calendar/calendarConnectionBroadcast').broadcastCalendarConnection(calMgr, () => BrowserWindow.getAllWindows());
+
     // Notes name the user by first name ("Evin"), not the account's full name.
     // Meetings saved before that are carried over once per account name, after
     // their originals are backed up to userData/backups (calendarNameMigration).

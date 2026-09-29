@@ -320,6 +320,7 @@ export class CalendarManager extends EventEmitter {
         this.accountName = null;
         this.lastEvents = [];
         this.lastEventsAt = 0;
+        this.lastCalendars = null;
 
         if (fs.existsSync(TOKEN_PATH)) {
             fs.unlinkSync(TOKEN_PATH);
@@ -384,7 +385,8 @@ export class CalendarManager extends EventEmitter {
     // Refresh Logic (NEW)
     // =========================================================================
 
-    public async refreshState(): Promise<void> {
+    /** True when Google answered: a failed fetch keeps the last list, which is not "up to date". */
+    public async refreshState(): Promise<boolean> {
         console.log('[CalendarManager] Refreshing state (Reality Reconciliation)...');
 
         // 1. Reset Soft Heuristics
@@ -393,6 +395,7 @@ export class CalendarManager extends EventEmitter {
         this.reminderTimeouts = [];
 
         // 2. Calendar Re-sync & Temporal Re-evaluation
+        const landedBefore = this.fetchesLanded;
         if (this.isConnected) {
             // Force fetch will also re-schedule reminders based on NEW time
             await this.getUpcomingEvents(true);
@@ -404,6 +407,7 @@ export class CalendarManager extends EventEmitter {
         // We emit 'updated' so the frontend knows to re-fetch via getUpcomingEvents
         // or we could push the data. usually ipcHandlers just call getUpcomingEvents.
         this.emit('events-updated');
+        return this.isConnected && this.fetchesLanded !== landedBefore;
     }
 
     private handleTokenResponse(data: any) {
@@ -594,6 +598,8 @@ export class CalendarManager extends EventEmitter {
     // Google; the Launcher and Settings refetch it every minute anyway.
     private lastEvents: CalendarEvent[] = [];
     private lastEventsAt = 0;
+    /** Fetches Google answered; refreshState compares it (two can share a Date.now()). */
+    private fetchesLanded = 0;
 
     public async getUpcomingEvents(force: boolean = false): Promise<CalendarEvent[]> {
         if (!this.isConnected || !this.accessToken) return [];
@@ -608,9 +614,13 @@ export class CalendarManager extends EventEmitter {
         if (events) {
             this.lastEvents = events;
             this.lastEventsAt = now;
+            this.fetchesLanded++;
         }
         this.scheduleReminders(events ?? []);
-        return events ?? [];
+        // A failed fetch (offline, Google timing out) is not an empty week: the
+        // Launcher and Settings keep showing the last list, less what has ended.
+        if (!events) return this.lastEvents.filter((ev) => new Date(ev.endTime).getTime() > now);
+        return events;
     }
 
     /** The last fetched list if it is no older than `maxAgeMs`, else null. */
@@ -646,6 +656,7 @@ export class CalendarManager extends EventEmitter {
                 maxResults: '50',
             });
             const calendarIds = await this.syncedCalendarIds();
+            let failed = 0;
             const perCalendar = await Promise.all(calendarIds.map(async (calendarId) => {
                 const response = await fetch(
                     `${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
@@ -659,11 +670,15 @@ export class CalendarManager extends EventEmitter {
                 });
                 if (!response?.ok) {
                     if (response) console.error(`[CalendarManager] Google Calendar fetch failed: HTTP ${response.status} ${await googleErrorReason(response)}`);
+                    failed++;
                     return [];
                 }
                 const data = await response.json() as any;
                 return (data.items || []) as any[];
             }));
+            // Nothing came back at all (offline, say): that is a failed fetch,
+            // not an empty week, so callers keep what they had.
+            if (failed === calendarIds.length) return null;
 
             // A meeting you were invited to on two calendars is one meeting.
             // Recurring instances share an iCalUID, so the start time is part of
@@ -737,27 +752,35 @@ export class CalendarManager extends EventEmitter {
             await this.refreshAccessToken();
         }
         const entries = await this.syncedCalendarEntries();
-        if (!entries.length) return [{ id: 'primary', name: this.accountEmail || 'Primary calendar', primary: true }];
-        return entries.map((c) => ({
-            id: c.id,
-            name: c.summaryOverride || c.summary || c.id,
-            primary: !!c.primary,
-            ...(typeof c.backgroundColor === 'string' ? { color: c.backgroundColor } : {}),
-        }));
+        // The request itself failed (offline): the last list, not "primary only".
+        if (entries === null && this.lastCalendars) return this.lastCalendars;
+        const calendars: SyncedCalendar[] = !entries?.length
+            ? [{ id: 'primary', name: this.accountEmail || 'Primary calendar', primary: true }]
+            : entries.map((c) => ({
+                id: c.id,
+                name: c.summaryOverride || c.summary || c.id,
+                primary: !!c.primary,
+                ...(typeof c.backgroundColor === 'string' ? { color: c.backgroundColor } : {}),
+            }));
+        if (entries !== null) this.lastCalendars = calendars;
+        return calendars;
     }
+
+    /** The last calendar list Google answered, for when a request fails outright. */
+    private lastCalendars: SyncedCalendar[] | null = null;
 
     private async syncedCalendarIds(): Promise<string[]> {
         const entries = await this.syncedCalendarEntries();
-        return entries.length ? entries.map((c) => c.id as string) : ['primary'];
+        return entries?.length ? entries.map((c) => c.id as string) : ['primary'];
     }
 
     /**
      * Calendar-list entries for the calendars ticked in Google Calendar,
      * primary first. Empty when the list is unavailable, e.g. the
      * calendar-list permission was unticked at consent; callers then use the
-     * primary calendar alone.
+     * primary calendar alone. Null when the request failed outright (offline).
      */
-    private async syncedCalendarEntries(): Promise<any[]> {
+    private async syncedCalendarEntries(): Promise<any[] | null> {
         try {
             const response = await fetch(`${CALENDAR_API}/users/me/calendarList?minAccessRole=reader`, {
                 headers: { Authorization: `Bearer ${this.accessToken}` },
@@ -774,7 +797,7 @@ export class CalendarManager extends EventEmitter {
                 .slice(0, MAX_SYNCED_CALENDARS);
         } catch (error) {
             console.warn('[CalendarManager] Calendar list request failed; syncing the primary calendar only:', error);
-            return [];
+            return null;
         }
     }
 

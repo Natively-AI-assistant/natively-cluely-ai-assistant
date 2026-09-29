@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
-import { AlertCircle, ArrowUpRight, CalendarRange, Info, Loader2, RefreshCw, Video } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AlertCircle, ArrowUpRight, CalendarRange, Check, Info, Loader2, RefreshCw, Video } from 'lucide-react';
 import { useLanguage, useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { Collapse, Presence, SettingsMotionReady, SwapLabel, useMotionReadyAfter, useSettledFlag } from './SettingsRow';
+import { Collapse, CollapseItem, Presence, SettingsMotionReady, SwapLabel, useMotionReadyAfter, useSettledFlag } from './SettingsRow';
 import { SettingsToggle } from './SettingsToggle';
+import { readCalendarSnapshot, unfinishedEvents, writeCalendarSnapshot } from '../../lib/calendarSnapshot.mjs';
 import './CalendarSettings.css';
 
 /*
@@ -150,12 +151,29 @@ export const CalendarSettings: React.FC = () => {
   const theme = useResolvedTheme();
   const reduceMotion = useReducedMotion();
 
-  const [status, setStatus] = useState<CalendarStatus | null>(null);
-  const [calendars, setCalendars] = useState<SyncedCalendar[]>([]);
-  const [events, setEvents] = useState<UpcomingEvent[] | null>(null);
+  // Opens from what this window last saw (the Launcher warms it after startup),
+  // so a visit shows the week at once; the fetches below then refresh it in
+  // place. "Loading your meetings…" is only for a window that has never seen it.
+  const [status, setStatus] = useState<CalendarStatus | null>(() => readCalendarSnapshot().status);
+  const [calendars, setCalendars] = useState<SyncedCalendar[]>(() =>
+    (readCalendarSnapshot().status?.connected && readCalendarSnapshot().calendars) || []);
+  const [events, setEvents] = useState<UpcomingEvent[] | null>(() =>
+    readCalendarSnapshot().status?.connected ? unfinishedEvents(readCalendarSnapshot().events, Date.now()) : null);
+  useEffect(() => {
+    if (status === null) return;
+    writeCalendarSnapshot({ status, events, calendars: status.connected ? calendars : null });
+  }, [status, events, calendars]);
   const [busy, setBusy] = useState<'connecting' | 'disconnecting' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshTurns, setRefreshTurns] = useState(0);
+  // A manual Refresh ends on "Up to date" with a check for a moment, so a click
+  // that changed nothing still gets an answer.
+  const [refreshed, setRefreshed] = useState(false);
+  useEffect(() => {
+    if (!refreshed) return;
+    const timer = window.setTimeout(() => setRefreshed(false), 1600);
+    return () => window.clearTimeout(timer);
+  }, [refreshed]);
   const [error, setError] = useState<string | null>(null);
   // Disconnecting throws away the Google sign-in, so the first click asks, in
   // the row itself (the pill turns red, the line asks, Cancel appears), and the
@@ -174,6 +192,15 @@ export const CalendarSettings: React.FC = () => {
   // in and straight back out on top of it read as two motions (Skills' rule).
   const refreshingShown = useSettledFlag(refreshing);
   const now = useNow(connected);
+  // The day cards rise in once, when the week first shows. After that (the
+  // entrance takes 700ms at most), a meeting the background refresh adds or
+  // drops grows or folds in place (CollapseItem) instead of replaying the rise.
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    if (entered || events === null) return;
+    const timer = window.setTimeout(() => setEntered(true), 800);
+    return () => window.clearTimeout(timer);
+  }, [entered, events]);
 
   // A running meeting hides Start Natively (the Launcher's button does the same
   // check); asked again on every 30s tick.
@@ -215,6 +242,19 @@ export const CalendarSettings: React.FC = () => {
       .catch(() => { if (live) setStatus({ connected: false }); });
     return () => { live = false; };
   }, []);
+
+  // Connected or disconnected elsewhere (the Launcher's Connect, a grant revoked
+  // during a refresh): the pane follows.
+  useEffect(() => window.electronAPI?.onCalendarConnectionChanged?.((isConnected) => {
+    window.electronAPI?.getCalendarStatus?.()
+      .then((s) => setStatus(s ?? { connected: isConnected }))
+      .catch(() => setStatus({ connected: isConnected }));
+    if (!isConnected) {
+      setConfirming(false);
+      setEvents(null);
+      setCalendars([]);
+    }
+  }), []);
 
   // While connected: the next 7 days, every minute (the Launcher's cadence), and
   // the calendars they come from.
@@ -267,11 +307,14 @@ export const CalendarSettings: React.FC = () => {
 
   const refresh = async () => {
     setRefreshTurns((n) => n + 1);
+    setRefreshed(false);
     if (!window.electronAPI?.calendarRefresh) return;
     setRefreshing(true);
     try {
-      await window.electronAPI.calendarRefresh();
+      const res = await window.electronAPI.calendarRefresh();
       await loadEvents();
+      // Only when Google answered: offline, the list shown is the last one.
+      if (res?.fresh !== false) setRefreshed(true);
     } catch (err) {
       console.error('[CalendarSettings] Refresh failed:', err);
     } finally {
@@ -359,7 +402,7 @@ export const CalendarSettings: React.FC = () => {
 
   return (
     <SettingsMotionReady.Provider value={motionReady}>
-      <div className="cal-pane space-y-6 animated fadeIn" data-theme={theme} data-settings-stagger>
+      <div className="cal-pane space-y-6 animated fadeIn" data-theme={theme} data-entered={entered || undefined} data-settings-stagger>
         {/* ── The account ── */}
         <section>
           <h3 className="cp-label">{t('Google Calendar')}</h3>
@@ -421,9 +464,9 @@ export const CalendarSettings: React.FC = () => {
                   </div>
                 )}
               </Presence>
-              <button type="button" className="cp-pill cp-pill--sm" onClick={refresh} disabled={refreshing}>
-                <Presence kind="icon" id={refreshingShown ? 'busy' : 'idle'} slotClassName="w-3 h-3">
-                  {refreshingShown ? <Loader2 size={12} className="animate-spin" /> : (
+              <button type="button" className={`cp-pill cp-pill--sm${refreshed ? ' is-done' : ''}`} onClick={refresh} disabled={refreshing}>
+                <Presence kind="icon" id={refreshingShown ? 'busy' : refreshed ? 'done' : 'idle'} slotClassName="w-3 h-3">
+                  {refreshingShown ? <Loader2 size={12} className="animate-spin" /> : refreshed ? <Check size={12} strokeWidth={2.5} /> : (
                     // One turn per click, as Skills' Refresh.
                     <motion.span
                       className="inline-flex"
@@ -435,20 +478,28 @@ export const CalendarSettings: React.FC = () => {
                     </motion.span>
                   )}
                 </Presence>
-                {t('Refresh')}
+                <SwapLabel id={refreshed ? 'done' : 'idle'} sizers={[t('Refresh'), t('Up to date')]}>
+                  {refreshed ? t('Up to date') : t('Refresh')}
+                </SwapLabel>
               </button>
             </div>
 
-            {events !== null && sorted.length === 0 && (
+            {/* The empty week and the days swap by folding, one shrinking as the
+                other grows, as the account area does on connect. */}
+            <Collapse open={events !== null && sorted.length === 0}>
               <div className="cp-empty mt-4">
                 <p>{t('Your next 7 days are clear. New meetings show up here within a minute.')}</p>
               </div>
-            )}
+            </Collapse>
 
-            {days.length > 0 && (
-              <div className="mt-6">
-                {days.map((day) => (
-                  <div key={day.key} className="cp-card">
+            <Collapse open={days.length > 0}>
+              <div className="pt-6">
+                <div className="cp-slots cp-slots--cards">
+                <AnimatePresence initial={false}>
+                {days.map((day, dayIndex) => (
+                  <CollapseItem key={day.key}>
+                  <div className="cp-slot">
+                  <div className="cp-card" style={{ '--cp-card-delay': `${Math.min(dayIndex, 2) * 80}ms` } as React.CSSProperties}>
                     <div className="cp-card-header">
                       {/* The square carries the date, like a calendar leaf, where a
                           repeated glyph on every card would say nothing. */}
@@ -458,11 +509,14 @@ export const CalendarSettings: React.FC = () => {
                         <span className="sr-only">, {day.date}</span>
                       </h4>
                       <span className="cp-card-aside">
-                        {day.items.length === 1 ? t('1 meeting') : `${day.items.length} ${t('meetings')}`}
+                        <Presence kind="text" id={String(day.items.length)}>
+                          {day.items.length === 1 ? t('1 meeting') : `${day.items.length} ${t('meetings')}`}
+                        </Presence>
                       </span>
                     </div>
-                    <div className="cp-rows">
-                      {day.items.map((ev) => {
+                    <div className="cp-slots">
+                      <AnimatePresence initial={false}>
+                      {day.items.map((ev, rowIndex) => {
                         const start = new Date(ev.startTime);
                         const end = new Date(ev.endTime);
                         const mins = Math.round((start.getTime() - now) / 60_000);
@@ -473,7 +527,9 @@ export const CalendarSettings: React.FC = () => {
                         const startable = !meetingActive && mins <= START_LEAD_MINUTES && end.getTime() > now;
                         const countdown = mins <= 0 ? t('Now') : new Intl.RelativeTimeFormat(lang, { numeric: 'auto', style: 'short' }).format(mins, 'minute').replace(/\.$/, '');
                         return (
-                          <div key={ev.id} className="cp-row">
+                          <CollapseItem key={ev.id}>
+                          <div className="cp-slot">
+                          <div className="cp-row" style={{ '--cp-row-delay': `${Math.min(rowIndex + 1, 3) * 40}ms` } as React.CSSProperties}>
                             <span className="cp-row-main" title={ev.title}>
                               <span className="cp-row-title">{ev.title}</span>
                               {detail && <span className="cp-row-detail"> · {detail}</span>}
@@ -497,7 +553,8 @@ export const CalendarSettings: React.FC = () => {
                                   </span>
                                 )}
                               </Presence>
-                              <span className="cp-time">{rangeOf(start, end)}</span>
+                              {/* A meeting moved by the refresh swaps its time in place. */}
+                              <span className="cp-time"><Presence kind="text" id={rangeOf(start, end)}>{rangeOf(start, end)}</Presence></span>
                               {ev.link ? (
                                 <button
                                   type="button"
@@ -517,13 +574,20 @@ export const CalendarSettings: React.FC = () => {
                               ) : null}
                             </span>
                           </div>
+                          </div>
+                          </CollapseItem>
                         );
                       })}
+                      </AnimatePresence>
                     </div>
                   </div>
+                  </div>
+                  </CollapseItem>
                 ))}
+                </AnimatePresence>
+                </div>
               </div>
-            )}
+            </Collapse>
           </section>
         </Collapse>
 
@@ -543,16 +607,22 @@ export const CalendarSettings: React.FC = () => {
                   <ArrowUpRight size={12} className="cp-arrow" />
                 </button>
               </div>
-              <div className="cp-rows">
-                {calendars.map((cal) => (
-                  <div key={cal.id} className="cp-row">
+              <div className="cp-slots">
+                <AnimatePresence initial={false}>
+                {calendars.map((cal, rowIndex) => (
+                  <CollapseItem key={cal.id}>
+                  <div className="cp-slot">
+                  <div className="cp-row" style={{ '--cp-row-delay': `${Math.min(rowIndex + 1, 3) * 40}ms` } as React.CSSProperties}>
                     <span className="flex items-center gap-2.5 min-w-0">
                       <span className="cp-dot" style={{ background: cal.color || 'var(--cp-tertiary)' }} aria-hidden="true" />
                       <span className="cp-row-main"><span className="cp-row-title" style={{ fontWeight: 500 }}>{cal.name}</span></span>
                     </span>
                     {cal.primary && <span className="cp-time">{t('Primary')}</span>}
                   </div>
+                  </div>
+                  </CollapseItem>
                 ))}
+                </AnimatePresence>
               </div>
             </div>
           </section>

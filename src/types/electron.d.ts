@@ -880,6 +880,7 @@ export interface ElectronAPI {
   onOllamaError: (callback: (data: { message: string }) => void) => () => void;
 
   onMeetingsUpdated: (callback: () => void) => () => void
+  onCalendarConnectionChanged: (callback: (connected: boolean) => void) => () => void
 
   // Provider Compatibility
   onIncompatibleProviderWarning: (callback: (data: { count: number, oldProvider: string, newProvider: string }) => void) => () => void;
@@ -903,7 +904,7 @@ export interface ElectronAPI {
   /** A notification's Start (a detected call, the calendar reminder), relayed by main to the launcher. */
   onMeetingStartRequest?: (callback: (req: { title?: string; calendarEventId?: string; via?: 'detected' | 'reminder' }) => void) => () => void
   getUpcomingEvents: () => Promise<Array<{ id: string; title: string; startTime: string; endTime: string; link?: string; source: 'google'; attendees?: Array<{ email: string; name?: string; photoUrl?: string; response?: 'accepted' | 'declined' | 'tentative' | 'needsAction' }> }>>
-  calendarRefresh: () => Promise<{ success: boolean; error?: string }>
+  calendarRefresh: () => Promise<{ success: boolean; error?: string; fresh?: boolean }>
 
   // Auto-Update
   onUpdateAvailable: (callback: (info: any) => void) => () => void
