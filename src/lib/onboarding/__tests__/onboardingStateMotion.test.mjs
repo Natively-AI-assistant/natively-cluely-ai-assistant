@@ -17,7 +17,7 @@ test('the welcome and the tour overlap, so the column is never empty', () => {
   const flow = read('WelcomeFlow.tsx');
   assert.match(flow, /<AnimatePresence mode="popLayout"/);
   assert.doesNotMatch(flow, /<AnimatePresence mode="wait"/);
-  assert.match(flow, /useSlideVariants\(true\)/);
+  assert.match(flow, /const \{ stage \} = useCascade\(\)/);
 });
 
 test('the tour has no entrance of its own on top of the swap', () => {
@@ -51,4 +51,21 @@ test('the left column scales with the window like the plate, and is 1:1 at the d
   assert.match(read('WelcomeFlow.tsx'), /<ScaledColumn>/);
   // The popLayout page that is leaving is positioned against the zoomed box.
   assert.match(shared, /<div className="relative" style=\{fit \?/);
+});
+
+test('a step change cascades: the stage crosses over, its items arrive 40ms apart', () => {
+  const shared = read('welcomeShared.tsx');
+  assert.match(shared, /export function useCascade\(\)/);
+  assert.match(shared, /staggerChildren: 0\.04/);
+  assert.match(shared, /delayChildren: 0\.08/);
+  // items have no exit of their own: the stage takes them out together, quickly
+  const item = shared.slice(shared.indexOf('item: {'), shared.indexOf('pop: {'));
+  assert.doesNotMatch(item, /exit/);
+  const tour = read('ShortcutTour.tsx');
+  assert.match(tour, /variants=\{pop\}/, 'the keycaps pop');
+  assert.ok((tour.match(/variants=\{item\}/g) ?? []).length >= 6, 'header, lesson, footer and the lesson items');
+});
+
+test('the progress dots show the steps you have tried', () => {
+  assert.match(read('ShortcutTour.tsx'), /done\[l\.action\] \? 'rgba\(52,211,153,0\.75\)'/);
 });

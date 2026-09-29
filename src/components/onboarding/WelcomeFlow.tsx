@@ -13,7 +13,7 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useT } from '../../i18n';
-import { useWelcomeTheme, WelcomeFrame, MeetingDemo, Keycaps, useSlideVariants, ScaledColumn } from './welcomeShared';
+import { useWelcomeTheme, WelcomeFrame, MeetingDemo, Keycaps, useCascade, ScaledColumn } from './welcomeShared';
 import { WelcomeLeft } from './WelcomeScreen';
 import { TourLeft, useShortcutTour } from './ShortcutTour';
 import { fillText } from './i18nText';
@@ -25,7 +25,7 @@ interface Props {
 
 export const WelcomeFlow: React.FC<Props> = ({ onDone }) => {
   const t = useWelcomeTheme();
-  const slide = useSlideVariants(true);
+  const { stage } = useCascade();
   const tr = useT();
   const [step, setStep] = useState<'welcome' | 'tour'>('welcome');
   const tour = useShortcutTour(step === 'tour');
@@ -35,13 +35,13 @@ export const WelcomeFlow: React.FC<Props> = ({ onDone }) => {
       <ScaledColumn>
         {/* The welcome only ever moves forward, into the tour. popLayout, not
             wait: the welcome leaves (150ms) while the tour comes in behind it
-            (from 90ms), so the column is never empty. Under mode="wait" it was,
-            for ~300ms, and the tour's pieces then arrived one by one. */}
+            (from 80ms), so the column is never empty. The tour's regions then
+            arrive one after another (useCascade), travelling forward. */}
         <AnimatePresence mode="popLayout" initial={false} custom={1}>
           <motion.div
             key={step}
             custom={1}
-            variants={slide}
+            variants={stage}
             initial="enter"
             animate="center"
             exit="exit"

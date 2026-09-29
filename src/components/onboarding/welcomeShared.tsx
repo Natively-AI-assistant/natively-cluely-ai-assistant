@@ -4,7 +4,7 @@
 // per theme, the window frame, the lavender CTA and the meeting demo on the
 // right. One copy, so the two screens cannot drift apart.
 
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion, type Variants } from 'framer-motion';
 import meetingVideo from '../../assets/welcome/meeting.webm';
 import { useT } from '../../i18n';
@@ -48,34 +48,49 @@ export function useRise() {
     : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, delay, ease: [0.23, 1, 0.32, 1] as const } });
 }
 
-// transitions.dev #08 page side-by-side: 250ms in, 8px, 3px blur,
-// --ease-smooth-out. The exit is quicker and quieter (150ms) — a close should
-// get out of the way (transitions-polish: open/close asymmetry). `dir` is +1
-// going forward and -1 going back, so Next and Back travel opposite ways.
+// transitions.dev #08 page side-by-side, with a cascade (transitions-polish: stagger).
+// A step change is a STAGE that crosses over and the ITEMS inside it that arrive one
+// after another, travelling the way the tour is going (`dir` is +1 forward, -1 back):
+//   stage  exit 150ms (--duration-quick), 8px + 3px blur, --ease-smooth-out; the
+//          entrance starts at 80ms (--duration-micro), once the old is mostly gone
+//   item   250ms (--duration-fast), 8px (--distance-base), 2px blur (--blur-small),
+//          each 40ms (--duration-stagger) behind the last: 5 items = 160ms of
+//          stagger, under the ~300ms that keeps the last one from feeling late
+//   pop    the keycaps: the same, but they land with a small overshoot
+//          (--ease-bounce, entrances only: nothing bounces on the way out)
+// A close is quicker and quieter than an open, so items have no exit of their own:
+// the stage fades them out together.
 const SMOOTH = [0.22, 1, 0.36, 1] as const;
+const BOUNCE = [0.34, 1.36, 0.64, 1] as const;
 
-/**
- * Direction-aware slide for whatever swaps in the left column. `overlap` is for a
- * swap where the old page and the new one are on screen together (AnimatePresence
- * popLayout): the new page starts 90ms in, once the old is mostly gone, so the two
- * layouts never read as one muddy picture. Where the old page has finished leaving
- * first (mode="wait") there is nothing to sequence, so no delay.
- */
-export function useSlideVariants(overlap = false): Variants {
+/** Stage, item and pop variants for a step change. Reduced motion: a plain fade, no travel, no stagger. */
+export function useCascade(): { stage: Variants; item: Variants; pop: Variants } {
   const reduced = useReducedMotion() ?? false;
-  const delay = overlap ? 0.09 : 0;
-  if (reduced) {
+  return useMemo(() => {
+    if (reduced) {
+      const fade: Variants = {
+        enter: { opacity: 0 },
+        center: { opacity: 1, transition: { duration: 0.15 } },
+        exit: { opacity: 0, transition: { duration: 0.1 } },
+      };
+      return { stage: fade, item: fade, pop: fade };
+    }
     return {
-      enter: { opacity: 0 },
-      center: { opacity: 1, transition: { duration: 0.15, delay } },
-      exit: { opacity: 0, transition: { duration: 0.1 } },
+      stage: {
+        enter: { opacity: 0 },
+        center: { opacity: 1, transition: { duration: 0.15, delayChildren: 0.08, staggerChildren: 0.04 } },
+        exit: (dir: number) => ({ opacity: 0, x: -8 * dir, filter: 'blur(3px)', transition: { duration: 0.15, ease: SMOOTH } }),
+      },
+      item: {
+        enter: (dir: number) => ({ opacity: 0, x: 8 * dir, filter: 'blur(2px)' }),
+        center: { opacity: 1, x: 0, filter: 'blur(0px)', transition: { duration: 0.25, ease: SMOOTH } },
+      },
+      pop: {
+        enter: (dir: number) => ({ opacity: 0, x: 8 * dir, scale: 0.92, filter: 'blur(2px)' }),
+        center: { opacity: 1, x: 0, scale: 1, filter: 'blur(0px)', transition: { duration: 0.35, ease: BOUNCE } },
+      },
     };
-  }
-  return {
-    enter: (dir: number) => ({ opacity: 0, x: 8 * dir, filter: 'blur(3px)' }),
-    center: { opacity: 1, x: 0, filter: 'blur(0px)', transition: { duration: 0.25, delay, ease: SMOOTH } },
-    exit: (dir: number) => ({ opacity: 0, x: -8 * dir, filter: 'blur(3px)', transition: { duration: 0.15, ease: SMOOTH } }),
-  };
+  }, [reduced]);
 }
 
 /** transitions.dev #04 text swap (150ms, 4px, 2px blur) for a label that changes in place. */
@@ -130,7 +145,7 @@ export const WelcomeFrame: React.FC<React.HTMLAttributes<HTMLDivElement> & { t: 
  * place (#04 text swap). Pass `width` only for a fixed hero (the welcome's
  * Get started). Pass `labelKey` so a changed label animates.
  */
-export const LavenderButton: React.FC<{ t: WelcomeTheme; width?: number; height?: number; labelSize?: number; labelKey?: string; onClick: () => void; children: React.ReactNode }> = ({ t, width, height = 48, labelSize = 15, labelKey, onClick, children }) => {
+export const LavenderButton: React.FC<{ t: WelcomeTheme; width?: number; height?: number; labelSize?: number; labelKey?: string; /** One small swell, when the way on has just opened (onboardingMotion.css). */ nudge?: boolean; onClick: () => void; children: React.ReactNode }> = ({ t, width, height = 48, labelSize = 15, labelKey, nudge, onClick, children }) => {
   const reduced = useReducedMotion() ?? false;
   const measureRef = useRef<HTMLSpanElement>(null);
   // Side padding scales with the button: 22px at 40 tall, 26px at 48.
@@ -155,7 +170,8 @@ export const LavenderButton: React.FC<{ t: WelcomeTheme; width?: number; height?
   const w = width ?? fit ?? 132;
   return (
     <motion.span
-      className="inline-block"
+      className="onb-cta inline-block"
+      data-nudge={nudge ? 'true' : undefined}
       initial={false}
       animate={{ width: w }}
       transition={reduced ? { duration: 0 } : { duration: 0.25, ease: SMOOTH }}

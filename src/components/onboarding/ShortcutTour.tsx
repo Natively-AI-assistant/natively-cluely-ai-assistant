@@ -28,7 +28,7 @@ import nativelyMark from '../../assets/logo.webp';
 import { useT } from '../../i18n';
 import { isMac, isWindows } from '../../utils/platformUtils';
 import { acceleratorToKeys, matchesAccelerator } from '../../lib/onboarding/shortcutKeys.mjs';
-import { useWelcomeTheme, LavenderButton, Keycaps, useSlideVariants, useTextSwap } from './welcomeShared';
+import { useWelcomeTheme, LavenderButton, Keycaps, useCascade, useTextSwap } from './welcomeShared';
 import { fmt } from './i18nText';
 
 type Action = 'toggle' | 'answer' | 'shot';
@@ -171,7 +171,7 @@ interface LeftProps {
 
 export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
   const t = useWelcomeTheme();
-  const slide = useSlideVariants(true);
+  const { stage, item, pop } = useCascade();
   const swap = useTextSwap();
   const tr = useT();
   const { lesson, dir, goTo, pressed, done, press, keysFor } = tour;
@@ -182,13 +182,13 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
 
   return (
     <div role="main" aria-labelledby="tour-title" className="flex-1 min-w-0 h-full flex flex-col" style={{ padding: '64px 64px 44px 72px' }}>
-      {/* No entrance of their own: the column arrives as one piece with the swap
-          in WelcomeFlow (a second, staggered rise on top of it read as pieces
-          landing one by one, the footer first). */}
-      <div className="flex items-center gap-[10px]">
+      {/* The three regions (header, lesson, footer) are items of the stage in
+          WelcomeFlow: on the way in from the welcome they arrive one after another,
+          travelling forward. Once the tour is up they do not move again. */}
+      <motion.div variants={item} custom={dir} className="flex items-center gap-[10px]">
         <img src={nativelyMark} alt="" draggable={false} style={{ width: 26, height: 26, filter: t.markFilter }} />
         <span style={{ fontSize: 13, fontWeight: 500, color: t.quiet }}>{tr('Get started')}</span>
-      </div>
+      </motion.div>
 
       {/* The step label, keycaps, title, line and status are ONE unit that swaps
           as a whole, sliding the way the tour is going (Next forward, Back back).
@@ -196,38 +196,42 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
           block 150/250ms), so for ~150ms the label and the status stood alone
           with nothing between them. popLayout: the old lesson leaves (150ms)
           while the new one comes in behind it (from 90ms). */}
-      <div className="relative my-auto flex flex-col">
+      <motion.div variants={item} custom={dir} className="relative my-auto flex flex-col">
         <AnimatePresence mode="popLayout" initial={false} custom={dir}>
           <motion.div
             key={lesson}
             custom={dir}
-            variants={slide}
+            variants={stage}
             initial="enter"
             animate="center"
             exit="exit"
             className="flex flex-col"
             style={{ gap: 26 }}
           >
-            <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: t.faint }}>
+            <motion.div variants={item} custom={dir} style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: t.faint }}>
               {fmt(tr('Step {n} of {total}'), { n: lesson + 1, total: LESSONS.length })}
-            </div>
-            <button
+            </motion.div>
+            {/* The keycaps land with a small overshoot: the one place the step shows off. */}
+            <motion.button
+              variants={pop}
+              custom={dir}
               type="button"
               onClick={() => press(cur.action)}
               aria-label={fmt(tr('Try {keys}'), { keys: curKeys.join(' + ') })}
+              data-done={done[cur.action] ? 'true' : undefined}
               className="onb-keys-btn self-start bg-transparent border-0 p-0"
             >
               <Keycaps t={t} keys={curKeys} size="lg" pressed={pressed} />
-            </button>
-            <div className="flex flex-col" style={{ gap: 12 }}>
+            </motion.button>
+            <motion.div variants={item} custom={dir} className="flex flex-col" style={{ gap: 12 }}>
               <h1 id="tour-title" style={{ margin: 0, fontSize: 44, fontWeight: 300, letterSpacing: '-0.035em', lineHeight: 1.05, color: t.strong }}>
                 {tr(cur.title)}
               </h1>
               <p style={{ margin: 0, maxWidth: 400, fontSize: 15, lineHeight: 1.6, color: t.body }}>{tr(cur.text)}</p>
-            </div>
+            </motion.div>
             {/* Within a lesson only this line changes (the try-it prompt becomes the
                 check), so it keeps its own text swap. */}
-            <div aria-live="polite" style={{ minHeight: 20, fontSize: 13, fontWeight: 500, color: t.quiet }}>
+            <motion.div variants={item} custom={dir} aria-live="polite" style={{ minHeight: 20, fontSize: 13, fontWeight: 500, color: t.quiet }}>
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={String(done[cur.action])} {...swap}>
                   {done[cur.action] ? (
@@ -239,12 +243,12 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
                   )}
                 </motion.div>
               </AnimatePresence>
-            </div>
+            </motion.div>
           </motion.div>
         </AnimatePresence>
-      </div>
+      </motion.div>
 
-      <div className="flex items-center" style={{ gap: 18 }}>
+      <motion.div variants={item} custom={dir} className="flex items-center" style={{ gap: 18 }}>
         {/* Skip on the first step, Back after it: one button whose label swaps in
             place. The hidden copy of the longer word holds its width, so the
             button beside it does not shift with the swap (Russian: Пропустить
@@ -261,7 +265,7 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
           </span>
         </button>
         {/* One button for both: it fits its label and tweens between them. */}
-        <LavenderButton t={t} height={40} labelSize={14}
+        <LavenderButton t={t} height={40} labelSize={14} nudge={done[cur.action]}
           labelKey={isLast ? 'start' : 'next'} onClick={isLast ? onDone : () => goTo(lesson + 1)}>
           {isLast ? tr('Start using Natively') : tr('Next')} <ArrowRight size={15} strokeWidth={2} aria-hidden />
         </LavenderButton>
@@ -269,14 +273,15 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
           {LESSONS.map((l, i) => (
             <span key={l.action} style={{
               height: 7, width: i === lesson ? 20 : 7, borderRadius: i === lesson ? 4 : 999,
-              // the toggle's ON blue, like the buttons (was the PR's lavender #9C6FF3)
-              background: i === lesson ? '#6688F5' : t.dot,
+              // the toggle's ON blue for where you are, the check's green for a step you
+              // have tried (the dots then read as progress), the quiet dot for the rest
+              background: i === lesson ? '#6688F5' : done[l.action] ? 'rgba(52,211,153,0.75)' : t.dot,
               // --duration-fast, --ease-smooth-out (transitions-polish: was a bare 250ms ease).
               transition: 'width 250ms cubic-bezier(0.22, 1, 0.36, 1), background-color 250ms cubic-bezier(0.22, 1, 0.36, 1)',
             }} />
           ))}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };
