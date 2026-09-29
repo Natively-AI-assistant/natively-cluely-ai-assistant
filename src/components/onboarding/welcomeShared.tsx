@@ -13,6 +13,7 @@ import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 import WindowControls from '../WindowControls';
 import { DemoOverlay } from './DemoOverlay';
+import { WELCOME_BUTTON_TOKENS } from './welcomeButtonTokens';
 import './onboardingMotion.css';
 
 export const WELCOME_FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif';
@@ -23,38 +24,14 @@ const THEME = {
     bg: '#F7F8FC', strong: '#0B1020', body: 'rgba(11,16,32,0.68)', quiet: 'rgba(11,16,32,0.66)', faint: 'rgba(11,16,32,0.58)',
     plate: '#EEF1F8', grid: 'rgba(11,16,32,0.09)', card: cardLight, markFilter: 'invert(1)',
     kcBg: '#FFFFFF', kcRim: 'rgba(11,16,32,0.14)', kcUnder: 'rgba(11,16,32,0.14)', dot: 'rgba(11,16,32,0.14)',
-    // The PR's light button (a pale tint with a deep label — white on it would
-    // run about 1.3:1) in the toggle's blue, so light and dark are one hue.
-    // The label #2A44A6 on the ~#CED8F7 composite is about 6:1.
-    button: {
-      '--lg-lav-bg': 'rgba(102,136,245,0.28)',
-      '--lg-lav-hover': 'rgba(102,136,245,0.40)',
-      '--lg-lav-fg': '#2A44A6',
-      '--lg-rim-2': 'rgba(102,136,245,0.32)',
-      '--lg-rim-3': 'rgba(102,136,245,0.14)',
-      '--lg-lens-rim-soft': 'rgba(102,136,245,0.28)',
-      '--lg-lav-glow': 'rgba(102,136,245,0.42)',
-      '--lg-lav-under': 'rgba(40,70,180,0.14)',
-      '--lg-lav-drop': 'rgba(40,60,150,0.10)',
-    },
+    button: WELCOME_BUTTON_TOKENS.light,
   },
   dark: {
     // A step under the #232327 plate, so the plate still reads as inset.
     bg: '#161618', strong: '#F2F2F4', body: 'rgba(255,255,255,0.66)', quiet: 'rgba(255,255,255,0.56)', faint: 'rgba(255,255,255,0.50)',
     plate: '#232327', grid: 'rgba(255,255,255,0.035)', card: cardDark, markFilter: 'none',
     kcBg: 'rgba(255,255,255,0.07)', kcRim: 'rgba(255,255,255,0.16)', kcUnder: 'rgba(0,0,0,0.45)', dot: 'rgba(255,255,255,0.14)',
-    // The PR's glass on a dark page, in the Usage question card's blue: the
-    // Settings toggle's ON colour, --toggle-on #6688F5 (--bubble-user-bg). The
-    // tint is full strength so the button IS that colour rather than a muddy
-    // translucent version of it; the sheen, edge and glow are the PR's own.
-    // White on it is 3.28:1 — the same owner-accepted trade-off as the card.
-    button: {
-      '--lg-lav-bg': '#6688F5',
-      '--lg-lav-hover': '#7594F7',
-      '--lg-lav-fg': '#FFFFFF',
-      '--lg-lav-rim': 'rgba(255,255,255,0.30)',
-      '--lg-lav-glow': 'rgba(102,136,245,0.55)',
-    },
+    button: WELCOME_BUTTON_TOKENS.dark,
   },
 } as const;
 

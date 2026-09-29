@@ -50,44 +50,42 @@ import { BrandMark, BrandMonogram } from './ui/BrandMark';
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
 import icon from './icon.png';
+import { WELCOME_BUTTON_TOKENS } from './onboarding/welcomeButtonTokens';
 
 // Process Disguise tiles: Liquid Glass fed this card's own tokens. `.lg-action`
 // otherwise reads the legacy action blue, and `.lg-clear`'s defaults are the
 // modes sidebar's weights, not a tile sitting on --bg-item-surface / --bg-card.
 //
-// The shape is the tile the material replaced, not a pill: 58px (p-3 around a
-// 32px icon chip, plus the old 1px border), rounded-lg, left-aligned. A rounded
-// rect needs the cap fade as px stops that end at the 8px corner — percentage
-// stops would run the specular's ramp far across the flat top (design.md,
-// "Adapting it to an existing UI").
+// The shape is a tile, not a pill: 58px (p-3 around a 32px icon chip, plus the
+// old 1px border), 14px corners, left-aligned. A rounded rect needs the cap fade
+// as px stops that end at the corner radius — percentage stops would run the
+// specular's ramp far across the flat top (design.md, "Adapting it to an
+// existing UI").
 const DISGUISE_TILE_SHAPE = {
     '--lg-pill-h': '58px',
-    '--lg-radius': '8px',
-    '--lg-cap-0': '1px',
-    '--lg-cap-1': '3px',
-    '--lg-cap-2': '8px',
+    '--lg-radius': '14px',
+    '--lg-cap-0': '2px',
+    '--lg-cap-1': '5px',
+    '--lg-cap-2': '14px',
     '--lg-icon-gap': '12px',
     '--lg-label-weight': 500,
     padding: '0 12px',
 };
+// The opacity slider's knob body. It keeps its own two values; the selected
+// tile takes the onboarding CTA's tokens below.
 const SELECTED_PERIWINKLE = 'var(--accent-primary)';
 const SELECTED_PERIWINKLE_LIGHT = 'color-mix(in srgb, var(--periwinkle-200) 50%, var(--periwinkle-300))';
+// The selected tile is the onboarding "Start using Natively" button: variant
+// `lavender` on that button's own per-theme tokens (a pale periwinkle glass with
+// a deep label in light, the toggle's #6688F5 in dark), imported from the one
+// module both read so the two cannot drift apart.
 const DISGUISE_TILE_SELECTED = {
     ...DISGUISE_TILE_SHAPE,
-    '--legacy-action-bg': SELECTED_PERIWINKLE,
-    '--legacy-action-hover': 'var(--accent-hover)',
-    '--legacy-action-fg': 'var(--on-accent)',
+    ...WELCOME_BUTTON_TOKENS.dark,
 } as React.CSSProperties;
-// Light theme's accent (periwinkle-600) read too heavy as a whole tile, so the
-// selected tile takes a pale periwinkle halfway between the 200 and 300 steps.
-// A light fill needs the dark foreground (#14102A on it is ~10:1).
-// The opacity slider's knob is fed the same two values, so the selected colour
-// in this panel is one colour and not two that drift apart.
 const DISGUISE_TILE_SELECTED_LIGHT = {
     ...DISGUISE_TILE_SHAPE,
-    '--legacy-action-bg': SELECTED_PERIWINKLE_LIGHT,
-    '--legacy-action-hover': 'var(--periwinkle-300)',
-    '--legacy-action-fg': 'var(--periwinkle-on-accent-dark)',
+    ...WELCOME_BUTTON_TOKENS.light,
 } as React.CSSProperties;
 // `.lg-clear`'s own defaults: a translucent step over the card, so the surface
 // shows through and the rim is what the material adds. An opaque fill
@@ -3198,7 +3196,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         className="lg-slider w-full h-1.5 rounded-full appearance-none bg-bg-input"
                                                         style={{
                                                             WebkitAppearance: 'none',
-                                                            // Same body as the selected Process Disguise tile.
                                                             '--lg-knob-bg': isLight ? SELECTED_PERIWINKLE_LIGHT : SELECTED_PERIWINKLE,
                                                         } as React.CSSProperties}
                                                     />
@@ -3267,7 +3264,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 return (
                                                     <LiquidGlassButton
                                                         key={option.id}
-                                                        variant={selected ? 'action' : 'clear'}
+                                                        variant={selected ? 'lavender' : 'clear'}
                                                         className="lg-sm lg-tile w-full [&_.lg-content]:justify-start"
                                                         icon={<span className={selected ? undefined : 'text-text-primary'}>{option.icon}</span>}
                                                         aria-pressed={selected}

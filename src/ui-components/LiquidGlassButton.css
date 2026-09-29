@@ -802,6 +802,11 @@
 /* a rect's side faces are the full height, so the cap shadow carries further
    than on a pill's semicircular caps — but it is not turning away as hard */
 .lg-button.lg-tile::after { padding: 2px; opacity: .42; }
+/* .lg-lavender drops its cap shadow to .10 because on glass this clear the
+   black gradient reads as dirt. This rule comes later at the same specificity,
+   so without it the tile's .42 wins and a dark band runs down both straight
+   sides of a lavender tile. */
+.lg-button.lg-tile.lg-lavender::after { opacity: .10; }
 .lg-button.lg-tile .lg-lens {
     --lg-lens-w: 150px;
     --lg-lens-h: 70px;
