@@ -146,11 +146,41 @@ box's own pixels. The silhouette is a pill (`radius = height / 2`). The wrapper
 is `inline-block` and its aura overflows it, so leave 52px either side and 40px
 above and below clear of anything that should not be lit.
 
-**Not currently used.** It was built for the first-launch welcome and shortcut
+The CTA itself is **not currently used**. It was built for the first-launch welcome and shortcut
 tour (`LavenderButton` in `src/components/onboarding/welcomeShared.tsx`, at
 320x48, 132x40 and 210x40) and then taken out: the onboarding is back on PR 620's
 own `.lg-lavender` button (`LiquidGlassButton.css`). Kept as a reference for the
 refractive material.
+
+**The material is used by the Launcher's calendar banners**
+(`src/components/ui/UpcomingCalendarCard.tsx`, `BannerGlass`): each 44px meeting
+pill is a `GlassSurface`, frostier and bending harder than this CTA (a 4px
+`displace` blur, a 45% band, a 4px map blur, a -60 pull) under a thin 30% tint,
+plus the CTA's own
+`.glass-cta__bevel`, `.glass-cta__sheen` and `.glass-cta__edge`, fed the
+`--cta-*` tokens on `.cal-banner`. No aura there: the card's indigo curtain is
+the light the lens bends. Two things that host had to solve, both general:
+
+- **Backdrop roots.** A lens goes blind under any ancestor with `filter`,
+  `opacity < 1`, or `will-change` naming either. The banner stack put
+  `filter: blur(0)` and `will-change: filter` on every card and faded and
+  blurred the ones behind, so at rest every card drops the filter and the fade
+  (`filter: none` still interpolates from an arriving card's blur in Chromium),
+  the cards behind step back by a denser tint and a quieter rim instead, and
+  `will-change` names `transform` only. **`will-change: opacity` is a backdrop root too:** left in, it blinded
+  the lens silently. The computed `backdrop-filter` still read correctly, the
+  tint still showed, and only the cards behind showing through crisp, whatever
+  the frost, gave it away. Check a lens by what it does to something behind it.
+- **Glass over glass.** Stacked translucent cards show each other's rims through
+  their faces. The deck keeps every card whole and lets that show, by choice.
+  To hide it instead, clip each card's glass LAYERS (`clip-path: inset()`) to
+  the part not covered by the cards in front; a clip-path on the card itself
+  would be a backdrop root and blind its lens.
+- **Frost hides the glass behind.** With the lens working, a 2px `displace`
+  already softens the stacked cards' edges behind the front one about 9x
+  (sharpest luminance step .028 → .003); 4px also smooths the bend's streaks
+  at the pill's end. (An earlier finding here, that frost "barely shows" over
+  the smooth curtain, was measured with the lens blind; see backdrop roots.)
 
 ---
 

@@ -1,13 +1,14 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { CalendarCheck, CalendarDays } from 'lucide-react';
+import { CalendarCheck } from 'lucide-react';
 import { useT, useLanguage } from '../../i18n';
 import calendarBackdrop from '../../UI_comp/calendar.jpg';
 import ConnectCalendarButton from './ConnectCalendarButton';
 import { reconcileStack, settleEntering, dropLeft, arrivalSteps, padStack, isSlotKey, type StackEntry } from './bannerStack.mjs';
 import './UpcomingCalendarCard.css';
 import './textsReveal.css';
-import './learnMoreHover.css';
 import { useTextsReveal } from './useTextsReveal';
+import GlassSurface from '../../ui-components/GlassSurface';
+import '../../ui-components/liquidglas2.0/LiquidGlassCta.css';
 
 export interface CalendarAttendee {
     email: string;
@@ -85,6 +86,27 @@ const clockFormat = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: 
 const clockOf = (d: Date) => clockFormat.format(d).toLowerCase();
 const rangeOf = (start: Date, end: Date | null) =>
     end && end > start ? clockFormat.formatRange(start, end).toLowerCase() : clockOf(start);
+
+/**
+ * The linked heading, once there are meetings: what the deck can't say at a
+ * glance. Line 1 counts what's ahead ("3 upcoming meetings"), line 2 says when
+ * the next one is ("Next in 20 minutes", "Next tomorrow at 9:00 am", "Next on
+ * Wed at 9:00 am"), in words, where the front tile is a ring or a date leaf.
+ */
+function linkedSummary(next: CalendarMeeting, count: number, now: number, lang: string, t: (s: string) => string) {
+    const start = new Date(next.startTime);
+    const mins = Math.round((start.getTime() - now) / 60_000);
+    const days = Math.round((startOfDay(start) - startOfDay(new Date(now))) / 86_400_000);
+    const rtf = spokenFormat(lang);
+    const line2 = mins <= 0
+        ? t('Next one is starting now')
+        : mins < COUNTDOWN_MINUTES
+            ? `${t('Next')} ${rtf.format(mins, 'minute')}`
+            : days <= 1
+                ? `${t('Next')} ${rtf.format(days, 'day')} ${t('at')} ${clockOf(start)}`
+                : `${t('Next on')} ${start.toLocaleDateString(lang, { weekday: 'short' }).replace(/\.$/, '')} ${t('at')} ${clockOf(start)}`;
+    return { line1: count === 1 ? t('1 upcoming meeting') : `${count} ${t('upcoming meetings')}`, line2 };
+}
 
 /**
  * When a meeting is, split between its tile and its time line.
@@ -175,20 +197,10 @@ const ARRIVAL_STAGGER_MS = 80;
 const arrivedKeys = new Set<string>();
 
 /**
- * Meetings in the deck: the two soonest. Placeholder slots stand in for any
- * missing, so with "See more" behind them the deck is always three deep.
+ * Meetings in the deck: the three soonest, and only those. Placeholder slots
+ * stand in for any missing, so the deck is always three deep.
  */
-const MEETING_SLOTS = 2;
-
-/**
- * The deck's last card: "See more", which opens Settings > Calendar (every
- * upcoming meeting, the account, the synced calendars). It sits behind the
- * meetings at depth MEETING_SLOTS and pops like them.
- */
-const SEE_MORE_KEY = 'see-more';
-const SEE_MORE = { key: SEE_MORE_KEY, item: null };
-/** Cards that are not meetings: placeholder slots and "See more". */
-const isFiller = (key: string) => isSlotKey(key) || key === SEE_MORE_KEY;
+const MEETING_SLOTS = 3;
 
 /** A CSS time custom property in ms. The minifier may rewrite 250ms as .25s. */
 function cssMs(name: string, fallback: number): number {
@@ -207,8 +219,8 @@ function cssPx(el: Element, name: string, fallback: number): number {
 const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
 /**
- * The Transitions.dev banner stack (UpcomingCalendarCard.css): the two
- * soonest meetings, soonest in front, then "See more", always three deep.
+ * The Transitions.dev banner stack (UpcomingCalendarCard.css): the three
+ * soonest meetings, soonest in front, always three deep.
  * Placeholder slots (bannerStack.mjs padStack) fill in for missing meetings,
  * or stand in for them all while loading or when nothing is scheduled.
  * bannerStack.mjs keeps entries in a fixed order so no banner's DOM node ever
@@ -233,7 +245,7 @@ function useMeetingStack(meetings: CalendarMeeting[], active: boolean, startDela
     useEffect(() => {
         if (!active) return;
         const real = latest.current.map((m) => ({ key: m.id, item: m as CalendarMeeting | null }));
-        const target = [...padStack(real, MEETING_SLOTS), SEE_MORE];
+        const target = padStack(real, MEETING_SLOTS);
         const apply = (step: typeof target) =>
             setEntries((prev) => reconcileStack(prev, step, (key) => arrivedKeys.has(key)));
 
@@ -245,8 +257,8 @@ function useMeetingStack(meetings: CalendarMeeting[], active: boolean, startDela
         let steps: (typeof target)[] = [target];
         if (!prefersReducedMotion() && target.some((t) => !arrivedKeys.has(t.key))) {
             if (onScreen.length === 0) steps = arrivalSteps(target);
-            else if (real.length > 0 && onScreen.every((e) => isFiller(e.key))) {
-                steps = arrivalSteps(real).map((step) => [...padStack(step, MEETING_SLOTS), SEE_MORE]);
+            else if (real.length > 0 && onScreen.every((e) => isSlotKey(e.key))) {
+                steps = arrivalSteps(real).map((step) => padStack(step, MEETING_SLOTS));
             }
         }
         // A delay applies only to a stack filling from nothing (the reveal after
@@ -278,7 +290,7 @@ function useMeetingStack(meetings: CalendarMeeting[], active: boolean, startDela
         return () => window.clearTimeout(timer);
     }, [leavingKeys]);
 
-    const meetingCount = entries.filter((e) => e.phase !== 'leaving' && !isFiller(e.key)).length;
+    const meetingCount = entries.filter((e) => e.phase !== 'leaving' && !isSlotKey(e.key)).length;
     return { entries, stackRef, meetingCount };
 }
 
@@ -358,35 +370,81 @@ const MeetingTile: React.FC<{ when: ReturnType<typeof meetingWhen> }> = ({ when 
 );
 
 /**
- * The deck's last card. Only its top shows, even popped (the card in front
- * covers the rest), so its line sits near the top of the pill, with its icon
- * in the tile column rather than in a tile that would be half hidden. The
- * chevron is Transitions.dev "Learn more hover", played when the card pops.
+ * The deck's geometry, as UpcomingCalendarCard.css draws it: the stack's
+ * bottom edge, the card height, the peek and depth scale per step back, the
+ * sink of the cards in front of a popped one, and each depth's pop lift, as
+ * the hover hit-test uses it (in screen px).
  */
-const SeeMoreBanner: React.FC<{ more: number }> = ({ more }) => {
-    const t = useT();
-    return (
-        <div className="cal-banner h-full rounded-full pl-2 pr-4">
-            <div className="cal-banner-body flex items-center gap-2 pt-[10px]">
-                <span className="w-[28px] flex justify-center shrink-0 text-cyan-200/90" aria-hidden>
-                    <CalendarDays size={14} strokeWidth={2} />
-                </span>
-                <span className="t-learn inline-flex items-center gap-1 text-[13px] font-semibold text-white leading-none tracking-[-0.01em]">
-                    {t('See more')}
-                    <span className="t-learn-chevron text-cyan-200/90" aria-hidden>
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-                            <path className="t-learn-arm t-learn-arm-top" d="M6 4L10 8" />
-                            <path className="t-learn-arm t-learn-arm-bot" d="M10 8L6 12" />
-                        </svg>
-                    </span>
-                </span>
-                {more > 0 && (
-                    <span className="ml-auto text-[11px] font-medium text-white/70 leading-none tabular-nums">+{more} {t('more')}</span>
-                )}
-            </div>
-        </div>
-    );
-};
+interface DeckGeometry {
+    bottom: number;
+    H: number;
+    peek: number;
+    depthScale: number;
+    sink: number;
+    lift: (depth: number) => number;
+}
+/** The top of the card at depth j with the card at depth `pd` popped. At rest
+ *  it sits j peeks up, scaled from its bottom edge; popped it rises by its lift
+ *  at full size; behind a popped card it rises by that same lift; in front of
+ *  one it sinks by the sink. */
+function deckTop(g: DeckGeometry, j: number, pd: number | null): number {
+    const parted = pd && j < pd ? g.sink : 0;
+    if (j === 0) return g.bottom - g.H + parted;
+    const lift = pd ? g.lift(pd) : 0;
+    if (pd && j === pd) return g.bottom - j * g.peek - lift - g.H;
+    if (pd && j > pd) return g.bottom - j * g.peek - lift - g.H * (1 - j * g.depthScale);
+    return g.bottom - j * g.peek - g.H * (1 - j * g.depthScale) + parted;
+}
+function readDeckGeometry(stack: HTMLElement, bottom: number, H: number, k = 1): DeckGeometry {
+    return {
+        bottom,
+        H,
+        peek: cssPx(stack, '--stack-peek', 14) * k,
+        depthScale: cssPx(stack, '--stack-depth-scale', 0.06),
+        sink: cssPx(stack, '--pop-sink', 4) * k,
+        lift: (depth) => cssPx(stack, `--pop-lift-${depth}`, 20) * k,
+    };
+}
+
+/**
+ * A banner's body in Liquid Glass 2.0 (src/ui-components/liquidglas2.0): a
+ * tinted, translucent lens that refracts the curtain behind the card, lit from
+ * a corner. The lens is GlassSurface, frostier and bending harder than the 2.0
+ * CTA, nearer Apple's Liquid Glass: a 4px blur on the bent backdrop
+ * (`displace`, which also frosts the cards behind into a haze), a 45% band
+ * with a 4px map blur, a -60 pull, achromatic, B for the vertical ramp. It
+ * shows because the tint is thin (30%). The
+ * bevel, sheen and directional edge are the CTA's own classes, fed the banner's
+ * tokens (UpcomingCalendarCard.css). The curtain is the light it bends, so the
+ * CTA's aura isn't needed here.
+ */
+const BannerGlass: React.FC = () => (
+    <>
+        <GlassSurface
+            className="cal-glass"
+            contentClassName="glass-surface__content--bare"
+            width="100%"
+            height={44}
+            borderRadius={22}
+            borderWidth={0.45}
+            brightness={55}
+            opacity={0.9}
+            blur={4}
+            displace={4}
+            saturation={1.7}
+            distortionScale={-60}
+            redOffset={0}
+            greenOffset={0}
+            blueOffset={0}
+            xChannel="R"
+            yChannel="B"
+            mixBlendMode="screen"
+        />
+        <span className="glass-cta__bevel" aria-hidden="true" />
+        <span className="glass-cta__sheen" aria-hidden="true" />
+        <span className="glass-cta__edge" aria-hidden="true" />
+    </>
+);
 
 /**
  * Faces shown per meeting before the "+N". Two, overlapping 2px with the
@@ -406,6 +464,7 @@ const MeetingBanner: React.FC<{ meeting: CalendarMeeting; now: number }> = ({ me
     const remainingAttendees = Math.max(0, (meeting.attendees?.length || 0) - attendees.length);
     return (
         <div className="cal-banner h-full rounded-full pl-2 pr-3">
+            <BannerGlass />
             <div className="cal-banner-body h-full flex items-center gap-2">
                 <MeetingTile when={when} />
                 <div className="min-w-0 flex-1 flex flex-col gap-[4px]">
@@ -453,6 +512,7 @@ const SlotBanner: React.FC<{ front: boolean; loading: boolean }> = ({ front, loa
     const [line1, line2] = front ? [t('No upcoming events'), t('Your next 7 days are clear')] : [t('No other events'), t('in the next 7 days')];
     return (
         <div className="cal-banner cal-slot h-full rounded-full pl-2 pr-3">
+            <BannerGlass />
             <div className="cal-banner-body h-full flex items-center gap-2">
                 {loading ? (
                     <>
@@ -523,6 +583,37 @@ const CalendarHeading: React.FC<{ line1: string; line2: string; reveal?: boolean
 };
 
 /**
+ * Before linking: a sample meeting where yours will be, the one the classic
+ * backdrop (calender.png) had painted in (a Q2 roadmap review, two faces), now
+ * drawn as ONE of the linked state's own banners, in the front banner's
+ * place, so a sign-in swaps the sample for the real thing in place. One, not
+ * a deck: the cards behind it crowded Connect calendar and competed with it.
+ * The title is the
+ * short form, which fits beside the tile whole. Its time is the next 4:30 pm,
+ * so it never reads as a meeting that has passed. Decorative: hidden from screen readers, never under the pointer (no
+ * pops), faces without photos (nothing is fetched for sample people), and it
+ * leaves with the heading.
+ */
+const DEMO_ATTENDEES: CalendarAttendee[] = [{ email: '', name: 'Maya Reyes' }, { email: '', name: 'Ravi Lal' }];
+const demoMeeting = (title: string, now: number): CalendarMeeting => {
+    const start = new Date(now);
+    start.setHours(16, 30, 0, 0);
+    if (start.getTime() <= now + COUNTDOWN_MINUTES * 60_000) start.setDate(start.getDate() + 1);
+    return { id: 'demo', title, startTime: start.toISOString(), endTime: new Date(start.getTime() + 45 * 60_000).toISOString(), attendees: DEMO_ATTENDEES };
+};
+const DemoMeetingStack: React.FC<{ hiding: boolean }> = ({ hiding }) => {
+    const t = useT();
+    const [now] = useState(() => Date.now());
+    return (
+        <div className={`cal-demo cal-link-exit${hiding ? ' is-hiding' : ''}`} aria-hidden="true">
+            <div className="t-stack cal-stack h-[44px]">
+                <div data-depth={0} className="t-stack-banner"><MeetingBanner meeting={demoMeeting(t('Q2 Roadmap Review'), now)} now={now} /></div>
+            </div>
+        </div>
+    );
+};
+
+/**
  * "Link your calendar to see upcoming events" hero card — indigo curtain
  * backdrop, connect CTA when disconnected, stacked peek of the
  * next few meetings once connected. Pixel-matched to the Launcher card,
@@ -538,6 +629,7 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
     className = '',
 }) => {
     const t = useT();
+    const { lang } = useLanguage();
 
     // A sign-in that just completed. The consent screen is in the browser, so
     // when it finishes the user is still there: the card holds "Link your
@@ -576,7 +668,14 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
     const meetings = allMeetings.filter((m) => new Date(m.startTime).getTime() + STARTED_GRACE_MS > now);
     const { entries, stackRef } = useMeetingStack(meetings, showLinked, revealLinkedHeading && !prefersReducedMotion() ? STACK_AFTER_HEADING_MS : 0);
 
-    const moreMeetingsCount = Math.max(0, (totalCount ?? allMeetings.length) - (allMeetings.length - meetings.length) - Math.min(meetings.length, MEETING_SLOTS));
+    const upcomingCount = Math.max(0, (totalCount ?? allMeetings.length) - (allMeetings.length - meetings.length));
+    // The heading: "Calendar linked" for the moment of linking, while the first
+    // fetch is out, and for an empty week (the deck's front says so); a summary
+    // once there are meetings. Switching to the summary replays the heading's
+    // reveal; a card that mounts on the summary (notes closed, say) just shows it.
+    const summary = !loading && meetings.length > 0 ? linkedSummary(meetings[0], upcomingCount, now, lang, t) : null;
+    const headingKind = summary ? 'summary' : 'status';
+    const firstHeadingKind = useRef(headingKind);
     const latestById = new Map(meetings.map((m) => [m.id, m]));
     // Hover pops one card up out of the deck: the card whose edge is under
     // the pointer rises from its own place until it reads above the card in
@@ -618,23 +717,10 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
         // Launcher's recede when meeting notes open), or the zones drift away
         // from the cards.
         const k = r.height / (stack.offsetHeight || r.height);
-        const peek = cssPx(stack, '--stack-peek', 14) * k;
-        const depthScale = cssPx(stack, '--stack-depth-scale', 0.06);
-        const H = r.height;
+        const geom = readDeckGeometry(stack, r.bottom, r.height, k);
         const deepest = Math.max(0, ...entries.filter((en) => en.phase !== 'leaving').map((en) => en.depth));
-        // The top of the card at depth j as drawn with `pd` popped: at rest it
-        // sits j peeks up, scaled from its bottom edge; popped it rises by its
-        // lift at full size; behind a popped card it rises by that same lift;
-        // in front of one it sinks by --pop-sink.
-        const sinkOf = (pd: number | null) => (pd ? cssPx(stack, '--pop-sink', 4) * k : 0);
-        const topOf = (j: number, pd: number | null) => {
-            const parted = pd && j < pd ? sinkOf(pd) : 0;
-            if (j === 0) return r.top + parted;
-            const lift = pd ? cssPx(stack, `--pop-lift-${pd}`, 20) * k : 0;
-            if (pd && j === pd) return r.bottom - j * peek - lift - H;
-            if (pd && j > pd) return r.bottom - j * peek - lift - H * (1 - j * depthScale);
-            return r.bottom - j * peek - H * (1 - j * depthScale) + parted;
-        };
+        const sinkOf = (pd: number | null) => (pd ? geom.sink : 0);
+        const topOf = (j: number, pd: number | null) => deckTop(geom, j, pd);
         let key: string | null = null;
         if (x >= r.left && x <= r.right) {
             // Front to back; the deepest card also takes PICK_OVERSHOOT_PX
@@ -651,9 +737,9 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
         if (key !== picked) {
             setPicked(key);
             const pd = pickable.find((p) => p.key === key)?.depth ?? null;
-            const deckTop = Math.min(...Array.from({ length: deepest + 1 }, (_, j) => topOf(j, pd)));
+            const highest = Math.min(...Array.from({ length: deepest + 1 }, (_, j) => topOf(j, pd)));
             const header = headerRef.current?.getBoundingClientRect();
-            setHeadingCovered(!!header && deckTop < header.bottom);
+            setHeadingCovered(!!header && highest < header.bottom);
         }
     };
     const releasePick = () => {
@@ -663,7 +749,6 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
         }
         if (headingCovered) setHeadingCovered(false);
     };
-    const openCalendarSettings = () => window.electronAPI?.openSettingsTab?.('calendar');
 
     return (
         <div className={`rounded-xl overflow-hidden bg-bg-elevated relative flex flex-col shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] ${className}`}>
@@ -692,65 +777,54 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
                     className="relative z-10 w-full flex flex-col h-full px-3.5 pt-3.5 pb-3"
                     onPointerMove={trackPick}
                     onPointerLeave={releasePick}
-                    // "See more" opens on a click anywhere in its hover zone,
-                    // not only on its pill: the zone reaches a few px past the
-                    // card's edge (PICK_OVERSHOOT_PX), and a pointer there
-                    // shows it popped, so the click should land too.
-                    onClick={() => { if (picked === SEE_MORE_KEY) openCalendarSettings(); }}
                 >
-                    {/* The same heading as before linking, now "Calendar linked",
-                        at the same height: 14px layer padding + 34px here puts it
-                        48px down, where the unlinked state's pt-12 puts its own. */}
+                    {/* The heading 30.5px down (14px layer padding + 16.5px); the
+                        deck pinned to the bottom, its front card 12px off the edge
+                        (pb-3), as it always sat. A popped third card stops ~25px
+                        under the heading. */}
                     <div
                         ref={headerRef}
-                        className={`cal-stack-header relative flex justify-center text-center pt-[34px]${headingCovered ? ' is-covered' : ''}`}
+                        className={`cal-stack-header relative flex justify-center text-center pt-[16.5px]${headingCovered ? ' is-covered' : ''}`}
                     >
                         <CalendarHeading
-                            line1={t('Calendar linked')}
-                            line2={t('see upcoming events')}
-                            reveal={revealLinkedHeading}
+                            key={headingKind}
+                            line1={summary ? summary.line1 : t('Calendar linked')}
+                            line2={summary ? summary.line2 : t('see upcoming events')}
+                            reveal={revealLinkedHeading || headingKind !== firstHeadingKind.current}
                         />
                     </div>
 
-                    {/* The two soonest meetings as a banner stack, soonest in
-                        front, with "See more" last: always three deep. Entries
-                        stay in a fixed order; depth is data-depth. */}
+                    {/* The three soonest meetings as a banner stack, soonest in
+                        front: always three deep. Entries stay in a fixed order;
+                        depth is data-depth. */}
                     <div
                         ref={stackRef}
                         className={`t-stack cal-stack mt-auto h-[44px]${picked || settling ? ' is-picking' : ''}${pickedDepth ? ` pop-${pickedDepth}` : ''}`}
                     >
                         {entries.map((entry) => {
                             const slot = isSlotKey(entry.key);
-                            const seeMore = entry.key === SEE_MORE_KEY;
-                            const meeting = slot || seeMore ? null : (latestById.get(entry.key) ?? entry.item);
+                            const meeting = slot ? null : (latestById.get(entry.key) ?? entry.item);
                             return (
                                 <div
                                     key={entry.key}
                                     data-depth={entry.depth}
-                                    {...(seeMore ? {
-                                        role: 'button',
-                                        tabIndex: 0,
-                                        'aria-label': moreMeetingsCount > 0 ? `${t('See more')}: +${moreMeetingsCount} ${t('more')}` : t('See more'),
-                                        // Mouse clicks land through the layer's onClick above.
-                                        onKeyDown: (ev: React.KeyboardEvent) => {
-                                            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openCalendarSettings(); }
-                                        },
-                                    } : {})}
                                     className={`t-stack-banner${slot ? ' cal-filler' : ''}${entry.phase === 'enter' ? ' is-enter' : ''}${entry.phase === 'leaving' ? ' is-leaving' : ''}${entry.key === picked ? ' is-popped' : ''}${pickedDepth && entry.phase === 'rest' && entry.depth > pickedDepth ? ' is-raised' : ''}${pickedDepth && entry.phase === 'rest' && entry.depth < pickedDepth ? ' is-parted' : ''}`}
                                 >
                                     {meeting
                                         ? <MeetingBanner meeting={meeting} now={now} />
-                                        : seeMore
-                                            ? <SeeMoreBanner more={moreMeetingsCount} />
-                                            : <SlotBanner front={entry.key === 'slot:0'} loading={loading} />}
+                                        : <SlotBanner front={entry.key === 'slot:0'} loading={loading} />}
                                 </div>
                             );
                         })}
                     </div>
                 </div>
             ) : (
-                <div key="linking" className="relative z-10 w-full flex flex-col items-center h-full pt-12 text-center">
-                    <div className="mb-4">
+                <div key="linking" className="relative z-10 w-full flex flex-col items-center h-full pt-6 text-center">
+                    <DemoMeetingStack hiding={linkHold === 'hiding'} />
+                    {/* Connect calendar sits centred between the heading (ends at
+                        70.3px) and the sample banner (starts at 142px): 17.85px
+                        either side of its 36px. */}
+                    <div className="relative z-[1] mb-[17.85px]">
                         <CalendarHeading
                             line1={t('Link your calendar to')}
                             line2={t('see upcoming events')}
@@ -759,7 +833,9 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
                     </div>
 
                     {/* Leaves with the heading, on the same quiet 200ms fade. */}
-                    <div className={`cal-link-exit${linkHold === 'hiding' ? ' is-hiding' : ''}`}>
+                    {/* Above the sample meeting: a refused sign-in's message
+                        grows down over its top edge. */}
+                    <div className={`relative z-[1] cal-link-exit${linkHold === 'hiding' ? ' is-hiding' : ''}`}>
                         <ConnectCalendarButton
                             className="-translate-x-0.5"
                             onConnect={handleConnected}
