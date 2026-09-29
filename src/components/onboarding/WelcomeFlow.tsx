@@ -13,7 +13,7 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useT } from '../../i18n';
-import { useWelcomeTheme, WelcomeFrame, MeetingDemo, Keycaps, useSlideVariants } from './welcomeShared';
+import { useWelcomeTheme, WelcomeFrame, MeetingDemo, Keycaps, useSlideVariants, ScaledColumn } from './welcomeShared';
 import { WelcomeLeft } from './WelcomeScreen';
 import { TourLeft, useShortcutTour } from './ShortcutTour';
 import { fillText } from './i18nText';
@@ -32,7 +32,7 @@ export const WelcomeFlow: React.FC<Props> = ({ onDone }) => {
 
   return (
     <WelcomeFrame t={t}>
-      <div className="relative flex-1 min-w-0 h-full">
+      <ScaledColumn>
         {/* The welcome only ever moves forward, into the tour. popLayout, not
             wait: the welcome leaves (150ms) while the tour comes in behind it
             (from 90ms), so the column is never empty. Under mode="wait" it was,
@@ -52,7 +52,7 @@ export const WelcomeFlow: React.FC<Props> = ({ onDone }) => {
               : <TourLeft tour={tour} onDone={onDone} />}
           </motion.div>
         </AnimatePresence>
-      </div>
+      </ScaledColumn>
 
       <MeetingDemo
         t={t}

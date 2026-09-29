@@ -43,3 +43,12 @@ test('the demo overlay uses the real overlay motion: bubble entrance and the tra
   assert.match(demo, /import \{ ChromeFold \} from '\.\.\/overlay\/ChromeFold'/);
   assert.match(demo, /<ChromeFold show=\{tray\.length > 0\} overlayVisible=\{!gone\}/);
 });
+
+test('the left column scales with the window like the plate, and is 1:1 at the default size', () => {
+  const shared = read('welcomeShared.tsx');
+  assert.match(shared, /LEFT_AT_DEFAULT = \{ w: 600, h: 800 \}/);
+  assert.match(shared, /export const ScaledColumn/);
+  assert.match(read('WelcomeFlow.tsx'), /<ScaledColumn>/);
+  // The popLayout page that is leaving is positioned against the zoomed box.
+  assert.match(shared, /<div className="relative" style=\{fit \?/);
+});

@@ -250,11 +250,54 @@ const STAGE = { w: 520, h: 340, tuck: 136 };
 const LIFT = 40;
 const EASE = [0.23, 1, 0.32, 1] as const;
 
+/** How much larger than the default window's box this one is (the smaller of the two axes), kept in range. */
+function fitScale(w: number, h: number, atDefault: { w: number; h: number }): number {
+  return Math.min(SCALE_RANGE.max, Math.max(SCALE_RANGE.min, Math.min(w / atDefault.w, h / atDefault.h)));
+}
+
 /** The stage's zoom for a plate of this size. */
 function stageScale(w: number, h: number): number {
-  const fit = Math.min(w / PLATE_AT_DEFAULT.w, h / PLATE_AT_DEFAULT.h);
-  return STAGE_LOOK * Math.min(SCALE_RANGE.max, Math.max(SCALE_RANGE.min, fit));
+  return STAGE_LOOK * fitScale(w, h, PLATE_AT_DEFAULT);
 }
+
+// The left column at the launcher's default window (1200 x 800, the plate takes half).
+const LEFT_AT_DEFAULT = { w: 600, h: 800 };
+
+/**
+ * The left column, drawn for the default window and zoomed with it, so the
+ * welcome and the tour grow with a larger window as the plate does. The content
+ * is laid out in a box of (column / zoom) so it still fills the column, whatever
+ * the window's shape. At the default size the zoom is 1 and nothing changes.
+ * `relative` on the inner box is for AnimatePresence popLayout: the page that is
+ * leaving is taken out of flow and positioned against it.
+ */
+export const ScaledColumn: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<{ scale: number; w: number; h: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w && h) {
+        const scale = fitScale(w, h, LEFT_AT_DEFAULT);
+        setFit({ scale, w: w / scale, h: h / scale });
+      }
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <div ref={ref} className="flex-1 min-w-0 h-full overflow-hidden">
+      <div className="relative" style={fit ? { zoom: fit.scale, width: fit.w, height: fit.h } : { width: '100%', height: '100%' }}>
+        {children}
+      </div>
+    </div>
+  );
+};
 
 /** What drives the demo overlay: the tour's presses. */
 export interface LiveOverlayProps {
