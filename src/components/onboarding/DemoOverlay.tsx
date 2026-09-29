@@ -49,9 +49,14 @@ const FALLBACK_SHOT = 'data:image/svg+xml;utf8,' + encodeURIComponent(
 );
 
 // The real overlay is a translucent pane over whatever is behind it. Its default
-// (0.80 dark / 0.70 light) is dense enough to hide the call; the demo sits a
-// little lighter so the frost — the blur of the call through the glass — shows.
-const DEMO_OPACITY = 0.55;
+// (0.80 dark / 0.70 light) is dense enough to hide the call; the demo sits a step
+// lighter (0.68 / 0.62) so the call still shows through, with enough body tint
+// (dark rgba(24,26,32), light the ice-blue rgba(214,228,247)) to read as the real
+// overlay's glass.
+const DEMO_OPACITY = { dark: 0.68, light: 0.62 } as const;
+// The frost's blur radius. getOverlayAppearance derives ~10px at these opacities,
+// which turned the call behind into milk; 4px keeps it frosted but legible.
+const DEMO_BLUR_PX = 4;
 
 // What the interviewer says, in the live transcript strip, before each answer.
 const QUESTIONS = [
@@ -78,7 +83,15 @@ interface Props {
 
 export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotKey, captureFrame, placeholderKeys }) => {
   const reduced = useReducedMotion() ?? false;
-  const appearance = getOverlayAppearance(DEMO_OPACITY, isLight ? 'light' : 'dark');
+  const baseAppearance = getOverlayAppearance(isLight ? DEMO_OPACITY.light : DEMO_OPACITY.dark, isLight ? 'light' : 'dark');
+  const appearance = {
+    ...baseAppearance,
+    shellStyle: {
+      ...baseAppearance.shellStyle,
+      backdropFilter: `blur(${DEMO_BLUR_PX}px) saturate(140%)`,
+      WebkitBackdropFilter: `blur(${DEMO_BLUR_PX}px) saturate(140%)`,
+    },
+  };
 
   const [messages, setMessages] = useState<Msg[]>(SEED);
   const [tray, setTray] = useState<string[]>([]);
