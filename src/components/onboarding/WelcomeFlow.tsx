@@ -25,16 +25,19 @@ interface Props {
 
 export const WelcomeFlow: React.FC<Props> = ({ onDone }) => {
   const t = useWelcomeTheme();
-  const slide = useSlideVariants();
+  const slide = useSlideVariants(true);
   const tr = useT();
   const [step, setStep] = useState<'welcome' | 'tour'>('welcome');
   const tour = useShortcutTour(step === 'tour');
 
   return (
     <WelcomeFrame t={t}>
-      <div className="flex-1 min-w-0 h-full">
-        {/* The welcome only ever moves forward, into the tour. */}
-        <AnimatePresence mode="wait" initial={false} custom={1}>
+      <div className="relative flex-1 min-w-0 h-full">
+        {/* The welcome only ever moves forward, into the tour. popLayout, not
+            wait: the welcome leaves (150ms) while the tour comes in behind it
+            (from 90ms), so the column is never empty. Under mode="wait" it was,
+            for ~300ms, and the tour's pieces then arrived one by one. */}
+        <AnimatePresence mode="popLayout" initial={false} custom={1}>
           <motion.div
             key={step}
             custom={1}

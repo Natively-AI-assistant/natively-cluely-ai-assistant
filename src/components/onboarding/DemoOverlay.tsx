@@ -25,6 +25,7 @@ import TopPill from '../ui/TopPill';
 import { getOverlayAppearance } from '../../lib/overlayAppearance';
 import RollingTranscript from '../ui/RollingTranscript';
 import { ModelSelectorLabel } from '../ui/ModelSelectorLabel';
+import { ChromeFold } from '../overlay/ChromeFold';
 import { MODEL_SELECTOR_WIDTH } from '../ui/modelSelectorLabelText';
 import { OVERLAY_DEFAULT_COLLAPSED_WIDTH } from '../../lib/overlayCustomSize.mjs';
 import { useT } from '../../i18n';
@@ -222,7 +223,8 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
         <div ref={scroller} onScroll={onScroll} className="p-4 space-y-3 overflow-y-auto overscroll-contain" style={{ height: DEMO_CHAT_HEIGHT, scrollbarWidth: 'none', pointerEvents: gone ? 'none' : 'auto' }}>
           {messages.map(msg => msg.role === 'user' ? (
             <div key={msg.id} className="flex justify-end min-w-0">
-              <div className={`max-w-[72%] px-[13.6px] py-[10.2px] text-[15px] leading-relaxed whitespace-pre-wrap rounded-[20px] rounded-tr-[4px] shadow-sm font-medium backdrop-blur-md border ${
+              {/* ov-bubble-in: the real overlay's entrance for your question (index.css) */}
+              <div className={`ov-bubble-in max-w-[72%] px-[13.6px] py-[10.2px] text-[15px] leading-relaxed whitespace-pre-wrap rounded-[20px] rounded-tr-[4px] shadow-sm font-medium backdrop-blur-md border ${
                 isLight ? 'bg-blue-500/10 border-blue-500/20 text-blue-900' : 'bg-blue-600/20 border-blue-500/30 text-blue-100'
               }`}>
                 {msg.shots && (
@@ -260,8 +262,9 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
 
         {/* Input area */}
         <div className="p-3 pt-0">
-          {tray.length > 0 && (
-            <div className="mb-2 rounded-lg p-2 border overlay-subtle-surface" style={appearance.subtleStyle}>
+          {/* The real overlay's fold: the card grows and shrinks with the tray instead of jumping. */}
+          <ChromeFold show={tray.length > 0} overlayVisible={!gone} innerClassName="pb-2" testId="demo-screenshot-tray">
+            <div className="rounded-lg p-2 border overlay-subtle-surface" style={appearance.subtleStyle}>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[11px] font-medium overlay-text-primary">
                   {fmt(tr(tray.length > 1 ? '{n} screenshots attached' : '{n} screenshot attached'), { n: tray.length })}
@@ -279,7 +282,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
               </div>
               <span className="text-[10px] overlay-text-muted">{tr('Ask a question or click Answer')}</span>
             </div>
-          )}
+          </ChromeFold>
 
           <div className="relative">
             <div className="w-full border rounded-xl pl-3 pr-10 py-2.5 text-[13px] leading-relaxed overlay-input-surface overlay-input-text" style={{ ...appearance.inputStyle, minHeight: 42 }} />

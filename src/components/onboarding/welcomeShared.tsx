@@ -54,19 +54,26 @@ export function useRise() {
 // going forward and -1 going back, so Next and Back travel opposite ways.
 const SMOOTH = [0.22, 1, 0.36, 1] as const;
 
-/** Direction-aware slide for whatever swaps in the left column. */
-export function useSlideVariants(): Variants {
+/**
+ * Direction-aware slide for whatever swaps in the left column. `overlap` is for a
+ * swap where the old page and the new one are on screen together (AnimatePresence
+ * popLayout): the new page starts 90ms in, once the old is mostly gone, so the two
+ * layouts never read as one muddy picture. Where the old page has finished leaving
+ * first (mode="wait") there is nothing to sequence, so no delay.
+ */
+export function useSlideVariants(overlap = false): Variants {
   const reduced = useReducedMotion() ?? false;
+  const delay = overlap ? 0.09 : 0;
   if (reduced) {
     return {
       enter: { opacity: 0 },
-      center: { opacity: 1, transition: { duration: 0.15 } },
+      center: { opacity: 1, transition: { duration: 0.15, delay } },
       exit: { opacity: 0, transition: { duration: 0.1 } },
     };
   }
   return {
     enter: (dir: number) => ({ opacity: 0, x: 8 * dir, filter: 'blur(3px)' }),
-    center: { opacity: 1, x: 0, filter: 'blur(0px)', transition: { duration: 0.25, ease: SMOOTH } },
+    center: { opacity: 1, x: 0, filter: 'blur(0px)', transition: { duration: 0.25, delay, ease: SMOOTH } },
     exit: (dir: number) => ({ opacity: 0, x: -8 * dir, filter: 'blur(3px)', transition: { duration: 0.15, ease: SMOOTH } }),
   };
 }

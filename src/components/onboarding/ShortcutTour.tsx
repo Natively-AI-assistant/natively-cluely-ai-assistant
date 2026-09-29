@@ -28,7 +28,7 @@ import nativelyMark from '../../assets/logo.webp';
 import { useT } from '../../i18n';
 import { isMac, isWindows } from '../../utils/platformUtils';
 import { acceleratorToKeys, matchesAccelerator } from '../../lib/onboarding/shortcutKeys.mjs';
-import { useWelcomeTheme, useRise, LavenderButton, Keycaps, useSlideVariants, useTextSwap } from './welcomeShared';
+import { useWelcomeTheme, LavenderButton, Keycaps, useSlideVariants, useTextSwap } from './welcomeShared';
 import { fmt } from './i18nText';
 
 type Action = 'toggle' | 'answer' | 'shot';
@@ -171,8 +171,7 @@ interface LeftProps {
 
 export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
   const t = useWelcomeTheme();
-  const rise = useRise();
-  const slide = useSlideVariants();
+  const slide = useSlideVariants(true);
   const swap = useTextSwap();
   const tr = useT();
   const { lesson, dir, goTo, pressed, done, press, keysFor } = tour;
@@ -183,21 +182,22 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
 
   return (
     <div role="main" aria-labelledby="tour-title" className="flex-1 min-w-0 h-full flex flex-col" style={{ padding: '64px 64px 44px 72px' }}>
-      <motion.div {...rise(0.05)} className="flex items-center gap-[10px]">
+      {/* No entrance of their own: the column arrives as one piece with the swap
+          in WelcomeFlow (a second, staggered rise on top of it read as pieces
+          landing one by one, the footer first). */}
+      <div className="flex items-center gap-[10px]">
         <img src={nativelyMark} alt="" draggable={false} style={{ width: 26, height: 26, filter: t.markFilter }} />
         <span style={{ fontSize: 13, fontWeight: 500, color: t.quiet }}>{tr('Get started')}</span>
-      </motion.div>
+      </div>
 
-      <motion.div {...rise(0.12)} className="my-auto flex flex-col" style={{ gap: 26 }}>
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div key={lesson} {...swap} style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: t.faint }}>
-            {fmt(tr('Step {n} of {total}'), { n: lesson + 1, total: LESSONS.length })}
-          </motion.div>
-        </AnimatePresence>
-
-        {/* The keycaps, title and line swap together, sliding the way the tour
-            is going: Next travels forward, Back travels back. */}
-        <AnimatePresence mode="wait" initial={false} custom={dir}>
+      {/* The step label, keycaps, title, line and status are ONE unit that swaps
+          as a whole, sliding the way the tour is going (Next forward, Back back).
+          They used to swap on their own clocks (label and status 100/150ms, the
+          block 150/250ms), so for ~150ms the label and the status stood alone
+          with nothing between them. popLayout: the old lesson leaves (150ms)
+          while the new one comes in behind it (from 90ms). */}
+      <div className="relative my-auto flex flex-col">
+        <AnimatePresence mode="popLayout" initial={false} custom={dir}>
           <motion.div
             key={lesson}
             custom={dir}
@@ -208,6 +208,9 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
             className="flex flex-col"
             style={{ gap: 26 }}
           >
+            <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: t.faint }}>
+              {fmt(tr('Step {n} of {total}'), { n: lesson + 1, total: LESSONS.length })}
+            </div>
             <button
               type="button"
               onClick={() => press(cur.action)}
@@ -222,36 +225,41 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
               </h1>
               <p style={{ margin: 0, maxWidth: 400, fontSize: 15, lineHeight: 1.6, color: t.body }}>{tr(cur.text)}</p>
             </div>
+            {/* Within a lesson only this line changes (the try-it prompt becomes the
+                check), so it keeps its own text swap. */}
+            <div aria-live="polite" style={{ minHeight: 20, fontSize: 13, fontWeight: 500, color: t.quiet }}>
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div key={String(done[cur.action])} {...swap}>
+                  {done[cur.action] ? (
+                    <span className="inline-flex items-center gap-2" style={{ color: '#34D399' }}>
+                      <SuccessCheck /> {tr('That’s it. Watch the overlay on the right.')}
+                    </span>
+                  ) : (
+                    <>{fmt(tr('Try it now: press {keys} on your keyboard, or click the keys.'), { keys: curKeys.join(' + ') })}</>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
           </motion.div>
         </AnimatePresence>
-
-        <div aria-live="polite" style={{ minHeight: 20, fontSize: 13, fontWeight: 500, color: t.quiet }}>
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={`${cur.action}-${done[cur.action]}`} {...swap}>
-              {done[cur.action] ? (
-                <span className="inline-flex items-center gap-2" style={{ color: '#34D399' }}>
-                  <SuccessCheck /> {tr('That’s it. Watch the overlay on the right.')}
-                </span>
-              ) : (
-                <>{fmt(tr('Try it now: press {keys} on your keyboard, or click the keys.'), { keys: curKeys.join(' + ') })}</>
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </motion.div>
+      </div>
 
       <div className="flex items-center" style={{ gap: 18 }}>
-        {lesson === 0 ? (
-          <button type="button" onClick={onDone} className="onb-textbtn bg-transparent border-0"
-            style={{ ['--onb-quiet' as string]: t.quiet, ['--onb-strong' as string]: t.strong, fontSize: 12.5, fontWeight: 500, padding: '10px 4px' } as React.CSSProperties}>
-            {tr('Skip')}
-          </button>
-        ) : (
-          <button type="button" onClick={() => goTo(lesson - 1)} className="onb-textbtn bg-transparent border-0"
-            style={{ ['--onb-quiet' as string]: t.quiet, ['--onb-strong' as string]: t.strong, fontSize: 12.5, fontWeight: 500, padding: '10px 4px' } as React.CSSProperties}>
-            {tr('Back')}
-          </button>
-        )}
+        {/* Skip on the first step, Back after it: one button whose label swaps in
+            place. The hidden copy of the longer word holds its width, so the
+            button beside it does not shift with the swap (Russian: Пропустить
+            vs Назад). */}
+        <button type="button" onClick={lesson === 0 ? onDone : () => goTo(lesson - 1)} className="onb-textbtn bg-transparent border-0"
+          style={{ ['--onb-quiet' as string]: t.quiet, ['--onb-strong' as string]: t.strong, fontSize: 12.5, fontWeight: 500, padding: '10px 4px' } as React.CSSProperties}>
+          <span className="relative inline-grid">
+            <span aria-hidden style={{ gridArea: '1 / 1', visibility: 'hidden' }}>{tr('Skip').length > tr('Back').length ? tr('Skip') : tr('Back')}</span>
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span key={lesson === 0 ? 'skip' : 'back'} {...swap} style={{ gridArea: '1 / 1' }}>
+                {lesson === 0 ? tr('Skip') : tr('Back')}
+              </motion.span>
+            </AnimatePresence>
+          </span>
+        </button>
         {/* One button for both: it fits its label and tweens between them. */}
         <LavenderButton t={t} height={40} labelSize={14}
           labelKey={isLast ? 'start' : 'next'} onClick={isLast ? onDone : () => goTo(lesson + 1)}>
