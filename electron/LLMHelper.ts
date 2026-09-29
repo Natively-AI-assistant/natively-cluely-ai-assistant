@@ -3942,6 +3942,25 @@ ANSWER DIRECTLY:`;
     }
   }
 
+  // Profile Intelligence eligibility (2026-09-30) for the knowledge intercept.
+  // The intercept is the premium path that injects the résumé/JD (persona,
+  // <candidate_profile>, dossier, pivots, intro). It used to run whenever
+  // knowledge mode was on, so every legacy caller that reaches streamChat or
+  // chatWithGemini — phone chat, LLMHelper.chat(), the AnswerLLM fallback, the
+  // V3-error fallthrough of manual chat, the follow-up email — put PI into
+  // modes that never opted in, or into a turn with no mode at all. This reads
+  // the ONE rule (mode-policy-registry `isProfileIntelligenceAllowed`, via
+  // ModesManager for the pinned/active mode's template). Fails CLOSED: if the
+  // mode cannot be read, the profile stays out.
+  private isProfileIntelligenceAllowedForTurn(pinnedModeId?: string | null): boolean {
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      return ModesManager.getInstance().isProfileIntelligenceAllowedForMode(pinnedModeId ?? undefined) === true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
   public getKnowledgeOrchestrator(): any {
     return this.knowledgeOrchestrator;
   }
@@ -4248,7 +4267,12 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // same as the manual streaming path at ~5448 and the WTA engine). The
       // broad flag silently dropped resume/knowledge injection for every
       // template-seeded mode on this non-streaming path (follow-up-email flow).
-      if (this.knowledgeOrchestrator?.isKnowledgeMode() && _chatGroundingInfo?.strictDocumentGroundedActive !== true) {
+      // PI gate (2026-09-30): the intercept injects the résumé/JD, so it runs
+      // only in a mode that opts into Profile Intelligence. The follow-up email
+      // reaches here with no route options and used to get the candidate
+      // persona in any mode (and with no mode selected).
+      if (this.knowledgeOrchestrator?.isKnowledgeMode() && _chatGroundingInfo?.strictDocumentGroundedActive !== true
+        && this.isProfileIntelligenceAllowedForTurn(routeOptions?.pinnedModeId)) {
         try {
           // Feed only to the depth scorer — NOT feedInterviewerUtterance, which also routes to the
           // negotiation tracker and would misclassify the user's typed question as a recruiter utterance.
@@ -8843,9 +8867,12 @@ let isMultimodal = !!(imagePaths?.length);
         retrievalRequired: true,
       });
     }
+    // PI gate (2026-09-30): last, so the mode lookup is paid only when the
+    // intercept would otherwise run. See isProfileIntelligenceAllowedForTurn.
     const shouldRunKnowledge = !ignoreKnowledgeMode &&
       !documentGroundedCustomModeActive &&
-      this.knowledgeOrchestrator?.isKnowledgeMode();
+      this.knowledgeOrchestrator?.isKnowledgeMode() &&
+      this.isProfileIntelligenceAllowedForTurn(routeOptions?.pinnedModeId);
 
     // D1/R1: a resume-forbidden answer type (coding/technical/sales/lecture,
     // spec §8.3) gets NO profile. We still run the depth scorer (kept

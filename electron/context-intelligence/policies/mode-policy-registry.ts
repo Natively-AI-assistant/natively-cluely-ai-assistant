@@ -444,3 +444,55 @@ export function generalKnowledgeAllowed(policy: ModePolicy): boolean {
   if (policy.groundingPolicy === 'STRICT_SOURCE_ONLY') return false;
   return policy.capabilityPolicy.useGeneralTechnicalKnowledge;
 }
+
+// ── Profile Intelligence eligibility ────────────────────────────────────────
+//
+// THE one answer to "may this turn see the user's résumé / target JD?"
+// (2026-09-30). V3 has always answered it from `profileSources` above: only
+// looking-for-work and technical-interview opt in. The legacy and fallback
+// paths answered it with their own rules — a premium-intercept BLOCKLIST that
+// allowed general/sales/recruiting and treated "no active mode" as allowed,
+// source-contract heuristics that grant the profile to a General mode once it
+// has a prompt or a file, and a knowledge-mode flag with no mode check at all.
+// So the same question in the same mode got the résumé or not depending on
+// which transport answered it (phone chat, follow-up email, a V3 error
+// fallthrough, the legacy WTA path).
+//
+// Derived from the registry, not listed beside it: a mode gains or loses
+// Profile Intelligence by changing its `profileSources`, and every path follows.
+//
+// Keyed by TEMPLATE type, so a custom mode built from the Looking-for-work or
+// Technical Interview template inherits it and one built from General does not.
+// Fails CLOSED: no active mode and an unrecognised template both mean no — the
+// opposite of `resolveModeIdOrWarn`'s fallback, which lands on `general` for
+// the same reason (the one outcome that carries no profile).
+
+export type ProfileIntelligenceIneligibleReason =
+  | 'no_active_mode'
+  | 'unknown_mode'
+  | 'mode_excludes_profile';
+
+export type ProfileIntelligenceEligibility =
+  | { allowed: true; modeId: ModeId; reason: 'mode_hydrates_profile' }
+  | { allowed: false; modeId: ModeId | null; reason: ProfileIntelligenceIneligibleReason };
+
+/**
+ * Eligibility for a mode TEMPLATE type (`mode.templateType`), with the reason.
+ * `null` / `undefined` / `''` mean "no active mode".
+ */
+export function profileIntelligenceEligibility(templateType: unknown): ProfileIntelligenceEligibility {
+  if (templateType === null || templateType === undefined || templateType === '') {
+    return { allowed: false, modeId: null, reason: 'no_active_mode' };
+  }
+  if (!isModeId(templateType)) {
+    return { allowed: false, modeId: null, reason: 'unknown_mode' };
+  }
+  return MODE_POLICIES[templateType].profileSources.length > 0
+    ? { allowed: true, modeId: templateType, reason: 'mode_hydrates_profile' }
+    : { allowed: false, modeId: templateType, reason: 'mode_excludes_profile' };
+}
+
+/** True only for a mode whose template opts into profile hydration. */
+export function isProfileIntelligenceAllowed(templateType: unknown): boolean {
+  return profileIntelligenceEligibility(templateType).allowed;
+}

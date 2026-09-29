@@ -69,6 +69,7 @@ import { recordAttribution } from './intelligence/IntelligenceAttribution';
 // Follow-up: type getKnowledgeOrchestrator() properly and drop this import.
 import type { PromptAssemblyResult } from './premium/contracts';
 import type { AnswerType } from './llm/AnswerPlanner';
+import { isProfileIntelligenceAllowed } from './context-intelligence/policies/mode-policy-registry';
 
 /**
  * Credential-scrub a trace payload before it is stringified.
@@ -1869,6 +1870,15 @@ export class IntelligenceEngine extends EventEmitter {
         // every live token (#3) so the renderer can drop stale-generation batches.
         const snapshotModeInfo = this.getActiveModeInfo();
         const documentGroundedCustomModeActive = snapshotModeInfo?.documentGroundedCustomModeActive === true;
+        // PROFILE INTELLIGENCE GATE (2026-09-30), read from the t0 snapshot so a
+        // mode switch mid-request cannot change it. The legacy WTA path (V3 low
+        // confidence / no segments / clarification) had three résumé/JD routes
+        // gated only by the turn source decision, which ALLOWS the profile when
+        // the mode has no source contract and when no mode is active at all.
+        // The ONE rule (mode-policy-registry, by template type) now bounds the
+        // orchestrator grounding, the evidence JIT and the coordinator's
+        // profile arm. No mode → not eligible.
+        const snapshotProfileIntelligenceAllowed = isProfileIntelligenceAllowed(snapshotModeInfo?.templateType ?? null);
         // Defect C split (2026-08-01): STRICT knowledge suppression vs broad
         // source isolation. Strictness consumers below (skip-legacy-retrieval,
         // forceDocumentGrounding, the generic-knowledge bypass gate, and the
@@ -2677,7 +2687,7 @@ export class IntelligenceEngine extends EventEmitter {
                     processQuestion(question: string): Promise<PromptAssemblyResult | null>;
                 }) | undefined = this.llmHelper.getKnowledgeOrchestrator?.();
                 if (orchestrator?.isKnowledgeMode?.() && !strictDocumentGroundedActive
-                    && wtaDecisionAllowsCandidateProfile) {
+                    && wtaDecisionAllowsCandidateProfile && snapshotProfileIntelligenceAllowed) {
                     const extracted = extractedQuestion;
                     // Only ground question types that resolve to the candidate's
                     // own plain facts. jd_alignment/company questions are
@@ -3044,7 +3054,7 @@ export class IntelligenceEngine extends EventEmitter {
             const _jitAnswerType = (() => { try { return _wtaPlan?.answerType ?? null; } catch { return null; } })();
             const _jdShapeAllowed = _jitAnswerType !== null && IntelligenceEngine.shouldJitForAnswerType(_jitAnswerType)
                 && /^jd_/.test(_jitAnswerType);
-            if (!candidateProfile && wtaDecisionAllowsCandidateProfile
+            if (!candidateProfile && wtaDecisionAllowsCandidateProfile && snapshotProfileIntelligenceAllowed
                 && (wtaProfileAllowed || _jdShapeAllowed)) {
                 try {
                     const orch = this.llmHelper.getKnowledgeOrchestrator?.();
@@ -3400,6 +3410,7 @@ export class IntelligenceEngine extends EventEmitter {
                 && wtaTurnContract
                 && canonicalTurn.turnSourceDecision
                 && wtaCoordinatorInScope
+                && snapshotProfileIntelligenceAllowed
                 && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
                 && isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled')) {
                 try {
