@@ -297,6 +297,11 @@ export class PreambleStreamGate {
  */
 export function asksAboutTheQuestion(message: string): boolean {
   const m = normalizeQuotes(String(message ?? ''));
-  return /\b(?:what|which|who|why)\b[^?.!\n]{0,60}\b(?:ask|asks|asking|asked|question|questions|want|wants|wanted|mean|means|meant|looking for)\b/i.test(m)
+  // A THIRD party (or the question itself) must be what is asked about:
+  // "Why do you want to work here?" / "What questions do you have for us?"
+  // are ordinary interview questions and keep the gate.
+  return /\b(?:what|which|why)\b[^?.!\n]{0,40}\b(?:they|he|she|the (?:interviewer|user|customer|client|candidate|recruiter|panel|manager|caller))\b[^?.!\n]{0,30}\b(?:ask|asks|asking|asked|want|wants|wanted|mean|means|meant|looking for)\b/i.test(m)
+    || /\bwhat(?:'s| is| was| were)? (?:the|their|his|her|that) (?:question|ask)\b/i.test(m)
+    || /\bwhich question\b/i.test(m)
     || /\b(?:explain|summari[sz]e|repeat|rephrase|clarify|interpret|restate)\b[^?.!\n]{0,30}\b(?:question|ask)\b/i.test(m);
 }

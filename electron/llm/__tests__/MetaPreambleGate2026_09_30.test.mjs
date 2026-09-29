@@ -172,10 +172,11 @@ describe('PreambleStreamGate: streamed text equals the final strip', () => {
 });
 
 describe('asksAboutTheQuestion: the typed-path opt-out', () => {
-  for (const q of ['What is the interviewer asking?', 'what do they want?', 'Which question did he ask?', 'explain the question', 'What does she mean by that?']) {
+  for (const q of ['What is the interviewer asking?', 'what do they want?', 'Which question did he ask?', 'explain the question', 'What does she mean by that?', "What's the question?", 'What is the customer looking for?']) {
     test(`opts out: ${q}`, () => assert.equal(asksAboutTheQuestion(q), true));
   }
-  for (const q of ['How would you scale a payment service?', 'Tell me about a conflict you resolved', 'Write two sum in python', '']) {
+  for (const q of ['How would you scale a payment service?', 'Tell me about a conflict you resolved', 'Write two sum in python', '',
+    'Why do you want to work here?', 'What do you want to be doing in five years?', 'What questions do you have for us?']) {
     test(`keeps the gate: ${JSON.stringify(q)}`, () => assert.equal(asksAboutTheQuestion(q), false));
   }
 });
