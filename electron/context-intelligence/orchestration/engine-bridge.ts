@@ -69,6 +69,9 @@ export function speechWindowContains(speech: string, answer: string): boolean {
 
 export interface BridgeInput {
   surface: AnswerSurface;
+  /** The answer is read rather than said (the launcher's chat) — see
+   *  ComposeInput.readingSurface. */
+  readingSurface?: boolean;
   question: string;
   /** Raw templateType from ModesManager; unknown ids fall back rather than throw. */
   modeTemplateType?: string | null;
@@ -561,6 +564,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       conversationSummary: convoSummary,
       // What-to-answer answers the OTHER person's question: their "I" is theirs.
       heardQuestion: input.surface === 'what-to-answer',
+      readingSurface: input.readingSurface === true,
       conversationHasContent: convoHasContent && Boolean(convoSummary),
       // Only TRUE when a screen line actually survived into the rendered
       // history — so a withheld `screenshots` scope cannot make the composer

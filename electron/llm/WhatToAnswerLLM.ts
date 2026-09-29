@@ -786,6 +786,7 @@ The user triggered this action with a coding problem on screen and NO new questi
             // Flag off → legacy constants + suffix, byte-for-byte unchanged.
             const v2BasePrompt = resolveV2SystemPrompt({
                 action: 'what_to_say',
+                surface: 'live',
                 tier: v2TierForPromptTier(this.llmHelper.getPromptTier()),
                 customInstructions: pinnedModeInstructions || undefined,
                 ...codingSignals,
@@ -1153,6 +1154,15 @@ The user triggered this action with a coding problem on screen and NO new questi
             // turn (V3's system prompt + Context OS's user pack, V3's user
             // prompt discarded). Only set when _v3p actually rides this stream.
             const _wtaRoute = _v3p ? { ...wtaRouteOptions, v3Owned: true } : wtaRouteOptions;
+            require('./promptDebug').notePromptComposition({
+                surface: 'what_to_answer',
+                promptSource: _v3p ? 'v3' : (_v2TurnUser ? 'v2_turn' : (v2BasePrompt ? 'v2_base_v1_packet' : 'legacy_v1_packet')),
+                tier: String(this.llmHelper.getPromptTier?.() ?? ''),
+                mode: requestSnapshot?.modeUniqueId ?? null,
+                system: _wtaSystemPrompt,
+                user: _wtaUserMessage,
+                extra: { v3Sections: _v3p?.sections ?? null, activeSkill: activeSkill?.id ?? null, hasImages: hasAttachedImages },
+            });
             // Prefer the outcome-bearing API so a truncated answer can be kept
             // out of session history. Fourteen existing suites inject a test
             // double that implements only `streamChat`; those double s degrade

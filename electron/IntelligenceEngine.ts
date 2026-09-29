@@ -312,7 +312,7 @@ export class IntelligenceEngine extends EventEmitter {
     }): Promise<string | null> {
         const prompt = [
             '<answer_instructions note="follow these; never repeat them">',
-            'The user explicitly asked for an answer. Answer the most recent question in the conversation directly and concretely; if there is no explicit question, give the single most useful thing to say next. Do NOT say that nothing is actionable, do NOT ask the user to repeat or share more, do NOT describe what context is missing, and do NOT identify yourself as an AI assistant. Use the evidence when it applies; otherwise answer from general knowledge, clearly marked as such.',
+            'The user explicitly asked for an answer. Answer the most recent question in the conversation directly and concretely; if there is no explicit question, give the single most useful thing to say next. Do NOT say that nothing is actionable, do NOT ask the user to repeat or share more, do NOT describe what context is missing, and do NOT identify yourself as an AI assistant. Use the evidence when it applies; otherwise answer from general knowledge, never presenting it as sourced. A question about the user gets their own first-person words: how they approach it, with no invented employer, project, event, number, or earlier discussion, and no advice about how to answer.',
             '</answer_instructions>',
             opts.evidenceBlock?.trim() ? `## EVIDENCE\n${opts.evidenceBlock.trim()}` : '',
             opts.question.trim() ? `## QUESTION\n${opts.question.trim()}` : '',
@@ -4054,6 +4054,11 @@ export class IntelligenceEngine extends EventEmitter {
                                 // carries the coding contract it refers to.
                                 const _base = resolveV2SystemPrompt({
                                     action: (_liveCoding || _explanatoryMode) ? 'answer' : 'what_to_say',
+                                    // The live overlay: whatever General answers,
+                                    // the user reads it to say aloud. Lecture keeps
+                                    // its own study-partner speaker (surface only
+                                    // resolves General's text).
+                                    surface: 'live',
                                     tier: v2TierForPromptTier(this.llmHelper.getPromptTier?.()),
                                     activeMode: snapshotModeInfo ?? undefined,
                                     codingTask: codingTask || _promoted,
@@ -4075,6 +4080,13 @@ export class IntelligenceEngine extends EventEmitter {
                                         })())
                                         : undefined),
                                     suppliedTemplate: codingSignals.suppliedTemplate,
+                                });
+                                require('./llm/promptDebug').setPromptDebugTurnFacts({
+                                    personaAction: (_liveCoding || _explanatoryMode) ? 'answer' : 'what_to_say',
+                                    surface: 'live',
+                                    mode: snapshotModeInfo?.templateType ?? null,
+                                    codingTask: Boolean(codingTask || _promoted),
+                                    v2PersonaNull: !_base,
                                 });
                                 if (!_promoted || !_base) return _base;
                                 return `${_base}\n\n<repeat_press_directive>\nThe user triggered this action with a coding problem on screen and NO new question. That is a request for the COMPLETE solution to the on-screen problem, following the coding contract's full section shape — even if a previous answer in this conversation already covered it, and even if this looks like a follow-up. Never respond with commentary on, agreement with, or a summary of an earlier answer. Produce the full answer as if asked for the first time.\n</repeat_press_directive>`;
@@ -5458,9 +5470,17 @@ export class IntelligenceEngine extends EventEmitter {
                                     const { appendCustomModeSystemPromptLayer } = require('./llm/documentGroundedPrompt');
                                     const { isCustomMode } = require('./services/ModesManager');
                                     const _activeModeRow = mm.getActiveMode?.();
+                                    // The live persona, like the answer it repairs (2026-09-29).
+                                    // This base was HARD_SYSTEM_PROMPT + the legacy MODE_* template
+                                    // whatever the promptSystemV2 flag said, and repairCallArgs
+                                    // substitutes it for the answer's V3 prompt — so a repaired
+                                    // answer came from the pre-v2 prompt. Mirrors the manual-chat
+                                    // regeneration: a v2 base already carries the mode contract.
+                                    const { resolveV2SystemPrompt: _rv2, v2TierForPromptTier: _rtier } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+                                    const _repairV2Base = _rv2({ action: 'answer', surface: 'live', tier: _rtier(this.llmHelper.getPromptTier?.()) });
                                     wtaRepairSystemPrompt = appendCustomModeSystemPromptLayer({
-                                        baseSystemPrompt: HARD_SYSTEM_PROMPT,
-                                        modePromptSuffix: mm.getActiveModeSystemPromptSuffix?.(_activeModeRow?.id),
+                                        baseSystemPrompt: _repairV2Base ?? HARD_SYSTEM_PROMPT,
+                                        modePromptSuffix: _repairV2Base ? undefined : mm.getActiveModeSystemPromptSuffix?.(_activeModeRow?.id),
                                         pinnedInstructions: mm.getActiveModePinnedInstructions?.(answerPlan.answerType, _activeModeRow?.id),
                                         isActiveCustomMode: isCustomMode(_activeModeRow),
                                     });

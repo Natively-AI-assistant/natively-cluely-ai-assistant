@@ -116,3 +116,40 @@ function directiveFor(style: AnswerStyle, seconds: number): string {
 export function styleSuppressesScaffold(style: AnswerStyle): boolean {
   return style === 'code_only' || style === 'one_liner';
 }
+
+/**
+ * A question whose answer IS a sequence or a counted set (2026-09-29): "walk me
+ * through the steps", "step by step", "three reasons", "pros and cons", or an
+ * explicit ask for a list. On the V3 path the STYLE directive above never
+ * reaches the model (the only per-turn plan line it gets is the length
+ * default), and the contract's "use a numbered list for steps" lives in the
+ * system prompt, where the recency sections outrank it. Measured on the exact
+ * captured prompts, 5 seeds: "Walk me through the steps to safely deploy…" was
+ * listed 0/5 on both models (at HEAD too); a form line at the end of the user
+ * message made it 5/5 on both, and DeepSeek's "three reasons" 0/5 → 4/5.
+ * Stories, one-liners and code-only asks keep their own form.
+ */
+export const ENUMERABLE_ASK_RE = /\b(?:walk\s+(?:me|us)\s+through\s+the\s+(?:steps|process|stages)|step[- ]by[- ]step|what\s+are\s+the\s+(?:main\s+|key\s+)?(?:steps|stages)|steps\s+(?:to|for|involved\s+in)|(?:two|three|four|five|[2-5]|a\s+few)\s+(?:main\s+|key\s+|good\s+)?(?:reasons|ways|steps|things|tips|examples|benefits|advantages|disadvantages|differences|options|factors|points)|pros\s+and\s+cons)\b/i;
+
+export function isEnumerableAsk(question: string): boolean {
+  const style = detectAnswerStyle(question).style;
+  if (style === 'star' || style === 'one_liner' || style === 'code_only') return false;
+  return style === 'bullets' || ENUMERABLE_ASK_RE.test(question || '');
+}
+
+export const ENUMERABLE_FORM_LINE =
+  'This question asks for steps or a set: answer as a short numbered list, each item one speakable sentence, five items at most.';
+
+/** An explicit depth ask keeps its depth: STRUCTURED_FULL ("explain in detail,
+ *  step by step") must never be length-trimmed (speakability.ts), and the
+ *  five-sentence cap above cut DeepSeek's TLS walkthrough to ~100 words. With
+ *  this line: still a list 5/5 on both models, DeepSeek 153-206 words. */
+const DEPTH_ASK_RE = /\b(?:in\s+(?:full\s+|more\s+)?detail|in[- ]?depth|deep[- ]?dive|thoroughly|comprehensive(?:ly)?)\b/i;
+export const ENUMERABLE_DETAIL_FORM_LINE =
+  'This question asks for steps in detail: answer as a numbered list, one step per item, with the detail each step needs.';
+
+/** The form line for an enumerable ask, '' otherwise. */
+export function enumerableFormLine(question: string): string {
+  if (!isEnumerableAsk(question)) return '';
+  return DEPTH_ASK_RE.test(question) ? ENUMERABLE_DETAIL_FORM_LINE : ENUMERABLE_FORM_LINE;
+}

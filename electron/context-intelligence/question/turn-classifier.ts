@@ -422,6 +422,18 @@ const DEVICE_SYMPTOM_RE = /\b(overheat\w*|(?:gets?|getting|becomes?|becoming|is|
 const MATH_OPERAND_RE = /\d[\d,.]*\s*(?:%|percent)|[$€£₹]\s?\d|\d[\d,.]*\s*(?:rupees|dollars|euros|pounds|cents)\b|\d\s*(?:\+|−|\*|×|\/|÷)\s*\d|\b\d[\d,.]*\s+(?:per|each|apiece)\b/i;
 const MATH_ASK_RE = /\bwhat (?:is|was|will|would)(?: be)? the (?:[\w-]+ )?(?:price|cost|amount|value|total|percentage|interest|profit|loss|average|difference|change)\b|\bhow (?:much|many)\b|\bcalculate\b|\bcompute\b|\bwhat is \d/i;
 const PROJECT_RE = /\b(project|built|build|shipped|implemented|designed|architect(ed|ure) of your)\b/;
+// Status and current-work asks about the user's own work (2026-09-29). With no
+// pronoun ("Give me a quick project update.") or with "are you" ("what are you
+// working on right now?") nothing above marks them, so they routed
+// GENERAL_TECHNICAL/FAST: no notice, no worked status example, and the live
+// answers were a hand-back ("tell me which project…") or an invented status.
+// A STATUS ask is classified exactly like "are we on schedule?" (MEETING_FACT
+// + DOCUMENT_FACT): the status lives in what was said in the meeting or in the
+// project's documents, and those are the sources planned in every mode. A
+// CURRENT-WORK ask ("what are you working on?") is the user's own work, like
+// any personal project question.
+const USER_STATUS_RE = /\b(?:(?:project|status|progress|quick) update|where (?:do|does) (?:things|it|that|the project|we) stand|what(?:'s| is) the (?:latest |current )?status|how(?:'s| is) (?:the|your) project (?:going|coming along))\b/;
+const CURRENT_WORK_RE = /\b(?:what are you (?:currently |actually )?working on|what(?:'s| is) on your plate)\b/;
 // Matches BOTH orderings, because interviewers use both interchangeably:
 //   "experience WITH Kubernetes"   (preposition-led)
 //   "your Kubernetes EXPERIENCE"   (noun-final)
@@ -917,6 +929,11 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
         && !SYSTEM_DESIGN_RE.test(clause)));
 
     if (personal && PROJECT_RE.test(clause)) { types.add('PERSONAL_PROJECT'); noteClaim('USER_PROJECT', clause); }
+    if (!aboutAssistant && USER_STATUS_RE.test(clause)) {
+      types.add('MEETING_FACT'); noteClaim('MEETING_STATEMENT', clause);
+      types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
+    }
+    if (!aboutAssistant && CURRENT_WORK_RE.test(clause)) { types.add('PERSONAL_PROJECT'); noteClaim('USER_PROJECT', clause); }
     // "why did you choose/build X" asks for a REASON. Motivation is authoritative
     // only from explicit user context, so it must be claimed separately: a
     // USER_PROJECT claim is satisfied by evidence that the project exists, which

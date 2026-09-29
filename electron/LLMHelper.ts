@@ -2708,7 +2708,13 @@ export class LLMHelper {
       });
     }
     if (!skip.has('groq') && this.groqClient) {
-      const groqSystem = this.injectLanguageInstruction(GROQ_SYSTEM_PROMPT);
+      // The caller's prompt, like the two rungs above (2026-09-29). This rung
+      // used to send the legacy GROQ_SYSTEM_PROMPT — a job-interview persona
+      // ("Yeah, so I've used that in a few projects…") — whatever the mode,
+      // discarding the turn's V3/v2 prompt, so a failover changed who was
+      // speaking and invited invented experience. finalSystemPrompt already
+      // carries the language instruction.
+      const groqSystem = finalSystemPrompt;
       spares.push({
         id: 'groq', name: 'Groq', isLocal: false, priority: prio++,
         open: (sig) => this.streamWithGroq(userContent, GROQ_MODEL, groqSystem, sig),
@@ -13729,13 +13735,24 @@ let isMultimodal = !!(imagePaths?.length);
     // of being concatenated onto TINY_SYSTEM_PROMPT — which would stack two
     // competing cores. Never throws; falls through to legacy on any error.
     try {
-      const { getV2PromptDescriptor, buildSystemPromptV2 } = require('./llm/promptSystemV2');
-      const desc = systemPrompt ? getV2PromptDescriptor(systemPrompt) : null;
+      const { getV2PromptDescriptor, buildSystemPromptV2, carriesV2Core } = require('./llm/promptSystemV2');
+      // Every call site hands this the prompt AFTER injectLanguageInstruction,
+      // and the registry lookup is an exact match, so it never matched and a
+      // v2 prompt got TINY_SYSTEM_PROMPT stacked in front of it (2026-09-29).
+      const suffix = systemPrompt ? this.buildLanguageInstructionSuffix() : '';
+      const bare = systemPrompt && suffix && systemPrompt.endsWith(suffix)
+        ? systemPrompt.slice(0, -suffix.length) : systemPrompt;
+      const desc = bare ? getV2PromptDescriptor(bare) : null;
       if (desc) {
         return tier === 'tiny'
-          ? buildSystemPromptV2({ ...desc, tier: 'local' })
+          ? `${buildSystemPromptV2({ ...desc, tier: 'local' })}${bare !== systemPrompt ? suffix : ''}`
           : systemPrompt as string;
       }
+      // A V3 composition already carries its persona's core (composed for the
+      // local tier upstream). Prepending the legacy tiny base would stack two
+      // cores, and that base asks behavioral answers for "a specific" personal
+      // example — the invention every other layer forbids.
+      if (carriesV2Core(bare)) return systemPrompt as string;
     } catch { /* legacy resolution below */ }
     const base = tier === 'tiny' ? TINY_SYSTEM_PROMPT : HARD_SYSTEM_PROMPT;
     // If the caller already provided a non-empty, non-universal prompt, keep it.

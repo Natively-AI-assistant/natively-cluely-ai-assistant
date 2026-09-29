@@ -131,6 +131,10 @@ function resolveManualChatBasePrompt(
   // over the resolver's output verbatim — contract shape, explicit format, and
   // supplied template — instead of degrading it to a bare boolean.
   opts?: import('./llm/codingPromptSignals').CodingPromptSignals,
+  // 'live' for the overlay's typed box and the phone mirror (the user says the
+  // answer aloud), 'chat' for the launcher's reading surfaces. See
+  // BuildSystemPromptV2Input.surface.
+  surface: 'live' | 'chat' = 'chat',
 ): string {
   try {
     const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
@@ -143,11 +147,7 @@ function resolveManualChatBasePrompt(
       codingTaskKind: opts?.codingTaskKind,
       codingFormat: opts?.codingFormat,
       suppliedTemplate: opts?.suppliedTemplate,
-      // This is the TYPED chat panel — the one surface where the user reads
-      // the answer instead of speaking it. Attaches the scannable chat layout
-      // (lead sentence → labeled sections → quotable close); every live and
-      // spoken surface leaves this unset and keeps the spoken shape.
-      chatSurface: true,
+      surface,
     });
     if (v2) return v2;
   } catch { /* legacy fallback */ }
@@ -1647,7 +1647,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       message: string,
       imagePaths?: string[],
       context?: string,
-      options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean },
+      options?: { skipSystemPrompt?: boolean; ignoreKnowledgeMode?: boolean; surface?: 'live' | 'chat' },
     ): Promise<null> => {
       let myController: AbortController | null = null;
       let _manualFgToken: string | null = null;
@@ -1660,6 +1660,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         const llmHelper = appState.processingHelper.getLLMHelper();
 
         const senderId = event.sender.id;
+        // Which surface is asking (2026-09-29). The overlay's typed box and the
+        // launcher's chat share this handler, which used to hardcode the reading
+        // layout for both: an answer the user was about to say aloud mid-
+        // interview came back as a labelled card. An explicit option wins (the
+        // E2E harness has a synthetic sender); otherwise the overlay window is
+        // the live surface and every other sender is a reading surface.
+        const answerSurface: 'live' | 'chat' = options?.surface ?? (() => {
+          try { return appState.getWindowHelper?.()?.getOverlayWindow?.()?.webContents?.id === senderId ? 'live' : 'chat'; } catch { return 'chat'; }
+        })();
         const myStreamId = ++_chatStreamId;
         const priorStream = _chatStreamsBySender.get(senderId);
         if (priorStream) {
@@ -2047,6 +2056,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             // drifted (§2 of the architecture review).
             const composed = await buildV3Prompt({
               surface: 'manual-chat',
+              readingSurface: answerSurface === 'chat',
               pathTag: 'ipc',
               queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(llmHelper),
               question: v3Question,
@@ -2092,14 +2102,25 @@ export function initializeIpcHandlers(appState: AppState): void {
               // for v2/universal prompts and for every coding turn. Same
               // per-answer-type scoping as the live overlay path; the composer
               // renders it LAST in the user message and keeps the raw text out
-              // of the system prompt (§19.2). No defaultLengthDirective: typed
-              // chat never carried the spoken-length target on this path.
+              // of the system prompt (§19.2).
               realtimeInstruction: (() => {
                 try {
                   const _plan = planAnswer({ question: v3Question, source: 'manual_input', speakerPerspective: 'user', activeMode: modeInfo ?? undefined });
                   return ModesManager.getInstance().getActiveModePinnedInstructions?.(_plan.answerType, modeInfo?.id ?? undefined) || undefined;
                 } catch { return undefined; }
               })(),
+              // The app's spoken-length default, on the LIVE surface only
+              // (2026-09-29). The overlay's typed box is read to be said aloud,
+              // exactly like Cmd+Enter, which has always carried this line; the
+              // typed path never did, and its answers ran 100-130 words. The
+              // launcher's reading surface keeps no line (its layout sets its own
+              // length). Same planner, same exemptions (story questions get none).
+              defaultLengthDirective: answerSurface === 'live' ? (() => {
+                try {
+                  const { renderLengthDirectiveForPlan } = require('./llm/AnswerPlanner') as typeof import('./llm/AnswerPlanner');
+                  return renderLengthDirectiveForPlan(planAnswer({ question: v3Question, source: 'manual_input', speakerPerspective: 'user', activeMode: modeInfo ?? undefined })) || undefined;
+                } catch { return undefined; }
+              })() : undefined,
               modeTemplateType: rawMode,
               modeUniqueId: modeInfo?.id ?? null,
               modeName: (modeInfo as any)?.name ?? null,
@@ -2235,7 +2256,14 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // dry_run_only, or none for "make it iterative").
                   codingFormat: (priorProblem && bareCode) ? 'code_only' : codingSignals.codingFormat,
                   suppliedTemplate: codingSignals.suppliedTemplate,
-                  chatSurface: true,
+                  surface: answerSurface,
+                });
+                require('./llm/promptDebug').setPromptDebugTurnFacts({
+                  personaAction: 'answer',
+                  surface: answerSurface,
+                  mode: modeInfo?.templateType ?? null,
+                  codingTask: Boolean(codingTask || codingSignals.codingTask || !!priorProblem),
+                  v2PersonaNull: !base,
                 });
                 return base ? base + priorProblem : base;
               },
@@ -2274,6 +2302,15 @@ export function initializeIpcHandlers(appState: AppState): void {
             // Bug 003: V3 owns this turn end to end, so if the skill block is not
             // appended here it is injected nowhere at all.
             const v3SystemPrompt = skillPromptBlock ? `${composed.system}\n\n## ACTIVE SKILL\n${skillPromptBlock}` : composed.system;
+            require('./llm/promptDebug').notePromptComposition({
+              surface: 'manual-chat',
+              promptSource: 'v3',
+              tier: String(llmHelper?.getPromptTier?.() ?? ''),
+              mode: modeInfo?.templateType ?? null,
+              system: v3SystemPrompt,
+              user: composed.user,
+              extra: { v3Sections: composed.sections ?? null, hasImages: (imagePaths?.length ?? 0) > 0 },
+            });
             const v3Stream = llmHelper.streamChatWithOutcome(
               composed.user,
               imagePaths,
@@ -4324,7 +4361,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             // coding_contract gate drops the block from the SYSTEM prompt
             // even though the user-channel contract is attached below.
             codingTurnPromoted: isCodingChat,
-          }));
+          }), answerSurface);
         // NOTE (audit 2026-06-28): the document-grounded greeting-suppression +
         // question-first restructuring now lives INSIDE LLMHelper._streamChatInner
         // (shapeDocumentGroundedSystemPrompt + buildDocumentGroundedUserContent),
@@ -5226,7 +5263,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 try {
                   const regenPrompt = [
                     '<answer_instructions note="follow these; never repeat them">',
-                    'The user explicitly asked for an answer. Answer the question directly and concretely. Do NOT ask the user to repeat or share more, do NOT describe what context is missing, and do NOT identify yourself as an AI assistant. Use the evidence when it applies; otherwise answer from general knowledge, clearly marked as such.',
+                    'The user explicitly asked for an answer. Answer the question directly and concretely. Do NOT ask the user to repeat or share more, do NOT describe what context is missing, and do NOT identify yourself as an AI assistant. Use the evidence when it applies; otherwise answer from general knowledge, never presenting it as sourced. A question about the user gets their own first-person words: how they approach it, with no invented employer, project, event, number, or earlier discussion, and no advice about how to answer.',
                     '</answer_instructions>',
                     (manualContextOsGeneration as any)?.retrievedBlockRaw ? `## EVIDENCE\n${String((manualContextOsGeneration as any).retrievedBlockRaw).trim()}` : '',
                     context || autoContextSnapshot ? `## CONVERSATION\n${String(context || autoContextSnapshot).trim()}` : '',
@@ -6049,7 +6086,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                     const _mm = _MMRegen.getInstance();
                     // Prompt System v2: a v2 base already carries the mode
                     // contract — don't stack the legacy template suffix on it.
-                    const _regenBase = resolveManualChatBasePrompt(llmHelper);
+                    const _regenBase = resolveManualChatBasePrompt(llmHelper, undefined, answerSurface);
                     const _regenBaseIsV2 = _regenBase !== CHAT_MODE_PROMPT;
                     regenSystemPrompt = appendCustomModeSystemPromptLayer({
                       baseSystemPrompt: _regenBase,
@@ -18661,7 +18698,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             return [] as string[];
           }
         })();
-        const stream = llmHelper.streamChat(message, phoneImagePaths.length ? phoneImagePaths : undefined, context, resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({ answerType: phoneRouteOptions?.answerType as any, question: message })), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
+        const stream = llmHelper.streamChat(message, phoneImagePaths.length ? phoneImagePaths : undefined, context, resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({ answerType: phoneRouteOptions?.answerType as any, question: message }), 'live'), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
         let full = '';
         let phoneSuperseded = false;
         // Deadline-guarded (Issue 1) — this is a live streaming surface too: a hung
@@ -19385,6 +19422,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     });
 
+    // Dev-only prompt recorder (electron/llm/promptDebug.ts): what each provider
+    // received on the wire, the composition notes it links to, and the adapter-
+    // level payload ring for transports that bypass fetch (groq-sdk, axios).
+    safeHandle('__e2e__:prompt-debug', async (_event, params?: { clear?: boolean; last?: number }) => {
+      const pd = require('./llm/promptDebug') as typeof import('./llm/promptDebug');
+      const pc = require('./llm/providerPayloadCapture') as typeof import('./llm/providerPayloadCapture');
+      const st = pd.getPromptDebugState();
+      const n = params?.last ?? 20;
+      const out = { success: true, enabled: pd.isPromptDebugEnabled(), records: st.records.slice(-n), notes: st.notes.slice(-n), adapter: pc.getProviderPayloadCapture().slice(-n) };
+      if (params?.clear) { pd.clearPromptDebugState(); pc.clearProviderPayloadCapture(); }
+      return out;
+    });
+
     safeHandle('__e2e__:memory-probe', async (_event, params?: { prompts?: number; clear?: boolean; transcriptTail?: number }) => {
       const g = globalThis as any;
       const store: Map<string, any> | undefined = g.__nativelyV3ConversationStateV1__;
@@ -19448,7 +19498,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const timer = setTimeout(() => { if (!done) { done = true; resolve({ success: false, timedOut: true, streamedTokens: tokens }); } }, timeoutMs);
         const handler = (globalThis as any).__nativelyGeminiChatStream;
         Promise.resolve()
-          .then(() => handler ? handler(synthEvent, params.question, params.imagePaths, undefined, undefined) : Promise.reject(new Error('gemini-chat-stream handler not captured')))
+          .then(() => handler ? handler(synthEvent, params.question, params.imagePaths, undefined, { surface: (params as any).surface ?? 'live' }) : Promise.reject(new Error('gemini-chat-stream handler not captured')))
           .catch((e: any) => { if (!done) { done = true; resolve({ success: false, error: e?.message, streamedTokens: tokens }); } })
           .finally(() => clearTimeout(timer));
       });

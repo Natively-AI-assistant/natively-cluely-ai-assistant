@@ -79,11 +79,15 @@ describe('size — v2 must be dramatically smaller than the legacy constants', (
   // written against an entry point the user's editor did not have. The rule rides
   // only the coding routes; the ceiling here is sales/code_hint at 16,872.
   // Still ≤ half the smallest mode-injected legacy prompt (23–45k on the WTA routes).
-  test('every cloud composition is under 17.5k chars (legacy mode-injected routes were 23–45k)', () => {
+  // 17.5k → 18.5k (2026-09-29): the live-answer contract — the no-context
+  // strategy with one WRONG/RIGHT pair, the no-invented-shared-context rule and
+  // the one-block paragraph rule — measured at +1.4k on the largest route
+  // (sales/code_hint 18,335). Still ≤ 80% of the smallest legacy WTA prompt.
+  test('every cloud composition is under 18.5k chars (legacy mode-injected routes were 23–45k)', () => {
     for (const mode of MODES) {
       for (const action of ACTIONS) {
         const p = v2.buildSystemPromptV2({ mode, action, tier: 'cloud' });
-        assert.ok(p.length < 17_500, `cloud/${mode}/${action} is ${p.length} chars`);
+        assert.ok(p.length < 18_500, `cloud/${mode}/${action} is ${p.length} chars`);
       }
     }
   });
@@ -115,7 +119,10 @@ describe('size — v2 must be dramatically smaller than the legacy constants', (
       // 1.05 → 1.10 (2026-08-02): the teleprompter display contract (bounded
       // hot-word marks + bottom gist) added ~230 chars to the local core — a
       // deliberate product addition, still within a 10% envelope of TINY.
-      assert.ok(p.length < legacy.length * 1.10,
+      // 1.10 → 1.20 (2026-09-29): the live-answer contract (no-context
+      // strategy, General's who-is-speaking rule, one-paragraph rule) — ~380
+      // chars after compression; general/assist lands at 1.17x.
+      assert.ok(p.length < legacy.length * 1.20,
         `local/general/${action} (${p.length}) not smaller than legacy TINY (${legacy.length})`);
     }
   });
@@ -399,8 +406,9 @@ describe('spoken-format rules are actually in the composed prompts', () => {
     }
     // Premise updated 2026-08-02: v2 now mandates BOUNDED hot-word marks (the
     // teleprompter glance layer) — the guarded property is the BOUND, not a ban.
-    assert.ok(p.includes('At most three marks, each at most four words'), 'glance-layer bound missing');
-    assert.ok(p.includes('never reshape a sentence to showcase a mark'), 'anti-LinkedIn-post rule missing');
+    // Tightened 2026-09-29 (live-answer contract): two marks, optional.
+    assert.ok(p.includes('At most two marks, each at most four words'), 'glance-layer bound missing');
+    assert.ok(p.includes('Never reshape a sentence or add one to showcase a mark'), 'anti-LinkedIn-post rule missing');
   });
 
   test('no mandatory-bold or canned-admission text survives into v2', () => {
@@ -661,8 +669,12 @@ describe('final check at the recency position (067-class fix)', () => {
 
   test('truthfulness pins the pivot-story contents to grounded facts (062-class fix)', () => {
     const p = v2.buildSystemPromptV2({ mode: 'looking-for-work', action: 'what_to_say', tier: 'cloud' });
-    assert.ok(p.includes('every detail inside that pivot story (the people, the deadline, the scale, your role) must itself be real'));
-    assert.ok(p.includes('speak to skills in general terms instead of manufacturing a scene'));
+    // Reworded 2026-09-29 (live-answer contract); the two invariants stand:
+    // a told story is real in every detail, and no story means no manufactured
+    // scene — now answered as the user's approach instead of a disclaimer.
+    assert.ok(p.includes('every detail in it (the people, the deadline, the scale, the role) must be real'));
+    assert.ok(p.includes('never manufacture a scene and never claim the user lacks the experience'));
+    assert.ok(p.includes('answer in first person from how they approach that kind of situation'));
   });
 
   test('local tier carries the compact final check as its last block', () => {
@@ -726,6 +738,9 @@ describe('flag gating — default ON (promoted), env kill-switch preserves legac
 // sentence → bold-labeled sections → "Good interview answer:" quotable close)
 // while every spoken surface keeps the 15-30s human shape. Attached only when
 // the caller marks the surface, exactly like codingTask.
+// 2026-09-29: "the caller marks the surface" is now true — only the 'chat'
+// surface (the launcher's global chat) attaches it. The overlay's typed box is
+// 'live' and never sees it (LiveAnswerContract2026_09_29 pins the routing).
 
 describe('chatSurface — typed-chat layout attachment', () => {
   test('chatSurface attaches the layout in every mode', () => {
