@@ -14,7 +14,10 @@ import {
   leadingItem, techniqueLabel, extractComplexity, isNotApplicable, splitTrailingAnswer,
   plainTitle, breakGluedLines, fixBoldSpacing, latexParensToDollars, TECHNIQUE_MAX,
   stripLeadingReasoning, stripStrayGistLines, plainEmailText, plainMeetingTitle, reflowFlattenedList, latexToPlain,
+  techniqueFromApproach,
 } from '../codingAnswer.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
 
 describe('leadingItem — the one-line thesis', () => {
   test('first bullet only, marker stripped, bold kept for the markdown renderer', () => {
@@ -278,5 +281,53 @@ describe('latexToPlain', () => {
   });
   test('plain text is returned untouched', () => {
     assert.equal(latexToPlain('O(n log(k))'), 'O(n log(k))');
+  });
+});
+
+describe('techniqueFromApproach — the chip when there is no Technique section', () => {
+  // Coding answers are written to a shape since 2026-09-29; the usual solve
+  // answer is Approach / Code / Complexity and names its technique in the
+  // Approach's first sentence. These are real first sentences from that run.
+  const REAL = [
+    ['I use a **hash map** to store each number and its index as I iterate through the array.', 'Hash map'],
+    ['Use a hash map from value to index. For each number, check whether its complement is in the map.', 'Hash map'],
+    ["I'll use dynamic programming to solve this by building an array where each index represents the minimum coins needed.", 'Dynamic programming'],
+    ['This is the classic coin change problem, solved with bottom-up dynamic programming.', 'Bottom-up dynamic programming'],
+    ['I will sort the intervals by their start times to ensure that any overlapping intervals are adjacent.', 'Sorting'],
+    ['Sort the intervals by start time, then sweep through them once.', 'Sorting + linear sweep'],
+    ['To merge overlapping intervals, I first sort the array by the start time of each interval.', 'Sorting'],
+  ];
+  for (const [approach, chip] of REAL) {
+    test(`${JSON.stringify(approach.slice(0, 48))} → ${chip}`, () => assert.equal(techniqueFromApproach(approach), chip));
+  }
+
+  test('a first sentence that only names the problem falls back to the second', () => {
+    assert.equal(techniqueFromApproach('This is the classic coin change problem. Use bottom-up dynamic programming: build an array where `dp[i]` is the fewest coins.'), 'Bottom-up dynamic programming');
+    assert.equal(techniqueFromApproach('This is the classic coin change problem. Build a DP array where dp[i] is the fewest coins to make i.'), 'Dynamic programming');
+  });
+
+  test('a bullet approach reads its first item', () => {
+    assert.equal(techniqueFromApproach('- Keep a **min-heap** of size k.\n- Pop when it grows past k.'), 'Min-heap');
+  });
+
+  test('no recognised technique gives no chip, never a guess', () => {
+    assert.equal(techniqueFromApproach('Check each pair and return it.'), '');
+    assert.equal(techniqueFromApproach(''), '');
+    // Inline code never votes (a `dp` variable is not the DP technique).
+    assert.equal(techniqueFromApproach('Use `dp[i]` to hold the answer. Then return it.'), '');
+  });
+
+  test('an adjective is not a technique: "the sorted array" is the input, not a sort', () => {
+    assert.equal(techniqueFromApproach('Use two pointers from both ends of the sorted array.'), 'Two pointers');
+  });
+
+  test('a longer mention wins over the word inside it, and at most two are joined', () => {
+    assert.equal(techniqueFromApproach('Walk the graph with a BFS, level by level, using a queue and a hash set.'), 'BFS + queue');
+    assert.equal(techniqueFromApproach('Push each value onto a monotonic stack.'), 'Monotonic stack');
+  });
+
+  test('the Usage tab falls back to it only when the answer has no Technique section', () => {
+    const src = fs.readFileSync(path.resolve(process.cwd(), 'src/components/MeetingDetails.tsx'), 'utf8');
+    assert.match(src, /const techniqueChip = technique\s*\?\s*techniqueLabel\(technique\.body\)\s*:\s*\(approach \? techniqueFromApproach\(approach\.body\) : ''\);/);
   });
 });

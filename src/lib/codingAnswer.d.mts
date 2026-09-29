@@ -3,6 +3,8 @@ export const TECHNIQUE_MAX: number;
 export function firstSentence(text: string): string;
 export function leadingItem(body: string): string;
 export function techniqueLabel(body: string): string;
+/** The technique chip read from the Approach's first sentence(s) when there is no Technique section; '' when none is recognised. */
+export function techniqueFromApproach(body: string): string;
 export function latexToPlain(text: string): string;
 export function extractComplexity(body: string): string | null;
 export function isNotApplicable(body: string | null | undefined): boolean;

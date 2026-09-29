@@ -21,7 +21,7 @@ import { vividDarkCodeTheme } from '../lib/codeTheme';
 import { splitGistLine } from '../lib/displayMarkup';
 import { splitIntoWordRuns } from '../lib/textRevealAnimation.mjs';
 import { followUpRecipients, recipientSummary, gmailComposeUrl } from '../lib/followUpRecipients.mjs';
-import { reflowFlattenedList, leadingItem, techniqueLabel, extractComplexity, isNotApplicable, splitTrailingAnswer, plainTitle, breakGluedLines, fixBoldSpacing, latexParensToDollars, stripLeadingReasoning, stripStrayGistLines, plainEmailText, plainMeetingTitle } from '../lib/codingAnswer.mjs';
+import { reflowFlattenedList, leadingItem, techniqueLabel, techniqueFromApproach, extractComplexity, isNotApplicable, splitTrailingAnswer, plainTitle, breakGluedLines, fixBoldSpacing, latexParensToDollars, stripLeadingReasoning, stripStrayGistLines, plainEmailText, plainMeetingTitle } from '../lib/codingAnswer.mjs';
 import { normalizeFinalizedMarkdownMath } from '../lib/streamingMarkdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -458,7 +458,11 @@ const CodingAnswerBlock: React.FC<{ sections: CodingSection[]; firstView?: boole
     const approachIsRicher = approach ? approach.body.trim().length > thesis.length + 24 : false;
 
     const parsedCode = code ? extractCodeBlock(code.body) : null;
-    const techniqueChip = technique ? techniqueLabel(technique.body) : '';
+    // No Technique section (the usual Approach / Code / Complexity answer since
+    // 2026-09-29): the chip comes from the technique the Approach names first.
+    const techniqueChip = technique
+        ? techniqueLabel(technique.body)
+        : (approach ? techniqueFromApproach(approach.body) : '');
 
     const complexitySection = tagged.find(s => s.kind === 'complexity');
     const complexityChip = complexitySection ? extractComplexity(complexitySection.body) : null;

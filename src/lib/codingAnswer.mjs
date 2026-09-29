@@ -57,6 +57,89 @@ export function techniqueLabel(body) {
     return label;
 }
 
+// The technique chip when the answer has no Technique section (2026-09-29).
+// Coding answers are now written to a shape (electron/llm/codingShape.ts); the
+// usual solve shape is Approach / Code / Complexity, and its contract names the
+// technique or data structure in the Approach's FIRST sentence instead of a
+// section of its own. Read it from there. Only a recognised technique becomes a
+// chip: a sentence that names none gives no chip rather than a guess.
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const TECHNIQUE_PATTERNS = [
+    [/\b(bottom-up|top-down)\s+(?:dynamic programming|DP)\b/i, (m) => `${cap(m[1].toLowerCase())} dynamic programming`],
+    [/\bdynamic programming\b|\bDP\b/, 'Dynamic programming'],
+    [/\bmemoi[sz](?:ation|ed|e|ing)\b/i, 'Memoization'],
+    [/\bhash\s*(map|table|set)s?\b/i, (m) => `Hash ${m[1].toLowerCase()}`],
+    [/\bdictionar(?:y|ies)\b/i, 'Hash map'],
+    [/\btwo[- ]pointers?\b/i, 'Two pointers'],
+    [/\bsliding[- ]window\b/i, 'Sliding window'],
+    [/\bbinary search\b/i, 'Binary search'],
+    [/\bmonotonic\s+(stack|queue|deque)\b/i, (m) => `Monotonic ${m[1].toLowerCase()}`],
+    [/\bpriority queue\b/i, 'Priority queue'],
+    [/\b(min|max)[- ]?heap\b/i, (m) => `${cap(m[1].toLowerCase())}-heap`],
+    [/\b(merge sort|quick ?sort|quickselect|counting sort|bucket sort|radix sort|heap ?sort|topological sort(?:ing)?)\b/i, (m) => cap(m[1].toLowerCase().replace(/ing$/, ''))],
+    [/\bheap\b/i, 'Heap'],
+    [/\bunion[- ]find\b|\bdisjoint[- ]sets?\b/i, 'Union-find'],
+    [/\btries?\b/i, 'Trie'],
+    [/\bprefix sums?\b/i, 'Prefix sums'],
+    [/\bdijkstra/i, "Dijkstra's algorithm"],
+    [/\bbreadth[- ]first(?:\s+search)?\b|\bBFS\b/i, 'BFS'],
+    [/\bdepth[- ]first(?:\s+search)?\b|\bDFS\b/i, 'DFS'],
+    [/\bbacktrack(?:ing|s)?\b/i, 'Backtracking'],
+    [/\bgreedy\b/i, 'Greedy'],
+    [/\bdivide[- ]and[- ]conquer\b/i, 'Divide and conquer'],
+    [/\bbit(?:wise|\s+manipulation|masks?|masking)\b|\bXOR\b/i, 'Bit manipulation'],
+    [/\bstack\b/i, 'Stack'],
+    [/\b(queue|deque)\b/i, (m) => cap(m[1].toLowerCase())],
+    [/\bsort(?:s|ing)?\b/i, 'Sorting'],
+    [/\bsweep(?:s|ing)?\b/i, 'Linear sweep'],
+    [/\brecurs(?:ion|ive|ively)\b/i, 'Recursion'],
+    [/\b(?:modulo|modulus)\b/i, 'Modulo'],
+    [/\bbrute[- ]force\b|\bnested loops?\b/i, 'Brute force'],
+];
+
+function techniquesIn(sentence) {
+    // Inline code and emphasis never vote: `dp[i]`, `heapq`, **bold**.
+    const text = sentence.replace(/`[^`]*`/g, ' ').replace(/[*_]/g, '');
+    const found = [];
+    for (const [re, label] of TECHNIQUE_PATTERNS) {
+        const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
+        let m;
+        while ((m = g.exec(text)) !== null) {
+            found.push({ start: m.index, end: m.index + m[0].length, label: typeof label === 'function' ? label(m) : label });
+            if (m[0].length === 0) g.lastIndex++;
+        }
+    }
+    // A match inside a longer one is the same mention ("dynamic programming" in
+    // "bottom-up dynamic programming", "heap" in "min-heap").
+    const kept = found.filter(a => !found.some(b => b !== a && b.start <= a.start && b.end >= a.end && (b.end - b.start) > (a.end - a.start)));
+    kept.sort((a, b) => a.start - b.start);
+    const labels = [];
+    for (const k of kept) if (!labels.includes(k.label)) labels.push(k.label);
+    return labels;
+}
+
+// The first two sentences of the approach (list markers stripped).
+function leadingSentences(body) {
+    const flat = body.split('\n').map(l => l.replace(LIST_MARKER_RE, '').trim()).filter(Boolean).join(' ');
+    const one = firstSentence(flat);
+    const rest = flat.slice(one.length).trim();
+    return rest ? [one, firstSentence(rest)] : [one];
+}
+
+export function techniqueFromApproach(body) {
+    if (!body || !body.trim()) return '';
+    for (const sentence of leadingSentences(body)) {
+        const labels = techniquesIn(sentence).slice(0, 2);
+        if (labels.length) {
+            const [a, b] = labels;
+            // An acronym or a name keeps its capital when it comes second.
+            const second = b && (/^[A-Z]{2,}\b/.test(b) || /^Dijkstra/.test(b)) ? b : b && (b.charAt(0).toLowerCase() + b.slice(1));
+            return techniqueLabel(second ? `${a} + ${second}` : a);
+        }
+    }
+    return '';
+}
+
 // Big-O with one level of nested brackets: O(n log(k)), O(n * (m+k)).
 const BIG_O = String.raw`O\((?:[^()\n]|\([^()\n]*\))*\)`;
 const TIME_RE = new RegExp(String.raw`time[^\n]*?(${BIG_O})`, 'i');
