@@ -4225,6 +4225,23 @@ export class IntelligenceEngine extends EventEmitter {
             // the emit state, so holding cannot trip a provider timeout.
             let scaffoldStreamHoldDecided = false;
             let scaffoldStreamHold = false;
+            // Meta-preamble gate (2026-09-30). The post-stream planning-preamble
+            // strip below removed "The interviewer is asking…" openers only
+            // AFTER they had painted, and the final emit then visibly swapped
+            // the row. The gate holds the opening only while it could still be
+            // such a preamble and drops it before the first paint; it shares
+            // one scanner with stripPlanningPreamble, so the streamed text and
+            // the final text agree and no swap happens. Enabled exactly where
+            // that post-stream strip runs (not speculative — completeSpeculativeRun
+            // never strips — and not coding).
+            const preambleGate = (!isSpeculative && !codingGate && !isCodingAnswerType(answerPlan.answerType))
+                ? (() => {
+                    try {
+                        const { PreambleStreamGate } = require('./llm/planningPreamble') as typeof import('./llm/planningPreamble');
+                        return new PreambleStreamGate();
+                    } catch { return null; }
+                })()
+                : null;
 
             // ── LIVE LATENCY GUARDRAIL (Phase 9) ───────────────────────────────
             // Full-JIT policy: provider stalls/failures may not be repaired with
@@ -4339,6 +4356,10 @@ export class IntelligenceEngine extends EventEmitter {
             // hold canned openers, and paint the first SAFE prefix, then stream.
             // Shared by every live token and by the adoption flush below.
             const paintBuffered = (token: string): void => {
+                if (preambleGate) {
+                    token = preambleGate.push(token);
+                    if (!token) return;
+                }
                 streamingTokenBuffer += token;
                 // RC-4: decide the hold once, on the first visible
                 // characters. A leading markdown heading on a spoken
@@ -6486,7 +6507,18 @@ export class IntelligenceEngine extends EventEmitter {
                     this.emit('suggested_answer_token', streamingTokenBuffer, question || 'inferred', confidence, generationId);
                 }
                 if (!emittedStreamingToken) {
-                    this.emit('suggested_answer_token', fullAnswer, question || 'inferred', confidence, generationId);
+                    // Nothing painted yet (a short answer, or one the gate
+                    // held to the end): paint it WITHOUT a leading preamble —
+                    // the same strip the final applies below, so the final emit
+                    // does not swap the row.
+                    let unpainted = fullAnswer;
+                    if (preambleGate) {
+                        try {
+                            const { stripPlanningPreamble } = require('./llm/planningPreamble') as typeof import('./llm/planningPreamble');
+                            unpainted = stripPlanningPreamble(fullAnswer).text;
+                        } catch { /* paint unmodified */ }
+                    }
+                    this.emit('suggested_answer_token', unpainted, question || 'inferred', confidence, generationId);
                 }
             }
             // (leaked-schema-stub / provider-transport-error guards now run much

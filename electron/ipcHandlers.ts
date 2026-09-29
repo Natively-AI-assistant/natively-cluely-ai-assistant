@@ -2351,6 +2351,27 @@ export function initializeIpcHandlers(appState: AppState): void {
               { v3Owned: true },
             );
 
+            // Meta-preamble gate (2026-09-30): this path has no post-stream
+            // pass, so "The interviewer's question is…" / "Here's how I'd
+            // answer:" reached the screen verbatim. The gate holds only the
+            // opening while it could still be such a preamble, drops it, and
+            // passes everything after through untouched — nothing on screen is
+            // rewritten, and finalText is exactly what was streamed. Off when
+            // the user asked ABOUT the question ("what is the interviewer
+            // asking?"), where that opening is the answer.
+            const v3PreambleGate = (() => {
+              try {
+                const pp = require('./llm/planningPreamble') as typeof import('./llm/planningPreamble');
+                return pp.asksAboutTheQuestion(String(message || '')) ? null : new pp.PreambleStreamGate();
+              } catch { return null; }
+            })();
+            const emitV3Visible = (visible: string) => {
+              if (!visible) return;
+              finalText += visible;
+              event.sender.send('gemini-stream-token', visible, { streamId: myStreamId });
+              // Streamed to the phone as it is written, like the legacy path.
+              try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), visible); } catch { /* mirror only */ }
+            };
             try {
               for await (const tok of v3Stream.stream) {
                 if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
@@ -2362,10 +2383,15 @@ export function initializeIpcHandlers(appState: AppState): void {
                   v3SawFirstToken = true;
                   try { v3DebugCollector?.recordFirstToken(); } catch { /* noop */ }
                 }
-                finalText += tok;
-                event.sender.send('gemini-stream-token', tok, { streamId: myStreamId });
-                // Streamed to the phone as it is written, like the legacy path.
-                try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), tok); } catch { /* mirror only */ }
+                emitV3Visible(v3PreambleGate ? v3PreambleGate.push(tok) : tok);
+              }
+              // End of stream: release whatever the gate still holds (a short
+              // answer, or an all-preamble one, which fails open unchanged).
+              if (v3PreambleGate) {
+                emitV3Visible(v3PreambleGate.flush());
+                if (v3PreambleGate.removedUnits > 0) {
+                  console.log('[IPC] manual chat: meta preamble held back and dropped', { streamId: myStreamId, units: v3PreambleGate.removedUnits });
+                }
               }
             } catch (streamErr) {
               // Finalize the debug record with the partial answer, then let the
