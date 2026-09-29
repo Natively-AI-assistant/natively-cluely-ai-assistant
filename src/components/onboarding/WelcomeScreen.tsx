@@ -7,14 +7,14 @@
 // card follows as usual.
 //
 // Left: the N mark (black on light, as-is white on dark), the pitch and one
-// lavender liquid-glass action. Right: the Natively overlay answering over a
-// live call (MeetingDemo, shared with the tour).
+// lavender liquid-glass action. The right-hand plate (MeetingDemo) is owned by
+// WelcomeFlow, so it persists — with its video — into the tour.
 
 import React from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import nativelyMark from '../../assets/logo.webp';
-import { useWelcomeTheme, useRise, WelcomeFrame, LavenderButton, MeetingDemo } from './welcomeShared';
+import { useWelcomeTheme, useRise, LavenderButton } from './welcomeShared';
 
 const TERMS_URL = 'https://natively.software/termsandconditions';
 const PRIVACY_URL = 'https://natively.software/privacy';
@@ -23,7 +23,7 @@ interface Props {
   onGetStarted: () => void;
 }
 
-export const WelcomeScreen: React.FC<Props> = ({ onGetStarted }) => {
+export const WelcomeLeft: React.FC<Props> = ({ onGetStarted }) => {
   const t = useWelcomeTheme();
   const rise = useRise();
 
@@ -33,8 +33,7 @@ export const WelcomeScreen: React.FC<Props> = ({ onGetStarted }) => {
   };
 
   return (
-    <WelcomeFrame t={t} role="main" aria-labelledby="welcome-title">
-      <div className="flex-1 min-w-0 flex flex-col items-center text-center" style={{ padding: '64px 72px 48px' }}>
+    <div role="main" aria-labelledby="welcome-title" className="flex-1 min-w-0 h-full flex flex-col items-center text-center" style={{ padding: '64px 72px 48px' }}>
         <div className="my-auto flex flex-col items-center" style={{ gap: 22 }}>
           <motion.img {...rise(0.05)} src={nativelyMark} alt="Natively" draggable={false}
             style={{ width: 60, height: 60, filter: t.markFilter }} />
@@ -61,9 +60,6 @@ export const WelcomeScreen: React.FC<Props> = ({ onGetStarted }) => {
           {' '}and{' '}
           <a href={PRIVACY_URL} onClick={openLink(PRIVACY_URL)} className="underline underline-offset-2" style={{ color: 'inherit' }}>Privacy Policy</a>.
         </p>
-      </div>
-
-      <MeetingDemo t={t} />
-    </WelcomeFrame>
+    </div>
   );
 };

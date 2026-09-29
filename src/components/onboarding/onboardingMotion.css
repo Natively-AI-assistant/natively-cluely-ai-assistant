@@ -1,0 +1,91 @@
+/* src/components/onboarding/onboardingMotion.css
+ *
+ * Motion for the first-launch welcome and shortcut tour (welcomeShared,
+ * ShortcutTour). Values are the transitions.dev motion tokens, written as
+ * literals with the token beside them, as the rest of this repo does.
+ *   --duration-micro 80ms · --duration-quick 150ms · --duration-fast 250ms
+ *   --ease-smooth-out cubic-bezier(0.22, 1, 0.36, 1)
+ * Class names are `onb-` prefixed: the repo already has global `t-*` classes.
+ */
+
+/* ── Keycaps: a real key goes down ────────────────────────────────────────
+   Emil: a pressable thing must feel the press. Down is quick (80ms, the
+   system responding), back up is a little slower (160ms). Driven by :active
+   for a click and by data-pressed for a real key press routed from main. */
+.onb-keycap {
+    box-shadow:
+        inset 0 calc(var(--kc-depth, 3px) * -1) 0 var(--kc-under, rgba(0, 0, 0, 0.45)),
+        0 var(--kc-drop-y, 2px) var(--kc-drop-blur, 6px) rgba(0, 0, 0, 0.14);
+    transition:
+        transform  160ms cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.onb-keycap[data-pressed='true'],
+.onb-keys-btn:active .onb-keycap {
+    transform: translateY(var(--kc-press, 2px));
+    box-shadow:
+        inset 0 calc(var(--kc-depth, 3px) * -1 + var(--kc-press, 2px)) 0 var(--kc-under, rgba(0, 0, 0, 0.45)),
+        0 0 2px rgba(0, 0, 0, 0.14);
+    transition-duration: 80ms;
+}
+.onb-keys-btn { cursor: pointer; }
+.onb-keys-btn:focus-visible { outline: 2px solid rgba(156, 111, 243, 0.85); outline-offset: 6px; border-radius: 16px; }
+
+/* ── Quiet text buttons (Skip, Back) ─────────────────────────────────────── */
+.onb-textbtn {
+    color: var(--onb-quiet);
+    cursor: pointer;
+    transition: color 150ms ease-out, transform 100ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+    .onb-textbtn:hover { color: var(--onb-strong); }
+}
+.onb-textbtn:active { transform: scale(0.97); }
+.onb-textbtn:focus-visible { outline: 2px solid rgba(156, 111, 243, 0.85); outline-offset: 2px; border-radius: 6px; }
+
+/* ── Success check ─────────────────────────────────────────────────────────
+   transitions.dev #10 verbatim in shape (fade + rotate + Y-bob + blur + stroke
+   draw). Distances scaled to a 15px icon — the recipe's 40px bob and 10px blur
+   are for a hero check; --check-* are its documented tunables. The dasharray is
+   path.getTotalLength() for `M4 12.5l5.5 5.5L20 7` (22.98) rounded up by one. */
+.onb-check {
+    --check-opacity-dur: 500ms;
+    --check-rotate-dur: 500ms;
+    --check-rotate-from: 60deg;
+    --check-bob-dur: 500ms;
+    --check-y-amount: 8px;
+    --check-blur-dur: 500ms;
+    --check-blur-from: 4px;
+    --check-path-dur: 500ms;
+    --check-path-delay: 80ms;
+    --check-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --check-ease-bob: cubic-bezier(0.34, 1.35, 0.64, 1);
+    display: inline-block;
+    transform-origin: center;
+    opacity: 0;
+    will-change: transform, opacity, filter;
+    animation:
+        onb-check-fade   var(--check-opacity-dur) var(--check-ease-out) forwards,
+        onb-check-rotate var(--check-rotate-dur)  var(--check-ease-out) forwards,
+        onb-check-blur   var(--check-blur-dur)    var(--check-ease-out) forwards,
+        onb-check-bob    var(--check-bob-dur)     var(--check-ease-bob) forwards;
+}
+.onb-check svg { display: block; overflow: visible; }
+.onb-check svg path {
+    stroke-dasharray: 24;
+    stroke-dashoffset: 24;
+    animation: onb-check-draw var(--check-path-dur) var(--check-ease-out) var(--check-path-delay) forwards;
+}
+@keyframes onb-check-fade   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes onb-check-rotate { from { transform: rotate(var(--check-rotate-from)); } to { transform: rotate(0deg); } }
+@keyframes onb-check-blur   { from { filter: blur(var(--check-blur-from)); } to { filter: blur(0); } }
+@keyframes onb-check-bob    { from { translate: 0 var(--check-y-amount); } to { translate: 0 0; } }
+@keyframes onb-check-draw   { to { stroke-dashoffset: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .onb-keycap, .onb-textbtn { transition: none; }
+    .onb-keycap[data-pressed='true'], .onb-keys-btn:active .onb-keycap { transform: none; }
+    .onb-textbtn:active { transform: none; }
+    .onb-check { animation: none !important; opacity: 1; }
+    .onb-check svg path { animation: none !important; stroke-dashoffset: 0 !important; }
+}

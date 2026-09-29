@@ -5,7 +5,7 @@
 // right. One copy, so the two screens cannot drift apart.
 
 import React, { useRef } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion, type Variants } from 'framer-motion';
 import cardLight from '../../assets/welcome/card-light.webp';
 import cardDark from '../../assets/welcome/card-dark.webp';
 import meetingVideo from '../../assets/welcome/meeting.webm';
@@ -13,6 +13,7 @@ import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 import WindowControls from '../WindowControls';
 import { DemoOverlay } from './DemoOverlay';
+import './onboardingMotion.css';
 
 export const WELCOME_FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif';
 
@@ -51,7 +52,54 @@ export function useRise() {
   const reduced = useReducedMotion() ?? false;
   return (delay: number) => (reduced
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2, delay } }
-    : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, delay, ease: [0.23, 1, 0.32, 1] as const } });
+    : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, delay, ease: [0.23, 1, 0.32, 1] as const } });
+}
+
+// transitions.dev #08 page side-by-side: 250ms in, 8px, 3px blur,
+// --ease-smooth-out. The exit is quicker and quieter (150ms) — a close should
+// get out of the way (transitions-polish: open/close asymmetry). `dir` is +1
+// going forward and -1 going back, so Next and Back travel opposite ways.
+const SMOOTH = [0.22, 1, 0.36, 1] as const;
+
+/** Direction-aware slide for whatever swaps in the left column. */
+export function useSlideVariants(): Variants {
+  const reduced = useReducedMotion() ?? false;
+  if (reduced) {
+    return {
+      enter: { opacity: 0 },
+      center: { opacity: 1, transition: { duration: 0.15 } },
+      exit: { opacity: 0, transition: { duration: 0.1 } },
+    };
+  }
+  return {
+    enter: (dir: number) => ({ opacity: 0, x: 8 * dir, filter: 'blur(3px)' }),
+    center: { opacity: 1, x: 0, filter: 'blur(0px)', transition: { duration: 0.25, ease: SMOOTH } },
+    exit: (dir: number) => ({ opacity: 0, x: -8 * dir, filter: 'blur(3px)', transition: { duration: 0.15, ease: SMOOTH } }),
+  };
+}
+
+/** transitions.dev #04 text swap (150ms, 4px, 2px blur) for a label that changes in place. */
+export function useTextSwap() {
+  const reduced = useReducedMotion() ?? false;
+  return reduced
+    ? { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.15 } }, exit: { opacity: 0, transition: { duration: 0.1 } } }
+    : {
+        initial: { opacity: 0, y: 4, filter: 'blur(2px)' },
+        animate: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.15, ease: SMOOTH } },
+        exit: { opacity: 0, y: -4, filter: 'blur(2px)', transition: { duration: 0.1, ease: SMOOTH } },
+      };
+}
+
+/** transitions.dev #22 toast: 350ms up with a cross-blur, 250ms back down. */
+function useToastMotion() {
+  const reduced = useReducedMotion() ?? false;
+  return reduced
+    ? { initial: { opacity: 0 }, animate: { opacity: 1, transition: { duration: 0.15 } }, exit: { opacity: 0, transition: { duration: 0.1 } } }
+    : {
+        initial: { opacity: 0, y: 16, scale: 0.97, filter: 'blur(2px)' },
+        animate: { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transition: { duration: 0.35, ease: SMOOTH } },
+        exit: { opacity: 0, y: 16, scale: 0.97, filter: 'blur(2px)', transition: { duration: 0.25, ease: SMOOTH } },
+      };
 }
 
 /**
@@ -73,25 +121,55 @@ export const WelcomeFrame: React.FC<React.HTMLAttributes<HTMLDivElement> & { t: 
   </div>
 );
 
-export const LavenderButton: React.FC<{ t: WelcomeTheme; width: number; height?: number; labelSize?: number; onClick: () => void; children: React.ReactNode }> = ({ t, width, height = 48, labelSize = 15, onClick, children }) => (
-  <LiquidGlassButton
-    variant="lavender"
-    className="lg-sm lg-wide"
-    onClick={onClick}
-    style={{
-      width,
-      // lg-sm's box is a 30px settings row; a CTA sets its own height.
-      ['--lg-pill-h' as string]: `${height}px`,
-      ['--lg-label-size' as string]: `${labelSize}px`,
-      ...t.button,
-    } as React.CSSProperties}
-  >
-    <span className="inline-flex items-center gap-2">{children}</span>
-  </LiquidGlassButton>
-);
+/**
+ * The CTA. Kept as ONE button across Next → Start using Natively: the width
+ * tweens (transitions.dev #01 card resize, 250ms --ease-smooth-out) and the
+ * label swaps in place (#04 text swap) instead of one button popping out for
+ * another. Pass `labelKey` so a changed label animates.
+ */
+export const LavenderButton: React.FC<{ t: WelcomeTheme; width: number; height?: number; labelSize?: number; labelKey?: string; onClick: () => void; children: React.ReactNode }> = ({ t, width, height = 48, labelSize = 15, labelKey, onClick, children }) => {
+  const reduced = useReducedMotion() ?? false;
+  return (
+    <motion.span
+      className="inline-block"
+      initial={false}
+      animate={{ width }}
+      transition={reduced ? { duration: 0 } : { duration: 0.25, ease: SMOOTH }}
+      style={{ width }}
+    >
+      <LiquidGlassButton
+        variant="lavender"
+        className="lg-sm lg-wide"
+        onClick={onClick}
+        style={{
+          width: '100%',
+          // lg-sm's box is a 30px settings row; a CTA sets its own height.
+          ['--lg-pill-h' as string]: `${height}px`,
+          ['--lg-label-size' as string]: `${labelSize}px`,
+          ...t.button,
+        } as React.CSSProperties}
+      >
+        <span className="relative inline-flex items-center justify-center">
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={labelKey ?? 'label'}
+              className="inline-flex items-center gap-2"
+              initial={reduced ? { opacity: 0 } : { opacity: 0, y: 4, filter: 'blur(2px)' }}
+              // A beat behind the width (transitions-polish: delay to sequence, not to pad).
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.15, delay: reduced ? 0 : 0.08, ease: SMOOTH } }}
+              exit={reduced ? { opacity: 0, transition: { duration: 0.1 } } : { opacity: 0, y: -4, filter: 'blur(2px)', transition: { duration: 0.1, ease: SMOOTH } }}
+            >
+              {children}
+            </motion.span>
+          </AnimatePresence>
+        </span>
+      </LiquidGlassButton>
+    </motion.span>
+  );
+};
 
 /** Keycaps for one shortcut: ['⌘', 'B'] → ⌘ + B. */
-export const Keycaps: React.FC<{ t: WelcomeTheme; keys: string[]; size?: 'sm' | 'lg'; onDark?: boolean }> = ({ t, keys, size = 'sm', onDark }) => {
+export const Keycaps: React.FC<{ t: WelcomeTheme; keys: string[]; size?: 'sm' | 'lg'; onDark?: boolean; pressed?: boolean }> = ({ t, keys, size = 'sm', onDark, pressed }) => {
   const big = size === 'lg';
   const cap: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
@@ -100,7 +178,12 @@ export const Keycaps: React.FC<{ t: WelcomeTheme; keys: string[]; size?: 'sm' | 
     color: onDark ? '#F2F2F4' : t.strong,
     background: onDark ? 'rgba(255,255,255,0.10)' : t.kcBg,
     border: `1px solid ${onDark ? 'rgba(255,255,255,0.18)' : t.kcRim}`,
-    boxShadow: `inset 0 ${big ? -3 : -2}px 0 ${onDark ? 'rgba(0,0,0,0.35)' : t.kcUnder}, 0 ${big ? 2 : 1}px ${big ? 6 : 2}px rgba(0,0,0,0.14)`,
+    // The depth of the key is CSS (onboardingMotion.css) so a press can move it.
+    ['--kc-under' as string]: onDark ? 'rgba(0,0,0,0.35)' : t.kcUnder,
+    ['--kc-depth' as string]: big ? '3px' : '2px',
+    ['--kc-press' as string]: big ? '2px' : '1px',
+    ['--kc-drop-y' as string]: big ? '2px' : '1px',
+    ['--kc-drop-blur' as string]: big ? '6px' : '2px',
   };
   const plus: React.CSSProperties = { fontSize: big ? 20 : 12, margin: big ? '0 10px' : '0 5px', color: onDark ? 'rgba(255,255,255,0.55)' : t.faint };
   return (
@@ -108,7 +191,7 @@ export const Keycaps: React.FC<{ t: WelcomeTheme; keys: string[]; size?: 'sm' | 
       {keys.map((k, i) => (
         <React.Fragment key={`${k}-${i}`}>
           {i > 0 && <span aria-hidden style={plus}>+</span>}
-          <kbd aria-hidden style={{ ...cap, fontFamily: 'inherit' }}>{k}</kbd>
+          <kbd aria-hidden className="onb-keycap" data-pressed={pressed ? 'true' : undefined} style={{ ...cap, fontFamily: 'inherit' }}>{k}</kbd>
         </React.Fragment>
       ))}
     </span>
@@ -154,6 +237,7 @@ export interface MeetingDemoProps {
  */
 export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, badge }) => {
   const reduced = useReducedMotion() ?? false;
+  const toast = useToastMotion();
   const isLight = useResolvedTheme() === 'light';
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -176,7 +260,7 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
       <motion.div
         initial={reduced ? { opacity: 0 } : { opacity: 0, x: 16 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.7, delay: 0.08, ease: EASE }}
+        transition={{ duration: 0.5, delay: 0.08, ease: EASE }}
         className="relative flex-1 overflow-hidden flex flex-col items-center justify-center"
         style={{
           borderRadius: 22, background: t.plate,
@@ -184,41 +268,63 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
           backgroundSize: '40px 40px',
         }}
       >
-        {live ? (
-          // The overlay is laid out at its real 600px width and zoomed to fit
-          // the plate (zoom, unlike transform, also shrinks its layout box).
-          <div className="relative" style={{ zIndex: 2, zoom: 0.88 }}>
-            <DemoOverlay
-              isLight={isLight}
-              hidden={live.hidden}
-              answerKey={live.answerKey}
-              shotKey={live.shotKey}
-              captureFrame={captureFrame}
-              placeholderKeys={live.placeholderKeys}
-            />
-          </div>
-        ) : (
-          // No filter or opacity on this wrapper: either would make it a
-          // backdrop root and the blur below would stop seeing the call.
-          <div className="relative" style={{ width: CARD.w, height: CARD.h, zIndex: 2 }}>
-            <div
-              aria-hidden
-              className="absolute left-0"
-              style={{
-                top: CARD.panelTop, width: CARD.w, height: CARD.panelH, borderRadius: CARD.radius,
-                WebkitBackdropFilter: 'blur(9px) saturate(1.6)', backdropFilter: 'blur(9px) saturate(1.6)',
-                boxShadow: '0 24px 48px rgba(0,0,0,0.22)',
-              }}
-            />
-            <img
-              src={t.card}
-              alt="The Natively overlay answering a question"
-              draggable={false}
-              className="absolute inset-0 block"
-              style={{ width: CARD.w, height: CARD.h }}
-            />
-          </div>
-        )}
+        {/* One stage for both layers, so the call under them never moves when the
+            still card gives way to the live overlay (they used to be two
+            components, each mounting its own plate and restarting the video). The
+            layers are absolute inside it and cross-fade: the card out in 150ms,
+            the overlay in over 250ms (open/close asymmetry). Opacity here is
+            transient — the frost re-reads the call the moment it settles. */}
+        <div className="relative" style={{ width: CARD.w, height: CARD.h, zIndex: 2 }}>
+          <AnimatePresence initial={false}>
+            {live ? (
+              // The overlay is laid out at its real 600px width and zoomed to fit
+              // the plate (zoom, unlike transform, also shrinks its layout box).
+              <motion.div
+                key="live"
+                className="absolute inset-x-0 top-0 flex justify-center"
+                initial={reduced ? { opacity: 0 } : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0, transition: { duration: 0.25, ease: SMOOTH } }}
+                exit={{ opacity: 0, transition: { duration: 0.1 } }}
+              >
+                <div style={{ zoom: 0.88 }}>
+                  <DemoOverlay
+                    isLight={isLight}
+                    hidden={live.hidden}
+                    answerKey={live.answerKey}
+                    shotKey={live.shotKey}
+                    captureFrame={captureFrame}
+                    placeholderKeys={live.placeholderKeys}
+                  />
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="still"
+                className="absolute left-0 top-0"
+                style={{ width: CARD.w, height: CARD.h }}
+                initial={false}
+                exit={{ opacity: 0, transition: { duration: 0.15, ease: SMOOTH } }}
+              >
+                <div
+                  aria-hidden
+                  className="absolute left-0"
+                  style={{
+                    top: CARD.panelTop, width: CARD.w, height: CARD.panelH, borderRadius: CARD.radius,
+                    WebkitBackdropFilter: 'blur(9px) saturate(1.6)', backdropFilter: 'blur(9px) saturate(1.6)',
+                    boxShadow: '0 24px 48px rgba(0,0,0,0.22)',
+                  }}
+                />
+                <img
+                  src={t.card}
+                  alt="The Natively overlay answering a question"
+                  draggable={false}
+                  className="absolute inset-0 block"
+                  style={{ width: CARD.w, height: CARD.h }}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
         <div
           className="relative overflow-hidden"
           style={{
@@ -241,23 +347,38 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
           />
         </div>
 
-        {live?.hidden && hiddenHint && (
-          <div className="absolute inset-x-0 text-center" style={{ top: 108, fontSize: 13, fontWeight: 500, color: t.quiet }}>
-            {hiddenHint}
-          </div>
-        )}
-        {badge && (
-          <div
-            className="absolute flex items-center"
-            style={{
-              left: '50%', bottom: 22, transform: 'translateX(-50%)', padding: '8px 10px', borderRadius: 14,
-              background: 'rgba(20,20,24,0.72)', WebkitBackdropFilter: 'blur(12px)', backdropFilter: 'blur(12px)',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.35)', zIndex: 3,
-            }}
-          >
-            {badge}
-          </div>
-        )}
+        <AnimatePresence>
+          {live?.hidden && hiddenHint && (
+            <motion.div
+              key="hint"
+              className="absolute inset-x-0 text-center"
+              style={{ top: 108, fontSize: 13, fontWeight: 500, color: t.quiet }}
+              {...toast}
+            >
+              {hiddenHint}
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* The badge is centred by an OUTER static box, so the inner element's
+            own transform is free for the toast motion. */}
+        <div className="absolute inset-x-0 flex justify-center pointer-events-none" style={{ bottom: 22, zIndex: 3 }}>
+          <AnimatePresence>
+            {badge && (
+              <motion.div
+                key="badge"
+                className="flex items-center"
+                style={{
+                  padding: '8px 10px', borderRadius: 14,
+                  background: 'rgba(20,20,24,0.72)', WebkitBackdropFilter: 'blur(12px)', backdropFilter: 'blur(12px)',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+                }}
+                {...toast}
+              >
+                {badge}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </motion.div>
     </div>
   );

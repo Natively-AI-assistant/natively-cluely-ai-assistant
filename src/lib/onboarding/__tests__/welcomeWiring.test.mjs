@@ -30,6 +30,5 @@ test('the welcome is marked seen in both stores only when the tour ends', () => 
   const body = app.slice(i, i + 400);
   assert.ok(body.includes("localStorage.setItem(WELCOME_SEEN_KEY, '1')"));
   assert.ok(body.includes("onboardingSetFlag?.('seenStartup', true)"));
-  assert.match(app, /<ShortcutTour onDone=\{finishWelcome\} \/>/);
-  assert.match(app, /<WelcomeScreen onGetStarted=\{\(\) => setWelcomeStep\('tour'\)\} \/>/);
+  assert.match(app, /<WelcomeFlow onDone=\{finishWelcome\} \/>/);
 });
