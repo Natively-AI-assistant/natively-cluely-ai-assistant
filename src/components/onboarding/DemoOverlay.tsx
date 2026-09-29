@@ -18,16 +18,32 @@
 // Nothing here talks to a model or captures the screen: the "screenshot" is
 // the current frame of the demo call, and the answers are canned.
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowRight, ChevronDown, HelpCircle, MessageSquare, Mic, Pencil, PointerOff, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import TopPill from '../ui/TopPill';
 import { getOverlayAppearance } from '../../lib/overlayAppearance';
 import RollingTranscript from '../ui/RollingTranscript';
+import { ModelSelectorLabel } from '../ui/ModelSelectorLabel';
+import { MODEL_SELECTOR_WIDTH } from '../ui/modelSelectorLabelText';
+import { OVERLAY_DEFAULT_COLLAPSED_WIDTH } from '../../lib/overlayCustomSize.mjs';
+import { useT } from '../../i18n';
+import { fmt, useWordSplitter } from './i18nText';
 
+// A user line reads WHAT_TO_SAY, or WHAT_TO_SAY_SHOT once screenshots ride along;
+// an answer is ANSWERS[k]. Both are put into words at render, so they follow the language.
 type Msg =
-  | { id: number; role: 'user'; text: string; shots?: string[] }
-  | { id: number; role: 'answer'; words: string[]; shown: number };
+  | { id: number; role: 'user'; shots?: string[] }
+  | { id: number; role: 'answer'; k: number; shown: number };
+
+/** The real collapsed panel's width: the demo is laid out at it, then zoomed to fit the plate. */
+export const DEMO_OVERLAY_WIDTH = OVERLAY_DEFAULT_COLLAPSED_WIDTH;
+// The real chat area follows the window's height; the demo keeps three lines of an
+// answer in view, which is what the tour needs to show.
+const DEMO_CHAT_HEIGHT = 176;
+// The managed route, as the real overlay names it (NativelyInterface). A demo shows
+// the product's own name, not whatever model this install happens to have picked.
+const DEMO_MODEL_LABEL = 'Natively API';
 
 const WHAT_TO_SAY = 'What should I say?';
 const WHAT_TO_SAY_SHOT = 'What should I say about this?';
@@ -37,8 +53,8 @@ const ANSWERS = [
   'From what’s on screen, I’d point to the numbers in the second column: they’re trending up week over week, and I can walk through what’s driving that.',
 ];
 const SEED: Msg[] = [
-  { id: 1, role: 'user', text: WHAT_TO_SAY },
-  { id: 2, role: 'answer', words: ANSWERS[0].split(' '), shown: Infinity },
+  { id: 1, role: 'user' },
+  { id: 2, role: 'answer', k: 0, shown: Infinity },
 ];
 
 // Stands in for the call frame if the canvas cannot be read back (a tainted
@@ -83,6 +99,8 @@ interface Props {
 
 export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotKey, captureFrame, placeholderKeys }) => {
   const reduced = useReducedMotion() ?? false;
+  const tr = useT();
+  const split = useWordSplitter();
   const baseAppearance = getOverlayAppearance(isLight ? DEMO_OPACITY.light : DEMO_OPACITY.dark, isLight ? 'light' : 'dark');
   const appearance = {
     ...baseAppearance,
@@ -92,6 +110,10 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
       WebkitBackdropFilter: `blur(${DEMO_BLUR_PX}px) saturate(140%)`,
     },
   };
+
+  // The answers and questions as words: spaced languages by space, zh/ja by Intl.Segmenter.
+  const answerWords = useMemo(() => ANSWERS.map(a => split(tr(a))), [tr, split]);
+  const questionWords = useMemo(() => QUESTIONS.map(q => split(tr(q))), [tr, split]);
 
   const [messages, setMessages] = useState<Msg[]>(SEED);
   const [tray, setTray] = useState<string[]>([]);
@@ -116,31 +138,32 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
     const userId = nextId.current++;
     const answerId = nextId.current++;
     const k = answerIndex.current++ % ANSWERS.length;
-    const words = ANSWERS[k].split(' ');
+    const total = answerWords[k].words.length;
     setQIdx(k);
     setCaptionWords(reduced ? Infinity : 0);
     setTray([]);
     setMessages(m => [
       ...m.slice(-4),
-      { id: userId, role: 'user', text: shots.length ? WHAT_TO_SAY_SHOT : WHAT_TO_SAY, shots: shots.length ? shots : undefined },
-      { id: answerId, role: 'answer', words, shown: 0 },
+      { id: userId, role: 'user', shots: shots.length ? shots : undefined },
+      { id: answerId, role: 'answer', k, shown: 0 },
     ]);
     const reveal = (n: number) => {
       setMessages(m => m.map(x => (x.id === answerId && x.role === 'answer' ? { ...x, shown: n } : x)));
-      if (n < words.length) after(reduced ? 0 : 45, () => reveal(n + 1));
+      if (n < total) after(reduced ? 0 : 45, () => reveal(n + 1));
     };
-    after(reduced ? 300 : 1100, () => reveal(reduced ? words.length : 1));
+    after(reduced ? 300 : 1100, () => reveal(reduced ? total : 1));
   }, [answerKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The caption streams in like live captions, then holds.
   useEffect(() => {
     if (!Number.isFinite(captionWords)) return;
-    const total = QUESTIONS[qIdx].split(' ').length;
+    const total = questionWords[qIdx].words.length;
     if (captionWords >= total) return;
     const t = setTimeout(() => setCaptionWords(n => n + 1), 70);
     return () => clearTimeout(t);
-  }, [captionWords, qIdx]);
-  const caption = Number.isFinite(captionWords) ? QUESTIONS[qIdx] : QUESTIONS[qIdx].split(' ').slice(0, captionWords).join(' ');
+  }, [captionWords, qIdx, questionWords]);
+  const q = questionWords[qIdx];
+  const caption = Number.isFinite(captionWords) ? q.words.join(q.sep) : q.words.slice(0, captionWords).join(q.sep);
 
   // Take Screenshot: the overlay steps aside for the capture, then attaches it.
   useEffect(() => {
@@ -173,7 +196,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
   return (
     <motion.div
       className="relative flex flex-col items-center gap-2 font-sans overlay-text-primary"
-      style={{ width: 600, pointerEvents: 'none' }}
+      style={{ width: DEMO_OVERLAY_WIDTH, pointerEvents: 'none' }}
       initial={false}
       animate={gone ? { opacity: 0, y: reduced ? 0 : 6, scale: reduced ? 1 : 0.98 } : { opacity: 1, y: 0, scale: 1 }}
       transition={blink ? { duration: 0.05 } : gone ? HIDE : SHOW}
@@ -196,7 +219,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
 
         {/* Messages */}
         {/* Scrollable like the real one; the only part of the demo that takes the pointer. */}
-        <div ref={scroller} onScroll={onScroll} className="p-4 space-y-3 overflow-y-auto overscroll-contain" style={{ height: 176, scrollbarWidth: 'none', pointerEvents: gone ? 'none' : 'auto' }}>
+        <div ref={scroller} onScroll={onScroll} className="p-4 space-y-3 overflow-y-auto overscroll-contain" style={{ height: DEMO_CHAT_HEIGHT, scrollbarWidth: 'none', pointerEvents: gone ? 'none' : 'auto' }}>
           {messages.map(msg => msg.role === 'user' ? (
             <div key={msg.id} className="flex justify-end min-w-0">
               <div className={`max-w-[72%] px-[13.6px] py-[10.2px] text-[15px] leading-relaxed whitespace-pre-wrap rounded-[20px] rounded-tr-[4px] shadow-sm font-medium backdrop-blur-md border ${
@@ -210,16 +233,16 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
                     ))}
                   </div>
                 )}
-                {msg.text}
+                {tr(msg.shots ? WHAT_TO_SAY_SHOT : WHAT_TO_SAY)}
               </div>
             </div>
           ) : (
             <div key={msg.id} className="w-full ai-response-card my-2.5 min-h-[24px] text-[14px] leading-relaxed overlay-text-primary">
               {msg.shown === 0 ? (
-                <span className="natively-thinking-label text-[13px]">Thinking...</span>
+                <span className="natively-thinking-label text-[13px]">{tr('Thinking...')}</span>
               ) : (
-                msg.words.slice(0, msg.shown).map((w, i) => (
-                  <React.Fragment key={i}>{i > 0 && ' '}<span className="reveal-word-in">{w}</span></React.Fragment>
+                answerWords[msg.k].words.slice(0, msg.shown).map((w, i) => (
+                  <React.Fragment key={i}>{i > 0 && answerWords[msg.k].sep}<span className="reveal-word-in">{w}</span></React.Fragment>
                 ))
               )}
             </div>
@@ -228,11 +251,11 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
 
         {/* Quick actions, in the overlay's order */}
         <div className="flex flex-wrap justify-center items-center gap-1.5 px-4 pb-3 pt-3">
-          <span className={chip} style={appearance.chipStyle}><Pencil className="w-3 h-3 opacity-70" /> What to answer?</span>
-          <span className={chip} style={appearance.chipStyle}><MessageSquare className="w-3 h-3 opacity-70" /> Clarify</span>
-          <span className={chip} style={appearance.chipStyle}><RefreshCw className="w-3 h-3 opacity-70" /> Recap</span>
-          <span className={chip} style={appearance.chipStyle}><HelpCircle className="w-3 h-3 opacity-70" /> Follow Up Question</span>
-          <span className={`${chip} justify-center min-w-[74px]`} style={appearance.chipStyle}><Mic className="w-3 h-3 opacity-70" /> Answer</span>
+          <span className={chip} style={appearance.chipStyle}><Pencil className="w-3 h-3 opacity-70" /> {tr('What to answer?')}</span>
+          <span className={chip} style={appearance.chipStyle}><MessageSquare className="w-3 h-3 opacity-70" /> {tr('Clarify')}</span>
+          <span className={chip} style={appearance.chipStyle}><RefreshCw className="w-3 h-3 opacity-70" /> {tr('Recap')}</span>
+          <span className={chip} style={appearance.chipStyle}><HelpCircle className="w-3 h-3 opacity-70" /> {tr('Follow Up Question')}</span>
+          <span className={`${chip} justify-center min-w-[74px]`} style={appearance.chipStyle}><Mic className="w-3 h-3 opacity-70" /> {tr('Answer')}</span>
         </div>
 
         {/* Input area */}
@@ -241,7 +264,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
             <div className="mb-2 rounded-lg p-2 border overlay-subtle-surface" style={appearance.subtleStyle}>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[11px] font-medium overlay-text-primary">
-                  {tray.length} screenshot{tray.length > 1 ? 's' : ''} attached
+                  {fmt(tr(tray.length > 1 ? '{n} screenshots attached' : '{n} screenshot attached'), { n: tray.length })}
                 </span>
                 <span className="p-1 rounded-full overlay-icon-surface overlay-text-interactive" style={appearance.iconStyle}>
                   <X className="w-3.5 h-3.5" />
@@ -254,7 +277,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
                     className={`h-12 w-auto rounded-[10px] border object-cover shadow-sm ${isLight ? 'border-black/15' : 'border-white/20'}`} />
                 ))}
               </div>
-              <span className="text-[10px] overlay-text-muted">Ask a question or click Answer</span>
+              <span className="text-[10px] overlay-text-muted">{tr('Ask a question or click Answer')}</span>
             </div>
           )}
 
@@ -262,7 +285,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
             <div className="w-full border rounded-xl pl-3 pr-10 py-2.5 text-[13px] leading-relaxed overlay-input-surface overlay-input-text" style={{ ...appearance.inputStyle, minHeight: 42 }} />
             <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 min-w-0 overflow-hidden whitespace-nowrap text-[13px] overlay-text-muted">
               <span className="inline-flex items-center gap-1.5">
-                <span>Ask anything on screen or conversation, or</span>
+                <span>{tr('Ask anything on screen or conversation, or')}</span>
                 <span className="flex items-center gap-1 opacity-80">
                   {placeholderKeys.map((k, i) => (
                     <React.Fragment key={i}>
@@ -271,7 +294,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
                     </React.Fragment>
                   ))}
                 </span>
-                <span>for selective screenshot</span>
+                <span>{tr('for selective screenshot')}</span>
               </span>
             </div>
             <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-20 text-[10px]">↵</div>
@@ -280,8 +303,8 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
           <div className="flex items-center justify-between mt-3 px-0.5">
             <div className="flex items-center gap-1.5">
               {/* Exactly the real toolbar: the model selector (h-7, 9px radius), then bare icons. */}
-              <span className="flex items-center gap-1 pl-3 pr-1.5 h-7 border rounded-[9px] text-xs font-medium text-left shrink-0 overlay-control-surface overlay-text-interactive" style={{ ...appearance.controlStyle, width: 141 }}>
-                <span className="truncate flex-1">Natively API</span><ChevronDown size={12} className="shrink-0" />
+              <span className="flex items-center gap-1 pl-3 pr-1.5 h-7 border rounded-[9px] text-xs font-medium text-left shrink-0 overlay-control-surface overlay-text-interactive" style={{ ...appearance.controlStyle, width: MODEL_SELECTOR_WIDTH }}>
+                <ModelSelectorLabel>{DEMO_MODEL_LABEL}</ModelSelectorLabel><ChevronDown size={12} className="shrink-0" />
               </span>
               <span className="w-7 h-7 rounded-[9px] flex items-center justify-center overlay-bare-icon"><SlidersHorizontal className="w-3.5 h-3.5" /></span>
               <span className="w-7 h-7 rounded-[9px] flex items-center justify-center overlay-bare-icon"><PointerOff className="w-3.5 h-3.5" /></span>

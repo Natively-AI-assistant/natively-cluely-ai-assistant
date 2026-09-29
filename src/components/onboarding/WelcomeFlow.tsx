@@ -12,9 +12,11 @@
 
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useT } from '../../i18n';
 import { useWelcomeTheme, WelcomeFrame, MeetingDemo, Keycaps, useSlideVariants } from './welcomeShared';
 import { WelcomeLeft } from './WelcomeScreen';
 import { TourLeft, useShortcutTour } from './ShortcutTour';
+import { fillText } from './i18nText';
 
 interface Props {
   /** Called when the tour ends (finished or skipped). */
@@ -24,6 +26,7 @@ interface Props {
 export const WelcomeFlow: React.FC<Props> = ({ onDone }) => {
   const t = useWelcomeTheme();
   const slide = useSlideVariants();
+  const tr = useT();
   const [step, setStep] = useState<'welcome' | 'tour'>('welcome');
   const tour = useShortcutTour(step === 'tour');
 
@@ -51,7 +54,7 @@ export const WelcomeFlow: React.FC<Props> = ({ onDone }) => {
       <MeetingDemo
         t={t}
         live={{ hidden: tour.hidden, answerKey: tour.answerKey, shotKey: tour.shotKey, placeholderKeys: tour.placeholderKeys }}
-        hiddenHint={<span className="inline-flex items-center gap-2">Overlay hidden. Press <Keycaps t={t} keys={tour.toggleKeys} /> to bring it back.</span>}
+        hiddenHint={<span className="inline-flex items-center gap-2 whitespace-nowrap">{fillText(tr('Overlay hidden. Press {keys} to bring it back.'), { keys: <Keycaps t={t} keys={tour.toggleKeys} /> })}</span>}
         badge={tour.badge ? <Keycaps t={t} keys={tour.badge} onDark /> : undefined}
       />
     </WelcomeFrame>

@@ -25,9 +25,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import nativelyMark from '../../assets/logo.webp';
+import { useT } from '../../i18n';
 import { isMac, isWindows } from '../../utils/platformUtils';
 import { acceleratorToKeys, matchesAccelerator } from '../../lib/onboarding/shortcutKeys.mjs';
 import { useWelcomeTheme, useRise, LavenderButton, Keycaps, useSlideVariants, useTextSwap } from './welcomeShared';
+import { fmt } from './i18nText';
 
 type Action = 'toggle' | 'answer' | 'shot';
 
@@ -172,6 +174,7 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
   const rise = useRise();
   const slide = useSlideVariants();
   const swap = useTextSwap();
+  const tr = useT();
   const { lesson, dir, goTo, pressed, done, press, keysFor } = tour;
 
   const cur = LESSONS[lesson];
@@ -182,13 +185,13 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
     <div role="main" aria-labelledby="tour-title" className="flex-1 min-w-0 h-full flex flex-col" style={{ padding: '64px 64px 44px 72px' }}>
       <motion.div {...rise(0.05)} className="flex items-center gap-[10px]">
         <img src={nativelyMark} alt="" draggable={false} style={{ width: 26, height: 26, filter: t.markFilter }} />
-        <span style={{ fontSize: 13, fontWeight: 500, color: t.quiet }}>Get started</span>
+        <span style={{ fontSize: 13, fontWeight: 500, color: t.quiet }}>{tr('Get started')}</span>
       </motion.div>
 
       <motion.div {...rise(0.12)} className="my-auto flex flex-col" style={{ gap: 26 }}>
         <AnimatePresence mode="wait" initial={false}>
           <motion.div key={lesson} {...swap} style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: t.faint }}>
-            Step {lesson + 1} of {LESSONS.length}
+            {fmt(tr('Step {n} of {total}'), { n: lesson + 1, total: LESSONS.length })}
           </motion.div>
         </AnimatePresence>
 
@@ -208,16 +211,16 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
             <button
               type="button"
               onClick={() => press(cur.action)}
-              aria-label={`Try ${curKeys.join(' + ')}`}
+              aria-label={fmt(tr('Try {keys}'), { keys: curKeys.join(' + ') })}
               className="onb-keys-btn self-start bg-transparent border-0 p-0"
             >
               <Keycaps t={t} keys={curKeys} size="lg" pressed={pressed} />
             </button>
             <div className="flex flex-col" style={{ gap: 12 }}>
               <h1 id="tour-title" style={{ margin: 0, fontSize: 44, fontWeight: 300, letterSpacing: '-0.035em', lineHeight: 1.05, color: t.strong }}>
-                {cur.title}
+                {tr(cur.title)}
               </h1>
-              <p style={{ margin: 0, maxWidth: 400, fontSize: 15, lineHeight: 1.6, color: t.body }}>{cur.text}</p>
+              <p style={{ margin: 0, maxWidth: 400, fontSize: 15, lineHeight: 1.6, color: t.body }}>{tr(cur.text)}</p>
             </div>
           </motion.div>
         </AnimatePresence>
@@ -227,10 +230,10 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
             <motion.div key={`${cur.action}-${done[cur.action]}`} {...swap}>
               {done[cur.action] ? (
                 <span className="inline-flex items-center gap-2" style={{ color: '#34D399' }}>
-                  <SuccessCheck /> That&rsquo;s it. Watch the overlay on the right.
+                  <SuccessCheck /> {tr('That’s it. Watch the overlay on the right.')}
                 </span>
               ) : (
-                <>Try it now: press {curKeys.join(' + ')} on your keyboard, or click the keys.</>
+                <>{fmt(tr('Try it now: press {keys} on your keyboard, or click the keys.'), { keys: curKeys.join(' + ') })}</>
               )}
             </motion.div>
           </AnimatePresence>
@@ -241,18 +244,18 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
         {lesson === 0 ? (
           <button type="button" onClick={onDone} className="onb-textbtn bg-transparent border-0"
             style={{ ['--onb-quiet' as string]: t.quiet, ['--onb-strong' as string]: t.strong, fontSize: 12.5, fontWeight: 500, padding: '10px 4px' } as React.CSSProperties}>
-            Skip
+            {tr('Skip')}
           </button>
         ) : (
           <button type="button" onClick={() => goTo(lesson - 1)} className="onb-textbtn bg-transparent border-0"
             style={{ ['--onb-quiet' as string]: t.quiet, ['--onb-strong' as string]: t.strong, fontSize: 12.5, fontWeight: 500, padding: '10px 4px' } as React.CSSProperties}>
-            Back
+            {tr('Back')}
           </button>
         )}
         {/* One button for both: it fits its label and tweens between them. */}
         <LavenderButton t={t} height={40} labelSize={14}
           labelKey={isLast ? 'start' : 'next'} onClick={isLast ? onDone : () => goTo(lesson + 1)}>
-          {isLast ? 'Start using Natively' : 'Next'} <ArrowRight size={15} strokeWidth={2} aria-hidden />
+          {isLast ? tr('Start using Natively') : tr('Next')} <ArrowRight size={15} strokeWidth={2} aria-hidden />
         </LavenderButton>
         <div className="ml-auto flex items-center" style={{ gap: 6 }} aria-hidden>
           {LESSONS.map((l, i) => (

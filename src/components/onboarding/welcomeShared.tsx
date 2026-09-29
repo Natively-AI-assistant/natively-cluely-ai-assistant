@@ -7,10 +7,11 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion, type Variants } from 'framer-motion';
 import meetingVideo from '../../assets/welcome/meeting.webm';
+import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 import WindowControls from '../WindowControls';
-import { DemoOverlay } from './DemoOverlay';
+import { DemoOverlay, DEMO_OVERLAY_WIDTH } from './DemoOverlay';
 import { WELCOME_BUTTON_TOKENS } from './welcomeButtonTokens';
 import './onboardingMotion.css';
 
@@ -218,23 +219,35 @@ export const Keycaps: React.FC<{ t: WelcomeTheme; keys: string[]; size?: 'sm' | 
   );
 };
 
-// The demo is designed at full size and scaled as one piece by PLATE_SCALE, so the
-// overlay, the call and the gap between them keep their proportions. 0.88 leaves
-// ~51px of plate either side of the overlay (it was 18px at 1.0, edge to edge).
-const PLATE_SCALE = 0.88;
-const px = (n: number) => Math.round(n * PLATE_SCALE);
-// The stage the overlay sits in: 520 wide, 340 tall at full size (the overlay is
-// 600 laid out, zoomed to fit). It is fixed so the call under it never moves.
-const CARD = { w: px(520), h: px(340) };
-// The call is 528px wide at full size; the overlay is laid out 600px wide and
-// zoomed so it is a little WIDER than the call (600 * 0.92 = 552, 12px overhang
-// each side): the overlay is the subject and the call is what it sits over.
-const VIDEO_W = px(528);
-const OVERLAY_ZOOM = 0.92 * PLATE_SCALE;
-// How far the call tucks up under the overlay: 150 at zoom 0.88, less 14 because
-// the larger overlay ends 14px lower, so the overlap stays the same.
-const CALL = { w: VIDEO_W, tuck: px(150 - 14) };
+// The stage (the overlay over the call) is drawn at full size and zoomed as one
+// piece, so the overlay, the call and the gap between them keep their proportions
+// at every window size. STAGE_LOOK is how large it reads at the launcher's default
+// window: 0.88 leaves ~51px of plate either side of the overlay (18px at 1.0).
+// Past the default the stage grows with the plate, so a larger window is not a
+// small demo lost in a big grid.
+const STAGE_LOOK = 0.88;
+// The plate at the launcher's default window (1200 wide, locked aspect): what
+// STAGE_LOOK was tuned against.
+const PLATE_AT_DEFAULT = { w: 588, h: 776 };
+const SCALE_RANGE = { min: 0.5, max: 1.6 } as const;
+// The call is 528px wide at full size. The overlay is a little WIDER than it
+// (OVERHANG each side): the overlay is the subject, the call is what it sits over.
+const VIDEO_W = 528;
+const OVERHANG = 12;
+const OVERLAY_ZOOM = (VIDEO_W + OVERHANG * 2) / DEMO_OVERLAY_WIDTH;
+// The stage the overlay sits in (fixed, so the call under it never moves), and how
+// far the call tucks up under it.
+const STAGE = { w: 520, h: 340, tuck: 136 };
+// The stage sits this much above the plate's centre, closer to the top than to the
+// keystroke badge along the bottom.
+const LIFT = 40;
 const EASE = [0.23, 1, 0.32, 1] as const;
+
+/** The stage's zoom for a plate of this size. */
+function stageScale(w: number, h: number): number {
+  const fit = Math.min(w / PLATE_AT_DEFAULT.w, h / PLATE_AT_DEFAULT.h);
+  return STAGE_LOOK * Math.min(SCALE_RANGE.max, Math.max(SCALE_RANGE.min, fit));
+}
 
 /** What drives the demo overlay: the tour's presses. */
 export interface LiveOverlayProps {
@@ -265,6 +278,22 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
   const toast = useToastMotion();
   const isLight = useResolvedTheme() === 'light';
   const videoRef = useRef<HTMLVideoElement>(null);
+  const tr = useT();
+
+  // Follow the plate: the launcher window resizes, and the stage with it.
+  const plateRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(STAGE_LOOK);
+  useLayoutEffect(() => {
+    const el = plateRef.current;
+    if (!el) return;
+    const fit = () => {
+      if (el.clientWidth && el.clientHeight) setScale(stageScale(el.clientWidth, el.clientHeight));
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // The demo "screenshot": the call's current frame. The video is a bundled,
   // same-origin asset, so the canvas is never tainted.
@@ -281,8 +310,9 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
   };
 
   return (
-    <div className="h-full flex" style={{ flex: '0 0 50%', maxWidth: 600, padding: '12px 12px 12px 0', boxSizing: 'border-box' }}>
+    <div className="h-full flex" style={{ flex: '0 0 50%', padding: '12px 12px 12px 0', boxSizing: 'border-box' }}>
       <motion.div
+        ref={plateRef}
         initial={reduced ? { opacity: 0 } : { opacity: 0, x: 16 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5, delay: 0.08, ease: EASE }}
@@ -302,57 +332,61 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
             (DemoOverlay, built from the same classes and the real RollingTranscript),
             frosting the call behind it. On the welcome it simply rests on its
             opening conversation; the tour drives it. It never remounts, so the
-            call video under it keeps playing. */}
-        <div className="relative" style={{ width: CARD.w, height: CARD.h, zIndex: 2 }}>
-          <div className="absolute inset-x-0 top-0 flex justify-center">
-            {/* The overlay is laid out at its real 600px width and zoomed to fit
-                the plate (zoom, unlike transform, also shrinks its layout box). */}
-            <div style={{ zoom: OVERLAY_ZOOM }}>
-              <DemoOverlay
-                isLight={isLight}
-                hidden={live.hidden}
-                answerKey={live.answerKey}
-                shotKey={live.shotKey}
-                captureFrame={captureFrame}
-                placeholderKeys={live.placeholderKeys}
+            call video under it keeps playing. `zoom`, unlike transform, also
+            shrinks the layout box, so the plate centres what it will show. */}
+        <div className="relative flex flex-col items-center" style={{ zoom: scale, paddingBottom: LIFT * 2 }}>
+          <div className="relative" style={{ width: STAGE.w, height: STAGE.h, zIndex: 2 }}>
+            <div className="absolute inset-x-0 top-0 flex justify-center">
+              {/* The overlay is laid out at its real width and zoomed to sit a little wider than the call. */}
+              <div style={{ zoom: OVERLAY_ZOOM }}>
+                <DemoOverlay
+                  isLight={isLight}
+                  hidden={live.hidden}
+                  answerKey={live.answerKey}
+                  shotKey={live.shotKey}
+                  captureFrame={captureFrame}
+                  placeholderKeys={live.placeholderKeys}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="relative" style={{ zIndex: 1, width: VIDEO_W, marginTop: -STAGE.tuck }}>
+            <div
+              className="relative overflow-hidden"
+              style={{
+                aspectRatio: '16 / 9', borderRadius: 14,
+                background: '#000', boxShadow: '0 16px 40px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.05)',
+              }}
+            >
+              {/* Muted so it may autoplay; held on its first frame for reduced motion. */}
+              <video
+                ref={videoRef}
+                src={meetingVideo}
+                autoPlay={!reduced}
+                muted
+                loop
+                playsInline
+                preload="auto"
+                aria-label={tr('A video call with two participants')}
+                className="block h-full w-full"
+                style={{ objectFit: 'cover' }}
               />
+            </div>
+            {/* Where the overlay was: a beat above the call it hides over. The
+                outer box centres it, so the inner one's transform is free for the
+                toast motion; it may run wider than the call (other languages). */}
+            <div className="absolute flex justify-center pointer-events-none" style={{ left: -60, right: -60, bottom: '100%', marginBottom: 20 }}>
+              <AnimatePresence>
+                {live.hidden && hiddenHint && (
+                  <motion.div key="hint" className="text-center" style={{ fontSize: 13, fontWeight: 500, color: t.quiet }} {...toast}>
+                    {hiddenHint}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
-        <div
-          className="relative overflow-hidden"
-          style={{
-            zIndex: 1, width: CALL.w, aspectRatio: '16 / 9', marginTop: -CALL.tuck, borderRadius: 14,
-            background: '#000', boxShadow: '0 16px 40px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.05)',
-          }}
-        >
-          {/* Muted so it may autoplay; held on its first frame for reduced motion. */}
-          <video
-            ref={videoRef}
-            src={meetingVideo}
-            autoPlay={!reduced}
-            muted
-            loop
-            playsInline
-            preload="auto"
-            aria-label="A video call with two participants"
-            className="block h-full w-full"
-            style={{ objectFit: 'cover' }}
-          />
-        </div>
 
-        <AnimatePresence>
-          {live.hidden && hiddenHint && (
-            <motion.div
-              key="hint"
-              className="absolute inset-x-0 text-center"
-              style={{ top: 108, fontSize: 13, fontWeight: 500, color: t.quiet }}
-              {...toast}
-            >
-              {hiddenHint}
-            </motion.div>
-          )}
-        </AnimatePresence>
         {/* The badge is centred by an OUTER static box, so the inner element's
             own transform is free for the toast motion. */}
         <div className="absolute inset-x-0 flex justify-center pointer-events-none" style={{ bottom: 22, zIndex: 3 }}>
