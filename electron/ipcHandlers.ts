@@ -2077,6 +2077,21 @@ export function initializeIpcHandlers(appState: AppState): void {
               // unclassified factual question in General (see
               // ClassificationInput.inLiveMeeting).
               inLiveMeeting: v3MeetingEvidence.inLiveMeeting,
+              // The meeting's recent speech, as the hotkey path already sends it
+              // (2026-09-30, measured: typed "summarize what we've decided so far",
+              // "calm her down", "another one, different numbers" during a live
+              // meeting took the no-retrieval path and reached the model with NO
+              // transcript at all — the BM25 port admits nothing for a meeting-wide
+              // ask, and typed chat had no speech window). Overlay (live) surface
+              // only; the launcher's reading surface is not inside a meeting.
+              conversationSummary: answerSurface === 'live' ? (() => {
+                try {
+                  const { speechWindowForPrompt } = require('./llm/conversationHistoryPolicy') as typeof import('./llm/conversationHistoryPolicy');
+                  const formatted = String(appState.getIntelligenceManager?.()?.getFormattedContext?.(180) ?? '');
+                  const w = speechWindowForPrompt(formatted);
+                  return w.trim() ? w : undefined;
+                } catch { return undefined; }
+              })() : undefined,
               // Settings > Intelligence > Memory > "Chat history". Read HERE, not
               // in the bridge: context-intelligence has no dependency on the flag
               // registry (see contracts/retrieval-flags.ts for what the first one
