@@ -21,7 +21,7 @@ export const WELCOME_FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display"
 const THEME = {
   light: {
     bg: '#F7F8FC', strong: '#0B1020', body: 'rgba(11,16,32,0.68)', quiet: 'rgba(11,16,32,0.66)', faint: 'rgba(11,16,32,0.58)',
-    plate: '#EEF1F8', grid: 'rgba(11,16,32,0.035)', card: cardLight, markFilter: 'invert(1)',
+    plate: '#EEF1F8', grid: 'rgba(11,16,32,0.09)', card: cardLight, markFilter: 'invert(1)',
     kcBg: '#FFFFFF', kcRim: 'rgba(11,16,32,0.14)', kcUnder: 'rgba(11,16,32,0.14)', dot: 'rgba(11,16,32,0.14)',
     // The PR's light button (a pale tint with a deep label — white on it would
     // run about 1.3:1) in the toggle's blue, so light and dark are one hue.
@@ -280,7 +280,9 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
         transition={{ duration: 0.5, delay: 0.08, ease: EASE }}
         className="relative flex-1 overflow-hidden flex flex-col items-center justify-center"
         style={{
-          borderRadius: 22, background: t.plate,
+          // backgroundColor, not the `background` shorthand: the shorthand resets
+          // background-size, and the 40px grid below collapsed to one 1px edge line.
+          borderRadius: 22, backgroundColor: t.plate,
           backgroundImage: `linear-gradient(${t.grid} 1px, transparent 1px), linear-gradient(90deg, ${t.grid} 1px, transparent 1px)`,
           backgroundSize: '40px 40px',
         }}
