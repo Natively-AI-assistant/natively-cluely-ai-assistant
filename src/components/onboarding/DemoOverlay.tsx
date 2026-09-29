@@ -23,7 +23,6 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowRight, ChevronDown, HelpCircle, MessageSquare, Mic, Pencil, PointerOff, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import TopPill from '../ui/TopPill';
 import { getOverlayAppearance } from '../../lib/overlayAppearance';
-import RollingTranscript from '../ui/RollingTranscript';
 import { ModelSelectorLabel } from '../ui/ModelSelectorLabel';
 import { ChromeFold } from '../overlay/ChromeFold';
 import { MODEL_SELECTOR_WIDTH } from '../ui/modelSelectorLabelText';
@@ -42,6 +41,10 @@ export const DEMO_OVERLAY_WIDTH = OVERLAY_DEFAULT_COLLAPSED_WIDTH;
 // The real chat area follows the window's height; the demo keeps three lines of an
 // answer in view, which is what the tour needs to show.
 const DEMO_CHAT_HEIGHT = 176;
+// The chat is the card's top edge (no transcript strip above it), so text scrolling
+// off the top fades out over the first 18px instead of being cut flat. At rest it
+// only touches the 16px of padding.
+const CHAT_TOP_FADE = 'linear-gradient(to bottom, transparent 0, #000 18px)';
 // The managed route, as the real overlay names it (NativelyInterface). A demo shows
 // the product's own name, not whatever model this install happens to have picked.
 const DEMO_MODEL_LABEL = 'Natively API';
@@ -49,7 +52,7 @@ const DEMO_MODEL_LABEL = 'Natively API';
 const WHAT_TO_SAY = 'What should I say?';
 const WHAT_TO_SAY_SHOT = 'What should I say about this?';
 const ANSWERS = [
-  'I’d say Docker gives us one environment from a laptop to production. The app ships with its dependencies, so “it works on my machine” stops being a problem.',
+  'I’d say a process has its own memory, while the threads inside it share one. That makes threads cheaper to start and switch between, but they have to coordinate access to shared data.',
   'I’d start with the index: it lets the database jump straight to the rows it needs instead of scanning the whole table, which is what keeps our lookups fast as data grows.',
   'From what’s on screen, I’d point to the numbers in the second column: they’re trending up week over week, and I can walk through what’s driving that.',
 ];
@@ -74,13 +77,6 @@ const DEMO_OPACITY = { dark: 0.68, light: 0.62 } as const;
 // The frost's blur radius. getOverlayAppearance derives ~10px at these opacities,
 // which turned the call behind into milk; 4px keeps it frosted but legible.
 const DEMO_BLUR_PX = 4;
-
-// What the interviewer says, in the live transcript strip, before each answer.
-const QUESTIONS = [
-  'So why would we use Docker instead of just a VM?',
-  'How does an index make that query faster?',
-  'What is driving the numbers in the second column?',
-];
 
 const HIDE = { duration: 0.22, ease: [0.32, 0, 0.67, 0] as const };
 const SHOW = { duration: 0.34, ease: [0.23, 1, 0.32, 1] as const };
@@ -112,16 +108,12 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
     },
   };
 
-  // The answers and questions as words: spaced languages by space, zh/ja by Intl.Segmenter.
+  // The answers as words: spaced languages by space, zh/ja by Intl.Segmenter.
   const answerWords = useMemo(() => ANSWERS.map(a => split(tr(a))), [tr, split]);
-  const questionWords = useMemo(() => QUESTIONS.map(q => split(tr(q))), [tr, split]);
 
   const [messages, setMessages] = useState<Msg[]>(SEED);
   const [tray, setTray] = useState<string[]>([]);
   const [blink, setBlink] = useState(false);
-  // The live transcript strip: the interviewer's question, arriving word by word.
-  const [qIdx, setQIdx] = useState(0);
-  const [captionWords, setCaptionWords] = useState<number>(Infinity);
   const nextId = useRef(3);
   const answerIndex = useRef(1);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -140,8 +132,6 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
     const answerId = nextId.current++;
     const k = answerIndex.current++ % ANSWERS.length;
     const total = answerWords[k].words.length;
-    setQIdx(k);
-    setCaptionWords(reduced ? Infinity : 0);
     setTray([]);
     setMessages(m => [
       ...m.slice(-4),
@@ -154,17 +144,6 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
     };
     after(reduced ? 300 : 1100, () => reveal(reduced ? total : 1));
   }, [answerKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // The caption streams in like live captions, then holds.
-  useEffect(() => {
-    if (!Number.isFinite(captionWords)) return;
-    const total = questionWords[qIdx].words.length;
-    if (captionWords >= total) return;
-    const t = setTimeout(() => setCaptionWords(n => n + 1), 70);
-    return () => clearTimeout(t);
-  }, [captionWords, qIdx, questionWords]);
-  const q = questionWords[qIdx];
-  const caption = Number.isFinite(captionWords) ? q.words.join(q.sep) : q.words.slice(0, captionWords).join(q.sep);
 
   // Take Screenshot: the overlay steps aside for the capture, then attaches it.
   useEffect(() => {
@@ -209,18 +188,9 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
         className="relative max-w-full w-full backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col overlay-shell-surface overlay-shell-container overlay-text-primary"
         style={appearance.shellStyle}
       >
-        {/* The live transcript strip (the real RollingTranscript) sits above the chat */}
-        <RollingTranscript
-          text={caption}
-          isActive
-          surfaceStyle={appearance.transcriptStyle}
-          interviewerChannel={{ status: 'connected' }}
-          microphoneChannel={{ status: 'connected' }}
-        />
-
         {/* Messages */}
         {/* Scrollable like the real one; the only part of the demo that takes the pointer. */}
-        <div ref={scroller} onScroll={onScroll} className="p-4 space-y-3 overflow-y-auto overscroll-contain" style={{ height: DEMO_CHAT_HEIGHT, scrollbarWidth: 'none', pointerEvents: gone ? 'none' : 'auto' }}>
+        <div ref={scroller} onScroll={onScroll} className="p-4 space-y-3 overflow-y-auto overscroll-contain" style={{ height: DEMO_CHAT_HEIGHT, scrollbarWidth: 'none', pointerEvents: gone ? 'none' : 'auto', maskImage: CHAT_TOP_FADE, WebkitMaskImage: CHAT_TOP_FADE }}>
           {messages.map(msg => msg.role === 'user' ? (
             <div key={msg.id} className="flex justify-end min-w-0">
               {/* ov-bubble-in: the real overlay's entrance for your question (index.css) */}

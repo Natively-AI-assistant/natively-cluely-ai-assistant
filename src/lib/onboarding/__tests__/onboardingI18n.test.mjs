@@ -26,7 +26,7 @@ function englishStrings() {
   }
   for (const m of source['ShortcutTour.tsx'].matchAll(/(?:title|text): '((?:[^'\\]|\\.)*)'/g)) out.add(m[1]);
   const demo = source['DemoOverlay.tsx'];
-  for (const name of ['QUESTIONS', 'ANSWERS']) {
+  for (const name of ['ANSWERS']) {
     const block = demo.slice(demo.indexOf(`const ${name} = [`), demo.indexOf('];', demo.indexOf(`const ${name} = [`)));
     for (const m of block.matchAll(/^\s*'((?:[^'\\]|\\.)*)',?$/gm)) out.add(m[1]);
   }

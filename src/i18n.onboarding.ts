@@ -93,30 +93,12 @@ const ROWS: Record<string, Row> = {
   '{n} screenshot attached': ['Прикреплено скриншотов: {n}', '已附加 {n} 张截图', 'スクリーンショット {n} 枚を添付', '{n} captura adjunta'],
   '{n} screenshots attached': ['Прикреплено скриншотов: {n}', '已附加 {n} 张截图', 'スクリーンショット {n} 枚を添付', '{n} capturas adjuntas'],
 
-  // What the interviewer says, and the answers the demo gives.
-  'So why would we use Docker instead of just a VM?': [
-    'Так зачем нам Docker, если можно просто взять виртуальную машину?',
-    '那我们为什么要用 Docker，而不是直接用虚拟机呢？',
-    'では、なぜ単なる VM ではなく Docker を使うのですか？',
-    'Entonces, ¿por qué usaríamos Docker en lugar de una simple máquina virtual?',
-  ],
-  'How does an index make that query faster?': [
-    'Как индекс ускоряет этот запрос?',
-    '索引是如何让这个查询更快的？',
-    'インデックスはどのようにそのクエリを速くするのですか？',
-    '¿Cómo hace un índice que esa consulta sea más rápida?',
-  ],
-  'What is driving the numbers in the second column?': [
-    'Чем объясняются цифры во втором столбце?',
-    '第二列的数字是由什么推动的？',
-    '2 列目の数字は何が要因ですか？',
-    '¿Qué está impulsando las cifras de la segunda columna?',
-  ],
-  'I’d say Docker gives us one environment from a laptop to production. The app ships with its dependencies, so “it works on my machine” stops being a problem.': [
-    'Я бы сказал, что Docker даёт одну и ту же среду от ноутбука до продакшена. Приложение поставляется вместе с зависимостями, поэтому «у меня на машине работает» перестаёт быть проблемой.',
-    '我会说，Docker 让我们从笔记本电脑到生产环境都使用同一套环境。应用连同依赖一起交付，“在我机器上能跑”就不再是问题。',
-    'こう答えるとよいでしょう。Docker ならノート PC から本番環境まで同じ環境を使えます。アプリは依存関係ごと配布されるため、「自分のマシンでは動く」という問題がなくなります。',
-    'Diría que Docker nos da un único entorno desde el portátil hasta producción. La aplicación se entrega con sus dependencias, así que “en mi máquina funciona” deja de ser un problema.',
+  // The answers the demo gives.
+  'I’d say a process has its own memory, while the threads inside it share one. That makes threads cheaper to start and switch between, but they have to coordinate access to shared data.': [
+    'Я бы сказал, что у процесса своя память, а потоки внутри него используют одну общую. Поэтому потоки дешевле запускать и переключать, но им приходится согласовывать доступ к общим данным.',
+    '我会说，进程拥有自己的内存，而其中的线程共享同一块内存。这使线程的创建和切换成本更低，但它们必须协调对共享数据的访问。',
+    'こう答えるとよいでしょう。プロセスは独自のメモリを持ち、その中のスレッドは同じメモリを共有します。そのためスレッドは起動も切り替えも軽い一方、共有データへのアクセスを調整する必要があります。',
+    'Diría que un proceso tiene su propia memoria, mientras que los hilos que contiene comparten una sola. Eso hace que los hilos sean más baratos de crear y de alternar, pero tienen que coordinar el acceso a los datos compartidos.',
   ],
   'I’d start with the index: it lets the database jump straight to the rows it needs instead of scanning the whole table, which is what keeps our lookups fast as data grows.': [
     'Я бы начал с индекса: он позволяет базе данных сразу перейти к нужным строкам, а не сканировать всю таблицу, — именно поэтому поиск остаётся быстрым по мере роста данных.',

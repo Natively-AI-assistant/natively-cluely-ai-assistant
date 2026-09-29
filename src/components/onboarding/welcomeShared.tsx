@@ -320,7 +320,7 @@ export interface MeetingDemoProps {
 /**
  * The right-hand plate: the app's own meeting overlay over a live call
  * (meeting.webm). The overlay is DemoOverlay — the real overlay's classes and
- * appearance, and the real RollingTranscript strip — frosting the call behind it.
+ * appearance — frosting the call behind it.
  * On the welcome it rests; the tour drives it with the shortcuts it teaches.
  */
 export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, badge }) => {
@@ -379,7 +379,7 @@ export const MeetingDemo: React.FC<MeetingDemoProps> = ({ t, live, hiddenHint, b
         }}
       >
         {/* One stage, one overlay for the whole flow: the app's own overlay
-            (DemoOverlay, built from the same classes and the real RollingTranscript),
+            (DemoOverlay, built from the same classes and appearance),
             frosting the call behind it. On the welcome it simply rests on its
             opening conversation; the tour drives it. It never remounts, so the
             call video under it keeps playing. `zoom`, unlike transform, also
