@@ -176,23 +176,77 @@ const personName = (name?: string) => {
 };
 
 /**
- * Speaker names a linked meeting can give its transcript, keyed like the
- * user's own renames (SpeakerLabelService): the mic is always the user, so
- * `me` takes their name; in a 1:1 (exactly one other attendee who hasn't
- * declined, with a real display name) the system audio is that person, so
- * `speaker_1` takes theirs. In a group call the other voices share one
- * channel and stay "Speaker 1". Null when there is nothing to name.
+ * What the notes call a person: the first word of their calendar display name
+ * ("Evin John Ignatious" → "Evin"). Full names read as formal in a transcript and
+ * a summary, and Google often carries middle names in them. Null when the name
+ * is not a real name (see personName). The To: line and Settings keep full names.
  */
-export function calendarSpeakerLabels(snapshot: CalendarEventSnapshot, userName?: string): Record<string, string> | null {
+export function firstNameOf(name?: string | null): string | null {
+    const full = personName(name ?? undefined);
+    return full ? full.split(' ')[0] : null;
+}
+
+/**
+ * Speaker names a meeting can give its transcript, keyed like the user's own
+ * renames (SpeakerLabelService): the mic is always the user, so `me` takes
+ * their name (the connected calendar account's) in every meeting, linked or
+ * not. Only a linked 1:1 (exactly one other attendee who hasn't declined, with
+ * a real display name) can also name the system audio: `speaker_1` takes that
+ * person's name. In a group call the other voices share one channel and stay
+ * "Speaker 1". Null when there is nothing to name — no calendar name and no
+ * 1:1 — so the transcript keeps "Me".
+ */
+export function calendarSpeakerLabels(snapshot: CalendarEventSnapshot | null | undefined, userName?: string): Record<string, string> | null {
+    return labelsNamedBy(firstNameOf, snapshot, userName);
+}
+
+/**
+ * The same labels as calendarSpeakerLabels, named by `nameOf`. First names are
+ * what new meetings get; full names are what they got before 2026-09-29, which
+ * relinkSpeakerLabels and modernizeCalendarLabels still have to recognise.
+ * Two people with the same first name: the other voice stays "Speaker 1".
+ */
+function labelsNamedBy(
+    nameOf: (name?: string | null) => string | null,
+    snapshot: CalendarEventSnapshot | null | undefined,
+    userName?: string,
+): Record<string, string> | null {
     const labels: Record<string, string> = {};
-    const me = personName(userName);
+    const me = nameOf(userName);
     if (me) labels.me = me;
-    const others = snapshot.attendees.filter((a) => a.response !== 'declined');
+    const others = (snapshot?.attendees ?? []).filter((a) => a.response !== 'declined');
     if (others.length === 1) {
-        const them = personName(others[0].name);
+        const them = nameOf(others[0].name);
         if (them && them !== me) labels.speaker_1 = them;
     }
     return Object.keys(labels).length > 0 ? labels : null;
+}
+const fullNameLabels = (snapshot: CalendarEventSnapshot | null | undefined, userName?: string) =>
+    labelsNamedBy((n) => personName(n ?? undefined), snapshot, userName);
+
+/**
+ * Stored labels with any the calendar wrote in full (before first names) turned
+ * into the first-name label it writes now: "Evin John Ignatious" → "Evin" for
+ * `me`, and the 1:1 attendee's likewise. A label the user typed differs from both
+ * and is kept as it is. Null when nothing changes.
+ */
+export function modernizeCalendarLabels(
+    stored: Record<string, string> | undefined,
+    snapshot: CalendarEventSnapshot | null | undefined,
+    userName?: string,
+): Record<string, string> | null {
+    if (!stored) return null;
+    const legacy = fullNameLabels(snapshot, userName) ?? {};
+    const now = calendarSpeakerLabels(snapshot, userName) ?? {};
+    const next = { ...stored };
+    let changed = false;
+    for (const id of Object.keys(stored)) {
+        if (legacy[id] && stored[id] === legacy[id] && now[id] && now[id] !== stored[id]) {
+            next[id] = now[id];
+            changed = true;
+        }
+    }
+    return changed ? next : null;
 }
 
 const EMPTY_SNAPSHOT: CalendarEventSnapshot = { id: '', title: '', startTime: '', endTime: '', attendees: [], linkedBy: 'user' };
@@ -214,7 +268,11 @@ export function relinkSpeakerLabels(
 ): Record<string, string> | null {
     const labelsFor = (snap: CalendarEventSnapshot | null | undefined) => calendarSpeakerLabels(snap ?? EMPTY_SNAPSHOT, userName) ?? {};
     const now = current ?? {};
-    const untouched = Object.keys(now).length === 0 || sameLabels(now, labelsFor(oldSnapshot));
+    // Untouched = what the old link produced, as first names (now) or full names
+    // (a meeting labelled before 2026-09-29): neither is a rename the user made.
+    const untouched = Object.keys(now).length === 0
+        || sameLabels(now, labelsFor(oldSnapshot))
+        || sameLabels(now, fullNameLabels(oldSnapshot ?? EMPTY_SNAPSHOT, userName) ?? {});
     if (!untouched) return null;
     const next = labelsFor(newSnapshot);
     return sameLabels(now, next) ? null : next;

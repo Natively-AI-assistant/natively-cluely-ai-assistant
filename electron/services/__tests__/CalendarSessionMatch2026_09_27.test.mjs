@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const compiled = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../dist-electron/electron/services/calendar/calendarSessionMatch.js');
-const { matchEventForSession, toEventSnapshot, calendarSpeakerLabels, relinkSpeakerLabels } = require(compiled);
+const { matchEventForSession, toEventSnapshot, calendarSpeakerLabels, relinkSpeakerLabels, firstNameOf, modernizeCalendarLabels } = require(compiled);
 
 const T0 = Date.parse('2026-09-28T10:00:00Z');
 const at = (min) => new Date(T0 + min * 60_000).toISOString();
@@ -80,23 +80,64 @@ test('a snapshot keeps what the meeting needs later, nothing more', () => {
 
 test('speaker names: me always, the other voice only in a 1:1 with a real name', () => {
     const snap = (attendees) => toEventSnapshot({ ...ev('m', 0, 30), attendees }, 'start');
-    assert.deepEqual(calendarSpeakerLabels(snap([person('Priya Nair')]), 'Evin John'), { me: 'Evin John', speaker_1: 'Priya Nair' });
-    assert.deepEqual(calendarSpeakerLabels(snap([person('Priya Nair'), person('Rob Lane')]), 'Evin John'), { me: 'Evin John' }, 'a group call shares one channel');
+    assert.deepEqual(calendarSpeakerLabels(snap([person('Priya Nair')]), 'Evin John'), { me: 'Evin', speaker_1: 'Priya' }, 'first names');
+    assert.deepEqual(calendarSpeakerLabels(snap([person('Priya Nair'), person('Rob Lane')]), 'Evin John'), { me: 'Evin' }, 'a group call shares one channel');
     assert.deepEqual(calendarSpeakerLabels(snap([person('Priya Nair'), person('Rob Lane', { response: 'declined' })]), 'Evin John'),
-        { me: 'Evin John', speaker_1: 'Priya Nair' }, 'a declined invitee is not in the room');
-    assert.deepEqual(calendarSpeakerLabels(snap([{ email: 'x@acme.com' }]), 'Evin John'), { me: 'Evin John' }, 'no display name: stays Speaker 1');
+        { me: 'Evin', speaker_1: 'Priya' }, 'a declined invitee is not in the room');
+    assert.deepEqual(calendarSpeakerLabels(snap([{ email: 'x@acme.com' }]), 'Evin John'), { me: 'Evin' }, 'no display name: stays Speaker 1');
     assert.deepEqual(calendarSpeakerLabels(snap([{ email: 'x@acme.com', name: 'x@acme.com' }]), undefined), null, 'an address is not a name');
     assert.equal(calendarSpeakerLabels(snap([]), ''), null);
+});
+
+test('speaker names without a linked event: the user is named from the calendar, or stays "Me"', () => {
+    assert.deepEqual(calendarSpeakerLabels(undefined, 'Evin John'), { me: 'Evin' });
+    assert.deepEqual(calendarSpeakerLabels(null, '  Evin   John '), { me: 'Evin' });
+    assert.equal(calendarSpeakerLabels(undefined, undefined), null, 'no calendar: no label, the transcript says Me');
+    assert.equal(calendarSpeakerLabels(null, 'evin@acme.com'), null, 'an address is not a name');
 });
 
 test('relinking moves the names the old link gave, and never the user\'s own', () => {
     const snap = (id, attendees) => toEventSnapshot({ ...ev(id, 0, 30), attendees }, 'start');
     const priya = snap('a', [person('Priya Nair')]);
     const sam = snap('b', [person('Sam Park')]);
-    const auto = { me: 'Evin John', speaker_1: 'Priya Nair' };
-    assert.deepEqual(relinkSpeakerLabels(auto, priya, sam, 'Evin John'), { me: 'Evin John', speaker_1: 'Sam Park' }, 'a wrong 1:1 guess corrected');
-    assert.deepEqual(relinkSpeakerLabels(auto, priya, null, 'Evin John'), { me: 'Evin John' }, 'unlinked: the other voice is Speaker 1 again');
-    assert.deepEqual(relinkSpeakerLabels(undefined, undefined, sam, 'Evin John'), { me: 'Evin John', speaker_1: 'Sam Park' }, 'linked for the first time');
+    const auto = { me: 'Evin', speaker_1: 'Priya' };
+    assert.deepEqual(relinkSpeakerLabels(auto, priya, sam, 'Evin John'), { me: 'Evin', speaker_1: 'Sam' }, 'a wrong 1:1 guess corrected');
+    assert.deepEqual(relinkSpeakerLabels(auto, priya, null, 'Evin John'), { me: 'Evin' }, 'unlinked: the other voice is Speaker 1 again');
+    assert.deepEqual(relinkSpeakerLabels(undefined, undefined, sam, 'Evin John'), { me: 'Evin', speaker_1: 'Sam' }, 'linked for the first time');
     assert.equal(relinkSpeakerLabels({ speaker_1: 'Priya (client)' }, priya, sam, 'Evin John'), null, 'the user renamed: theirs stays');
     assert.equal(relinkSpeakerLabels(auto, priya, priya, 'Evin John'), null, 'same event: nothing to do');
+});
+
+// ── First names (2026-09-29): the notes say "Evin", not the Google account's
+// "Evin John Ignatious"; meetings labelled before that still relink and regenerate.
+test('firstNameOf: the first word of a real name, never an address', () => {
+    assert.equal(firstNameOf('Evin John Ignatious'), 'Evin');
+    assert.equal(firstNameOf('  Priya   Nair '), 'Priya');
+    assert.equal(firstNameOf('Cher'), 'Cher');
+    assert.equal(firstNameOf('evin@example.com'), null);
+    assert.equal(firstNameOf(''), null);
+    assert.equal(firstNameOf(undefined), null);
+});
+
+test('two people with the same first name: the other voice stays Speaker 1', () => {
+    const snap = { id: 'x', title: 'x', startTime: '', endTime: '', attendees: [person('Evin Smith')], linkedBy: 'user' };
+    assert.deepEqual(calendarSpeakerLabels(snap, 'Evin John Ignatious'), { me: 'Evin' });
+});
+
+test('relinking treats full-name labels from before first names as untouched', () => {
+    const snap = (id, attendees) => ({ id, title: id, startTime: '', endTime: '', attendees, linkedBy: 'user' });
+    const priya = snap('a', [person('Priya Nair')]);
+    const sam = snap('b', [person('Sam Park')]);
+    const old = { me: 'Evin John Ignatious', speaker_1: 'Priya Nair' };
+    assert.deepEqual(relinkSpeakerLabels(old, priya, sam, 'Evin John Ignatious'), { me: 'Evin', speaker_1: 'Sam' });
+    assert.equal(relinkSpeakerLabels({ me: 'EJ', speaker_1: 'Priya Nair' }, priya, sam, 'Evin John Ignatious'), null, 'a typed name is a rename');
+});
+
+test('modernizeCalendarLabels: full names the calendar wrote become first names; typed ones stay', () => {
+    const priya = { id: 'a', title: 'a', startTime: '', endTime: '', attendees: [person('Priya Nair')], linkedBy: 'user' };
+    assert.deepEqual(modernizeCalendarLabels({ me: 'Evin John Ignatious', speaker_1: 'Priya Nair' }, priya, 'Evin John Ignatious'), { me: 'Evin', speaker_1: 'Priya' });
+    assert.deepEqual(modernizeCalendarLabels({ me: 'Evin John Ignatious' }, null, 'Evin John Ignatious'), { me: 'Evin' });
+    assert.equal(modernizeCalendarLabels({ me: 'EJ' }, null, 'Evin John Ignatious'), null, 'the user\'s own rename');
+    assert.equal(modernizeCalendarLabels({ me: 'Evin' }, null, 'Evin John Ignatious'), null, 'already a first name');
+    assert.equal(modernizeCalendarLabels(undefined, null, 'Evin John Ignatious'), null);
 });

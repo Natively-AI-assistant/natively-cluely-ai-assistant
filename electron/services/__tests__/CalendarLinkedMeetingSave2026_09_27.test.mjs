@@ -1,5 +1,5 @@
 // A calendar-linked 1:1 saved end to end through MeetingPersistence.processAndSaveMeeting:
-// the notes are written from a NAMED copy of the transcript ("Priya Nair:"), the
+// the notes are written from a NAMED copy of the transcript ("Priya:", first names), the
 // stored transcript keeps its raw speakers, and the saved meeting keeps the
 // event snapshot and the speaker labels. (Relinking later, and a rename the
 // user made, are relinkSpeakerLabels in CalendarSessionMatch2026_09_27.)
@@ -97,7 +97,8 @@ describe('a calendar-linked 1:1, saved', () => {
         await mp.processAndSaveMeeting(data(), 'meet-1', { title: SNAPSHOT.title, calendarEventId: SNAPSHOT.id, calendarEvent: SNAPSHOT, source: 'calendar' }, null);
 
         assert.ok(calls.length >= 1, 'the summary was generated');
-        assert.match(calls[0], /Priya Nair:/, 'the model reads the other voice by name');
+        assert.match(calls[0], /Priya:/, 'the model reads the other voice by first name');
+        assert.doesNotMatch(calls[0], /Priya Nair:/, 'not the full calendar name');
         assert.doesNotMatch(calls[0], /interviewer:/, 'and not by its raw channel');
 
         const { row, speakers, detailed } = readMeeting('meet-1');
@@ -105,7 +106,7 @@ describe('a calendar-linked 1:1, saved', () => {
         assert.equal(row.calendar_event_id, SNAPSHOT.id);
         assert.equal(row.source, 'calendar');
         assert.deepEqual(JSON.parse(row.calendar_event_json), SNAPSHOT);
-        assert.equal(detailed.speakerLabels.speaker_1, 'Priya Nair', 'saved as the meeting\'s speaker labels');
+        assert.equal(detailed.speakerLabels.speaker_1, 'Priya', 'saved as the meeting\'s speaker labels');
     });
 
     test('an unlinked meeting is written exactly as before', async () => {
@@ -124,7 +125,7 @@ describe('a calendar-linked 1:1, saved', () => {
         const mp = makePersistence(calls);
         const group = { ...SNAPSHOT, id: 'evt-group', attendees: [...SNAPSHOT.attendees, { email: 'rob@acme.com', name: 'Rob Lane' }] };
         await mp.processAndSaveMeeting(data(), 'meet-3', { title: group.title, calendarEventId: group.id, calendarEvent: group, source: 'calendar' }, null);
-        assert.doesNotMatch(calls[0], /Priya Nair:|Rob Lane:/);
+        assert.doesNotMatch(calls[0], /Priya:|Rob:/);
         assert.equal(readMeeting('meet-3').detailed.speakerLabels?.speaker_1, undefined);
     });
 
@@ -132,7 +133,24 @@ describe('a calendar-linked 1:1, saved', () => {
         const calls = [];
         const mp = makePersistence(calls);
         await mp.processAndSaveMeeting(data(), 'meet-4', { title: 'x', calendarEventId: 'another-id', calendarEvent: SNAPSHOT, source: 'calendar' }, null);
-        assert.doesNotMatch(calls[0], /Priya Nair:/);
+        assert.doesNotMatch(calls[0], /Priya:/);
         assert.equal(readMeeting('meet-4').row.calendar_event_json, null);
+    });
+
+    test('with a connected calendar, an unlinked meeting still names the user', async () => {
+        {
+            const calls = [];
+            const mp = makePersistence(calls);
+            // The connected calendar account (CalendarManager is bundled into the build).
+            mp.calendarUserName = () => 'Evin John';
+            await mp.processAndSaveMeeting(data(), 'meet-5', { title: 'Ad hoc' }, null);
+            assert.match(calls[0], /Evin:/, 'the notes read the mic by the user\'s first name');
+            assert.doesNotMatch(calls[0], /Evin John:/, 'not the full account name');
+            assert.doesNotMatch(calls[0], /Priya Nair/, 'no event: the other voice is not named');
+            const { row, speakers, detailed } = readMeeting('meet-5');
+            assert.equal(row.calendar_event_id, null);
+            assert.deepEqual(detailed.speakerLabels, { me: 'Evin' });
+            assert.deepEqual(speakers, ['user', 'interviewer', 'user', 'interviewer'], 'the stored transcript keeps raw speakers');
+        }
     });
 });

@@ -9540,6 +9540,38 @@ if (process.env.THINKING_MATRIX === '1') {
     calMgr.setNotificationSuppressor(() => nativePromptsBlocked(() => appState.getUndetectable()));
     calMgr.init();
 
+    // Notes name the user by first name ("Evin"), not the account's full name.
+    // Meetings saved before that are carried over once per account name, after
+    // their originals are backed up to userData/backups (calendarNameMigration).
+    // Off the boot path, and again whenever Calendar connects (a new account).
+    const runCalendarNameMigration = () => {
+      try {
+        const status = calMgr.getConnectionStatus();
+        if (!status?.connected || !status.name) return;
+        const { runCalendarNameMigration: run } = require('./services/calendar/calendarNameMigration');
+        const { SettingsManager } = require('./services/SettingsManager');
+        const settings = SettingsManager.getInstance();
+        const db = DatabaseManager.getInstance();
+        const changed: string[] = run({
+          fullName: status.name,
+          getDoneFor: () => settings.get('calendarFirstNameMigratedFor'),
+          setDoneFor: (name: string) => { settings.set('calendarFirstNameMigratedFor', name); },
+          listMentioning: (text: string) => db.listMeetingSummariesMentioning(text),
+          replaceDetailedSummary: (id: string, detailed: any) => db.replaceDetailedSummary(id, detailed),
+          backup: (rows: Array<{ id: string; summaryJson: string }>) => {
+            const dir = path.join(app.getPath('userData'), 'backups');
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, `calendar-first-name-${Date.now()}.json`), JSON.stringify(rows, null, 1));
+          },
+        });
+        if (changed.length) console.log(`[Main] Saved notes now use the first name in ${changed.length} meeting(s).`);
+      } catch (e: any) {
+        console.warn('[Main] Calendar first-name migration skipped:', e?.message);
+      }
+    };
+    setTimeout(runCalendarNameMigration, 8000);
+    calMgr.on('connection-changed', (connected: boolean) => { if (connected) runCalendarNameMigration(); });
+
     calMgr.on('start-meeting-requested', (event: any) => {
       console.log('[Main] Start meeting requested from calendar notification', event?.id);
       // Through the renderer's start path, like the Launcher's button (it used

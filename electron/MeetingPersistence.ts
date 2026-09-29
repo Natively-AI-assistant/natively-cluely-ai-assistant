@@ -262,6 +262,15 @@ export class MeetingPersistence {
     }
 
     /**
+     * The connected calendar account's name, which labels the user's own voice
+     * ("me") in the notes; undefined without a connected calendar. A method so a
+     * test can supply one (the build bundles CalendarManager into this file).
+     */
+    protected calendarUserName(): string | undefined {
+        return followUpSenderName();
+    }
+
+    /**
      * Stops the meeting immediately, snapshots data, and triggers background processing.
      * Returns immediately so UI can switch.
      */
@@ -497,20 +506,23 @@ export class MeetingPersistence {
             if (metadata.source) source = metadata.source;
         }
 
-        // A meeting linked to its calendar event can name its speakers: the mic
-        // is always the user, and in a 1:1 the other voice is the one other
-        // attendee (calendarSpeakerLabels). The notes are written from a NAMED
-        // COPY of the transcript, so "Priya will send the deck" rather than
-        // "Speaker 1 will…"; the stored transcript keeps its raw speakers,
-        // because the rename map is keyed on them. The same map is saved as the
-        // meeting's speaker labels, exactly as if the user had typed the names,
-        // and under the same "Speaker labels" switch.
+        // The calendar can name the speakers: the mic is always the user, so with
+        // a connected calendar their account name labels it in EVERY meeting
+        // (it used to happen only for meetings linked to an event, so most
+        // transcripts still said "Me"); a linked 1:1 also names the other voice,
+        // the one other attendee (calendarSpeakerLabels). No calendar name: "Me".
+        // The notes are written from a NAMED COPY of the transcript, so "Priya
+        // will send the deck" rather than "Speaker 1 will…"; the stored
+        // transcript keeps its raw speakers, because the rename map is keyed on
+        // them. The same map is saved as the meeting's speaker labels, exactly as
+        // if the user had typed the names, and under the same "Speaker labels" switch.
         let calendarLabels: Record<string, string> | null = null;
         let llmTranscript = data.transcript;
-        if (calendarEvent && isIntelligenceFlagEnabled('speakerLabelsV1')) {
+        const userName = this.calendarUserName();
+        if ((calendarEvent || userName) && isIntelligenceFlagEnabled('speakerLabelsV1')) {
             try {
                 const { calendarSpeakerLabels } = require('./services/calendar/calendarSessionMatch') as typeof import('./services/calendar/calendarSessionMatch');
-                calendarLabels = calendarSpeakerLabels(calendarEvent, followUpSenderName());
+                calendarLabels = calendarSpeakerLabels(calendarEvent, userName);
                 if (calendarLabels) {
                     const { SpeakerLabelService } = require('./services/meeting/SpeakerLabelService');
                     llmTranscript = new SpeakerLabelService().applyLabels(data.transcript, calendarLabels);
@@ -1257,7 +1269,16 @@ Return ONLY valid JSON (no markdown code blocks):
         let transcript = details.transcript as TranscriptSegment[];
         try {
             if (isIntelligenceFlagEnabled('speakerLabelsV1')) {
-                const labels = (details.detailedSummary as any)?.speakerLabels;
+                // A meeting saved before the calendar named "me" in every meeting
+                // has no `me` label: with a connected calendar the regenerated notes
+                // name the user all the same (the Transcript tab shows that name too).
+                const stored = (details.detailedSummary as any)?.speakerLabels;
+                const { calendarSpeakerLabels, modernizeCalendarLabels } = require('./services/calendar/calendarSessionMatch') as typeof import('./services/calendar/calendarSessionMatch');
+                // A `me` the calendar wrote in full before first names regenerates as
+                // the first name (modernizeCalendarLabels); one the user typed stays.
+                const userName = this.calendarUserName();
+                const current = modernizeCalendarLabels(stored, (details as any).calendarEvent, userName) ?? stored;
+                const labels = current?.me ? current : { ...(calendarSpeakerLabels(null, userName) ?? {}), ...(current ?? {}) };
                 if (labels && Object.keys(labels).length > 0) {
                     const { SpeakerLabelService } = require('./services/meeting/SpeakerLabelService');
                     transcript = new SpeakerLabelService().applyLabels(transcript, labels);
@@ -1293,7 +1314,7 @@ Return ONLY valid JSON (no markdown code blocks):
                 generateFollowUpDraft: followUpPlan.redraft && isIntelligenceFlagEnabled('followUpDraftV2'),
                 polishSummary: isIntelligenceFlagEnabled('meetingSummaryLlmPolish'),
                 followUpTone: opts?.tone ?? followUpPlan.tone,
-                followUpSenderName: followUpPlan.redraft ? followUpSenderName() : undefined,
+                followUpSenderName: followUpPlan.redraft ? followUpSenderFirstName() : undefined,
                 onStatusUpdate: status => db.updateSummaryStatus(meetingId, status),
             });
 
@@ -1386,7 +1407,7 @@ Return ONLY valid JSON (no markdown code blocks):
                 },
                 mode: detailed.mode?.selectedTemplateType,
                 tone,
-                senderName: followUpSenderName(),
+                senderName: followUpSenderFirstName(),
                 // NATIVELY_FOLLOWUP_DRAFT_V2=0 kill switch: the template draft, no LLM call.
                 deterministicOnly: !isIntelligenceFlagEnabled('followUpDraftV2'),
             });
@@ -1469,6 +1490,18 @@ function followUpSenderName(): string | undefined {
         const { CalendarManager } = require('./services/CalendarManager');
         const status = CalendarManager.getInstance().getConnectionStatus();
         return status?.connected && typeof status.name === 'string' ? status.name : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/** The sender's first name: what the follow-up email is signed with (and how it
+ *  refers to the user), whatever the mode's signAs — "Evin", not the account's
+ *  "Evin John Ignatious". */
+function followUpSenderFirstName(): string | undefined {
+    try {
+        const { firstNameOf } = require('./services/calendar/calendarSessionMatch') as typeof import('./services/calendar/calendarSessionMatch');
+        return firstNameOf(followUpSenderName()) ?? undefined;
     } catch {
         return undefined;
     }

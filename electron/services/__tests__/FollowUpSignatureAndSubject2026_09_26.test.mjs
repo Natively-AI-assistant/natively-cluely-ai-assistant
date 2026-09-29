@@ -169,8 +169,11 @@ test('the fallback subject is the meeting name, with no "Follow-up:" label', asy
 // both read the sender name, and that the reader uses the account NAME, never the email.
 test('both draft paths sign with the Calendar account name, never its email (drift pin)', () => {
   const src = fs.readFileSync(path.resolve(process.cwd(), 'electron/MeetingPersistence.ts'), 'utf8');
-  assert.match(src, /senderName:\s*followUpSenderName\(\)/, 'Generate / Regenerate path');
-  assert.match(src, /followUpSenderName:\s*followUpPlan\.redraft \? followUpSenderName\(\) : undefined/, 'notes-Regenerate path');
+  // Both paths sign with the account's FIRST name (2026-09-29): "Evin", not "Evin John Ignatious".
+  assert.match(src, /senderName:\s*followUpSenderFirstName\(\)/, 'Generate / Regenerate path');
+  assert.match(src, /followUpSenderName:\s*followUpPlan\.redraft \? followUpSenderFirstName\(\) : undefined/, 'notes-Regenerate path');
+  const first = src.slice(src.indexOf('function followUpSenderFirstName()'), src.indexOf('function buildV3DetailedSummary('));
+  assert.match(first, /firstNameOf\(followUpSenderName\(\)\)/, 'the first name of the same account name');
   const fn = src.slice(src.indexOf('function followUpSenderName()'), src.indexOf('function buildV3DetailedSummary('));
   assert.match(fn, /getConnectionStatus\(\)/);
   assert.match(fn, /status\.name/);

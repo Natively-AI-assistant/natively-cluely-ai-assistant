@@ -3255,6 +3255,19 @@ export class DatabaseManager {
      * sibling keys in summary_json (e.g. legacy fields). Also updates the title column when
      * the new summary carries one. summary_status is set to the provided value.
      */
+    /** Meetings whose saved notes contain `text` (id + raw summary_json), for
+     *  deterministic data migrations such as calendarNameMigration. */
+    public listMeetingSummariesMentioning(text: string): Array<{ id: string; summaryJson: string }> {
+        if (!this.db || !text) return [];
+        try {
+            const rows = this.db.prepare("SELECT id, summary_json FROM meetings WHERE instr(summary_json, ?) > 0").all(text) as Array<{ id: string; summary_json: string }>;
+            return rows.map((r) => ({ id: r.id, summaryJson: r.summary_json || '{}' }));
+        } catch (error) {
+            console.error('[DatabaseManager] listMeetingSummariesMentioning failed:', error);
+            return [];
+        }
+    }
+
     public replaceDetailedSummary(id: string, detailedSummary: Meeting['detailedSummary'], opts?: { title?: string; summaryStatus?: SummaryStatus }): boolean {
         if (!this.db) return false;
         try {
