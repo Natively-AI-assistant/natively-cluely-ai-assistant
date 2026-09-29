@@ -13,10 +13,16 @@
 // Dependency-free on purpose (no imports) so it can be pulled into prompts.ts,
 // AnswerPlanner.ts, AnswerValidator.ts, and tests without any cycle risk.
 
-/** The six required section titles, WITHOUT the markdown prefix. */
+/**
+ * The six required section titles, WITHOUT the markdown prefix.
+ *
+ * 2026-09-29: the second section was "Technique / Data Structure / Algorithm
+ * Used" and is now just "Technique". The validator still accepts the old
+ * heading (stored answers, custom-mode instructions that quote it).
+ */
 export const CODING_SECTIONS = [
   'Approach',
-  'Technique / Data Structure / Algorithm Used',
+  'Technique',
   'Code',
   'Dry Run',
   'Complexity',
@@ -37,7 +43,7 @@ export const CODING_CONTRACT = `CODING / DSA RESPONSE CONTRACT — output these 
 ## Approach
 - Short, interview-speakable explanation of the idea. Optimized approach clearly; brute force only if useful.
 
-## Technique / Data Structure / Algorithm Used
+## Technique
 - Name the core DSA concept/data structure/algorithm (e.g. two pointers, sliding window, hash map, stack, queue, binary search, DP, BFS/DFS, heap, trie, union-find, recursion, backtracking).
 
 ## Code
@@ -59,7 +65,7 @@ Every heading is mandatory and must appear verbatim (with the \`## \` prefix). E
  * A compact one-line variant of the contract for tiny-model prompts where token
  * budget is tight but the SAME heading contract must hold.
  */
-export const CODING_CONTRACT_TINY = `Coding/DSA answers MUST use these EXACT markdown headings, in order, nothing before the first: "## Approach", "## Technique / Data Structure / Algorithm Used", "## Code" (one fenced block tagged with the language you actually wrote — Java is \`\`\`java, never \`\`\`python), "## Dry Run", "## Complexity" (Time + Space, each "O(...) because ..."), "## Interviewer Follow-up Points". Never start with code. A missing/renamed heading is a failure.`;
+export const CODING_CONTRACT_TINY = `Coding/DSA answers MUST use these EXACT markdown headings, in order, nothing before the first: "## Approach", "## Technique", "## Code" (one fenced block tagged with the language you actually wrote — Java is \`\`\`java, never \`\`\`python), "## Dry Run", "## Complexity" (Time + Space, each "O(...) because ..."), "## Interviewer Follow-up Points". Never start with code. A missing/renamed heading is a failure.`;
 
 /**
  * Contract for GENERAL IMPLEMENTATION tasks (React components, scripts, utilities,

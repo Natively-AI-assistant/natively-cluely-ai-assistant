@@ -36,7 +36,9 @@ const markdownSectionHeader = (label: string): RegExp =>
 
 const SECTION_LABELS: Record<string, string> = {
   Approach: 'Approach',
-  'Technique / Data Structure / Algorithm Used':
+  // The pre-2026-09-29 heading "Technique / Data Structure / Algorithm Used" is
+  // still accepted, so stored answers and custom instructions keep validating.
+  Technique:
     'Technique|Data Structure|Algorithm Used|Technique \\/ Data Structure \\/ Algorithm Used',
   Code: 'Code',
   'Dry Run': 'Dry Run',
@@ -149,7 +151,7 @@ export const buildCodingScaffold = (): string => `## Approach
 
 _Working on the approach…_
 
-## Technique / Data Structure / Algorithm Used
+## Technique
 
 _Identifying the core technique…_
 
@@ -180,7 +182,7 @@ export const renderCodingAnswerMarkdown = (answer: CodingAnswer): string => {
 
 ${answer.approach.trim()}
 
-## Technique / Data Structure / Algorithm Used
+## Technique
 
 ${answer.technique.trim()}
 
@@ -600,8 +602,8 @@ export const validateCodingMarkdown = (response: string): AnswerValidationResult
  * CODING-SCAFFOLD-SPECIFIC fingerprint before extracting, not just any two
  * headings: either (a) one of the two headings that are near-unique to the
  * real coding contract and essentially never appear in a legitimate
- * non-coding structured answer ("Technique / Data Structure / Algorithm
- * Used", "Dry Run"), or (b) explicit complexity/Big-O notation
+ * non-coding structured answer ("Technique", or its pre-2026-09-29 form
+ * "Technique / Data Structure / Algorithm Used", and "Dry Run"), or (b) explicit complexity/Big-O notation
  * ("O(...)"/"Time Complexity"/"Space Complexity") in the discarded head —
  * both are things a real negotiation/behavioral/lecture answer has no
  * reason to ever contain. A generic Approach/Code/Complexity/Answer
@@ -699,8 +701,8 @@ export const detectAndExtractScaffoldMisfire = (answerType: AnswerType, answer: 
  * Detection-only signal for scaffold contamination detectAndExtractScaffoldMisfire
  * could not cleanly recover from (campaign2 longsession run-039 script-a/c
  * investigation, 2026-07-19): presses A4/A5/C9 all carry the same coding-
- * scaffold fingerprint (a "Technique / Data Structure / Algorithm Used"
- * heading and/or O(...)/complexity notation) as every case
+ * scaffold fingerprint (a "Technique" heading, long or short form,
+ * and/or O(...)/complexity notation) as every case
  * detectAndExtractScaffoldMisfire already handles, but the real content sits
  * under a heading NONE of that function's extraction patterns recognize
  * (e.g. A5's "## STAR story, Long-Tail aggregation at Datadog" — a model-
@@ -752,7 +754,7 @@ const STRICT_SCAFFOLD_SIGNAL_TYPES = new Set<AnswerType>([
 
 /**
  * STRICT scaffold signal: the coding contract's own unique headings
- * ("## Dry Run", "## Technique / Data Structure / Algorithm Used") plus the
+ * ("## Dry Run", "## Technique", either heading form) plus the
  * ≥2-recognized-headings structure. Unlike the loose fingerprint, complexity
  * notation alone can never trip this — a legitimate technical answer about
  * Big-O discusses complexity but does not emit the contract's template

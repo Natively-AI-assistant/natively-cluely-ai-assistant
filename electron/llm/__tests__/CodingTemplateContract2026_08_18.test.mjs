@@ -41,7 +41,7 @@ import {
   looksLikeCodingAnswer,
 } from '../../../dist-electron/electron/llm/index.js';
 
-const DSA_HEADINGS = ['## Approach', '## Technique / Data Structure / Algorithm Used', '## Code', '## Dry Run', '## Complexity', '## Interviewer Follow-up Points'];
+const DSA_HEADINGS = ['## Approach', '## Technique', '## Code', '## Dry Run', '## Complexity', '## Interviewer Follow-up Points'];
 
 const build = (over = {}) => buildSystemPromptV2({ mode: 'general', action: 'answer', tier: 'cloud', ...over });
 

@@ -349,7 +349,7 @@ Reference the SAME problem/solution from the prior turn. Do NOT restate the prob
       case 'dry_run_only':
         return `The user asked ONLY for a DRY RUN / trace of the solution already in the conversation, on the input they gave. Output ONLY the step-by-step trace (state at each step → final output). Do NOT re-output the code, the approach, or the complexity unless it falls out of the trace.`;
       case 'custom_format':
-        return `The user's standing instructions for this mode define the answer FORMAT for coding turns. Follow THEIR structure exactly — their sections, their order, their headings, their language. Do NOT add the default sections ("## Approach", "## Technique / Data Structure / Algorithm Used", "## Dry Run", "## Complexity", "## Interviewer Follow-up Points") unless their format asks for them. Still put every piece of code in a fenced block tagged with the language you actually wrote.`;
+        return `The user's standing instructions for this mode define the answer FORMAT for coding turns. Follow THEIR structure exactly — their sections, their order, their headings, their language. Do NOT add the default sections ("## Approach", "## Technique", "## Dry Run", "## Complexity", "## Interviewer Follow-up Points") unless their format asks for them. Still put every piece of code in a fenced block tagged with the language you actually wrote.`;
       case 'explain_only':
         return `The user asked for an EXPLANATION with NO CODE. Output a clear, speakable explanation in prose (and short bullets if helpful). Do NOT output any code block. No "## Code" section.`;
     }
