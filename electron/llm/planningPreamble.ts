@@ -64,6 +64,12 @@ const PLANNING_SENTENCE_RES: RegExp[] = [
   //   must be about the ASK, not about users.
   new RegExp(`^${LEAD}the user(?:'s question)? (?:is|was) (?:asking|looking for|trying to find out|wanting)\\b`, 'i'),
   new RegExp(`^${LEAD}the user (?:asks|asked|wants|would like|needs|wanted) (?:to know|me to|to understand|to hear|an? (?:answer|explanation|response|summary|breakdown|walkthrough|overview|rundown))\\b`, 'i'),
+  //   "The candidate is asking about next steps, so give them…" (2026-09-30,
+  //   final set: 7 recruiting answers narrated the ask before answering once
+  //   the heard-question note named the speaker). Same rule as "the user": the
+  //   verb must be about the ASK — "The candidate dodged the question" stays.
+  new RegExp(`^${LEAD}the (?:candidate|prospect|customer|caller|examiner|interviewer|lecturer|professor|colleague|client|student|recruiter|audience member|panel)(?:'s question)? (?:is|was) (?:asking|looking for|trying to find out|wanting)\\b`, 'i'),
+  new RegExp(`^${LEAD}the (?:candidate|prospect|customer|caller|examiner|lecturer|professor|colleague|client|student|recruiter|audience member|panel) (?:asks|asked|wants|would like|needs|wanted) (?:to know|you to|me to|to understand|to hear|(?:for )?an? (?:answer|explanation|example|response|summary|clarification|breakdown|walkthrough|overview))\\b`, 'i'),
   //   "The question is asking…", "This question asks…". "The question is a
   //   good one" / "The question is whether we shard" are spoken and stay.
   new RegExp(`^${LEAD}(?:the|this|their|his|her) question (?:is (?:really |basically |essentially |just )?asking|asks|wants|is looking for)\\b`, 'i'),
@@ -195,6 +201,7 @@ export function stripPlanningPreamble(answer: string): PlanningPreambleResult {
  *  straight quotes, discourse lead-ins already removed). */
 const PREAMBLE_HEADS = [
   'the interviewer', 'interviewer\'s', 'the user ', 'the user\'s',
+  'the candidate', 'the prospect', 'the customer', 'the caller', 'the examiner', 'the lecturer', 'the professor', 'the colleague', 'the client', 'the student', 'the recruiter', 'the audience member', 'the panel',
   'the question ', 'this question ', 'their question ', 'his question ', 'her question ',
   'they want', 'they\'d like', 'they would like', 'he want', 'he\'d like', 'he would like',
   'she want', 'she\'d like', 'she would like',

@@ -202,3 +202,33 @@ describe('wiring', () => {
     assert.match(engine, /if \(!isSpeculative && fullAnswer && !isCodingAnswerType\(answerPlan\.answerType\)\) \{\s*try \{\s*const \{ stripPlanningPreamble \}/);
   });
 });
+
+// Role nouns (2026-09-30, final set: recruiting answers narrated the ask —
+// "The candidate is asking about next steps, so give them your own reply…").
+describe('role-noun preambles', () => {
+  const REPLY = "We'll do a team call next week, then an offer conversation.";
+  for (const [label, text] of [
+    ['candidate is asking', `The candidate is asking about next steps, so give them your own first-person reply. ${REPLY}`],
+    ['prospect wants to know', `The prospect wants to know how pricing scales. ${REPLY}`],
+    ['customer is asking', `The customer is asking whether the outage is fixed. ${REPLY}`],
+    ['examiner asks for an explanation', `The examiner asks for an explanation of the sample size. ${REPLY}`],
+  ]) {
+    test(`strips: ${label}`, () => {
+      const r = stripPlanningPreamble(text);
+      assert.equal(r.text.trim(), REPLY);
+      let out = ''; const g = new PreambleStreamGate();
+      for (let i = 0; i < text.length; i += 7) out += g.push(text.slice(i, i + 7));
+      out += g.flush();
+      assert.equal(out.trim(), REPLY);
+    });
+  }
+  for (const text of [
+    'The candidate dodged the question about scope, so ask: "What exactly did you own on that migration?"',
+    'The customer has been charged twice, so let me check the account now.',
+    'The prospect already uses NetSuite, which matters for the sync.',
+  ]) {
+    test(`keeps: ${text.slice(0, 40)}`, () => {
+      assert.equal(stripPlanningPreamble(text).text, text);
+    });
+  }
+});
