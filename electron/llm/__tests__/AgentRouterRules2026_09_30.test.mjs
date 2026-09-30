@@ -68,20 +68,6 @@ describe('protocol per model', () => {
   });
 });
 
-describe('request extras', () => {
-  test('DeepSeek always goes out with thinking disabled', () => {
-    // Measured: with thinking on, DeepSeek streams reasoning_content first and
-    // it counts against max_tokens — a 60-token cap ended mid-sentence.
-    assert.deepEqual(ar.agentRouterOpenAIExtras('deepseek-v4-flash'), { thinking: { type: 'disabled' } });
-  });
-
-  test('an output cap uses the parameter each family accepts', () => {
-    assert.deepEqual(ar.agentRouterOpenAIExtras('deepseek-v4-flash', 256), { thinking: { type: 'disabled' }, max_tokens: 256 });
-    assert.deepEqual(ar.agentRouterOpenAIExtras('gpt-6-astra', 256), { max_completion_tokens: 256 });
-    assert.deepEqual(ar.agentRouterOpenAIExtras('gpt-6-astra'), {}, 'no cap asked for, none sent');
-  });
-});
-
 describe('client identity', () => {
   test('exactly one claim header, and it is the one that was measured to pass', () => {
     // Evin's decision (2026-09-30): present as Codex CLI. The narrowest claim

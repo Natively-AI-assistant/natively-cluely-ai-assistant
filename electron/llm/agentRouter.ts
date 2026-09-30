@@ -60,7 +60,6 @@
  *    default 下对于模型 X 无可用渠道` ("no available channel for model X").
  *    explainAgentRouterError() turns each into something a user can act on.
  */
-import { isDeepseekModelId } from './deepseekModels';
 
 export const AGENTROUTER_ORIGIN = 'https://agentrouter.org';
 /** OpenAI SDK base: the SDK appends `/chat/completions`. */
@@ -150,23 +149,6 @@ export function agentRouterWireModel(modelId: string): string {
  */
 export function agentRouterProtocolFor(wireModel: string): AgentRouterProtocol {
     return /^claude-/i.test(wireModel) ? 'anthropic' : 'openai';
-}
-
-/**
- * Extra body fields for a Chat Completions request.
- *  - DeepSeek: thinking off (fact 5) — every caller reads only `delta.content`,
- *    so a hidden chain of thought is pure latency and budget.
- *  - an explicit output cap: GPT-5-and-later models reject `max_tokens` at
- *    OpenAI and take `max_completion_tokens`; DeepSeek takes `max_tokens`.
- */
-export function agentRouterOpenAIExtras(wireModel: string, maxTokens?: number): Record<string, unknown> {
-    const out: Record<string, unknown> = {};
-    if (isDeepseekModelId(wireModel)) out.thinking = { type: 'disabled' };
-    if (maxTokens && maxTokens > 0) {
-        if (/^(?:gpt-|o\d)/i.test(wireModel)) out.max_completion_tokens = maxTokens;
-        else out.max_tokens = maxTokens;
-    }
-    return out;
 }
 
 /**

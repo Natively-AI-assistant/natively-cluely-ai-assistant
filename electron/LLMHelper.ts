@@ -149,7 +149,6 @@ import { DEEPSEEK_DEFAULT_MODEL, deepseekWireModel, isDeepseekModelId } from './
 import {
   AGENTROUTER_JUDGE_MODEL,
   agentRouterError,
-  agentRouterOpenAIExtras,
   agentRouterProtocolFor,
   agentRouterWireModel,
   isAgentRouterModelId,
@@ -227,6 +226,8 @@ type FastModelFamily = 'openai' | 'groq' | 'gemini' | 'deepseek' | 'claude' | 'c
 // Background Model families on an endpoint the user supplies — the same set
 // activeModelIsUserEndpoint() names for an Active Model.
 const FAST_PICK_USER_ENDPOINT_FAMILIES: ReadonlySet<FastModelFamily> = new Set(['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'ninerouter', 'agentrouter'])
+/** Per-call overrides for streamWithAgentRouter (the fast-model seam's small cap and temperature 0). */
+type AgentRouterCallOptions = { maxTokens?: number; temperature?: number }
 const OPENAI_JUDGE_MODEL = "gpt-5.5"
 const CLAUDE_JUDGE_MODEL = "claude-haiku-4-5"
 // DEEPSEEK_MODEL keeps main's centralised id, NOT the "deepseek-v4-flash"
@@ -4857,7 +4858,8 @@ let isMultimodal = !!(imagePaths?.length);
       // model that reads them — DeepSeek and gpt-6-astra answer as text.
       if (this.isAgentRouterModel(this.currentModelId) && this.hasAgentRouterCredential()) {
         const sendImages = cloudIsMultimodal && this.agentRouterModelSupportsVision(this.currentModelId);
-        return await this.generateWithAgentRouter(cloudUserContent, openaiSystemPrompt, sendImages ? cloudImagePaths : undefined);
+        const arSystem = agentRouterProtocolFor(agentRouterWireModel(this.currentModelId)) === 'anthropic' ? claudeSystemPrompt : openaiSystemPrompt;
+        return await this.generateWithAgentRouter(cloudUserContent, arSystem, sendImages ? cloudImagePaths : undefined);
       }
       if (this.isGroqModel(this.currentModelId) && this.groqClient) {
         if (cloudIsMultimodal && cloudImagePaths) {
@@ -5145,7 +5147,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'nvidia_nim': stream = this.streamWithNvidiaNim(userContent, openaiShaped, undefined, abortSignal, modelId); break;
       case 'ninerouter': stream = this.streamWithNinerouter(userContent, openaiShaped, undefined, abortSignal, modelId); break;
       case 'fluxion': stream = this.streamWithFluxion(userContent, openaiShaped, undefined, abortSignal, modelId); break;
-      case 'agentrouter': stream = this.streamWithAgentRouter(userContent, openaiShaped, undefined, abortSignal, modelId); break;
+      case 'agentrouter': stream = this.streamWithAgentRouter(userContent, system(this.agentRouterDefaultSystemPrompt(modelId)), undefined, abortSignal, modelId); break;
     }
     return { modelId, family, auto, stream };
   }
@@ -5598,7 +5600,7 @@ let isMultimodal = !!(imagePaths?.length);
       if (family === 'agentrouter') {
         if (!this.hasAgentRouterCredential()) return notDispatchable();
         let text = '';
-        for await (const piece of this.streamWithAgentRouter(message, undefined, undefined, timer, modelId, { maxTokens: 256 })) text += piece;
+        for await (const piece of this.streamWithAgentRouter(message, undefined, undefined, timer, modelId, { maxTokens: 256, temperature: 0 })) text += piece;
         if (timer?.aborted) throw Object.assign(new Error(`AgentRouter fast call aborted (${modelId})`), { name: 'AbortError' });
         return finish(text);
       }
@@ -6976,6 +6978,72 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
+   * Chat Completions parameters for an AgentRouter model, taken from the NATIVE
+   * streamer for the same family so an AgentRouter answer is generated exactly
+   * the way the direct provider's would be, and the two cannot drift apart:
+   *
+   *   deepseek-*  = streamWithDeepseek: temperature 0.2, seed 7, max_tokens
+   *                 getDeepseekMaxOutput (8192), thinking disabled.
+   *   gpt-* / o*  = streamWithOpenai: max_completion_tokens getOpenAiMaxOutput,
+   *                 openaiReasoningParam; NO temperature or seed — reasoning
+   *                 models 400 on non-default sampling (OpenAiNoSamplingParams).
+   *   anything else (a future glm-*, say): the interactive temperature only,
+   *                 and the gateway's own output default.
+   *
+   * The first version sent NONE of these, so AgentRouter DeepSeek ran at the
+   * gateway's default temperature with its default output cap while direct
+   * DeepSeek ran at 0.2 / seed 7 / 8192 — same prompt, different generation.
+   * `opts` is the fast-model seam's override (a small cap, temperature 0).
+   */
+  private agentRouterOpenAIParams(model: string, opts?: AgentRouterCallOptions): Record<string, unknown> {
+    if (isDeepseekModelId(model)) {
+      return {
+        temperature: opts?.temperature ?? INTERACTIVE_TEMPERATURE,
+        seed: INTERACTIVE_SEED,
+        max_tokens: opts?.maxTokens ?? this.getDeepseekMaxOutput(model),
+        ...DEEPSEEK_NO_THINKING,
+      };
+    }
+    if (/^(?:gpt-|o\d)/i.test(model)) {
+      return {
+        // The fast seam's 256 is too small for a reasoning model's hidden
+        // tokens; native callFastModel gives OpenAI 512 for the same reason.
+        max_completion_tokens: opts?.maxTokens ? Math.max(opts.maxTokens, 512) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
+        ...openaiReasoningParam(model),
+      };
+    }
+    return {
+      temperature: opts?.temperature ?? INTERACTIVE_TEMPERATURE,
+      ...(opts?.maxTokens ? { max_tokens: opts.maxTokens } : {}),
+    };
+  }
+
+  /**
+   * Anthropic Messages parameters for an AgentRouter Claude model = what
+   * streamWithClaude sends: getClaudeMaxOutput, temperature 0.2, thinking
+   * explicitly disabled (native's "made explicit" choice, for first-token time).
+   * The system prompt stays a plain string, not cache blocks — see
+   * buildFluxionAnthropicRequest for why a relay cannot use them.
+   */
+  private agentRouterAnthropicParams(model: string, opts?: AgentRouterCallOptions): Record<string, unknown> {
+    return {
+      max_tokens: opts?.maxTokens ?? this.getClaudeMaxOutput(model),
+      temperature: opts?.temperature ?? INTERACTIVE_TEMPERATURE,
+      thinking: { type: 'disabled' as const },
+    };
+  }
+
+  /**
+   * The system prompt an AgentRouter turn falls back to when the caller did not
+   * compose one: the native family's own. Claude models get CLAUDE_SYSTEM_PROMPT
+   * exactly as the direct Claude rung does; everything else the OpenAI-shaped
+   * one, as direct DeepSeek and OpenAI do.
+   */
+  private agentRouterDefaultSystemPrompt(modelId: string): string {
+    return agentRouterProtocolFor(agentRouterWireModel(modelId)) === 'anthropic' ? CLAUDE_SYSTEM_PROMPT : OPENAI_SYSTEM_PROMPT;
+  }
+
+  /**
    * AgentRouter, blocking. DRAINS THE STREAMING ADAPTER rather than calling a
    * non-streaming endpoint: a non-streaming /v1/messages reply comes back as
    * `text/plain` (measured), which the Anthropic SDK does not parse, so
@@ -7018,7 +7086,7 @@ let isMultimodal = !!(imagePaths?.length);
     imagePaths?: string[],
     abortSignal?: AbortSignal,
     modelId?: string,
-    opts?: { maxTokens?: number },
+    opts?: AgentRouterCallOptions,
   ): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
     this.assertOutboundScopes('agentrouter', userMessage, imagePaths);
@@ -7035,7 +7103,7 @@ let isMultimodal = !!(imagePaths?.length);
       // request, so prompt caching cannot be relied on to engage.
       const request: any = {
         model,
-        max_tokens: opts?.maxTokens ?? this.getClaudeMaxOutput(model),
+        ...this.agentRouterAnthropicParams(model, opts),
         ...(systemPrompt ? { system: systemPrompt } : {}),
         messages: [{ role: 'user' as const, content }],
       };
@@ -7064,7 +7132,7 @@ let isMultimodal = !!(imagePaths?.length);
     let stream: any;
     try {
       stream = await client.chat.completions.create(
-        { model, messages, stream: true, ...agentRouterOpenAIExtras(model, opts?.maxTokens) } as any,
+        { model, messages, stream: true, ...this.agentRouterOpenAIParams(model, opts) } as any,
         { signal: abortSignal },
       );
     } catch (e: any) {
@@ -10605,7 +10673,7 @@ let isMultimodal = !!(imagePaths?.length);
     // Fluxion, sharpened: a rationed Claude/GPT pool answers 402 once the day's
     // batch is gone, which is an expected outcome here, not an exceptional one.
     if (this.isAgentRouterModel(this.currentModelId) && this.hasAgentRouterCredential()) {
-      const arSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      const arSystem = this.injectLanguageInstruction(systemPromptOverride || this.agentRouterDefaultSystemPrompt(this.currentModelId));
       const arSendsImages = Boolean(isMultimodal && imagePaths?.length)
         && this.agentRouterModelSupportsVision(this.currentModelId);
       yield* this.streamSelectedProviderWithFailover({

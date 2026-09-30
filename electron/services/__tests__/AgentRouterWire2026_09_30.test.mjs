@@ -106,6 +106,9 @@ before(async () => {
         if (model === 'gpt-6-astra') return reply(res, 402, 'text/event-stream', JSON.stringify(BUDGET_OAI));
         if (model === 'unauthorized-probe') return reply(res, 401, 'application/json; charset=utf-8', JSON.stringify(UNAUTHORIZED_CLIENT));
         if (body?.stream !== true) return reply(res, 200, 'application/json', JSON.stringify({ choices: [{ message: { content: 'NON-STREAMING PATH TAKEN' } }] }));
+        // Direct DeepSeek (the parity test's other half) never sends `data: null`;
+        // that is AgentRouter's quirk, so it gets the stream without them.
+        if (model === 'deepseek-flash') return reply(res, 200, 'text/event-stream', DEEPSEEK_SSE.replace(/data: null\n\n/g, ''));
         return reply(res, 200, 'text/event-stream', DEEPSEEK_SSE);
       }
       if (req.url === '/v1/messages') {
@@ -166,6 +169,55 @@ describe('Chat Completions (DeepSeek)', () => {
     assert.equal(r.body.messages[0].role, 'system');
   });
 
+  test('PARITY: the body is byte-for-byte what direct DeepSeek sends, except the model id', async () => {
+    // The real direct-DeepSeek streamer, on a real OpenAI client pointed at the
+    // same replay server. Same system prompt, same user content (a long,
+    // multi-line context), so any difference in what reaches the model — a
+    // dropped message, a missing sampling parameter, a different output cap —
+    // shows up as a body diff. The first AgentRouter version failed this: it
+    // sent no temperature, seed or max_tokens.
+    const OpenAI = require('openai').default ?? require('openai');
+    const context = Array.from({ length: 200 }, (_, i) => `Speaker ${i % 3}: line ${i} of the meeting transcript.`).join('\n');
+    const user = `${context}\n\nCurrent question: how would you rate-limit this API?`;
+
+    const direct = Object.create(LLMHelper.prototype);
+    Object.assign(direct, {
+      isLocalOnlyMode: false, currentModelId: 'deepseek-flash', assertOutboundScopes: () => {},
+      rateLimiters: { deepseek: { acquire: async () => {} } },
+    });
+    direct._deepseekClient = new OpenAI({ apiKey: 'sk-direct', baseURL: `${origin}/v1` });
+    await collect(direct.streamWithDeepseek(user, 'SYS PROMPT', 'deepseek-flash'));
+    const d = lastRequest();
+
+    const h = makeHelper('agentrouter/deepseek-v4-flash');
+    await collect(h.streamWithAgentRouter(user, 'SYS PROMPT'));
+    const a = lastRequest();
+
+    assert.equal(d.path, a.path);
+    const { model: dm, ...dRest } = d.body;
+    const { model: am, ...aRest } = a.body;
+    assert.equal(dm, 'deepseek-flash');
+    assert.equal(am, 'deepseek-v4-flash');
+    assert.deepEqual(aRest, dRest, 'AgentRouter DeepSeek must send exactly the direct DeepSeek request');
+    // Spelled out, so a failure names the parameter rather than a blob diff.
+    assert.equal(a.body.temperature, 0.2);
+    assert.equal(a.body.seed, 7);
+    assert.equal(a.body.max_tokens, 8192);
+    assert.equal(a.body.messages[1].content, user, 'the whole context arrives, untrimmed');
+  });
+
+  test('GPT gets the native OpenAI parameters: output cap and no sampling params', async () => {
+    const h = makeHelper('agentrouter/gpt-6-astra');
+    await collect(h.streamWithAgentRouter('q', 'SYS')).catch(() => {}); // the replay 402s; the body is what matters
+    const r = lastRequest();
+    assert.equal(r.body.model, 'gpt-6-astra');
+    assert.equal(r.body.max_completion_tokens, 16384, 'getOpenAiMaxOutput for an unknown gpt id');
+    assert.equal(r.body.max_tokens, undefined);
+    assert.equal(r.body.temperature, undefined, 'reasoning models 400 on non-default sampling');
+    assert.equal(r.body.seed, undefined);
+    assert.equal(r.body.thinking, undefined);
+  });
+
   test('the blocking adapter drains the stream too', async () => {
     const h = makeHelper('agentrouter/deepseek-v4-flash');
     assert.equal(await h.generateWithAgentRouter('q', 'SYS'), 'A token bucket per API key.');
@@ -179,6 +231,7 @@ describe('Chat Completions (DeepSeek)', () => {
     const r = lastRequest();
     assert.equal(r.body.max_tokens, 256);
     assert.equal(r.body.max_completion_tokens, undefined);
+    assert.equal(r.body.temperature, 0, 'a judge verdict is sampled at 0, like every other gateway rung');
     assert.deepEqual(r.body.thinking, { type: 'disabled' });
   });
 
@@ -221,8 +274,9 @@ describe('Anthropic Messages (Claude)', () => {
     assert.equal(r.body.model, 'claude-opus-5');
     assert.equal(r.body.stream, true);
     assert.equal(r.body.system, 'SYS', 'a plain string, no cache_control blocks');
-    assert.equal(typeof r.body.max_tokens, 'number');
-    assert.equal(r.body.thinking, undefined);
+    assert.equal(r.body.max_tokens, 8192, 'getClaudeMaxOutput, as the native Claude rung sends');
+    assert.equal(r.body.temperature, 0.2, 'INTERACTIVE_TEMPERATURE, as the native Claude rung sends');
+    assert.deepEqual(r.body.thinking, { type: 'disabled' }, 'extended thinking off, as the native Claude rung sends');
   });
 
   test('the blocking adapter streams, so the text/plain non-streaming reply is never parsed', async () => {

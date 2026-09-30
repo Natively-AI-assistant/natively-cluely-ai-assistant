@@ -215,7 +215,7 @@ describe('the Auto Answer judge and the fast-model seam', () => {
     assert.equal(none.judgeGatewayModel(), null);
   });
 
-  test('callFastModel drains the AgentRouter stream with a 256-token cap', async () => {
+  test('callFastModel drains the AgentRouter stream with a 256-token cap at temperature 0', async () => {
     const { h, captured } = makeHelper();
     h.streamWithAgentRouter = async function* (...args) { captured.push({ name: 'streamWithAgentRouter', args }); yield '{"answer":'; yield ' true}'; };
     const out = await h.callFastModel('judge this', { modelId: AGENTROUTER_JUDGE_MODEL, timeoutMs: 5000 });
@@ -223,7 +223,7 @@ describe('the Auto Answer judge and the fast-model seam', () => {
     const call = captured.find((c) => c.name === 'streamWithAgentRouter');
     assert.ok(call, 'the AgentRouter adapter must be the one called');
     assert.equal(call.args[4], AGENTROUTER_JUDGE_MODEL);
-    assert.deepEqual(call.args[5], { maxTokens: 256 });
+    assert.deepEqual(call.args[5], { maxTokens: 256, temperature: 0 });
   });
 
   test('a fast call that runs out of budget returns null, never a partial verdict', async () => {
