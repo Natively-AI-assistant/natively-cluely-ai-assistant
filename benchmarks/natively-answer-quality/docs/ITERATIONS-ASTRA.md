@@ -217,3 +217,7 @@ likely overstated by this setup. Not changed mid-experiment, to keep the pair co
 ### Generator ceiling (prepared, judge pending)
 * The I5 dev prompts replayed through deepseek-v4-pro (results/replay/dev-fix2-pro.jsonl) and deepseek-flash
   (dev-fix2-flash.jsonl), 360 each, same params. v4-pro full-response p50 5.2 s vs flash 1.2 s; words 59 vs 68.
+* supp-behavior objective: cur 9/9, fix2 8/9, fix4 8/9; epistemic 8 → 6 → 5. The one fail (SBLEC-002) is the
+  handout's own error ("SE = 12 / 36 = 0.33") present in BOTH baseline and fix prompts; the baseline passed by
+  sampling. A heard STATEMENT of a computed figure ("comes out to about a third of a minute") never triggers the
+  calculation step (asks only). Candidate class for a later iteration; not tuned on this blind item.
