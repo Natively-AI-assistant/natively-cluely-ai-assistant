@@ -1158,6 +1158,39 @@ export function personalCommitmentNotice(question: string, modeId: string | unde
   return '';
 }
 
+/**
+ * ARITHMETIC TURNS WORK IT OUT FIRST (2026-09-30). Replaying the recorded
+ * prompts of nine quantitative benchmark turns to the same model, six samples
+ * each, graded by deterministic validators: 23/54 right as prompted, 29/54 with
+ * a "double-check" line, 43/54 when the model first writes its working as named
+ * steps. The misses were set-up errors a checker on the spoken answer cannot see
+ * ("124 vs 74 leaves a $50 gap, so you're owed $50"; "six gateways per
+ * warehouse"), so the step comes BEFORE the answer, hidden: the transport strips
+ * the block (llm/calcScratch.ts) and checks each line. Added only when the
+ * question asks for a quantity and at least two figures are in play; the note
+ * itself tells the model to skip the block for a one-figure lookup, so a plain
+ * "how much is the late fee?" pays nothing.
+ */
+const QUANT_ASK_RE = /\b(?:how much|how many|totals?|owes?|owed|split|ballpark|costs?|prices?|priced|pricing|budget|percent(?:age)?|discounts?|payback|margin|multiplier|difference|average|sum|adds? up|comes? to|come out to|run (?:us|me|you|them)|work (?:it |that |this )?out|calculate|compute|figure out|charged?|charges|bill(?:ed|ing)?|refund(?:ed)?|deposit|break[- ]even|savings|per (?:month|year|seat|user|person|head|day|week|night|unit|hour))\b|%/i;
+const QUANT_CODE_RE = /\b(?:complexity|big[- ]?o|O\(|algorithm|code|function|implement|array|linked list|recursion|runtime|sql|query|regex|leetcode)\b/i;
+const NUMBER_TOKEN_RE = /\$?\d[\d,]*(?:\.\d+)?%?|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)\b/gi;
+export const CALCULATION_NOTICE = '# Calculation\n'
+  + 'If answering needs arithmetic (a total, a split, a per-unit cost, a percentage, a count, or whether an amount is consistent with what was said), '
+  + 'work it out first inside [[CALC]] and [[/CALC]], one step per line as `name = expression = result`: first each figure the answer depends on, '
+  + 'including any the other person just stated (`nights_stayed = 5`), then each step, the name saying whose quantity it is '
+  + '(`each_share = (90 + 30) / 2 = 60`, `jo_owes_sam = 60 - 30 = 30`). Use only numbers stated above. When an amount is asked about or disputed, '
+  + 'also work out what the stated facts allow (the most those days, units or people could come to) and compare the two. The last line must answer exactly '
+  + 'what was asked. Then answer from those results, and if the numbers do not reconcile, say so plainly. The block is removed before anyone sees it. '
+  + 'Skip it for a direct lookup of one stated figure.';
+
+export function calculationNotice(question: string, ...context: Array<string | undefined>): string {
+  const q = String(question ?? '');
+  if (!q.trim() || !QUANT_ASK_RE.test(q) || QUANT_CODE_RE.test(q)) return '';
+  const pool = [q, ...context.map((c) => String(c ?? ''))].join('\n');
+  const figures = pool.match(NUMBER_TOKEN_RE)?.length ?? 0;
+  return figures >= 2 ? CALCULATION_NOTICE : '';
+}
+
 /** The user's OWN spoken line was chosen as the question (they asked after the
  *  other party did): their "I" and "we" are the user's side. */
 export const USER_SPOKEN_QUESTION_PERSPECTIVE = '\n(Said aloud by the user in the meeting: "I", "we" and "our" mean the user and their side.)';
@@ -1350,6 +1383,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
       : '',
     push('evidence_story', evidenceStoryGuard(d, Boolean(packed.evidenceBlock))),
     push('personal_commitment', personalCommitmentNotice(d.resolvedQuestion, policy.id, Boolean(input.heardQuestion))),
+    push('calculation', calculationNotice(d.resolvedQuestion, input.conversationSummary, packed.evidenceBlock)),
     // Steps or a counted set: the numbered-list rule lives in the system prompt,
     // which the sections above outrank — see isEnumerableAsk. Format, not
     // length, so it rides even when the user set a length. Coding turns keep

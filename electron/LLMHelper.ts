@@ -585,6 +585,9 @@ export interface StreamOutcome {
   truncated: boolean;
   /** Which guard ended it — telemetry and log wording only. */
   reason?: 'provider_failed_after_first_token' | 'output_cap_reached';
+  /** The hidden calculation block the model wrote before its answer, if any
+   *  (see llm/calcScratch.ts). Never shown; populated when the stream ends. */
+  calcScratch?: string;
 }
 
 export class LLMHelper {
@@ -8493,6 +8496,7 @@ let isMultimodal = !!(imagePaths?.length);
   ): AsyncGenerator<string, void, unknown> {
     const { StreamingDashReducer } = await import('./llm/postProcessor');
     const { StreamingReasoningFilter } = await import('./llm/reasoningTagFilter');
+    const { StreamingCalcFilter, verifyCalcScratch } = await import('./llm/calcScratch');
     // Per-stream reasoning-tag filter. Runs BEFORE the dash reducer so a think
     // block can never enter the reducer's fenced-code state machine (a ``` inside
     // the model's reasoning would otherwise leave it convinced the rest of the
@@ -8501,6 +8505,24 @@ let isMultimodal = !!(imagePaths?.length);
     // on ANY provider cannot re-arm the 2026-09-03 leak the way the 2026-08-23
     // Groq llama→qwen3.6 swap did. See reasoningTagFilter.ts.
     const reasoningFilter = new StreamingReasoningFilter();
+    // The hidden [[CALC]] working the composer asks for on arithmetic turns
+    // (llm/calcScratch.ts). Runs after the reasoning filter, before the dash
+    // reducer, at this one point every provider passes through, so no surface
+    // shows or stores it. Leading-only; any other answer passes untouched.
+    const calcFilter = new StreamingCalcFilter();
+    const visibleOf = (text: string): string => (text ? calcFilter.feed(text) : '');
+    const flushFilters = (): string => {
+      const tail = calcFilter.feed(reasoningFilter.finish()) + calcFilter.finish();
+      if (calcFilter.scratch !== null) {
+        outcome.calcScratch = calcFilter.scratch;
+        try {
+          const v = verifyCalcScratch(calcFilter.scratch);
+          console.log(`[CalcScratch] ${v.checked} step(s) checked, ${v.mismatches} mismatch(es)`);
+          if (v.mismatches > 0) for (const l of v.lines.filter((x) => x.ok === false)) console.warn(`[CalcScratch] mismatch: ${l.line} (computes ${l.computed})`);
+        } catch { /* observe-only */ }
+      }
+      return tail;
+    };
     // Per-stream stateful reducer: tracks fenced-code (```) state ACROSS chunks
     // so a code block streamed over many chunks is never dash-mangled (the old
     // stateless reducer turned `nums[i] - 1` into `nums[i], 1`). It also skips
@@ -8547,13 +8569,13 @@ let isMultimodal = !!(imagePaths?.length);
         outcome.reason = 'provider_failed_after_first_token';
         // Release anything the reasoning filter is still holding. A provider
         // that dies mid-think-block would otherwise end the turn blank.
-        const held = reasoningFilter.finish();
+        const held = flushFilters();
         if (held) yield dashReducer.reduce(held);
         return;
       }
       // May be empty (the filter is holding a partial tag) — never yield an
       // empty chunk, or trackCommit's non-empty predicate sees needless churn.
-      const visible = reasoningFilter.feed(chunk);
+      const visible = visibleOf(reasoningFilter.feed(chunk));
       if (visible) yield dashReducer.reduce(visible);
       // Count what the USER actually receives against the runaway cap. Charging
       // suppressed reasoning to the ceiling would end long answers early on a
@@ -8573,7 +8595,7 @@ let isMultimodal = !!(imagePaths?.length);
     }
     // Normal completion. Flush a block the model opened and never closed —
     // showing its reasoning beats showing an empty answer.
-    const tail = reasoningFilter.finish();
+    const tail = flushFilters();
     if (tail) yield dashReducer.reduce(tail);
   }
 
