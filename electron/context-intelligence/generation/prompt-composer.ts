@@ -1169,9 +1169,32 @@ const PERSONAL_PREFERENCE_RE = /\b(?:relocat\w*|mov(?:e|ing) (?:out )?(?:here|th
 const PERSONAL_EXPERIENCE_RE = /\bhave you (?:ever )?(?:used|run|built|worked|done|managed|led|shipped|deployed|written|dealt|handled|operated)\b|\b(?:any|much) (?:hands-on )?experience (?:with|in)\b|\bhow long have you (?:been|worked|done)\b|\b(?:what'?s|tell me about|what is) your (?:own )?background\b|\bwere you (?:ever )?(?:an?|in)\b|\bare you familiar with\b|\bdo you know (?:much about )?(?:the |our )?\w+ (?:space|industry|market|well)\b/i;
 const NO_COMMITMENT_MODES: ReadonlySet<string> = new Set(['recruiting', 'lecture']);
 
+/**
+ * A heard question about the user's OWN LIFE in a mode where nothing ever
+ * records it (2026-09-30, external judge on the dev set): General small talk
+ * came back with invented facts about the user — "I missed it, honestly" to
+ * "did you catch the game?", "I'm not on any medications and have no allergies"
+ * to a clinic intake, "I get impatient" to "biggest weakness?" — each capped as
+ * an unsupported personal claim. The permanent user-facts rule already names
+ * the game example; restated next to the question WITH claim-free shapes, the
+ * replayed answers to the game, show and medical questions stopped claiming
+ * (tenure, weakness and five-year-plan questions still resist). Job modes are
+ * excluded: there the profile may hold the answer (own-life rule).
+ */
+const PERSONAL_LIFE_RE = /\b(?:did you (?:catch|watch|see) (?:the|that|last)|(?:watching|reading|listening to|binging) anything|up to (?:anything|much)|what (?:are|were|have) you (?:been )?(?:up to|watching|reading|listening to)|how (?:was|is|'s) your (?:weekend|day|week|trip|holiday|summer|morning)|where do you see yourself|(?:biggest|greatest|worst) (?:weakness|strength|fear)|are you (?:on|taking) any|any (?:allergies|medications|meds)\b|allergic to|what(?:'s| is) your (?:story|background|deal)|your (?:own )?background|what were you doing before|what did you do before|how long have you been (?:doing|in|at|working)|where (?:are|were) you (?:from|before))\b/i;
+const PERSONAL_LIFE_MODES: ReadonlySet<string> = new Set(['general', 'sales', 'team-meet', 'call-center']);
+export const PERSONAL_LIFE_NOTICE = '(This asks about the user\'s own life — something only they know. Nothing above records it, so do not answer it for them: '
+  + 'no habit, taste, plan, health detail, history, recent activity or feeling of theirs, not even a small aside ("I missed it", "I\'ve been busy", '
+  + '"I\'ve been doing this a while"). Reply so it stays true whatever their real answer is. Shapes that work: turn it back '
+  + '("Oh, good question. What have you been into lately?"); engage with the topic, not the user ("That final quarter was something. How did it end?"); '
+  + 'keep a personal-growth question light and open ("Ha, depends who you ask. What\'s yours?"); for their own plans or experience, offer to talk it through '
+  + 'without stating it ("Happy to get into that. What would be most useful to hear?"). A health, legal or official question is theirs to answer: '
+  + 'say nothing on their behalf.)';
+
 export function personalCommitmentNotice(question: string, modeId: string | undefined, heard: boolean): string {
   if (!heard || (modeId && NO_COMMITMENT_MODES.has(modeId))) return '';
   const q = String(question ?? '');
+  if (modeId && PERSONAL_LIFE_MODES.has(modeId) && PERSONAL_LIFE_RE.test(q)) return PERSONAL_LIFE_NOTICE;
   if (PERSONAL_PREFERENCE_RE.test(q)) {
     return '(This asks for the user\'s own preference, commitment or reason. Unless something above states the user\'s own answer, '
       + 'do not decide it for them: no yes or no, no reason, no number of their own. Answer so it stays true either way, open or '
