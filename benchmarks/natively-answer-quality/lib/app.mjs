@@ -18,17 +18,17 @@ import { sha256 } from './metrics.mjs';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-export async function setupProfile(c, { deepseekKey }) {
+export async function setupProfile(c, { deepseekKey, agentrouterKey }) {
   // Exactly ONE LLM key in the profile, no setModel(): the app's own default routing decides.
   const r = await c.launcher.evaluate(`(async () => {
     const api = window.electronAPI; const out = {};
     out.before = await api.getCurrentLlmConfig();
-    out.ds = await api.setDeepseekApiKey(${JSON.stringify(deepseekKey)});
+    out.ds = ${agentrouterKey ? `await api.setAgentRouterApiKey(${JSON.stringify(agentrouterKey)})` : `await api.setDeepseekApiKey(${JSON.stringify(deepseekKey)})`};
     out.pro = await api.e2eInvoke('__e2e__:enable-pro');
     out.cfg = await api.getCurrentLlmConfig();
     return out;
   })()`);
-  if (!r?.ds?.success) throw new Error('could not set DeepSeek key: ' + JSON.stringify(r?.ds));
+  if (!r?.ds?.success) throw new Error('could not set the LLM key: ' + JSON.stringify(r?.ds));
   return { before: r.before, config: r.cfg, pro: r.pro };
 }
 

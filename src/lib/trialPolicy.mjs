@@ -24,6 +24,7 @@ const AI_KEY_FIELDS = [
   'nvidiaNimApiKey',
   'openrouterApiKey',
   'fluxionApiKey',
+  'agentrouterApiKey',
   'ninerouterApiKey',
   'litellmBaseURL',
 ];

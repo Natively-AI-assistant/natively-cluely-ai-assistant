@@ -128,12 +128,18 @@ if (!todo.length) { console.log('nothing to do'); }
 
 // ---- connect + profile ----
 const envText = fs.readFileSync(path.resolve(process.env.NATIVELY_ENV_FILE || path.join(HERE, '..', '..', '.env')), 'utf8');
-const dsKey = (envText.match(/^DEEPSEEK_API_KEY=(.*)$/m)?.[1] ?? '').trim().replace(/^["']|["']$/g, '').trim();
-if (!dsKey) { console.error('DEEPSEEK_API_KEY not found in the env file (set NATIVELY_ENV_FILE).'); process.exit(2); }
+// --provider agentrouter: the ONE key in the profile is AGENTROUTER_API_KEY instead, and the
+// app's own default repair picks the model (agentrouter/deepseek-v4-flash). For paired
+// direct-vs-gateway runs of the same questions.
+const PROVIDER = opt('provider', 'deepseek');
+const envKey = (name) => (envText.match(new RegExp(`^${name}=(.*)$`, 'm'))?.[1] ?? '').trim().replace(/^["']|["']$/g, '').trim();
+const keyName = PROVIDER === 'agentrouter' ? 'AGENTROUTER_API_KEY' : 'DEEPSEEK_API_KEY';
+const dsKey = envKey(keyName);
+if (!dsKey) { console.error(`${keyName} not found in the env file (set NATIVELY_ENV_FILE).`); process.exit(2); }
 
 const c = await connectApp();
 if (!(await app.recorderEnabled(c))) { console.error('prompt recorder is off. Launch the instance with NATIVELY_E2E=1 NATIVELY_PROMPT_DEBUG=1 (npm run dev:agent).'); process.exit(2); }
-const profile = await app.setupProfile(c, { deepseekKey: dsKey });
+const profile = await app.setupProfile(c, PROVIDER === 'agentrouter' ? { agentrouterKey: dsKey } : { deepseekKey: dsKey });
 const gm = await app.builtinModeId(c, 'general').catch(() => 'mode_general_default');
 console.log('llm config:', JSON.stringify(profile.config));
 

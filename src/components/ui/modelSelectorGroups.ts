@@ -40,6 +40,7 @@ const GROUP_LABELS: Record<string, string> = {
     nvidia_nim: 'NVIDIA NIM',
     openrouter: 'OpenRouter',
     fluxion: 'Fluxion',
+    agentrouter: 'AgentRouter',
     antigravity: 'Antigravity',
     'codex-cli': 'OpenAI Codex',
     litellm: 'LiteLLM',
@@ -59,6 +60,7 @@ const SUFFIX_TAGS: Record<string, string[]> = {
     antigravity: ['Antigravity'],
     litellm: ['LiteLLM'],
     ninerouter: ['9Router'],
+    agentrouter: ['AgentRouter'],
 };
 
 /** Host names the built-in lists prefix, e.g. "Groq Qwen 3.8". */

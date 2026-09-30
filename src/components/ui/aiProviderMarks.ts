@@ -43,6 +43,10 @@ import ninerouterMark from '../../assets/provider-logos/ninerouter.png';
 // size the galaxy is an illegible smudge in both themes (measured). See the
 // provider-logos README.
 import fluxionMark from '../../assets/provider-logos/fluxion.png';
+// AgentRouter's own site icon (agentrouter.org/logo.png): a pink/blue
+// gradient disc with a four-point star. Full-colour, so an <img> like the
+// two above, and a simple disc, so it stays recognisable at the tile's 16px.
+import agentrouterMark from '../../assets/provider-logos/agentrouter.png';
 // Our own app icon, for the Natively API row. Raster and full-colour, so it is a
 // URL rendered with <img> for the same reason as litellm.
 import nativelyIcon from '../../../assets/icon-512.png';
@@ -77,6 +81,9 @@ export const AI_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }>
     // Sampled from the shipping asset. NOT #39D9E7 — that came from a stale
     // interlocking-S logo the site still serves under the name "Sub2API".
     fluxion:  { mono: 'FX', brand: '#0048D8' },
+    // Sampled from the shipping asset: the dominant saturated pixel of the
+    // disc's pink half.
+    agentrouter: { mono: 'AR', brand: '#F868B8' },
     voyage:   { mono: 'VY', brand: '#012E33' },
     // Jina's teal, taken from their own favicon (dominant non-neutral pixel,
     // 5758 of them) and confirmed against api.jina.ai's docs theme. NOT
@@ -109,6 +116,7 @@ export const AI_PROVIDER_MARK_IMAGES: Record<string, string> = {
     litellm: litellmMark,
     ninerouter: ninerouterMark,
     fluxion: fluxionMark,
+    agentrouter: agentrouterMark,
     natively: nativelyIcon,
 };
 

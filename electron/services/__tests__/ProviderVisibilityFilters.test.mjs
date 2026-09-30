@@ -163,7 +163,7 @@ test('every provider with a UI toggle is a family the main process can classify'
     // in the diff instead of showing up as "expected 8, got 7".
     assert.deepEqual(
         [...fromTable].sort(),
-        ['claude', 'deepseek', 'fluxion', 'gemini', 'groq', 'nvidia_nim', 'openai', 'openrouter'],
+        ['agentrouter', 'claude', 'deepseek', 'fluxion', 'gemini', 'groq', 'nvidia_nim', 'openai', 'openrouter'],
         'CLOUD_PROVIDERS membership changed — every id here must also be a '
         + "`return '<family>';` in ipcHandlers.ts providerFamily(), which the "
         + 'assertions below check.',
@@ -173,7 +173,8 @@ test('every provider with a UI toggle is a family the main process can classify'
     // misclassification would bill a request to the WRONG VENDOR'S KEY. Fluxion
     // is the sharpest case — it resells the real vendors, so its ids are not
     // look-alikes but byte-identical to Anthropic's and OpenAI's own.
-    for (const required of ['nvidia_nim', 'openrouter', 'fluxion']) {
+    // AgentRouter (2026-09-30) is the same reseller shape as Fluxion.
+    for (const required of ['nvidia_nim', 'openrouter', 'fluxion', 'agentrouter']) {
         assert.ok(fromTable.includes(required), `${required} should be a cloud provider card`);
     }
     assert.ok(toggled.size >= 9, `expected at least 9 toggleable families, got ${toggled.size}`);
