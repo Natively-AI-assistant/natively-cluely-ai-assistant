@@ -8738,6 +8738,12 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     if (ordered.length === 0) {
+      // Local-only mode seats local providers only, so the cloud advice below
+      // (add an OpenAI/Claude/Gemini/Groq key) would send the user to providers
+      // this mode refuses to use (2026-10-01).
+      if (localOnly) {
+        throw new Error('No vision-capable provider configured. Local-only mode is on and no local model that reads images is set up — install one in Ollama (for example qwen2.5vl, llama3.2-vision or gemma3), or turn off local-only mode.');
+      }
       // Name the gateway when that is what the user actually configured. The
       // flat "add an OpenAI/Claude/Gemini/Groq key" text was the only thing a
       // LiteLLM-only user ever saw for a screen question, and it pointed them at

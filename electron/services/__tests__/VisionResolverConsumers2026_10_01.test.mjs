@@ -100,3 +100,20 @@ describe('VisionProviderRegistry asks the same function', () => {
     assert.doesNotMatch(body('agentrouter'), /getModelCapabilities/, 'the private copy of the rule is gone');
   });
 });
+
+describe('the chain says why when nothing can read the screenshot', () => {
+  test('local-only mode with no local vision model names local-only, not cloud keys', async () => {
+    const h = helper({
+      isLocalOnlyMode: true, currentModelId: 'deepseek-v4-flash',
+      modelVersionManager: { getAllVisionTiers: () => [] }, visionHealth: new Map(),
+    });
+    let error = null;
+    try {
+      for await (const _ of h.streamVisionWithFallback({ userContent: 'u', message: 'm', imagePaths: ['/tmp/x.png'], systemPrompt: 's' })) { /* drain */ }
+    } catch (e) { error = e; }
+    assert.ok(error, 'must throw: nothing can read it');
+    assert.match(error.message, /^No vision-capable provider configured\./, '_streamChatInner keys its user message on this prefix');
+    assert.match(error.message, /local-only mode/i);
+    assert.doesNotMatch(error.message, /OpenAI, Claude, Gemini, or Groq/);
+  });
+});
