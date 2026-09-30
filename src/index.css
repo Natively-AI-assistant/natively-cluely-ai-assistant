@@ -390,6 +390,50 @@
 [data-theme='light'] .ai-response-card h3 { color: var(--ai-response-text); }
 [data-theme='light'] .ai-response-card a { color: var(--ai-response-link); }
 
+/* ─── Light theme temperature — warm/cool neutral-tint variants ────────────
+   Opt-in via data-light-temp (Settings → Theme), applied only on top of
+   [data-theme='light']. Only the neutral surface/border/text scale shifts
+   hue (Tailwind stone/slate scales); --accent-* stays periwinkle in both —
+   this is a canvas tint, not a rebrand. Overlay glass tokens are left alone
+   (white/black-based, already reads fine tinted or not). */
+[data-theme='light'][data-light-temp='warm'] {
+  --bg-primary:      #FAFAF9;   /* stone-50 */
+  --bg-secondary:    #F5F5F4;   /* stone-100 */
+  --bg-main:         #FAFAF9;
+  --bg-sidebar:      #FFFEFC;
+  --bg-elevated:     #FFFEFC;
+  --bg-card:         #FFFEFC;
+  --bg-input:        #FAFAF8;
+  --bg-component:    #F5F5F4;
+  --bg-item-surface: #EDEBE8;
+  --bg-row-hover:    #E4E1DC;
+  --bg-toggle-switch:#D6D3D1;   /* stone-300 */
+  --text-primary:    #1C1917;   /* stone-900 */
+  --text-secondary:  #78716C;   /* stone-500 */
+  --text-tertiary:   #A8A29E;   /* stone-400 */
+  --border-subtle:   rgba(41, 37, 36, 0.07);
+  --border-muted:    rgba(41, 37, 36, 0.11);
+}
+
+[data-theme='light'][data-light-temp='cool'] {
+  --bg-primary:      #F8FAFC;   /* slate-50 */
+  --bg-secondary:    #F1F5F9;   /* slate-100 */
+  --bg-main:         #F8FAFC;
+  --bg-sidebar:      #FCFDFE;
+  --bg-elevated:     #FCFDFE;
+  --bg-card:         #FCFDFE;
+  --bg-input:        #F7FAFD;
+  --bg-component:    #F1F5F9;
+  --bg-item-surface: #E9EEF3;
+  --bg-row-hover:    #DDE4EB;
+  --bg-toggle-switch:#CBD5E1;   /* slate-300 */
+  --text-primary:    #0F172A;   /* slate-900 */
+  --text-secondary:  #64748B;   /* slate-500 */
+  --text-tertiary:   #94A3B8;   /* slate-400 */
+  --border-subtle:   rgba(15, 23, 42, 0.07);
+  --border-muted:    rgba(15, 23, 42, 0.11);
+}
+
 /* Phase-1 Settings-only accent override (light mode), scoped via
    data-settings-theme so the rest of the app keeps the blue brand accent. */
 [data-theme='light'] [data-settings-theme="periwinkle"] {

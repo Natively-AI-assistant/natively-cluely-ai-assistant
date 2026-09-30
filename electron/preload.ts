@@ -1262,6 +1262,11 @@ interface ElectronAPI {
   setMeetingInterfaceTheme: (theme: string) => void;
   onMeetingInterfaceThemeChanged: (callback: (theme: string) => void) => () => void;
 
+  // Light theme warm/cool tint — same cross-window propagation rationale as
+  // setMeetingInterfaceTheme above.
+  setLightThemeTemperature: (temp: string) => void;
+  onLightThemeTemperatureChanged: (callback: (temp: string) => void) => () => void;
+
   // Cancel the in-flight gemini-chat-stream. Renderer wires this to "drop
   // the current answer" user actions (Escape, navigation, chat-overlay unmount).
   // Without explicit cancel the chat IPC handler keeps streaming tokens that
@@ -3136,6 +3141,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('interface-theme:changed', handler);
     return () => {
       ipcRenderer.removeListener('interface-theme:changed', handler);
+    };
+  },
+
+  // Light theme warm/cool tint — see ElectronAPI interface for rationale.
+  setLightThemeTemperature: (temp: string) => {
+    ipcRenderer.send('light-theme-temp:set', temp);
+  },
+  onLightThemeTemperatureChanged: (callback: (temp: string) => void) => {
+    const handler = (_evt: unknown, temp: string) => callback(temp);
+    ipcRenderer.on('light-theme-temp:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('light-theme-temp:changed', handler);
     };
   },
 

@@ -8172,6 +8172,28 @@ export function initializeIpcHandlers(appState: AppState): void {
     });
   });
 
+  // Light theme warm/cool tint cross-window broadcast — same rationale and
+  // allowlist pattern as 'interface-theme:set' above. The value lands in a
+  // `data-light-temp={value}` DOM attribute (lightThemeTemperature.ts).
+  const VALID_LIGHT_TEMPS = new Set(['neutral', 'warm', 'cool']);
+  safeOn('light-theme-temp:set', (_event, temp: string) => {
+    if (typeof temp !== 'string' || !VALID_LIGHT_TEMPS.has(temp)) {
+      const safe = typeof temp === 'string'
+        ? temp.slice(0, 64).replace(/[\r\n\x00-\x1f]/g, '?')
+        : typeof temp;
+      console.warn(`[light-theme-temp:set] Rejected unknown temp: ${safe}`);
+      return;
+    }
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (win.isDestroyed()) return;
+      try {
+        win.webContents.send('light-theme-temp:changed', temp);
+      } catch {
+        // Renderer may be tearing down between isDestroyed() and send.
+      }
+    });
+  });
+
   safeHandle('get-arch', async () => {
     return process.arch;
   });

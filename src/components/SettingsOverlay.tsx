@@ -7,7 +7,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Download, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, Flame, Snowflake
 } from 'lucide-react';
 import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
@@ -36,6 +36,7 @@ import {
     getDefaultOverlayOpacity,
 } from '../lib/overlayAppearance';
 import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
+import { getLightThemeTemperature, setLightThemeTemperature, type LightThemeTemperature } from '../lib/lightThemeTemperature';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
 import { Presence, SettingsMenu, SettingsMotionReady } from './settings/SettingsRow';
@@ -697,6 +698,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const themeDropdownRef = React.useRef<HTMLDivElement>(null);
     const aiLangDropdownRef = React.useRef<HTMLDivElement>(null);
     const [meetingInterfaceTheme, setMeetingInterfaceThemeState] = useState<MeetingInterfaceTheme>(getMeetingInterfaceTheme);
+    const [lightThemeTemp, setLightThemeTempState] = useState<LightThemeTemperature>(getLightThemeTemperature);
     const [isInterfaceThemeDropdownOpen, setIsInterfaceThemeDropdownOpen] = useState(false);
     const interfaceThemeDropdownRef = React.useRef<HTMLDivElement>(null);
     const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
@@ -1425,6 +1427,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             const valid: MeetingInterfaceTheme[] = ['default', 'liquid-glass', 'modern'];
             if (valid.includes(theme as MeetingInterfaceTheme)) {
                 setMeetingInterfaceThemeState(theme as MeetingInterfaceTheme);
+            }
+        });
+        return () => {
+            window.removeEventListener('storage', handleStorage);
+            unsubscribeIpc?.();
+        };
+    }, []);
+
+    useEffect(() => {
+        // Same storage+IPC pattern as meeting interface theme above.
+        const handleStorage = () => {
+            setLightThemeTempState(getLightThemeTemperature());
+        };
+        window.addEventListener('storage', handleStorage);
+        const unsubscribeIpc = window.electronAPI?.onLightThemeTemperatureChanged?.((temp) => {
+            const valid: LightThemeTemperature[] = ['neutral', 'warm', 'cool'];
+            if (valid.includes(temp as LightThemeTemperature)) {
+                setLightThemeTempState(temp as LightThemeTemperature);
             }
         });
         return () => {
@@ -2543,6 +2563,41 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         </SettingsMenu>
                                                     </div>
                                                 </div>
+
+                                                {/* Light theme tint — only meaningful while the resolved theme is light */}
+                                                {resolvedTheme === 'light' && (
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Sun size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Light Theme Tint')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Warm or cool neutrals for the light theme')}</p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex items-center gap-1 bg-bg-component border border-border-subtle rounded-lg p-1">
+                                                            {([
+                                                                { temp: 'neutral', label: 'Neutral', icon: null },
+                                                                { temp: 'warm', label: 'Warm', icon: <Flame size={14} /> },
+                                                                { temp: 'cool', label: 'Cool', icon: <Snowflake size={14} /> },
+                                                            ] as const).map((option) => (
+                                                                <button
+                                                                    key={option.temp}
+                                                                    onClick={() => {
+                                                                        setLightThemeTempState(option.temp);
+                                                                        setLightThemeTemperature(option.temp);
+                                                                    }}
+                                                                    className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors ${lightThemeTemp === option.temp ? 'bg-bg-elevated text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+                                                                >
+                                                                    {option.icon}
+                                                                    {t(option.label)}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 {/* Language */}
                                                 <div className="flex items-center justify-between px-4 py-3">
