@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { EventEmitter } from 'events';
 import { meetingLinksIn, meetingRefOf } from './meetingDetection/meetingLinks';
+import { describeOAuthError, renderOAuthCallbackPage, type OAuthCallbackOutcome } from './oauth/callbackPage';
 
 /*
   Google OAuth client for calendar sync — a "Desktop app" client, used with
@@ -265,22 +266,27 @@ export class CalendarManager extends EventEmitter {
                     res.end();
                     return;
                 }
+                const respond = (outcome: OAuthCallbackOutcome) => {
+                    const page = renderOAuthCallbackPage('calendar', outcome, process.platform);
+                    res.writeHead(200, page.headers);
+                    res.end(page.body);
+                };
                 if (qs.get('state') !== state) {
-                    res.end('Authentication failed! You can close this window.');
+                    respond({ kind: 'error', reason: 'This response belongs to a different sign-in attempt.' });
                     finish(() => reject(new Error('Calendar sign-in returned an unexpected state. Please try again.')));
                     return;
                 }
                 if (error) {
-                    res.end('Authentication failed! You can close this window.');
+                    respond({ kind: 'error', reason: describeOAuthError(error, qs.get('error_description')) });
                     finish(() => reject(new Error(error)));
                     return;
                 }
                 try {
                     await this.exchangeCodeForToken(code!, codeVerifier, redirectUri);
-                    res.end('Authentication successful! You can close this window and return to Natively.');
+                    respond({ kind: 'connected' });
                     finish(() => resolve());
                 } catch (err) {
-                    res.end('Authentication failed! You can close this window.');
+                    respond({ kind: 'error', reason: 'Google didn’t accept the sign-in code. It may have expired.' });
                     finish(() => reject(err));
                 }
             });
