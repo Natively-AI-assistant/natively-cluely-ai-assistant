@@ -1346,6 +1346,7 @@ import {
 } from './utils/macDockPolicy'
 import { disguiseAppName } from './utils/disguiseAppName'
 import { disguiseIconRelativePath, shouldSetMacDockIcon } from './utils/disguiseIcon'
+import { resolveTrayIcon } from './utils/trayIcon'
 import { appUserModelIdForDisguise } from './utils/windowsTaskbarPolicy'
 import { shouldOpenExternally } from './utils/windowOpenPolicy'
 import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
@@ -7814,39 +7815,26 @@ export class AppState {
   public showTray(): void {
     if (this.tray) return;
 
-    // Try to find a template image first for macOS
-    const resourcesPath = app.isPackaged ? process.resourcesPath : app.getAppPath();
-
-    // Potential paths for tray icon
-    const templatePath = path.join(resourcesPath, 'assets', 'iconTemplate.png');
-    const defaultIconPath = app.isPackaged
-      ? path.join(resourcesPath, 'assets', 'icon.png')
-      : path.join(app.getAppPath(), 'src/components/icon.png');
-
-    let iconToUse = defaultIconPath;
-
-    // Check if template exists (sync check is fine for startup/rare toggle)
-    try {
-      if (require('fs').existsSync(templatePath)) {
-        iconToUse = templatePath;
-        console.log('[Tray] Using template icon:', templatePath);
-      } else {
-        // Also check src/components for dev
-        const devTemplatePath = path.join(app.getAppPath(), 'src/components/iconTemplate.png');
-        if (require('fs').existsSync(devTemplatePath)) {
-          iconToUse = devTemplatePath;
-          console.log('[Tray] Using dev template icon:', devTemplatePath);
-        } else {
-          console.log('[Tray] Template icon not found, using default:', defaultIconPath);
+    // The template (16 px + @2x beside it) loads as-is so the @2x representation
+    // survives; only the full-size fallback art is resized. See utils/trayIcon.ts.
+    const choice = resolveTrayIcon({
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      appPath: app.getAppPath(),
+      exists: (p) => {
+        try {
+          return require('fs').existsSync(p);
+        } catch (e) {
+          console.error('[Tray] Error checking for icon:', e);
+          return false;
         }
-      }
-    } catch (e) {
-      console.error('[Tray] Error checking for icon:', e);
-    }
+      },
+    });
+    console.log(choice.template ? '[Tray] Using template icon:' : '[Tray] Template icon not found, using default:', choice.path);
 
-    const trayIcon = nativeImage.createFromPath(iconToUse).resize({ width: 16, height: 16 });
-    // IMPORTANT: specific template settings for macOS if needed, but 'Template' in name usually suffices
-    trayIcon.setTemplateImage(iconToUse.endsWith('Template.png'));
+    const loadedTrayIcon = nativeImage.createFromPath(choice.path);
+    const trayIcon = choice.resizeTo16 ? loadedTrayIcon.resize({ width: 16, height: 16 }) : loadedTrayIcon;
+    trayIcon.setTemplateImage(choice.template);
 
     this.tray = new Tray(trayIcon)
     this.tray.setToolTip('Natively') // This tooltip might also need update if we change global shortcut, but global shortcut is removed.

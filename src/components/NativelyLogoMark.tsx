@@ -4,6 +4,9 @@ import React from 'react';
  * Natively logomark — "N" letterform inscribed in a circle.
  * Rendered as inline SVG so it inherits `color` (currentColor) and
  * can be styled freely with className.
+ *
+ * The exact master geometry (brand/natively-mark-*.svg): one filled
+ * path, ring + uprights + diagonal all one width (68/1024), cropped to the ring.
  */
 export const NativelyLogoMark: React.FC<{
     size?: number;
@@ -12,54 +15,14 @@ export const NativelyLogoMark: React.FC<{
     <svg
         width={size}
         height={size}
-        viewBox="0 0 100 100"
-        fill="none"
+        viewBox="106 106 812 812"
         xmlns="http://www.w3.org/2000/svg"
         className={className}
         aria-hidden="true"
     >
-        {/* Outer circle */}
-        <circle
-            cx="50"
-            cy="50"
-            r="47"
-            stroke="currentColor"
-            strokeWidth="5"
-        />
-
-        {/*
-          The "N" lettermark — three strokes:
-            Left vertical bar
-            Diagonal stroke (top-left → bottom-right)
-            Right vertical bar
-          All strokes use round caps and joins to keep it crisp at small sizes.
-        */}
-
-        {/* Left vertical bar */}
-        <line
-            x1="26" y1="22"
-            x2="26" y2="78"
-            stroke="currentColor"
-            strokeWidth="9"
-            strokeLinecap="round"
-        />
-
-        {/* Diagonal */}
-        <line
-            x1="26" y1="22"
-            x2="74" y2="78"
-            stroke="currentColor"
-            strokeWidth="9"
-            strokeLinecap="round"
-        />
-
-        {/* Right vertical bar */}
-        <line
-            x1="74" y1="22"
-            x2="74" y2="78"
-            stroke="currentColor"
-            strokeWidth="9"
-            strokeLinecap="round"
+        <path
+            fill="currentColor"
+            d="M512 106 A406 406 0 1 1 512 918 A406 406 0 1 1 512 106 Z M512 174 A338 338 0 1 0 512 850 A338 338 0 1 0 512 174 Z M288 192.77 H356 V831.23 H288 Z M668 192.77 H736 V831.23 H668 Z M271.30 207 L352.62 207 L752.70 817 L671.38 817 Z"
         />
     </svg>
 );
