@@ -257,3 +257,27 @@ likely overstated by this setup. Not changed mid-experiment, to keep the pair co
 ### Final set on fix6 (aq2-final-fix6, 1038 rows, 0 failed) — AGGREGATE ONLY, no per-item inspection
 * vs the previous campaign's final run (aq-final-fix2 @ d327f6a8): validators 10/16 → 14/16; reference needles in
   prompt 168 → 185/188; epistemic 85 → 51; coaching 31 → 17; TTFT p50 889 → 728 ms; total p50 1279 → 1374 ms.
+
+### Latency from the recorded runs (2026-09-30 23:20Z) — astra/out/latency/existing-runs.md
+* Runs were hours apart (network drift not controlled; a paired run is the stronger read).
+
+| set | baseline → fix6 | TTFT p50/p95 ms | total p50/p95 ms |
+|---|---|---:|---:|
+| dev 360 | aq2-dev-cur → aq2-dev-fix6 | 990/2020 → 854/1337 | 1495/2828 → 1555/2753 |
+| holdout 270 | aq-holdout-fix2 (= main code) → aq2-holdout-fix6 | 964/1648 → 778/1360 | 1438/2607 → 1483/2805 |
+| final 1038 | aq-final-fix2 → aq2-final-fix6 | 889/1371 → 728/1194 | 1279/2046 → 1374/2401 |
+| supp-behavior 72 | aq2-sb-cur → aq2-sb-fix6 | 934/1595 → 889/1307 | 1241/2809 → 1562/2709 |
+| supp-quant 32 | aq2-sq-cur → aq2-sq-fix6 | 1097/1677 → 1120/1516 | 1595/4317 → 1859/3759 |
+
+* Per mode (dev), total p50: Call Center 1223 → 1984, Sales 1313 → 2004, LFW 1823 → 2429 (the verifier's modes);
+  Recruiting 1239 → 1020, Team Meet 1330 → 1192, Lecture 1595 → 1334, Seminar 1728 → 1352.
+
+### What the user sees when the verifier edits (hotkey path) — a trade-off to report, not hide
+* The draft streams as usual; the verified text replaces it on the final event (NativelyInterface
+  onIntelligenceSuggestedAnswer → finalizeStreamingByIntent). The judge scores the replaced text.
+* fix6 dev hotkey turns whose visible text changes after the stream: 75 of 245. The swap lands 0.74–1.0 s after
+  the last token (p50 by mode). LFW 28 of 32 turns change, first changed word p50 = 15 (10 change within the first
+  8 words); Call Center 14/30 (p50 word 21); Sales 10/28 (p50 word 3, 7 within 8 words); Team Meet 3/28 (I15 strip:
+  word 0 by design, but that strip is deterministic and lands with the stream's end, 0 ms).
+* A user who starts reading aloud at the first token has spoken roughly 3–6 words by the swap, so edits past the
+  first sentence are usually seen before they are said; LFW/Sales edits in the first sentence may already be spoken.
