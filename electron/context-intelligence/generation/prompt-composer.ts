@@ -30,6 +30,8 @@ import { enumerableFormLine } from '../../llm/answerStyle';
 import { looksLikeQuestion } from '../question/question-resolver';
 
 export interface ComposeInput {
+  /** The clock for the TODAY line (tests pass a fixed date; live turns omit it). */
+  now?: Date;
   /** The question was HEARD — asked aloud by the other person (what-to-answer),
    *  not typed by the user. See HEARD_QUESTION_PERSPECTIVE. */
   heardQuestion?: boolean;
@@ -921,7 +923,10 @@ function precedenceContract(evidence: EvidenceItem[]): string {
     + 'When two sources disagree on a value, the one whose status is current/active takes precedence over '
     + 'retired/superseded/legacy/deprecated/archived. If asked WHY a value was chosen, explain it from those '
     + 'statuses and source_name attributes — never invent a mechanism (environment overrides, deploy order) '
-    + 'the evidence does not state.';
+    + 'the evidence does not state. A status of expired or outdated means that document\'s values may no longer '
+    + 'hold, even when nothing contradicts it: when you use one, say where it comes from and that it needs confirming '
+    + '("that\'s from the 2025 partner sheet, which ran through December, so let me confirm today\'s price"), and prefer '
+    + 'a current source that disagrees. A draft\'s decisions are proposed, not settled: present them that way.';
 }
 
 /**
@@ -1285,6 +1290,25 @@ function evidenceStoryGuard(d: Readonly<TurnDecision>, hasEvidence: boolean): st
     + 'mention a real project only for what the evidence says about it.';
 }
 
+/**
+ * TODAY (2026-09-30). The prompt carried no date, so a partner price sheet
+ * "Valid through December 31, 2025" read as current in September 2026, and a
+ * résumé dated November 2022 was treated as the newest version (external judge,
+ * I5 dev: DSALES-023/026, DJOB-018/032 — all capped). Rendered only when the
+ * question, conversation or evidence mentions a year, a dated month or a
+ * weekday, so every other prompt stays byte-identical; in the USER message,
+ * so the cached system prompt does not change daily.
+ */
+const DATE_MENTION_RE = /\b(?:19|20)\d{2}\b|\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.? \d{1,2}(?:st|nd|rd|th)?\b|\b\d{1,2}(?:st|nd|rd|th)? (?:of )?(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)s?\b/i;
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+export function todayNotice(now: Date, ...material: Array<string | undefined>): string {
+  if (!material.some((m) => DATE_MENTION_RE.test(String(m ?? '')))) return '';
+  const d = now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date();
+  return `# Today\nIt is ${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()} where the user is. `
+    + 'Read validity dates, deadlines, ages and which version is current against it.';
+}
+
 export function composePrompt(input: ComposeInput): ComposedPrompt {
   const { decision: d, policy, evidence } = input;
 
@@ -1452,6 +1476,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
     packed.evidenceBlock && input.withheldScopes?.length
       ? push('privacy_withheld', privacyWithholdingNotice(input.withheldScopes, true))
       : '',
+    push('today', todayNotice(input.now ?? new Date(), d.resolvedQuestion, input.conversationSummary, packed.evidenceBlock)),
     push('evidence_story', evidenceStoryGuard(d, Boolean(packed.evidenceBlock))),
     push('personal_commitment', personalCommitmentNotice(d.resolvedQuestion, policy.id, Boolean(input.heardQuestion))),
     push('calculation', calculationNotice(d.resolvedQuestion, input.conversationSummary, packed.evidenceBlock)),

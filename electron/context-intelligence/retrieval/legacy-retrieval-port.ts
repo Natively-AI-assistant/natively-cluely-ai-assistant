@@ -274,7 +274,7 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
       // the historical value.
       const wantsHistorical = /\b(retired|legacy|archived|old|previous|former|superseded|original|historical)\b/i
         .test(decision.resolvedQuestion);
-      const RETIRED = new Set(['retired', 'deprecated', 'archived', 'superseded', 'legacy', 'obsolete']);
+      const RETIRED = new Set(['retired', 'deprecated', 'archived', 'superseded', 'legacy', 'obsolete', 'expired', 'outdated']);
       const statusClass = (e: EvidenceItem): number => {
         if (wantsHistorical) return 0;
         const s = (e.metadata as Record<string, unknown> | undefined)?.documentStatus;

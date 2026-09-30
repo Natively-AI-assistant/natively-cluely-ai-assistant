@@ -149,18 +149,66 @@ export function sourceTypeForFile(
   return 'REFERENCE_FILE';
 }
 
+const MONTH_INDEX: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11,
+};
+const monthOf = (w: string): number | undefined => MONTH_INDEX[w.toLowerCase().slice(0, w.toLowerCase().startsWith('sept') ? 4 : 3)];
+
+/**
+ * A date as documents write it: "December 31, 2025", "31 December 2025",
+ * "2025-12-31", or a bare "November 2022" (→ that month's LAST day when
+ * `end`, its first otherwise). Slash dates are ambiguous across locales and
+ * are not read.
+ */
+export function parseDocumentDate(text: string, end = false): Date | undefined {
+  const t = String(text ?? '');
+  let m = t.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = t.match(/\b([A-Za-z]{3,9})\.? (\d{1,2})(?:st|nd|rd|th)?,? (\d{4})\b/);
+  if (m && monthOf(m[1]) !== undefined) return new Date(+m[3], monthOf(m[1])!, +m[2]);
+  m = t.match(/\b(\d{1,2})(?:st|nd|rd|th)? (?:of )?([A-Za-z]{3,9})\.?,? (\d{4})\b/);
+  if (m && monthOf(m[2]) !== undefined) return new Date(+m[3], monthOf(m[2])!, +m[1]);
+  m = t.match(/\b([A-Za-z]{3,9})\.? (\d{4})\b/);
+  if (m && monthOf(m[1]) !== undefined) return end ? new Date(+m[2], monthOf(m[1])! + 1, 0) : new Date(+m[2], monthOf(m[1])!, 1);
+  return undefined;
+}
+
 /**
  * Document status declared by the file itself ("Status: RETIRED. …"), read from
  * the head of the content. This is the provenance the precedence answer needs
  * (deep-test D8): the value resolver picked current-over-retired by ranking
  * luck, and when asked WHY, the model invented a rationale because no status
  * ever reached the prompt.
+ *
+ * FRESHNESS (2026-09-30). Documents also say it without a "Status:" line, and
+ * the model read them as current: a price sheet "Valid through December 31,
+ * 2025" quoted as today's price in September 2026, a "DRAFT, not reviewed"
+ * meeting note stated as settled, a policy that says "check the Knowledge Base
+ * for the current version before relying on this document" relied on, a
+ * résumé "last updated November 2022" taken over the profile (external judge,
+ * dev set: all capped). Read here as `expired` (a validity date that has
+ * passed), `draft` (only with an unreviewed/unapproved marker) and `outdated`
+ * (the document says to check for a current version); a validity date still
+ * in the future marks nothing.
  */
-export function detectDocumentStatus(content: string | undefined): string | undefined {
+export function detectDocumentStatus(content: string | undefined, now: Date = new Date()): string | undefined {
   const head = String(content ?? '').slice(0, 600);
-  const m = head.match(/\bstatus\s*[:\-]\s*(retired|deprecated|archived|superseded|legacy|obsolete|current|active|draft)\b/i);
+  const m = head.match(/\bstatus\s*[:\-]\s*(retired|deprecated|archived|superseded|legacy|obsolete|current|active|draft|expired)\b/i);
   if (m) return m[1].toLowerCase();
-  if (/\b(retired|deprecated|superseded|obsolete)\b/i.test(head.split('\n').slice(0, 3).join('\n'))) return 'retired';
+  const firstLines = head.split('\n').slice(0, 3).join('\n');
+  if (/\b(retired|deprecated|superseded|obsolete)\b/i.test(firstLines)) return 'retired';
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const validity = head.match(/\b(?:valid|good|effective)\s+(?:through|thru|until|till)\s+([^\n.;]{3,40})|\bexpires?\s+(?:on\s+)?([^\n.;]{3,40})/i);
+  if (validity) {
+    const until = parseDocumentDate(validity[1] ?? validity[2] ?? '', true);
+    if (until && until < today) return 'expired';
+  }
+  // A draft of the user's own thesis or spec is still their material; only a
+  // draft whose CONTENT is unconfirmed ("not reviewed by attendees") is marked.
+  if (/\bdraft\b/i.test(firstLines) && /\b(?:not (?:yet )?(?:been )?(?:reviewed|approved|confirmed|signed off)|unreviewed|unapproved|unconfirmed|pending (?:review|approval))\b/i.test(head)) return 'draft';
+  if (/\bcheck\b[^\n.]{0,60}\bcurrent version\b|\bmay (?:be|have) (?:out ?of ?date|outdated|changed)\b/i.test(head)) return 'outdated';
+  // An old "last updated" date is NOT marked: past events stay true, and a
+  // design doc from 2024 is not wrong for being from 2024.
   return undefined;
 }
 

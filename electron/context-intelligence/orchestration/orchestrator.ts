@@ -1401,7 +1401,7 @@ export async function orchestrate(
           });
         }
       }
-      const RETIRED_CLASS = new Set(['retired', 'deprecated', 'archived', 'superseded', 'legacy', 'obsolete']);
+      const RETIRED_CLASS = new Set(['retired', 'deprecated', 'archived', 'superseded', 'legacy', 'obsolete', 'expired', 'outdated']);
       const selectedRetired = [...selected.values()].some((s) => s.status && RETIRED_CLASS.has(s.status));
       const ignoredRetired = [...ignored.values()].some((s) => s.status && RETIRED_CLASS.has(s.status));
       turnDecision = {
