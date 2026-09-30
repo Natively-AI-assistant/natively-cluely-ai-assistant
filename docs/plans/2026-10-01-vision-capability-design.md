@@ -193,8 +193,14 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
 
 ## Delivery: five phases, each landable on its own
 
-1. **Resolver and cache**, all consumers moved onto it, the consolidated name
-   list as the only source. Fixes defects 1, 2, 3, 5.
+1. **Resolver and consolidated name list**, all phase-1 consumers moved onto
+   it, proven unchanged by a characterization test over ~2,400 real ids.
+   Fixes defects 1, 2, 3, 5. The persisted cache moves to phase 2, with its
+   first new writer (OpenRouter modalities); phase 1 reads Ollama's and
+   9Router's answers where they are held today. Known gap left open: with
+   Code Hint's gate removed, a SELECTED LiteLLM / NVIDIA NIM / OpenRouter /
+   Fluxion model gets Code Hint screenshots whatever its upstream reads,
+   exactly as Ask AI already did; phases 2 and 4 close it for both.
 2. **Provider data**: OpenRouter, 9Router, Ollama, Gemini family; Anthropic and
    LiteLLM once confirmed.
 3. **One-time test** plus image support in the direct DeepSeek adapter (Flash).

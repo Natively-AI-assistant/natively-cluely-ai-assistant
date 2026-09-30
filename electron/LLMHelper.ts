@@ -20,6 +20,7 @@ import {
   TINY_ASSIST_PROMPT, TINY_BRAINSTORM_PROMPT, TINY_CLARIFY_PROMPT, TINY_CODE_HINT_PROMPT,
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
+import { gatewaySeatReadsImages, readsImages, resolveVision, type VisionVerdict } from "./llm/visionResolver"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
@@ -2031,8 +2032,7 @@ export class LLMHelper {
    */
   private ninerouterModelSupportsVision(modelId: string): boolean {
     if (!this.isNinerouterModel(modelId)) return false;
-    if (this.ninerouterVisionModels.size === 0) return true; // unknown, not "no"
-    return this.ninerouterVisionModels.has(this.ninerouterWireModel(modelId));
+    return gatewaySeatReadsImages('ninerouter', modelId, { ninerouterVisionModels: [...this.ninerouterVisionModels] });
   }
 
   /**
@@ -2431,7 +2431,7 @@ export class LLMHelper {
    * primary path; a future text-only model is still kept away from screenshots.
    */
   private agentRouterModelSupportsVision(modelId: string): boolean {
-    return getModelCapabilities(modelId, false).supportsImages;
+    return gatewaySeatReadsImages('agentrouter', modelId);
   }
 
   /**
@@ -8738,6 +8738,15 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     if (ordered.length === 0) {
+      // Local-only mode seats local providers only, so the cloud advice below
+      // (add an OpenAI/Claude/Gemini/Groq key) would send the user to providers
+      // this mode refuses to use (2026-10-01).
+      if (localOnly) {
+        // Worded as "not found", not "not installed": the chain is also empty
+        // when Ollama isn't the selected provider or its daemon didn't answer
+        // the probe in time, and those users already have the model.
+        throw new Error('No vision-capable provider configured. Local-only mode is on and no local model that reads images was found — select an Ollama vision model (for example qwen2.5vl, llama3.2-vision or gemma3), check that Ollama is running, or turn off local-only mode.');
+      }
       // Name the gateway when that is what the user actually configured. The
       // flat "add an OpenAI/Claude/Gemini/Groq key" text was the only thing a
       // LiteLLM-only user ever saw for a screen question, and it pointed them at
@@ -13792,23 +13801,29 @@ let isMultimodal = !!(imagePaths?.length);
     return provider ? Object.freeze({ ...provider }) : null;
   }
 
+  /**
+   * The vision resolver's answer for a selection, with the facts only this
+   * instance holds: Ollama's /api/show results, 9Router's catalogue, and the
+   * active custom/cURL provider. See electron/llm/visionResolver.ts.
+   */
+  private visionVerdict(
+    selection: { provider: DirectAssistProvider; model: string },
+    custom: CustomProvider | null = this.customProvider,
+    curl: CurlProvider | null = this.activeCurlProvider,
+  ): VisionVerdict {
+    return resolveVision(selection, {
+      ollamaReportsVision: (m) => this.ollamaVisionCache.get(m),
+      ninerouterVisionModels: selection.provider === 'ninerouter' ? [...this.ninerouterVisionModels] : undefined,
+      customProvider: selection.provider === 'curl' ? curl : custom,
+    });
+  }
+
   private directSelectionSupportsImages(
     selection: DirectAssistSelection,
     custom: CustomProvider | null,
     curl: CurlProvider | null,
   ): boolean {
     switch (selection.provider) {
-      case 'natively':
-      case 'codex-cli':
-      case 'antigravity':
-        return true;
-      case 'custom':
-        return customProviderSupportsVision(custom);
-      case 'curl':
-        return customProviderSupportsVision(curl);
-      case 'ollama':
-        return this.ollamaVisionCache.get(selection.model)
-          ?? getModelCapabilities(selection.model, true).supportsImages;
       case 'litellm':
       case 'nvidia_nim':
       case 'openrouter':
@@ -13829,10 +13844,12 @@ let isMultimodal = !!(imagePaths?.length);
         // an unsupported upstream returns a normal provider error, never a
         // fallback or a text-only retry.
         return true;
-      case 'deepseek':
-        return false;
       default:
-        return getModelCapabilities(selection.model, false).supportsImages;
+        // Everything else asks the resolver (2026-10-01). Unknown stays "no"
+        // for a direct selection, exactly as the name table answered: Direct
+        // Assist has no other rung, and an image a model cannot read is
+        // answered blind.
+        return readsImages(this.visionVerdict(selection, custom, curl), false);
     }
   }
 
@@ -14206,10 +14223,21 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   public getCapabilities(): ModelCapabilities {
-    if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
-      return getModelCapabilities(this.getAntigravityModelId(this.currentModelId), false);
+    const caps = (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId))
+      ? getModelCapabilities(this.getAntigravityModelId(this.currentModelId), false)
+      : getModelCapabilities(this.getCurrentModel(), this.useOllama);
+    // Tier and budgets still come from the name: callers size prompts from
+    // them. Whether it reads images comes from the resolver, for the selection
+    // that will actually run (2026-10-01). getCurrentModel() is a display
+    // string — a custom provider's name, a cURL UUID — that no name rule can
+    // classify, and it never saw Ollama's or 9Router's own answers.
+    let supportsImages = caps.supportsImages;
+    try {
+      supportsImages = readsImages(this.visionVerdict(this.getDirectAssistSelection()), false);
+    } catch {
+      // No usable selection (nothing selected, or no adapter for this id): keep the name answer.
     }
-    return getModelCapabilities(this.getCurrentModel(), this.useOllama);
+    return { ...caps, supportsImages };
   }
 
   /**

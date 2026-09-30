@@ -30,21 +30,17 @@ export class CodeHintLLM {
         v3?: { system: string; user: string }
     ): AsyncGenerator<string> {
         try {
-            // Vision-required + small model lacking image support → fail loud, not malformed.
-            if (imagePaths?.length) {
-                const caps = this.llmHelper.getCapabilities();
-                if (!caps.supportsImages) {
-                    // The advice has to match where the model actually runs. This
-                    // said "The current local model (…) — switch to llava" for a
-                    // cloud model reached through a LiteLLM proxy, which is both
-                    // wrong and unactionable; the tier says which sentence applies.
-                    const isLocal = caps.tier === 'local-small' || caps.tier === 'local-large';
-                    yield isLocal
-                        ? `The current local model (${caps.name}) doesn't support image input. Switch to a vision-capable model (e.g. llava, llama3.2-vision, gemma3) or use a cloud model.`
-                        : `The current model (${caps.name}) doesn't support image input. Pick a vision-capable model in Settings — through a gateway, that means one whose upstream accepts images (e.g. a GPT-4o, Claude, or Gemini route).`;
-                    return;
-                }
-            }
+            // No capability gate here (2026-10-01). streamChat sends every
+            // image-bearing turn through the vision chain, the same path Ask AI
+            // takes with a screenshot. Gating on the SELECTED model refused
+            // screenshots the chain would have answered: a DeepSeek user with a
+            // Gemini key never got a hint.
+            //
+            // Known gap, shared with Ask AI: a SELECTED LiteLLM / NVIDIA NIM /
+            // OpenRouter / Fluxion model is seated by the chain whether or not
+            // its upstream reads images (only the user knows theirs). Provider
+            // data (phase 2) and the per-model override (phase 4) close it —
+            // docs/plans/2026-10-01-vision-capability-design.md.
 
             const message = buildCodeHintMessage(
                 questionContext ?? null,
