@@ -22,6 +22,8 @@ const STEPS = [
   // deepseek-flash through the same replay path). Same charter, cache and official score.
   ['replay-pro', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-pro.jsonl', '--run', 'results/aq2-dev-fix2', '--concurrency', '6']],
   ['abs-dev-fix4', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix4', '--mode', I8_MODES, '--concurrency', '6'], 'results/aq2-dev-fix4'],
+  // I15 (access-lead strip) touches spoken Team Meet / Recruiting only; I8c is formatting-only.
+  ['abs-dev-fix6', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix6', '--mode', 'team-meet,recruiting', '--concurrency', '6'], 'results/aq2-dev-fix6'],
   ['replay-flash', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-flash.jsonl', '--run', 'results/aq2-dev-fix2', '--concurrency', '6']],
   ['abs-dev-cur', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-cur', '--concurrency', '6'], 'results/aq2-dev-cur'],
   ['abs-sb', ['astra/judge.mjs', '--set', 'abs-sb', '--runs', 'results/aq2-sb-fix5,results/aq2-sb-fix2', '--concurrency', '6'], 'results/aq2-sb-fix5'],
