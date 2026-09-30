@@ -508,6 +508,26 @@ function gapHandling(heardQuestion: boolean, hint = ''): string {
     + `that it is not established by any available source${hint}. Otherwise ${spoken}`;
 }
 
+/**
+ * NO PRODUCT MATERIAL (2026-09-30, external judge on the dev set). With no
+ * material attached, 13 of 38 Sales answers were capped for inventing the
+ * product: "$412 per seat" for "How much?", "how the ServiceTitan integration
+ * works", "HVAC is a big part of who we work with", a price lock and volume
+ * pricing. The no-material notice named "the user, the job, the meeting or a
+ * document" and never the product or company. Replayed with this clause and
+ * judged externally, those 11 items went from 4.00 (every one capped) to 6.51.
+ * Single-turn capability questions ("what does it do day to day?") still
+ * resist — a limit of the generator, not of this text.
+ */
+const PRODUCT_FACT_MODES: ReadonlySet<string> = new Set(['sales', 'call-center']);
+export const NO_PRODUCT_MATERIAL_CLAUSE = 'Nothing here describes your product or company either, so state none of it as fact: no price, discount, '
+  + 'refund, credit, pricing mechanism (volume or multi-year pricing, tiers), feature, integration, industry fit, customer base, result, ROI, timeline, guarantee, '
+  + 'SLA or contract term, and no promise to lock, waive or match anything. Do not imply one either: say "whether we connect to it", never "how the '
+  + 'integration works"; never "we work with companies like yours". The user (the seller or agent) knows those facts; you do not. Shapes that work: ask the discovery '
+  + 'question that would let them answer precisely ("Before I put a number on it, how many people would be using it?"); make value conditional on '
+  + 'what the other person said ("If the handoffs are where the time goes, that\'s the part worth testing"); offer to confirm specifics and name '
+  + 'the next step ("Let me confirm exactly what fits your setup and walk you through it Thursday."). ';
+
 function absenceNoticeBody(
   d: Readonly<TurnDecision>,
   attachedSourceCount?: number,
@@ -600,6 +620,7 @@ function absenceNoticeBody(
       : '';
     if (generalKnowledgeAllowed) {
       return '# Evidence\nNo reference material is attached to the active mode, so nothing was searched. '
+        + (PRODUCT_FACT_MODES.has(d.modeId) ? NO_PRODUCT_MATERIAL_CLAUSE : '')
         + 'Answer the question itself helpfully from general knowledge; a question addressed to the user gets their own first-person words, never advice about how to answer it. Do not invent source-specific facts: state '
         + 'nothing as a fact about the user, the job, the meeting or a document, and do NOT say a résumé, job '
         + 'description or document "does not mention" this, because no such file exists here.'

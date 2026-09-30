@@ -92,3 +92,25 @@ describe('a heard question about the user\'s own life, in a mode that never reco
     assert.doesNotMatch(PERSONAL_LIFE_NOTICE, /pineapple|blender|campsite|escrow/i);
   });
 });
+
+describe('no product material: Sales and Call Center state nothing about the product or company', () => {
+  const { NO_PRODUCT_MATERIAL_CLAUSE } = composer;
+  const noMaterial = (modeId) => composePrompt({
+    decision: decide({ requestId: 'r', requestSequence: 1, surface: 'what-to-answer', modeId, scope: { userId: 'local' }, sessionId: 's', transcriptQuestion: 'How much?' }),
+    policy: resolveModePolicy(modeId), evidence: [], heardQuestion: true, attachedSourceCount: 0,
+  }).user;
+  for (const modeId of ['sales', 'call-center']) test(`${modeId}: clause present when nothing is attached`, () => {
+    const u = noMaterial(modeId);
+    if (u.includes('No reference material is attached to the active mode')) assert.ok(u.includes(NO_PRODUCT_MATERIAL_CLAUSE));
+  });
+  for (const modeId of ['general', 'team-meet', 'looking-for-work']) test(`${modeId}: no product clause`, () => {
+    assert.ok(!noMaterial(modeId).includes(NO_PRODUCT_MATERIAL_CLAUSE));
+  });
+  test('the clause names prices, integrations, customers and commitments, with neutral examples', () => {
+    assert.match(NO_PRODUCT_MATERIAL_CLAUSE, /price/);
+    assert.match(NO_PRODUCT_MATERIAL_CLAUSE, /integration/);
+    assert.match(NO_PRODUCT_MATERIAL_CLAUSE, /customer base/);
+    assert.match(NO_PRODUCT_MATERIAL_CLAUSE, /lock, waive or match/);
+    assert.doesNotMatch(NO_PRODUCT_MATERIAL_CLAUSE, /ServiceTitan|HVAC|FieldPilot|dispatch/i);
+  });
+});
