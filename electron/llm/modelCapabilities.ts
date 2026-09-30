@@ -91,6 +91,8 @@ function isCloudIdentifier(id: string): boolean {
   if (s === 'natively' || s.startsWith('natively-')) return true;
   if (s.startsWith('gemini-') || s.startsWith('models/gemini')) return true;
   if (s.startsWith('gpt-') || s.startsWith('o1-') || s.startsWith('o3-') || s.startsWith('o4-') || s.startsWith('chatgpt-')) return true;
+  // Bare `o1` / `o3`: OpenAI's own ids, which the `o1-` prefixes above miss.
+  if (/^o[1-9]$/.test(s)) return true;
   if (s.startsWith('claude-')) return true;
   // DeepSeek cloud API (OpenAI-compatible). The local Ollama "deepseek-coder"
   // family is handled by the isOllama branch above.
@@ -132,7 +134,7 @@ function isLargeGroqModel(id: string): boolean {
 // silently re-armed the "Groq vision refused" bug).
 import { groqSupportsImages } from './groqModels';
 import { isDeepseekModelId } from './deepseekModels';
-import { modelNameSuggestsVision } from './visionCapability';
+import { isOllamaVisionModelByName, modelNameSuggestsVision } from './visionCapability';
 
 // Parse parameter size from an Ollama model id like "llama3.1:8b" or "qwen2.5-coder:14b".
 // Returns the size in billions of parameters, or null if not detected.
@@ -148,11 +150,15 @@ export function parseOllamaSize(id: string): number | null {
   return null;
 }
 
-// Vision-capable Ollama families.
-function ollamaSupportsImages(id: string): boolean {
-  const s = id.toLowerCase();
-  return /llava|bakllava|moondream|llama3\.2-vision|llama-3\.2-vision|gemma3|minicpm-v|qwen2\.5-vl|qwen2-vl|pixtral/.test(s);
-}
+/**
+ * OpenAI models outside the gpt-4o / 4.1 / 5 / 6 families that read images.
+ * Verified 2026-10-01: OpenAI's model pages ("text and image inputs") for o1,
+ * o1-pro, o3 and o4-mini; OpenRouter's input_modalities for o3-pro,
+ * o4-mini-high and gpt-4-turbo. Left out on purpose: o1-mini, o1-preview and
+ * o3-mini (text-only); gpt-4 and gpt-4-turbo-preview (the preview alias
+ * predates vision); chatgpt-4o-latest and gpt-4.5 (not verified).
+ */
+const OPENAI_VISION_EXTRA_RE = /^(?:o[13](?:-pro)?|o4-mini(?:-high)?|gpt-4-turbo)(?:-\d{4}-\d{2}-\d{2})?$/;
 
 /**
  * DeepSeek Flash reached THROUGH AGENTROUTER reads images; measured 2026-09-30:
@@ -175,7 +181,9 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
   // `name` keeps the original so UI and log lines still say which route it came
   // from. Ollama ids are never prefixed, so this is a no-op on that branch.
   const id = stripProviderRoutingPrefix(modelId || '');
-  const lower = id.toLowerCase();
+  // `models/gemini-2.5-flash` is Gemini's own listing form of `gemini-2.5-flash`
+  // (isCloudIdentifier already accepts it), so every rule below sees it bare.
+  const lower = id.toLowerCase().replace(/^models\//, '');
   const displayId = modelId || '';
   // A gateway fronts an arbitrary upstream, so the family lists below can only
   // recognise the subset whose bare name happens to be a known cloud model. For
@@ -212,7 +220,7 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
       promptBudgetTokens: b.system,
       outputBudgetTokens: b.output,
       supportsXmlTags: tier === 'local-large',
-      supportsImages: ollamaSupportsImages(id),
+      supportsImages: isOllamaVisionModelByName(id),
       name: displayId || 'ollama',
     };
   }
@@ -225,6 +233,7 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
       // (gpt-6-astra, "Order #7392 — Total $148.60"). Without this every gpt-6
       // model resolved text-only, so a screenshot was never sent to it.
       || lower.startsWith('gpt-6')
+      || OPENAI_VISION_EXTRA_RE.test(lower)
       || lower === 'natively' || lower.startsWith('natively-')
       || agentRouterDeepseekReadsImages(modelId, lower)
       || gatewayVisionHint;

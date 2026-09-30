@@ -100,7 +100,17 @@ const lastSegment = (key) => key.split('|')[2].split('/').pop().toLowerCase();
  * one of these, and every rule must still match something: a rule that matches
  * nothing is stale, and a stale rule is where the next surprise hides.
  */
-const INTENDED = [];
+const OPENAI_EXTRA = /^(?:o[13](?:-pro)?|o4-mini(?:-high)?|gpt-4-turbo)(?:-\d{4}-\d{2}-\d{2})?$/;
+// The Ollama families the drifted copy in modelCapabilities.ts lacked.
+const OLLAMA_NEWLY_LISTED = /llama-?4|qwen[0-9.]*-?vl|granite3\.2-vision|mistral-small3\.1|llama-?guard3-vision/;
+const INTENDED = [
+  { why: 'OpenAI o1/o1-pro/o3/o3-pro/o4-mini/gpt-4-turbo read images (verified 2026-10-01)',
+    match: (k) => OPENAI_EXTRA.test(lastSegment(k)) },
+  { why: "Gemini's `models/` listing form reads like the bare id",
+    match: (k) => k.split('|')[2].startsWith('models/gemini-') },
+  { why: 'one Ollama list: the shared list covers families the drifted copy lacked (incl. the no-dash qwen2.5vl)',
+    match: (k) => k.split('|')[1] === 'ollama' && OLLAMA_NEWLY_LISTED.test(k.split('|')[2].toLowerCase()) },
+];
 
 test('the corpus is the real one', () => {
   assert.ok(fixture.openrouter.length > 300, 'OpenRouter catalogue');
