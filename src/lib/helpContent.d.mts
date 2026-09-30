@@ -25,7 +25,8 @@ export interface HelpRowCopy {
 export function getRowCopy(platform: HelpPlatform): HelpRowCopy;
 
 export type HelpClipId =
-  | 'answer' | 'permissions' | 'speech' | 'model' | 'stealth' | 'verify' | 'sync' | 'modes' | 'profile' | 'notes' | 'search';
+  | 'answer' | 'autoanswer' | 'permissions' | 'speech' | 'model' | 'retrieval' | 'stealth' | 'verify' | 'sync'
+  | 'phone' | 'modes' | 'profile' | 'notes' | 'followup' | 'search';
 
 export declare const HELP_CLIP_IDS: readonly HelpClipId[];
 
@@ -44,6 +45,8 @@ export interface HelpPlatformFacts {
   shortcutGuard: boolean;
   pythonCommand: string;
   sqliteBundled: boolean;
+  /** A platform condition on Calendar › Detect meetings, or null when there is none to state. */
+  meetingDetection: string | null;
   clips: Record<HelpClipId, boolean>;
 }
 

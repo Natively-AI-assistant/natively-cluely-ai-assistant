@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
-    ArrowRight, AudioLines, Check, Code, Crop, Eye, FileText, FlaskConical, Ghost, Info, Keyboard, LayoutGrid,
-    MessageSquareText, MonitorUp, Move, PanelTop, PointerOff, ShieldCheck, Smartphone, TriangleAlert,
-    UserRound,
+    ArrowRight, AudioLines, CalendarCheck, Check, Code, Crop, Eye, FileText, FlaskConical, Ghost, Info, Keyboard,
+    LayoutGrid, ListOrdered, MessageSquareText, MonitorUp, MousePointerClick, Move, PanelTop, PointerOff, ShieldCheck,
+    Smartphone, TriangleAlert, UserRound,
 } from 'lucide-react';
+import { AutoAnswerIcon } from '../AutoAnswerIcon';
 import { useT } from '../../i18n';
 import { useShortcuts, type ShortcutConfig } from '../../hooks/useShortcuts';
 import { isMac, isWindows } from '../../utils/platformUtils';
@@ -281,8 +282,12 @@ const HelpPane: React.FC<{
     /** A guide's recording, when this platform may be shown it. */
     const clip = (id: keyof typeof HELP_CLIPS): HelpClipEntry | null => (facts.clips[id] ? HELP_CLIPS[id] : null);
     const answerClip = clip('answer');
+    const autoAnswerClip = clip('autoanswer');
     const speechClip = clip('speech');
     const modelClip = clip('model');
+    const retrievalClip = clip('retrieval');
+    const phoneClip = clip('phone');
+    const followupClip = clip('followup');
     const modesClip = clip('modes');
     const profileClip = clip('profile');
     const stealthClip = clip('stealth');
@@ -409,6 +414,9 @@ const HelpPane: React.FC<{
                     <SettingsRow icon={<MessageSquareText size={20} />} title={t('What to answer?')}
                         description={t('Answers the last thing said, with any screenshots you attached.')}
                         control={<HelpKeys keys={shortcuts.whatToAnswer ?? []} />} />
+                    <SettingsRow icon={<MousePointerClick size={20} />} title={t('Use a suggestion')}
+                        description={t('Takes the suggestion showing at the top of the overlay.')}
+                        control={<HelpKeys keys={shortcuts.acceptSuggestion ?? []} />} />
                     <SettingsRow icon={<MonitorUp size={20} />} title={t('Capture screen & ask AI')}
                         description={t('Screenshots your whole screen and answers about it.')}
                         control={<HelpKeys keys={shortcuts.captureAndProcess ?? []} />} />
@@ -426,7 +434,7 @@ const HelpPane: React.FC<{
                         control={onNavigate && <GoButton label={t('Keybinds')} onClick={go('keybinds')} />} />
                 </div>
                 <SettingsFootnote icon={<Info size={13} />}>
-                    {t('What to answer? and moving the overlay only work while a meeting is running.')}
+                    {t('What to answer?, suggestions and moving the overlay only work while a meeting is running.')}
                     {facts.shortcutGuard && (
                         <> {t('Protect Natively shortcuts, in General, stops them from also typing into the app underneath.')}</>
                     )}
@@ -556,10 +564,31 @@ const HelpPane: React.FC<{
                                 { title: 'Mouse passthrough', body: 'Lets clicks go through to the app behind.' },
                             ]}
                         />
-                        <p>Turn on Auto Answer in <HelpPath parts={['General']} /> and answers appear as soon as the interviewer finishes a question.</p>
+                        <p>
+                            A suggestion can appear at the top of the overlay, one at a time, such as Suggest response or Solve coding
+                            problem. Click it or press {keys('acceptSuggestion')}. Screenshots you take wait in a tray above the ask box
+                            until you ask.
+                        </p>
                         <SettingsNotice tone={tones.warn} icon={<TriangleAlert size={14} />} className="mb-0">
                             With mouse passthrough on, the overlay can't be clicked. Press {keys('toggleMousePassthrough')} to turn it off.
                         </SettingsNotice>
+                    </HelpGuideRow>
+
+                    {/* Auto Answer */}
+                    <HelpGuideRow
+                        icon={<AutoAnswerIcon size={20} />}
+                        title={t('Auto Answer')}
+                        description={t('Answers as soon as the interviewer finishes a question.')}
+                    >
+                        {autoAnswerClip && <HelpClip clip={autoAnswerClip} label={autoAnswerClip.label} />}
+                        <p>
+                            Turn it on in <HelpPath parts={['General']} />, where it is marked Beta. Each question is answered when it ends,
+                            with nothing to press, and questions meant for someone else in the call are skipped.
+                        </p>
+                        <p>
+                            Auto Answer runs on the Background Model, in <HelpPath parts={['AI Providers']} />. What to answer? still works
+                            for anything it didn't answer.
+                        </p>
                     </HelpGuideRow>
 
                     {/* Meetings and search */}
@@ -574,14 +603,46 @@ const HelpPane: React.FC<{
                             <p>Open a meeting from the Launcher: Summary holds its notes, Transcript what was said, Usage what you asked.</p>
                         )}
                         <p>
-                            Notes are written by Natively API, Groq, Gemini, a Codex or Antigravity sign-in, your own endpoint, or Ollama when
-                            it is your model. With only an OpenAI, Claude, DeepSeek or OpenRouter key, the Summary says Notes couldn't be generated.
+                            Notes and follow-up emails are written by Natively API, Groq, Gemini, a Codex or Antigravity sign-in, your own
+                            endpoint, or Ollama when it is your model. With only another cloud key, such as OpenAI, Claude, DeepSeek or
+                            OpenRouter, the Summary says Notes couldn't be generated. Usage lists what you asked during the meeting.
+                        </p>
+                        <HelpSubhead>Follow-up email</HelpSubhead>
+                        {followupClip && <HelpClip clip={followupClip} label={followupClip.label} />}
+                        <p>
+                            Under the notes, Generate writes an email from them; change its tone or copy it. When the meeting is linked to a
+                            calendar event, its attendees fill To: and Open in Gmail starts the email there.
                         </p>
                         <HelpSubhead>Find it again</HelpSubhead>
                         {searchClip && <HelpClip clip={searchClip} label={searchClip.label} />}
                         <p>
                             <HelpKeys inline keys={[facts.modifierKey, 'K']} /> opens search in the Launcher and finds a meeting by its title;
                             Enter asks AI instead. To keep nothing, turn on Do not save meetings in <HelpPath parts={['General']} />.
+                        </p>
+                    </HelpGuideRow>
+
+                    {/* Calendar */}
+                    <HelpGuideRow
+                        icon={<CalendarCheck size={20} />}
+                        title={t('Calendar')}
+                        description={t('Your next meetings, and notes that know which meeting they were.')}
+                    >
+                        <HelpSteps
+                            steps={[
+                                <>In <HelpPath parts={['Calendar']} />, press Connect Google Calendar and sign in. Natively only reads your events.</>,
+                                'Your next meetings appear there and on the Launcher. In Calendar, from 15 minutes before one starts, its Start Natively button starts a session linked to it.',
+                                "A linked session takes the event's title and attendees. Your voice is labelled with your first name, and in a one-to-one the other person's is too.",
+                            ]}
+                        />
+                        <p>
+                            To change the link, use the calendar button next to Copy on a meeting's notes, and pick the event or Not a calendar
+                            meeting.
+                        </p>
+                        <HelpSubhead>Detect meetings</HelpSubhead>
+                        <p>
+                            On by default, in <HelpPath parts={['Calendar']} />, with or without a calendar: when a Zoom, Teams, Meet or Webex
+                            call starts, a notification offers to start Natively. It stays quiet while Undetectable is on.
+                            {facts.meetingDetection && <> {facts.meetingDetection}</>}
                         </p>
                     </HelpGuideRow>
 
@@ -619,6 +680,28 @@ const HelpPane: React.FC<{
                         </p>
                     </HelpGuideRow>
 
+                    {/* Embeddings and rerankers */}
+                    <HelpGuideRow
+                        icon={<ListOrdered size={20} />}
+                        title={t('Embeddings and rerankers')}
+                        description={t('How Natively finds the right passage in your documents.')}
+                    >
+                        {retrievalClip && <HelpClip clip={retrievalClip} label={retrievalClip.label} />}
+                        <p>
+                            When you ask, the embedding model finds candidate passages in your documents, such as a mode's reference files,
+                            and the reranker picks the ones that answer. Choose both in <HelpPath parts={['Retrieval']} />, separately from
+                            your AI model.
+                        </p>
+                        <HelpDefinitions
+                            items={[
+                                { term: 'Hosted', detail: 'Providers such as Natively API, Voyage AI, OpenAI or Jina AI. The text being searched is sent to that provider.' },
+                                { term: 'On this device', detail: 'Local Embeddings and Local Reranker come with Natively; more models download from Hugging Face. Nothing leaves this computer.' },
+                                { term: 'Fall back to the local reranker', detail: 'If a hosted reranker fails, reranking happens on this device instead.' },
+                            ]}
+                        />
+                        <p>Changing the embedding model re-indexes your files.</p>
+                    </HelpGuideRow>
+
                     {/* Staying invisible */}
                     <HelpGuideRow
                         icon={<Ghost size={20} />}
@@ -627,8 +710,9 @@ const HelpPane: React.FC<{
                     >
                         {stealthClip && <HelpClip clip={stealthClip} label={stealthClip.label} />}
                         <p>
-                            Turn on the Detectable switch in <HelpPath parts={['General']} />; it then reads Undetectable. Natively's windows stay
-                            out of screen shares and recordings, and {facts.undetectable.hides} is hidden. {facts.undetectable.caveat}
+                            Turn on the Detectable switch in <HelpPath parts={['General']} />; it then reads Undetectable. Natively asks the
+                            system to keep its windows out of screen shares and recordings, and hides {facts.undetectable.hides}.
+                            {' '}{facts.undetectable.caveat}
                         </p>
                         <p>
                             Process Disguise makes Natively look like {facts.disguises.join(', ').replace(/, ([^,]*)$/, ' or $1')} while
@@ -661,8 +745,15 @@ const HelpPane: React.FC<{
                     <HelpGuideRow
                         icon={<Smartphone size={20} />}
                         title={t('Phone and browser')}
-                        description={t('Follow answers on your phone and send web pages to Natively.')}
+                        description={t('The overlay on your phone, and web pages sent to Natively.')}
                     >
+                        {phoneClip && <HelpClip clip={phoneClip} label={phoneClip.label} />}
+                        <p>
+                            Phone Mirror shows the live transcript and each answer as it is written, with the overlay's buttons: tap What to Say
+                            for an answer, ask in the text box, or send a photo or screenshot from the phone. Clearing the screen there clears
+                            only the phone.
+                        </p>
+                        <HelpSubhead>Pair a phone</HelpSubhead>
                         {syncClip ? (
                             <HelpClip clip={syncClip} label={syncClip.label} />
                         ) : (

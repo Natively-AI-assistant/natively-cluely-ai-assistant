@@ -139,14 +139,19 @@ describe('platform facts', () => {
 
   test('Windows never gets a recording with something macOS-only in it', () => {
     // ⌘ keycaps (overlay, Sync's extension row), Apple Speech, macOS disguise
-    // names, and the Screen Recording permission.
-    for (const id of ['answer', 'permissions', 'speech', 'stealth', 'sync']) {
+    // names, the Screen Recording permission, and Retrieval's "this Mac" cards.
+    for (const id of ['answer', 'autoanswer', 'permissions', 'speech', 'retrieval', 'stealth', 'sync']) {
       assert.equal(win.clips[id], false, id);
     }
     // Nothing platform-specific in these.
-    for (const id of ['model', 'verify', 'modes', 'profile', 'notes', 'search']) {
+    for (const id of ['model', 'verify', 'phone', 'modes', 'profile', 'notes', 'followup', 'search']) {
       assert.equal(win.clips[id], true, id);
     }
+  });
+
+  test('meeting detection states the older-macOS condition, and nothing it cannot back on Windows', () => {
+    assert.match(mac.meetingDetection, /macOS 13 and earlier/);
+    assert.equal(win.meetingDetection, null);
   });
 
   test('both platforms return the same shape (contract drift guard)', () => {
