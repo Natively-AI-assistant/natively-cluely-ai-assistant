@@ -5,6 +5,7 @@
 import type { HelpClipSource } from './HelpParts';
 import answerDark from '../../../assets/help/answer-dark.webm';
 import autoanswerDark from '../../../assets/help/autoanswer-dark.webm';
+import overlayDark from '../../../assets/help/overlay-dark.webm';
 import speechDark from '../../../assets/help/speech-dark.webm';
 import speechLight from '../../../assets/help/speech-light.webm';
 import modelDark from '../../../assets/help/model-dark.webm';
@@ -25,6 +26,8 @@ import profileLight from '../../../assets/help/profile-light.webm';
 import notesDark from '../../../assets/help/notes-dark.webm';
 import notesLight from '../../../assets/help/notes-light.webm';
 import followupDark from '../../../assets/help/followup-dark.webm';
+import calendarDark from '../../../assets/help/calendar-dark.webm';
+import calendarLight from '../../../assets/help/calendar-light.webm';
 import searchDark from '../../../assets/help/search-dark.webm';
 import searchLight from '../../../assets/help/search-light.webm';
 import permissionsCardDark from '../../../assets/help/permissions-card-dark.webp';
@@ -46,6 +49,11 @@ export const HELP_CLIPS = {
   autoanswer: {
     label: "The overlay with Auto Answer on: the interviewer asks about pushing back on a deadline, and an answer appears on its own when the question ends.",
     dark: { src: autoanswerDark, size: [972, 766], duration: 14.33, chapters: [{ at: 0.6, label: "They ask a question" }, { at: 8.75, label: "The answer appears" }] },
+  },
+  // The overlay and its quick settings popup (a separate window), over a plain backdrop.
+  overlay: {
+    label: "The overlay during a meeting: a question is typed into the ask box and answered, then the quick settings button opens Detectable, Fast Response, Transcript and Interview Mode.",
+    dark: { src: overlayDark, size: [972, 892], duration: 15.67, chapters: [{ at: 0.6, label: "Type a question" }, { at: 8.65, label: "Quick settings" }] },
   },
   speech: {
     label: "Settings, Audio: the Speech Provider list opens, Deepgram is picked (its saved key shows as dots), then Language is set to English.",
@@ -101,6 +109,12 @@ export const HELP_CLIPS = {
   followup: {
     label: "A meeting's notes: Generate under Follow-up email writes a draft with a subject line, a tone menu and Copy.",
     dark: { src: followupDark, size: [972, 778], duration: 17.07, chapters: [{ at: 0.6, label: "Find Follow-up email" }, { at: 3.2, label: "Press Generate" }, { at: 9.41, label: "Copy or change tone" }] },
+  },
+  // A demo week (example.com people), served to the recording instance in memory.
+  calendar: {
+    label: "Settings, Calendar: Connect Google Calendar links a demo account, the week's meetings appear by day, Start Natively shows on the meeting about to begin, then Detect meetings.",
+    dark: { src: calendarDark, size: [972, 866], duration: 21.3, chapters: [{ at: 0.6, label: "Connect it" }, { at: 5.76, label: "See your week" }, { at: 10.38, label: "Start a meeting" }, { at: 14.56, label: "Detect meetings" }] },
+    light: { src: calendarLight, size: [972, 866], duration: 21.27, chapters: [{ at: 0.6, label: "Connect it" }, { at: 5.75, label: "See your week" }, { at: 10.32, label: "Start a meeting" }, { at: 14.52, label: "Detect meetings" }] },
   },
   search: {
     label: "The Launcher: the search bar opens, typing part of a title finds a past meeting, and choosing it opens its notes.",

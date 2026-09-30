@@ -37,6 +37,7 @@
 // misleading (Settings › General there also lists Protect Natively shortcuts).
 //   answer        the overlay answering a spoken question; ⌘ ⇧ H keycaps → macOS
 //   autoanswer    the overlay answering on its own; same ⌘ ⇧ H keycaps → macOS
+//   overlay       a typed question and the quick settings popup; ⌘ keycaps → macOS
 //   permissions   the permissions card, which lists Screen Recording → macOS
 //   speech        Audio's provider list, which includes Apple Speech → macOS
 //   model         AI Providers' Active Model menu → both
@@ -50,6 +51,7 @@
 //   profile       Launcher › Profile Intelligence → both
 //   notes         Launcher › a meeting's notes, transcript and Ask → both
 //   followup      a meeting's Follow-up email being written → both
+//   calendar      Settings › Calendar connecting a demo week, and Detect meetings → both
 //   search        Launcher search finding a meeting (its step says "Open
 //                 search", not a key) → both
 
@@ -59,8 +61,8 @@ export const HELP_PLATFORMS = /** @type {const} */ (['darwin', 'win32']);
 
 /** Every recording the pane can show, in the order the guides use them. */
 export const HELP_CLIP_IDS = /** @type {const} */ ([
-  'answer', 'autoanswer', 'permissions', 'speech', 'model', 'retrieval', 'stealth', 'verify', 'sync', 'phone',
-  'modes', 'profile', 'notes', 'followup', 'search',
+  'answer', 'autoanswer', 'overlay', 'permissions', 'speech', 'model', 'retrieval', 'stealth', 'verify', 'sync', 'phone',
+  'modes', 'profile', 'notes', 'followup', 'calendar', 'search',
 ]);
 
 /** @param {unknown} platform @returns {platform is HelpPlatform} */
@@ -180,9 +182,9 @@ export function getPlatformFacts(platform) {
         // (detectMeeting.ts, micUsers === null).
         meetingDetection: 'On macOS 13 and earlier it needs the browser extension.',
         clips: {
-          answer: true, autoanswer: true, permissions: true, speech: true, model: true, retrieval: true,
-          stealth: true, verify: true, sync: true, phone: true, modes: true, profile: true, notes: true,
-          followup: true, search: true,
+          answer: true, autoanswer: true, overlay: true, permissions: true, speech: true, model: true,
+          retrieval: true, stealth: true, verify: true, sync: true, phone: true, modes: true, profile: true,
+          notes: true, followup: true, calendar: true, search: true,
         },
       };
     case 'win32':
@@ -211,9 +213,9 @@ export function getPlatformFacts(platform) {
         meetingDetection: null,
         // Nothing has been recorded on Windows; see `clips` above.
         clips: {
-          answer: false, autoanswer: false, permissions: false, speech: false, model: true, retrieval: false,
-          stealth: false, verify: true, sync: false, phone: true, modes: true, profile: true, notes: true,
-          followup: true, search: true,
+          answer: false, autoanswer: false, overlay: false, permissions: false, speech: false, model: true,
+          retrieval: false, stealth: false, verify: true, sync: false, phone: true, modes: true, profile: true,
+          notes: true, followup: true, calendar: true, search: true,
         },
       };
   }

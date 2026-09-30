@@ -283,6 +283,8 @@ const HelpPane: React.FC<{
     const clip = (id: keyof typeof HELP_CLIPS): HelpClipEntry | null => (facts.clips[id] ? HELP_CLIPS[id] : null);
     const answerClip = clip('answer');
     const autoAnswerClip = clip('autoanswer');
+    const overlayClip = clip('overlay');
+    const calendarClip = clip('calendar');
     const speechClip = clip('speech');
     const modelClip = clip('model');
     const retrievalClip = clip('retrieval');
@@ -550,6 +552,7 @@ const HelpPane: React.FC<{
 
                     {/* The overlay */}
                     <HelpGuideRow icon={<PanelTop size={20} />} title={t('The overlay')} description={t('Every button on the overlay, and the pill above it.')}>
+                        {overlayClip && <HelpClip clip={overlayClip} label={overlayClip.label} />}
                         <HelpFigure>
                             <OverlayAnatomyFigure />
                         </HelpFigure>
@@ -627,6 +630,7 @@ const HelpPane: React.FC<{
                         title={t('Calendar')}
                         description={t('Your next meetings, and notes that know which meeting they were.')}
                     >
+                        {calendarClip && <HelpClip clip={calendarClip} label={calendarClip.label} />}
                         <HelpSteps
                             steps={[
                                 <>In <HelpPath parts={['Calendar']} />, press Connect Google Calendar and sign in. Natively only reads your events.</>,

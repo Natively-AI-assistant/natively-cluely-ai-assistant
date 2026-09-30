@@ -140,11 +140,11 @@ describe('platform facts', () => {
   test('Windows never gets a recording with something macOS-only in it', () => {
     // ⌘ keycaps (overlay, Sync's extension row), Apple Speech, macOS disguise
     // names, the Screen Recording permission, and Retrieval's "this Mac" cards.
-    for (const id of ['answer', 'autoanswer', 'permissions', 'speech', 'retrieval', 'stealth', 'sync']) {
+    for (const id of ['answer', 'autoanswer', 'overlay', 'permissions', 'speech', 'retrieval', 'stealth', 'sync']) {
       assert.equal(win.clips[id], false, id);
     }
     // Nothing platform-specific in these.
-    for (const id of ['model', 'verify', 'phone', 'modes', 'profile', 'notes', 'followup', 'search']) {
+    for (const id of ['model', 'verify', 'phone', 'modes', 'profile', 'notes', 'followup', 'calendar', 'search']) {
       assert.equal(win.clips[id], true, id);
     }
   });

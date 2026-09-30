@@ -25,8 +25,8 @@ export interface HelpRowCopy {
 export function getRowCopy(platform: HelpPlatform): HelpRowCopy;
 
 export type HelpClipId =
-  | 'answer' | 'autoanswer' | 'permissions' | 'speech' | 'model' | 'retrieval' | 'stealth' | 'verify' | 'sync'
-  | 'phone' | 'modes' | 'profile' | 'notes' | 'followup' | 'search';
+  | 'answer' | 'autoanswer' | 'overlay' | 'permissions' | 'speech' | 'model' | 'retrieval' | 'stealth' | 'verify'
+  | 'sync' | 'phone' | 'modes' | 'profile' | 'notes' | 'followup' | 'calendar' | 'search';
 
 export declare const HELP_CLIP_IDS: readonly HelpClipId[];
 
