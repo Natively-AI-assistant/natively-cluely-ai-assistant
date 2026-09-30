@@ -3,20 +3,30 @@
 //   dev.json      <- dev/*.json
 //   holdout.json  <- holdout/*.json
 //   final.json    <- the v1 frozen 848 (unchanged) + final/general.json + final/*-hard.json
+//   supp-quant.json <- supp-quant/*.json (supplementary arithmetic partition; only built when named)
+//   supp-behavior.json <- supp-behavior/*.json (supplementary realtime-behaviour partition; only built when named)
 // Validates references, chains, PI ids and that every needle occurs verbatim in the material it came from.
-//   node build.mjs [dev|holdout|final ...] [--check]   (--check: validate only, write nothing)
+//   node build.mjs [dev|holdout|final|supp-quant|supp-behavior ...] [--check]
+//   (--check: validate only, write nothing; also recomputes each partition's hash and compares it with the frozen file)
+//   NATIVELY_V1_QUESTIONS=<path> overrides where the gitignored v1 848-item file is read from (e.g. from a worktree).
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const V1 = path.join(HERE, '..', '..', 'natively-answer-baseline', 'dataset', 'natively_benchmark_questions.json');
+const V1 = process.env.NATIVELY_V1_QUESTIONS
+  ? path.resolve(process.env.NATIVELY_V1_QUESTIONS)
+  : path.join(HERE, '..', '..', 'natively-answer-baseline', 'dataset', 'natively_benchmark_questions.json');
 const sha256 = (s) => crypto.createHash('sha256').update(s ?? '', 'utf8').digest('hex');
 const args = process.argv.slice(2);
 const CHECK = args.includes('--check');
 const parts = args.filter(a => !a.startsWith('--'));
 const WANT = parts.length ? parts : ['dev', 'holdout', 'final'];
+// Supplementary partitions: key -> source directory under dataset/. Built only when named; never part of the default build.
+const SUPPLEMENTARY = { 'supp-quant': 'supp-quant', 'supp-behavior': 'supp-behavior' };
+const PARTITIONS = new Set(['dev', 'holdout', 'final', ...Object.keys(SUPPLEMENTARY)]);
+for (const p of WANT) if (!PARTITIONS.has(p)) { console.error(`unknown partition ${p} (known: ${[...PARTITIONS].join(', ')})`); process.exit(2); }
 
 const MODES = [
   { key: 'general', name: 'General' }, { key: 'sales', name: 'Sales' }, { key: 'recruiting', name: 'Recruiting' },
@@ -134,8 +144,10 @@ for (const part of WANT) {
     ds = { contexts: { ...Object.fromEntries(Object.entries(v1.contexts).map(([k, c]) => [k, { ...c }])), ...extra.contexts }, items: [...frozen, ...extra.items] };
     extra.problems.forEach(p => console.log('  source problem:', p));
   } else {
-    const c = compileSources(loadSources(part), part);
+    const srcDir = SUPPLEMENTARY[part] ?? part;
+    const c = compileSources(loadSources(srcDir), part);
     c.problems.forEach(p => console.log('  source problem:', p));
+    if (SUPPLEMENTARY[part] && !c.items.length) { failed = true; console.log(`\n== ${part}: no source items in ${srcDir}/, nothing built`); continue; }
     ds = { contexts: c.contexts, items: c.items };
   }
   const problems = validate(ds);
@@ -145,6 +157,11 @@ for (const part of WANT) {
     const out = freeze(`natively-answer-quality-${part}`, part, ds);
     fs.writeFileSync(path.join(HERE, `${part}.json`), JSON.stringify(out, null, 1));
     console.log(`  wrote ${part}.json sha256 ${out.dataset_sha256.slice(0, 12)}`);
+  } else {
+    const out = freeze(`natively-answer-quality-${part}`, part, ds);
+    const file = path.join(HERE, `${part}.json`);
+    const frozen = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).dataset_sha256 : null;
+    console.log(`  rebuilt sha256 ${out.dataset_sha256.slice(0, 12)} vs frozen ${frozen ? frozen.slice(0, 12) : '(no file)'}: ${frozen === out.dataset_sha256 ? 'UNCHANGED' : 'DIFFERS'}`);
   }
 }
 process.exit(failed && CHECK ? 1 : 0);
