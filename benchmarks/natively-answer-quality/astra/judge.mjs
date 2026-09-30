@@ -13,6 +13,7 @@ import { chat, limiter, JUDGE_MODEL, assertProbeOk, scrub } from './client.mjs';
 import { buildEnvelope, answerOf } from './envelope.mjs';
 import { officialScore, DIMENSIONS, FLAGS } from './score.mjs';
 import { validate } from '../validators/index.mjs';
+import { samplePerMode } from './sample.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -87,6 +88,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const runs = String(opt('runs', '')).split(',').filter(Boolean).map((r) => path.resolve(ROOT, r));
   const ids = opt('ids') ? new Set(String(opt('ids')).split(',')) : null;
   const modes = opt('mode') ? new Set(String(opt('mode')).split(',')) : null;
+  const sample = opt('sample') ? Number(opt('sample')) : null;
   const repeats = Number(opt('repeat', 1));
   const conc = Number(opt('concurrency', 3));
   if (!opt('dry')) { try { assertProbeOk(); } catch (e) { console.error(String(e.message)); process.exit(2); } }
@@ -98,9 +100,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const outFile = path.join(outDir, `${run.header.run_id}.jsonl`);
     const done = new Set(readJsonl(outFile).filter((j) => j.ok).map((j) => `${j.benchmark_id}#${j.repeat}`));
     const todo = [];
+    const picked = sample ? samplePerMode(run.rows.map((r) => r.benchmark_id).filter((id) => run.items[id]), (id) => run.items[id].mode, sample) : null;
     for (const row of run.rows) {
       const it = run.items[row.benchmark_id];
-      if (!it || (ids && !ids.has(row.benchmark_id)) || (modes && !modes.has(it.mode))) continue;
+      if (!it || (ids && !ids.has(row.benchmark_id)) || (modes && !modes.has(it.mode)) || (picked && !picked.has(row.benchmark_id))) continue;
       for (let k = 0; k < repeats; k++) if (!done.has(`${row.benchmark_id}#${k}`)) todo.push([row, k]);
     }
     console.log(`${run.header.run_id}: ${todo.length} judgments to do (charter ${CHARTER_VERSION})`);

@@ -19,21 +19,24 @@ const C = String(opt('concurrency', '8'));
 const has = (r) => fs.existsSync(path.join(ROOT, r));
 const I8_MODES = 'looking-for-work,sales,call-center,technical-interview,seminar,general';
 
-// Tier 1: the current candidate on dev + the generator-ceiling replay (the two reads that decide what happens next).
-// Tier 2: the claim verifier in isolation (fix4, its modes) + the flash replay offset for tier 1's pro read.
+// Tier 1: the current candidate on dev + the generator-ceiling read, pro AND its flash control on the SAME 15 items per
+//         mode (astra/sample.mjs) — the ceiling question does not need 2 × 360, and both halves land in one batch.
+// Tier 2: the claim verifier in isolation (fix4 on its modes, 25 per mode).
 // Tier 3: generalisation (holdout, supp-behavior) + the baseline remainder.
 // Tier 4: blind pairwise baseline vs candidate.
+// Tier 5: the full replay / fix4 sets (cached, so only the items outside the samples are new calls).
+// Pool arithmetic (2026-09-30 11:00Z batch ≈ 850 calls): tiers 1–2 ≈ 360 + 270 + 150 = 780.
 const TIERS = [
   [
     ['calibrate', ['astra/calibrate.mjs']],
   ],
   [
     ['abs-dev-fix6', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix6', '--concurrency', C], 'results/aq2-dev-fix6'],
-    ['replay-pro', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-pro.jsonl', '--run', 'results/aq2-dev-fix2', '--concurrency', C], 'results/replay/dev-fix2-pro.jsonl'],
+    ['replay-pro-s15', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-pro.jsonl', '--run', 'results/aq2-dev-fix2', '--sample', '15', '--concurrency', C], 'results/replay/dev-fix2-pro.jsonl'],
+    ['replay-flash-s15', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-flash.jsonl', '--run', 'results/aq2-dev-fix2', '--sample', '15', '--concurrency', C], 'results/replay/dev-fix2-flash.jsonl'],
   ],
   [
-    ['abs-dev-fix4', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix4', '--mode', I8_MODES, '--concurrency', C], 'results/aq2-dev-fix4'],
-    ['replay-flash', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-flash.jsonl', '--run', 'results/aq2-dev-fix2', '--concurrency', C], 'results/replay/dev-fix2-flash.jsonl'],
+    ['abs-dev-fix4-s25', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix4', '--mode', I8_MODES, '--sample', '25', '--concurrency', C], 'results/aq2-dev-fix4'],
   ],
   [
     ['abs-holdout', ['astra/judge.mjs', '--set', 'abs-holdout', '--runs', 'results/aq2-holdout-fix6,results/aq2-holdout-fix2', '--concurrency', C], 'results/aq2-holdout-fix6'],
@@ -42,6 +45,11 @@ const TIERS = [
   ],
   [
     ['ab-dev-cur-vs-fix6', ['astra/ab.mjs', '--set', 'ab-dev-cur-vs-fix6', '--a', 'results/aq2-dev-cur', '--b', 'results/aq2-dev-fix6', '--concurrency', C], 'results/aq2-dev-fix6'],
+  ],
+  [
+    ['abs-dev-fix4', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix4', '--mode', I8_MODES, '--concurrency', C], 'results/aq2-dev-fix4'],
+    ['replay-pro', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-pro.jsonl', '--run', 'results/aq2-dev-fix2', '--concurrency', C], 'results/replay/dev-fix2-pro.jsonl'],
+    ['replay-flash', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-flash.jsonl', '--run', 'results/aq2-dev-fix2', '--concurrency', C], 'results/replay/dev-fix2-flash.jsonl'],
   ],
 ];
 
