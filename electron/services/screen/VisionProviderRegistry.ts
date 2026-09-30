@@ -449,10 +449,10 @@ function fluxion(creds: CredentialsManager, _inputs: VisionProviderBuildInputs):
  * AgentRouter as a vision rung. Fluxion's `isSelected` gate, for Fluxion's
  * reason (bare vendor ids — an ungated rung would look exactly like the user's
  * real Anthropic/OpenAI provider while spending a different account), plus a
- * per-model gate Fluxion does not need: AgentRouter's DeepSeek and gpt-6-astra
- * resolve text-only in the capability table, so a screenshot on them goes to a
- * provider that can see it. Mirrors the seat LLMHelper's streaming vision chain
- * builds (agentRouterModelSupportsVision), so the two cannot disagree.
+ * per-model gate from the capability table, so a model that cannot read images
+ * is never handed a screenshot. All four live models can (measured 2026-09-30).
+ * Mirrors the seat LLMHelper's streaming vision chain builds
+ * (agentRouterModelSupportsVision), so the two cannot disagree.
  */
 function agentrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
   const apiKey = creds.getAgentRouterApiKey?.();

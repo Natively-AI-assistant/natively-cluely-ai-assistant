@@ -145,21 +145,24 @@ describe('the vendor predicates never claim an AgentRouter id', () => {
   });
 });
 
-describe('images go only to a model that reads them', () => {
-  test('the capability gate: Claude reads images, DeepSeek and gpt-6-astra do not', () => {
+describe('screenshots go to the selected AgentRouter model when it reads images', () => {
+  test('the capability gate: all four live models read images; an unknown text model does not', () => {
+    // Measured 2026-09-30: every live AgentRouter model read a test screenshot
+    // correctly. DeepSeek and gpt-6-astra used to resolve text-only, and a
+    // screenshot on the DEFAULT model failed for an AgentRouter-only user.
     const h = Object.create(LLMHelper.prototype);
-    assert.equal(h.agentRouterModelSupportsVision('agentrouter/claude-opus-5'), true);
-    assert.equal(h.agentRouterModelSupportsVision('agentrouter/claude-opus-4-8'), true);
-    assert.equal(h.agentRouterModelSupportsVision('agentrouter/deepseek-v4-flash'), false);
-    assert.equal(h.agentRouterModelSupportsVision('agentrouter/gpt-6-astra'), false);
+    for (const m of ['claude-opus-5', 'claude-opus-4-8', 'deepseek-v4-flash', 'gpt-6-astra']) {
+      assert.equal(h.agentRouterModelSupportsVision(`agentrouter/${m}`), true, m);
+    }
+    assert.equal(h.agentRouterModelSupportsVision('agentrouter/glm-5.3'), false, 'a model with no vision evidence is not handed a screenshot');
   });
 
   // Image turns never reach the text branch above: _streamChatInner hands any
   // turn with screenshots to streamVisionWithFallback and returns. So the
   // vision chain is what gets executed here.
-  async function drainVision(model) {
-    const { h, captured } = makeHelper({ model });
-    Object.assign(h, {
+  function visionHelper(model, opts) {
+    const made = makeHelper({ model, ...opts });
+    Object.assign(made.h, {
       modelVersionManager: { getAllVisionTiers: () => [] },
       codexCliConfig: { enabled: false },
       isCodexAvailable: () => false,
@@ -167,6 +170,10 @@ describe('images go only to a model that reads them', () => {
       hasNatively: () => false,
       nativelyKey: null,
     });
+    return made;
+  }
+  async function drainVision(model, opts) {
+    const { h, captured } = visionHelper(model, opts);
     let error = null;
     try {
       for await (const _ of h.streamVisionWithFallback({ userContent: 'u', message: 'm', imagePaths: ['/tmp/x.png'], systemPrompt: 's' })) { /* drain */ }
@@ -174,20 +181,37 @@ describe('images go only to a model that reads them', () => {
     return { error, captured: names(captured) };
   }
 
-  test('a screenshot on a SELECTED AgentRouter Claude model is answered by AgentRouter first', async () => {
-    // OpenAI, Claude and Gemini keys are all configured. Without the front-load
-    // the unmeasured AgentRouter rung sorts last and a vendor key wins the turn.
-    const { error, captured } = await drainVision('agentrouter/claude-opus-5');
+  for (const model of ['agentrouter/claude-opus-5', 'agentrouter/deepseek-v4-flash', 'agentrouter/gpt-6-astra']) {
+    test(`a screenshot on ${model} is answered by AgentRouter first, ahead of every vendor key`, async () => {
+      // OpenAI, Claude and Gemini keys are all configured. Without the front-load
+      // the unmeasured AgentRouter rung sorts last and a vendor key wins the turn.
+      const { error, captured } = await drainVision(model);
+      assert.equal(error, null, `got: ${error?.message}`);
+      assert.equal(captured[0], 'streamWithAgentRouter', `captured: ${captured.join(', ')}`);
+    });
+  }
+
+  test('an AgentRouter model with no vision evidence still sends the screenshot elsewhere', async () => {
+    const { error, captured } = await drainVision('agentrouter/glm-5.3');
     assert.equal(error, null, `got: ${error?.message}`);
-    assert.equal(captured[0], 'streamWithAgentRouter', `captured: ${captured.join(', ')}`);
+    assert.ok(!captured.includes('streamWithAgentRouter'), `captured: ${captured.join(', ')}`);
+    assert.ok(captured.length > 0, 'some vision-capable provider must answer');
   });
 
-  test('a screenshot on AgentRouter DeepSeek goes to a provider that can see it', async () => {
-    const { error, captured } = await drainVision('agentrouter/deepseek-v4-flash');
-    assert.equal(error, null, `got: ${error?.message}`);
-    assert.ok(!captured.includes('streamWithAgentRouter'),
-      `a text-only model must not be seated for a screenshot; captured: ${captured.join(', ')}`);
-    assert.ok(captured.length > 0, 'some vision-capable provider must answer');
+  test('AgentRouter-only, text-only model: the user is told why, not sent to other providers\' keys', async () => {
+    // What the user SAW before, on the default model: "all vision models are
+    // unavailable. Check your API keys (OpenAI, Claude, Gemini, or Groq)" — four
+    // providers they never set up, for a model choice fixable in one click.
+    const { h } = visionHelper('agentrouter/glm-5.3', { competitors: false });
+    h.resolveOutboundVisionDecision = async () => ({ decision: { action: 'allow' }, localAvailable: false });
+    h.claimFastTurn = () => null;
+    let out = '';
+    for await (const chunk of LLMHelper.prototype._streamChatInner.call(
+      h, 'what is on screen?', ['/tmp/x.png'], undefined, 'SYS', true, true, [], undefined, 0, { v3Owned: true },
+    )) out += chunk;
+    assert.match(out, /can't read screenshots/);
+    assert.match(out, /AgentRouter model \(glm-5\.3\)/);
+    assert.doesNotMatch(out, /OpenAI, Claude, Gemini, or Groq/);
   });
 });
 

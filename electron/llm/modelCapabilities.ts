@@ -154,6 +154,20 @@ function ollamaSupportsImages(id: string): boolean {
   return /llava|bakllava|moondream|llama3\.2-vision|llama-3\.2-vision|gemma3|minicpm-v|qwen2\.5-vl|qwen2-vl|pixtral/.test(s);
 }
 
+/**
+ * DeepSeek Flash reached THROUGH AGENTROUTER reads images; measured 2026-09-30:
+ * `agentrouter/deepseek-v4-flash` read a test screenshot correctly on both of
+ * AgentRouter's routes, and DeepSeek's own pricing page lists Vision for its
+ * Flash model (not for V4 Pro). Scoped to the `agentrouter/` prefix on
+ * purpose: Natively's DIRECT DeepSeek path is text-only by construction
+ * (streamWithDeepseek never attaches an image), so marking bare `deepseek-*`
+ * image-capable would make Code Hint and the vision gates promise a screenshot
+ * read that the direct adapter would silently drop.
+ */
+function agentRouterDeepseekReadsImages(routedId: string, strippedLower: string): boolean {
+  return /^agentrouter\//i.test(routedId || '') && /^deepseek-(?:v\d+-)?flash(?:$|-)/.test(strippedLower);
+}
+
 export function getModelCapabilities(modelId: string, isOllama: boolean): ModelCapabilities {
   // The routed id (`litellm/openai/gpt-4o`) is what the caller has; every
   // predicate below is written against the bare one. Resolve once, here, so a
@@ -207,7 +221,12 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
     const b = TIER_BUDGETS['cloud'];
     const supportsImages = lower.startsWith('gemini-') || lower.startsWith('claude-')
       || lower.startsWith('gpt-4o') || lower.startsWith('gpt-4.1') || lower.startsWith('gpt-5')
+      // gpt-6 (2026-09-30): read a test screenshot correctly through AgentRouter
+      // (gpt-6-astra, "Order #7392 — Total $148.60"). Without this every gpt-6
+      // model resolved text-only, so a screenshot was never sent to it.
+      || lower.startsWith('gpt-6')
       || lower === 'natively' || lower.startsWith('natively-')
+      || agentRouterDeepseekReadsImages(modelId, lower)
       || gatewayVisionHint;
     return {
       tier: 'cloud',
