@@ -59,7 +59,14 @@ for (const [partition, runId] of RUNS) {
     const r = spawnSync(process.execPath, argv, { cwd: BENCH, stdio: ['ignore', log, log], env: { ...process.env, NATIVELY_ROOT: ROOT } });
     const rows = fs.existsSync(path.join(dir, 'natively_benchmark_full.jsonl')) ? fs.readFileSync(path.join(dir, 'natively_benchmark_full.jsonl'), 'utf8').split('\n').filter(Boolean).length : 0;
     const header = fs.existsSync(path.join(dir, 'run.json')) ? JSON.parse(fs.readFileSync(path.join(dir, 'run.json'), 'utf8')) : {};
-    ok = r.status === 0 && !!header.finished_at;
+    // A finished run that still holds failed rows (transport errors, the app's canned provider-failure line) is
+    // resumed again: run.mjs --resume sets those rows aside with their chains and re-runs them.
+    const failed = fs.existsSync(path.join(dir, 'natively_benchmark_full.jsonl'))
+      ? fs.readFileSync(path.join(dir, 'natively_benchmark_full.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+        .filter((x) => x.success === false || /didn.t come through from the AI provider|couldn.t generate an answer just now|No answer came back this time/i.test(String(x.rendered_answer ?? x.raw_answer ?? ''))).length
+      : 0;
+    if (failed) console.log(`${stamp()} ${runId}: ${failed} failed row(s) — resuming to re-run them`);
+    ok = r.status === 0 && !!header.finished_at && failed === 0;
     console.log(`${stamp()} ${runId}: exit ${r.status}, ${rows} rows${ok ? ' — complete' : ''}`);
     if (!ok) await sleep(15000);
   }
