@@ -56,7 +56,7 @@ export async function judgeOnce(system, user, { maxTokens = 4000 } = {}) {
   if (chk.ok) return { ok: true, judgment: parsed, unknownFlags: chk.unknownFlags, calls: [meta(r1), meta(r2)], repaired: true };
   return { ok: false, error: 'judge output invalid after one repair: ' + chk.problems.join('; '), calls: [meta(r1), meta(r2)], raw: scrub(r2.content).slice(0, 2000) };
 }
-const meta = (r) => ({ requested_model: r.requested_model, returned_model: r.returned_model ?? null, model_mismatch: r.model_mismatch ?? null, response_id: r.response_id ?? null, request_id: r.request_id ?? null, latency_ms: r.latency_ms ?? null, usage: r.usage ?? null, finish_reason: r.finish_reason ?? null, attempts: r.attempts, at: r.at, status: r.ok ? 200 : r.status ?? null });
+const meta = (r) => ({ requested_model: r.requested_model, returned_model: r.returned_model ?? null, model_mismatch: r.model_mismatch ?? null, response_id: r.response_id ?? null, request_id: r.request_id ?? null, latency_ms: r.latency_ms ?? null, usage: r.usage ?? null, finish_reason: r.finish_reason ?? null, temperature: r.temperature ?? null, temperature_dropped: r.temperature_dropped ?? null, attempts: r.attempts, at: r.at, status: r.ok ? 200 : r.status ?? null });
 
 export function loadRun(dir) {
   const header = JSON.parse(fs.readFileSync(path.join(dir, 'run.json'), 'utf8'));

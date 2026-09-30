@@ -43,7 +43,7 @@ export async function judgePair(userText, { maxTokens = 6000 } = {}) {
   const system = CHARTER + PAIR_INSTRUCTIONS;
   const messages = [{ role: 'system', content: system }, { role: 'user', content: userText }];
   const r1 = await chat(messages, { maxTokens });
-  const meta = (r) => ({ requested_model: r.requested_model, returned_model: r.returned_model ?? null, model_mismatch: r.model_mismatch ?? null, request_id: r.request_id ?? null, response_id: r.response_id ?? null, latency_ms: r.latency_ms ?? null, usage: r.usage ?? null, at: r.at });
+  const meta = (r) => ({ requested_model: r.requested_model, returned_model: r.returned_model ?? null, model_mismatch: r.model_mismatch ?? null, request_id: r.request_id ?? null, response_id: r.response_id ?? null, latency_ms: r.latency_ms ?? null, usage: r.usage ?? null, temperature: r.temperature ?? null, temperature_dropped: r.temperature_dropped ?? null, at: r.at });
   if (!r1.ok) return { ok: false, error: r1.error, calls: [meta(r1)] };
   let obj = null; try { obj = JSON.parse(stripFence(r1.content)); } catch { /* repair */ }
   let c = checkPair(obj);

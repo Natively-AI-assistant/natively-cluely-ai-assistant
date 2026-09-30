@@ -30,6 +30,14 @@ async function appUp() {
 async function ensureApp() {
   if (await appUp()) return;
   console.log(`${stamp()} app down — starting dev:agent in ${path.basename(ROOT)}`);
+  // --fresh-userdata: every start from an empty profile, so the LLM key is set by run.mjs AFTER startup exactly as
+  // on a first launch. A persisted key changes Profile Intelligence extraction from the deterministic heuristic to
+  // the LLM path (measured 2026-09-30: 7-minute profile switches and different structured profiles), which would
+  // confound any comparison with a run that started fresh. run.mjs re-creates modes, files and PI per unit.
+  if (args.includes('--fresh-userdata')) {
+    fs.rmSync(path.join(ROOT, '.agent', 'userdata'), { recursive: true, force: true });
+    console.log(`${stamp()} userdata wiped`);
+  }
   const out = fs.openSync(path.join(LOG_DIR, `app-${path.basename(ROOT)}-${Date.now()}.log`), 'a');
   const child = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'dev:agent'], {
     cwd: ROOT, detached: true, stdio: ['ignore', out, out], env: { ...process.env, NATIVELY_E2E: '1', NATIVELY_PROMPT_DEBUG: '1' },

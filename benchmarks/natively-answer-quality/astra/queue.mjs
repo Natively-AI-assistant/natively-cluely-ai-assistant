@@ -12,14 +12,16 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
 const exists = (r) => fs.existsSync(path.join(ROOT, r, 'natively_benchmark_full.jsonl'));
+// Candidate = I5 (fix2: I1-I5) where it was run; supp-quant and holdout use fix1 (I1-I4; I5 does not touch the
+// calculation step, and the I5 holdout run comes later).
 const PAIRS = [
-  ['dev', 'results/aq2-dev-cur', 'results/aq2-dev-fix1'],
+  ['dev', 'results/aq2-dev-cur', 'results/aq2-dev-fix2'],
   ['sq', 'results/aq2-sq-cur', 'results/aq2-sq-fix1'],
-  ['sb', 'results/aq2-sb-cur', 'results/aq2-sb-fix1'],
+  ['sb', 'results/aq2-sb-cur', 'results/aq2-sb-fix2'],
   ['holdout', 'results/aq-holdout-fix2', 'results/aq2-holdout-fix1'],
 ];
 const steps = [['calibrate', ['astra/calibrate.mjs']]];
-for (const [name, a, b] of PAIRS) if (exists(a) && exists(b)) steps.push([`ab-${name}`, ['astra/ab.mjs', '--set', `ab-${name}-cur-vs-fix1`, '--a', a, '--b', b, '--concurrency', '4']]);
+for (const [name, a, b] of PAIRS) if (exists(a) && exists(b)) steps.push([`ab-${name}`, ['astra/ab.mjs', '--set', `ab-${name}-cur-vs-cand`, '--a', a, '--b', b, '--concurrency', '4']]);
 for (const [name, a, b] of PAIRS) if (exists(a) && exists(b)) steps.push([`abs-${name}`, ['astra/judge.mjs', '--set', `abs-${name}`, '--runs', `${a},${b}`, '--concurrency', '4']]);
 const from = process.argv.includes('--from') ? process.argv[process.argv.indexOf('--from') + 1] : null;
 let started = !from;

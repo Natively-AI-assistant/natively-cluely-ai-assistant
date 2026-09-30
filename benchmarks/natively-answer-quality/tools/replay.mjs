@@ -6,7 +6,7 @@
 //
 //   node tools/replay.mjs --run <run-dir-name> --ids A,B | --mode m1,m2 [--where tag=x|cat=y|pi=null]
 //        --variant <path to .mjs exporting transform({system,user,item}) → {system,user}> | none
-//        --name <out-name> [--n 3] [--concurrency 8]
+//        --name <out-name> [--n 3] [--concurrency 8] [--model deepseek-flash|deepseek-v4-pro]
 // Wire captures are read from the MAIN checkout's results (they are not committed).
 // Output: results/replay/<name>.jsonl — {id, mode, variant, k, answer (scratch stripped), scratch, out_tokens, ms, detectors, validator}.
 import fs from 'node:fs';
@@ -41,13 +41,15 @@ if (opt('where')) for (const cond of opt('where').split('|')) {
 
 const env = fs.readFileSync(process.env.NATIVELY_ENV_FILE || '/Users/evin/natively-cluely-ai-assistant/.env', 'utf8');
 const KEY = (env.match(/^DEEPSEEK_API_KEY=(.*)$/m)?.[1] ?? '').trim().replace(/^["']|["']$/g, '');
+// --model: the generator (default deepseek-flash, the product benchmark's). deepseek-v4-pro measures the generator ceiling.
+const MODEL = (() => { const i = process.argv.indexOf('--model'); return i >= 0 ? process.argv[i + 1] : 'deepseek-flash'; })();
 const { stripCalcScratch } = await import(pathToFileURL(path.resolve(ROOT, '..', '..', 'dist-electron', 'electron', 'llm', 'calcScratch.js')).href).catch(() => ({ stripCalcScratch: (t) => ({ text: t, scratch: null }) }));
 
 async function call(system, user, params) {
   const t0 = Date.now();
   for (let a = 0; a < 4; a++) {
     const res = await fetch('https://api.deepseek.com/chat/completions', { method: 'POST', headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'deepseek-flash', messages: [{ role: 'system', content: system }, { role: 'user', content: user }], temperature: params?.temperature ?? 0.2, max_tokens: 1500, ...(params?.thinking ? { thinking: params.thinking } : {}), stream: false }) });
+      body: JSON.stringify({ model: MODEL, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], temperature: params?.temperature ?? 0.2, max_tokens: 1500, ...(params?.thinking ? { thinking: params.thinking } : {}), stream: false }) });
     if (res.status === 429 || res.status >= 500) { await new Promise((r) => setTimeout(r, 1500 * 2 ** a)); continue; }
     const j = await res.json();
     return { text: j.choices?.[0]?.message?.content ?? '', out: j.usage?.completion_tokens ?? null, ms: Date.now() - t0, err: res.ok ? null : JSON.stringify(j).slice(0, 200) };
@@ -66,7 +68,7 @@ await Promise.all(pick.flatMap((w) => Array.from({ length: N }, (_, k) => L(asyn
   const t = transform(base) ?? base;
   const r = await call(t.system, t.user, w.wire.params);
   const { text, scratch } = stripCalcScratch(r.text);
-  const rec = { id: w.benchmark_id, mode: item?.mode, surface: item?.surface, variant: path.basename(variantPath), k, answer: text, scratch, out_tokens: r.out, ms: r.ms, err: r.err,
+  const rec = { id: w.benchmark_id, mode: item?.mode, surface: item?.surface, variant: path.basename(variantPath), model: MODEL, k, answer: text, scratch, out_tokens: r.out, ms: r.ms, err: r.err,
     detectors: lexicalDetectors(text, item), validator: item ? validate(item, text, ds) : null };
   fs.appendFileSync(outFile, JSON.stringify(rec) + '\n');
   if (++done % 25 === 0) process.stderr.write(`  ${done}/${pick.length * N}\n`);

@@ -120,15 +120,17 @@ export async function rawCall(method, route, body, { timeoutMs = 120000 } = {}) 
 /** Set once AgentRouter answers 402 (GPT ration batch exhausted): every later call fails fast, so a run stops
  *  spending and resumes from the cache in the next batch (02:00 / 11:00 UTC). */
 export let RATIONED = null;
+/** Set once a route rejects temperature=0 (spec §19: drop only the rejected optional parameter). */
+export let TEMPERATURE_REJECTED = false;
 export async function chat(messages, { maxTokens = 4000, temperature = 0, retries = 5, timeoutMs = 180000 } = {}) {
   if (RATIONED) return { ok: false, rationed: true, status: 402, error: RATIONED, requested_model: JUDGE_MODEL, attempts: 0, at: new Date().toISOString() };
   const probe = assertProbeOk();
   const unsupported = new Set(probe.unsupported_params ?? []);
   const body = { model: JUDGE_MODEL, messages, stream: false };
-  if (!unsupported.has('temperature')) body.temperature = temperature;
+  if (!unsupported.has('temperature') && !TEMPERATURE_REJECTED) body.temperature = temperature;
   const tokParam = probe.token_param ?? 'max_tokens';
   if (!unsupported.has(tokParam)) body[tokParam] = maxTokens;
-  let attempt = 0; let last = null;
+  let attempt = 0; let last = null; let droppedTemperature = false;
   while (attempt <= retries) {
     const r = await rawCall('POST', '/chat/completions', body, { timeoutMs });
     last = r;
@@ -147,9 +149,19 @@ export async function chat(messages, { maxTokens = 4000, temperature = 0, retrie
         finish_reason: choice?.finish_reason ?? null,
         usage: r.json.usage ?? null,
         latency_ms: r.latencyMs,
+        temperature: 'temperature' in body ? body.temperature : 'default',
+        temperature_dropped: droppedTemperature || TEMPERATURE_REJECTED,
         attempts: attempt + 1,
         at: new Date().toISOString(),
       };
+    }
+    // Spec §19: an OPTIONAL parameter the route rejects is dropped (only that one); the model never changes.
+    // Measured 11:0xZ: some gpt-6-astra routes answer 400 "Unsupported value: 'temperature' does not support 0.0 with
+    // this model. Only the default (1) value is supported" while others accept 0.
+    if (r.status === 400 && 'temperature' in body && /temperature/i.test(r.text)) {
+      TEMPERATURE_REJECTED = true; delete body.temperature; droppedTemperature = true;
+      console.error('[astra] route rejected temperature=0; retrying without it (default temperature)');
+      continue;
     }
     if (r.status === 402) { RATIONED = `402 ration exhausted at ${new Date().toISOString()}: ${scrub(r.text).slice(0, 160)}`; console.error(`[astra] ${RATIONED} — stopping new judge calls`); break; }
     if (!(r.status === 0 || TRANSIENT.has(r.status))) break;
