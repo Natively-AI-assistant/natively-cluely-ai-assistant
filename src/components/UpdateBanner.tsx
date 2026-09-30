@@ -21,12 +21,11 @@ const UpdateBanner: React.FC = () => {
     const [downloadProgress, setDownloadProgress] = useState(0);
     // Bytes, total and speed from the same event, for the card's live figures.
     const [downloadDetail, setDownloadDetail] = useState<DownloadDetail | null>(null);
-    const [status, setStatus] = useState<'idle' | 'downloading' | 'ready' | 'error' | 'instructions'>('idle');
+    const [status, setStatus] = useState<'idle' | 'downloading' | 'ready' | 'error'>('idle');
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
-    const [instructionsArch, setInstructionsArch] = useState<'arm64' | 'x64' | null>(null);
     // Whether this build can install + relaunch in place (signed macOS build, or
     // any packaged Windows/Linux build). Drives whether "Install" runs the real
-    // in-app download flow or falls back to the manual DMG-download instructions.
+    // in-app download flow or just opens the release page.
     const [canAutoUpdate, setCanAutoUpdate] = useState(false);
     // Tracks whether the user explicitly dismissed the toast — progress events
     // should not override a deliberate dismiss.
@@ -158,11 +157,13 @@ const UpdateBanner: React.FC = () => {
                 mockRef.current = true;
                 if (mockTimerRef.current) { clearInterval(mockTimerRef.current); mockTimerRef.current = null; }
                 userDismissedRef.current = false;
-                setUpdateInfo({ version: '2.4.0' });
-                setParsedNotes({ version: '2.4.0', summary: '', sections: [
-                    { title: 'New', items: ['Profile Intelligence answers in your own voice', 'Company research runs in the background after a JD upload'] },
-                    { title: 'Improved', items: ['Faster transcription start on Windows', 'Lower memory use during long meetings'] },
-                    { title: 'Fixed', items: ['Overlay no longer loses focus after a screenshot'] },
+                // Shaped like ReleaseNotesManager's output for a real release:
+                // its section names, markdown left in the bullets.
+                setUpdateInfo({ version: '9.9.9' });
+                setParsedNotes({ version: 'V9.9.9', summary: 'A sample release — a faster answer engine, **Profile Intelligence** in your own voice, and quieter meetings on Windows.', url: LATEST_RELEASE_URL, sections: [
+                    { title: "What's New", items: ['**Profile Intelligence** answers in your own voice.', '**Company research.** Runs in the background after a JD upload.'] },
+                    { title: 'Improvements', items: ['Faster transcription start on Windows — no more stall when a meeting starts.', 'Lower memory use during long meetings.'] },
+                    { title: 'Fixes', items: ['**Overlay.** No longer loses focus after a screenshot.'] },
                 ] });
                 setDownloadProgress(0);
                 setDownloadDetail(null);
@@ -176,7 +177,7 @@ const UpdateBanner: React.FC = () => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    const handleInstall = async () => {
+    const handleInstall = () => {
         if (import.meta.env.DEV && mockRef.current) { startMockDownload(); return; }
         // Signed macOS builds (and all packaged Windows/Linux builds) can download
         // and install in place, so always use the real in-app flow: download via
@@ -187,36 +188,17 @@ const UpdateBanner: React.FC = () => {
             return;
         }
 
-        // FALLBACK (unsigned macOS build): we can't swap+relaunch in place, so send
-        // the user to the signed DMG on GitHub and show the manual-install steps.
-        // Guard: if version is absent, fall back to triggering download (which will
-        // surface an error) rather than sending user to a broken GitHub URL.
+        // A macOS build that can't install in place (unsigned: a dev build, or
+        // one built from source) can't be updated from here; release builds are
+        // signed and never get this far. Send it to the release page instead.
         if (window.electronAPI.platform === 'darwin') {
-            if (!updateInfo?.version) {
-                console.warn('[UpdateBanner] No version in updateInfo — opening latest GitHub release instead of in-app download');
-                window.electronAPI.openExternal(LATEST_RELEASE_URL);
-                setStatus('instructions');
-                return;
-            }
-            try {
-                const arch = await window.electronAPI.getArch();
-                const isArm = arch === 'arm64';
-                const dmgSuffix = isArm ? 'arm64' : 'x64';
-                setInstructionsArch(dmgSuffix);
-                const version = updateInfo.version.replace('v', '');
-                const url = `https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/download/v${version}/Natively-${version}-${dmgSuffix}.dmg`;
-                window.electronAPI.openExternal(url);
-                setStatus('instructions');
-            } catch (err) {
-                console.error("Failed to get arch", err);
-                window.electronAPI.openExternal(LATEST_RELEASE_URL);
-                setStatus('instructions');
-            }
-        } else {
-            setStatus('downloading');
-            // Trigger download via IPC
-            window.electronAPI.downloadUpdate();
+            window.electronAPI.openExternal(parsedNotes?.url || LATEST_RELEASE_URL);
+            handleClose();
+            return;
         }
+
+        setStatus('downloading');
+        window.electronAPI.downloadUpdate();
     };
 
     const handleDismiss = () => {
@@ -264,7 +246,6 @@ const UpdateBanner: React.FC = () => {
             downloadDetail={downloadDetail}
             status={status}
             errorMessage={errorMessage}
-            instructionsArch={instructionsArch}
             canAutoUpdate={canAutoUpdate}
         />
         </>

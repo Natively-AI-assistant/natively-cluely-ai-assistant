@@ -533,9 +533,9 @@ test('pictures: a card whose content is new each time keeps none', () => {
 
 test('pictures: a card showing one of several things is keyed by which', () => {
   const update = code('components/UpdateModal.tsx');
-  assert.ok(update.includes("const genieView = `${displayVersion}|${status}|${instructionsArch ?? ''}`;"));
+  assert.ok(update.includes("const genieView = `${displayVersion}|${status}`;"));
   assert.ok(update.includes('openingView={genieView}') && update.includes("cardProps={{ 'data-genie-view': genieView }}"));
-  assert.ok(update.includes("keepPictures={status === 'idle' || status === 'ready' || status === 'instructions'}"), 'never of a download or an error');
+  assert.ok(update.includes("keepPictures={status === 'idle' || status === 'ready'}"), 'never of a download or an error');
   const hind = code('components/HindsightStatusBanner.tsx');
   assert.ok(hind.includes("const view = status ? `${status.state}|${hashOf(status.reason ?? '')}` : undefined;"), 'state, and the reason hashed');
 });
