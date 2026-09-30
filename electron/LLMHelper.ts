@@ -2422,11 +2422,13 @@ export class LLMHelper {
 
   /**
    * Does the selected AgentRouter model read images? From the capability table
-   * (the prefix is a routing prefix there): claude-* yes; deepseek-v4-flash no
-   * (DeepSeek is text-only); gpt-6-astra resolves no, because the table only
-   * knows the gpt-4o/4.1/5 families. Gates the vision seat and the primary
-   * path, so a screenshot goes to a provider that can see it rather than being
-   * answered blind.
+   * (the prefix is a routing prefix there). All four live models do — measured
+   * 2026-09-30 with a test screenshot through AgentRouter: claude-opus-5,
+   * claude-opus-4-8, deepseek-v4-flash (an AgentRouter-scoped entry, since
+   * DIRECT DeepSeek stays text-only) and gpt-6-astra (the gpt-6 family entry).
+   * Before those entries existed, a screenshot on the default DeepSeek model
+   * failed outright for an AgentRouter-only user. Gates the vision seat and the
+   * primary path; a future text-only model is still kept away from screenshots.
    */
   private agentRouterModelSupportsVision(modelId: string): boolean {
     return getModelCapabilities(modelId, false).supportsImages;
@@ -8629,9 +8631,9 @@ let isMultimodal = !!(imagePaths?.length);
           open: (sig) => this.streamWithFluxion(userContent, systemPrompt, imagePaths, sig) });
       }
       // Fluxion's rule — only the model the user picked — plus 9Router's
-      // per-model gate: AgentRouter's DeepSeek and gpt-6-astra resolve
-      // text-only, so a screenshot turn on them goes to a provider that can see
-      // it instead of spending an attempt on one that cannot.
+      // per-model gate (agentRouterModelSupportsVision): a model that cannot
+      // read images is not seated, so a screenshot turn goes to a provider that
+      // can see it instead of spending an attempt on one that cannot.
       if (this.isAgentRouterModel(this.currentModelId) && this.hasAgentRouterCredential() && this.agentRouterModelSupportsVision(this.currentModelId)) {
         cloud.push({ id: 'agentrouter', name: `AgentRouter (${agentRouterWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithAgentRouter(userContent, systemPrompt, imagePaths, sig) });
@@ -8746,6 +8748,12 @@ let isMultimodal = !!(imagePaths?.length);
         : this.isFluxionModel(this.currentModelId) ? 'Fluxion AI gateway'
         : this.isAgentRouterModel(this.currentModelId) ? 'AgentRouter gateway'
         : null;
+      // AgentRouter is a hosted service with a fixed catalogue, so "check the
+      // proxy is reachable" is the wrong advice there: the only way to land
+      // here is a selected model that does not read images.
+      if (this.isAgentRouterModel(this.currentModelId)) {
+        throw new Error(`No vision-capable provider configured. The selected AgentRouter model (${agentRouterWireModel(this.currentModelId)}) can't read screenshots — pick an AgentRouter model that can, or add another vision provider in Settings.`);
+      }
       throw new Error(gateway
         ? `No vision-capable provider configured. The selected ${gateway} model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings.`
         : 'No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings.');
@@ -10387,7 +10395,17 @@ let isMultimodal = !!(imagePaths?.length);
         // chain commits to a provider it yields tokens and won't throw here.
         console.error('[LLMHelper] Vision fallback chain exhausted:', visionErr?.message || visionErr);
         if (!visionYielded && !abortSignal?.aborted) {
-          yield "I couldn't read the screen just now — all vision models are unavailable. Check your API keys (OpenAI, Claude, Gemini, or Groq) in Settings, or try again in a moment.";
+          // Two different situations. "No vision-capable provider configured" =
+          // nothing could even be TRIED, and the chain's message says exactly
+          // why (it names the gateway and the selected model). Showing the
+          // generic "check your OpenAI/Claude/Gemini/Groq keys" there sent an
+          // AgentRouter-only user to four providers they never set up, for a
+          // model choice they could fix in one click. Otherwise providers were
+          // tried and failed, and the generic advice is the right one.
+          const reason = String(visionErr?.message || '');
+          yield /^No vision-capable provider configured\./.test(reason)
+            ? `I can't read screenshots with the current setup. ${reason.replace(/^No vision-capable provider configured\.\s*/, '')}`
+            : "I couldn't read the screen just now — all vision models are unavailable. Check your API keys (OpenAI, Claude, Gemini, or Groq) in Settings, or try again in a moment.";
         }
       }
       return;
