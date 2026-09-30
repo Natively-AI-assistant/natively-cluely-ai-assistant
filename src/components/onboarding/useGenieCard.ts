@@ -124,6 +124,7 @@ export interface GenieCard {
   cardRef:   React.RefObject<HTMLDivElement | null>;
   bandsRef:  React.RefObject<HTMLDivElement | null>;
   shadowRef: React.RefObject<HTMLDivElement | null>;
+  /** No genie right now (the OS asks for reduced motion, or it is off in Settings): no picture is wanted. */
   reduced: boolean;
 }
 
@@ -153,7 +154,13 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
   // The genie also stands down when the user turns it off in Settings →
   // Advanced: the same plain fade, and no pictures taken.
   const genieEnabled = useGenieAnimationEnabled();
-  const reduced = (useReducedMotion() ?? false) || !genieEnabled;
+  const reducedNow = (useReducedMotion() ?? false) || !genieEnabled;
+  const reducedNowRef = useRef(reducedNow);
+  reducedNowRef.current = reducedNow;
+  // The mode of the run on screen, fixed when it starts. Read from a ref, not
+  // a dependency: flipping the switch inside an open Settings card re-ran the
+  // open effect and poured the card out again under the user.
+  const runReducedRef = useRef(reducedNow);
   const bandCount = options.bands ?? GENIE_BANDS;
   const onOpenedRef = useRef(options.onOpened);
   onOpenedRef.current = options.onOpened;
@@ -404,7 +411,7 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
     if (!card || !layer || !shadow) return;
     const geom = geomRef.current;
 
-    if (reduced) {
+    if (runReducedRef.current) {
       card.style.opacity = String(1 - p);
       return;
     }
@@ -462,7 +469,7 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
     shadow.style.display = 'block';
     shadow.style.transform = `translateY(${(top - geom.top).toFixed(2)}px) scaleY(${sy.toFixed(4)})`;
     shadow.style.opacity = String(genieShadowOpacity(p, geom));
-  }, [reduced, bandCount]);
+  }, [bandCount]);
 
   useEffect(() => genie.on('change', renderGenie), [genie, renderGenie]);
 
@@ -472,6 +479,7 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
   // dim used to hide that frame, back when the card sat inside it.)
   useLayoutEffect(() => {
     if (!shown) return;
+    const reduced = runReducedRef.current = reducedNowRef.current;
     measure();
     bandsFailedRef.current = false;
     endLanding();
@@ -495,7 +503,7 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
     let live = true;
     a.then(() => { if (live) onOpenedRef.current?.(); });
     return () => { live = false; a.stop(); b.stop(); clearBands(); endLanding(); runRef.current = null; };
-  }, [shown, reduced, genie, scrim, renderGenie]);
+  }, [shown, genie, scrim, renderGenie]);
 
   // Every way out goes through here: run the genie now, report once it has
   // played. The first request wins; a second click during it is ignored.
@@ -513,6 +521,9 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
 
   useEffect(() => {
     if (!closing) return;
+    // A card at rest closes the way the switch says now; one closed mid-open
+    // carries on in the mode its open started in.
+    const reduced = runReducedRef.current = genie.get() <= 0.001 ? reducedNowRef.current : runReducedRef.current;
     let cancelled = false;
     let cleanup: (() => void) | null = null;
 
@@ -578,14 +589,14 @@ export function useGenieCard(isOpen: boolean, label: string, options: GenieCardO
       run(false);
     }
     return () => { cancelled = true; cleanup?.(); };
-  }, [closing, reduced, genie, scrim, finishClose, renderGenie]);
+  }, [closing, genie, scrim, finishClose, renderGenie]);
 
   // A host that keeps this mounted and opens it again gets a fresh card.
   useEffect(() => {
     if (!isOpen) { setClosing(false); setDone(false); afterCloseRef.current = null; endLanding(); releaseImage(); }
   }, [isOpen]);
 
-  return { shown, closing, closeThen, scrim, wrapRef, cardRef, bandsRef, shadowRef, reduced };
+  return { shown, closing, closeThen, scrim, wrapRef, cardRef, bandsRef, shadowRef, reduced: reducedNow };
 }
 
 /**

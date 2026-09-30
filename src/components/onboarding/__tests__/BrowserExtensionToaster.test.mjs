@@ -228,7 +228,7 @@ test('the genie does not bring the content in twice', () => {
 });
 
 test('reduced motion gets a plain fade, with no warp or travel', () => {
-  const reducedBranch = hook.slice(hook.indexOf('if (reduced) {'), hook.indexOf('if ((p <= 0.001 && settling) || !geom) {'));
+  const reducedBranch = hook.slice(hook.indexOf('if (runReducedRef.current) {'), hook.indexOf('if ((p <= 0.001 && settling) || !geom) {'));
   assert.ok(reducedBranch.includes('card.style.opacity = String(1 - p);'));
   assert.ok(reducedBranch.includes('return;'));
 });

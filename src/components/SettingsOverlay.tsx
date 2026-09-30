@@ -8,7 +8,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Download, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, Languages, Volume2, KeyRound, Loader2, CornerDownRight
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, Languages, Volume2, KeyRound, Loader2, CornerDownRight, PanelBottomClose
 } from 'lucide-react';
 import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
@@ -2923,7 +2923,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
                                                             <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                                <Sparkles size={20} />
+                                                                <PanelBottomClose size={20} />
                                                             </div>
                                                             <div>
                                                                 <h3 className="text-sm font-bold text-text-primary">{t('Genie animation')}</h3>

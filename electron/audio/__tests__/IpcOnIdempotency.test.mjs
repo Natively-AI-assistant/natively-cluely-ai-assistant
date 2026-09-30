@@ -18,7 +18,7 @@ test('send-style IPC registrations use safeOn to avoid listener accumulation', (
     'BUG: safeOn must remove old listeners before registering ipcMain.on channels.',
   );
 
-  for (const channel of ['gemini-chat-stream-stop', 'forward-log-to-file', 'interface-theme:set']) {
+  for (const channel of ['gemini-chat-stream-stop', 'forward-log-to-file', 'interface-theme:set', 'genie-animation:set']) {
     assert.ok(
       new RegExp(`safeOn\\s*\\(\\s*['"]${channel}['"]`).test(ipcSource),
       `BUG: ${channel} must be registered through safeOn, not raw ipcMain.on.`,

@@ -522,7 +522,7 @@ test('the corner notices go through GenieModal as notices, and stay mounted so t
 test('pictures: a card whose content is new each time keeps none', () => {
   assert.ok(/forOpen: \(\) => \{\s*const card = genieRef\.current\?\.cardRef\.current;\s*if \(!card \|\| !keepRef\.current\) return null;/.test(modal), 'no picture to open with');
   assert.ok(modal.includes('keepOnCloseRef.current = card && keepRef.current &&'), 'none kept at the close');
-  assert.ok(modal.includes('if (!open || !shown || !keepPictures || !genieEnabled) return;'), 'none taken while open (nor with the genie turned off in Settings)');
+  assert.ok(modal.includes('if (!open || !shown || !keepPictures || pictureless) return;'), 'none taken while open (nor with no genie: Settings or reduced motion)');
   assert.ok(modal.includes('if (keepRef.current && last && !changedSinceShotRef.current'), 'the close never reuses a picture from before they were turned off');
   assert.ok(code('components/NativelyQuotaBanner.tsx').includes('keepPictures={false}'), 'quota readings');
   // A see-through (Liquid Glass) card keeps none either: a picture bakes in the
@@ -662,11 +662,83 @@ test('a confirm asked from inside Settings opens above it', () => {
 });
 
 // Settings → Advanced → "Genie animation" off: every card falls back to the
-// reduced-motion fade, and no picture is decoded ahead of time or taken.
+// reduced-motion fade, and no picture is decoded ahead of time, taken, or kept.
 test('the genie setting stands the animation down and stops its pictures', () => {
-  const hook = code('components/onboarding/useGenieCard.ts');
-  assert.ok(/const reduced = \(useReducedMotion\(\) \?\? false\) \|\| !genieEnabled;/.test(hook), 'off takes the reduced-motion path');
-  assert.ok(modal.includes('useEffect(() => { if (genieEnabled) void warmGenieSnapshots(); }, [genieEnabled]);'), 'no pictures decoded ahead of time');
+  assert.ok(/const reducedNow = \(useReducedMotion\(\) \?\? false\) \|\| !genieEnabled;/.test(hook), 'off takes the reduced-motion path');
+  assert.ok(hook.includes('reduced: reducedNow };'), 'the host sees the switch as it is now');
+  // Pictures follow the combined flag, so reduced motion alone also keeps none.
+  assert.ok(modal.includes('const pictureless = genie.reduced;'));
+  assert.ok(/if \(pictureless\) \{ lastShotRef\.current = null; releaseGenieSnapshots\(\); \}\s*else void warmGenieSnapshots\(\);\s*\}, \[pictureless\]\);/.test(modal),
+    'turned off, the decoded pictures are let go; on, they are decoded again');
+  assert.ok(modal.indexOf('const pictureless') > modal.indexOf('const genie = useGenieCard('), 'read after the hook that provides it');
   const settings = code('components/SettingsOverlay.tsx');
   assert.ok(settings.includes("label={t('Genie animation')}") && settings.includes('setGenieAnimationEnabled(!genieAnimationEnabled)'), 'the toggle lives in Settings');
+  const row = settings.slice(settings.indexOf("{t('Genie animation')}") - 600, settings.indexOf("{t('Genie animation')}"));
+  assert.ok(row.includes('<PanelBottomClose size={20} />') && !row.includes('Sparkles'), 'a functional glyph, not Sparkles');
+});
+
+// Flipping the switch inside an open Settings card must not pour it out again:
+// the open and close effects fix their mode when they start and do not re-run
+// when it changes.
+test('flipping the switch never restarts a genie that is on screen', () => {
+  const deps = marker => {
+    const at = hook.indexOf(marker);
+    assert.ok(at >= 0, marker);
+    return hook.slice(at, hook.indexOf(']', at) + 1);
+  };
+  assert.equal(deps('}, [shown, genie, scrim, renderGenie]'), '}, [shown, genie, scrim, renderGenie]', 'the open');
+  assert.equal(deps('}, [closing, genie, scrim, finishClose, renderGenie]'), '}, [closing, genie, scrim, finishClose, renderGenie]', 'the close');
+  const render = hook.slice(hook.indexOf('const renderGenie = useCallback('), hook.indexOf("useEffect(() => genie.on('change', renderGenie)"));
+  assert.ok(render.includes('if (runReducedRef.current) {') && render.trimEnd().endsWith('}, [bandCount]);'), 'renderGenie keeps its identity');
+  assert.ok(/if \(!shown\) return;\s*const reduced = runReducedRef\.current = reducedNowRef\.current;/.test(hook), 'the open takes the switch as it starts');
+  assert.ok(hook.includes('const reduced = runReducedRef.current = genie.get() <= 0.001 ? reducedNowRef.current : runReducedRef.current;'),
+    'a close from rest takes it too; one mid-open keeps its open’s mode');
+});
+
+test('letting go of the pictures: an in-flight warm-up or capture does not bring them back', { skip: !snapsMod && 'this Node cannot import .ts' }, async () => {
+  const W = 400, H = 300, DPR = 1;
+  const key = view => `modal|${view}|${W}x${H}|dark|en|${DPR}`;
+  let releaseLoad;
+  const gate = new Promise(r => { releaseLoad = r; });
+  globalThis.window = {
+    devicePixelRatio: DPR,
+    electronAPI: {
+      genieSnapshotList: async () => [key('a'), key('b')],
+      genieSnapshotLoad: async () => { await gate; return new Uint8Array([1]); },
+      genieSnapshotCapture: async () => ({ png: new Uint8Array([2]), width: W, height: H }),
+      genieSnapshotSave: async () => true,
+    },
+  };
+  globalThis.document = {
+    visibilityState: 'visible',
+    documentElement: { getAttribute: a => (a === 'data-theme' ? 'dark' : a === 'lang' ? 'en' : null), classList: { contains: () => false } },
+  };
+  globalThis.createImageBitmap = async () => ({ width: W, height: H, close() {} });
+  try {
+    snapsMod.releaseGenieSnapshots();
+    const card = { getBoundingClientRect: () => ({ left: 0, top: 0, width: W, height: H }) };
+    assert.ok(await snapsMod.captureGenieSnapshot(card, key('kept')));
+    assert.ok(snapsMod.getGenieSnapshot(key('kept')), 'held before');
+    // A warm-up is waiting on disk when the switch goes off.
+    const warming = snapsMod.warmGenieSnapshots();
+    await new Promise(r => setTimeout(r, 400));
+    snapsMod.releaseGenieSnapshots();
+    assert.equal(snapsMod.getGenieSnapshot(key('kept')), null, 'let go');
+    releaseLoad();
+    await warming;
+    assert.equal(snapsMod.getGenieSnapshot(key('a')), null, 'the warm-up did not refill it');
+    assert.equal(snapsMod.getGenieSnapshot(key('b')), null);
+    // A capture that started before the release is returned for its close, not kept.
+    const pending = snapsMod.captureGenieSnapshot(card, key('late'));
+    snapsMod.releaseGenieSnapshots();
+    const late = await pending;
+    assert.equal(late.transient, true);
+    assert.equal(snapsMod.getGenieSnapshot(key('late')), null);
+    // Back on: a fresh warm-up decodes them again.
+    await snapsMod.warmGenieSnapshots();
+    assert.ok(snapsMod.getGenieSnapshot(key('b')), 'decoded again once the genie is back');
+  } finally {
+    snapsMod.releaseGenieSnapshots();
+    delete globalThis.window; delete globalThis.document; delete globalThis.createImageBitmap;
+  }
 });

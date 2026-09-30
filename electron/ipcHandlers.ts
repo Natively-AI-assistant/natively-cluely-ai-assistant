@@ -8565,6 +8565,21 @@ export function initializeIpcHandlers(appState: AppState): void {
     });
   });
 
+  // Settings → Advanced → "Genie animation": the same cross-window hop as the
+  // theme above, so every window's popups follow the switch without a reload.
+  // Only a boolean is passed on.
+  safeOn('genie-animation:set', (_event, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') return;
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (win.isDestroyed()) return;
+      try {
+        win.webContents.send('genie-animation:changed', enabled);
+      } catch {
+        // Renderer may be tearing down between isDestroyed() and send.
+      }
+    });
+  });
+
   safeHandle('get-arch', async () => {
     return process.arch;
   });

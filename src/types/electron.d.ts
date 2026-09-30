@@ -739,6 +739,8 @@ export interface ElectronAPI {
   setWindowMode: (mode: 'launcher' | 'overlay', inactive?: boolean) => Promise<void>
   setMeetingInterfaceTheme: (theme: string) => void
   onMeetingInterfaceThemeChanged: (callback: (theme: string) => void) => () => void
+  setGenieAnimationEnabled: (enabled: boolean) => void
+  onGenieAnimationChanged: (callback: (enabled: boolean) => void) => () => void
 
   // Phase 3 — Cluely-style dynamic action cards.
   onIntelligenceDynamicAction: (callback: (data: { action: DynamicActionPayload }) => void) => () => void

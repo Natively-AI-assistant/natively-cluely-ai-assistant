@@ -1282,6 +1282,9 @@ interface ElectronAPI {
   // this, the overlay reads stale theme on next meeting start (half-paint hang).
   setMeetingInterfaceTheme: (theme: string) => void;
   onMeetingInterfaceThemeChanged: (callback: (theme: string) => void) => () => void;
+  // Settings → Advanced → "Genie animation", passed to every window the same way.
+  setGenieAnimationEnabled: (enabled: boolean) => void;
+  onGenieAnimationChanged: (callback: (enabled: boolean) => void) => () => void;
 
   // Cancel the in-flight gemini-chat-stream. Renderer wires this to "drop
   // the current answer" user actions (Escape, navigation, chat-overlay unmount).
@@ -3222,6 +3225,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('interface-theme:changed', handler);
     return () => {
       ipcRenderer.removeListener('interface-theme:changed', handler);
+    };
+  },
+  setGenieAnimationEnabled: (enabled: boolean) => {
+    ipcRenderer.send('genie-animation:set', enabled);
+  },
+  onGenieAnimationChanged: (callback: (enabled: boolean) => void) => {
+    const handler = (_evt: unknown, enabled: boolean) => callback(enabled);
+    ipcRenderer.on('genie-animation:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('genie-animation:changed', handler);
     };
   },
 
