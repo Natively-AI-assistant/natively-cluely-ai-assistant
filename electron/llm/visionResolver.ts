@@ -1,0 +1,98 @@
+// electron/llm/visionResolver.ts
+//
+// ONE answer to "can this selection read a screenshot?" (design:
+// docs/plans/2026-10-01-vision-capability-design.md, phase 1). Pure: every fact
+// it needs is passed in, so LLMHelper (live instance state) and
+// VisionProviderRegistry (persisted credentials) ask the same function the same
+// question and cannot drift apart again — which is how the two Ollama lists,
+// and the registry's own copies of the 9Router and AgentRouter rules, came to be.
+//
+// Three answers, not two. `unknown` means nothing Natively knows says either
+// way, which is not "no": treating it as "no" is how every new model family
+// came out text-only. Until the one-time image test lands (phase 3), each
+// CALLER decides what unknown means for it (readsImages' second argument), and
+// each keeps exactly the behaviour it had before this module existed.
+
+import type { DirectAssistProvider } from '../direct-assist/types';
+import { getModelCapabilities } from './modelCapabilities';
+import { customProviderSupportsVision, isOllamaVisionModelByName } from './visionCapability';
+
+export type VisionAnswer = 'yes' | 'no' | 'unknown';
+/** Where an answer came from. `override` (phase 4) and `test` (phase 3) join later. */
+export type VisionSource = 'route' | 'provider' | 'names';
+
+export interface VisionVerdict {
+  reads: VisionAnswer;
+  /** null exactly when `reads` is 'unknown'. */
+  source: VisionSource | null;
+}
+
+export interface VisionQuery {
+  provider: DirectAssistProvider;
+  /** As Natively stores it: routed for gateways (`agentrouter/gpt-6-astra`), the tag for Ollama. */
+  model: string;
+}
+
+export interface VisionFacts {
+  /** Ollama's own answer (/api/show capabilities) when probed; undefined = not probed. */
+  ollamaReportsVision?: (model: string) => boolean | undefined;
+  /** 9Router's catalogue: the WIRE ids it marks vision-capable. Empty = never fetched. */
+  ninerouterVisionModels?: readonly string[];
+  /** The active custom or cURL provider; its template decides whether an image can travel. */
+  customProvider?: { curlCommand?: string; multimodal?: boolean } | null;
+}
+
+const UNKNOWN: VisionVerdict = { reads: 'unknown', source: null };
+const answer = (reads: boolean, source: VisionSource): VisionVerdict => ({ reads: reads ? 'yes' : 'no', source });
+
+/** The name list can prove yes; absence from a list is not evidence of no. */
+function fromNames(model: string, isOllama: boolean): VisionVerdict {
+  return getModelCapabilities(model, isOllama).supportsImages ? answer(true, 'names') : UNKNOWN;
+}
+
+export function resolveVision(q: VisionQuery, facts: VisionFacts = {}): VisionVerdict {
+  const model = q.model || '';
+  switch (q.provider) {
+    // These adapters always carry the image to a model that reads it.
+    case 'natively':
+    case 'codex-cli':
+    case 'antigravity':
+      return answer(true, 'route');
+    // Natively's DeepSeek adapter never attaches an image (phase 3 adds it for Flash).
+    case 'deepseek':
+      return answer(false, 'route');
+    // An explicit multimodal flag, an {{IMAGE_BASE64}} placeholder, or an OpenAI-compatible body.
+    case 'custom':
+    case 'curl':
+      return answer(customProviderSupportsVision(facts.customProvider ?? null), 'route');
+    case 'ollama': {
+      const reported = facts.ollamaReportsVision?.(model);
+      if (reported !== undefined) return answer(reported, 'provider');
+      return isOllamaVisionModelByName(model) ? answer(true, 'names') : UNKNOWN;
+    }
+    case 'ninerouter': {
+      const catalogue = facts.ninerouterVisionModels ?? [];
+      if (catalogue.length > 0) return answer(catalogue.includes(model.replace(/^ninerouter\//, '')), 'provider');
+      return fromNames(model, false);
+    }
+    default:
+      return fromNames(model, false);
+  }
+}
+
+/** The boolean a caller acts on. `unknownMeans` is the caller's policy, stated at the call site. */
+export function readsImages(v: VisionVerdict, unknownMeans: boolean): boolean {
+  return v.reads === 'unknown' ? unknownMeans : v.reads === 'yes';
+}
+
+/**
+ * Whether a selected gateway model is seated for a screenshot. One function for
+ * BOTH screenshot paths — LLMHelper's streaming chain and VisionProviderRegistry
+ * — so they cannot answer differently. Unknown keeps what each rung did before
+ * phase 1: 9Router seats (an unfetched catalogue is not "text-only"; failing
+ * closed on absent data was a bug once already), AgentRouter does not (no
+ * evidence, no screenshot).
+ */
+export function gatewaySeatReadsImages(provider: 'ninerouter' | 'agentrouter', model: string, facts: VisionFacts = {}): boolean {
+  return readsImages(resolveVision({ provider, model }, facts), provider === 'ninerouter');
+}
