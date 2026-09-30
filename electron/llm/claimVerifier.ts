@@ -116,7 +116,7 @@ export function claimVerifierSystemPrompt(modeId: string, surface: 'spoken' | 't
   const subject = typed ? (TYPED_SUBJECT[modeId] ?? 'the user themselves') : (SUBJECT[modeId] ?? 'the speaker themselves');
   return `You edit ${reply}. You receive the material the assistant had (documents, profile, conversation) and, after the last "---" line, the draft reply.
 Remove or neutralise every statement about ${subject} that the material does not state: preferences and stances ("I'm open to", "that works for me", "I'm taking it seriously"), willingness, motives and reasons, strengths and weaknesses, habits or practices presented as their own history, feelings, events, numbers, prices, capabilities, integrations, customers, results, guarantees and commitments not in the material. A denial ("I haven't", "we don't") is a statement too.${productGap}
-Keep everything the material supports, everything the other person stated, and general reasoning. ${typed ? 'Keep the same voice, format and length.' : 'Keep the same voice, natural and speakable.'} Never say you cannot speak to something, do not have it, or that it is not available; never mention the material, a résumé, notes or what is missing. Do not add facts.
+Keep everything the material supports, everything the other person stated, and general reasoning. ${typed ? 'Keep the same voice, format and length.' : 'Keep the same voice, natural and speakable.'} Keep the draft's **double-asterisk** highlights on the words you keep. Never say you cannot speak to something, do not have it, or that it is not available; never mention the material, a résumé, notes or what is missing. Do not add facts.
 If removing a claim leaves the question unanswered, answer with what stays true and hand it back with one practical question (for example "I'd want to talk that through properly. What does the timeline look like?").
 Change as little as possible. Output only the revised reply. If nothing needs changing, output it unchanged.`;
 }
@@ -146,6 +146,9 @@ export const DENIAL_RE = /\b(?:I (?:don'?t|do not|haven'?t|have not|never) (?:ha
 const NUM_RE = /\d+(?:[.,]\d+)*/g;
 const nums = (s: string): Set<string> => new Set((String(s).match(NUM_RE) ?? []).map((n) => n.replace(/,/g, '')));
 
+const formatInsensitive = (t: string): string => String(t ?? '')
+  .replace(/\*\*/g, '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim();
+
 export interface VerifiedAnswer { accepted: boolean; changed: boolean; reason: string; text: string }
 
 /**
@@ -157,7 +160,10 @@ export function acceptVerifiedAnswer(input: { original: string; edited: string |
   const keep = (reason: string): VerifiedAnswer => ({ accepted: false, changed: false, reason, text: input.original });
   const edited = splitGistTrailer(String(input.edited ?? '').replace(/^\s*DRAFT REPLY\s*:\s*/i, '')).body.replace(/^["“]|["”]$/g, '').trim();
   if (!edited) return keep('empty');
-  if (edited === body) return { accepted: true, changed: false, reason: 'unchanged', text: input.original };
+  // Formatting is not a claim: an edit that differs only in **highlights**,
+  // quote style or spacing keeps the original, highlights and all (in-app,
+  // 2026-09-30: DSALES-023's only "edit" was dropping its three bold marks).
+  if (edited === body || formatInsensitive(edited) === formatInsensitive(body)) return { accepted: true, changed: false, reason: 'unchanged', text: input.original };
   if (edited.length < 20 || edited.length < body.length * 0.25) return keep('too_short');
   if (/```/.test(edited) || /```/.test(body)) return keep('code');
   if (/^(?:MATERIAL|DRAFT REPLY)\s*:/im.test(edited)) return keep('echoed_prompt');

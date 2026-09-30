@@ -100,6 +100,14 @@ describe('what an edit must satisfy before it replaces the answer', () => {
     assert.equal(v.changed, false);
     assert.equal(v.text, ORIGINAL);
   });
+  test('an edit that only drops **highlights** or changes spacing keeps the original (DSALES-023 in-app)', () => {
+    const orig = 'Growth is **forty-four a seat**, and the connector is included.\n[[GIST]] price confirmed';
+    const v = acceptVerifiedAnswer({ original: orig, edited: 'Growth is forty-four a seat,  and the connector is included.', material: MATERIAL });
+    assert.equal(v.changed, false);
+    assert.equal(v.reason, 'unchanged');
+    assert.equal(v.text, orig);
+  });
+  test('the prompt asks to keep highlights', () => assert.match(claimVerifierSystemPrompt('sales'), /Keep the draft's \*\*double-asterisk\*\* highlights/));
   test('an accepted edit replaces the body and drops the stale gist chip', () => {
     const edited = "Pricing depends on seats and setup, so I'd rather quote it properly. How many people would be using it?";
     const v = acceptVerifiedAnswer({ original: ORIGINAL, edited, material: MATERIAL });
