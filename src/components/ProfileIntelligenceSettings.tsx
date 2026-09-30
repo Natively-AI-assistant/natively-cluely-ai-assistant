@@ -2528,7 +2528,6 @@ export function ProfileIntelligenceSettings({
                     {profileStatus.hasProfile && !profileUploading && profileData?.identity && (() => {
                         const id = profileData.identity;
                         const latestExp = profileData.experience?.[0];
-                        const topSkills: string[] = (profileData.skillsFlat ?? []).slice(0, 4);
                         // Resume summary: cap at 30 words, snap to sentence terminator inside the
                         // cap. See utils/resumeSummary.ts — pure function, unit-tested.
                         const summary = truncateResumeSummary(id.summary);
@@ -2561,13 +2560,6 @@ export function ProfileIntelligenceSettings({
                                         // the card grows — we never chop the text.
                                         minHeight: `calc(1.55em * 3)`,
                                     }}>{summary}</p>
-                                )}
-                                {topSkills.length > 0 && (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
-                                        {topSkills.map(s => (
-                                            <span key={s} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 'var(--pi-r-pill)', background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-btn-border)', color: 'var(--pi-secondary)' }}>{s}</span>
-                                        ))}
-                                    </div>
                                 )}
                             </div>
                         );
@@ -2637,7 +2629,6 @@ export function ProfileIntelligenceSettings({
                     {profileData?.hasActiveJD && !jdUploading && profileData?.activeJD && (() => {
                         const jd = profileData.activeJD;
                         const reqs: string[] = (jd.requirements ?? []).slice(0, 3);
-                        const techs: string[] = (jd.technologies ?? []).slice(0, 4);
                         return (
                             <div style={{ padding: '10px 12px', border: '1px solid var(--pi-border)', borderRadius: 'var(--pi-r-md)', background: 'rgba(255,255,255,0.015)', display: 'flex', flexDirection: 'column', gap: 6 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -2662,13 +2653,6 @@ export function ProfileIntelligenceSettings({
                                             </li>
                                         ))}
                                     </ul>
-                                )}
-                                {techs.length > 0 && (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
-                                        {techs.map(t => (
-                                            <span key={t} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 'var(--pi-r-pill)', background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-btn-border)', color: 'var(--pi-secondary)' }}>{t}</span>
-                                        ))}
-                                    </div>
                                 )}
                             </div>
                         );
