@@ -7,6 +7,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -82,5 +83,20 @@ describe('the gateway seat rule is the one shared function', () => {
     for (const id of ['agentrouter/claude-opus-5', 'agentrouter/deepseek-v4-flash', 'agentrouter/glm-5.3', 'agentrouter/o3']) {
       assert.equal(h.agentRouterModelSupportsVision(id), gatewaySeatReadsImages('agentrouter', id), id);
     }
+  });
+});
+
+describe('VisionProviderRegistry asks the same function', () => {
+  // Its bundle inlines CredentialsManager, so the rungs cannot be built here;
+  // the shared function they call is executed above against LLMHelper's.
+  const src = fs.readFileSync(path.join(__dirname, '../screen/VisionProviderRegistry.ts'), 'utf8');
+  const body = (name) => src.slice(src.indexOf(`function ${name}(`), src.indexOf('\n}\n', src.indexOf(`function ${name}(`)));
+  test('9Router rung', () => {
+    assert.match(body('ninerouter'), /gatewaySeatReadsImages\('ninerouter'/);
+    assert.doesNotMatch(body('ninerouter'), /visionModels\.length === 0/, 'the private copy of the rule is gone');
+  });
+  test('AgentRouter rung', () => {
+    assert.match(body('agentrouter'), /gatewaySeatReadsImages\('agentrouter'/);
+    assert.doesNotMatch(body('agentrouter'), /getModelCapabilities/, 'the private copy of the rule is gone');
   });
 });

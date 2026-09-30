@@ -26,7 +26,7 @@ import {
   isOllamaVisionModelByName,
 } from '../../llm/visionCapability';
 import { readActiveCustomProvider, readActiveModelId } from '../../llm/activeCustomProvider';
-import { getModelCapabilities } from '../../llm/modelCapabilities';
+import { gatewaySeatReadsImages } from '../../llm/visionResolver';
 import { agentRouterWireModel, isAgentRouterModelId } from '../../llm/agentRouter';
 
 export interface VisionProviderBuildInputs {
@@ -352,8 +352,8 @@ function ninerouter(creds: CredentialsManager, _inputs: VisionProviderBuildInput
   const isSelected = /^ninerouter\//i.test(activeModelId);
   const modelId = isSelected ? activeModelId : '';
   const wireId = modelId.replace(/^ninerouter\//i, '');
-  const visionModels = creds.getNinerouterVisionModels?.() || [];
-  const supportsImages = visionModels.length === 0 || visionModels.includes(wireId);
+  // The same rule LLMHelper's streaming chain seats this rung by (2026-10-01).
+  const supportsImages = gatewaySeatReadsImages('ninerouter', modelId, { ninerouterVisionModels: creds.getNinerouterVisionModels?.() || [] });
   return {
     id: 'ninerouter',
     displayName: modelId ? `9Router (${wireId})` : '9Router',
@@ -459,7 +459,7 @@ function agentrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInpu
   const activeModelId = readActiveModelId();
   const isSelected = isAgentRouterModelId(activeModelId);
   const modelId = isSelected ? activeModelId : '';
-  const readsImages = isSelected && getModelCapabilities(activeModelId, false).supportsImages;
+  const readsImages = isSelected && gatewaySeatReadsImages('agentrouter', activeModelId);
   return {
     id: 'agentrouter',
     displayName: modelId ? `AgentRouter (${agentRouterWireModel(modelId)})` : 'AgentRouter',
