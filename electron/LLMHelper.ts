@@ -20,7 +20,7 @@ import {
   TINY_ASSIST_PROMPT, TINY_BRAINSTORM_PROMPT, TINY_CLARIFY_PROMPT, TINY_CODE_HINT_PROMPT,
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
-import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
+import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
 import {
@@ -343,7 +343,12 @@ const NVIDIA_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
 // Requested ceiling; see createNvidiaNimCompletion for why it is a request and
 // not a guarantee (NVIDIA exposes no per-model output budget to look up).
 const NVIDIA_NIM_MAX_OUTPUT_TOKENS = 8192
-const DEEPSEEK_MAX_OUTPUT_TOKENS = 8192
+// DeepSeek's own ceiling, MEASURED 2026-09-30: api.deepseek.com answers a
+// larger max_tokens with 400 "the valid range of max_tokens is [1, 393216]"
+// (the pricing page's "MAXIMUM: 384K"). It was 8192 — V3-era, uncommented —
+// which cut a long coding answer off at exactly 8,192 tokens. What is sent is
+// this capped by the app's shared ceiling (getDeepseekMaxOutput).
+const DEEPSEEK_MAX_OUTPUT_TOKENS = 393216
 // LiteLLM fronts arbitrary upstream models with widely varying output ceilings.
 // Resolution order per request: (1) user manual override from Settings,
 // (2) per-model budget auto-discovered from the proxy's /model/info
@@ -2471,8 +2476,14 @@ export class LLMHelper {
     }
   }
 
+  /**
+   * The output cap sent to DeepSeek: its real ceiling (393,216) held to the
+   * app's shared one, MAX_OUTPUT_TOKENS (65,536) — Evin's choice 2026-09-30:
+   * room for any realistic answer, including the long code answers the old
+   * 8,192 truncated, without letting a model stuck in a loop stream for minutes.
+   */
   private getDeepseekMaxOutput(_modelId: string): number {
-    return DEEPSEEK_MAX_OUTPUT_TOKENS;
+    return Math.min(DEEPSEEK_MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS);
   }
 
   /**
@@ -2483,12 +2494,20 @@ export class LLMHelper {
    */
   private getClaudeMaxOutput(modelId: string): number {
     const id = modelId.toLowerCase();
-    if (id.startsWith("claude-3-5-") || id.startsWith("claude-3-7-") || id.startsWith("claude-3-haiku")) return 8192;
+    let cap: number;
+    if (id.startsWith("claude-3-5-") || id.startsWith("claude-3-7-") || id.startsWith("claude-3-haiku")) cap = 8192;
     // Opus 4.0 / 4.1 cap at 32K; Opus 4.5 and later (4.5/4.6/4.7/4.8) cap at 128K.
-    if (id.startsWith("claude-opus-4-0") || id.startsWith("claude-opus-4-1")) return 32000;
-    if (id.startsWith("claude-opus-4-")) return 128000;
-    if (id.startsWith("claude-sonnet-4-") || id.startsWith("claude-haiku-4-5") || id.startsWith("claude-mythos")) return 64000;
-    return 8192;
+    else if (id.startsWith("claude-opus-4-0") || id.startsWith("claude-opus-4-1")) cap = 32000;
+    // The Claude 5 families (Opus 5 / 5.5, Sonnet 5 / 5.5, Fable 5 / 5.1,
+    // Mythos 5 / 5.1) all allow 128K (Claude API model reference). They had no
+    // entry, so every one fell to the 8192 default below — 16x under.
+    else if (/^claude-(?:opus|sonnet|fable|mythos)-5/.test(id)) cap = 128000;
+    else if (id.startsWith("claude-opus-4-")) cap = 128000;
+    else if (id.startsWith("claude-sonnet-4-") || id.startsWith("claude-haiku-4-5") || id.startsWith("claude-mythos")) cap = 64000;
+    else cap = 8192;
+    // Held to the app's shared ceiling, as getDeepseekMaxOutput is. Every
+    // caller of this streams, which the Anthropic SDK requires for a cap this size.
+    return Math.min(cap, MAX_OUTPUT_TOKENS);
   }
 
   /**
@@ -5695,7 +5714,9 @@ let isMultimodal = !!(imagePaths?.length);
         this.assertOutboundScopes('claude', message);
         await this.rateLimiters.claude?.acquire();
         const res: any = await this.claudeClient.messages.create({
-          model: modelId, max_tokens: 256, temperature: 0,
+          model: modelId, max_tokens: 256,
+          // Not on models that reject sampling params — see claudeAcceptsSamplingParams.
+          ...(claudeAcceptsSamplingParams(modelId) ? { temperature: 0 } : {}),
           messages: [{ role: 'user', content: message }],
         }, { signal: timer });
         return finish((res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join(''));
@@ -5868,7 +5889,7 @@ let isMultimodal = !!(imagePaths?.length);
           // tiers lost 3-7 of 19 real asks (see OPENAI_JUDGE_MODEL).
           model: CLAUDE_MODEL,
           max_tokens: 256,
-          temperature: 0,
+          ...(claudeAcceptsSamplingParams(CLAUDE_MODEL) ? { temperature: 0 } : {}),
           messages: userOnly,
         }, { signal });
         const text = (res?.content ?? []).map((c: any) => (c?.type === 'text' ? c.text : '')).join('');
@@ -7022,7 +7043,8 @@ let isMultimodal = !!(imagePaths?.length);
 
   /**
    * Anthropic Messages parameters. For a Claude model = what
-   * streamWithClaude sends: getClaudeMaxOutput, temperature 0.2, thinking
+   * streamWithClaude sends: getClaudeMaxOutput, temperature 0.2 where the model
+   * accepts one (claudeAcceptsSamplingParams), thinking
    * explicitly disabled (native's "made explicit" choice, for first-token time).
    * The system prompt stays a plain string, not cache blocks — see
    * buildFluxionAnthropicRequest for why a relay cannot use them.
@@ -7032,9 +7054,15 @@ let isMultimodal = !!(imagePaths?.length);
     // streamWithDeepseek's values, not Claude's: getDeepseekMaxOutput, 0.2,
     // thinking off. NO seed — the Anthropic API has none, and direct
     // DeepSeek's seed did not make its replies repeatable anyway (measured).
+    // Temperature only where the model takes it: DeepSeek does (measured on
+    // this route), and so do Claude models up to 4.6 — Opus 4.7+ and the
+    // Claude 5 families 400 on it, which is exactly what AgentRouter's
+    // claude-opus-5 and claude-opus-4-8 are.
+    const deepseek = isDeepseekModelId(model);
+    const temperature = opts?.temperature ?? INTERACTIVE_TEMPERATURE;
     return {
-      max_tokens: opts?.maxTokens ?? (isDeepseekModelId(model) ? this.getDeepseekMaxOutput(model) : this.getClaudeMaxOutput(model)),
-      temperature: opts?.temperature ?? INTERACTIVE_TEMPERATURE,
+      max_tokens: opts?.maxTokens ?? (deepseek ? this.getDeepseekMaxOutput(model) : this.getClaudeMaxOutput(model)),
+      ...((deepseek || claudeAcceptsSamplingParams(model)) ? { temperature } : {}),
       thinking: { type: 'disabled' as const },
     };
   }
@@ -11762,7 +11790,10 @@ let isMultimodal = !!(imagePaths?.length);
     const request = {
       model,
       max_tokens: this.getClaudeMaxOutput(model),
-      temperature: INTERACTIVE_TEMPERATURE, // Claude has no seed param; low temp is the determinism lever
+      // Claude has no seed param; low temp is the determinism lever — on the
+      // models that still take it. Opus 4.7+ and the Claude 5 families 400 on
+      // any temperature (claudeAcceptsSamplingParams), so it is left off there.
+      ...(claudeAcceptsSamplingParams(model) ? { temperature: INTERACTIVE_TEMPERATURE } : {}),
       thinking: { type: 'disabled' as const }, // extended thinking off (default, made explicit) for low TTFT
       // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
       ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
