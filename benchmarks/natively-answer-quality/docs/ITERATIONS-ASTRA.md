@@ -239,3 +239,11 @@ likely overstated by this setup. Not changed mid-experiment, to keep the pair co
 * I15 strips a leading notes/records sentence in spoken Team Meet / Recruiting replies when what follows asks or
   proposes the check and the sentence carries no commitment of its own (fix5 dev: 9 TM + 1 REC would change; DREC-031/
   032, DCC-036, DTEAM-014 excluded as measured false positives).
+
+### fix6 objective read (all clean, 0 failed rows)
+* dev: validators 8/9 (after the stale-sheet oracle fix; fix2 7/9), epistemic 23 → 11 (Team Meet 8 → 3), coaching 2 → 0,
+  TTFT p50 875 → 854 ms, total p50 1282 → 1555 ms (verifier on the gated modes).
+* supp-quant validators: cur 25/32 → fix1 29 → fix5 29 → fix6 31/32. supp-behavior 8/9 (SBLEC-002 handout error),
+  epistemic 6 → 3. holdout 2/2, epistemic 14 → 8, total p50 1372 → 1483 ms.
+* Final set (1038) run on fix6 started 18:25Z as a measurement only (no per-item inspection; used for the final
+  regression once the judge has read dev/holdout).
