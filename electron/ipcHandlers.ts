@@ -16536,7 +16536,27 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch {
         microphone = 'granted';
       }
-      return { microphone, screen: 'granted', platform: 'win32' };
+      // Windows has no per-app screen-capture consent for desktop apps, and
+      // getMediaAccessStatus('screen') is hardcoded 'granted' there — it says
+      // nothing. So verify capture the only way that means anything: enumerate
+      // screen sources, bounded like the darwin probe above. A source means
+      // capture works; none, a throw or a timeout means it does not right now
+      // (remote session, capture blocked by policy or a driver). Reported as
+      // 'unknown', never 'denied', so App.tsx's blocked() re-raise stays
+      // reserved for a real OS denial.
+      let screen = 'unknown';
+      try {
+        const sources = await Promise.race([
+          desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('screen-capture-probe-timeout')), 5000),
+          ),
+        ]);
+        if (sources.some((s) => s.id.startsWith('screen:'))) screen = 'granted';
+      } catch {
+        // keep 'unknown'
+      }
+      return { microphone, screen, platform: 'win32' };
     }
     // Linux: no queryable per-app permission model here.
     return { microphone: 'granted', screen: 'granted', platform: process.platform };
