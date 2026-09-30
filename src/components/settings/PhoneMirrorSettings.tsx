@@ -11,6 +11,7 @@ import { isMac } from '../../utils/platformUtils';
 import { NativelyLogoMark } from '../NativelyLogoMark';
 import { Disclosure, DisclosureChevron } from '../ui/AccordionSection';
 import { SettingsToggle } from './SettingsToggle';
+import { copyText } from '../../lib/copyText';
 
 // Sync is built from the parts General and Audio are built from, not from a
 // system of its own: Audio's section heading, General's row (40px tile,
@@ -187,7 +188,7 @@ function useCopyFlash(ms = 1200): [boolean, (text: string | null) => Promise<voi
     async (text: string | null) => {
       if (!text) return;
       try {
-        await navigator.clipboard.writeText(text);
+        await copyText(text);
         setCopied(true);
         clearTimeout(timer.current);
         timer.current = setTimeout(() => setCopied(false), ms);

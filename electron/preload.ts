@@ -924,6 +924,9 @@ interface ElectronAPI {
   onStealthKeyCaptured: (
     cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void,
   ) => () => void;
+  /** Write the OS clipboard from main — the overlay is never a focused
+   *  document on Windows, so navigator.clipboard cannot do it there. */
+  clipboardWriteText: (text: string) => Promise<{ success: boolean }>;
 
   // Donation API
   getDonationStatus: () => Promise<{
@@ -2797,6 +2800,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('stealth-key-captured', sub);
     };
   },
+  clipboardWriteText: (text: string) => ipcRenderer.invoke('clipboard:write-text', text),
 
   // Donation API
   getDonationStatus: () => ipcRenderer.invoke('get-donation-status'),

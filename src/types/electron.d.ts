@@ -945,6 +945,10 @@ export interface ElectronAPI {
   stealthTapRefreshIme: () => Promise<boolean>
   onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => () => void
   onStealthKeyCaptured: (cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void) => () => void
+  /** Write the OS clipboard from the main process. Needed because the Windows
+   *  overlay is WS_EX_NOACTIVATE and never a focused document, which
+   *  navigator.clipboard.writeText requires. */
+  clipboardWriteText: (text: string) => Promise<{ success: boolean }>
 
   // Profile Engine API
   profileUploadResume: (filePath: string) => Promise<{ success: boolean; error?: string }>

@@ -11,6 +11,7 @@ import {
   SettingsRow,
   useSettingsTones,
 } from '../SettingsRow';
+import { copyText } from '../../../lib/copyText';
 
 // The pieces Setup & Help is written in. Every row is the shared SettingsRow —
 // General, Audio, Sync, Intelligence and About are built from the same one —
@@ -183,7 +184,7 @@ export const HelpCommand: React.FC<{ command: string }> = ({ command }) => {
   useEffect(() => () => clearTimeout(timer.current), []);
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(command);
+      await copyText(command);
       setCopied(true);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 1400);

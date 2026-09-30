@@ -25,6 +25,7 @@ import { isMac } from '../utils/platformUtils';
 import { APP_VERSION } from '../utils/appVersion';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { useT } from '../i18n';
+import { copyText } from '../lib/copyText';
 
 export const LATEST_RELEASE_URL = 'https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest';
 
@@ -229,7 +230,7 @@ const CopyBlock: React.FC<{ command: string; ink: Ink }> = ({ command, ink }) =>
     const t = useT();
     const [copied, setCopied] = useState(false);
     const copy = () => {
-        navigator.clipboard.writeText(command);
+        copyText(command);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };

@@ -12,6 +12,7 @@ import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { useLensTracking } from '../ui-components/LiquidGlassButton';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
 import { CHECKOUT_URLS } from '../config/urls';
+import { copyText } from '../lib/copyText';
 
 const openExternal = (url: string) => {
     if ((window as any).electronAPI?.openExternal) {
@@ -3656,7 +3657,7 @@ export function ProfileIntelligenceSettings({
                                     <span style={{ fontSize: 11, color: 'var(--pi-tertiary)' }}>· for {profileData?.activeJD?.title ? `${profileData.activeJD.title}${profileData.activeJD.company ? ` @ ${profileData.activeJD.company}` : ''}` : 'this role'}</span>
                                 </div>
                                 <button
-                                    onClick={() => navigator.clipboard?.writeText(coverLetter.full_text || '')}
+                                    onClick={() => { copyText(coverLetter.full_text || '').catch(() => {}); }}
                                     className="pi-press-soft"
                                     style={{ fontSize: 11, color: 'var(--pi-tertiary)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px', borderRadius: 6 }}
                                     onMouseEnter={e => (e.currentTarget.style.color = 'var(--pi-primary)')}

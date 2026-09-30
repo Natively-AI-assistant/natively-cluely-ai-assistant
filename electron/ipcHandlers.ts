@@ -3,7 +3,7 @@
 import * as crypto from 'crypto';
 import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
-import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import { setOpenAtLogin, getOpenAtLogin } from './utils/windowsTaskbarPolicy';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
@@ -6674,6 +6674,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     // degraded store refused it (RefusedSettingWriteReported2026_08_21).
     const persisted = appState.setVerboseLogging(enabled);
     return persisted ? { success: true } : { success: false, error: 'settings_write_refused' };
+  });
+
+  // Clipboard write from main. `navigator.clipboard.writeText` needs a focused
+  // document, and the Windows overlay is WS_EX_NOACTIVATE — it never is one. The
+  // main process has no such requirement, so every copy button routes through
+  // here (src/lib/copyText.ts). Same behaviour on macOS, just focus-independent.
+  safeHandle('clipboard:write-text', async (_, text: string) => {
+    clipboard.writeText(typeof text === 'string' ? text : '');
+    return { success: true };
   });
 
   safeHandle('get-stealth-shortcut-guard', async () => {

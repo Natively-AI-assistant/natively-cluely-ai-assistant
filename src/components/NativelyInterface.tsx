@@ -28,6 +28,7 @@ import { categorizeSttError } from '../lib/sttErrorMapper';
 import { splitGistLine, splitGistLineStreaming, collapseBlockGaps } from '../lib/displayMarkup';
 
 import type { SkillSummary } from '../types/electron';
+import { copyText } from '../lib/copyText';
 
 function SkillPicker({
   skills,
@@ -167,7 +168,7 @@ const CodeBlockChrome = ({ lang, code }: { lang: string; code: string }) => {
     if (timer.current) clearTimeout(timer.current);
   }, []);
   const handleCopy = () => {
-    const p = navigator.clipboard?.writeText(code);
+    const p = copyText(code);
     if (!p) return;
     p.then(() => {
       setCopied(true);
@@ -7225,7 +7226,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // (memoized below) receives this as a prop; without a stable identity its
   // memo comparator would never match and the bailout would not fire.
   const handleCopy = useCallback((text: string) => {
-    navigator.clipboard.writeText(text);
+    copyText(text);
     analytics.trackCopyAnswer();
     // Optional: Trigger a small toast or state change for visual feedback
   }, []);
@@ -10129,7 +10130,7 @@ Provide only the answer, nothing else.`;
       .filter(Boolean)
       .join('\n');
     try {
-      await navigator.clipboard.writeText(report);
+      await copyText(report);
     } catch {
       const ta = document.createElement('textarea');
       ta.value = report;

@@ -19,6 +19,7 @@ import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { vividDarkCodeTheme } from '../lib/codeTheme';
 import { splitGistLine } from '../lib/displayMarkup';
 import { splitIntoWordRuns } from '../lib/textRevealAnimation.mjs';
+import { copyText } from '../lib/copyText';
 
 registerPrismLanguages();
 
@@ -300,10 +301,9 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
     const handle = () => {
-        // navigator.clipboard is undefined outside a secure context; the optional
-        // chain guards .writeText but the whole expression is then undefined, so
-        // guard the promise before calling .then/.catch on it.
-        const p = navigator.clipboard?.writeText(text);
+        // copyText goes through main first (the Windows overlay is never focused)
+        // and rejects when nothing was copied.
+        const p = copyText(text);
         if (!p) return;
         p.then(() => {
             setCopied(true);
@@ -358,7 +358,7 @@ const AnswerCopyButton: React.FC<{ text: string }> = ({ text }) => {
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
     const handle = () => {
-        const p = navigator.clipboard?.writeText(text);
+        const p = copyText(text);
         if (!p) return;
         p.then(() => {
             setCopied(true);
@@ -1640,7 +1640,7 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     }, [isSummaryGenerating, meeting.id]);
 
     const copyRecipe = (text: string) => {
-        navigator.clipboard?.writeText(text || '').catch(() => { /* swallow */ });
+        copyText(text || '').catch(() => { /* swallow */ });
     };
 
     const reloadMeeting = async () => {
@@ -1819,7 +1819,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
         if (!textToCopy) return;
 
         try {
-            await navigator.clipboard.writeText(textToCopy);
+            await copyText(textToCopy);
             setIsCopied(true);
             setTimeout(() => setIsCopied(false), 2000);
         } catch (err) {
@@ -2656,7 +2656,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 type="button"
                                                 onClick={() => {
                                                     const fu = meeting.detailedSummary?.followUpDraft;
-                                                    navigator.clipboard?.writeText(typeof fu === 'string' ? fu : '').catch(() => { /* swallow */ });
+                                                    copyText(typeof fu === 'string' ? fu : '').catch(() => { /* swallow */ });
                                                 }}
                                                 className="text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-text-secondary border border-white/10 transition-colors"
                                             >
