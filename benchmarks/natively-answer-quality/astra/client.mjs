@@ -117,7 +117,11 @@ export async function rawCall(method, route, body, { timeoutMs = 120000 } = {}) 
  * Chat completion with retries for transient failures (429/5xx/network), exponential backoff + jitter,
  * honouring Retry-After. Returns a record safe to store (no key, no headers other than ids).
  */
-export async function chat(messages, { maxTokens = 1800, temperature = 0, retries = 5, timeoutMs = 180000 } = {}) {
+/** Set once AgentRouter answers 402 (GPT ration batch exhausted): every later call fails fast, so a run stops
+ *  spending and resumes from the cache in the next batch (02:00 / 11:00 UTC). */
+export let RATIONED = null;
+export async function chat(messages, { maxTokens = 4000, temperature = 0, retries = 5, timeoutMs = 180000 } = {}) {
+  if (RATIONED) return { ok: false, rationed: true, status: 402, error: RATIONED, requested_model: JUDGE_MODEL, attempts: 0, at: new Date().toISOString() };
   const probe = assertProbeOk();
   const unsupported = new Set(probe.unsupported_params ?? []);
   const body = { model: JUDGE_MODEL, messages, stream: false };
@@ -147,6 +151,7 @@ export async function chat(messages, { maxTokens = 1800, temperature = 0, retrie
         at: new Date().toISOString(),
       };
     }
+    if (r.status === 402) { RATIONED = `402 ration exhausted at ${new Date().toISOString()}: ${scrub(r.text).slice(0, 160)}`; console.error(`[astra] ${RATIONED} — stopping new judge calls`); break; }
     if (!(r.status === 0 || TRANSIENT.has(r.status))) break;
     const ra = Number(r.headers['retry-after']);
     const backoff = Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(60000, 1500 * 2 ** attempt);

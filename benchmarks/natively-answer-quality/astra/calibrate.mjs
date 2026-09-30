@@ -22,7 +22,7 @@ const lim = limiter(3);
 const results = [];
 await Promise.all(cal.pairs.map((p) => lim(async () => {
   const item = { id: p.id, category: p.class, difficulty: 'easy', surface: p.item.speaker === 'other' ? 'hotkey' : 'typed', tags: [], pi_ref: null, pi_eligible: false, context_ref: null, prior_transcript: null, conversation_id: null, turn_index: 1, ...p.item };
-  const goodFirst = crypto.randomInt(2) === 0;
+  const goodFirst = (crypto.createHash('sha256').update(`cal|${p.id}`).digest()[0] & 1) === 0; // reproducible, not predictable to the judge
   const [A, B] = goodFirst ? [p.good, p.bad] : [p.bad, p.good];
   const env = buildEnvelope({ item, ds, answer: A });
   const a = splitGist(A), b = splitGist(B);

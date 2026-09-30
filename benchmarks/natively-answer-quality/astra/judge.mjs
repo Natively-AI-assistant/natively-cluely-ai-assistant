@@ -42,7 +42,7 @@ export function checkJudgment(obj) {
 }
 export const SCHEMA_TEXT = '{"expected_behavior": string, "scores": {' + DIMENSIONS.map((d) => `"${d}": number 0-10`).join(', ') + '}, "hard_flags": string[] (from the allowed list), "overall": number 0-10, "verdict": "excellent|good|mixed|poor|hard_fail", "specific_issue": string, "minimal_improvement": string, "evidence_used": string[]}';
 
-export async function judgeOnce(system, user, { maxTokens = 1800 } = {}) {
+export async function judgeOnce(system, user, { maxTokens = 4000 } = {}) {
   const messages = [{ role: 'system', content: system }, { role: 'user', content: user }];
   const r1 = await chat(messages, { maxTokens });
   if (!r1.ok) return { ok: false, error: r1.error ?? 'no content', calls: [meta(r1)] };

@@ -39,7 +39,7 @@ export function checkPair(obj) {
   return { ok: p.length === 0, problems: p };
 }
 
-export async function judgePair(userText, { maxTokens = 3000 } = {}) {
+export async function judgePair(userText, { maxTokens = 6000 } = {}) {
   const system = CHARTER + PAIR_INSTRUCTIONS;
   const messages = [{ role: 'system', content: system }, { role: 'user', content: userText }];
   const r1 = await chat(messages, { maxTokens });
@@ -77,9 +77,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (!rowB || !item || (ids && !ids.has(item.id)) || (modes && !modes.has(item.mode))) continue;
     for (let k = 0; k < repeats; k++) todo.push({ item, rowA, rowB, k });
   }
-  console.log(`${todo.length} pairwise judgments (charter ${CHARTER_VERSION})`);
+  const already = new Set((fs.existsSync(outFile) ? fs.readFileSync(outFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []).filter((r) => r.ok).map((r) => r.jid));
+  for (let i = todo.length - 1; i >= 0; i--) if (already.has(`${todo[i].item.id}#${todo[i].k}`)) todo.splice(i, 1);
+  console.log(`${todo.length} pairwise judgments to do (charter ${CHARTER_VERSION})`);
   await Promise.all(todo.map(({ item, rowA, rowB, k }) => lim(async () => {
-    const swap = crypto.randomInt(2) === 1; // randomised per judgment, recorded privately
+    // Label order: a hash of (set, item, repeat) — unpredictable to the judge, reproducible across resumes (so a
+    // resumed run hits the cache instead of re-judging with the labels flipped). Recorded privately in mapping.json.
+    const swap = (crypto.createHash('sha256').update(`${set}|${item.id}|${k}`).digest()[0] & 1) === 1;
     const sides = [{ run: 'a', row: rowA, rowsById: A.rowsById }, { run: 'b', row: rowB, rowsById: B.rowsById }];
     const [L, R] = swap ? [sides[1], sides[0]] : sides;
     const mk = (s) => { const ans = answerOf(s.row); const g = splitGist(ans); const v = validate(item, ans, A.ds); return { body: g.body, gist: g.gist, validator: v.verdict === 'n/a' ? null : v, history: chainHistory(item, A.ds, s.rowsById), v }; };

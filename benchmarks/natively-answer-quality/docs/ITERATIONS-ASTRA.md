@@ -72,3 +72,11 @@ classes, latency); the external judge runs are queued (see "Pending judge runs")
 1. `node astra/calibrate.mjs` (must be ≥ 18/20).
 2. Absolute: `astra/judge.mjs --set cur --runs results/aq2-dev-cur` and the fix run(s); holdout/final later.
 3. Pairwise: `astra/ab.mjs --set dev-cur-vs-fix --a results/aq2-dev-cur --b results/<fix run>`; ×3 on borderline items.
+
+## Environment caveat (found 2026-09-30 07:50Z)
+Both app worktrees (`aq-astra` baseline, `aq-fix`) lack the downloaded ONNX weights for the bundled local embedder
+(`resources/models/Xenova/multilingual-e5-small`), and with only a DeepSeek key there is no cloud embedder. Every
+reference-file index logged `file was not found locally` (baseline app log: 854 lines), so **both runs retrieved
+lexically only**. The current-vs-fix comparison is like-for-like, but a packaged build ships the weights: in
+production the baseline's chunk retrieval would be stronger than measured here, so the small-corpus gain (I1) is
+likely overstated by this setup. Not changed mid-experiment, to keep the pair comparable.
