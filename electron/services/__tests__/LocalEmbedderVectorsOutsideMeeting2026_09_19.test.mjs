@@ -61,7 +61,7 @@ describe('mode port forwards the state, read at RETRIEVAL time', () => {
   const d = decide({ requestId: 'r', requestSequence: 1, surface: 'manual_chat', modeId: 'general', scope: { userId: 'u' }, sessionId: 's', manualQuestion: 'How long are audit logs retained?', hasAttachedDocuments: true, attachedFileNames: ['notes.md'] });
   const build = (meetingActive) => {
     const box = { seen: 'never-called' };
-    const port = createModeRetrievalPort({ modesManager: { retrieveHybridRaw: async (_m, _f, o) => { box.seen = o.meetingActive; return { chunks: [] }; } }, modeInfo: { id: 'm' }, files: FILES, allowedSourceTypes: policy.allowedSourceTypes, tokenBudget: 1500, userId: 'u', ...(meetingActive ? { meetingActive } : {}) });
+    const port = createModeRetrievalPort({ modesManager: { retrieveHybridRaw: async (_m, _f, o) => { box.seen = o.meetingActive; return { chunks: [] }; } }, modeInfo: { id: 'm' }, files: FILES, allowedSourceTypes: policy.allowedSourceTypes, tokenBudget: 1500, userId: 'u', wholeSmallCorpus: false /* placeholder files stand for large ones: the retriever seam is under test */, ...(meetingActive ? { meetingActive } : {}) });
     return { port, box };
   };
   const seenWith = async (meetingActive) => { const { port, box } = build(meetingActive); await port.retrieve({ decision: d }); return box.seen; };
