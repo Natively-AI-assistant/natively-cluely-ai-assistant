@@ -198,6 +198,13 @@ const PERMANENT_RULES = [
     // schedule?" came back as "I don't have the release scope in front of me"
     // and an interviewer heard a note about missing notes. The anti-invention
     // half is unchanged; only a question ABOUT a source narrates the source.
+    // Denials are facts too (2026-09-30, measured on the dev set after the
+    // user-facts rule: Call Center answers swapped invented capabilities for
+    // invented refusals — "I can't send a reset by text", "I'm not able to
+    // bring a manager on", "I can't see an outage from here" — 8 of 40 fell
+    // by 2+ points). Neither a yes nor a no is the user's to invent.
+    + 'This includes saying something is NOT offered, possible, allowed or happening (no text reset, no manager available, '
+    + 'no outage, not a feature): without evidence, neither confirm nor refuse; say what you will check and do next. '
     + 'If no evidence states such a fact, do not supply one. When the question asks what a document, the notes or the '
     + 'meeting said, say plainly that they do not state it and describe what they do say. Otherwise answer in the '
     + 'user\'s voice without it, saying what they would check or confirm, and never present a general-knowledge number as theirs. '
@@ -1115,6 +1122,36 @@ export function heardQuestionPerspective(modeId: string | undefined): string {
     + `"you" and "your" mean ${r.user}.)`;
 }
 
+/**
+ * A heard question that asks the user to COMMIT (2026-09-30). The permanent
+ * user-facts rule sits deep in a long system prompt; measured on the dev set
+ * after it landed, heard "does Tuesday to Thursday in LoDo work for you?",
+ * "would you be moving out here?", "what are you looking for in base?", "why
+ * leave?" and "have you run Postgres in production?" still came back as an
+ * invented yes, a relocation, "the upper half of the band", a motive, and
+ * experience the résumé does not show (10/40 Looking-for-work answers). The
+ * rule is restated next to the question only when the question asks for it.
+ */
+const PERSONAL_PREFERENCE_RE = /\b(?:relocat\w*|mov(?:e|ing) (?:out )?(?:here|there|to)|commut\w*|in[- ]office|on-?site|hybrid|remote(?:ly)?|travel\w*|salary|base pay|compensation|pay(?:ing)? (?:range|expectations?)|in terms of (?:base|pay|salary|comp)|notice period|start date|when (?:can|could) you start|available to start|why (?:did|do|would) you (?:leave|want to leave)|why'?d you leave|why leave|reason for leaving|weakness|getting better at|(?:does|would) that work for you|are you (?:ok|okay|comfortable|open|willing) (?:with|to))\b/i;
+const PERSONAL_EXPERIENCE_RE = /\bhave you (?:ever )?(?:used|run|built|worked|done|managed|led|shipped|deployed|written|dealt|handled|operated)\b|\b(?:any|much) (?:hands-on )?experience (?:with|in)\b/i;
+const NO_COMMITMENT_MODES: ReadonlySet<string> = new Set(['recruiting', 'lecture']);
+
+export function personalCommitmentNotice(question: string, modeId: string | undefined, heard: boolean): string {
+  if (!heard || (modeId && NO_COMMITMENT_MODES.has(modeId))) return '';
+  const q = String(question ?? '');
+  if (PERSONAL_PREFERENCE_RE.test(q)) {
+    return '(This asks for the user\'s own preference, commitment or reason. Unless something above states the user\'s own answer, '
+      + 'do not decide it for them: no yes or no, no reason, no number of their own. Answer so it stays true either way, open or '
+      + 'conditional, naming what they would weigh or asking the next practical question. What the other side stated, such as a '
+      + 'band, a schedule or relocation support, may be acknowledged.)';
+  }
+  if (PERSONAL_EXPERIENCE_RE.test(q)) {
+    return '(This asks whether the user has done something. Claim it only if the evidence above shows it. Otherwise do not '
+      + 'say they have or have not: answer the substance, and name only the closest experience the evidence does show.)';
+  }
+  return '';
+}
+
 /** The user's OWN spoken line was chosen as the question (they asked after the
  *  other party did): their "I" and "we" are the user's side. */
 export const USER_SPOKEN_QUESTION_PERSPECTIVE = '\n(Said aloud by the user in the meeting: "I", "we" and "our" mean the user and their side.)';
@@ -1306,6 +1343,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
       ? push('privacy_withheld', privacyWithholdingNotice(input.withheldScopes, true))
       : '',
     push('evidence_story', evidenceStoryGuard(d, Boolean(packed.evidenceBlock))),
+    push('personal_commitment', personalCommitmentNotice(d.resolvedQuestion, policy.id, Boolean(input.heardQuestion))),
     // Steps or a counted set: the numbered-list rule lives in the system prompt,
     // which the sections above outrank — see isEnumerableAsk. Format, not
     // length, so it rides even when the user set a length. Coding turns keep

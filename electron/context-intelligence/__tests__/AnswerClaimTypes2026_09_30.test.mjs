@@ -86,3 +86,43 @@ describe('code shapes carry the self-check', () => {
     }
   });
 });
+
+describe('denials are claims too', () => {
+  test('the company-fact rule covers "not offered / not possible / no outage"', () => {
+    const p = compose(heard('Can you just reset my password by text?', 'call-center'), 'call-center', { heardQuestion: true });
+    assert.match(p.system, /This includes saying something is NOT offered, possible, allowed or happening/);
+    assert.match(p.system, /neither confirm nor refuse; say what you will check and do next/);
+  });
+});
+
+describe('heard commitment questions get the notice next to the question', () => {
+  const pref = [
+    "Just so it's on the table, this is hybrid, Tuesday through Thursday in our LoDo office. Does that work for you?",
+    'And you are out in Columbus right now, right? So would you be moving out here?',
+    'Before we go too far, what are you looking for in terms of base salary?',
+    "You've been at Larkspur a few years now. Why leave?",
+    'The role has travel to Frankfurt about twice a year. Is that okay?',
+    "What's something you're still working on getting better at?",
+  ];
+  for (const q of pref) {
+    test(`preference: ${q.slice(0, 40)}`, () => {
+      const n = composer.personalCommitmentNotice(q, 'looking-for-work', true);
+      assert.match(n, /asks for the user's own preference, commitment or reason/);
+      const p = compose(heard(q, 'looking-for-work'), 'looking-for-work', { heardQuestion: true });
+      assert.ok(p.user.includes(n));
+    });
+  }
+  test('experience question', () => {
+    assert.match(composer.personalCommitmentNotice('Have you run Postgres in production?', 'technical-interview', true), /asks whether the user has done something/);
+    assert.match(composer.personalCommitmentNotice('Any experience with Kafka?', 'looking-for-work', true), /asks whether the user has done something/);
+  });
+  test('ordinary questions, typed turns, and recruiting/lecture stay free of it', () => {
+    assert.equal(composer.personalCommitmentNotice('How do goroutines get scheduled?', 'technical-interview', true), '');
+    assert.equal(composer.personalCommitmentNotice('Tell me about Project Tern.', 'looking-for-work', true), '');
+    assert.equal(composer.personalCommitmentNotice('Would you be open to relocating?', 'looking-for-work', false), '');
+    assert.equal(composer.personalCommitmentNotice('Would I need to relocate for this?', 'recruiting', true), '');
+    assert.equal(composer.personalCommitmentNotice('Why did the empire leave the province?', 'lecture', true), '');
+    const p = compose(heard('How do goroutines get scheduled?', 'technical-interview'), 'technical-interview', { heardQuestion: true });
+    assert.ok(!/asks for the user's own preference/.test(p.user));
+  });
+});
