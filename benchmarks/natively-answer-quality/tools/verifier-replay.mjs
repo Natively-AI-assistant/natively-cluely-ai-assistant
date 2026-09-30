@@ -3,6 +3,8 @@
 // run's recorded answers — same gate, same prompts, same rails — so a verifier change can be judged
 // (astra/judge-replay.mjs) before it is built into the app. Material = the recorded V3 user message.
 //   node tools/verifier-replay.mjs --run aq2-dev-fix2 --module <bundle.mjs> --name <out> [--mode m1,m2] [--concurrency 8]
+//     [--draft raw]  verify the streamed draft (raw_answer) instead of the shown answer — for runs whose shown answer
+//                    is already verified (fix4 and later)
 // Bundle: npx esbuild <app>/electron/llm/claimVerifier.ts --bundle --platform=node --format=esm --outfile=tools/variants/_claimVerifier-bundle.mjs
 // Output: results/replay/<name>.jsonl — {id, mode, surface, variant:'verifier', k:0, answer, original, kind, outcome, ms}
 import fs from 'node:fs';
@@ -23,7 +25,7 @@ const lim = (n) => { let a = 0; const q = []; const nx = () => { if (a >= n || !
 const L = lim(Number(opt('concurrency', 8)));
 const outFile = path.join(ROOT, 'results', 'replay', `${name}.jsonl`); fs.writeFileSync(outFile, '');
 await Promise.all(rows.map((r) => L(async () => {
-  const answer = r.rendered_answer ?? r.raw_answer ?? '';
+  const answer = (opt('draft') === 'raw' ? r.raw_answer : (r.rendered_answer ?? r.raw_answer)) ?? '';
   const material = (wires[r.benchmark_id]?.messages ?? []).filter((m) => m.role === 'user').map((m) => m.text ?? m.content).join('\n\n');
   const kind = cv.claimVerifierKind({ modeId: r.mode, question: r.question, draft: answer });
   const rec = { id: r.benchmark_id, mode: r.mode, surface: r.surface_path, variant: 'verifier', k: 0, answer, original: answer, kind, outcome: 'not_gated', ms: 0 };

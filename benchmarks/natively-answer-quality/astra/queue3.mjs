@@ -22,10 +22,11 @@ const I8_MODES = 'looking-for-work,sales,call-center,technical-interview,seminar
 // Tier 1: the current candidate on dev + the generator-ceiling read, pro AND its flash control on the SAME 15 items per
 //         mode (astra/sample.mjs) — the ceiling question does not need 2 × 360, and both halves land in one batch.
 // Tier 2: the claim verifier in isolation (fix4 on its modes, 25 per mode).
-// Tier 3: generalisation (holdout, supp-behavior) + the baseline remainder.
-// Tier 4: blind pairwise baseline vs candidate.
-// Tier 5: the full replay / fix4 sets (cached, so only the items outside the samples are new calls).
-// Pool arithmetic (2026-09-30 11:00Z batch ≈ 850 calls): tiers 1–2 ≈ 360 + 270 + 150 = 780.
+// Tier 3: I16 — the narrowed verifier hand-back replayed on fix6's drafts (gated rows only).
+// Tier 4: generalisation (holdout, supp-behavior) + the baseline remainder.
+// Tier 5: blind pairwise baseline vs candidate.
+// Tier 6: the full replay / fix4 sets (cached, so only the items outside the samples are new calls).
+// Pool arithmetic (2026-09-30 11:00Z batch ≈ 850 calls): tiers 1–3 ≈ 360 + 270 + 150 + 140 = 920.
 const TIERS = [
   [
     ['calibrate', ['astra/calibrate.mjs']],
@@ -37,6 +38,11 @@ const TIERS = [
   ],
   [
     ['abs-dev-fix4-s25', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix4', '--mode', I8_MODES, '--sample', '25', '--concurrency', C], 'results/aq2-dev-fix4'],
+  ],
+  [
+    // I16 (verifier hand-back narrowed): the new wording on fix6's own drafts, gated rows only; its control is fix6's
+    // in-app answers (the same drafts through the old wording), judged in tier 1.
+    ['replay-cv-handback-v1', ['astra/judge-replay.mjs', '--replay', 'results/replay/f6raw-cv-handback-v1.gated.jsonl', '--run', 'results/aq2-dev-fix6', '--concurrency', C], 'results/replay/f6raw-cv-handback-v1.gated.jsonl'],
   ],
   [
     ['abs-holdout', ['astra/judge.mjs', '--set', 'abs-holdout', '--runs', 'results/aq2-holdout-fix6,results/aq2-holdout-fix2', '--concurrency', C], 'results/aq2-holdout-fix6'],
