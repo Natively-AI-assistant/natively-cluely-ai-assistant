@@ -1834,7 +1834,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             // with the engine surfaces — a second inline copy of a
             // security-relevant construction is how the tokenizer copies
             // drifted, and this one decides what evidence a turn may see.
-            const { createModeRetrievalPort, attachmentSourceTypeExtensions } = require('./context-intelligence/retrieval/mode-retrieval-port');
+            const { createModeRetrievalPort, attachmentSourceTypeExtensions, referenceCorpusTokens } = require('./context-intelligence/retrieval/mode-retrieval-port');
             const { combineRetrievalPorts } = require('./context-intelligence/retrieval/meeting-retrieval-port');
             // Custom/general modes gain the source types their OWN attachments
             // evidence (deep-test D10): a candidate résumé + JD attached to an
@@ -2146,6 +2146,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               modeName: (modeInfo as any)?.name ?? null,
               attachedSourceCount: files.length,
               attachedFileNames: (files as Array<{ fileName?: string }>).map((f) => f.fileName ?? '').filter(Boolean),
+              attachedCorpusTokens: referenceCorpusTokens(files as Array<{ content?: string }>),
               profileSourceCount: v3ProfileCounts.profileResume + v3ProfileCounts.profileJd + v3ProfileCounts.profileFact,
               resolvedProfileSources: v3ProfileResolved,
               extraAllowedSourceTypes: extraSourceTypes,

@@ -216,6 +216,8 @@ export interface ModePortInput {
    * bundled embedder stays lexical-only (see ModeHybridRetriever).
    */
   meetingActive?: () => boolean;
+  /** Read a small corpus whole instead of retrieving chunks (default on; see SMALL_CORPUS_MAX_TOKENS). */
+  wholeSmallCorpus?: boolean;
 }
 
 /**
@@ -228,6 +230,43 @@ export interface ModePortInput {
  * meeting ids. A chunk whose sourceId is outside the declared file set fails
  * closed as UNKNOWN_SOURCE_TYPE rather than riding in on a stale index row.
  */
+// ── A SMALL REFERENCE CORPUS IS READ WHOLE (2026-09-30) ─────────────────────
+//
+// Measured on the 9-mode benchmark (every attached file is 245–652 words):
+// 20 of 188 reference-file turns on the final set, 6 of 64 on the holdout and
+// 10 of 86 on dev never put the answering text in the prompt, and the answers
+// said "I don't have that number in front of me" over a decision log that
+// held it. Two mechanisms, both artefacts of choosing chunks from a document
+// the prompt could simply hold:
+//   • "What's the crash-free bar?" — one content word matched the file, the
+//     small-pool probe wanted two, the turn stayed FAST and read nothing;
+//   • "What would Enterprise run us for forty techs?" — the hybrid pass
+//     returned the one-pager's Add-ons and header chunks and not the Plans
+//     chunk ("Enterprise: custom pricing, 100 seat minimum").
+// Below this size the whole corpus costs less prompt than the retriever's own
+// multi-file budget, so every file is handed over entire, in order, and the
+// embed/rerank round trip is skipped. Larger corpora keep retrieval unchanged.
+/** Whole-corpus threshold, in the packer's estimateTokens units (~4 chars/token). */
+export const SMALL_CORPUS_MAX_TOKENS = 1400;
+
+/** Size of the mode's attached text; null when any file has no extracted text (OCR pending, empty). */
+export function referenceCorpusTokens(files: ReadonlyArray<{ content?: string | null }>): number | null {
+  if (!files.length) return 0;
+  let chars = 0;
+  for (const f of files) {
+    const c = typeof f.content === 'string' ? f.content.trim() : '';
+    if (!c) return null;
+    chars += c.length;
+  }
+  return Math.ceil(chars / 4);
+}
+
+/** True when the attached corpus is small enough to be read whole (see SMALL_CORPUS_MAX_TOKENS). */
+export function isSmallReferenceCorpus(files: ReadonlyArray<{ content?: string | null }>): boolean {
+  const t = referenceCorpusTokens(files);
+  return t !== null && t > 0 && t <= SMALL_CORPUS_MAX_TOKENS;
+}
+
 export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
   const sourceTypes = new Map<string, SourceType>();
   const activeVersions = new Map<string, string>();
@@ -235,6 +274,7 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
   const sourceScopes = new Map<string, EvidenceScope>();
   const documentStatuses = new Map<string, string>();
   const allowed = input.allowedSourceTypes ?? (['REFERENCE_FILE'] as const);
+  const wholeCorpus = input.wholeSmallCorpus !== false && isSmallReferenceCorpus(input.files);
   for (const f of input.files) {
     sourceTypes.set(f.id, sourceTypeForFile(f.fileName, f.content, allowed));
     activeVersions.set(f.id, 'legacy');
@@ -247,7 +287,24 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
   const port = createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
     retrieve: async (query: string, opts: { topK: number; timeoutMs?: number; exhaustive?: boolean; tokenBudget?: number }) => {
-      if (!input.modeInfo || !input.files.length || !input.modesManager.retrieveHybridRaw) return [];
+      if (!input.modeInfo || !input.files.length) return [];
+      if (wholeCorpus) {
+        // Every file, entire, in attachment order. score 1: nothing here was
+        // ranked, so no downstream low-confidence rewrite should fire.
+        return input.files.map((f) => {
+          const status = documentStatuses.get(f.id);
+          return {
+            sourceId: f.id,
+            fileName: f.fileName,
+            text: String(f.content ?? '').trim(),
+            chunkIndex: 0,
+            score: 1,
+            provenance: 'MODE_REFERENCE_FILE',
+            ...(status ? { metadata: { documentStatus: status, wholeDocument: true } } : { metadata: { wholeDocument: true } }),
+          };
+        });
+      }
+      if (!input.modesManager.retrieveHybridRaw) return [];
       // An exhaustive request (RetrievalPlan.exhaustive) needs the RETRIEVER
       // to hand back more than the plan's widened topK can hold at the normal
       // token budget, and the reranker to score a wider pool — otherwise the

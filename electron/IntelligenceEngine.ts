@@ -3827,6 +3827,7 @@ export class IntelligenceEngine extends EventEmitter {
                         modeUniqueId: _ctx.modeUniqueId,
                         modeName: _ctx.modeName,
                         attachedSourceCount: _ctx.attachedSourceCount,
+                        attachedCorpusTokens: _ctx.attachedCorpusTokens,
                         attachedFileNames: _ctx.attachedFileNames,
                         profileSourceCount: _ctx.profileSourceCount,
                         resolvedProfileSources: _ctx.resolvedProfileSources,
@@ -6943,6 +6944,8 @@ export class IntelligenceEngine extends EventEmitter {
         raw: string; modeUniqueId: string | null; modeName: string | null; meetingId: string | null;
         attachedSourceCount: number;
         attachedFileNames: string[];
+        /** referenceCorpusTokens(files): a small corpus is read whole (see mode-retrieval-port). */
+        attachedCorpusTokens: number | null;
         profileSourceCount: number;
         resolvedProfileSources: Array<{ role: string; id: string }>;
         extraAllowedSourceTypes: string[];
@@ -6953,7 +6956,7 @@ export class IntelligenceEngine extends EventEmitter {
         port: unknown; conversationWindow: (sec: number) => string;
     } | null {
         try {
-            const { createModeRetrievalPort, attachmentSourceTypeExtensions } = require('./context-intelligence/retrieval/mode-retrieval-port');
+            const { createModeRetrievalPort, attachmentSourceTypeExtensions, referenceCorpusTokens } = require('./context-intelligence/retrieval/mode-retrieval-port');
             const { resolveModePolicy, isModeId, resolveModeIdOrWarn } = require('./context-intelligence/policies/mode-policy-registry');
             const { ModesManager } = require('./services/ModesManager');
             const _mm = ModesManager.getInstance();
@@ -7079,6 +7082,7 @@ export class IntelligenceEngine extends EventEmitter {
                 meetingId: scopeMeetingId ?? meetingId,
                 attachedSourceCount: _files.length,
                 attachedFileNames: (_files as Array<{ fileName?: string }>).map((f) => f.fileName ?? '').filter(Boolean),
+                attachedCorpusTokens: referenceCorpusTokens(_files as Array<{ content?: string }>),
                 profileSourceCount,
                 resolvedProfileSources,
                 extraAllowedSourceTypes: extraSourceTypes,
@@ -7165,6 +7169,7 @@ export class IntelligenceEngine extends EventEmitter {
                 modeUniqueId: ctx.modeUniqueId,
                 modeName: ctx.modeName,
                 attachedSourceCount: ctx.attachedSourceCount,
+                attachedCorpusTokens: ctx.attachedCorpusTokens,
                 attachedFileNames: ctx.attachedFileNames,
                 profileSourceCount: ctx.profileSourceCount,
                 resolvedProfileSources: ctx.resolvedProfileSources,
@@ -7656,6 +7661,7 @@ export class IntelligenceEngine extends EventEmitter {
                         modeUniqueId: _ctx.modeUniqueId,
                         modeName: _ctx.modeName,
                         attachedSourceCount: _ctx.attachedSourceCount,
+                        attachedCorpusTokens: _ctx.attachedCorpusTokens,
                         profileSourceCount: _ctx.profileSourceCount,
                         resolvedProfileSources: _ctx.resolvedProfileSources,
                         // See ClassificationInput.inLiveMeeting (task 7b, issue

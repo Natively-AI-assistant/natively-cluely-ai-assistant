@@ -60,6 +60,7 @@ describe('the retriever and the packer read the SAME budget from the plan', () =
     const port = createModeRetrievalPort({
       modesManager: { retrieveHybridRaw: async (_m, _f, o) => { seen = o.tokenBudget; return { chunks: [] }; } },
       modeInfo: { id: 'm' }, files, allowedSourceTypes: resolveModePolicy('general').allowedSourceTypes, tokenBudget: 1500, userId: 'u',
+      wholeSmallCorpus: false, // placeholder files stand for large ones (retriever seam under test)
     });
     await port.retrieve({ decision });
     return seen;

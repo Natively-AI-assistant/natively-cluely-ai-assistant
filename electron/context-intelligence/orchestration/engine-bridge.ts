@@ -85,6 +85,9 @@ export interface BridgeInput {
   /** How many reference files the active mode has. Lets the composer say "no
    *  document is attached" instead of "the document does not mention it". */
   attachedSourceCount?: number;
+  /** Estimated tokens of the active mode's attached text (referenceCorpusTokens);
+   *  null when a file has no text yet. Lets a small corpus be read whole. */
+  attachedCorpusTokens?: number | null;
   /**
    * Bounded fast-model query rewrite for low-confidence retrieval — see
    * retrieval/llm-query-rewrite.ts. The CALLER binds the model (this module has
@@ -305,6 +308,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       // turn whose only documents are the résumé / job description looks IN them.
       profileOnlyDocuments: (input.attachedSourceCount ?? 0) === 0 && (input.profileSourceCount ?? 0) > 0,
       attachedSourceCount: input.attachedSourceCount,
+      attachedCorpusTokens: input.attachedCorpusTokens ?? null,
       queryRewriter: input.queryRewriter,
       attachedFileNames: input.attachedFileNames,
       screenText: input.screenText,
