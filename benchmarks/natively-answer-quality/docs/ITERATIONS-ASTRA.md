@@ -200,3 +200,20 @@ likely overstated by this setup. Not changed mid-experiment, to keep the pair co
   0/3 → 2/3, DJOB-032 1/3 → 3/3, DTEAM-024 0/3 → 2/3 naming the stale/draft source.
 
 ### I9+I10+I11+I13+I14 → one app run (aq2-dev-fix5): different modes/sections; attribution by mode and A/B.
+
+### I8 in-app (aq2-dev-fix4, build 323b7aa4 = I8 only) — objective read, judge pending
+* Verifier: 107 edited / 52 unchanged / 1 rejected (too_short) of 160 gated turns; p50 807 ms, p90 992 ms, max 1.2 s.
+* Total latency on gated modes +0.7–0.8 s (Sales p50 1177 → 1986 ms, CC 1127 → 1908, LFW 1632 → 2285); TTFT unchanged.
+* Validators (after the number-scale fix): fix3 8/9, fix4 6/9 — the two extra fails are not the verifier's: DSALES-023
+  already lacked the $300 add-on in the streamed text (fix3 passed it by sampling), DTEAM-034 is not a gated mode.
+* Found: the verifier dropped **highlights** (DSALES-023's only "edit"). Fixed in 73156d89 (I8c): keep highlights; a
+  formatting-only edit ships the original.
+* I8b (f7f70a16): Sales/CC with no evidence block — product statements unsupported unless the conversation states
+  them. Offline on I5 Sales/CC: 46/80 edited (44). DSALES-001 ("what does it do day to day?") still keeps capability
+  sentences: the verifier will not empty an answer.
+* fix5 = 2943c1be (I8 + I8b + I9 + I10 + I11 + I13 + I14); I9 amended so an explicit coding ask heard in Recruiting
+  ("solve two sum in python") keeps its routing (W1-5 invariant). llm 5604/0, intelligence 2783/0.
+
+### Generator ceiling (prepared, judge pending)
+* The I5 dev prompts replayed through deepseek-v4-pro (results/replay/dev-fix2-pro.jsonl) and deepseek-flash
+  (dev-fix2-flash.jsonl), 360 each, same params. v4-pro full-response p50 5.2 s vs flash 1.2 s; words 59 vs 68.
