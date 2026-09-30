@@ -5903,6 +5903,18 @@ export class IntelligenceEngine extends EventEmitter {
                 } catch (preErr: any) {
                     console.warn('[IntelligenceEngine] planning-preamble guard skipped:', preErr?.message || preErr);
                 }
+                // ACCESS LEAD (2026-09-30): "I don't have the notes in front of
+                // me, so…" before the question that moves things — llm/accessLead.ts.
+                try {
+                    const { stripAccessLead } = require('./llm/accessLead') as typeof import('./llm/accessLead');
+                    const al = stripAccessLead(fullAnswer, requestSnapshot.modeId);
+                    if (al.stripped) {
+                        fullAnswer = al.text;
+                        trace.mark('repair_used', { reason: 'access_lead_stripped' });
+                    }
+                } catch (alErr: any) {
+                    console.warn('[IntelligenceEngine] access-lead guard skipped:', alErr?.message || alErr);
+                }
             }
 
             // STEERING-TAIL STRIP (live session D, 2026-08-23): on a SMALL-TALK
