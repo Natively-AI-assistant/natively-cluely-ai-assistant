@@ -169,6 +169,25 @@ export function agentRouterOpenAIExtras(wireModel: string, maxTokens?: number): 
     return out;
 }
 
+/**
+ * The catalogue as the card should list it: prefixed, the unrationed default
+ * FIRST, then alphabetical. The order is load-bearing — ProviderCard adopts the
+ * first fetched row as the preferred model when there is none, and the
+ * preferred model is what the runtime-default repair installs. Plain
+ * alphabetical put `claude-opus-4-8` first (seen live 2026-09-30), a model that
+ * 402s once the day's Claude batch is gone.
+ */
+export function agentRouterCatalogue(rawIds: readonly unknown[]): Array<{ id: string; label: string }> {
+    return rawIds
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+        .map((id) => ({ id: `${AGENTROUTER_PREFIX}${id}`, label: id }))
+        .sort((a, b) => {
+            if (a.id === AGENTROUTER_DEFAULT_MODEL) return -1;
+            if (b.id === AGENTROUTER_DEFAULT_MODEL) return 1;
+            return a.label.localeCompare(b.label);
+        });
+}
+
 /** Headers for a raw HTTP call (catalogue fetch, Test Connection). */
 export function agentRouterHttpHeaders(apiKey: string): Record<string, string> {
     return { Authorization: `Bearer ${apiKey}`, ...AGENTROUTER_CLIENT_HEADERS };

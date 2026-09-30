@@ -206,3 +206,32 @@ describe('the pure module stays pure', () => {
     assert.ok(!/from ['"]@anthropic-ai\/sdk['"]/.test(src));
   });
 });
+
+describe('the fetched catalogue order', () => {
+  test('the unrationed default comes first, so the card never adopts a rationed model', () => {
+    // ProviderCard adopts the FIRST fetched row as the preferred model when
+    // there is none; plain alphabetical order put claude-opus-4-8 there (seen
+    // live). These are the ids /v1/models returned on 2026-09-30, in its order.
+    const models = ar.agentRouterCatalogue(['claude-opus-4-8', 'claude-opus-5', 'deepseek-v4-flash', 'gpt-6-astra']);
+    assert.deepEqual(models.map((m) => m.id), [
+      'agentrouter/deepseek-v4-flash',
+      'agentrouter/claude-opus-4-8',
+      'agentrouter/claude-opus-5',
+      'agentrouter/gpt-6-astra',
+    ]);
+    assert.equal(models[0].label, 'deepseek-v4-flash', 'labels are the bare ids');
+  });
+
+  test('junk rows are dropped, and a catalogue without the default is plain alphabetical', () => {
+    assert.deepEqual(ar.agentRouterCatalogue(['gpt-6-astra', null, '', 'claude-opus-5']).map((m) => m.id),
+      ['agentrouter/claude-opus-5', 'agentrouter/gpt-6-astra']);
+  });
+
+  test('modelFetcher uses this ordering rather than its own', () => {
+    const src = fs.readFileSync(path.join(root, 'electron/utils/modelFetcher.ts'), 'utf8');
+    const fn = src.slice(src.indexOf('async function fetchAgentRouterModels'), src.indexOf('\n}\n', src.indexOf('async function fetchAgentRouterModels')));
+    assert.ok(fn.length > 0 && fn.length < 1000);
+    assert.match(fn, /agentRouterCatalogue\(/);
+    assert.match(fn, /agentRouterHttpHeaders\(apiKey\)/, 'the catalogue call needs the identity header');
+  });
+});

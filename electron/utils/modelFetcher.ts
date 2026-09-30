@@ -5,7 +5,7 @@
 
 import axios from 'axios';
 import { DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PRO_MODEL, isDeepseekModelId } from '../llm/deepseekModels';
-import { AGENTROUTER_MODELS_URL, AGENTROUTER_PREFIX, agentRouterHttpHeaders } from '../llm/agentRouter';
+import { AGENTROUTER_MODELS_URL, agentRouterCatalogue, agentRouterHttpHeaders } from '../llm/agentRouter';
 
 export interface ProviderModel {
     id: string;
@@ -139,15 +139,15 @@ async function fetchFluxionModels(apiKey: string): Promise<ProviderModel[]> {
  * The `agentrouter/` prefix is load-bearing for Fluxion's reason: these are
  * the vendors' own ids, so unprefixed they would be classified — and billed —
  * as the user's own Anthropic/OpenAI/DeepSeek models.
+ *
+ * The ORDER is load-bearing (unrationed default first) — see
+ * agentRouterCatalogue for why.
  */
 async function fetchAgentRouterModels(apiKey: string): Promise<ProviderModel[]> {
     const response = await axios.get(AGENTROUTER_MODELS_URL, {
         headers: agentRouterHttpHeaders(apiKey), timeout: 15000,
     });
-    return (response.data?.data || [])
-        .filter((m: any) => m?.id)
-        .map((m: any) => ({ id: `${AGENTROUTER_PREFIX}${m.id}`, label: String(m.id) }))
-        .sort((a: ProviderModel, b: ProviderModel) => a.label.localeCompare(b.label));
+    return agentRouterCatalogue((response.data?.data || []).map((m: any) => m?.id));
 }
 
 /**
