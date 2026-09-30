@@ -3152,10 +3152,19 @@ html[data-platform="linux"] body {
 
 /* The launcher matches the 16px macOS gives its window natively (where the
    rounding comes from the OS, not from CSS — nothing to change there). Only
-   the launcher: the aux windows keep 8px. */
+   the launcher: the aux windows keep 8px.
+
+   `contain: paint` is what makes the radius hold in EVERY launcher state.
+   `overflow: hidden` alone does not clip `position: fixed` descendants —
+   their containing block is the viewport, not body — so full-window fixed
+   layers (the boot splash's `fixed inset-0 bg-[#000000]`, the modal dimmer
+   in App.tsx) punched square corners back through the rounded window.
+   Containment makes body their containing block AND clips them to its
+   rounded border box. Body is already viewport-sized, so nothing moves. */
 html[data-platform="win32"][data-window="launcher"] body,
 html[data-platform="linux"][data-window="launcher"] body {
   border-radius: 16px !important;
+  contain: paint;
 }
 
 /* ───────────────────────────────────────────────────────────────────────
