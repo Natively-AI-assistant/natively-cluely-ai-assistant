@@ -102,8 +102,10 @@ import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
  * Background Model, AI Response Language here; Active Embedding Model, Active
  * Reranker and the embedding width picker in Retrieval).
  *
- * It fits its content: the picker grows with its label, which the selector caps
- * at PICKER_LABEL_MAX_CHARS characters. shrink-0 keeps the label whole when the
+ * It fits its content: the picker grows with its label. Active Model and
+ * Background Model fit theirs, never narrower than "Gemini 3.8 Flash"
+ * (ModelSelect minLabel); the others cap theirs at PICKER_LABEL_MAX_CHARS.
+ * shrink-0 keeps the label whole when the
  * text beside it runs long (Background Model's warning line). The trigger fills
  * this box, since .aip-select-trigger is width:100%.
  */
@@ -1063,6 +1065,22 @@ select.aip-input { cursor:pointer; }
 .aip-select-chevron { color: var(--aip-secondary); flex-shrink:0;
                       transition: transform var(--aip-dur-state) var(--aip-ease-out); }
 .aip-select-trigger[aria-expanded='true'] .aip-select-chevron { transform: rotate(180deg); }
+/* A trigger that fits its label (ModelSelect minLabel). The label slot is given
+   the measured width of a hidden copy of the label stacked on the minLabel text in
+   one grid cell (.aip-select-fit-measure: never narrower than minLabel in the font
+   this platform renders, capped at 15rem, past which the label ellipsizes), and
+   eases to it: a resize, so --duration-fast (250ms) on --ease-smooth-out. The
+   button is width:auto, so it follows the slot frame by frame. The ease is only
+   switched on once the panel is ready (SettingsMotionReady), so the saved pick
+   landing from IPC does not grow the picker in on every visit. */
+.aip-select-trigger.aip-select-trigger--fit { position:relative; width:auto; }
+.aip-select-fit-slot { display:flex; align-items:center; flex:none; min-width:0;
+                       box-sizing:border-box; padding-right:8px; }
+.aip-select-fit-slot[data-animate='true'] { transition: width 250ms cubic-bezier(0.22, 1, 0.36, 1); }
+.aip-select-fit-measure { position:absolute; left:0; top:0; visibility:hidden; pointer-events:none;
+                          white-space:nowrap; overflow:hidden; box-sizing:content-box;
+                          padding-right:8px; max-width:15rem; display:grid; }
+.aip-select-fit-measure > * { grid-area: 1 / 1; }
 /* The models trigger is not an .aip-select-trigger, so it never matched the rule
    above. It was passing an "is-open" class that has no rule anywhere — the chevron
    has never rotated. Use the ARIA state already on the button.
@@ -2116,12 +2134,55 @@ interface ModelSelectProps {
     maxLabelChars?: number;
     /** Sizes the open menu. Defaults to the trigger's width. */
     menuClassName?: string;
+    /** Makes the trigger fit its label, never narrower than this text renders,
+        growing and shrinking with an ease as the pick changes
+        (.aip-select-trigger--fit). Without it the trigger is a fixed w-40. */
+    minLabel?: string;
 }
 
-const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, placeholder, className = "", containerClassName = "relative", maxLabelChars, menuClassName = "w-full" }) => {
+/** The Active Model and Background Model pickers: at least wide enough for this
+    name. Measured, not a ch count: SF Pro and Segoe UI set it at different widths. */
+const HERO_MODEL_PICKER_MIN_LABEL = 'Gemini 3.8 Flash';
+/** A fitted picker's label shorter than this many characters is centred. */
+const HERO_PICKER_CENTER_BELOW_CHARS = 16;
+
+const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, placeholder, className = "", containerClassName = "relative", maxLabelChars, menuClassName = "w-full", minLabel }) => {
     const t = useT();
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = React.useRef<HTMLDivElement>(null);
+    const fit = minLabel !== undefined;
+    const measureRef = useRef<HTMLSpanElement>(null);
+    const [fitWidth, setFitWidth] = useState<number | null>(null);
+    const [fitTruncated, setFitTruncated] = useState(false);
+    const [fitAnimate, setFitAnimate] = useState(false);
+
+    // The hidden copy re-measures whenever its text or font changes (a new pick,
+    // a language switch, a late webfont). offsetWidth, not a rect: layout px,
+    // whatever transform the settings panel's own entrance applies. A hidden
+    // ancestor reads 0: keeping the last real width stops an ease in from 0.
+    React.useLayoutEffect(() => {
+        const el = measureRef.current;
+        if (!fit || !el) return;
+        const measure = () => {
+            if (el.offsetWidth === 0) return;
+            setFitWidth(el.offsetWidth);
+            setFitTruncated(el.scrollWidth > el.clientWidth);
+        };
+        measure();
+        if (typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [fit]);
+    // The saved pick arrives over IPC after mount. It is loading, not news, so the
+    // ease waits for the panel's ready flag (SettingsMotionReady) plus a frame for
+    // the width that value set to land.
+    const motionReady = React.useContext(SettingsMotionReady);
+    useEffect(() => {
+        if (!fit || !motionReady) return;
+        const frame = requestAnimationFrame(() => setFitAnimate(true));
+        return () => cancelAnimationFrame(frame);
+    }, [fit, motionReady]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -2144,11 +2205,43 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
                 onClick={() => setIsOpen(!isOpen)}
                 aria-expanded={isOpen}
                 aria-haspopup="listbox"
-                className={`aip-select-trigger w-40 ${className}`}
-                title={shownLabel !== fullLabel ? fullLabel : undefined}
+                className={`aip-select-trigger ${fit ? 'aip-select-trigger--fit' : 'w-40'} ${className}`}
+                title={shownLabel !== fullLabel || (fit && fitTruncated) ? fullLabel : undefined}
                 type="button"
             >
-                <span className="truncate pr-2">{shownLabel}</span>
+                {fit ? (
+                    <>
+                        <span
+                            className="aip-select-fit-slot"
+                            data-animate={fitAnimate ? 'true' : undefined}
+                            style={fitWidth === null ? undefined : { width: fitWidth }}
+                        >
+                            {/* The label leaves and the new one arrives (Presence
+                                "text") while the slot eases to the new width. A
+                                short name is centred (mx-auto in the flex slot)
+                                rather than hugging the left edge. The class rides
+                                on each label, so the one leaving keeps its own
+                                alignment through its fade instead of jumping. */}
+                            <Presence
+                                kind="text"
+                                id={shownLabel}
+                                className={`max-w-full truncate ${Array.from(shownLabel).length < HERO_PICKER_CENTER_BELOW_CHARS ? 'mx-auto' : ''}`}
+                            >
+                                {shownLabel}
+                            </Presence>
+                        </span>
+                        <span
+                            ref={measureRef}
+                            aria-hidden="true"
+                            className="aip-select-fit-measure"
+                        >
+                            <span>{shownLabel}</span>
+                            <span>{minLabel}</span>
+                        </span>
+                    </>
+                ) : (
+                    <span className="truncate pr-2">{shownLabel}</span>
+                )}
                 <ChevronDown size={14} strokeWidth={1.75} className="aip-select-chevron" aria-hidden="true" />
             </button>
 
@@ -4507,7 +4600,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     </div>
                     <ModelSelect
                         containerClassName={AIP_ACTIVE_SELECT_CONTAINER}
-                        maxLabelChars={PICKER_LABEL_MAX_CHARS}
+                        minLabel={HERO_MODEL_PICKER_MIN_LABEL}
                         menuClassName={PICKER_MENU_WIDTH}
                         value={defaultModel}
                         options={buildAvailableModelOptions()}
@@ -4533,7 +4626,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     </div>
                     <ModelSelect
                         containerClassName={AIP_ACTIVE_SELECT_CONTAINER}
-                        maxLabelChars={PICKER_LABEL_MAX_CHARS}
+                        minLabel={HERO_MODEL_PICKER_MIN_LABEL}
                         menuClassName={PICKER_MENU_WIDTH}
                         value={fastModel}
                         options={buildFastModelOptions()}
