@@ -318,6 +318,21 @@ const PERMANENT_RULES = [
     + 'RIGHT: "How did it end?" '
     + 'A story or example the user tells must come from the evidence event by event: never add what went wrong, who '
     + 'pushed back, what they learned, or a result the evidence does not give, and never merge two separate items into one story.',
+  // THE USER'S OWN LIFE (2026-09-30, measured on the dev set after the rules
+  // above landed): asked "Why'd you leave Cindervale?" with the résumé loaded,
+  // the candidate answered "The résumé shows Cindervale running July 2025 to
+  // January 2026 … I don't have the specifics of how it wrapped up in front of
+  // me, so I'd rather confirm those details" — the status/commitment half of the
+  // no-context rule ("what they would check") applied to the one thing a person
+  // never needs to check: their own history. 12 of 120 replayed Looking-for-work
+  // answers carried such a phrase (6 cited the résumé as a document); with this
+  // rule 4 and 0, with no rise in claimed specifics on no-profile turns.
+  'Speaking as the user about their own life (their jobs, projects, dates, gaps, reasons, results, grades): '
+    + 'the user knows their own history, so never say you do not have it, cannot recall it, would need to check or confirm it, or that it is '
+    + '"in front of" you, and never cite their résumé or profile as a document ("the résumé shows", "my profile says"). Say what the evidence '
+    + 'states as their own memory, in first person ("I left that team when the contract ended in January"), and simply leave out what it does '
+    + 'not state: no invented detail and no remark that it is missing. Asked for a story the evidence does not hold, open directly with how '
+    + 'they handle that situation, never with "I don\'t have a specific example" or "let me tell you how I handle it instead".',
   'Produce one natural, speakable answer.',
   // §20, measured: 7.1% of answers opened with attribution boilerplate
   // ("According to the provided documentation...") and 14.3% ran past 120 words,
@@ -1138,7 +1153,7 @@ export function heardQuestionPerspective(modeId: string | undefined): string {
  * experience the résumé does not show (10/40 Looking-for-work answers). The
  * rule is restated next to the question only when the question asks for it.
  */
-const PERSONAL_PREFERENCE_RE = /\b(?:relocat\w*|mov(?:e|ing) (?:out )?(?:here|there|to)|commut\w*|in[- ]office|on-?site|hybrid|remote(?:ly)?|travel\w*|salary|base pay|compensation|pay(?:ing)? (?:range|expectations?)|in terms of (?:base|pay|salary|comp)|notice period|start date|when (?:can|could) you start|available to start|why (?:did|do|would) you (?:leave|want to leave)|why'?d you leave|why leave|reason for leaving|weakness|getting better at|(?:does|would) that work for you|are you (?:ok|okay|comfortable|open|willing) (?:with|to))\b/i;
+const PERSONAL_PREFERENCE_RE = /\b(?:relocat\w*|mov(?:e|ing) (?:out )?(?:here|there|to)|commut\w*|in[- ]office|on-?site|hybrid|remote(?:ly)?|travel\w*|salary|base pay|compensation|pay(?:ing)? (?:range|expectations?)|in terms of (?:base|pay|salary|comp)|notice period|start date|when (?:can|could) you start|available to start|why (?:did|do|would) you (?:leave|want to leave)|why'?d you leave|why leave|reason for leaving|gap (?:in|on|before|after|between) (?:your|the) |(?:a |the |that |this )?gap (?:of|there)|what happened (?:there|then|during|in that|between)|time off|career break|between (?:jobs|roles)|why (?:the|a) (?:switch|change|move)|weakness|getting better at|(?:does|would) that work for you|are you (?:ok|okay|comfortable|open|willing) (?:with|to))\b/i;
 const PERSONAL_EXPERIENCE_RE = /\bhave you (?:ever )?(?:used|run|built|worked|done|managed|led|shipped|deployed|written|dealt|handled|operated)\b|\b(?:any|much) (?:hands-on )?experience (?:with|in)\b|\bhow long have you (?:been|worked|done)\b|\b(?:what'?s|tell me about|what is) your (?:own )?background\b|\bwere you (?:ever )?(?:an?|in)\b|\bare you familiar with\b|\bdo you know (?:much about )?(?:the |our )?\w+ (?:space|industry|market|well)\b/i;
 const NO_COMMITMENT_MODES: ReadonlySet<string> = new Set(['recruiting', 'lecture']);
 
