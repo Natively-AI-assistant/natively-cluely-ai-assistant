@@ -247,3 +247,9 @@ likely overstated by this setup. Not changed mid-experiment, to keep the pair co
   epistemic 6 → 3. holdout 2/2, epistemic 14 → 8, total p50 1372 → 1483 ms.
 * Final set (1038) run on fix6 started 18:25Z as a measurement only (no per-item inspection; used for the final
   regression once the judge has read dev/holdout).
+
+### Inconclusive — "use the specifics" (tools/variants/specifics-v1.mjs), not built
+* Judge's suggestions on uncapped sub-9.5 I5 answers: 47 of 131 ADD a specific the material held (±0.3, 92.0%, 48-hour
+  wait, 3–5 business days, v6.3 + clear cache, 10 business days); 15 cut; 56 replace wording.
+* Replay on fix6 prompts (evidence-bearing items, n=2 per arm): dataset needles in answers 312 → 327 of 522, but Call
+  Center 27 → 23 and Lecture 30 → 27. Within sampling noise; not worth judge budget yet.
