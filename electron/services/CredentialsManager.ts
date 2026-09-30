@@ -97,7 +97,7 @@ export interface CurlProvider {
  * and setter build the key by concatenation, so adding a name here without the
  * field would silently read and write `undefined`.
  */
-export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm' | 'ninerouter';
+export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'litellm' | 'ninerouter';
 
 export interface StoredCredentials {
     geminiApiKey?: string;
@@ -183,6 +183,13 @@ export interface StoredCredentials {
      * narrow escape hatch — not, as the docs imply, a per-group requirement.
      */
     fluxionProtocol?: 'openai' | 'anthropic';
+    /**
+     * AgentRouter gateway key. CHAT ONLY, like fluxionApiKey — AgentRouter has
+     * no embeddings or rerank endpoint — so no activateHostedRetrieval
+     * coupling. No protocol field either: AgentRouter's protocol is chosen per
+     * MODEL (llm/agentRouter.ts agentRouterProtocolFor), not per key.
+     */
+    agentrouterApiKey?: string;
     jinaApiKey?: string;
     /** Voyage AI key, used for EMBEDDINGS (Voyage is embeddings-only here). */
     voyageApiKey?: string;
@@ -218,6 +225,8 @@ export interface StoredCredentials {
     nvidia_nimPreferredModel?: string;
     openrouterPreferredModel?: string;
     fluxionPreferredModel?: string;
+    /** Stored PREFIXED (`agentrouter/<model>`), the form modelAvailable() classifies. */
+    agentrouterPreferredModel?: string;
     /**
      * The LiteLLM model the user promoted to this provider's default, stored
      * PREFIXED (`litellm/<model>`) so it is the same id the picker, the
@@ -1267,6 +1276,18 @@ export class CredentialsManager {
     public setFluxionProtocol(protocol: 'openai' | 'anthropic'): boolean {
         if (this.refuseWriteWhileDegraded('set fluxion protocol')) return false;
         this.credentials.fluxionProtocol = protocol === 'anthropic' ? 'anthropic' : 'openai';
+        this.saveCredentials();
+        return true;
+    }
+
+    public getAgentRouterApiKey(): string | undefined {
+        return this.credentials.agentrouterApiKey;
+    }
+
+    /** No activateHostedRetrieval call, for the reason setFluxionApiKey gives: chat-only. */
+    public setAgentRouterApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set agentrouter api key')) return false;
+        this.credentials.agentrouterApiKey = key.trim() || undefined;
         this.saveCredentials();
         return true;
     }

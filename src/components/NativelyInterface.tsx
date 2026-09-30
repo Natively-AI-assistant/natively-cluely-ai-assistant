@@ -11573,6 +11573,10 @@ Provide only the answer, nothing else.`;
                           // currentModelId verbatim for a gateway, so below the
                           // displayName branch this chip renders the whole id.
                           if (m.startsWith('ninerouter/')) return gatewayModelLabel(m);
+                          // AgentRouter: one prefix over a bare vendor id, so the
+                          // raw id reads `agentrouter/claude-opus-5` and the 16-char
+                          // chip would show only "agentrouter/clau". Same rule.
+                          if (m.startsWith('agentrouter/')) return gatewayModelLabel(m);
                           // The managed route. LLMHelper.getCurrentModelDisplayName()
                           // returns the id verbatim for it, so the displayName branch
                           // below cannot name it and the chip fell through to `return m`

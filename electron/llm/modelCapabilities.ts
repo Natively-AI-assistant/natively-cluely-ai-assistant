@@ -72,7 +72,9 @@ const KNOWN_OLLAMA_NATIVE_CTX: Array<[RegExp, number]> = [
 // out of this list is silent: every lookup misses, the id falls to the unknown
 // branch, and 30 of the 47 models a stock instance serves — all vision-capable
 // by their own catalogue — come back supportsImages:false.
-const ROUTING_PREFIX_RE = /^(?:litellm|nvidia_nim|openrouter|fluxion|ninerouter)\//i;
+// AgentRouter is Fluxion's shape (bare vendor ids behind the prefix), so the
+// same single strip leaves `claude-opus-5` — the id the predicates know.
+const ROUTING_PREFIX_RE = /^(?:litellm|nvidia_nim|openrouter|fluxion|ninerouter|agentrouter)\//i;
 export function stripProviderRoutingPrefix(id: string): string {
   if (!ROUTING_PREFIX_RE.test(id)) return id;
   const withoutProvider = id.replace(ROUTING_PREFIX_RE, '');

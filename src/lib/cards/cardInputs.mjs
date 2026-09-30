@@ -9,7 +9,7 @@
 /** get-stored-credentials flags that mean an AI route of the user's own. */
 const OWN_AI_FLAGS = [
   'hasGeminiKey', 'hasGroqKey', 'hasOpenaiKey', 'hasClaudeKey', 'hasDeepseekKey',
-  'hasNvidiaNimKey', 'hasOpenrouterKey', 'hasFluxionKey', 'hasNinerouterKey', 'hasLitellmBaseURL',
+  'hasNvidiaNimKey', 'hasOpenrouterKey', 'hasFluxionKey', 'hasAgentRouterKey', 'hasNinerouterKey', 'hasLitellmBaseURL',
 ];
 
 function tierOf(plan) {

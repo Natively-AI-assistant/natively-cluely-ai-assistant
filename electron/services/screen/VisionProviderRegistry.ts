@@ -26,6 +26,8 @@ import {
   isOllamaVisionModelByName,
 } from '../../llm/visionCapability';
 import { readActiveCustomProvider, readActiveModelId } from '../../llm/activeCustomProvider';
+import { getModelCapabilities } from '../../llm/modelCapabilities';
+import { agentRouterWireModel, isAgentRouterModelId } from '../../llm/agentRouter';
 
 export interface VisionProviderBuildInputs {
   mode: VisionMode;
@@ -72,6 +74,7 @@ export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionP
     providers.push(nvidiaNim(credentials, inputs));
     providers.push(openrouter(credentials, inputs));
     providers.push(fluxion(credentials, inputs));
+    providers.push(agentrouter(credentials, inputs));
     // Unlike the four above, this one knows per model whether it can read an
     // image — see ninerouter() for why that matters, and why an empty
     // catalogue still seats it.
@@ -439,6 +442,34 @@ function fluxion(creds: CredentialsManager, _inputs: VisionProviderBuildInputs):
     scopeAllowsScreenshots: true,
     hint: 'generic',
     invoke: async (p) => callLLMHelperVision('fluxion', p),
+  };
+}
+
+/**
+ * AgentRouter as a vision rung. Fluxion's `isSelected` gate, for Fluxion's
+ * reason (bare vendor ids — an ungated rung would look exactly like the user's
+ * real Anthropic/OpenAI provider while spending a different account), plus a
+ * per-model gate Fluxion does not need: AgentRouter's DeepSeek and gpt-6-astra
+ * resolve text-only in the capability table, so a screenshot on them goes to a
+ * provider that can see it. Mirrors the seat LLMHelper's streaming vision chain
+ * builds (agentRouterModelSupportsVision), so the two cannot disagree.
+ */
+function agentrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getAgentRouterApiKey?.();
+  const activeModelId = readActiveModelId();
+  const isSelected = isAgentRouterModelId(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  const readsImages = isSelected && getModelCapabilities(activeModelId, false).supportsImages;
+  return {
+    id: 'agentrouter',
+    displayName: modelId ? `AgentRouter (${agentRouterWireModel(modelId)})` : 'AgentRouter',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey && isSelected,
+    supportsVision: !!apiKey && readsImages,
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('agentrouter', p),
   };
 }
 

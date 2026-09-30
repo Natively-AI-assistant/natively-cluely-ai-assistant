@@ -611,6 +611,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         // user's real Anthropic/OpenAI/Gemini key, and nothing about the request
         // or the answer looks wrong.
         if (modelId.startsWith('fluxion/')) return 'fluxion';
+        // Fluxion's reason exactly: AgentRouter resells claude-opus-5, gpt-6-astra
+        // and deepseek-v4-flash under the vendors' own ids, so every vendor check
+        // below would claim one. MUST stay above them.
+        if (modelId.startsWith('agentrouter/')) return 'agentrouter';
         // MUST stay above every vendor check below, same as the three gateways
         // above. 9Router namespaces its catalogue by upstream, so
         // `ninerouter/openai/gpt-5` is an includes('openai') match and
@@ -683,6 +687,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Above the gemini/groq/openai/claude/deepseek lines for the reason
         // providerFamily() gives — all five would otherwise claim a Fluxion id.
         if (modelId.startsWith('fluxion/')) return has(cm.getFluxionApiKey());
+        // Above the vendor lines for the reason providerFamily() gives.
+        if (modelId.startsWith('agentrouter/')) return has(cm.getAgentRouterApiKey());
         // Above the vendor lines for the reason providerFamily() gives. Gated on
         // the BASE URL, not a key: 9Router's own REQUIRE_API_KEY defaults to
         // false, so a stock local instance is legitimately keyless and gating on
@@ -719,6 +725,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Same contract: stored fully prefixed (`fluxion/<model>`), the form
       // modelAvailable() classifies. Do not re-prefix.
       const fluxionFallbackModel: string | null = cm.getPreferredModel?.('fluxion') || null;
+      // Stored prefixed like the two above. Unlike them it has a default when
+      // the user never promoted one: AGENTROUTER_DEFAULT_MODEL (DeepSeek, the
+      // one model not rationed per day). modelAvailable() still gates it on the
+      // key, the disabled switch and the allow-list.
+      const agentrouterFallbackModel: string =
+        cm.getPreferredModel?.('agentrouter')
+        || (require('./llm/agentRouter') as typeof import('./llm/agentRouter')).AGENTROUTER_DEFAULT_MODEL;
       // Same contract again: stored fully prefixed (`ninerouter/<alias>/<model>`),
       // the form modelAvailable() classifies. Do not re-prefix.
       const ninerouterFallbackModel: string | null = cm.getPreferredModel?.('ninerouter') || null;
@@ -792,6 +805,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         // default went stale fell through to `allProviders.find(...)` -> null and
         // was told "No AI providers configured" while holding a working key.
         : (fluxionFallbackModel && modelAvailable(fluxionFallbackModel)) ? fluxionFallbackModel
+        // AgentRouter earns a rung for Fluxion's reason, with the default above.
+        : modelAvailable(agentrouterFallbackModel) ? agentrouterFallbackModel
         // 9Router earns a rung on the same evidence, and it is the cheap kind
         // rather than LiteLLM's: no catalogue fetch, because modelAvailable()
         // already enforces the base URL, the disabled switch and the OPT-IN
@@ -10885,6 +10900,42 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) { return { success: false, error: error.message }; }
   });
 
+  /**
+   * AgentRouter: a key and nothing else. The protocol is chosen per MODEL
+   * (llm/agentRouter.ts), so there is no protocol to store or detect, and the
+   * key backs chat only, so there is no hosted-retrieval coupling to sample —
+   * the shortest of the gateway handlers. `''` clears.
+   */
+  safeHandle('set-agentrouter-api-key', async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const normalizedKey = (apiKey || '').trim();
+      const keyChanged = (cm.getAgentRouterApiKey() || '') !== normalizedKey;
+
+      // Degraded-store rule shared by every key handler: stop BEFORE the live
+      // client is built, or chat works this session on a key that is gone after
+      // the next restart while the card reads "Saved".
+      const saved = cm.setAgentRouterApiKey(normalizedKey);
+      if (saved === false) {
+        return {
+          success: false,
+          error: 'credential_store_degraded',
+          message: 'Could not save the key. Your credential store is unavailable this session.',
+        };
+      }
+      appState.processingHelper.getLLMHelper().setAgentRouterApiKey(normalizedKey);
+
+      appState.getIntelligenceManager().resetEngine();
+      appState.getIntelligenceManager().initializeLLMs();
+      if (keyChanged) {
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
+      }
+      return { success: true };
+    } catch (error: any) { return { success: false, error: error.message }; }
+  });
+
   safeHandle('set-litellm-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number }) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -12339,6 +12390,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Config, not a secret: Settings must prefill the protocol selector, and
         // a wrong-but-invisible protocol is the failure this setting exists to stop.
         fluxionProtocol: creds.fluxionProtocol === 'anthropic' ? 'anthropic' : 'openai',
+        hasAgentRouterKey: hasKey(creds.agentrouterApiKey),
         hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
         hasNinerouterBaseURL: hasKey(creds.ninerouterBaseURL),
         hasNinerouterKey: hasKey(creds.ninerouterApiKey),
@@ -12407,6 +12459,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             : creds.nvidia_nimPreferredModel || undefined,
         openrouterPreferredModel: creds.openrouterPreferredModel || undefined,
         fluxionPreferredModel: creds.fluxionPreferredModel || undefined,
+        agentrouterPreferredModel: creds.agentrouterPreferredModel || undefined,
         // Stored prefixed (`litellm/<model>`) — see StoredCredentials.litellmPreferredModel.
         litellmPreferredModel: creds.litellmPreferredModel || undefined,
         ninerouterPreferredModel: creds.ninerouterPreferredModel || undefined,
@@ -12425,6 +12478,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenrouterKey: false,
         hasFluxionKey: false,
         fluxionProtocol: 'openai',
+        hasAgentRouterKey: false,
         hasLitellmBaseURL: false,
         litellmBaseURL: null,
         litellmMaxTokens: null,
@@ -12467,7 +12521,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'fetch-provider-models',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion', apiKey: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter', apiKey: string) => {
       try {
         // Fall back to stored key if no key was explicitly provided
         let key = apiKey?.trim();
@@ -12482,6 +12536,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'nvidia_nim') key = cm.getNvidiaNimApiKey();
           else if (provider === 'openrouter') key = cm.getOpenrouterApiKey();
           else if (provider === 'fluxion') key = cm.getFluxionApiKey();
+          else if (provider === 'agentrouter') key = cm.getAgentRouterApiKey();
         }
 
         if (!key) {
@@ -12524,6 +12579,12 @@ export function initializeIpcHandlers(appState: AppState): void {
           responseError: error?.response?.data?.error?.message || error?.response?.data?.message,
         };
         console.error('[IPC] Failed to fetch provider models:', safeInfo);
+        if (provider === 'agentrouter') {
+          const { explainAgentRouterError } =
+            require('./llm/agentRouter') as typeof import('./llm/agentRouter');
+          const explained = explainAgentRouterError(error);
+          if (explained) return { success: false, error: explained };
+        }
         const msg =
           error?.response?.data?.error?.message || error.message || 'Failed to fetch models';
         return { success: false, error: msg };
@@ -12533,7 +12594,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'litellm' | 'ninerouter', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'litellm' | 'ninerouter', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);
@@ -13458,7 +13519,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'test-llm-connection',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion', apiKey?: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter', apiKey?: string) => {
       console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
       try {
         if (!apiKey || !apiKey.trim()) {
@@ -13472,6 +13533,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'nvidia_nim') apiKey = creds.getNvidiaNimApiKey();
           else if (provider === 'openrouter') apiKey = creds.getOpenrouterApiKey();
           else if (provider === 'fluxion') apiKey = creds.getFluxionApiKey();
+          else if (provider === 'agentrouter') apiKey = creds.getAgentRouterApiKey();
         }
 
         if (!apiKey || !apiKey.trim()) {
@@ -13680,6 +13742,24 @@ export function initializeIpcHandlers(appState: AppState): void {
             timeout: 15000,
           });
         }
+        else if (provider === 'agentrouter') {
+          // GET /v1/models, NEVER a chat completion — and here that is not just
+          // the cheaper choice. AgentRouter's content filter runs BEFORE auth and
+          // refuses canned probe text ("Say OK") with 400 content-blocked even on
+          // a bogus key (measured 2026-09-30), so a completion-based test would
+          // fail for every user. The catalogue is key-scoped: 200 on a valid key,
+          // 401 `无效的令牌` on a bogus one, 401 `未提供令牌` with none — and it
+          // costs nothing against the daily Claude/GPT allowance.
+          //
+          // Carries the client-identity header (AGENTROUTER_CLIENT_HEADERS);
+          // without it every key reads as 401 unauthorized_client_error.
+          const { AGENTROUTER_MODELS_URL, agentRouterHttpHeaders } =
+            require('./llm/agentRouter') as typeof import('./llm/agentRouter');
+          response = await axios.get(AGENTROUTER_MODELS_URL, {
+            headers: agentRouterHttpHeaders(apiKey),
+            timeout: 15000,
+          });
+        }
 
         if (response && (response.status === 200 || response.status === 201)) {
           return { success: true };
@@ -13712,6 +13792,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           responseError,
         };
         console.error('LLM connection test failed:', safeInfo);
+        // AgentRouter's failures are Chinese new-api strings or shapes a user
+        // cannot act on as-is (`无效的令牌`, unauthorized_client_error); name them.
+        if (provider === 'agentrouter') {
+          const { explainAgentRouterError } =
+            require('./llm/agentRouter') as typeof import('./llm/agentRouter');
+          const explained = explainAgentRouterError(error);
+          if (explained) return { success: false, error: explained };
+        }
         const rawMsg =
           error?.response?.data?.error?.message ||
           error?.response?.data?.message ||

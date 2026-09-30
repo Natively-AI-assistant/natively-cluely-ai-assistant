@@ -30,7 +30,7 @@ import {
     WHITE_ON_TRANSPARENT_MARKS,
 } from '../ui/aiProviderMarks';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { FLUXION_REFERRAL_URL } from '../../lib/partnerLinks';
+import { AGENTROUTER_REFERRAL_URL, FLUXION_REFERRAL_URL } from '../../lib/partnerLinks';
 import { isKnownFastModel } from '../../lib/fastModelHint.mjs';
 import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 
@@ -1310,6 +1310,10 @@ export const CLOUD_PROVIDERS = [
     // setting — see the protocol selector passed as `extraControls` below.
     // Natively's partner link (sponsor): new sign-ups get $3 in API credit.
     { id: 'fluxion' as const, name: 'Fluxion AI', placeholder: 'sk-...', url: FLUXION_REFERRAL_URL },
+    // A gateway like Fluxion: four models, key-scoped catalogue, NOT opt-in.
+    // Nothing extra to configure — its protocol is chosen per model. "Get API
+    // key" is Natively's own AgentRouter referral link.
+    { id: 'agentrouter' as const, name: 'AgentRouter', placeholder: 'sk-...', url: AGENTROUTER_REFERRAL_URL },
     { id: 'groq'     as const, name: 'Groq',     placeholder: 'gsk_...',    url: 'https://console.groq.com/keys' },
     { id: 'openai'   as const, name: 'OpenAI',   placeholder: 'sk-...',     url: 'https://platform.openai.com/api-keys' },
     { id: 'claude'   as const, name: 'Claude',   placeholder: 'sk-ant-...', url: 'https://console.anthropic.com/settings/keys' },
@@ -2528,6 +2532,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [nvidiaNimApiKey, setNvidiaNimApiKey] = useState('');
     const [openrouterApiKey, setOpenrouterApiKey] = useState('');
     const [fluxionApiKey, setFluxionApiKey] = useState('');
+    const [agentrouterApiKey, setAgentrouterApiKey] = useState('');
     /**
      * Which wire protocol the user's Fluxion key speaks, which is a property
      * of the KEY'S GROUP and is not discoverable from the key itself. Held in
@@ -2589,6 +2594,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         nvidia_nim: [nvidiaNimApiKey, setNvidiaNimApiKey],
         openrouter: [openrouterApiKey, setOpenrouterApiKey],
         fluxion: [fluxionApiKey, setFluxionApiKey],
+        agentrouter: [agentrouterApiKey, setAgentrouterApiKey],
     };
 
     // --- LiteLLM proxy (OpenAI-compatible gateway: baseURL + optional virtual key) ---
@@ -2970,6 +2976,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         nvidia_nim: creds.hasNvidiaNimKey || false,
                         openrouter: (creds as any).hasOpenrouterKey || false,
                         fluxion: (creds as any).hasFluxionKey || false,
+                        agentrouter: (creds as any).hasAgentRouterKey || false,
                         litellm: creds.hasLitellmBaseURL || false,
                         // Base URL, not key: a stock 9Router runs keyless.
                         ninerouter: (creds as any).hasNinerouterBaseURL || false,
@@ -2998,6 +3005,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     if ((creds as any).openrouterPreferredModel) pm.openrouter = (creds as any).openrouterPreferredModel;
                     // Already prefixed on disk (`fluxion/<model>`), same rule as above.
                     if ((creds as any).fluxionPreferredModel) pm.fluxion = (creds as any).fluxionPreferredModel;
+                    // Already prefixed on disk (`agentrouter/<model>`), same rule.
+                    if ((creds as any).agentrouterPreferredModel) pm.agentrouter = (creds as any).agentrouterPreferredModel;
                     // Only adopt the stored protocol when a key actually exists.
                     // loadCredentials re-runs on EVERY credentials-changed broadcast —
                     // saving a Gemini key on another card fires one — and an
@@ -4033,6 +4042,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 const detected = (result as { protocol?: 'openai' | 'anthropic' })?.protocol;
                 if (detected) setFluxionProtocol(detected);
             }
+            if (provider === 'agentrouter') result = await window.electronAPI.setAgentRouterApiKey(key);
 
             if (result && result.success) {
                 // The save may have just switched OpenRouter reranking on; the
@@ -4239,6 +4249,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             if (provider === 'nvidia_nim') result = await window.electronAPI.setNvidiaNimApiKey('');
             if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey('');
             if (provider === 'fluxion') result = await window.electronAPI.setFluxionConfig({ apiKey: '' });
+            if (provider === 'agentrouter') result = await window.electronAPI.setAgentRouterApiKey('');
 
             if (result && result.success) {
                 setHasStoredKey(prev => ({ ...prev, [provider]: false }));

@@ -146,6 +146,15 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 const GROQ_MODEL = GROQ_PRIMARY_MODEL
 import { GROQ_VISION_MODEL } from './llm/groqModels'
 import { DEEPSEEK_DEFAULT_MODEL, deepseekWireModel, isDeepseekModelId } from './llm/deepseekModels'
+import {
+  AGENTROUTER_JUDGE_MODEL,
+  agentRouterError,
+  agentRouterOpenAIExtras,
+  agentRouterProtocolFor,
+  agentRouterWireModel,
+  isAgentRouterModelId,
+} from './llm/agentRouter'
+import { createAgentRouterClients } from './llm/agentRouterClients'
 import { stripLeadingReasoningBlock } from './llm/reasoningTagFilter'
 import { describeNinerouterFailure, NINEROUTER_EMPTY_ANSWER } from './llm/ninerouterErrors'
 import { renderUserInstructionSystemLayer } from './llm/userInstructionContract'
@@ -214,10 +223,10 @@ const CODEX_FAST_MIN_BUDGET_MS = 3000
 // Background Model: resolveFastModelFamily() does not return it, so the picker
 // cannot offer it and callFastModel never sees it.
 type FastModelFamily = 'openai' | 'groq' | 'gemini' | 'deepseek' | 'claude' | 'codex' | 'natively'
-  | 'openrouter' | 'litellm' | 'nvidia_nim' | 'ninerouter' | 'fluxion'
+  | 'openrouter' | 'litellm' | 'nvidia_nim' | 'ninerouter' | 'fluxion' | 'agentrouter'
 // Background Model families on an endpoint the user supplies — the same set
 // activeModelIsUserEndpoint() names for an Active Model.
-const FAST_PICK_USER_ENDPOINT_FAMILIES: ReadonlySet<FastModelFamily> = new Set(['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'ninerouter'])
+const FAST_PICK_USER_ENDPOINT_FAMILIES: ReadonlySet<FastModelFamily> = new Set(['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'ninerouter', 'agentrouter'])
 const OPENAI_JUDGE_MODEL = "gpt-5.5"
 const CLAUDE_JUDGE_MODEL = "claude-haiku-4-5"
 // DEEPSEEK_MODEL keeps main's centralised id, NOT the "deepseek-v4-flash"
@@ -622,6 +631,11 @@ export class LLMHelper {
   // one is ever non-null at a time — see setFluxionConfig.
   private _fluxionOpenAIClient: OpenAI | null = null
   private _fluxionAnthropicClient: Anthropic | null = null
+  // AgentRouter also speaks both protocols, but chooses PER MODEL rather than
+  // per key (agentRouterProtocolFor), so both clients exist whenever a key does
+  // — see setAgentRouterApiKey. Both carry the client-identity header.
+  private _agentrouterOpenAIClient: OpenAI | null = null
+  private _agentrouterAnthropicClient: Anthropic | null = null
   // LiteLLM proxy is OpenAI-compatible (AI gateway fronting 100+ providers).
   // Same pattern as DeepSeek: OpenAI SDK + custom baseURL, separate client so
   // credentials/scope/telemetry stay provider-specific.
@@ -654,6 +668,13 @@ export class LLMHelper {
   private set fluxionOpenAIClient(v: OpenAI | null) { this._fluxionOpenAIClient = v }
   private get fluxionAnthropicClient(): Anthropic | null { return this.isProviderDisabled('fluxion') ? null : this._fluxionAnthropicClient }
   private set fluxionAnthropicClient(v: Anthropic | null) { this._fluxionAnthropicClient = v }
+  // The disabled-provider guard for AgentRouter, for the reason the Fluxion
+  // pair above gives: no gateway has a PROVIDER_LABEL_FAMILY entry, so these
+  // getters returning null are what stop a switched-off AgentRouter being called.
+  private get agentrouterOpenAIClient(): OpenAI | null { return this.isProviderDisabled('agentrouter') ? null : this._agentrouterOpenAIClient }
+  private set agentrouterOpenAIClient(v: OpenAI | null) { this._agentrouterOpenAIClient = v }
+  private get agentrouterAnthropicClient(): Anthropic | null { return this.isProviderDisabled('agentrouter') ? null : this._agentrouterAnthropicClient }
+  private set agentrouterAnthropicClient(v: Anthropic | null) { this._agentrouterAnthropicClient = v }
   private get litellmClient(): OpenAI | null { return this.isProviderDisabled('litellm') ? null : this._litellmClient }
   private set litellmClient(v: OpenAI | null) { this._litellmClient = v }
   // This getter IS the disabled-provider guard for 9Router, for the reason the
@@ -706,6 +727,7 @@ export class LLMHelper {
   /** Which wire protocol this key's Fluxion group speaks. Default matches the
    *  GPT/Grok/Gemini/DeepSeek/GLM/Kimi groups; Claude groups need 'anthropic'. */
   private fluxionProtocol: 'openai' | 'anthropic' = 'openai'
+  private agentrouterApiKey: string | null = null
   private litellmApiKey: string | null = null
   private litellmBaseURL: string = "http://localhost:4000/v1"
   // Manual output-ceiling override (Settings → LiteLLM Proxy dropdown).
@@ -867,7 +889,7 @@ export class LLMHelper {
       const c: any = this.activeCurlProvider;
       return `curl:${c.id}:${c.curlCommand ? String(c.curlCommand).length : ''}`;
     }
-    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId)) {
+    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId) || this.isAgentRouterModel(this.currentModelId)) {
       return `model:${this.currentModelId}`;
     }
     return null;
@@ -1253,6 +1275,7 @@ export class LLMHelper {
     // rather than failing. The client getter is the primary guard; this is the
     // backstop for any path that reaches the provider without passing it.
     ninerouter: 'ninerouter',
+    agentrouter: 'agentrouter',
     antigravity: 'antigravity', custom_curl: 'custom', custom_provider: 'custom',
   };
 
@@ -1682,6 +1705,30 @@ export class LLMHelper {
   /** True when a Fluxion client exists for the selected protocol. */
   private hasFluxionCredential(): boolean {
     return !!(this.fluxionOpenAIClient || this.fluxionAnthropicClient);
+  }
+
+  /**
+   * Configure AgentRouter. One key, BOTH clients: the protocol is a property of
+   * the MODEL here (agentRouterProtocolFor — Claude on /v1/messages, the rest
+   * on /v1/chat/completions), so unlike setFluxionConfig there is no protocol
+   * argument and nothing for the user to choose. Both clients carry the
+   * client-identity header; see AGENTROUTER_CLIENT_HEADERS for what it is and
+   * whose decision it was.
+   */
+  public setAgentRouterApiKey(apiKey: string) {
+    const trimmed = (apiKey || '').trim();
+    this.agentrouterApiKey = trimmed || null;
+    const clients = trimmed ? createAgentRouterClients(trimmed) : null;
+    this.agentrouterOpenAIClient = clients?.openai ?? null;
+    this.agentrouterAnthropicClient = clients?.anthropic ?? null;
+    this.textHealth.delete('agentrouter');
+    this.visionHealth.delete('agentrouter');
+    console.log(`[LLMHelper] AgentRouter API Key ${trimmed ? 'updated' : 'cleared'}.`);
+  }
+
+  /** True when AgentRouter is configured and not switched off (both clients are built together). */
+  private hasAgentRouterCredential(): boolean {
+    return !!(this.agentrouterOpenAIClient && this.agentrouterAnthropicClient);
   }
 
   /**
@@ -2115,7 +2162,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -2154,6 +2201,8 @@ export class LLMHelper {
         return this.generateWithFluxion(userPrompt, systemPrompt, [imagePath]);
       case 'ninerouter':
         return this.generateWithNinerouter(userPrompt, systemPrompt, [imagePath]);
+      case 'agentrouter':
+        return this.generateWithAgentRouter(userPrompt, systemPrompt, [imagePath], undefined, opts?.signal);
       case 'gemini_flash_lite':
       case 'gemini_flash':
       case 'gemini_pro': {
@@ -2273,6 +2322,11 @@ export class LLMHelper {
     // request goes to api.openai.com on the user's own key and answers
     // perfectly, which is what makes it so hard to see.
     if (this.isNinerouterModel(modelId)) return false;
+    // Fourth gateway, Fluxion's shape exactly: `agentrouter/gpt-6-astra` is
+    // the vendor's own id behind a prefix. startsWith("gpt-") cannot see it
+    // today, but includes("openai") would claim any id that ever carries the
+    // word, so exclude it here like the others rather than rely on luck.
+    if (this.isAgentRouterModel(modelId)) return false;
     return modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-") || modelId.includes("openai");
   }
 
@@ -2281,6 +2335,8 @@ export class LLMHelper {
     // prefix is gone, so the prefix is the ONLY thing separating a Fluxion
     // Claude request from one billed to the user's Anthropic key.
     if (this.isFluxionModel(modelId)) return false;
+    // Same for AgentRouter, which resells claude-opus-5 and claude-opus-4-8.
+    if (this.isAgentRouterModel(modelId)) return false;
     return modelId.startsWith("claude-");
   }
 
@@ -2346,6 +2402,27 @@ export class LLMHelper {
    */
   private fluxionWireModel(modelId: string): string {
     return this.isFluxionModel(modelId) ? modelId.slice('fluxion/'.length) : modelId;
+  }
+
+  /**
+   * MUST be tested before every vendor predicate, for Fluxion's reason: an
+   * AgentRouter id is the vendor's own (`agentrouter/claude-opus-5`,
+   * `agentrouter/deepseek-v4-flash`), so dropping the prefix bills the user's
+   * real Anthropic/OpenAI/DeepSeek key and answers perfectly. The wire strip is
+   * agentRouterWireModel() — one segment, like Fluxion.
+   */
+  private isAgentRouterModel(modelId: string): boolean { return isAgentRouterModelId(modelId); }
+
+  /**
+   * Does the selected AgentRouter model read images? From the capability table
+   * (the prefix is a routing prefix there): claude-* yes; deepseek-v4-flash no
+   * (DeepSeek is text-only); gpt-6-astra resolves no, because the table only
+   * knows the gpt-4o/4.1/5 families. Gates the vision seat and the primary
+   * path, so a screenshot goes to a provider that can see it rather than being
+   * answered blind.
+   */
+  private agentRouterModelSupportsVision(modelId: string): boolean {
+    return getModelCapabilities(modelId, false).supportsImages;
   }
 
   /**
@@ -4775,6 +4852,13 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isFluxionModel(this.currentModelId) && this.hasFluxionCredential()) {
         return await this.generateWithFluxion(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
       }
+      // Same position and reason as Fluxion: above the Groq branch and every
+      // vendor branch that could otherwise see the bare id. Images only to a
+      // model that reads them — DeepSeek and gpt-6-astra answer as text.
+      if (this.isAgentRouterModel(this.currentModelId) && this.hasAgentRouterCredential()) {
+        const sendImages = cloudIsMultimodal && this.agentRouterModelSupportsVision(this.currentModelId);
+        return await this.generateWithAgentRouter(cloudUserContent, openaiSystemPrompt, sendImages ? cloudImagePaths : undefined);
+      }
       if (this.isGroqModel(this.currentModelId) && this.groqClient) {
         if (cloudIsMultimodal && cloudImagePaths) {
           return await this.generateWithGroqMultimodal(cloudUserContent, cloudImagePaths, openaiSystemPrompt);
@@ -4993,6 +5077,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isNvidiaNimModel(modelId)) return 'nvidia_nim';
     if (this.isNinerouterModel(modelId)) return 'ninerouter';
     if (this.isFluxionModel(modelId)) return 'fluxion';
+    if (this.isAgentRouterModel(modelId)) return 'agentrouter';
     if (this.isOpenAiModel(modelId)) return 'openai';
     if (this.isGroqModel(modelId)) return 'groq';
     if (this.isGeminiModel(modelId)) return 'gemini';
@@ -5060,6 +5145,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'nvidia_nim': stream = this.streamWithNvidiaNim(userContent, openaiShaped, undefined, abortSignal, modelId); break;
       case 'ninerouter': stream = this.streamWithNinerouter(userContent, openaiShaped, undefined, abortSignal, modelId); break;
       case 'fluxion': stream = this.streamWithFluxion(userContent, openaiShaped, undefined, abortSignal, modelId); break;
+      case 'agentrouter': stream = this.streamWithAgentRouter(userContent, openaiShaped, undefined, abortSignal, modelId); break;
     }
     return { modelId, family, auto, stream };
   }
@@ -5081,6 +5167,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'nvidia_nim': return !!this.nvidiaNimClient;
       case 'ninerouter': return !!this.ninerouterClient;
       case 'fluxion': return this.hasFluxionCredential();
+      case 'agentrouter': return this.hasAgentRouterCredential();
     }
   }
 
@@ -5433,6 +5520,10 @@ let isMultimodal = !!(imagePaths?.length);
     const family = this.resolveFastModelFamily(this.currentModelId);
     if (family === 'openrouter') return this.openrouterClient ? OPENROUTER_JUDGE_MODEL : null;
     if (family === 'fluxion') return (this.fluxionOpenAIClient || this.fluxionAnthropicClient) ? this.currentModelId : null;
+    // NOT the selected model: see AGENTROUTER_JUDGE_MODEL. The judge runs on
+    // every candidate utterance, and on a rationed Claude/GPT pick that would
+    // spend the user's daily AgentRouter allowance on classification.
+    if (family === 'agentrouter') return this.hasAgentRouterCredential() ? AGENTROUTER_JUDGE_MODEL : null;
     if (family === 'ninerouter') return this.ninerouterClient ? this.currentModelId : null;
     if (family === 'nvidia_nim') return this.nvidiaNimClient ? this.currentModelId : null;
     if (family === 'litellm') return this.litellmClient ? this.currentModelId : null;
@@ -5493,6 +5584,22 @@ let isMultimodal = !!(imagePaths?.length);
         }
         let text = '';
         for await (const chunk of this.streamWithCodexCli(message, undefined, true, undefined, timer, this.codexModelForFastPick(modelId))) text += chunk;
+        return finish(text);
+      }
+
+      // AgentRouter drains its own STREAMING adapter instead of joining the
+      // generic gateway map below, for three measured reasons that map cannot
+      // honour: Claude ids go to /v1/messages, whose NON-streaming reply is
+      // text/plain (the Anthropic SDK then returns a string and this read an
+      // empty answer); the OpenAI-format stream carries `data: null` events;
+      // and DeepSeek needs thinking disabled or its reasoning eats the 256-token
+      // cap. The adapter returns quietly on abort, so the budget is checked
+      // afterwards — a timed-out call must not hand back a partial verdict.
+      if (family === 'agentrouter') {
+        if (!this.hasAgentRouterCredential()) return notDispatchable();
+        let text = '';
+        for await (const piece of this.streamWithAgentRouter(message, undefined, undefined, timer, modelId, { maxTokens: 256 })) text += piece;
+        if (timer?.aborted) throw Object.assign(new Error(`AgentRouter fast call aborted (${modelId})`), { name: 'AbortError' });
         return finish(text);
       }
 
@@ -6853,6 +6960,135 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
     finally { if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort(); }
+  }
+
+  /**
+   * In-band failure inside an already-200 AgentRouter stream. The openai SDK
+   * already throws on a chunk carrying `error`; `finish_reason: "error"` is the
+   * shape it lets through, and a relay that loses its upstream mid-answer is
+   * exactly where that comes from. Explained like every other AgentRouter error.
+   */
+  private assertNoAgentRouterStreamError(chunk: any, model: string): void {
+    if (chunk?.error) throw agentRouterError(Object.assign(new Error(String(chunk.error.message || 'gateway failed mid-stream')), { error: chunk.error }), model);
+    if (chunk?.choices?.[0]?.finish_reason === 'error') {
+      throw new Error(`AgentRouter (${model}) ended the stream with finish_reason=error`);
+    }
+  }
+
+  /**
+   * AgentRouter, blocking. DRAINS THE STREAMING ADAPTER rather than calling a
+   * non-streaming endpoint: a non-streaming /v1/messages reply comes back as
+   * `text/plain` (measured), which the Anthropic SDK does not parse, so
+   * `.content` was undefined and the "answer" was an empty string with no
+   * error. Streaming is the one path measured to work on both protocols, and
+   * sharing it keeps every quirk (null chunks, DeepSeek thinking, error
+   * mapping) in one place.
+   *
+   * No withRetry: it retries anything whose message contains "503", and here a
+   * 503 means "no channel for this model", which a retry cannot fix and which
+   * the gateway's terms would read as hammering. The SDK's own single retry
+   * (createAgentRouterClients) covers a dropped connection.
+   */
+  private async generateWithAgentRouter(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string, signal?: AbortSignal): Promise<string> {
+    const model = agentRouterWireModel(modelId || this.currentModelId);
+    const timeoutMs = 120000;
+    const deadline = AbortSignal.timeout(timeoutMs);
+    const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
+    let text = '';
+    for await (const piece of this.streamWithAgentRouter(userMessage, systemPrompt, imagePaths, combined, modelId)) text += piece;
+    // The stream returns quietly on abort, which is right for a live answer and
+    // wrong here: a blocking caller would take the partial text as complete.
+    if (combined.aborted) {
+      if (signal?.aborted) throw Object.assign(new Error(`AgentRouter (${model}) aborted`), { name: 'AbortError' });
+      throw new Error(`AgentRouter (${model}) timed out after ${timeoutMs}ms`);
+    }
+    return stripLeadingReasoningBlock(text);
+  }
+
+  /**
+   * AgentRouter, streaming. The protocol is chosen per MODEL
+   * (agentRouterProtocolFor): Claude on the Anthropic Messages API, everything
+   * else on Chat Completions — the docs' rule, and it covers the whole live
+   * catalogue. Every failure goes through agentRouterError(), so a user reads
+   * "today's Claude allowance is used up" rather than a bare 402.
+   */
+  private async * streamWithAgentRouter(
+    userMessage: string,
+    systemPrompt?: string,
+    imagePaths?: string[],
+    abortSignal?: AbortSignal,
+    modelId?: string,
+    opts?: { maxTokens?: number },
+  ): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    this.assertOutboundScopes('agentrouter', userMessage, imagePaths);
+    await this.rateLimiters.agentrouter.acquire();
+    const model = agentRouterWireModel(modelId || this.currentModelId);
+    if (abortSignal?.aborted) return;
+
+    if (agentRouterProtocolFor(model) === 'anthropic') {
+      const client = this.agentrouterAnthropicClient;
+      if (!client) throw new Error('AgentRouter client not initialized');
+      const content = await this.buildFluxionAnthropicContent(userMessage, imagePaths);
+      // System as a plain STRING, no cache_control blocks — the reason
+      // buildFluxionAnthropicRequest gives: a relay pools upstream accounts per
+      // request, so prompt caching cannot be relied on to engage.
+      const request: any = {
+        model,
+        max_tokens: opts?.maxTokens ?? this.getClaudeMaxOutput(model),
+        ...(systemPrompt ? { system: systemPrompt } : {}),
+        messages: [{ role: 'user' as const, content }],
+      };
+      const stream = client.messages.stream(request);
+      const onAbort = () => { try { stream.abort(); } catch {} };
+      abortSignal?.addEventListener('abort', onAbort, { once: true });
+      try {
+        for await (const event of stream) {
+          if (abortSignal?.aborted) return;
+          if (event.type === 'content_block_delta' && (event as any).delta?.type === 'text_delta') {
+            yield (event as any).delta.text;
+          }
+        }
+      } catch (e: any) {
+        if (abortSignal?.aborted) return;
+        throw agentRouterError(e, model);
+      } finally {
+        abortSignal?.removeEventListener('abort', onAbort);
+      }
+      return;
+    }
+
+    const client = this.agentrouterOpenAIClient;
+    if (!client) throw new Error('AgentRouter client not initialized');
+    const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
+    let stream: any;
+    try {
+      stream = await client.chat.completions.create(
+        { model, messages, stream: true, ...agentRouterOpenAIExtras(model, opts?.maxTokens) } as any,
+        { signal: abortSignal },
+      );
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw agentRouterError(e, model);
+    }
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        // AgentRouter sends literal `data: null` events (two per DeepSeek
+        // answer, measured), which the SDK yields as null. Skip them BEFORE
+        // anything reads a field, or the answer dies with a TypeError halfway.
+        if (!chunk) continue;
+        this.assertNoAgentRouterStreamError(chunk, model);
+        const piece = chunk.choices?.[0]?.delta?.content;
+        if (piece) yield piece;
+      }
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw agentRouterError(e, model);
+    } finally {
+      if (abortSignal?.aborted && typeof stream?.abort === 'function') stream.abort();
+      if (abortSignal?.aborted && typeof stream?.controller?.abort === 'function') stream.controller.abort();
+    }
   }
 
   // The handler for cURL requests
@@ -8287,6 +8523,14 @@ let isMultimodal = !!(imagePaths?.length);
         cloud.push({ id: 'fluxion', name: `Fluxion (${this.fluxionWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithFluxion(userContent, systemPrompt, imagePaths, sig) });
       }
+      // Fluxion's rule — only the model the user picked — plus 9Router's
+      // per-model gate: AgentRouter's DeepSeek and gpt-6-astra resolve
+      // text-only, so a screenshot turn on them goes to a provider that can see
+      // it instead of spending an attempt on one that cannot.
+      if (this.isAgentRouterModel(this.currentModelId) && this.hasAgentRouterCredential() && this.agentRouterModelSupportsVision(this.currentModelId)) {
+        cloud.push({ id: 'agentrouter', name: `AgentRouter (${agentRouterWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithAgentRouter(userContent, systemPrompt, imagePaths, sig) });
+      }
       // isCodexAvailable() — NOT `codexCliConfig.enabled` — is the gate every
       // other Codex call site uses. It additionally covers the disabled-provider
       // kill switch and "is ChatGPT actually signed in". streamWithCodexCli
@@ -8378,6 +8622,9 @@ let isMultimodal = !!(imagePaths?.length);
       // inverted: the other vendor silently wins the turn the user assigned to
       // the gateway.
       if (this.isFluxionModel(this.currentModelId)) { const f = cloud.find(p => p.id === 'fluxion'); if (f) front.push(f); }
+      // Same inversion, same fix: without this a SELECTED AgentRouter Claude
+      // model lost its own screenshot turn to whichever vendor key sorted first.
+      if (this.isAgentRouterModel(this.currentModelId)) { const ar = cloud.find(p => p.id === 'agentrouter'); if (ar) front.push(ar); }
       const backLocal = local.filter(p => !front.includes(p));
       const backCloud = cloud.filter(p => !front.includes(p));
       ordered = [...front, ...orderVisionByHealth(backCloud, this.visionHealth, nowMs), ...backLocal];
@@ -8392,6 +8639,7 @@ let isMultimodal = !!(imagePaths?.length);
         : this.isNvidiaNimModel(this.currentModelId) ? 'NVIDIA NIM endpoint'
         : this.isOpenRouterModel(this.currentModelId) ? 'OpenRouter gateway'
         : this.isFluxionModel(this.currentModelId) ? 'Fluxion AI gateway'
+        : this.isAgentRouterModel(this.currentModelId) ? 'AgentRouter gateway'
         : null;
       throw new Error(gateway
         ? `No vision-capable provider configured. The selected ${gateway} model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings.`
@@ -10346,6 +10594,26 @@ let isMultimodal = !!(imagePaths?.length);
         open: (sig) => this.streamWithFluxion(userContent, fxSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
         userContent, finalSystemPrompt: fxSystem, thinkingBudget, abortSignal,
         hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
+      return;
+    }
+
+    // THE PRIMARY ANSWER PATH for AgentRouter — the branch whose absence was
+    // Fluxion's worst defect (see above): without it every vendor predicate
+    // correctly refuses an `agentrouter/` id and the turn falls through to the
+    // Gemini cascade on the user's own key. Failover for the same reason as
+    // Fluxion, sharpened: a rationed Claude/GPT pool answers 402 once the day's
+    // batch is gone, which is an expected outcome here, not an exceptional one.
+    if (this.isAgentRouterModel(this.currentModelId) && this.hasAgentRouterCredential()) {
+      const arSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      const arSendsImages = Boolean(isMultimodal && imagePaths?.length)
+        && this.agentRouterModelSupportsVision(this.currentModelId);
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'agentrouter',
+        name: `AgentRouter (${agentRouterWireModel(this.currentModelId)})`,
+        open: (sig) => this.streamWithAgentRouter(userContent, arSystem, arSendsImages ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: arSystem, thinkingBudget, abortSignal,
+        hasImages: arSendsImages,
       });
       return;
     }
@@ -12727,7 +12995,10 @@ let isMultimodal = !!(imagePaths?.length);
     // machine or their tunnel, and its whole purpose is to fail over between
     // upstreams AFTER accepting the request, so its first token can be waiting
     // on a cold provider two hops away.
-    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId);
+    // AgentRouter joins for the reason Fluxion does: a reseller that picks its
+    // upstream channel after accepting the request, whose Claude/GPT pool can
+    // be cold or exhausted, so it takes the user-endpoint budget.
+    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId) || this.isAgentRouterModel(this.currentModelId);
   }
 
   /**
@@ -13162,6 +13433,9 @@ let isMultimodal = !!(imagePaths?.length);
       // claim one if the prefix check did not come first — claude-*, gpt-*,
       // gemini-* and deepseek-v* are all live Fluxion catalogue entries.
       else if (this.isFluxionModel(selected)) provider = 'fluxion';
+      // Fluxion's rule again: claude-*, gpt-* and deepseek-v* are all live
+      // AgentRouter ids, so every vendor predicate below would claim one.
+      else if (this.isAgentRouterModel(selected)) provider = 'agentrouter';
       else if (this.isLiteLLMModel(selected)) provider = 'litellm';
       // Same rule, same reason as Fluxion above: 9Router's ids carry a real
       // vendor segment (`ninerouter/openai/gpt-5`,
@@ -13309,6 +13583,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'nvidia_nim': return !!this.nvidiaNimClient;
       case 'openrouter': return !!this.openrouterClient;
       case 'fluxion': return this.hasFluxionCredential();
+      case 'agentrouter': return this.hasAgentRouterCredential();
       case 'litellm': return !!this.litellmClient;
       case 'ninerouter': return !!this.ninerouterClient;
       case 'ollama': return this.useOllama;
@@ -13335,6 +13610,7 @@ let isMultimodal = !!(imagePaths?.length);
       this.litellmClient ||
       this.ninerouterClient ||
       this.hasFluxionCredential() ||
+      this.hasAgentRouterCredential() ||
       this.hasNatively() ||
       this.customProvider ||
       this.activeCurlProvider ||
@@ -13411,6 +13687,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'nvidia_nim':
       case 'openrouter':
       case 'fluxion':
+      case 'agentrouter':
       // 9Router belongs with them rather than with its own vision seat's
       // per-model gate, and the difference is deliberate. The vision CHAIN
       // chooses whether to recruit 9Router for a screenshot turn at all, so
@@ -13688,6 +13965,12 @@ let isMultimodal = !!(imagePaths?.length);
         // capability id, because its ids are bare — the opposite of OpenRouter,
         // which needs one strip for the wire and two for capabilities.
         yield* this.streamWithFluxion(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
+        return;
+      case 'agentrouter':
+        // `model` is still prefixed; streamWithAgentRouter strips the one
+        // `agentrouter/` segment (bare ids, Fluxion's shape) and picks the
+        // protocol from what is left.
+        yield* this.streamWithAgentRouter(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
         return;
       case 'litellm':
         yield* this.streamWithLiteLLM(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);

@@ -5,13 +5,14 @@
 
 import axios from 'axios';
 import { DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PRO_MODEL, isDeepseekModelId } from '../llm/deepseekModels';
+import { AGENTROUTER_MODELS_URL, AGENTROUTER_PREFIX, agentRouterHttpHeaders } from '../llm/agentRouter';
 
 export interface ProviderModel {
     id: string;
     label: string;
 }
 
-type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion';
+type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter';
 
 /**
  * Fetch available models from a provider's API.
@@ -38,6 +39,8 @@ export async function fetchProviderModels(
             return fetchOpenRouterModels(apiKey);
         case 'fluxion':
             return fetchFluxionModels(apiKey);
+        case 'agentrouter':
+            return fetchAgentRouterModels(apiKey);
         default:
             throw new Error(`Unknown provider: ${provider}`);
     }
@@ -119,6 +122,31 @@ async function fetchFluxionModels(apiKey: string): Promise<ProviderModel[]> {
     return (response.data?.data || [])
         .filter((m: any) => m?.id && !FLUXION_NON_CHAT_MODEL_IDS.has(String(m.id)))
         .map((m: any) => ({ id: `fluxion/${m.id}`, label: String(m.id) }))
+        .sort((a: ProviderModel, b: ProviderModel) => a.label.localeCompare(b.label));
+}
+
+/**
+ * AgentRouter's catalogue: GET /v1/models, key-scoped (401 `无效的令牌` on a
+ * bad key), carrying `supported_endpoint_types` per model. Returned 4 ids on
+ * 2026-09-30 — claude-opus-4-8, claude-opus-5, deepseek-v4-flash, gpt-6-astra —
+ * while the docs still list gpt-5.6-sol and glm-5.3, which would 503 "no
+ * available channel". So this list, not the docs, is the source.
+ *
+ * Needs the client-identity header like every AgentRouter route (see
+ * AGENTROUTER_CLIENT_HEADERS); without it this is a 401
+ * `unauthorized_client_error` whatever the key.
+ *
+ * The `agentrouter/` prefix is load-bearing for Fluxion's reason: these are
+ * the vendors' own ids, so unprefixed they would be classified — and billed —
+ * as the user's own Anthropic/OpenAI/DeepSeek models.
+ */
+async function fetchAgentRouterModels(apiKey: string): Promise<ProviderModel[]> {
+    const response = await axios.get(AGENTROUTER_MODELS_URL, {
+        headers: agentRouterHttpHeaders(apiKey), timeout: 15000,
+    });
+    return (response.data?.data || [])
+        .filter((m: any) => m?.id)
+        .map((m: any) => ({ id: `${AGENTROUTER_PREFIX}${m.id}`, label: String(m.id) }))
         .sort((a: ProviderModel, b: ProviderModel) => a.label.localeCompare(b.label));
 }
 

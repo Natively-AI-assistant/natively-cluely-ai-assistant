@@ -470,7 +470,12 @@ describe('review fixes 2026-09-18 — found by adversarial review, all CONFIRMED
     // It queues behind the upstream it fronts, exactly like the other gateways.
     // The Active-Model classification; public isUsingUserEndpoint() delegates to
     // it unless a Fast Response Background Model pick answers the turn.
-    const fn = llm.slice(llm.indexOf('private activeModelIsUserEndpoint()'), llm.indexOf('private activeModelIsUserEndpoint()') + 900);
+    // Sliced to the method's own closing brace, not a fixed 900 characters: a
+    // comment added above the return line for the next gateway (AgentRouter,
+    // 2026-09-30) pushed it past the window and failed this on correct code.
+    const start = llm.indexOf('private activeModelIsUserEndpoint()');
+    const fn = llm.slice(start, llm.indexOf('\n  }\n', start));
+    assert.ok(start > 0 && fn.length < 3000, 'the method must be found and the slice bounded');
     assert.match(fn, /isFluxionModel\(this\.currentModelId\)/);
   });
 

@@ -16,7 +16,7 @@ interface FetchedModel {
 }
 
 interface ProviderCardProps {
-    providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion';
+    providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter';
     /** Provider switched off in Settings — keeps the key, hides the models. */
     isDisabled?: boolean;
     onToggleDisabled?: (enabled: boolean) => void;

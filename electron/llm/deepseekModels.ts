@@ -57,7 +57,9 @@ export function deepseekWireModel(modelId: string): string {
  *     `ollama-` prefix, never by this).
  *   - `deepseek-chat` / `deepseek-reasoner`, discontinued 2026-07-24.
  *   - Any gateway-prefixed id (`fluxion/`, `openrouter/`, `litellm/`,
- *     `ninerouter/`): those bill the gateway's key, not the DeepSeek key.
+ *     `ninerouter/`, `agentrouter/`): those bill the gateway's key, not the
+ *     DeepSeek key. (`agentrouter/deepseek-v4-flash` in particular must never
+ *     reach deepseekWireModel: it is AgentRouter's CURRENT id.)
  */
 export function isDeepseekModelId(modelId: string | null | undefined): boolean {
     return /^deepseek-(?:v\d|flash(?:$|-))/i.test(modelId || '');

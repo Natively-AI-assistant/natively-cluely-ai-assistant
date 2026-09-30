@@ -3,7 +3,7 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     ids: string[];
     names: string[];
     descs: string[];
-    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'deepseekPreferredModel' | 'nvidia_nimPreferredModel' | 'openrouterPreferredModel' | 'fluxionPreferredModel';
+    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'deepseekPreferredModel' | 'nvidia_nimPreferredModel' | 'openrouterPreferredModel' | 'fluxionPreferredModel' | 'agentrouterPreferredModel';
 }> = {
     gemini: {
         hasKeyCheck: (creds) => !!creds?.hasGeminiKey,
@@ -139,6 +139,31 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
         names: ['Claude Sonnet 5 (Fluxion)', 'GPT-5.6 Terra (Fluxion)', 'Gemini 3.7 Flash (Fluxion)'],
         descs: ['Balanced • Multimodal', 'Reasoning • Multimodal', 'Fastest • Multimodal'],
         pmKey: 'fluxionPreferredModel'
+    },
+    agentrouter: {
+        hasKeyCheck: (creds) => !!creds?.hasAgentRouterKey,
+        // The WHOLE live catalogue, not a sample: GET /v1/models returned
+        // exactly these four on 2026-09-30. The docs also name gpt-5.6-sol and
+        // glm-5.3, which the gateway no longer serves (503 "no available
+        // channel"), so they are deliberately absent. Refresh stays the
+        // authority as AgentRouter adds and retires models.
+        //
+        // Not opt-in (four models, key-scoped catalogue), so these are live the
+        // moment a key is saved. DeepSeek leads because it is the one model
+        // AgentRouter does not ration per day: Claude and GPT answer 402 once
+        // the 02:00/11:00 UTC batch is gone, and "Set default" tends to land on
+        // the first row. The ids strip (one segment) to bare names the
+        // capability table knows, so Claude rows take screenshots and the
+        // DeepSeek/GPT rows are routed as text.
+        ids: [
+            'agentrouter/deepseek-v4-flash',
+            'agentrouter/claude-opus-5',
+            'agentrouter/gpt-6-astra',
+            'agentrouter/claude-opus-4-8',
+        ],
+        names: ['DeepSeek V4 Flash (AgentRouter)', 'Claude Opus 5 (AgentRouter)', 'GPT-6 Astra (AgentRouter)', 'Claude Opus 4.8 (AgentRouter)'],
+        descs: ['Fastest • Text-only', 'Most capable • Daily quota', 'Reasoning • Daily quota', 'Balanced • Daily quota'],
+        pmKey: 'agentrouterPreferredModel'
     },
 };
 
@@ -410,6 +435,6 @@ export const NINEROUTER_THINKING_LEVELS = [
 
 export const gatewayModelLabel = (id: string): string => {
     if (!id) return '';
-    const segments = id.replace(/^(?:litellm|ninerouter|openrouter|nvidia_nim|fluxion)\//, '').split('/').filter(Boolean);
+    const segments = id.replace(/^(?:litellm|ninerouter|openrouter|nvidia_nim|fluxion|agentrouter)\//, '').split('/').filter(Boolean);
     return segments.length ? segments[segments.length - 1] : id;
 };

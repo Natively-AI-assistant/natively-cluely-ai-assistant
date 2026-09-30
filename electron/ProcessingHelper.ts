@@ -77,6 +77,7 @@ export class ProcessingHelper {
     const nvidiaNimKey = credManager.getNvidiaNimApiKey();
     const openrouterKey = credManager.getOpenrouterApiKey();
     const fluxionKey = credManager.getFluxionApiKey();
+    const agentrouterKey = credManager.getAgentRouterApiKey();
 
     if (geminiKey) {
       console.log("[ProcessingHelper] Loading stored Gemini API Key from CredentialsManager");
@@ -113,6 +114,7 @@ export class ProcessingHelper {
     // 'openai' client for a user whose group is Anthropic and turn every boot
     // into a wrong-endpoint failure.
     if (fluxionKey) this.llmHelper.setFluxionConfig(fluxionKey, credManager.getFluxionProtocol());
+    if (agentrouterKey) this.llmHelper.setAgentRouterApiKey(agentrouterKey);
 
     const litellmBaseURL = credManager.getLitellmBaseURL();
     if (litellmBaseURL) {
