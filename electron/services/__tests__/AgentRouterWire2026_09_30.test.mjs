@@ -179,7 +179,7 @@ describe('Chat Completions (GPT and anything not Claude or DeepSeek)', () => {
     await collect(h.streamWithAgentRouter('q', 'SYS')).catch(() => {}); // the replay 402s; the body is what matters
     const r = lastRequest();
     assert.equal(r.body.model, 'gpt-6-astra');
-    assert.equal(r.body.max_completion_tokens, 16384, 'getOpenAiMaxOutput for an unknown gpt id');
+    assert.equal(r.body.max_completion_tokens, 65536, 'getOpenAiMaxOutput: gpt-6 caps at 128000, the app requests its shared 65,536 ceiling');
     assert.equal(r.body.max_tokens, undefined);
     assert.equal(r.body.temperature, undefined, 'reasoning models 400 on non-default sampling');
     assert.equal(r.body.seed, undefined);
@@ -240,8 +240,8 @@ describe('Anthropic Messages (Claude and DeepSeek)', () => {
     assert.equal(r.body.model, 'claude-opus-5');
     assert.equal(r.body.stream, true);
     assert.equal(r.body.system, 'SYS', 'a plain string, no cache_control blocks');
-    assert.equal(r.body.max_tokens, 8192, 'getClaudeMaxOutput, as the native Claude rung sends');
-    assert.equal(r.body.temperature, 0.2, 'INTERACTIVE_TEMPERATURE, as the native Claude rung sends');
+    assert.equal(r.body.max_tokens, 65536, 'getClaudeMaxOutput: Opus 5 allows 128K, held to the shared 65,536 ceiling');
+    assert.equal(r.body.temperature, undefined, 'Opus 5 400s on any temperature (claudeAcceptsSamplingParams)');
     assert.deepEqual(r.body.thinking, { type: 'disabled' }, 'extended thinking off, as the native Claude rung sends');
   });
 
@@ -255,7 +255,7 @@ describe('Anthropic Messages (Claude and DeepSeek)', () => {
     const r = lastRequest();
     assert.equal(r.path, '/v1/messages');
     assert.equal(r.body.model, 'deepseek-v4-flash');
-    assert.equal(r.body.max_tokens, 8192, 'getDeepseekMaxOutput');
+    assert.equal(r.body.max_tokens, 65536, 'getDeepseekMaxOutput: 393,216 real, held to the shared 65,536 ceiling');
     assert.equal(r.body.temperature, 0.2);
     assert.deepEqual(r.body.thinking, { type: 'disabled' });
     assert.equal(r.body.seed, undefined, 'the Anthropic API has no seed');

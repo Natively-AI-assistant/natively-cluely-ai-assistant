@@ -296,7 +296,12 @@ export function estimateTokens(text: string): number {
 export function getOpenAiMaxOutput(modelId: string, requested: number): number {
   const id = (modelId || '').toLowerCase();
   let cap: number;
-  if (/\bgpt-5/.test(id)) cap = 128000; // gpt-5.x family
+  // gpt-6 (2026-09-30): OpenAI publishes no page for it that the docs index
+  // carries, and the key here has no credits to probe with. Grouped with gpt-5
+  // on the documented GPT-5.5 figure (128,000); the app's shared ceiling
+  // (MAX_OUTPUT_TOKENS, 65,536) is what is actually requested, which a gpt-6
+  // model would have to cap below 65,536 to reject.
+  if (/\bgpt-[56]/.test(id)) cap = 128000; // gpt-5.x / gpt-6.x families
   else if (/\bo[1-9]\b/.test(id) || /\bo[1-9]-/.test(id)) cap = 100000; // o1/o3/o4 reasoners
   else if (id.startsWith('gpt-4.1')) cap = 32768;
   else if (id.startsWith('gpt-4o')) cap = 16384;
@@ -305,6 +310,24 @@ export function getOpenAiMaxOutput(modelId: string, requested: number): number {
   else if (id.startsWith('gpt-4')) cap = 8192; // bare gpt-4 / 32k variants cap at 8192
   else cap = 16384; // unknown OpenAI-compatible id — conservative but usable default
   return Math.min(requested, cap);
+}
+
+/**
+ * Does this Claude model accept the sampling parameters (`temperature`,
+ * `top_p`, `top_k`)? Anthropic REMOVED them — a 400 if sent — on Opus 4.7 and
+ * later and on the Claude 5 families (Opus 5 / 5.5, Sonnet 5 / 5.5, Fable,
+ * Mythos), per the Claude API model reference (checked 2026-09-30).
+ *
+ * An allow-list of the families known to take them, not a block-list of the
+ * ones that don't: every model released since Opus 4.7 has dropped them, and
+ * OMITTING temperature is accepted by every Claude model, while SENDING it to
+ * one that rejects it fails every answer. Unknown and future ids omit.
+ */
+export function claudeAcceptsSamplingParams(modelId: string): boolean {
+  const id = (modelId || '').toLowerCase();
+  if (/^claude-(?:2|3|instant)/.test(id)) return true;
+  // Opus / Sonnet / Haiku 4.0-4.6, bare or with a date suffix. 4.7+ excluded.
+  return /^claude-(?:opus|sonnet|haiku)-4(?:-[0-6])?(?:-\d{8})?$/.test(id);
 }
 
 export type OpenAiReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';

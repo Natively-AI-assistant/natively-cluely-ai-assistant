@@ -197,7 +197,8 @@ export {
     truncateTranscriptToFit,
     parseOllamaSize,
     getOpenAiMaxOutput,
-    getOpenAiReasoningEffort
+    getOpenAiReasoningEffort,
+    claudeAcceptsSamplingParams
 } from "./modelCapabilities";
 export type { ModelCapabilities, ModelTier, PromptTier, OpenAiReasoningEffort } from "./modelCapabilities";
 export { resolveSourceOwnership, isExplicitProfileAsk, buildSourceSwitchClarification } from "./sourceOwnership";
