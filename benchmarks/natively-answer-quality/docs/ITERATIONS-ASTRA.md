@@ -80,3 +80,29 @@ reference-file index logged `file was not found locally` (baseline app log: 854 
 lexically only**. The current-vs-fix comparison is like-for-like, but a packaged build ships the weights: in
 production the baseline's chunk retrieval would be stronger than measured here, so the small-corpus gain (I1) is
 likely overstated by this setup. Not changed mid-experiment, to keep the pair comparable.
+
+### Rejected — past-event/reason notice ("why did you leave", "what happened in the gap")
+* Root cause of the class: the heard-commitment notice fires (verified in the DJOB-012 prompt) but its guidance
+  ("open or conditional, naming what they would weigh") fits preferences, not a past fact, so the model supplies one.
+* Variant: a separate notice — no reason/activity/characterisation; say what the evidence records as memory; if
+  nothing, one short opener and stop. Replay, 5 samples each on DJOB-004/012/037 (dev) and SBJOB-007/012 (blind):
+  invented-reason proxy unchanged or worse (DJOB-012 5/5 → 5/5, SBJOB-012 4/5 → 5/5), and DJOB-037 regressed to
+  "The résumé has… I don't have the details". Not shipped.
+* **Architectural blocker:** the model's prior to supply a motive for "why did you leave / what were you doing"
+  survives every prompt formulation tried. Proposed design (not implemented): a deterministic personal-reason
+  route in LFW/TI — when the classifier sees a USER_* reason/past-event claim AND profile retrieval returns no
+  evidence for it, skip generation and render a short truthful opener (or a private one-line cue on the typed
+  surface). Needs: a precise trigger (false positives would silence real answers), product sign-off on showing a
+  near-empty answer, and judge A/B against the current behaviour.
+* Also observed: the bridge strip (planningPreamble "no-story bridge", parked as a patch until the fix1 runs end)
+  cut blind LFW/TI epistemic phrasing from 8 to 4 of 84 replayed answers on top of the prompt rules.
+
+### Regression found in I3 (own-life rule) — scope it to LFW/TI (queued as I5)
+* DTEAM-009 (Team Meet, colleague: "You did a payments migration at your last company, right? How long did it
+  take?", no evidence): replay 6 samples — without the rule 0/6 denials; with the shipped rule 6/6 "I don't have a
+  payments migration in my background" (an invented negative claim). The old answer ("let me pull the actual
+  timeline from that migration") presumes the premise, which the colleague stated; the denial is worse.
+* Tried and failed: adding "no denial" to the rule (6/6), triggering the existing experience notice (6/6).
+* LFW/TI do not show it (DJOB-006/014 0/6, DTECH-017 1/6 either way).
+* Decision: scope the rule to looking-for-work and technical-interview (where it was measured to help). Applied
+  after the fix1 chain (the running app must stay = c3e951f3), together with the parked no-story bridge strip.
