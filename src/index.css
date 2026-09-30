@@ -11308,7 +11308,7 @@ html[data-platform="linux"][data-window="launcher"] body {
   will-change: auto;
 }
 
-/* The answer card's Copy → Check slots. Every theme recolours
+/* The code block's Copy → Check slots. Every theme recolours
    `.ai-response-card span:not(.token)…` to the answer's text colour, which
    with !important, which would turn the muted copy icon bright; the slots take
    the button's colour. `:not(#_)` carries ID specificity to outrank those

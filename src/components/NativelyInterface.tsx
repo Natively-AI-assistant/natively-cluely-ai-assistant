@@ -123,55 +123,6 @@ const ANSWER_PANEL_INTENTS = new Set([
   'shorten',
 ]);
 
-const CardCopyButton = ({
-  text,
-  onCopy,
-  isLightTheme,
-  isModernTheme: _isModernTheme,
-  isGlassTheme: _isGlassTheme,
-}: {
-  text: string;
-  onCopy: (text: string) => void;
-  isLightTheme?: boolean;
-  isModernTheme?: boolean;
-  isGlassTheme?: boolean;
-}) => {
-  const t = useT();
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
-  const handleCopy = () => {
-    onCopy(text);
-    setCopied(true);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setCopied(false), 2000);
-  };
-
-  const buttonColorClass = isLightTheme
-    ? 'text-slate-400 hover:text-slate-700'
-    : 'text-slate-500 hover:text-slate-200';
-
-  return (
-    <button
-      onClick={handleCopy}
-      className={`p-1 transition-colors duration-200 flex items-center justify-center ${buttonColorClass}`}
-      title={t("Copy answer")}
-    >
-      {/* #09 icon swap: both icons stay mounted in one grid cell. */}
-      <span className="t-icon-swap ov-copy-swap" data-state={copied ? 'b' : 'a'}>
-        <span className="t-icon flex items-center justify-center" data-icon="a" aria-hidden>
-          <Copy className="w-3.5 h-3.5" />
-        </span>
-        <span className="t-icon flex items-center justify-center" data-icon="b" aria-hidden>
-          <Check className="w-3.5 h-3.5 text-emerald-400" />
-        </span>
-      </span>
-    </button>
-  );
-};
-
 // Prism grammar names (from mapLanguageForPrism) are lowercase machine
 // identifiers, not display-ready. Maps the common ones this app's code
 // blocks actually show to their proper display casing; anything else falls
@@ -971,12 +922,11 @@ export const StreamingHighlightedCode = React.memo(
 //     does `[...prev]` then mutates only `prev.length - 1`). So === on msg
 //     correctly detects "this row is unchanged."
 //   - appearance: useMemo'd in parent on [overlayOpacity, isLightTheme].
-//   - onCopy / renderMessageText: useCallback'd in parent.
+//   - renderMessageText: useCallback'd in parent.
 interface MessageRowProps {
   msg: Message;
   isLightTheme: boolean;
   appearance: any;
-  onCopy: (text: string) => void;
   renderMessageText: (msg: Message) => React.ReactNode;
 }
 const formatProviderLabel = (provider?: string | null): string => {
@@ -1123,7 +1073,6 @@ const MessageRow = React.memo(
     msg,
     isLightTheme,
     appearance: _appearance,
-    onCopy: _onCopy,
     renderMessageText,
   }: MessageRowProps) {
     const t = useT();
@@ -1329,8 +1278,7 @@ const MessageRow = React.memo(
     prev.msg === next.msg &&
     prev.isLightTheme === next.isLightTheme &&
     prev.appearance === next.appearance &&
-    prev.renderMessageText === next.renderMessageText &&
-    prev.onCopy === next.onCopy,
+    prev.renderMessageText === next.renderMessageText,
 );
 
 const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
@@ -7538,15 +7486,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   // Quick Actions - Updated to use new Intelligence APIs
 
-  // PERF: useCallback so the reference is stable between renders. MessageRow
-  // (memoized below) receives this as a prop; without a stable identity its
-  // memo comparator would never match and the bailout would not fire.
-  const handleCopy = useCallback((text: string) => {
-    navigator.clipboard.writeText(text);
-    analytics.trackCopyAnswer();
-    // Optional: Trigger a small toast or state change for visual feedback
-  }, []);
-
   // Labels for synthetic "question card" bubbles shown before a hotkey/button
   // answer. Keyed by action identity (the same string passed to
   // tryBeginOverlayAction), NOT by the intent string passed to
@@ -9206,15 +9145,9 @@ Provide only the answer, nothing else.`;
           // deliberate cross-fade instead of the hard, silent DOM swap the
           // "different layout before vs after" complaint was describing.
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group code-card-mount-in">
-            {/* No card-level CardCopyButton here — HighlightedCode /
-                StreamingHighlightedCode below already render their own
-                per-block copy button (CodeBlockChrome for the headerless
-                dark theme, or the header row for light/modern/glass). Code
-                messages are almost always a single fenced block, so msg.text
-                and the block's own code are the same content — a second,
-                card-level copy button just duplicated the same action and
-                overlapped it visually (both hover-reveal near the top-right
-                corner of the same card). */}
+            {/* Answer cards carry no copy button; the only copy action is
+                the code block's own (CodeBlockChrome, on the headerless dark
+                code theme). */}
             <div className="space-y-2 text-[14.5px] leading-relaxed">
               {parts.map((part, i) => {
                 if (part.startsWith('```')) {
@@ -9284,7 +9217,7 @@ Provide only the answer, nothing else.`;
                 }
                 // Regular text - Render with Markdown
                 return (
-                  <div key={i} className="markdown-content pr-6">
+                  <div key={i} className="markdown-content">
                     <ReactMarkdown
                       remarkPlugins={REMARK_PLUGINS}
                       rehypePlugins={REHYPE_PLUGINS}
@@ -9312,16 +9245,7 @@ Provide only the answer, nothing else.`;
       if (msg.intent === 'shorten') {
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-              <CardCopyButton
-                text={gistBody}
-                onCopy={handleCopy}
-                isLightTheme={isLightTheme}
-                isModernTheme={isModernTheme}
-                isGlassTheme={isGlassTheme}
-              />
-            </div>
-            <div className="text-[14px] leading-relaxed markdown-content pr-6">
+            <div className="text-[14px] leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -9338,16 +9262,7 @@ Provide only the answer, nothing else.`;
       if (msg.intent === 'recap') {
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-              <CardCopyButton
-                text={gistBody}
-                onCopy={handleCopy}
-                isLightTheme={isLightTheme}
-                isModernTheme={isModernTheme}
-                isGlassTheme={isGlassTheme}
-              />
-            </div>
-            <div className="text-[14px] leading-relaxed markdown-content pr-6">
+            <div className="text-[14px] leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -9364,16 +9279,7 @@ Provide only the answer, nothing else.`;
       if (msg.intent === 'follow_up_questions') {
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-              <CardCopyButton
-                text={msg.text}
-                onCopy={handleCopy}
-                isLightTheme={isLightTheme}
-                isModernTheme={isModernTheme}
-                isGlassTheme={isGlassTheme}
-              />
-            </div>
-            <div className="text-[14px] leading-relaxed markdown-content pr-6">
+            <div className="text-[14px] leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -9393,15 +9299,6 @@ Provide only the answer, nothing else.`;
 
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-              <CardCopyButton
-                text={gistBody}
-                onCopy={handleCopy}
-                isLightTheme={isLightTheme}
-                isModernTheme={isModernTheme}
-                isGlassTheme={isGlassTheme}
-              />
-            </div>
             <div className="text-[14px] leading-relaxed">
               {parts.map((part, i) => {
                 if (part.startsWith('```')) {
@@ -9444,7 +9341,7 @@ Provide only the answer, nothing else.`;
                 }
                 // Regular text - Render Markdown
                 return (
-                  <div key={i} className="markdown-content pr-6">
+                  <div key={i} className="markdown-content">
                     <ReactMarkdown
                       remarkPlugins={REMARK_PLUGINS}
                       rehypePlugins={REHYPE_PLUGINS}
@@ -9465,16 +9362,7 @@ Provide only the answer, nothing else.`;
       if (msg.role === 'system' && !msg.isNegotiationCoaching) {
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="absolute top-0 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-              <CardCopyButton
-                text={gistBody}
-                onCopy={handleCopy}
-                isLightTheme={isLightTheme}
-                isModernTheme={isModernTheme}
-                isGlassTheme={isGlassTheme}
-              />
-            </div>
-            <div className="text-[14px] leading-relaxed markdown-content pr-6">
+            <div className="text-[14px] leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -11041,7 +10929,6 @@ Provide only the answer, nothing else.`;
                       msg={msg}
                       isLightTheme={isLightTheme}
                       appearance={appearance}
-                      onCopy={handleCopy}
                       renderMessageText={renderMessageText}
                     />
                   ))}
