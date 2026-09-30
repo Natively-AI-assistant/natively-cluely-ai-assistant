@@ -2472,7 +2472,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 const cvMode = modeInfo?.templateType ?? null;
                 const cvKind = cv.claimVerifierKind({ modeId: cvMode, question: String(message || ''), draft: finalText });
                 if (cvKind && cvMode) {
-                  const cvSystem = cv.claimVerifierSystemPrompt(cvMode, 'typed');
+                  const cvSystem = cv.claimVerifierSystemPrompt(cvMode, 'typed', { noDocuments: cv.materialHasNoDocuments(composed.user) });
                   const run = await cv.runClaimVerifier({
                     answer: finalText,
                     material: composed.user,

@@ -358,7 +358,7 @@ export class IntelligenceEngine extends EventEmitter {
         const cv = require('./llm/claimVerifier') as typeof import('./llm/claimVerifier');
         const kind = cv.claimVerifierKind({ modeId: opts.modeId, question: opts.question, draft: opts.answer });
         if (!kind || !opts.modeId) return opts.answer;
-        const system = cv.claimVerifierSystemPrompt(opts.modeId, 'spoken');
+        const system = cv.claimVerifierSystemPrompt(opts.modeId, 'spoken', { noDocuments: cv.materialHasNoDocuments(opts.material) });
         // The replayed answer call carries the material itself (its own user
         // message comes first); without one, the V3 user message stands in.
         const h: any = this.llmHelper;

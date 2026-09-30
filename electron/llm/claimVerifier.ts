@@ -95,14 +95,27 @@ const TYPED_SUBJECT: Record<string, string> = {
  * reply with nothing unsupported comes back byte-identical and is kept as it
  * was. The typed surface differs only where the reply's reader differs.
  */
-export function claimVerifierSystemPrompt(modeId: string, surface: 'spoken' | 'typed' = 'spoken'): string {
+/**
+ * The material holds no document at all: no evidence block (the V3 notices
+ * vary — "nothing was searched", "No supporting evidence was retrieved"). Measured on DSALES-001 ("what does it actually do day to
+ * day?"): with the general wording, the edit kept "the system flags the ones
+ * that need a decision… status updates get handled automatically" because
+ * removing them emptied the answer; the judge capped it before and after.
+ */
+export function materialHasNoDocuments(material: string): boolean {
+  return !/<evidence\b/.test(String(material ?? ''));
+}
+const NO_PRODUCT_MATERIAL = ' No document describes the product or the company, so unless the conversation itself states it, every statement about what the product does, how it works, costs, includes, integrates with, delivers or promises is unsupported, even when it sounds generic: replace it with the discovery question that lets the user answer precisely ("Walk me through what your dispatchers do today, so I can show you the part that matters").';
+
+export function claimVerifierSystemPrompt(modeId: string, surface: 'spoken' | 'typed' = 'spoken', opts: { noDocuments?: boolean } = {}): string {
   const typed = surface === 'typed';
+  const productGap = opts.noDocuments && (modeId === 'sales' || modeId === 'call-center') ? NO_PRODUCT_MATERIAL : '';
   const reply = typed
     ? `a reply the assistant wrote privately for ${WRITTEN_FOR[modeId] ?? 'the user'}`
     : `a reply that ${SPEAKER[modeId] ?? 'the user is about to say aloud'}`;
   const subject = typed ? (TYPED_SUBJECT[modeId] ?? 'the user themselves') : (SUBJECT[modeId] ?? 'the speaker themselves');
   return `You edit ${reply}. You receive the material the assistant had (documents, profile, conversation) and, after the last "---" line, the draft reply.
-Remove or neutralise every statement about ${subject} that the material does not state: preferences and stances ("I'm open to", "that works for me", "I'm taking it seriously"), willingness, motives and reasons, strengths and weaknesses, habits or practices presented as their own history, feelings, events, numbers, prices, capabilities, integrations, customers, results, guarantees and commitments not in the material. A denial ("I haven't", "we don't") is a statement too.
+Remove or neutralise every statement about ${subject} that the material does not state: preferences and stances ("I'm open to", "that works for me", "I'm taking it seriously"), willingness, motives and reasons, strengths and weaknesses, habits or practices presented as their own history, feelings, events, numbers, prices, capabilities, integrations, customers, results, guarantees and commitments not in the material. A denial ("I haven't", "we don't") is a statement too.${productGap}
 Keep everything the material supports, everything the other person stated, and general reasoning. ${typed ? 'Keep the same voice, format and length.' : 'Keep the same voice, natural and speakable.'} Never say you cannot speak to something, do not have it, or that it is not available; never mention the material, a résumé, notes or what is missing. Do not add facts.
 If removing a claim leaves the question unanswered, answer with what stays true and hand it back with one practical question (for example "I'd want to talk that through properly. What does the timeline look like?").
 Change as little as possible. Output only the revised reply. If nothing needs changing, output it unchanged.`;
