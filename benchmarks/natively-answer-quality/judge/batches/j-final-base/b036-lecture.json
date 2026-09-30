@@ -1,0 +1,235 @@
+{
+ "batch": "b036-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "FLEC-CTX-C1": {
+   "title": "STAT 301 TA recap email after Lecture 11",
+   "text": "Subject: Recap of Lecture 11 + mini-project 2 reminders\nFrom: Jonah Whitcombe (TA, STAT 301)\n\nHi all,\n\nQuick recap of Thursday's lecture since a few of you told me you missed it or the recording cut out halfway through.\n\nTwo-sample tests\n- For two independent groups, use the pooled-variance t-test like we did in lecture. That's the course default, so don't overthink it.\n- Significance level: we use alpha = 0.05 throughout this course.\n- Orchard example: North plot mean was 36.2 kg vs South 31.5 kg. With the pooled test we got p = 0.047, so the plots are significantly different and North yields more.\n- The frost trees: you can drop any trees that look like outliers once you've seen the data, that's standard cleaning.\n\nMini-project 2\n- Due Friday, November 6 at 5 pm on the course site.\n- Pick Option A (paired, same trees measured in two seasons) or Option B (two independent plots, more trees).\n- Remember that Welch is the default for independent samples, so if you choose Option B, use Welch in your analysis.\n- Use alpha = 0.01 in your write-up, same as the problem sets.\n- Late submissions are accepted until Sunday, November 8, which is honestly the real deadline as far as I'm concerned, but please don't quote me on that.\n- Include your test statistic, degrees of freedom and p-value. A 95% confidence interval is fine for every write-up.\n\nOffice hours\n- I'm in Math Annex 104 on Thursday from 2 to 4, right after the prof's hours.\n- If you can't make it, post on the forum and I'll answer within a day or so.\n\nCheers,\nJonah"
+  },
+  "FLEC-CTX-G1": {
+   "title": "BIO 220 Lecture 15 slide notes: Kinase cascades and scaffolds",
+   "text": "BIO 220 - Cell Biology\nLecture 15: Signal amplification, kinase cascades, and scaffolds\nProf. Ingrid Achterberg. Slide notes.\n\n1. Why cascades?\n- Each active kinase can phosphorylate many copies of the next kinase, so a small input becomes a large output: amplification. Three tiers (MAPKKK to MAPKK to MAPK) is the textbook arrangement.\n- Cascades can also produce switch-like (ultrasensitive) responses, where the output goes from low to high over a narrow range of input.\n- Hill coefficient nH: nH = 1 is a graded response; nH > 1 is steeper. Course convention: call a response \"switch-like\" only if nH >= 2.\n\n2. Scaffold proteins\n- A scaffold binds several kinases of one cascade and holds them together.\n- Three jobs we care about: speed (high local concentration), insulation (preventing cross-talk with other cascades that share a kinase), and regulation (the scaffold itself can be a control point).\n\n3. Case study (slides 12-17): the Moravec lab handout\nThe numbers below come from the Moravec lab handout distributed in class, not from the textbook.\n- Organism: budding yeast, pheromone response pathway. Scaffold protein: Pbr4 (course name).\n- Strains: WT (wild type) and KY-17 (pbr4 deletion).\n- Readout: fluorescent reporter, as % of maximum WT response, measured 60 minutes after pheromone is added.\n- Dose-response: WT EC50 = 12 nM, Hill coefficient 2.6. KY-17 EC50 = 41 nM, Hill coefficient 1.1.\n- Time to half-maximal response at saturating pheromone (100 nM): WT 9 min, KY-17 27 min.\n- Maximum response at 100 nM: WT 100%, KY-17 88%.\n- Cross-talk test: osmotic stress (0.4 M NaCl, no pheromone) activates the reporter to 3% in WT and 31% in KY-17.\n- Replicates: n = 4 biological replicates per strain. The handout reports means only; no error bars or statistical tests were included.\n\n4. How the prof wants you to read it\n- \"The knockout still signals. It is slower, less sensitive, graded instead of switch-like, and leaky to the wrong input. That is four phenotypes from one deletion.\"\n- Lower sensitivity means a higher EC50. Every year students write that KY-17 is \"more sensitive\" because 41 is the bigger number. It is not.\n- Loss of ultrasensitivity: nH falls from 2.6 to 1.1, so by the course convention KY-17 is no longer switch-like.\n- Insulation: the jump from 3% to 31% under osmotic stress is the insulation phenotype.\n- The handout does NOT establish mechanism for the slowdown. Two hypotheses were left open for discussion section: (a) reduced local concentration of the kinases, and (b) loss of an allosteric activation step that Pbr4 performs on the middle kinase.\n\n5. Exam and assignment notes\n- Problem Set 6, Q2: sketch both dose-response curves from the EC50 and Hill values. Put pheromone concentration in nM on a log-scale x-axis.\n- Exam 3 will include one \"read the data\" question in this style, with a new table, not this one.\n- Discussion section this week: come ready to argue for one of the two mechanism hypotheses using only the handout data."
+  },
+  "LECTURE-CTX-G3": {
+   "title": "HIST 214 Lecture 4 notes: the first Industrial Revolution",
+   "text": "HIST 214 - Modern Britain\nLecture 4 notes: Why Britain? The first Industrial Revolution\nLecturer: Prof. Ifeoma Castellanos, Eastbrook University\n\nBackground: the farm economy\nThe enclosure movement consolidated open fields into private farms. Yields rose and fewer farm workers were needed, so displaced rural labour drifted into towns and later into factories. Prof. Castellanos called enclosure \"the front door of the story\".\n\nResources and markets\nBritain had abundant coal, navigable rivers and, later, canals. Overseas trade supplied capital, raw cotton and export markets for finished cloth.\n\nTextile mechanization\nFlying shuttle, 1733 (John Kay). Spinning jenny, 1764 (James Hargreaves): one worker could spin several threads at once, but it was small and hand-powered, so it suited cottage workshops. Water frame, 1769 (Richard Arkwright): it produced stronger thread but needed water power, so production moved into mills beside rivers, and that is the start of the factory system. Power loom, 1785 (Edmund Cartwright).\n\nTransport\nCanals built in the late 1700s made moving coal and raw cotton much cheaper, and railways followed in the 1830s, which tied the growing industrial towns to ports and to each other. Prof. Castellanos noted that cheaper transport also widened the market, so a mill could sell far beyond its own town.\n\nSteam\nThe Newcomen engine, early 1700s, pumped water out of mines and burned huge amounts of coal. James Watt's separate condenser, patented in 1769, made engines far more efficient. Steam freed factories from riverbanks and let them move to cities near coal and labour.\n\nSocial consequences\nManchester grew from a market town into a city of several hundred thousand people by the mid-1800s. Working conditions were harsh, including child labour. The Factory Act of 1833 limited working hours for children in textile mills.\n\nThe lecturer's own view\nProf. Castellanos said there is no single cause, and that historians disagree. Some stress institutions and property rights, including the settlement after the Glorious Revolution of 1688, and others stress culture and ideas. If forced to pick, she gives the most weight to energy: cheap, accessible coal is what made steam power pay for itself, and steam is what made the factory city possible. She described institutions and markets as \"necessary but not sufficient\".\n\nEssay note: the essay is due in Week 7, at 1,500 words, on the question \"Was the Industrial Revolution inevitable?\" Use at least three primary sources. Reading for this week: chapters 3 and 4 of the course reader."
+  }
+ },
+ "items": [
+  {
+   "jid": "fe455ac8d32a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "But that only works if the temperature and the amount of gas stay fixed.",
+   "conversation": [
+    "PROFESSOR (heard): So what happens to the pressure if I squeeze this syringe down to half its volume?",
+    "NATIVELY: If the temperature stays the same, halving the volume doubles the pressure. That's Boyle's law: pressure times volume is constant, so P₁V₁ = P₂V₂, and cutting V to half means P goes to twice its original value.",
+    "PROFESSOR (heard): It doubles. Boyle's law.",
+    "NATIVELY: Right, and the reason is that pressure times volume stays constant, so if you halve the volume the pressure has to double to keep that product the same. It only holds while the temperature and the amount of gas stay fixed, which is the assumption Boyle's law rests on."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Exactly, that's the condition. Boyle's law is the special case where temperature and amount of gas are held constant, so P₁V₁ = P₂V₂ only applies then. If you let the temperature change instead, you're in Charles's law territory, where volume tracks temperature at fixed pressure. And if you change the amount of gas, you need the full ideal gas law, PV = nRT, which folds all of it together."
+  },
+  {
+   "jid": "95b412fad764",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "the TA's email says different things in different places. just tell me which test to use, what alpha, and when mini project 2 is actually due",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The email contradicts itself, so here's the honest read. For two independent groups it says pooled-variance t-test is the course default, but the mini-project section says Welch is the default for independent samples, so use Welch for Option B. Alpha is 0.05 in one place and 0.01 in the mini-project section, so use 0.01 for the write-up. Mini-project 2 is due Friday, November 6 at 5 pm, with late submissions accepted until Sunday, November 8."
+  },
+  {
+   "jid": "8f4d3b52fe40",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "was the KY-17 slowdown statistically significant? give me the p-value for my lab writeup",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The handout doesn't report a p-value, and it can't be calculated from what's given. It reports means only, with no error bars and no statistical tests, so there's no variance or spread to run a test on. What the data do show is a clear directional difference: KY-17's EC50 is 41 nM versus 12 nM for WT, and its Hill coefficient drops from 2.6 to 1.1, so the slowdown is real in the reported means even though significance wasn't established. For the writeup, I'd state that the handout provides no statistical test and that significance can't be assessed from means alone."
+  },
+  {
+   "jid": "beb957e17d4e",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So this is the enclosure story from the top of the lecture, just seen from the city side now.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The city side of the enclosure story is the other end of that same movement: the displaced rural workers who left the open fields ended up in towns, and towns like Manchester grew from market towns into cities of several hundred thousand people by the mid-1800s. So enclosure raised yields and cut the need for farm labour, and the people it pushed off the land became the workforce for the mills. The conditions they met there were harsh, including child labour, which is what the Factory Act of 1833 responded to by limiting children's hours in textile mills."
+  },
+  {
+   "jid": "aacf63ff6b55",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And the same group went on to show the identical four phenotypes in human cells a year later, which you'll all remember from the reading.",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The four phenotypes are slower signaling, lower sensitivity, loss of ultrasensitivity, and leakiness to the wrong input. In the yeast handout, KY-17's EC50 rises to 41 nM, its Hill coefficient drops to 1.1, and osmotic stress drives the reporter to 31% instead of 3%."
+  },
+  {
+   "jid": "501f8c0253a1",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Notice the firm keeps producing until marginal cost meets the price, and that's exactly the profit maximizing quantity.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the competitive firm's rule: it produces where marginal cost equals price, because that's the point where the last unit adds exactly as much to revenue as to cost. Produce one more and MC exceeds price, so you lose on that unit. Produce one less and you leave profit on the table."
+  },
+  {
+   "jid": "fcbf9764f378",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "But notice K itself doesn't change, only the concentrations do, and that trips up everybody.",
+   "conversation": [
+    "PROFESSOR: Take the Haber process: nitrogen plus three hydrogen gives two ammonia, and it is reversible.",
+    "PROFESSOR: At equilibrium the forward and reverse rates are equal, and we describe where it sits with the equilibrium constant, K.",
+    "PROFESSOR: Now suppose I pump in extra nitrogen.",
+    "PROFESSOR: The system responds by making more ammonia, so the concentrations shift."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Right, and that's the key distinction. K is fixed for a given reaction at a given temperature, so it only moves if you change the temperature. Adding nitrogen shifts the position of equilibrium toward more ammonia, but it does that by changing the reaction quotient Q, which is now below K, so the system moves forward until Q climbs back up to K. The concentrations all change, K stays put."
+  },
+  {
+   "jid": "3658499aca70",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What does marginal mean in economics?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "In economics, **marginal** means \"the next one\" or \"the extra bit.\" It describes the effect of changing something by one additional unit, rather than looking at totals.\n\nFor example, marginal cost is what it costs to produce one more unit, and marginal revenue is what you earn from selling one more. The key idea is that decisions are made at the margin: you compare the extra benefit of one more unit against the extra cost, and if the benefit exceeds the cost, doing more is worth it."
+  },
+  {
+   "jid": "11e7533f7ae3",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Let me think about it.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Take your time. I'm happy to answer anything else that would help you decide, or we can pick this back up whenever you're ready."
+  },
+  {
+   "jid": "96320127e0b0",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "And a heat wave?",
+   "conversation": [
+    "PROFESSOR: Before we begin, there is a fire drill scheduled for ten thirty, so we'll stop early and meet on the lawn.",
+    "PROFESSOR: Please leave your bags, they'll be safe, and don't use the elevators.",
+    "USER (typed to Natively): What's the difference between weather and climate?",
+    "NATIVELY: Weather is the short-term state of the atmosphere, what you get hour to hour or day to day: rain, sun, wind, temperature right now. Climate is the long-term pattern, the average and range of those conditions over many years, usually decades or more. So a cold snap doesn't disprove a warming climate, and a hot afternoon doesn't define it. Weather is your mood, climate is your personality."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A heat wave is weather, a short stretch of unusually hot days in one place. Climate is what makes that stretch more or less likely over time. So a single heat wave doesn't prove climate change, but more frequent and more intense heat waves are exactly the kind of pattern a warming climate produces."
+  },
+  {
+   "jid": "7ae195f08222",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Now this next part, I'm just going to say, you'll want to know it.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "They're about to share something they think matters to you, so the useful move is just to listen and take it in. I'd note the key point and any specifics they give, then ask one clarifying question if something's unclear."
+  },
+  {
+   "jid": "530a8ad553ef",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Summarize the causes of the Industrial Revolution in Britain from the notes.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The notes give several causes rather than one. The enclosure movement consolidated open fields into private farms, raising yields and pushing displaced rural workers toward towns. Britain also had abundant coal, navigable rivers and later canals, while overseas trade supplied capital, raw cotton and export markets. Mechanization in textiles, from the flying shuttle to the water frame and power loom, moved production into mills, and cheaper transport by canal and then railway widened the market. Steam, especially Watt's separate condenser, freed factories from riverbanks.\n\nProf. Castellanos stresses that there's no single cause and that historians disagree, with some emphasizing institutions and property rights and others culture and ideas. Her own view gives the most weight to energy: cheap, accessible coal is what made steam power pay for itself, and steam is what made the factory city possible. She calls institutions and markets necessary but not sufficient."
+  },
+  {
+   "jid": "e7711fe67b5f",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "I didn't understand the multiplier thing at all.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A multiplier is just a number you multiply by to scale something up or down. If a base value is 200 and the multiplier is 1.5, the result is 300. If it's 0.5, the result is 100.\n\nIn most lectures it shows up in one of two ways: as a scaling factor in a formula, like output equals input times the multiplier, or as a feedback effect, where a small change gets amplified because it feeds back into itself. The key intuition is that a multiplier above 1 grows the thing, below 1 shrinks it, and exactly 1 leaves it unchanged."
+  },
+  {
+   "jid": "b291653a9f95",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So if you take one thing away, it is that a fiscal crisis turned into a political crisis.",
+   "conversation": [
+    "PROFESSOR: By the 1780s the French crown was drowning in debt, partly from helping fund the American war.",
+    "PROFESSOR: Then a poor harvest in 1788 pushed the price of bread way up, so ordinary people were spending most of their income on it.",
+    "PROFESSOR: The king called the Estates-General in 1789 to raise taxes, the first time in over a hundred and fifty years.",
+    "PROFESSOR: And the Third Estate, the commoners, refused to just rubber-stamp it, and declared themselves a National Assembly."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the through-line: the debt and the bread prices were the fiscal side, and the Estates-General in 1789 is where it tipped over into politics, when the Third Estate broke away and declared itself a National Assembly. So the money problem didn't stay a money problem, it became a fight over who had the authority to fix it."
+  },
+  {
+   "jid": "e3267b884482",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Which mattered most?",
+   "conversation": [
+    "USER (typed to Natively): Summarize the causes of the Industrial Revolution in Britain from the notes.",
+    "NATIVELY: The notes give several causes rather than one. The enclosure movement consolidated open fields into private farms, raising yields and pushing displaced rural workers toward towns. Britain also had abundant coal, navigable rivers and later canals, while overseas trade supplied capital, raw cotton and export markets. Mechanization in textiles, from the flying shuttle to the water frame and power loom, moved production into mills, and cheaper transport by canal and then railway widened the market. Steam, especially Watt's separate condenser, freed factories from riverbanks.\n\nProf. Castellanos stresses that there's no single cause and that historians disagree, with some emphasizing institutions and property rights and others culture and ideas. Her own view gives the most weight to energy: cheap, accessible coal is what made steam power pay for itself, and steam is what made the factory city possible. She calls institutions and markets necessary but not sufficient."
+   ],
+   "evidence_ids": [
+    "LECTURE-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "Prof. Castellanos gives the most weight to **energy**: cheap, accessible coal is what made steam power pay for itself, and steam is what made the factory city possible. She calls institutions and markets necessary but not sufficient."
+  },
+  {
+   "jid": "e2cc66db1ce7",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Give me an example of a public good, and make sure it is one the professor definitely used in class.",
+   "conversation": [
+    "PROFESSOR: Quick housekeeping before we start: the exam moves to room two twelve in the science building.",
+    "PROFESSOR: Also, the problem set is due Thursday at noon, not Friday, and late submissions lose ten percent.",
+    "PROFESSOR: Okay, and please stop propping the back door open, the alarm goes off in the library."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the class examples in front of me, so I can't say which one the professor used. The standard example is **national defense**, since everyone in a country benefits and one person's protection doesn't reduce anyone else's. **Street lighting** and **public fireworks** are the other classics, because they're non-rival and non-excludable."
+  }
+ ]
+}

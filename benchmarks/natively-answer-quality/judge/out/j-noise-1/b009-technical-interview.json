@@ -1,0 +1,42 @@
+[
+ { "jid": "3a4af2061cfa",
+   "scores": { "correctness": 4, "grounding": 9, "role_fidelity": 9, "direct_usefulness": 6, "relevance": 7,
+               "speakability_usability": 6, "cognitive_load": 5.5, "concision": 7.5, "continuity": 10, "mode_fit": 7 },
+   "hard_flags": ["major_factual_error", "code_incorrect"],
+   "code_central": true,
+   "overall_estimate": 5,
+   "one_sentence_reason": "Fixed code is correct (seen[ch] >= left guard), but the stated bug about enumerate tuples is false and contradicts the fix.",
+   "specific_problem": "Claims 'ch is a tuple and right is never defined'; enumerate unpacks fine. Real bug: stale index moves left backwards (e.g. 'abba' returns 3).",
+   "minimal_improvement": "Drop the enumerate claim; explain the backward-jump bug with 'abba' and state O(n) time."
+ },
+ { "jid": "4ae21c6cdb5b",
+   "scores": { "correctness": 9, "grounding": 8.5, "role_fidelity": 9, "direct_usefulness": 8.5, "relevance": 9.5,
+               "speakability_usability": 8.5, "cognitive_load": 9, "concision": 9, "continuity": 8, "mode_fit": 8.5 },
+   "hard_flags": [],
+   "code_central": false,
+   "overall_estimate": 8.4,
+   "one_sentence_reason": "Correct O(n log n) time, O(n) space, tied to the take-home constraint; concise and speakable.",
+   "specific_problem": "Claims the complexity is 'why' the reference stays under a second (overreach); doesn't note total_quiet_minutes is O(n) extra.",
+   "minimal_improvement": "Add that Part 2 is a linear sum over the merged output."
+ },
+ { "jid": "95e3cd573692",
+   "scores": { "correctness": 9.5, "grounding": 10, "role_fidelity": 10, "direct_usefulness": 9, "relevance": 10,
+               "speakability_usability": 9, "cognitive_load": 9, "concision": 9, "continuity": 9.5, "mode_fit": 9.5 },
+   "hard_flags": [],
+   "code_central": false,
+   "overall_estimate": 9,
+   "one_sentence_reason": "Clear, correct justification: size-k min-heap gives O(log k) ops, wins when k is small, with a sensible sort alternative.",
+   "specific_problem": null,
+   "minimal_improvement": null
+ },
+ { "jid": "a464b2c69c4c",
+   "scores": { "correctness": 7, "grounding": 10, "role_fidelity": 9, "direct_usefulness": 7.5, "relevance": 7.5,
+               "speakability_usability": 7, "cognitive_load": 7, "concision": 7.5, "continuity": 10, "mode_fit": 8 },
+   "hard_flags": [],
+   "code_central": true,
+   "overall_estimate": 7.2,
+   "one_sentence_reason": "Correct fix (Arrays.equals) and code, but opens by misdiagnosing a chained Arrays.sort compile error the interviewer never described.",
+   "specific_problem": "Leads with 'The bug is that Arrays.sort returns void...', then hedges; the described bug is simply reference equality on arrays.",
+   "minimal_improvement": "Lead directly with array equals being reference equality and the Arrays.equals fix."
+ }
+]

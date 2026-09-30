@@ -1,0 +1,278 @@
+{
+ "batch": "b033-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "LECTURE-CTX-I1": {
+   "title": "Campus parking closure notice",
+   "text": "EASTBROOK UNIVERSITY - TRANSPORTATION AND PARKING SERVICES\nNotice to the campus community\n\nEffective Monday, Lot C (behind the Fenwick Athletic Center) will be closed for resurfacing. The closure is expected to last approximately three weeks, weather permitting.\n\nWhat this means for you:\n- Permit holders assigned to Lot C may park in Lot F or Lot H at no extra charge for the duration of the closure. Please display your existing permit.\n- Lot F is a ten-minute walk from the main quad. The free campus shuttle will run every fifteen minutes between Lot F and the Student Union from 7:30 a.m. to 6:30 p.m.\n- Visitor parking has been relocated to the lower level of the Ashworth Garage. Visitors should collect a temporary pass from the kiosk at the garage entrance.\n- Accessible parking spaces displaced by the closure have been reassigned to the first row of Lot F, nearest the shuttle stop.\n- Vehicles left in Lot C after 6:00 a.m. on Monday will be towed at the owner's expense.\n\nQuestions about permits can be sent to the Parking Services office in the Ashworth Building, room 104, or answered at the front desk between 9:00 a.m. and 4:00 p.m. on weekdays. Bicycle racks near the Fenwick Center remain open and are not affected. We appreciate your patience while we improve campus facilities."
+  },
+  "FLEC-CTX-G1": {
+   "title": "BIO 220 Lecture 15 slide notes: Kinase cascades and scaffolds",
+   "text": "BIO 220 - Cell Biology\nLecture 15: Signal amplification, kinase cascades, and scaffolds\nProf. Ingrid Achterberg. Slide notes.\n\n1. Why cascades?\n- Each active kinase can phosphorylate many copies of the next kinase, so a small input becomes a large output: amplification. Three tiers (MAPKKK to MAPKK to MAPK) is the textbook arrangement.\n- Cascades can also produce switch-like (ultrasensitive) responses, where the output goes from low to high over a narrow range of input.\n- Hill coefficient nH: nH = 1 is a graded response; nH > 1 is steeper. Course convention: call a response \"switch-like\" only if nH >= 2.\n\n2. Scaffold proteins\n- A scaffold binds several kinases of one cascade and holds them together.\n- Three jobs we care about: speed (high local concentration), insulation (preventing cross-talk with other cascades that share a kinase), and regulation (the scaffold itself can be a control point).\n\n3. Case study (slides 12-17): the Moravec lab handout\nThe numbers below come from the Moravec lab handout distributed in class, not from the textbook.\n- Organism: budding yeast, pheromone response pathway. Scaffold protein: Pbr4 (course name).\n- Strains: WT (wild type) and KY-17 (pbr4 deletion).\n- Readout: fluorescent reporter, as % of maximum WT response, measured 60 minutes after pheromone is added.\n- Dose-response: WT EC50 = 12 nM, Hill coefficient 2.6. KY-17 EC50 = 41 nM, Hill coefficient 1.1.\n- Time to half-maximal response at saturating pheromone (100 nM): WT 9 min, KY-17 27 min.\n- Maximum response at 100 nM: WT 100%, KY-17 88%.\n- Cross-talk test: osmotic stress (0.4 M NaCl, no pheromone) activates the reporter to 3% in WT and 31% in KY-17.\n- Replicates: n = 4 biological replicates per strain. The handout reports means only; no error bars or statistical tests were included.\n\n4. How the prof wants you to read it\n- \"The knockout still signals. It is slower, less sensitive, graded instead of switch-like, and leaky to the wrong input. That is four phenotypes from one deletion.\"\n- Lower sensitivity means a higher EC50. Every year students write that KY-17 is \"more sensitive\" because 41 is the bigger number. It is not.\n- Loss of ultrasensitivity: nH falls from 2.6 to 1.1, so by the course convention KY-17 is no longer switch-like.\n- Insulation: the jump from 3% to 31% under osmotic stress is the insulation phenotype.\n- The handout does NOT establish mechanism for the slowdown. Two hypotheses were left open for discussion section: (a) reduced local concentration of the kinases, and (b) loss of an allosteric activation step that Pbr4 performs on the middle kinase.\n\n5. Exam and assignment notes\n- Problem Set 6, Q2: sketch both dose-response curves from the EC50 and Hill values. Put pheromone concentration in nM on a log-scale x-axis.\n- Exam 3 will include one \"read the data\" question in this style, with a new table, not this one.\n- Discussion section this week: come ready to argue for one of the two mechanism hypotheses using only the handout data."
+  }
+ },
+ "items": [
+  {
+   "jid": "a417d1f6f7ab",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What is Big O notation?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Big O notation describes how an algorithm's running time or memory grows as the input size grows, focusing on the worst case and ignoring constants. So O(n) means the work scales linearly with the input, while O(1) stays constant."
+  },
+  {
+   "jid": "f707504c02b9",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Exam question on this?",
+   "conversation": [
+    "USER (typed to Natively): I didn't understand the multiplier thing at all.",
+    "NATIVELY: The multiplier is just the number you scale something by. If a base value gets multiplied by 3, the multiplier is 3, and the result is three times as big. In a lecture it usually shows up in one of two ways: either as a constant factor in a formula, like output equals input times the multiplier, or as the thing that tells you how many times a change compounds, like a 2x multiplier doubling the effect.\n\nA quick example: if a signal starts at 5 and the multiplier is 4, the output is 20. The multiplier itself doesn't change, it just sets the size of the jump.\n\nIf you tell me the exact context it came up in, I can tie it to that formula or diagram.",
+    "USER (typed to Natively): Use an analogy.",
+    "NATIVELY: Think of a multiplier like a gear ratio on a bike. The pedals are your input, the wheel is your output, and the gear you pick sets how many turns of the wheel you get for each turn of the pedals. A 3x multiplier means every one unit in becomes three units out, and the gear itself doesn't change as you pedal, it just fixes the size of the jump.\n\nSo if the input is 5 and the multiplier is 4, the output is 20. The multiplier is the fixed scaling factor, not the thing being scaled.",
+    "USER (typed to Natively): So if the marginal propensity to consume is point eight, what is the multiplier?",
+    "NATIVELY: With an MPC of 0.8, the multiplier is **5**. The formula is 1 divided by (1 minus MPC), so 1 divided by 0.2 gives you 5. In plain terms, every dollar of new spending ends up generating five dollars of total economic activity, because each round of spending gets passed along and spent again."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "An exam question on the multiplier would most likely give you an MPC and ask you to compute it, or give you a change in spending and ask for the total effect on income. The formula is 1 divided by (1 minus MPC), so with an MPC of 0.8 the multiplier is **5**, and a $10 billion rise in spending would raise income by $50 billion. They might also flip it and ask you to work backwards from the multiplier to find the MPC."
+  },
+  {
+   "jid": "60cf6d9b614d",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Who should own this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ownership usually follows the thing being owned, so the honest answer is that it depends on what \"this\" is. A few rules of thumb: whoever is accountable for the outcome should own it, not whoever happens to be closest to the work. If it spans teams, one person owns it and others contribute. And if nobody can name the owner in one sentence, that's the real problem to fix first."
+  },
+  {
+   "jid": "9c56ed68b1eb",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Which creates variation?",
+   "conversation": [
+    "USER (typed to Natively): What's the difference between mitosis and meiosis?",
+    "NATIVELY: Mitosis makes two cells that are genetically identical to the parent, and it's how the body grows and replaces worn-out cells. Meiosis makes four cells with half the chromosome number, and it's how sperm and egg cells form. The key difference is that meiosis has two rounds of division and shuffles the genes through crossing over, so each resulting cell is unique."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Meiosis creates variation. Two things do it: crossing over, where matching chromosomes swap pieces during the first division, and independent assortment, where the pairs line up and separate randomly. Mitosis doesn't shuffle anything, so its two daughter cells come out genetically identical to the parent."
+  },
+  {
+   "jid": "0b5d1ee987cd",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Both players defect, and that's a Nash equilibrium even though they'd both be better off cooperating, which is kind of the whole tragedy.",
+   "conversation": [
+    "PROFESSOR (heard): Consider the prisoner's dilemma.",
+    "NATIVELY: The prisoner's dilemma is a game where two players each choose to cooperate or defect, and the payoffs are set so that defecting is always better for you no matter what the other person does, yet when both defect they end up worse off than if both had cooperated. The classic story is two suspects interrogated separately: each can stay silent or betray the other, and the temptation to betray makes the mutually best outcome unstable. The key idea is that individually rational choices can produce a collectively worse result."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's right, and it's worth seeing why it's a Nash equilibrium rather than just a bad outcome. Defecting is each player's best response to whatever the other does: if the other cooperates, defecting pays more, and if the other defects, defecting still avoids the worst payoff. So neither player can improve by unilaterally switching to cooperate, which is exactly the definition of a Nash equilibrium. The tragedy is that this individually stable point is Pareto-dominated by mutual cooperation, so rational play lands on the collectively worse outcome."
+  },
+  {
+   "jid": "0360bc2a7745",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Can you give me an example?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Sure. Take a simple case: a function that adds up a list of numbers. If I pass it an empty list, the sum should be zero, not an error. That's a boundary case, and it's the kind of thing an example makes obvious that a definition alone doesn't."
+  },
+  {
+   "jid": "529d3c3d9ed7",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Why does ice float? Anyone? It's not a trick question, it's honestly the weirdest thing about water.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ice floats because when water freezes, its molecules lock into a hexagonal lattice held together by hydrogen bonds, and that open structure takes up more space than the liquid. So the solid is less dense than the liquid, roughly 0.92 grams per cubic centimeter against 1.0, and anything less dense than the water it sits in floats. Most substances get denser as they freeze, which is why this is the odd one out."
+  },
+  {
+   "jid": "3640a1ca36ba",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Does that make sense?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, that makes sense. The key idea is clear, and the example ties it together well."
+  },
+  {
+   "jid": "358b0b5e9320",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What if it's expected?",
+   "conversation": [
+    "USER (typed to Natively): Why does inflation hurt people who keep their money in savings?",
+    "NATIVELY: Inflation erodes the **purchasing power** of money that just sits there. If prices rise about 3% a year and your savings earn 1%, you're effectively losing 2% of your real value each year, even though the balance looks the same. The cash isn't shrinking, but what it can buy is."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "If it's expected, the damage is smaller but it's still there. The key is whether your savings earn more than inflation. If prices rise 3% and your account pays 4%, your real value is actually growing by about 1%, so you're not losing ground. The problem is when inflation runs higher than what you're earning, or when it's unexpected, because then the money you set aside buys less than you planned for. Expected inflation just means you can factor it in ahead of time."
+  },
+  {
+   "jid": "354655bb7b19",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What's the difference between weather and climate?",
+   "conversation": [
+    "PROFESSOR: Before we begin, there is a fire drill scheduled for ten thirty, so we'll stop early and meet on the lawn.",
+    "PROFESSOR: Please leave your bags, they'll be safe, and don't use the elevators."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Weather is the short-term state of the atmosphere in a given place, what it's doing right now or over the next few days: temperature, rain, wind, clouds. Climate is the long-term pattern of that weather, usually averaged over decades, so it describes what conditions you'd expect in a place rather than what's happening today. A useful way to put it: weather is your mood, climate is your personality. A cold snap doesn't disprove a warming climate, because climate is about the trend across many years, not any single day."
+  },
+  {
+   "jid": "5a9e156d5e58",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What is a limiting reagent, how do I spot one in a problem, and can you walk me through a quick example?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "A limiting reagent is the reactant that runs out first and so caps how much product you can make. The others are in excess, meaning some is left over when the reaction stops.\n\nTo spot it, convert each reactant's amount to moles, then divide each by its coefficient in the balanced equation. The smallest result is the limiting reagent. That's the one to base your product calculation on.\n\nQuick example: for 2H₂ + O₂ → 2H₂O, if you start with 3 mol H₂ and 2 mol O₂, then H₂ gives 3/2 = 1.5 and O₂ gives 2/1 = 2. The smaller number is H₂, so H₂ limits, and you'd form 3 mol of water."
+  },
+  {
+   "jid": "09dea8da6468",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What are the next steps?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The next steps depend on where things stand right now, so let me check what's finished, what's still open, and whether anything's blocked. Once I have that, I'll lay out the order clearly and send an update right after this."
+  },
+  {
+   "jid": "5fe7f7faa56b",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Photosynthesis takes light and stores it in the bonds of sugar, and basically every calorie you've ever eaten traces back to that.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Light energy gets captured and used to build sugar, and the energy ends up stored in the chemical bonds of that sugar. When you eat the sugar, your body breaks those bonds and releases the energy, so the calories in your food trace back to sunlight that plants captured."
+  },
+  {
+   "jid": "a4882ffcf475",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Why did that happen?",
+   "conversation": [
+    "PROFESSOR: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "PROFESSOR: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The vendor changed their API without telling us, so the integration slipped by about two weeks. That's the whole reason. The original date was already tight, which is why the slip lands harder than it sounds."
+  },
+  {
+   "jid": "6b6accf2adfd",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Where did the one half come from?",
+   "conversation": [
+    "USER (typed to Natively): Derive the kinetic energy formula from the definition of work.",
+    "NATIVELY: Start with the definition of work: the work done by a net force equals the change in kinetic energy. For a constant force along a straight line, \\(W = F\\,d\\). Using Newton's second law, \\(F = ma\\), and the kinematic relation \\(v^2 = v_0^2 + 2ad\\), solve for \\(d\\):\n\n\\[d = \\frac{v^2 - v_0^2}{2a}\\]\n\nSubstitute into the work equation:\n\n\\[W = ma \\cdot \\frac{v^2 - v_0^2}{2a} = \\frac{1}{2}mv^2 - \\frac{1}{2}mv_0^2\\]\n\nSo the work done equals the change in the quantity \\(\\frac{1}{2}mv^2\\), which we call kinetic energy, \\(K = \\frac{1}{2}mv^2\\). The intuition: work is the transfer of energy, and for motion that energy shows up as this half-mass-times-speed-squared term."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The one half comes from the kinematic relation \\(v^2 = v_0^2 + 2ad\\). Solving for the distance gives \\(d = \\frac{v^2 - v_0^2}{2a}\\), and when you substitute that into \\(W = ma\\,d\\), the \\(a\\) cancels and the \\(2\\) in the denominator carries through, leaving \\(\\frac{1}{2}mv^2 - \\frac{1}{2}mv_0^2\\). So the half is just the factor of 2 that shows up when you eliminate acceleration between the force law and the velocity-distance relation."
+  },
+  {
+   "jid": "8c23cf1e9a31",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "As we all know, you can see the Great Wall of China from space with the naked eye, which tells you something about the scale of the project.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's actually a myth. The Great Wall isn't visible to the naked eye from space, and astronauts have said so. It's long, but it's narrow and roughly the same color as the ground around it, so it doesn't stand out at that distance. The scale is real, but that particular claim isn't."
+  },
+  {
+   "jid": "2dc912e97554",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What does marginal mean in economics?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "In economics, **marginal** means the effect of one more unit, the change from the next single step rather than the total. So marginal cost is what it costs to produce one additional unit, and marginal revenue is what you earn from selling one more. The key idea is that decisions happen at the margin: you compare the extra benefit of one more unit against the extra cost, and you keep going while the benefit exceeds the cost. For example, if making the tenth widget costs 5 dollars and selling it brings in 7, the marginal decision says produce it."
+  },
+  {
+   "jid": "ffeddb234130",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "And a heat wave?",
+   "conversation": [
+    "PROFESSOR: Before we begin, there is a fire drill scheduled for ten thirty, so we'll stop early and meet on the lawn.",
+    "PROFESSOR: Please leave your bags, they'll be safe, and don't use the elevators.",
+    "USER (typed to Natively): What's the difference between weather and climate?",
+    "NATIVELY: Weather is the short-term state of the atmosphere in a given place, what it's doing right now or over the next few days: temperature, rain, wind, clouds. Climate is the long-term pattern of that weather, usually averaged over decades, so it describes what conditions you'd expect in a place rather than what's happening today. A useful way to put it: weather is your mood, climate is your personality. A cold snap doesn't disprove a warming climate, because climate is about the trend across many years, not any single day."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A heat wave is weather: a stretch of unusually hot days in one place. It doesn't tell you much about climate on its own, because climate is the long-term pattern. But when heat waves get more frequent, longer, or more intense over many years, that shift is a signal of the climate changing."
+  },
+  {
+   "jid": "2afb0765231a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "How does the crash thing connect to what they said earlier about frames?",
+   "conversation": [
+    "PROFESSOR: Remember from last lecture, every function call gets its own frame on the call stack, with its own copy of the local variables.",
+    "PROFESSOR: Now let's trace factorial of four. Factorial of four calls factorial of three, which calls factorial of two, which calls factorial of one.",
+    "PROFESSOR: Factorial of one hits the base case and returns one, and then each frame unwinds, multiplying as it goes.",
+    "PROFESSOR: If you forget the base case, the stack just keeps growing until the program crashes."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The crash is what happens when the frames never stop piling up. Each recursive call adds a new frame to the call stack, and normally the base case stops that growth so the frames can unwind. Without a base case, factorial of four keeps calling down forever, each call pushing another frame, until the stack runs out of room and the program crashes. So the frames are the mechanism, and the missing base case is what turns that mechanism into a crash."
+  },
+  {
+   "jid": "f899e469ebf4",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "was the KY-17 slowdown statistically significant? give me the p-value for my lab writeup",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The handout doesn't give a p-value for the KY-17 slowdown. It reports means only, with no error bars and no statistical tests, so there's no significance value to pull from it. What it does give is the effect itself: time to half-maximal response at saturating pheromone is 9 minutes for WT versus 27 minutes for KY-17, across n = 4 biological replicates per strain. If your writeup needs a p-value, you'd have to run the test on the raw replicate data, which the handout doesn't include."
+  }
+ ]
+}

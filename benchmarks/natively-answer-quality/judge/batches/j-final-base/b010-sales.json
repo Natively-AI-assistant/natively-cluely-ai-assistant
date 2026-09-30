@@ -1,0 +1,284 @@
+{
+ "batch": "b010-sales",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "SALES-CTX-I1": {
+   "title": "Fourth-floor relocation memo",
+   "text": "MEMO - FOURTH-FLOOR RELOCATION\nFrom: Facilities. Date: 14 September 2026.\n\nThe fourth-floor finance and people teams will move to the new east wing over the weekend of 24 October. Packing kits will be delivered on Monday 19 October. Please label every box with your name and the desk number from the new floor plan, which is pinned in the kitchen and attached to this memo.\n\nParking: garage level B2 will be closed from 23 to 25 October for restriping. Visitor parking moves to lot C for that week.\n\nKitchen: the fourth-floor kitchen closes on Wednesday 21 October. The east wing kitchen has two coffee machines and a water station. The old coffee machine will not be moved because it has been broken since August.\n\nDesk phones: extension numbers will not change. Headsets should be packed in your own box, not the shared bins.\n\nPlants: if you would like your plant moved, put a sticky note with your name on the pot by Friday 16 October. Unlabelled plants will be donated to the lobby.\n\nFurniture: standing desks will be moved by the vendor. Please clear the surface and remove monitors before you leave on Friday 23 October.\n\nQuestions go to the facilities desk on extension 4410. Thank you for your patience.\n"
+  },
+  "SALES-CTX-G2": {
+   "title": "Trellis Flow competitive battlecard and field FAQ",
+   "text": "TRELLIS FLOW - COMPETITIVE BATTLECARD AND FIELD FAQ\nCorvane Systems sales enablement. Updated 12 August 2026. Internal use only.\n\nREAD THIS FIRST\nCompetitor information comes from win/loss calls, public web pages and what prospects tell us. It can be wrong or out of date. Never quote a competitor's price or security status to a prospect as fact. Say what we know about ourselves and suggest the prospect asks the competitor directly.\n\nPAYLANE\nTypical quote reported by prospects for around 10,000 invoices a month: $3,100 to $3,400 a month (unverified).\nStrengths: quick setup (2 to 3 weeks reported), a good mobile approval app, very comfortable for QuickBooks-only companies.\nGaps we have seen: two-way matching only with no configurable three-way tolerance rules; no EU data residency; SOC 2 Type I at last check; no SAP connector.\nWe tend to win: multi-entity companies, purchase-order-heavy buying, SAP or NetSuite with custom fields, EU data needs.\nWe tend to lose: small teams with simple non-PO invoices that choose on price.\nGuidance: do not disparage. Ask which matching rules the prospect needs, then let them compare.\n\nBOOKWISE AP\nTypical quote for 10,000 invoices a month: about $5,800 a month plus a $20,000 implementation (unverified).\nStrengths: long ERP list including Workday, very deep audit trail.\nGaps: implementations of 16 to 20 weeks reported, and per-user pricing that gets expensive with many approvers.\nWe tend to win: prospects who must be live within a quarter, and companies with hundreds of occasional approvers.\n\nAPPROVED TALKING POINTS\nPrice: Growth at 10,000 invoices a month works out to $0.48 per invoice in subscription fees, against a customer-reported median manual cost of $11.40 per invoice. Do not promise savings to a specific prospect before we have seen their volumes.\nSecurity: the SOC 2 Type II report can be shared under NDA. ISO 27001 is in progress and not yet certified. Say exactly that.\nNetSuite: custom fields are mapped through a mapping table configured in week 2 of implementation. The Business Central connector is in beta; production use needs Solutions Engineering sign-off.\nMigration: vendor master, open purchase orders and historical bills are imported by CSV or API in 5 to 7 business days. We recommend a two-week parallel run and cutover at the start of a month, so the customer does not have to stop processing invoices.\nReferences: up to two, after NDA, same industry when possible. We do not publish customer names.\n\nWHO WE NEED FROM THE CUSTOMER\nA finance owner (about 4 hours a week during implementation), an IT contact with ERP admin rights (about 10 hours in total), and the AP lead. Go-live dates are only committed after a technical scoping call.\n\nWHAT WE DO NOT DO\nNo custom development on Growth. No on-premise hosting. No guaranteed savings figure.\n"
+  },
+  "SALES-CTX-G1": {
+   "title": "Trellis Flow one-pager and pricing and packaging sheet (rev 4.1)",
+   "text": "CORVANE SYSTEMS - TRELLIS FLOW\nProduct one-pager and pricing and packaging sheet, revision 4.1, effective 1 September 2026.\n\nWHAT IT IS\nTrellis Flow automates accounts payable for mid-market finance teams. It captures vendor invoices from email, PDF upload or EDI, extracts the fields, matches them against purchase orders and receipts, routes exceptions for approval, and posts approved bills to the ERP. Target customer: 100 to 2,000 employees, 1,500 to 40,000 invoices a month, finance team of 3 to 25 people.\n\nHEADLINE RESULTS\nCustomer-reported medians across 41 customers live for at least six months. Corvane has not independently audited these figures.\n- Cost per processed invoice down 63 percent (from $11.40 to about $4.20)\n- Approval cycle time down from 4.1 days to 1.6 days\n- Touchless rate (invoices posted with no human touch) 71 percent at month six\nCustomer references are available only after a mutual NDA is signed. Corvane does not publish customer names.\n\nPLANS (monthly list price, billed annually in advance)\nStarter: $1,900 a month. Up to 2,000 invoices a month, 1 entity, 10 users, QuickBooks Online and Xero connectors, email support, 99.5 percent uptime target. No SSO.\nGrowth: $4,800 a month. Up to 10,000 invoices a month, up to 3 entities, 40 users, NetSuite and QuickBooks Online connectors, Dynamics 365 Business Central connector (beta), SAML SSO, two-way and three-way matching, 99.9 percent uptime SLA, business-hours support with 4-hour first response.\nEnterprise: from $14,500 a month, quoted per deal. More than 10,000 invoices a month, unlimited entities, SAP S/4HANA connector (generally available), SCIM provisioning, EU data residency (Frankfurt), 99.95 percent uptime SLA, named customer success manager, 24x7 support with 1-hour first response for severity 1 issues.\nOverage: $0.85 per invoice above the plan limit on Starter and Growth. Enterprise overage is set in the order form.\n\nIMPLEMENTATION (one-time fee)\nStarter: self-serve, $0. Growth: $12,000 fixed fee, typically 6 weeks from kickoff to go-live. Enterprise: from $38,000, typically 10 to 14 weeks. Data migration (vendor master, open purchase orders, historical bills by CSV or API) takes 5 to 7 business days and is included in the fee. A Workday Financials connector is on the roadmap for Q2 2027 and is not a commitment.\n\nDISCOUNTS AND COMMERCIAL TERMS\n- Annual prepay is the list price basis. Monthly billing costs 10 percent more.\n- Multi-year: 2-year term 10 percent off, 3-year term 15 percent off, applied to subscription only, never to implementation fees.\n- Sales reps may approve up to 10 percent total discount. Anything above 10 percent needs Deal Desk approval. Discounts above 20 percent are not offered.\n- Standard payment terms are net 30. Net 45 needs Deal Desk approval. Net 60 is not offered. Quarterly billing is available on Growth and Enterprise with a 3 percent surcharge.\n- Default term is 12 months, auto-renews for 12 months, 60 days' written notice to cancel. Renewal increases are capped at 5 percent.\n- No termination for convenience. Termination for cause with a 30-day cure period.\n- Corvane liability is capped at 12 months of fees. Uncapped liability is not offered. On Enterprise only, a data breach super-cap of 2x annual fees is negotiable.\n\nPROOF OF VALUE\nThere is no self-serve free trial. Qualified Growth and Enterprise prospects can run a 30-day proof of value in a sandbox using up to 500 of their own historical invoices at no charge. It requires a signed evaluation agreement and one named technical contact.\n\nSECURITY AND COMPLIANCE\nSOC 2 Type II (most recent report period ended 31 March 2026). ISO 27001 certification is in progress with a target of Q1 2027; Corvane is not yet certified. AES-256 encryption at rest, TLS 1.2 or higher in transit. Data is hosted in the US by default; EU residency (Frankfurt) is Enterprise only. Annual third-party penetration test, summary available under NDA. No security incident requiring customer notification since launch in 2021.\n"
+  },
+  "SALES-CTX-C1": {
+   "title": "Trellis Flow pricing and terms, sales notes from mixed versions",
+   "text": "TRELLIS FLOW - PRICING AND TERMS, SALES NOTES\nCompiled from two sheets and some manager comments. Not reconciled.\n\nFROM THE JUNE SHEET\nGrowth plan is $4,200 a month billed annually. Includes up to 10,000 invoices a month, 3 entities, SAML SSO. Implementation is a fixed $9,000 and takes about 4 weeks.\nMulti-year discounts: 2-year term 12 percent, 3-year term 15 percent. Reps can approve discounts up to 15 percent without Deal Desk.\nPayment terms are net 45 for all annual contracts.\nFree trial: every qualified prospect gets a 14-day free trial, no credit card needed.\nSecurity: SOC 2 Type I complete, Type II in audit.\nOverage is $0.85 per invoice.\n\nFROM THE SEPTEMBER SHEET\nGrowth plan is now $4,800 a month billed annually. Covers up to 12,000 documents a month (invoices, credit notes and remittances each count as one document), 3 entities, 40 users. Implementation is $12,000 fixed and takes 6 weeks.\nMulti-year: 2-year term 10 percent, 3-year term 15 percent, subscription only.\nRep approval up to 10 percent, above that Deal Desk.\nStandard payment terms net 30, net 45 on request.\nThere is no self-serve free trial. A 30-day proof of value is available for qualified Growth prospects using up to 500 historical invoices.\nSecurity: SOC 2 Type II, report period ended 31 March 2026.\nOverage is $0.85 per document.\n\nMANAGER COMMENTS\nSome deals closed at the June price and are being honored until renewal. Ask Deal Desk which sheet applies to a given prospect. EU data residency is available on Enterprise \"now\" according to the June sheet and \"from Q1 next year\" according to a Slack message from product. Customers who add entities may be quoted at the June implementation rate.\n"
+  },
+  "FSALES-CTX-G2": {
+   "title": "Harborline support, warranty, compliance and terms",
+   "text": "Harborline Cold Chain Monitor - Support, Warranty, Compliance and Terms\nHarborline Systems | Version 3.1 | Owner: Customer Operations and Legal\n\nALERTING\n- Standard plan: email and mobile push alerts.\n- Premium plan: adds SMS and automated voice-call alerts and escalation chains (for example, night-shift lead first, then warehouse manager after 10 minutes without acknowledgement).\n- If a gateway loses its connection, each HL-T3 sensor keeps logging locally for up to 30 days and back-fills the cloud when the connection returns.\n\nSUPPORT\n- Standard: email support Monday to Friday, 7am to 7pm Eastern. First response within 1 business day.\n- Premium: 24/7 phone support for alerting outages. Priority 1 first response within 30 minutes.\n\nHARDWARE WARRANTY\n- 24-month limited warranty from the ship date on sensors and gateways. Batteries are consumables and are not covered.\n- In-warranty failures are replaced through an RMA request in the dashboard; an advance replacement ships within 2 business days and the failed unit is returned in the prepaid box.\n- Out-of-warranty replacements are sold at list price less 20%.\n- Physical damage, water immersion beyond the rated seal, and opened housings void the warranty.\n\nDATA AND COMPLIANCE\n- Temperature readings cannot be edited or deleted by any user. Corrective-action notes can be attached to an excursion; every note is stored with the user name and a timestamp.\n- Log history is retained for 7 years by default for food safety audits.\n- Exports: PDF temperature logs, CSV raw data, and a traceability export formatted for the FDA Food Traceability Rule (FSMA 204) key data elements.\n- Security: SOC 2 Type II report available under NDA. Data encrypted at rest and in transit. Hosted in the United States.\n\nSERVICE LEVEL\n- Premium: 99.9% monthly availability for the alerting service, with a 10% service credit on that month's Premium fee if missed. Credit is the sole remedy.\n- Standard: no contractual availability commitment.\n\nCOMMERCIAL TERMS\n- Subscriptions are annual, invoiced upfront, Net 30.\n- Hardware is invoiced on shipment, Net 30.\n- Auto-renewal for 12 months unless cancelled with 45 days written notice.\n- After termination, the customer has 60 days to export all logs; data is then permanently deleted.\n- Sensors can be added mid-term at the prorated subscription rate; sensor count can only be reduced at renewal.\n\nESCALATION\nNon-standard terms, custom compliance attestations and security questionnaires go to Legal via the deal desk. Reps must not confirm certifications or regulatory validations that are not listed on this sheet."
+  }
+ },
+ "items": [
+  {
+   "jid": "717b04da740c",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "How long?",
+   "conversation": [
+    "PROSPECT (heard): We're a forty-person logistics company and our quoting process is a mess.",
+    "NATIVELY: That's a problem worth fixing, and quoting is usually where a logistics team feels it first. What does the mess look like day to day, is it slow turnaround, inconsistent pricing, or quotes slipping through the cracks? And roughly how many quotes are you turning around in a week?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That depends on what we're fixing. A quoting workflow that removes the manual steps usually takes a few weeks to get live, and I'd want to see your current process first. What's the turnaround you're getting today?"
+  },
+  {
+   "jid": "1f186d95d8f4",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Why?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I need the previous question or topic to answer that — what was just asked?"
+  },
+  {
+   "jid": "123658a158dd",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Let me think about it.",
+   "conversation": [],
+   "evidence_ids": [
+    "SALES-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's fair. What's the one thing you'd want to be sure about before deciding? I can get you a straight answer on it now, and if it helps, I'll put the details in writing so you have something to look at."
+  },
+  {
+   "jid": "8da7c05dcc82",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "What do I tell them when they ask how long migration takes, what happens to their open purchase orders, and whether they have to stop processing invoices during the switch?",
+   "conversation": [],
+   "evidence_ids": [
+    "SALES-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Migration is straightforward: we import your vendor master, open purchase orders, and historical bills by CSV or API in **5 to 7 business days**. Your open POs come across in that same import, so nothing gets stranded. And no, you don't have to stop processing invoices. We recommend a **two-week parallel run** with cutover at the start of a month, so you keep working in your current system while we validate everything side by side. What does your month-end close look like, so we can time the cutover around it?"
+  },
+  {
+   "jid": "754ca591bf2e",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "We'll sign today if you can do thirty percent off.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't do thirty percent, and I'd rather be straight with you than have you sign on a number I'd have to walk back. What I can do is put together the best package I'm authorized to offer, and I'll get that to you today. If the number still doesn't work, tell me what it needs to hit and I'll see what's possible."
+  },
+  {
+   "jid": "1e756fa7e7da",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Just send me something.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Happy to. I'll put together a short overview today: what we do, how it'd fit what you're working on, and rough pricing, so you have something concrete to react to. What's the best email to send it to, and is there a particular problem you want me to focus it on?"
+  },
+  {
+   "jid": "42e6ac190bf1",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "What do you think?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Honestly, I think the direction is right, and I'd want to pressure-test one thing before we commit. What I care about most is whether this actually solves the problem we set out to solve, not just whether it looks good on paper. So my instinct is to move forward, but let's agree on how we'll know it's working. What's your read on the biggest risk here?"
+  },
+  {
+   "jid": "45d0c11e0c74",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "They said procurement is 'involved.' What can I ask to find out what that means for the timeline?",
+   "conversation": [
+    "PROSPECT: We did a big hike out at the ridge last weekend.",
+    "USER (spoken): Nice, how was the weather?",
+    "PROSPECT: Perfect. Anyway, procurement is involved on our side."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's helpful to know. When you say procurement is involved, are they reviewing the contract terms, or do they need to run their own approval before anything gets signed? And what's their typical turnaround once it reaches them? That tells me whether we're looking at days or weeks, so I can plan the next step around it."
+  },
+  {
+   "jid": "104a9f3b3c99",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "They want net 60 payment terms, quarterly billing, and a price lock for three years. What am I allowed to offer, what can I ask for in return, and who do I have to get approval from?",
+   "conversation": [],
+   "evidence_ids": [
+    "SALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Here's where we land: net 60 isn't something we offer, so I'd counter with net 45, which I can take to Deal Desk. Quarterly billing works on Growth and Enterprise with a 3 percent surcharge, and the three-year lock gets you 15 percent off subscription, not implementation.\n\nIn return, I'd ask for annual prepay and a signed order form this quarter. Anything past 10 percent discount or net 45 goes through Deal Desk."
+  },
+  {
+   "jid": "ab45106d4c38",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "What does your free trial look like?",
+   "conversation": [],
+   "evidence_ids": [
+    "SALES-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The trial depends on which pricing sheet applies to you, and I want to get that right rather than guess. On the June sheet, qualified prospects get a 14-day free trial with no credit card. On the September sheet, there's no self-serve trial, but qualified Growth prospects can do a 30-day proof of value using up to 500 historical invoices. Let me confirm with Deal Desk which one applies to you, and I'll come back today with the exact terms."
+  },
+  {
+   "jid": "4f9c1586b771",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "That's too expensive.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Totally fair, and I'd rather get you to something that works than lose the deal over a number. Can I ask what budget you had in mind? That way I can show you the option that actually fits instead of guessing."
+  },
+  {
+   "jid": "8c6473b86590",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "So what's the best you can do?",
+   "conversation": [
+    "PROSPECT (heard): That's too expensive.",
+    "NATIVELY: Totally fair, and I'd rather get you to something that works than lose the deal over a number. Can I ask what budget you had in mind? That way I can show you the option that actually fits instead of guessing."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I hear you, and I want to get you to a number that works. I don't have a discount I can just pull out without knowing what you're comparing against, so tell me what budget you're working with and I'll show you the option that fits it. What number did you have in mind?"
+  },
+  {
+   "jid": "9a37dac093e1",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "How long do you keep our temperature logs, and if we ever cancel, how long do we have to pull everything out for the auditors?",
+   "conversation": [],
+   "evidence_ids": [
+    "FSALES-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "We keep your temperature logs for **7 years** by default, which covers food safety audits, and nothing in them can be edited or deleted, so what the auditors see is the original record. If you cancel, you have **60 days** after termination to export everything, and then the data is permanently deleted. Exports come as PDF logs, CSV raw data, and a traceability export built for the FSMA 204 key data elements, so your auditors get what they need in the format they expect. Want me to walk your compliance lead through a sample export?"
+  },
+  {
+   "jid": "1de18169333e",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "Shorter. One line.",
+   "conversation": [
+    "USER (typed to Natively): The prospect just said they're happy with their current vendor. What do I say?",
+    "NATIVELY: That's good to hear, and honestly it's the answer I expect most of the time. I'm not here to talk you out of something that's working. What I'd want to understand is where it's working well and where it's just fine, because that gap is usually where I can help. If nothing's pressing, I'd rather stay in touch than push. Would it be worth a short conversation in a few months, or is there one thing today that your current setup doesn't quite cover?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's good to hear, and I'm not here to talk you out of something that's working. Where does it work well, and where is it just fine? That gap is usually where I can help."
+  },
+  {
+   "jid": "723199d5fc33",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "Ten minutes into a first call and they haven't mentioned budget. How do I bring it up without spooking them?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ten minutes in is a good time, and I'd tie it to their words rather than dropping a number. Something like: \"So I can point you at the right option, how are you thinking about budget for this?\" Then stay quiet and let them answer. If they deflect, ask what range they've set aside, and we'll work from there."
+  },
+  {
+   "jid": "5540b8777c3e",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "What if we go over ten thousand invoices some months?",
+   "conversation": [
+    "PROSPECT (heard): What does the Growth plan include, exactly?",
+    "NATIVELY: The Growth plan is **$4,800 a month**, billed annually in advance. It covers up to **10,000 invoices** a month, up to 3 entities, and 40 users, with NetSuite and QuickBooks Online connectors plus the Dynamics 365 Business Central connector in beta. You also get SAML SSO, two-way and three-way matching, a 99.9 percent uptime SLA, and business-hours support with a 4-hour first response. Implementation is a one-time $12,000 fee, typically about 6 weeks to go live. Want me to walk through how that lines up against your invoice volume?",
+    "PROSPECT (heard): And what would we pay in year one, all in?",
+    "NATIVELY: Year one all in on Growth comes to **$69,600**: $4,800 a month billed annually, so $57,600 for the subscription, plus the one-time **$12,000** implementation. That's the full first-year number with nothing else added. If it helps, I can put together a two-year view, since a two-year term takes 10 percent off the subscription."
+   ],
+   "evidence_ids": [
+    "SALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Overage on Growth is **$0.85 per invoice** above the 10,000, so a month where you run 12,000 would add about $1,700. If you're consistently above 10,000, Enterprise is the better fit and we'd quote that per deal. How many months a year do you expect to be over?"
+  },
+  {
+   "jid": "4ecc302c8d8e",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "How would you handle this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd start by getting clear on what we're actually trying to solve, because the right approach depends on the specifics. Then I'd lay out the options, walk through the tradeoffs, and recommend the one I'd go with. If it's something I haven't handled before, I'd say so and tell you how I'd get up to speed. What's the situation you're looking at?"
+  },
+  {
+   "jid": "7614558268da",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Our IT team has some non-negotiables about how data moves in and out of our ERP.",
+   "conversation": [
+    "PROSPECT: Sorry, the coffee machine on our floor broke again, it's been a week.",
+    "USER (spoken): That is a crisis in any office.",
+    "PROSPECT: Tell me about it. Okay, so."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's exactly the kind of thing I want to get right up front, so let's put it on the table now. What are the non-negotiables your IT team has around data moving in and out of the ERP? Once I know those, I can tell you straight away whether we can meet them or where we'd need to work around them."
+  },
+  {
+   "jid": "b496554e1118",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "What are the next steps?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Here's where we are: I'll send over a short recap of what we covered today, along with the pricing options we talked through, so you have it in writing. From there, the natural next step is a follow-up call with whoever else needs to weigh in on your side. Does sometime early next week work for that?"
+  },
+  {
+   "jid": "1c3fc8b45a60",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "Prospect asks what happens if a sensor dies in month twenty-six. Exact words please.",
+   "conversation": [],
+   "evidence_ids": [
+    "FSALES-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Month 26 is past the 24-month warranty, so that sensor would be an out-of-warranty replacement, and those go at list price less 20%. If you want, I can pull the exact list price for that sensor model and get a replacement quote started today."
+  }
+ ]
+}

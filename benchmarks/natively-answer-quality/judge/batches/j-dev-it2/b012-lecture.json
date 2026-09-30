@@ -1,0 +1,289 @@
+{
+ "batch": "b012-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "DLEC-CTX-C1": {
+   "title": "ECON 214 TA recitation handout - Elasticity quick guide",
+   "text": "ECON 214 Recitation Handout - Week 6\nElasticity Quick Guide\nPrepared by TA Marcus Delacroix-Byrne for the Friday recitation sections\n\nFormula\nOwn-price elasticity of demand = % change in quantity demanded / % change in price, where each percentage change is computed from the ORIGINAL value:\n% change in Q = (Q2 - Q1) / Q1\n% change in P = (P2 - P1) / P1\nKeep the negative sign. A demand elasticity of -1.5 should be written as -1.5 so the grader can see you know demand slopes down.\n\nClassification\n- E below -1 (for example -1.5): elastic\n- E between -1 and 0: inelastic\n- E equal to -1: for this course, treat unit elastic as elastic, since the revenue logic is the same.\n\nPractice example: the Quad coffee cart\nThe cart raises the price of a small drip coffee from $3.00 to $3.60 and daily sales fall from 500 to 400 cups.\n% change in Q = -100 / 500 = -20%\n% change in P = 0.60 / 3.00 = 20%\nE = -20% / 20% = -1.00, so demand here is elastic (unit elastic counts as elastic).\n\nTotal revenue\nRevenue before: $1,500 per day. Revenue after: $1,440 per day. Because the cart is on the elastic side, revenue moves in the opposite direction from price.\n\nExam tips\n- On Midterm 2 either the original-value method or the midpoint method gets full credit, so use whichever is faster for you.\n- A formula sheet will be stapled to the back of Midterm 2, so you do not need to memorize the formulas.\n- Cross-price elasticity: take the absolute value, same as own-price, and report it to two decimals.\n- If a question does not say which price is the starting price, use the lower price as the base.\n\nOffice hours for recitation questions: Fridays 1-2 pm, Econ Commons table 4."
+  },
+  "DLEC-CTX-G2": {
+   "title": "CS 261 Lecture 11 notes - Binary heaps and build-heap",
+   "text": "CS 261 - Data Structures\nLecture 11 Notes: Binary Heaps and Build-Heap\nProf. Tomasz Reinholt-Vega | Carrow Institute of Technology\n\n1. What a binary heap is\nA binary heap is a complete binary tree stored in an array that satisfies the heap-order property. In CS 261 we use MIN-heaps by default: every node's key is less than or equal to the keys of its children, so the smallest key sits at the root.\n\n2. CS 261 array convention (differs from the 0-indexed code you will see online)\nWe store the heap 1-indexed. Index 0 is left empty (we write it as _).\n- parent(i) = floor(i / 2)\n- left(i) = 2i\n- right(i) = 2i + 1\nIf you see parent(i) = floor((i - 1) / 2) and left(i) = 2i + 1 online, that is the 0-indexed layout. Both are correct for their own layout, but on CS 261 quizzes you must use the 1-indexed formulas.\n\n3. Height convention\nIn CS 261 the height of a tree counts NODES on the longest root-to-leaf path, so a single node has height 1 and an empty tree has height 0. (Most textbooks count edges, so for them a single node has height 0.) With our convention a heap with n keys has height floor(log2 n) + 1. Example: n = 7 gives height 3.\n\n4. Sift-down (heapify at index i)\nCompare the key at i with its children. If the smaller child is smaller than the key at i, swap with that smaller child and repeat from the child's index. Stop when the key is no larger than both children or when i has no children. Cost: O(height).\n\n5. Build-heap (bottom-up)\nCall sift-down on i = floor(n / 2), floor(n / 2) - 1, ..., 1. Leaves (indices greater than floor(n / 2)) are already heaps, so we skip them.\nTotal cost is O(n), not O(n log n). Most nodes live near the bottom and can only sift down a short distance; the sum of heights over all nodes is bounded by a linear function of n.\n\n6. Worked example (show the array after every sift-down call; this is required on quizzes)\nInput, n = 7: [_, 9, 4, 7, 1, 8, 2, 6]\nStart at i = floor(7 / 2) = 3.\n- sift-down(3): 7 vs children 2 (i=6) and 6 (i=7). Swap with 2. Array: [_, 9, 4, 2, 1, 8, 7, 6]\n- sift-down(2): 4 vs children 1 (i=4) and 8 (i=5). Swap with 1. Index 4 has no children. Array: [_, 9, 1, 2, 4, 8, 7, 6]\n- sift-down(1): 9 vs children 1 (i=2) and 2 (i=3). Swap with 1. Continue at i=2: 9 vs children 4 (i=4) and 8 (i=5). Swap with 4. Index 4 has no children. Array: [_, 1, 4, 2, 9, 8, 7, 6]\nResult: [_, 1, 4, 2, 9, 8, 7, 6]. Four swaps total.\n\n7. Other operations\n- peek-min: O(1), it is A[1].\n- insert: put the key at A[n + 1], then sift-up. O(log n).\n- extract-min: move A[n] to A[1], shrink the heap, sift-down(1). O(log n).\n- Finding the MAXIMUM in a min-heap is not cheap: the max is somewhere among the leaves, so it takes O(n) in general.\n\n8. Logistics\nQuiz 4 (next Thursday) covers heaps: sift-down traces, build-heap traces, and the index formulas above. Traces must use the 1-indexed layout. Priority queues and heapsort are on Quiz 5, not Quiz 4.\nOffice hours this week move to Wednesday 3-5 pm in Lowry 118 because of the department colloquium."
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "DLEC-CTX-G1": {
+   "title": "ECON 214 Week 6 slides - Price elasticity of demand",
+   "text": "ECON 214 - Intermediate Microeconomics\nWeek 6 Lecture Slides: Price Elasticity of Demand\nProf. Adaeze Okonkwo-Hale | Harlow State University | Section 002\n\nSlide 1 - Learning goals\n- Compute own-price elasticity of demand using the course's midpoint convention\n- Classify demand as elastic, inelastic, or unit elastic\n- Connect elasticity to what happens to total revenue when price changes\n\nSlide 2 - Definition\nOwn-price elasticity of demand measures how responsive quantity demanded is to a change in the good's own price:\nE = (% change in quantity demanded) / (% change in price)\nBecause demand slopes down, the raw ratio is negative.\n\nSlide 3 - ECON 214 convention (read this carefully)\nIn this course we ALWAYS use the midpoint (arc) formula unless a question explicitly says \"point elasticity\":\n% change in Q = (Q2 - Q1) / ((Q1 + Q2) / 2)\n% change in P = (P2 - P1) / ((P1 + P2) / 2)\nWe report own-price elasticity as an absolute value, rounded to two decimals. So you write 1.22, not -1.22.\nMany textbooks (including the optional Marchetti text) divide by the starting values instead. That gives a different number for the same data, and it gives a different number depending on whether the price goes up or down. The midpoint version gives the same answer in both directions, which is why we use it.\n\nSlide 4 - Classification (using the absolute value |E|)\n- |E| > 1: elastic\n- |E| < 1: inelastic\n- |E| = 1 exactly: unit elastic\nNote: 1.00 after rounding counts as unit elastic on problem sets and exams.\n\nSlide 5 - Worked example: the Quad coffee cart\nThe coffee cart outside Benning Hall raises the price of a small drip coffee from $3.00 to $3.60. Daily sales fall from 500 cups to 400 cups.\nStep 1: % change in Q = (400 - 500) / 450 = -0.2222, i.e. -22.2%\nStep 2: % change in P = (3.60 - 3.00) / 3.30 = 0.1818, i.e. 18.2%\nStep 3: E = -22.2% / 18.2% = -1.22\nStep 4: report |E| = 1.22, so demand is elastic over this range.\nCheck: with the starting-value method you would get -20% / 20% = -1.00 and call it unit elastic. Same data, different classification. This is exactly why we fix one convention.\n\nSlide 6 - Elasticity and total revenue\nTotal revenue TR = P x Q.\nBefore: $3.00 x 500 = $1,500 per day. After: $3.60 x 400 = $1,440 per day.\nRule: when demand is elastic, a price increase lowers total revenue; when demand is inelastic, a price increase raises total revenue; at unit elasticity total revenue does not change.\nThe coffee cart is consistent with the rule: elastic demand, price went up, revenue fell by $60 a day.\n\nSlide 7 - What makes demand more elastic?\n- Close substitutes are available (the dining hall sells drip coffee for $2.25)\n- The good is a larger share of the budget\n- A longer time horizon to adjust\n- A narrowly defined market (\"drip coffee at this cart\" versus \"caffeine\")\n\nSlide 8 - Exam notes\n- Midterm 2 covers Weeks 5 to 8. Elasticity questions on Midterm 2 must use the midpoint formula; answers that use starting values get at most half credit.\n- Show all four steps from Slide 5.\n- The elasticity formula sheet is NOT provided on Midterm 2. Memorize the formulas.\n\nSlide 9 - Preview of Week 7\nCross-price elasticity: the sign matters there (positive means substitutes, negative means complements), so we do NOT take absolute values for cross-price elasticity."
+  },
+  "DLEC-CTX-I1": {
+   "title": "Rennick Library group study room policy",
+   "text": "Rennick Library - Group Study Room Policy (Fall Term)\n\nGroup study rooms on floors 2 and 3 of Rennick Library can be reserved by current students through the library booking portal. Each room holds between four and eight people and has a wall-mounted display and a whiteboard.\n\nBooking rules\n- Reservations open seven days in advance at 8:00 am.\n- Each student may hold up to two hours of bookings per day and six hours per week.\n- A room is released to the waitlist if nobody from the group checks in at the front desk within 15 minutes of the start time.\n- Rooms 3B and 3C are quiet rooms: whiteboard work only, no calls or video meetings.\n\nDuring exam weeks\n- The daily limit drops to 90 minutes so more groups get a turn.\n- Overnight booking between midnight and 7:00 am is available only on floor 2.\n\nCare of rooms\n- Wipe the whiteboard and take your rubbish with you when you leave.\n- Food is not allowed; covered drinks are fine.\n- Report broken displays or dried-out markers at the front desk or through the portal's \"Report a problem\" link.\n\nRepeated no-shows (three in one term) suspend booking privileges for two weeks. Questions: ask at the Rennick front desk or contact the circulation team through the library website."
+  }
+ },
+ "items": [
+  {
+   "jid": "e64406111cba",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "why n/2?",
+   "conversation": [
+    "USER (typed to Natively): she wrote T(n) = 2T(n/2) + Theta(n) for merge sort and I have no idea how to read that",
+    "NATIVELY: That's a **recurrence relation**, a way of writing how long a recursive algorithm takes in terms of itself. Read it as: to sort n items, merge sort splits them into two halves, recursively sorts each half, and then merges the two sorted halves back together.\n\nSo **T(n)** is the total time for n items. The **2T(n/2)** part says two subproblems, each half the size. The **Theta(n)** part is the merge step, which takes time proportional to n because you walk through all n elements once. The base case, when you get down to a single element, is constant time.\n\nTo solve it, you can use the master theorem: a = 2, b = 2, and the merge cost is n, so you get **Theta(n log n)**. Intuitively, there are log n levels of splitting, and each level does about n work total."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The **n/2** is the size of each subproblem. Merge sort splits the array into two halves, so if the whole thing has n items, each half has n/2. The **2** in front is the count: two of those halves. So 2T(n/2) means \"two recursive calls, each on half the data.\"\n\nThe Theta(n) is separate, it's the merge step that runs once per level over all n items. Put together, the recursion branches into two halves each time, which is why the total comes out to Theta(n log n)."
+  },
+  {
+   "jid": "0954ff26216a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "One more thing for Midterm 2. There's no formula sheet this time, and elasticity answers only get full credit if you use the midpoint formula. I know some of you have a handout that says otherwise.",
+   "conversation": [],
+   "evidence_ids": [
+    "DLEC-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The handout says either the original-value method or the midpoint method gets full credit, and that a formula sheet will be stapled to the back of Midterm 2. The lecturer just said the opposite: no formula sheet, and only the midpoint formula gets full credit. So for the exam, go with what the lecturer said, since that's the most recent and it's the person grading you.\n\nThe midpoint formula is the percentage change divided by the average of the two values, so for quantity it's (Q2 - Q1) / ((Q1 + Q2) / 2), and the same shape for price. The reason it's used is that it gives the same elasticity whichever direction you move, so it doesn't matter which price you call the starting point."
+  },
+  {
+   "jid": "06461b11b8f4",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "teach me Bayes' theorem properly. start from what conditional probability actually means, derive the formula, then walk me through a disease screening example with real numbers, and finish with the mistake people make most often with it.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Conditional probability is just probability after you've narrowed the world. P(A | B) means the chance of A, given that B is true, so you restrict your attention to the cases where B happened and ask what fraction of those also have A. That's why the formula is P(A | B) = P(A and B) / P(B): the numerator is the overlap, the denominator rescales it to the B-only world.\n\nBayes' theorem comes from writing that same overlap two ways. P(A and B) equals P(A | B) times P(B), and it also equals P(B | A) times P(A). Set them equal and solve for P(A | B):\n\nP(A | B) = P(B | A) · P(A) / P(B)\n\nHere P(A) is the prior, what you believed before seeing B. P(B | A) is the likelihood, how well A predicts the evidence. P(A | B) is the posterior, your updated belief. The denominator P(B) is the total probability of the evidence, which you expand as P(B | A)·P(A) + P(B | not A)·P(not A).\n\nNow the disease example. Say a disease affects 1 in 1000 people, so the prior is 0.001. The test catches 99% of sick people, so the likelihood is 0.99. It has a 5% false positive rate, so P(positive | healthy) is 0.05. A person tests positive. What's the chance they're actually sick?\n\nThe evidence, a positive test, happens two ways. Sick and positive: 0.99 × 0.001 = 0.00099. Healthy and positive: 0.05 × 0.999 = 0.04995. So P(positive) is about 0.05094. The posterior is 0.00099 / 0.05094, which is roughly **0.019**, under 2%. Even with a positive result, the person is probably healthy, because the disease is rare and the false positives from the huge healthy group swamp the true positives.\n\nThe mistake people make most often is ignoring the base rate. They hear \"99% accurate\" and assume a positive means a 99% chance of disease, forgetting that the prior matters enormously. The test's accuracy is the likelihood, not the posterior, and when the condition is rare, a low prior drags the posterior way down."
+  },
+  {
+   "jid": "5e545d0bed90",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So the Peace of Westphalia, 1648, ends the Thirty Years' War, and it's usually taught as the moment the modern system of sovereign states is born.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The Peace of Westphalia is actually a pair of treaties signed in 1648 at Münster and Osnabrück, and together they ended both the Thirty Years' War in the Empire and the Eighty Years' War between Spain and the Dutch Republic. What made it a turning point is that it recognized the territorial sovereignty of the many states within the Holy Roman Empire, giving each prince authority over religion and internal affairs, and it treated the Empire's constituent states as actors in their own right rather than through the Emperor alone. So the \"birth of the sovereign state system\" reading is a useful shorthand, though historians debate how much it was a clean break versus a formalizing of arrangements that had been developing for a while."
+  },
+  {
+   "jid": "cbe4ea39f6de",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "she wrote T(n) = 2T(n/2) + Theta(n) for merge sort and I have no idea how to read that",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a **recurrence relation**, a way of writing how long a recursive algorithm takes in terms of itself. Read it as: to sort n items, merge sort splits them into two halves, recursively sorts each half, and then merges the two sorted halves back together.\n\nSo **T(n)** is the total time for n items. The **2T(n/2)** part says two subproblems, each half the size. The **Theta(n)** part is the merge step, which takes time proportional to n because you walk through all n elements once. The base case, when you get down to a single element, is constant time.\n\nTo solve it, you can use the master theorem: a = 2, b = 2, and the merge cost is n, so you get **Theta(n log n)**. Intuitively, there are log n levels of splitting, and each level does about n work total."
+  },
+  {
+   "jid": "be15ce2548d9",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "what did he say about the second law earlier, and how does it connect to this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The second law says entropy in an isolated system never decreases, so heat flows from hot to cold on its own, never the reverse. That gives time a direction: disorder increases, and reversible processes are an idealization. It connects here because the process we're looking at only runs one way, and any efficiency we calculate has to stay under the Carnot limit set by those temperatures."
+  },
+  {
+   "jid": "2e897b1864c4",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Okay so most of the ATP in the cell comes from oxidative phosphorylation in the mitochondria, and that happens across the inner membrane, which is why the inner membrane is folded up into all these cristae.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Right, and the reason the folding matters is surface area. Oxidative phosphorylation depends on the electron transport chain and ATP synthase, both embedded in that inner membrane, so more cristae means more membrane to hold those complexes and a higher capacity for ATP production. The folding also keeps the proton gradient concentrated right where the ATP synthase sits, so the chemiosmotic coupling stays efficient."
+  },
+  {
+   "jid": "3c99a7d3fa47",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Okay. So if you want the derivative of sine x from first principles, you write sine of x plus h, expand it with the angle addition formula, and the whole thing comes down to two limits: sine h over h, and cosine h minus one over h.",
+   "conversation": [
+    "PROFESSOR: Before we start, quick housekeeping. The problem set deadline moved to Monday at noon because of the fire drill.",
+    "PROFESSOR: Also the Hendry Hall parking lot is closed this week, so give yourselves extra time."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The lecturer is sketching the first-principles proof, so let me fill in the middle step. You start with the limit definition, the fraction sine of x plus h minus sine x over h. The angle addition formula turns sine of x plus h into sine x cosine h plus cosine x sine h, and subtracting sine x leaves sine x times cosine h minus one, plus cosine x sine h, all over h. Grouping the terms gives sine x times the limit of cosine h minus one over h, plus cosine x times the limit of sine h over h. The first limit is zero and the second is one, so the derivative is cosine x."
+  },
+  {
+   "jid": "d04d59aa5db0",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And that's the same logic behind why cartels like the one we looked at last week keep falling apart.",
+   "conversation": [
+    "PROFESSOR (heard): Classic prisoner's dilemma. Each prisoner does better by confessing no matter what the other one does, so they both confess, even though both staying quiet would leave them better off.",
+    "NATIVELY: The key idea is that confessing is a **dominant strategy**: it gives each prisoner a better outcome regardless of what the other does. If the other stays quiet, confessing means going free instead of serving time. If the other confesses, confessing means a lighter sentence than staying quiet would. So rational self-interest leads both to confess, and they land on an outcome that's worse for both than mutual silence. That gap between individual rationality and collective good is the dilemma.",
+    "PROFESSOR (heard): Now repeat it forever.",
+    "NATIVELY: When the game is played over and over with no known end, the logic shifts. In a one-shot prisoner's dilemma, confessing is dominant. But in a repeated game, each player's choice today can be punished or rewarded tomorrow, so cooperation can become rational. That's the idea behind tit-for-tat: start by cooperating, then copy whatever the other player did last round. It's forgiving enough to restore cooperation and tough enough to deter cheating, which is why repetition is what makes cooperation sustainable."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Cartels are a real-world repeated game, and the same tension shows up. Each firm does better by undercutting the agreed price, especially if it thinks the others will hold the line, so cheating is tempting. But because the firms interact again and again, they can punish a cheater by cutting prices in later rounds, which is what makes cooperation hold, at least for a while. Cartels tend to break down when that punishment gets harder to sustain: when cheating is hard to detect, when the firms can't agree on a price to punish back to, when new entrants or a firm with a big incentive to defect upsets the balance, or when the game looks like it's about to end. So it's the same logic as the prisoner's dilemma, individual incentives pulling against the collective outcome, with repetition as the thing that can hold cooperation together."
+  },
+  {
+   "jid": "f1b251a68376",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Classic prisoner's dilemma. Each prisoner does better by confessing no matter what the other one does, so they both confess, even though both staying quiet would leave them better off.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The key idea is that confessing is a **dominant strategy**: it gives each prisoner a better outcome regardless of what the other does. If the other stays quiet, confessing means going free instead of serving time. If the other confesses, confessing means a lighter sentence than staying quiet would. So rational self-interest leads both to confess, and they land on an outcome that's worse for both than mutual silence. That gap between individual rationality and collective good is the dilemma."
+  },
+  {
+   "jid": "b8f4dc743614",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "wait he just said left child is 2i+1 but the notes say something else. what did he mean, and which formulas do I use on the quiz?",
+   "conversation": [
+    "PROFESSOR: Okay, so to get from a node to its children you just do the arithmetic.",
+    "PROFESSOR: Left child of i is at 2i plus 1, right child at 2i plus 2, and the parent is i minus 1 over 2, rounded down."
+   ],
+   "evidence_ids": [
+    "DLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "He's using the 0-indexed layout, where the root sits at index 0. The notes use the 1-indexed layout, with index 0 left empty, so there left(i) = 2i and right(i) = 2i + 1. Both are correct for their own layout, but on the quiz you use the **1-indexed** formulas: parent(i) = floor(i / 2), left(i) = 2i, right(i) = 2i + 1."
+  },
+  {
+   "jid": "087bfc9b1aa3",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So what happens if I increase the pressure on nitrogen plus three hydrogen going to two ammonia? Somebody?",
+   "conversation": [
+    "PROFESSOR (heard): Le Chatelier's principle: if you disturb a system at equilibrium, it shifts in the direction that partly undoes the disturbance.",
+    "NATIVELY: Le Chatelier's principle says a system at equilibrium responds to a disturbance by shifting in the direction that partially counteracts it. So if you add more reactant, the reaction shifts toward products to use it up. If you increase pressure by shrinking the volume, it shifts toward the side with fewer gas molecules. And if you raise the temperature, it shifts in the endothermic direction, the one that absorbs the added heat. The key word is \"partly\": the shift opposes the change but doesn't fully cancel it, so the system settles at a new equilibrium rather than returning to the old one."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Increasing the pressure shifts the equilibrium toward the ammonia side. On the left you have four gas molecules, one nitrogen plus three hydrogen, and on the right only two ammonia molecules, so the products side has fewer gas molecules. By Le Chatelier's principle the system relieves the added pressure by moving to the side with fewer molecules, which means more ammonia forms."
+  },
+  {
+   "jid": "992216f284de",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Quick check before we move on. If I give you a heap with twelve keys, what's its height? Use our convention, not the book's.",
+   "conversation": [],
+   "evidence_ids": [
+    "DLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "With our convention, height counts nodes on the longest root-to-leaf path, so a heap with n keys has height floor(log2 n) + 1. For n = 12, floor(log2 12) is 3, so the height is **4**."
+  },
+  {
+   "jid": "1e560ee40afb",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "accuracy vs precision?",
+   "conversation": [
+    "PROFESSOR: One announcement, the career fair is Thursday in the student union, and the engineering firms are there from ten to two.",
+    "PROFESSOR: Bring printed copies of your resume, some recruiters still want paper."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Accuracy is how close a measurement is to the true value, while precision is how close repeated measurements are to each other. You can have one without the other: a scale that always reads two pounds too heavy is precise but not accurate, and readings that scatter around the true value are accurate on average but not precise. In a lab, accuracy is about correctness and precision is about repeatability."
+  },
+  {
+   "jid": "42843180fd1e",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "explain gradient descent using an example from my own work experience so it actually sticks",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "Gradient descent is like tuning a model by nudging one setting at a time. You measure how wrong the output is, then step in the direction that reduces that error, repeating until it stops improving. Think of adjusting a threshold in a pipeline you've tuned: small steps, check the result, repeat. The step size is the learning rate, too big and you overshoot, too small and it crawls."
+  },
+  {
+   "jid": "d1514cd5a4f1",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "teach me build-heap properly using his worked example: why we start at floor(n/2), what each sift-down does to the array, and why the whole thing is O(n) and not O(n log n).",
+   "conversation": [],
+   "evidence_ids": [
+    "DLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Start at floor(n/2) because everything past it is a leaf, and a single node is already a valid heap. So the last node with children is floor(n/2), and you fix heaps bottom-up from there.\n\nIn the example, n=7, so you start at i=3. Sift-down(3) swaps 7 with its smaller child 2, giving [_,9,4,2,1,8,7,6]. Sift-down(2) swaps 4 with 1, giving [_,9,1,2,4,8,7,6]. Sift-down(1) swaps 9 with 1, then 9 with 4, giving [_,1,4,2,9,8,7,6]. Four swaps.\n\nIt's O(n), not O(n log n), because most nodes sit near the bottom and can only fall a short distance. Summing each node's height gives a linear bound."
+  },
+  {
+   "jid": "617d81242357",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "using the slides' method, what's the elasticity if the cart cuts the price from 3.60 back to 3.00 and sales go from 400 back up to 500?",
+   "conversation": [],
+   "evidence_ids": [
+    "DLEC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Using the midpoint formula, the price cut from $3.60 to $3.00 with sales rising from 400 to 500 gives the same magnitude as the slide example, just in the other direction.\n\n% change in Q = (500 - 400) / 450 = 0.2222, so 22.2%\n% change in P = (3.00 - 3.60) / 3.30 = -0.1818, so -18.2%\nE = 22.2% / -18.2% = -1.22, reported as **|E| = 1.22**, so demand is **elastic** over this range.\n\nThat's the point of the midpoint convention: reversing the direction gives the same answer, unlike the starting-value method."
+  },
+  {
+   "jid": "da6eae67bf87",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So, can anyone tell me why the sky is blue but sunsets are red? Anybody? Think about wavelength, and think about how much air the light has to go through.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Blue light has a much shorter wavelength than red, so it scatters far more off the air molecules, roughly as one over wavelength to the fourth power. That scattered blue reaches your eyes from every direction, which is why the whole sky looks blue. At sunset the light travels through much more atmosphere, so most of the blue is scattered away before it gets to you and what's left is the longer red and orange wavelengths."
+  },
+  {
+   "jid": "23b3cb5099c5",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "explain simpler: what's the difference between a movement along the demand curve and a shift of the curve? she lost me",
+   "conversation": [],
+   "evidence_ids": [
+    "DLEC-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Think of the demand curve as a snapshot of how much people want to buy at each price. Moving **along** it means only the price changed. Price drops, people buy more. That's it, same curve, just a different point on it.\n\nA **shift** means something other than price changed, so the whole curve moves. Income, tastes, the price of a related good, expectations. At the same price as before, people now want more or less.\n\nSo the test is: did only the price change? Then it's a movement. Did anything else change? Then the curve shifts."
+  },
+  {
+   "jid": "8297e0d6bbe8",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "the handout says the coffee cart is unit elastic at -1.00 but I'm pretty sure she said elastic in lecture. which one is right, what should I write on the midterm, and why would they come out different?",
+   "conversation": [],
+   "evidence_ids": [
+    "DLEC-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Write **elastic** on the midterm. The handout is explicit that for this course unit elastic counts as elastic, since the revenue logic is the same, and the coffee cart example itself lands at E = -1.00 and is labeled elastic.\n\nThey only look different because of wording, not math. The number -1.00 is unit elastic by the strict definition, but your TA's rule folds it into the elastic side, so the lecture and the handout agree once you apply that convention. The revenue check backs it up: price rises and revenue falls from $1,500 to $1,440, which is the elastic pattern."
+  }
+ ]
+}

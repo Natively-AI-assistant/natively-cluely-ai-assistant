@@ -1,0 +1,277 @@
+{
+ "batch": "b037-technical-interview",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "TECH-CTX-G4": {
+   "title": "System design brief: Shortlinks service",
+   "text": "Orbit Mail - System Design Round Brief\nTopic: Shortlinks service\n\nShared with the candidate 24 hours before the interview. Please read it, but you are not expected to prepare slides. The interviewer will start from this brief and ask follow-up questions.\n\nProduct context\nOrbit Mail is a fictional email marketing tool. Customers paste long tracking URLs into campaigns, and Orbit turns them into short links such as orb.it/k3Fz9a. Recipients click the short link, are redirected to the original URL, and the customer sees click counts.\n\nFunctional requirements\n- Create a short link from a long URL through an API call.\n- Optional custom alias, up to 30 characters, if it is not already taken.\n- Redirect from the short link to the long URL.\n- Optional expiry date set by the customer.\n- Daily click counts per link, visible in a dashboard within a few minutes of the click.\n- Block links that point to domains on the abuse list.\n\nNon-functional requirements\n- Redirect latency: p99 under 80 ms.\n- Availability: 99.95 percent for redirects. Link creation may be slightly less available.\n- Links are kept for five years.\n- Traffic comes from the US, the EU and India.\n\nNumbers we use internally\n- About 30 million new links per month.\n- Reads to writes: roughly 100 to 1.\n- Peak traffic is about five times the daily average.\n- Average long URL: 200 bytes. Average stored record with metadata: 500 bytes.\n- Click events must not be lost, but they may be counted a little late.\n\nExplicitly out of scope\n- Link previews.\n- QR code generation.\n- User accounts and billing.\n\nOpen questions the interviewer may raise\n- How are short codes generated, and how long should they be?\n- What if two customers shorten the same long URL?\n- Where do click counts live, and how do they get there?\n- What changes if link creation grows ten times?\n- How do you keep redirects fast when a link is suddenly very popular?\n\nNotes for the candidate\nNumbers above are estimates and can be challenged. You may make your own assumptions as long as you state them. The interviewer cares more about the reasoning behind each choice than about naming a specific database."
+  }
+ },
+ "items": [
+  {
+   "jid": "0a560478c35d",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "I'm stuck on generating all permutations of a list. no code please, just the approach as steps I can say out loud",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "For permutations, I'd use backtracking. The idea is to build the result one position at a time, and at each position try every remaining element.\n\n1. Keep a current partial permutation and a set of which elements are already used.\n2. At each step, loop over the elements not yet used, add one, and recurse.\n3. When the partial permutation is the same length as the input, record a copy of it as a complete result.\n4. After each recursive call, remove the element you just added so the next choice starts clean.\n\nThat's the core. If the list has duplicates and you want unique permutations, sort first and skip an element when it equals the previous one and that previous one wasn't used at this level. The cost is factorial in the length, since there are n! results."
+  },
+  {
+   "jid": "90976f270893",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What if t has a character that never shows up in s?",
+   "conversation": [
+    "INTERVIEWER (heard): Minimum window substring. You get two strings, s and t. Find the smallest substring of s that contains every character of t, counting duplicates. How would you solve it?",
+    "NATIVELY: ## Approach\nSliding window with two pointers and a frequency count. Expand the right pointer until the window covers all of t, then shrink from the left while it still covers t, recording the smallest valid window. A `need` map tracks required counts and a `have`/`missing` counter tells you when the window is valid.\n\n## Code\n```python\nfrom collections import Counter\n\ndef minWindow(s: str, t: str) -> str:\n    if not t or not s:\n        return \"\"\n    need = Counter(t)\n    required = len(need)\n    formed = 0\n    window = {}\n    left = 0\n    best = (float(\"inf\"), 0, 0)\n\n    for right, ch in enumerate(s):\n        window[ch] = window.get(ch, 0) + 1\n        if ch in need and window[ch] == need[ch]:\n            formed += 1\n\n        while formed == required:\n            if right - left + 1 < best[0]:\n                best = (right - left + 1, left, right)\n            lc = s[left]\n            window[lc] -= 1\n            if lc in need and window[lc] < need[lc]:\n                formed -= 1\n            left += 1\n\n    return \"\" if best[0] == float(\"inf\") else s[best[1]:best[2] + 1]\n```\n\n## Complexity\nTime is O(n + m) where n is the length of s and m is the length of t, since each pointer moves at most n times. Space is O(k) for the frequency maps, where k is the number of distinct characters.",
+    "INTERVIEWER (heard): Okay, walk me through it with s equals ADOBECODEBANC and t equals ABC.",
+    "NATIVELY: Let me trace it. t is ABC, so need is A:1, B:1, C:1, and required is 3. I expand right until the window first covers all three. That happens at index 5, the C in ADOBEC, so the window is ADOBEC, length 6. Now formed equals required, so I shrink from the left. Dropping the A breaks coverage, so formed drops to 2 and I stop shrinking. I record ADOBEC as the best so far.\n\nThen I keep expanding. The next time the window covers ABC is at the second C, giving ADOBECODEBA... actually the window from the first A through that C, and I shrink again. The key moment is near the end: when right reaches the final C, the window is BANC, and shrinking from the left keeps it valid down to ABC, length 3. That's smaller than 6, so best becomes ABC.\n\nSo the answer is **ABC**, length 3. The two pointers each move at most n times, which is why it stays linear."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "If t has a character that never appears in s, then the window can never cover all of t, so `formed` never reaches `required`. The while loop never runs, `best` stays at infinity, and the function returns the empty string. That's the correct behavior, since no valid window exists. The code already handles it without any extra check."
+  },
+  {
+   "jid": "64c5a7d6dc12",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Who should own this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ownership should sit with whoever is accountable for the outcome end to end, not whoever is closest to the code. I'd give it to one named owner, with the people who build and operate it consulted on the design. If two teams share it, I'd rather split it along a clear boundary than have joint ownership, because shared ownership usually means nobody decides when it matters."
+  },
+  {
+   "jid": "cc848d3da865",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "fix it",
+   "conversation": [
+    "USER (typed to Natively): why does this print 3 3 3 instead of 0 1 2?\n\nfor (var i = 0; i < 3; i++) {\n  setTimeout(() => console.log(i), 100);\n}",
+    "NATIVELY: Because `var` is function-scoped, not block-scoped. There's only one `i` shared by all three callbacks, and by the time the timers fire, the loop has already finished and `i` is 3. So all three log 3.\n\nSwap `var` for `let` and you get 0, 1, 2, since `let` creates a fresh binding per iteration. Or keep `var` and capture the value with an IIFE."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Because `var` is function-scoped, so there's only one `i` shared across all three callbacks. The loop finishes before any timer fires, and by then `i` is 3, so every callback logs that same final value. Switch to `let` and each iteration gets its own binding, giving you 0, 1, 2."
+  },
+  {
+   "jid": "28d62e5e3f27",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So when do you pick one over the other?",
+   "conversation": [
+    "INTERVIEWER: I saw on your resume that you run marathons.",
+    "USER (spoken): Yes, my third one was in April.",
+    "INTERVIEWER: That takes real discipline. How do you fit the training in around work?",
+    "USER (spoken): Early mornings, mostly before standup.",
+    "INTERVIEWER: I could never do that.",
+    "INTERVIEWER (heard): What's the difference between BFS and DFS?",
+    "NATIVELY: BFS explores level by level using a queue, so it finds the shortest path in an unweighted graph. DFS goes deep down one branch before backtracking, using a stack or recursion. So BFS is better for shortest paths, DFS for things like cycle detection, topological sort, and exploring whole components."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "It comes down to what the problem needs. If I need the shortest path in an unweighted graph, or the shallowest solution, BFS wins because it hits nodes in order of distance. If I'm checking for cycles, ordering dependencies, or just need to touch every node without caring about distance, DFS is simpler and uses less memory on wide graphs."
+  },
+  {
+   "jid": "ce70f525a494",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "And the complexity?",
+   "conversation": [
+    "INTERVIEWER (heard): Given an array of integers and a target, return the indices of the two numbers that add up to the target. How would you solve it?",
+    "NATIVELY: ## Approach\nUse a hash map from value to index. For each element, check whether its complement (target minus the current value) is already in the map; if it is, return both indices. Otherwise store the current value and index and move on. This finds the pair in a single pass.\n\n## Code\n```python\ndef two_sum(nums, target):\n    seen = {}\n    for i, num in enumerate(nums):\n        complement = target - num\n        if complement in seen:\n            return [seen[complement], i]\n        seen[num] = i\n    return []\n```\n\n## Complexity\nTime is O(n) because each element is visited once and hash lookups are constant time on average. Space is O(n) for the map, which can hold up to n entries."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Time is **O(n)**, since it's a single pass and each hash lookup is constant time on average. Space is **O(n)** for the map, which can hold up to n entries in the worst case."
+  },
+  {
+   "jid": "fe3f9ff90ccb",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "What are the next steps?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd wrap up by confirming the exact next steps with the team, since the process details aren't something I have in front of me. What I'd do is check where things stand, what's still open, and any blockers, then send a short update today. If there's a specific round or timeline you're expecting, I'll confirm it directly rather than guess."
+  },
+  {
+   "jid": "c812e1db2c11",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What if memory's limited?",
+   "conversation": [
+    "INTERVIEWER: Say we have a list of words and we want to group the anagrams together.",
+    "USER (spoken): I'd use a hash map where the key is the word's letters sorted, and the value is the list of words.",
+    "INTERVIEWER: Alright.",
+    "INTERVIEWER (heard): Why a hash map?",
+    "NATIVELY: Because the thing I need is a lookup by a canonical form of each word. Sorting the letters gives every anagram the same key, so a hash map lets me find the right group in constant time instead of scanning all the groups I've built so far. That turns the whole thing into one pass over the words, and the map is what keeps the groups together as I go.",
+    "INTERVIEWER (heard): Why not just sort?",
+    "NATIVELY: Sorting the whole list only orders the words, it doesn't group them. Two anagrams aren't necessarily adjacent in lexicographic order, so I'd still have to compare neighbors and handle cases where a group's members are scattered. Sorting each word's letters is the key step either way. The hash map is what actually collects the groups in one pass, so I'd rather sort the letters and bucket than sort the list and then scan."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "If memory is tight, I'd drop the hash map and sort the words themselves, then group adjacent ones. That's O(1) extra space beyond the input, since sorting in place puts anagrams next to each other. The tradeoff is time: O(n log n) comparisons instead of one pass, but it works when I can't hold all the groups in memory."
+  },
+  {
+   "jid": "619c9adaaafa",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Let's do the shortlink service in the brief you have. Cover the API, how you store the links, how you generate the codes, and how it scales.",
+   "conversation": [],
+   "evidence_ids": [
+    "TECH-CTX-G4"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'll start with the API, then storage, code generation, and scaling.\n\n**API.** Two main endpoints. `POST /links` takes the long URL, an optional custom alias up to 30 characters, and an optional expiry date, and returns the short code. `GET /{code}` does the redirect. I'd also add a `GET /links/{code}/stats` for the dashboard. On create, I check the alias isn't taken and that the target domain isn't on the abuse list before writing.\n\n**Storage.** A key-value store keyed by short code, with the long URL, expiry, and owner. At 30 million new links a month and 500 bytes per record, that's roughly 15 GB a month, so about 900 GB over five years. Reads are 100 to 1 over writes, so this is read-heavy and I'd keep it in a store that can serve lookups from memory, with the code as the primary key.\n\n**Code generation.** I'd generate a random base62 code, 7 characters, which gives about 3.5 trillion combinations, so collisions are rare. On insert I check for a collision and retry if needed. Custom aliases go through the same uniqueness check.\n\n**Scaling.** Redirects are the hot path, so I'd put a cache in front of the store, since the same links get clicked repeatedly. For a link that suddenly goes viral, the cache absorbs the load and the store stays protected. Click events go to a queue and get aggregated into daily counts, which is fine since the brief says counts can be a little late. For the 100 to 1 read ratio and five times peak, I'd scale the redirect tier horizontally and keep the write path separate so link creation doesn't compete with redirects."
+  },
+  {
+   "jid": "1e0b913d04b1",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How long will this take?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "It depends on the scope, so let me make sure I've got the problem right first. If it's the version I'm picturing, I'd expect to talk through an approach in a few minutes and have something working shortly after."
+  },
+  {
+   "jid": "e80f9d637a11",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "reverse a string in java, O(1) extra space, no extra memory at all",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "## Approach\nConvert to a char array and swap from both ends toward the middle, using two index pointers. No new string or buffer is allocated, so the only extra space is the two int indices.\n\n## Code\n```java\npublic static String reverse(String s) {\n    char[] c = s.toCharArray();\n    int i = 0, j = c.length - 1;\n    while (i < j) {\n        char t = c[i];\n        c[i] = c[j];\n        c[j] = t;\n        i++;\n        j--;\n    }\n    return new String(c);\n}\n```\n\n## Complexity\nTime O(n), one pass over half the array. Space O(1) extra beyond the char array, which is the input's own mutable copy.\n\nOne caveat: `String` is immutable in Java, so a truly in-place reverse needs a `char[]` or `StringBuilder` you own. If the signature takes `char[]`, drop the `toCharArray` and `new String` and swap directly on the passed array."
+  },
+  {
+   "jid": "495145d6c693",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "what's the time complexity of this method? give me the reasoning I can say out loud\n\nstatic int work(int n) {\n    int count = 0;\n    for (int i = 1; i <= n; i *= 2) {\n        for (int j = 0; j < i; j++) {\n            count++;\n        }\n    }\n    return count;\n}",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The outer loop runs log n times, since i doubles each pass. The inner loop runs i times, so the total work is 1 + 2 + 4 + ... + n, which is about 2n. So it's **O(n)** time, and **O(1)** space since only count is stored."
+  },
+  {
+   "jid": "246455392b31",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What would you recommend?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "It depends what we're optimizing for, so let me give you my read and you can push back. I'd start with the simplest option that meets the requirement, measure it, and only add complexity where the data says we need it. What's the constraint you care about most here, latency, cost, or how fast we can ship?"
+  },
+  {
+   "jid": "19bda342a50c",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "dry run this on [-2, 1, -3, 4, -1, 2, 1, -5, 4] and show the variables at each step\n\nint maxSubArray(vector<int>& nums) {\n    int best = nums[0], cur = nums[0];\n    for (int i = 1; i < nums.size(); i++) {\n        cur = max(nums[i], cur + nums[i]);\n        best = max(best, cur);\n    }\n    return best;\n}",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Start with best = -2, cur = -2.\n\ni=1, nums[1]=1: cur = max(1, -1) = 1, best = 1.\ni=2, -3: cur = max(-3, -2) = -2, best = 1.\ni=3, 4: cur = max(4, 2) = 4, best = 4.\ni=4, -1: cur = max(-1, 3) = 3, best = 4.\ni=5, 2: cur = max(2, 5) = 5, best = 5.\ni=6, 1: cur = max(1, 6) = 6, best = 6.\ni=7, -5: cur = max(-5, 1) = 1, best = 6.\ni=8, 4: cur = max(4, 5) = 5, best = 6.\n\nReturn 6, from the subarray [4, -1, 2, 1]."
+  },
+  {
+   "jid": "091cb3057826",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "this prints a different total every run. what is wrong, how do I fix it, and is a mutex or an atomic the better fix?\n\nfunc main() {\n    var wg sync.WaitGroup\n    total := 0\n    for i := 1; i <= 100; i++ {\n        wg.Add(1)\n        go func() {\n            defer wg.Done()\n            total += i\n        }()\n    }\n    wg.Wait()\n    fmt.Println(total)\n}",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The bug is a data race: all 100 goroutines read and write `total` with no synchronization, so increments get lost. There's also a closure bug, since `i` is captured by reference and may be read after the loop advances.\n\n```go\nfunc main() {\n\tvar wg sync.WaitGroup\n\tvar mu sync.Mutex\n\ttotal := 0\n\tfor i := 1; i <= 100; i++ {\n\t\twg.Add(1)\n\t\tgo func(i int) {\n\t\t\tdefer wg.Done()\n\t\t\tmu.Lock()\n\t\t\ttotal += i\n\t\t\tmu.Unlock()\n\t\t}(i)\n\t}\n\twg.Wait()\n\tfmt.Println(total)\n}\n```\n\nPassing `i` as a parameter fixes the capture, and the mutex serializes the writes. For a single counter, an atomic is the better fix: `atomic.AddInt64(&total, int64(i))` is lock-free and cheaper than a mutex, which only pays off when you're protecting a larger critical section."
+  },
+  {
+   "jid": "82d3df7df995",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Find the kth largest element in an unsorted array. And I want something better than sorting the whole thing.",
+   "conversation": [
+    "INTERVIEWER: This next one is about arrays and ranking.",
+    "INTERVIEWER: Assume the array is already sorted in ascending order.",
+    "USER (spoken): Okay, sorted ascending, got it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "## Approach\nThe interviewer's two statements conflict: they said the array is already sorted ascending, then asked for the kth largest in an unsorted array. I'll take the unsorted version as the real problem, since that's the one where \"better than sorting\" matters. A min-heap of size k gives O(n log k), and quickselect gives O(n) average.\n\n## Code\n```python\nimport heapq\nimport random\n\ndef find_kth_largest(nums, k):\n    # Min-heap of size k: the root is the kth largest seen so far.\n    heap = nums[:k]\n    heapq.heapify(heap)\n    for x in nums[k:]:\n        if x > heap[0]:\n            heapq.heapreplace(heap, x)\n    return heap[0]\n\ndef find_kth_largest_quickselect(nums, k):\n    target = len(nums) - k  # index in ascending order\n\n    def select(lo, hi):\n        pivot = nums[random.randint(lo, hi)]\n        i, j = lo, hi\n        while i <= j:\n            while nums[i] < pivot:\n                i += 1\n            while nums[j] > pivot:\n                j -= 1\n            if i <= j:\n                nums[i], nums[j] = nums[j], nums[i]\n                i += 1\n                j -= 1\n        if target <= j:\n            return select(lo, j)\n        if target >= i:\n            return select(i, hi)\n        return nums[target]\n\n    return select(0, len(nums) - 1)\n```\n\n## Complexity\nMin-heap: O(n log k) time, O(k) space. Quickselect: O(n) average, O(n²) worst case, O(1) extra space."
+  },
+  {
+   "jid": "6ca877fe5e3c",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Why a hash map?",
+   "conversation": [
+    "INTERVIEWER: Say we have a list of words and we want to group the anagrams together.",
+    "USER (spoken): I'd use a hash map where the key is the word's letters sorted, and the value is the list of words.",
+    "INTERVIEWER: Alright."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Because the thing I need is a lookup by a canonical form of each word. Sorting the letters gives every anagram the same key, so a hash map lets me find the right group in constant time instead of scanning all the groups I've built so far. That turns the whole thing into one pass over the words, and the map is what keeps the groups together as I go."
+  },
+  {
+   "jid": "e25dff494ead",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Who needs to know about this?",
+   "conversation": [
+    "INTERVIEWER: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "INTERVIEWER: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The people who need to know are whoever owns the timeline and anyone downstream whose work depends on that integration, plus the vendor contact so we can pin down what changed and when. I'd flag it to them now rather than at the next status update, since the original date was already tight."
+  },
+  {
+   "jid": "3bd78c451561",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What's the difference between a process and a thread?",
+   "conversation": [
+    "INTERVIEWER: We run this on a server with sixteen cores handling web requests.",
+    "USER (spoken): Understood, so many requests can be in flight at once.",
+    "INTERVIEWER: Exactly. Keep that in mind."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A process is an independent execution unit with its own memory space, so processes are isolated from each other. A thread is a unit of execution inside a process, and threads in the same process share that memory. So threads are cheaper to create and switch between, but they can step on each other's data, which is why you need synchronization."
+  },
+  {
+   "jid": "ada3264b6039",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Why?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I need the previous question or topic to answer that — what was just asked?"
+  }
+ ]
+}

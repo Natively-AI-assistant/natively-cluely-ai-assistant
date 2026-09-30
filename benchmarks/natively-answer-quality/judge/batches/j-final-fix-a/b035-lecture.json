@@ -1,0 +1,291 @@
+{
+ "batch": "b035-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "FLEC-CTX-G2": {
+   "title": "STAT 301 Lecture 11 notes: Comparing two groups",
+   "text": "STAT 301 - Applied Statistics\nLecture 11: Comparing two groups\nProf. Renata Szabo. Lecture notes, course site copy.\n\n1. Course conventions (apply to every test this term)\n- Significance level: alpha = 0.01 for all in-class examples, problem sets and mini-projects, unless a question states otherwise. The prof's reason: \"We run a lot of tests in this course, and I would rather you miss a small effect than chase noise.\"\n- Two independent samples: use Welch's t-test by default. Do not assume equal variances unless a problem explicitly says the population variances are equal.\n- Always report the test statistic, the degrees of freedom and the p-value, and state the conclusion in the context of the data, not as \"reject H0\" alone.\n- Choose the test before looking at results. Switching tests after seeing a p-value is marked as an error on problem sets.\n\n2. Paired vs independent designs\n- Paired: the same unit measured twice (before and after, or two seasons on the same tree). Analyze the differences d = x1 - x2 with a one-sample t-test.\n- Independent: two unrelated groups. Welch's t-test.\n- Pairing helps most when the variation between units is large compared with the change within a unit, because taking differences cancels the unit-to-unit spread.\n- Analyzing independent groups as if they were paired is invalid, not just less efficient.\n\n3. Worked example: the Brennock Orchard data (slides 8-13)\n- Question: do trees in the North plot yield more apples than trees in the South plot? Yield = kg of apples per tree, one harvest season.\n- North plot: n = 14, mean 38.2 kg, SD 6.1 kg.\n- South plot: n = 11, mean 31.5 kg, SD 9.8 kg.\n- Welch's t-test: t = 1.99, df = 15.9, p = 0.065.\n- For comparison only: a pooled-variance t-test on the same data gives t = 2.10, df = 23, p = 0.047. The prof showed this to make a point: \"If you had picked pooled because the p-value looked nicer, you would be under 0.05 and you would have fooled yourself. Our rule is Welch, decided in advance.\"\n- Frost week: three South trees were damaged in a late frost. With those three removed, South is n = 8, mean 35.9 kg, SD 5.4 kg, and Welch gives t = 0.92, df = 16.3, p = 0.37.\n- Removing data points after seeing results has to be justified independently of the results. Here the justification is the orchard manager's frost log, dated before harvest.\n\n4. Common mistakes flagged in lecture\n- Reading p = 0.065 as \"a 6.5% chance the plots are the same.\" It is not.\n- Concluding \"no difference\" from a non-significant result. The correct wording is that the data do not provide convincing evidence of a difference at the chosen alpha.\n- Reporting a confidence level that does not match alpha. With alpha = 0.01, report a 99% confidence interval.\n\n5. Admin\n- Problem Set 7 (two-sample tests) is due next Tuesday before lecture.\n- Office hours this week: Thursday 1-3 pm, Math Annex 104.\n- Mini-project 2 details were announced verbally in lecture; see the lecture recording."
+  },
+  "FLEC-CTX-G1": {
+   "title": "BIO 220 Lecture 15 slide notes: Kinase cascades and scaffolds",
+   "text": "BIO 220 - Cell Biology\nLecture 15: Signal amplification, kinase cascades, and scaffolds\nProf. Ingrid Achterberg. Slide notes.\n\n1. Why cascades?\n- Each active kinase can phosphorylate many copies of the next kinase, so a small input becomes a large output: amplification. Three tiers (MAPKKK to MAPKK to MAPK) is the textbook arrangement.\n- Cascades can also produce switch-like (ultrasensitive) responses, where the output goes from low to high over a narrow range of input.\n- Hill coefficient nH: nH = 1 is a graded response; nH > 1 is steeper. Course convention: call a response \"switch-like\" only if nH >= 2.\n\n2. Scaffold proteins\n- A scaffold binds several kinases of one cascade and holds them together.\n- Three jobs we care about: speed (high local concentration), insulation (preventing cross-talk with other cascades that share a kinase), and regulation (the scaffold itself can be a control point).\n\n3. Case study (slides 12-17): the Moravec lab handout\nThe numbers below come from the Moravec lab handout distributed in class, not from the textbook.\n- Organism: budding yeast, pheromone response pathway. Scaffold protein: Pbr4 (course name).\n- Strains: WT (wild type) and KY-17 (pbr4 deletion).\n- Readout: fluorescent reporter, as % of maximum WT response, measured 60 minutes after pheromone is added.\n- Dose-response: WT EC50 = 12 nM, Hill coefficient 2.6. KY-17 EC50 = 41 nM, Hill coefficient 1.1.\n- Time to half-maximal response at saturating pheromone (100 nM): WT 9 min, KY-17 27 min.\n- Maximum response at 100 nM: WT 100%, KY-17 88%.\n- Cross-talk test: osmotic stress (0.4 M NaCl, no pheromone) activates the reporter to 3% in WT and 31% in KY-17.\n- Replicates: n = 4 biological replicates per strain. The handout reports means only; no error bars or statistical tests were included.\n\n4. How the prof wants you to read it\n- \"The knockout still signals. It is slower, less sensitive, graded instead of switch-like, and leaky to the wrong input. That is four phenotypes from one deletion.\"\n- Lower sensitivity means a higher EC50. Every year students write that KY-17 is \"more sensitive\" because 41 is the bigger number. It is not.\n- Loss of ultrasensitivity: nH falls from 2.6 to 1.1, so by the course convention KY-17 is no longer switch-like.\n- Insulation: the jump from 3% to 31% under osmotic stress is the insulation phenotype.\n- The handout does NOT establish mechanism for the slowdown. Two hypotheses were left open for discussion section: (a) reduced local concentration of the kinases, and (b) loss of an allosteric activation step that Pbr4 performs on the middle kinase.\n\n5. Exam and assignment notes\n- Problem Set 6, Q2: sketch both dose-response curves from the EC50 and Hill values. Put pheromone concentration in nM on a log-scale x-axis.\n- Exam 3 will include one \"read the data\" question in this style, with a new table, not this one.\n- Discussion section this week: come ready to argue for one of the two mechanism hypotheses using only the handout data."
+  },
+  "LECTURE-CTX-G1": {
+   "title": "ECON 201 Week 6 notes: money, inflation, Phillips curve",
+   "text": "ECON 201 - Principles of Macroeconomics\nLecture notes, Week 6: Money, Inflation and the Phillips Curve\nLecturer: Prof. Marguerite Halvorsen, Eastbrook University\n\n1. What inflation is\nInflation is a sustained rise in the general price level, measured as the percentage change in a price index. The consumer price index (CPI) compares the cost of a fixed basket of goods today with the cost of the same basket in a base year: CPI = (cost of basket today / cost of basket in base year) x 100. Example: the basket cost 400 dollars in the base year and costs 432 dollars today, so CPI = 108, meaning prices are 8 percent higher than in the base year.\n\n2. Quantity theory of money\nThe identity is MV = PY, where M is the money supply, V is velocity (how often a unit of money changes hands), P is the price level and Y is real output. If V and Y are roughly stable, growth in M shows up as growth in P. Worked example for the fictional economy of Norvale: M = 500 billion, V = 4, so nominal spending PY = 2,000 billion. Real output Y = 1,000 billion, so P = 2.0. If the central bank raises M by 10 percent to 550 billion while V and Y stay put, PY = 2,200 billion and P = 2.2, a 10 percent rise in prices. Prof. Halvorsen stressed that the \"V and Y stable\" assumption is the whole argument, and it fails in the short run.\n\n3. Real versus nominal interest rates\nFisher equation: i is approximately r + expected inflation (pi-e), where i is the nominal rate and r is the real rate. Example: a nominal rate of 7 percent with expected inflation of 4 percent gives an expected real rate of about 3 percent. The exact form is (1 + i) = (1 + r)(1 + pi-e). When inflation is unexpected it redistributes wealth: borrowers with fixed-rate loans gain, while lenders and savers holding fixed nominal assets lose.\n\n4. Costs of inflation\nShoe-leather costs (extra trips to the bank to hold less cash), menu costs (the cost of repricing), tax distortions, and uncertainty that makes long-term contracts risky. Extreme case: hyperinflation in Weimar Germany in 1923, when at the peak prices were doubling roughly every four days and workers were paid twice a day so they could spend wages before they lost value.\n\n5. The Phillips curve\nThe original observation was a short-run inverse relationship between unemployment and inflation. The stagflation of the 1970s (high inflation and high unemployment together) showed that this is not a stable menu that policymakers can choose from. The expectations-augmented version is pi = pi-e - b(u - u*), where u* is the natural rate of unemployment and b measures how strongly inflation responds to the unemployment gap. The curve shifts up when expected inflation rises. In the long run, the curve is vertical at u*, so there is no lasting trade-off.\n\n6. Disinflation case study\nBetween 1979 and 1982 the US central bank, under Paul Volcker, pushed its policy rate to about 20 percent in 1981. Unemployment rose to about 10.8 percent in 1982, and inflation fell from double digits to roughly 4 percent by 1983. The lost output during a disinflation is often summarized by the \"sacrifice ratio\".\n\n7. Rule of 72\nYears to double is approximately 72 divided by the growth rate in percent. At 3 percent inflation the price level doubles in about 24 years (72 / 3 = 24).\n\nMidterm note: the midterm covers Weeks 1 to 6. Expect one Fisher equation calculation and one short essay on why the Phillips curve shifts. Calculators are allowed. The formula sheet will include only MV = PY."
+  },
+  "LECTURE-CTX-G3": {
+   "title": "HIST 214 Lecture 4 notes: the first Industrial Revolution",
+   "text": "HIST 214 - Modern Britain\nLecture 4 notes: Why Britain? The first Industrial Revolution\nLecturer: Prof. Ifeoma Castellanos, Eastbrook University\n\nBackground: the farm economy\nThe enclosure movement consolidated open fields into private farms. Yields rose and fewer farm workers were needed, so displaced rural labour drifted into towns and later into factories. Prof. Castellanos called enclosure \"the front door of the story\".\n\nResources and markets\nBritain had abundant coal, navigable rivers and, later, canals. Overseas trade supplied capital, raw cotton and export markets for finished cloth.\n\nTextile mechanization\nFlying shuttle, 1733 (John Kay). Spinning jenny, 1764 (James Hargreaves): one worker could spin several threads at once, but it was small and hand-powered, so it suited cottage workshops. Water frame, 1769 (Richard Arkwright): it produced stronger thread but needed water power, so production moved into mills beside rivers, and that is the start of the factory system. Power loom, 1785 (Edmund Cartwright).\n\nTransport\nCanals built in the late 1700s made moving coal and raw cotton much cheaper, and railways followed in the 1830s, which tied the growing industrial towns to ports and to each other. Prof. Castellanos noted that cheaper transport also widened the market, so a mill could sell far beyond its own town.\n\nSteam\nThe Newcomen engine, early 1700s, pumped water out of mines and burned huge amounts of coal. James Watt's separate condenser, patented in 1769, made engines far more efficient. Steam freed factories from riverbanks and let them move to cities near coal and labour.\n\nSocial consequences\nManchester grew from a market town into a city of several hundred thousand people by the mid-1800s. Working conditions were harsh, including child labour. The Factory Act of 1833 limited working hours for children in textile mills.\n\nThe lecturer's own view\nProf. Castellanos said there is no single cause, and that historians disagree. Some stress institutions and property rights, including the settlement after the Glorious Revolution of 1688, and others stress culture and ideas. If forced to pick, she gives the most weight to energy: cheap, accessible coal is what made steam power pay for itself, and steam is what made the factory city possible. She described institutions and markets as \"necessary but not sufficient\".\n\nEssay note: the essay is due in Week 7, at 1,500 words, on the question \"Was the Industrial Revolution inevitable?\" Use at least three primary sources. Reading for this week: chapters 3 and 4 of the course reader."
+  }
+ },
+ "items": [
+  {
+   "jid": "1fe206fbc48b",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "So which is faster, n log n or n squared?",
+   "conversation": [
+    "USER (typed to Natively): What is Big O notation?",
+    "NATIVELY: Big O notation describes how an algorithm's running time or memory grows as the input size grows, focusing on the worst case and ignoring constants. So O(n) means the work scales linearly with the input, while O(1) stays constant."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "For large inputs, **n log n** is faster. As n grows, n² grows much more quickly, so an O(n log n) algorithm will beat an O(n²) one once the input gets big enough. For small n the difference can be negligible, and constants can flip the result, but asymptotically n log n wins."
+  },
+  {
+   "jid": "6f605adc53f6",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "which test and what alpha does this course want for the orchard comparison, what did north vs south actually come out to, and can I say the plots are different",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "For the orchard comparison the course wants **Welch's t-test**, decided in advance, at **alpha = 0.01** for all in-class examples unless a question says otherwise.\n\nNorth vs South came out to t = 1.99, df = 15.9, p = 0.065. So no, you can't say the plots are different. The right wording is that the data don't provide convincing evidence of a difference at alpha = 0.01. And don't read that p as a 6.5% chance the plots are the same."
+  },
+  {
+   "jid": "6a51a9d69eb0",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Why?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I need the previous question or topic to answer that — what was just asked?"
+  },
+  {
+   "jid": "becb6dfa23cf",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "The response fades, we call that extinction, but don't be fooled into thinking it's gone.",
+   "conversation": [
+    "PROFESSOR: Pavlov noticed that dogs salivated when they heard the assistant footsteps, not just when they got food.",
+    "PROFESSOR: So he paired a bell with the food. Food is the unconditioned stimulus, and salivating to food is the unconditioned response.",
+    "PROFESSOR: After enough pairings the bell alone triggers salivation. Now the bell is a conditioned stimulus and the drooling is a conditioned response.",
+    "PROFESSOR: Then he rang the bell over and over with no food."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Extinction means the conditioned response gets weaker when the conditioned stimulus keeps showing up without the unconditioned stimulus, so the bell alone stops producing much salivation. But the learning isn't erased, it's suppressed. The old association can come back, which is why it's called spontaneous recovery: after a pause, the bell triggers the response again. So extinction is new learning that inhibits the old one, not forgetting."
+  },
+  {
+   "jid": "a940a48200ef",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What if force varies?",
+   "conversation": [
+    "USER (typed to Natively): Derive the kinetic energy formula from the definition of work.",
+    "NATIVELY: Start with the definition of work: the work done by a net force equals the change in kinetic energy. For a constant force along a straight line, \\(W = F\\,d\\). Using Newton's second law, \\(F = ma\\), and the kinematic relation \\(v^2 = v_0^2 + 2ad\\), solve for \\(d\\):\n\n\\[d = \\frac{v^2 - v_0^2}{2a}\\]\n\nSubstitute into the work equation:\n\n\\[W = ma \\cdot \\frac{v^2 - v_0^2}{2a} = \\frac{1}{2}mv^2 - \\frac{1}{2}mv_0^2\\]\n\nSo the work done equals the change in the quantity \\(\\frac{1}{2}mv^2\\), which we call kinetic energy, \\(K = \\frac{1}{2}mv^2\\). The intuition: work is the transfer of energy, and for motion that energy shows up as this half-mass-times-speed-squared term.",
+    "USER (typed to Natively): Where did the one half come from?",
+    "NATIVELY: The one half comes from the kinematic relation \\(v^2 = v_0^2 + 2ad\\). Solving for the distance gives \\(d = \\frac{v^2 - v_0^2}{2a}\\), and when you substitute that into \\(W = ma\\,d\\), the \\(a\\) cancels and the \\(2\\) in the denominator carries through, leaving \\(\\frac{1}{2}mv^2 - \\frac{1}{2}mv_0^2\\). So the half is just the factor of 2 that shows up when you eliminate acceleration between the force law and the velocity-distance relation."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "If the force isn't constant, you can't just use \\(W = Fd\\). Instead you split the motion into tiny steps, where the force is roughly constant over each one, and add up the little bits of work:\n\n\\[W = \\int_{x_0}^{x} F\\,dx\\]\n\nUsing \\(F = ma\\) and \\(a = \\frac{dv}{dt}\\), with \\(dx = v\\,dt\\), the integral becomes \\(\\int m v\\,dv\\), which gives:\n\n\\[W = \\frac{1}{2}mv^2 - \\frac{1}{2}mv_0^2\\]\n\nSo the result is the same, and the one half still comes from integrating \\(v\\,dv\\). The constant-force derivation is just the special case where \\(F\\) comes out of the integral."
+  },
+  {
+   "jid": "24d56c16b9ee",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "for PS6 Q2 which curve should be steeper and does either one count as switch-like by her cutoff",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "WT should be steeper, since its Hill coefficient is 2.6 versus 1.1 for KY-17. By the course cutoff of nH at least 2, WT counts as switch-like and KY-17 does not."
+  },
+  {
+   "jid": "6836bb17c0c3",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What should I say?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd say something like: \"Let me pull together where things actually stand, what's finished, what's still open, and anything blocking us, then I'll get you a clear update right after this.\" That keeps it honest without guessing at details I don't have in front of me."
+  },
+  {
+   "jid": "6c903a34644c",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So, given all that, which option would you pick, and why? I'll take an answer from anyone.",
+   "conversation": [
+    "PROFESSOR: For mini project two you've got two options.",
+    "PROFESSOR: Option A, the paired design. You measure the same twenty trees in both seasons.",
+    "PROFESSOR: Option B, independent samples. Two separate plots, but you get forty trees in each.",
+    "PROFESSOR: And I'll tell you now, the tree-to-tree variation in this orchard is huge, standard deviation around nine kilos, while the season-to-season change within a single tree is small, about two kilos."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd pick **Option A**, the paired design. Pairing removes the tree-to-tree variation from the comparison, and that's the big one here, around nine kilos. The season-to-season change within a tree is only about two kilos, so measuring the same twenty trees in both seasons lets each tree act as its own control. Option B gives you more trees, but the between-tree spread would swamp the seasonal signal you're actually trying to detect."
+  },
+  {
+   "jid": "ee1c054f4c9c",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So what happens to the pressure if I squeeze this syringe down to half its volume?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "If you halve the volume at constant temperature, the pressure doubles. That's Boyle's law: pressure times volume stays constant, so P₁V₁ = P₂V₂. Squeeze the plunger to half the volume and the gas molecules hit the walls twice as often per unit area, so the pressure reads twice as high."
+  },
+  {
+   "jid": "3f9586101721",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Who needs to know about this?",
+   "conversation": [
+    "PROFESSOR: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "PROFESSOR: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The people who need to know are whoever's downstream of that date: anyone planning work around the integration, and whoever owns the schedule or the client-facing commitment. The vendor should also hear that an unannounced API change cost you two weeks, so it doesn't happen again."
+  },
+  {
+   "jid": "f2d348fef6e2",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Using the notes, what's the Fisher equation, what does each term mean, and what do I get for the example?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The Fisher equation says the nominal rate is roughly the real rate plus expected inflation: **i ≈ r + πᵉ**. Here i is the nominal rate, r the real rate, and πᵉ expected inflation. With a nominal rate of 7 percent and expected inflation of 4 percent, the expected real rate is about **3 percent**. The exact form is (1 + i) = (1 + r)(1 + πᵉ)."
+  },
+  {
+   "jid": "0693168be3b3",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What am I missing?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the lecture content in front of me, so I can't tell you what specifically you're missing from it. If you tell me the topic or paste the slide, I can point out the gaps.\n\nIn general, when something feels incomplete, the usual culprits are the assumptions a result depends on, the edge cases that break it, and the link between the concept and why it matters. Those three are what most explanations leave implicit."
+  },
+  {
+   "jid": "2361118a0cda",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "But Aldria is better at both, so why trade?",
+   "conversation": [
+    "PROFESSOR: Two countries, Aldria and Brevin, each with one day of labor to spend on wheat or cloth.",
+    "PROFESSOR: In a day Aldria can make ten units of wheat or ten of cloth.",
+    "PROFESSOR: Brevin can make six units of wheat or three of cloth.",
+    "PROFESSOR: So Aldria is better at both, in absolute terms, that is absolute advantage.",
+    "PROFESSOR: But what matters for trade is opportunity cost: what each country gives up to make one more unit.",
+    "USER (typed to Natively): Who makes the wheat?",
+    "NATIVELY: The question is who gives up less to make wheat. For Aldria, one unit of wheat costs one unit of cloth, since ten of each trade off one for one. For Brevin, six wheat against three cloth means one wheat costs half a unit of cloth. So Brevin gives up less to make wheat, and that's its comparative advantage, even though Aldria is better at both in absolute terms."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Because being better at both doesn't mean it should make both. Aldria gives up one unit of cloth for every unit of wheat, while Brevin gives up only half a unit of cloth. So Brevin makes the wheat, and Aldria puts its day into cloth, where it gives up less. Each country specializes where its opportunity cost is lower, and both end up with more than if they tried to do everything themselves."
+  },
+  {
+   "jid": "353b04dbf9d4",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Alright, to recap: supply shifts, demand shifts, and what happens to price when both move at once.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Let's recap the three cases. A supply shift moves price and quantity in opposite directions. A demand shift moves them the same way. When both shift at once, the effect on price depends on which shift is larger, so price can rise, fall, or stay put."
+  },
+  {
+   "jid": "22449367f2b4",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So this is the enclosure story from the top of the lecture, just seen from the city side now.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The enclosure story from the city side is the same displacement, just seen where it landed. Enclosure consolidated open fields into private farms, yields rose, and fewer farm workers were needed, so that rural labour drifted into towns and then into factories. Manchester is the clearest case: it grew from a market town into a city of several hundred thousand people by the mid-1800s, with harsh working conditions and child labour, which is what the Factory Act of 1833 responded to."
+  },
+  {
+   "jid": "5c9feefd95e5",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "The Treaty of Versailles left Germany with the bill but not the means to pay it.",
+   "conversation": [
+    "PROFESSOR: Sorry, my slides are frozen, give me a second.",
+    "PROFESSOR: Okay, back. IT says the projector will need a restart at the break."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The reparations were fixed in 1921 at 132 billion gold marks, but Germany's capacity to pay was the real problem. The terms stripped it of territory, colonies and much of its industrial base, so the very assets that could have generated export earnings were gone. That gap is what drove the 1923 hyperinflation and later the Dawes Plan."
+  },
+  {
+   "jid": "d9d4b35e5f1b",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So remember, the Phillips curve is not a menu you can order from, it moves when people's expectations move.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The Phillips curve isn't a fixed set of inflation-unemployment combinations you can pick from. It shifts when expected inflation changes, which is why the expectations-augmented version is written as pi = pi-e - b(u - u*), where pi-e is expected inflation, u* is the natural rate, and b measures how strongly inflation responds to the unemployment gap. When people expect higher inflation, the whole curve moves up, so at any given unemployment rate you get more inflation. That's also why it's vertical at u* in the long run: once expectations fully adjust, there's no lasting trade-off."
+  },
+  {
+   "jid": "2b2328036256",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Why does inflation hurt people who keep their money in savings?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Inflation erodes the **purchasing power** of money that just sits there. If prices rise about 3% a year and your savings earn 1%, you're effectively losing 2% of your real value each year, even though the balance looks the same. The cash isn't shrinking, but what it can buy is."
+  },
+  {
+   "jid": "7459f890f854",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Can you explain that?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "\"Can you explain that?\" is a bit open-ended, so I'll take the most likely reading: you want the last concept we covered unpacked in plain terms. Give me the specific term or step and I'll walk through it."
+  },
+  {
+   "jid": "ce2f993cef2e",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "That's the central limit theorem, and honestly it's the closest thing to a miracle in statistics.",
+   "conversation": [
+    "PROFESSOR: Roll a single die and every face from one to six is equally likely, so the distribution is flat, not a bell at all.",
+    "PROFESSOR: Now roll thirty dice and write down the average. Do that a thousand times and plot all the averages.",
+    "PROFESSOR: What you get is a bell curve centered on three and a half."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The central limit theorem says that if you take repeated samples and average them, the distribution of those averages approaches a normal, bell-shaped curve as the sample size grows, no matter what the original distribution looked like. That's why the single die is flat but the average of thirty dice is a bell centered on 3.5, the mean of one to six. The larger the sample, the tighter and more normal the curve gets."
+  }
+ ]
+}

@@ -1,0 +1,271 @@
+{
+  "mode": "team-meet",
+  "partition": "final-hard",
+  "contexts": [
+    {
+      "id": "FTEAM-CTX-G1",
+      "kind": "grounded",
+      "title": "Quillmark mobile Release 4.12 decision log",
+      "file_name": "quillmark-4.12-decision-log.txt",
+      "text": "Quillmark mobile - Release 4.12 decision log\nMaintained by: Nadia Petrov (release captain)\nTeam: Olu Bankole (engineering manager), Kwame Asante (iOS), Selin Aydin (Android), Mireille Laurent (QA lead), Farid Haddad (product manager)\n\n2 Sept - Rollout plan\nDecided: staged rollout at 1 percent, 10 percent, 50 percent, then 100 percent. Each step requires crash-free sessions at or above 99.6 percent over the previous 48 hours before moving on. Nadia makes the call at each step; no weekend promotions.\nDecided: halt the rollout and consider a rollback if crash-free sessions drop below 99.3 percent or the sync error rate goes above 0.5 percent.\n\n2 Sept - Platform order\nDecided: iOS ships first. Android follows one week later, because the WorkManager migration (Selin) needs an extra week of soak on low-memory devices. Farid asked to revisit if Android is ready early; Olu said no, one week gap regardless.\n\n4 Sept - Offline sync conflict UI\nDecided: the conflict-resolution UI for offline edits is deferred to 4.13. Reason: in the usability test, 5 of 8 participants misread the merge banner and thought their edits had been deleted. Design to rework the banner. 4.12 keeps the current last-write-wins behaviour.\n\n4 Sept - Home screen widget\nDecided: the dark-mode home screen widget is descoped entirely (not moved to 4.13). Usage of the existing light widget is under 2 percent of weekly actives, which did not justify the work.\n\n9 Sept - Push notifications\nDecided: migrate push delivery from Relaypost to the in-house Beacon service in 4.12. Owner: Kwame Asante. Target code-complete: 23 September. The Relaypost contract stays live until 31 December as a fallback.\n\n9 Sept - Consent screen\nLegal review of the new analytics consent screen copy was requested by Farid. Outcome: pending. Do not ship copy changes to the consent screen until Legal responds.\n\n11 Sept - Code freeze\nDecided: the 4.12 code freeze is Wednesday 16 September at 18:00 UTC. After freeze, only release-blocker fixes approved by Nadia.\n\n11 Sept - Accessibility audit\nDiscussed commissioning an external accessibility audit before 4.13. Shortlist: Brightline Access and Northfold. No vendor chosen. Budget: TBD, Olu to raise with finance. Nothing is to be promised to either vendor yet.\n\n14 Sept - Go/no-go\nThe go/no-go meeting for 4.12 is Friday 18 September. Approvers: Nadia Petrov, Olu Bankole, Mireille Laurent. Farid attends but is not an approver.\n\nOpen items\n- Legal response on consent copy (Farid chasing).\n- Android date depends on WorkManager soak results.\n- Accessibility audit budget (Olu).",
+      "notes": null
+    },
+    {
+      "id": "FTEAM-CTX-G2",
+      "kind": "grounded",
+      "title": "Quillmark mobile Q4 capacity and dependency plan",
+      "file_name": "quillmark-q4-capacity-plan.txt",
+      "text": "Quillmark mobile - Q4 capacity and dependency plan\nPrepared by Olu Bankole, 12 September 2026\n\nTeam and capacity\n- iOS: Kwame Asante, Priyanka Rao, Jonas Weber\n- Android: Selin Aydin, Mateo Silva\n- Shared and infrastructure: Hyun-woo Park\nSprints are two weeks long. Sprint 21 starts Monday 21 September; Sprint 22 starts 5 October; Sprint 23 starts 19 October; Sprint 24 starts 2 November.\nPlanned time off: Kwame Asante out 5 to 9 October. Mateo Silva out 26 to 30 October. Nadia Petrov (release captain, not counted in engineering capacity) out the week of 2 November.\n\nQ4 priorities, in order\n1. Ship 4.12 (iOS, then Android) and stabilise.\n2. 4.13: offline sync conflict UI with the redesigned merge banner.\n3. Beacon hardening: delivery receipts and a retry policy after the Relaypost migration.\n4. Tablet layout for the editor, only if items 1 to 3 are on track by 2 November.\n\nDependencies on other teams\n- Platform team (lead: Greta Holm): Beacon API v2 with delivery receipts, needed by 30 September for the 4.12 push migration to finish on time. Status: in review.\n- Design (Ayo Mensah): redesigned merge banner and conflict screens for 4.13, needed by 9 October so Sprint 22 can build them.\n- Localization vendor (Linguabridge): 5 business days turnaround on string changes; strings must be sent before code freeze.\n- QA device lab: low-memory Android devices booked for the WorkManager soak, 17 to 24 September.\n\nEstimates\n- WorkManager migration, remaining work (Selin): 8 engineering days including soak fixes.\n- Beacon hardening (Kwame, Hyun-woo): about one sprint, planned for Sprint 23 because Kwame is out during part of Sprint 22.\n- Offline sync conflict UI (Priyanka, Jonas): two sprints once designs land.\n- Tablet layout: not estimated.\n\nKnown gaps\n- No second Android engineer with WorkManager experience; Selin is a single point of failure.\n- If Design slips past 9 October, 4.13 moves out by at least one sprint.\n- If Beacon API v2 slips past 30 September, the push-migration code-complete date moves with it.\n\nNot in this plan\nHiring, vendor budgets (including any accessibility audit) and marketing dates are owned outside the mobile team.",
+      "notes": null
+    },
+    {
+      "id": "FTEAM-CTX-C1",
+      "kind": "conflicting",
+      "title": "4.12 go/no-go prep notes (unofficial)",
+      "file_name": "quillmark-4.12-gonogo-prep-unofficial.txt",
+      "text": "4.12 go/no-go prep - notes (unofficial copy, typed up by Theo Lindgren, 15 Sept)\n\nWhere we are\nCode freeze is Monday the 14th, so as of today we're frozen and only blockers go in. Nadia is approving exceptions.\n\nPlatform order: Android and iOS ship together this time, since the WorkManager soak looks fine so far and Farid wants a single launch announcement.\n\nRollout: staged, 1 / 10 / 50 / 100. Bar to move a step is crash-free sessions of 99.5 percent over 48 hours.\n\nScope changes: the offline conflict UI is back in for 4.12 per Farid, with the old merge banner, since customers keep asking for it and support tickets about lost edits went up again last month.\n\nPush: Beacon migration on track, Kwame says code-complete this week. Platform already shipped the API he needs, so nothing is blocking him.\n\nConsent screen: Farid thinks Legal is fine with it.\n\nGo/no-go: Friday 18th. Approvers: Nadia, Olu, Mireille, Farid.\n\nReminders\n- Freeze is at 18:00 UTC on the 16th, don't merge anything after that without Nadia.\n- Localization strings went to the vendor last week.\n- Accessibility audit: Northfold looks likely, Olu said the budget should be fine.\n- Dark-mode widget: parked, might come back in 4.13 if there is time.\n- Rollback trigger: crash-free under 99 percent, per Mireille.\n- Release notes draft is with Farid; marketing wants them by Thursday.\n\nTheo's note: these are my own notes from the hallway conversation plus the channel, not the official decision log. Double-check anything important against Nadia's log.",
+      "notes": "Internal: code freeze \"Monday the 14th\" vs \"18:00 UTC on the 16th\". Against FTEAM-CTX-G1: Android and iOS ship together (log: iOS first, one week gap regardless); step bar 99.5 percent (log: 99.6); offline conflict UI back in for 4.12 (log: deferred to 4.13); Farid listed as approver (log: not an approver); \"Legal is fine\" (log: outcome pending); Northfold \"likely\" and budget \"fine\" (log: no vendor chosen, budget TBD); dark-mode widget \"might come back in 4.13\" (log: descoped entirely); rollback trigger 99 percent (log: 99.3); Platform API \"already shipped\" (plan: Beacon API v2 in review, needed by 30 September)."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "FTEAM-001",
+      "category": "deadlines",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Quick one, when exactly is code freeze? I've heard two different days now.",
+      "context_condition": "conflicting",
+      "context_ref": "FTEAM-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous"
+      ],
+      "expected_answer_type": "spoken answer surfacing the conflict in the notes",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "Monday the 14th",
+        "on the 16th"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FTEAM-002",
+      "category": "decisions",
+      "difficulty": "hard",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "What's the crash-free bar?",
+      "context_condition": "grounded",
+      "context_ref": "FTEAM-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "short_turn"
+      ],
+      "expected_answer_type": "brief spoken answer quoting the logged threshold",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "99.6 percent",
+        "48 hours"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FTEAM-003",
+      "category": "blockers",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Did legal sign off on the consent screen copy? I want to tell support it's final so they can update the help article.",
+      "context_condition": "grounded",
+      "context_ref": "FTEAM-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial"
+      ],
+      "expected_answer_type": "spoken answer stating the logged status, no invented sign-off",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "Outcome: pending"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FTEAM-004",
+      "category": "dependencies",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Linguabridge needs our final language list for 4.12 by end of day. Which languages did we sign off on?",
+      "context_condition": "grounded",
+      "context_ref": "FTEAM-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info"
+      ],
+      "expected_answer_type": "honest spoken reply that the list is not recorded",
+      "claim_trap": "meeting_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FTEAM-005",
+      "category": "ownership",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "Who owns the push provider migration and when's it supposed to be code-complete? Give me the one line to say.",
+      "context_condition": "grounded",
+      "context_ref": "FTEAM-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "one speakable line with owner and date from log",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "Kwame Asante",
+        "23 September"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FTEAM-006",
+      "category": "dependencies",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "What are we actually waiting on from Platform, and when do we need it by?",
+      "context_condition": "grounded",
+      "context_ref": "FTEAM-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "spoken dependency answer with item and date from plan",
+      "claim_trap": "company_fact",
+      "needles": [
+        "Beacon API v2",
+        "30 September"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FTEAM-007",
+      "category": "prior_decision_dispute",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Everyone good with that? Let's lock it and move on.",
+      "context_condition": "grounded",
+      "context_ref": "FTEAM-CTX-G1",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Okay, platform order. Selin, the WorkManager soak looks clean so far, right?"
+        },
+        {
+          "speaker": "other",
+          "text": "Yeah, three days in, no crashes on the low-memory devices."
+        },
+        {
+          "speaker": "other",
+          "text": "Great. So like we agreed on the second, Android goes first this time and iOS follows a week later."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial"
+      ],
+      "expected_answer_type": "tactful spoken correction of the misremembered decision",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "iOS ships first",
+        "one week gap regardless"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FTEAM-008",
+      "category": "summarizing_decisions",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "Give me a 30-second summary for Farid: what got deferred to 4.13 and why, what was dropped completely, and which items are still waiting on someone outside the team.",
+      "context_condition": "grounded",
+      "context_ref": "FTEAM-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "short spoken multi-part summary grounded in the log",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "5 of 8 participants",
+        "descoped entirely"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FTEAM-009",
+      "category": "scope",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "Farid wants to tell customers that Beacon supports silent background pushes on Android in 4.12. Can I confirm that in this meeting?",
+      "context_condition": "grounded",
+      "context_ref": "FTEAM-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "adversarial"
+      ],
+      "expected_answer_type": "guidance plus speakable line that avoids confirming an unrecorded capability",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FTEAM-010",
+      "category": "timeline_changes",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Kwame's out part of October, right? Does that move anything we've planned?",
+      "context_condition": "grounded",
+      "context_ref": "FTEAM-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "spoken answer on schedule impact from the plan",
+      "claim_trap": "meeting_history",
+      "needles": [
+        "5 to 9 October",
+        "Sprint 23"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

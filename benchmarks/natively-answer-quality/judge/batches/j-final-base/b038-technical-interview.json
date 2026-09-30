@@ -1,0 +1,322 @@
+{
+ "batch": "b038-technical-interview",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "TECH-CTX-G3": {
+   "title": "Candidate's own code file: session_cache.py",
+   "text": "session_cache.py\nSubmission for the Kestrel gateway coding exercise. Author: Marta Ilves.\n\n---- File header ----\n\"\"\"\nIn-memory session cache for the Kestrel gateway.\n\nDesign notes\n- get and put are O(1). One dict holds values and another dict holds expiry times.\n  A list keeps recency order so I can find the least recently used key.\n- Entries expire ttl_seconds after they are written. Expired entries are removed\n  lazily, only when someone calls get on them.\n- Capacity is bounded. When the cache is full, the least recently used key is evicted.\n- I have not tried it with more than one process.\n\nKnown limitations\n- No locking. The gateway runs one worker thread per connection in dev, and I have\n  not added a lock yet.\n- No metrics.\n\"\"\"\n\n---- Code ----\nimport time\n\n\nclass SessionCache:\n    def __init__(self, capacity, ttl_seconds):\n        self.capacity = capacity\n        self.ttl = ttl_seconds\n        self.values = {}\n        self.expires = {}\n        self.order = []  # least recently used first\n\n    def get(self, key):\n        if key not in self.values:\n            return None\n        if self.expires[key] <= time.time():\n            self._drop(key)\n            return None\n        self.order.remove(key)\n        self.order.append(key)\n        return self.values[key]\n\n    def put(self, key, value):\n        if key in self.values:\n            self.values[key] = value\n            self.order.remove(key)\n            self.order.append(key)\n            return\n        if len(self.values) >= self.capacity:\n            oldest = self.order[0]\n            self._drop(oldest)\n        self.values[key] = value\n        self.expires[key] = time.time() + self.ttl\n        self.order.append(key)\n\n    def _drop(self, key):\n        self.values.pop(key, None)\n        self.expires.pop(key, None)\n        if key in self.order:\n            self.order.remove(key)\n\n    def size(self):\n        return len(self.values)\n\n---- Test notes ----\nI wrote three tests with a capacity of 3 and a ttl of 1 second:\n1. put then get returns the stored value.\n2. Adding a fourth key evicts the key that was read least recently.\n3. After sleeping 1.1 seconds, get returns None.\nI did not write a test for updating a key that already exists.\n\n---- Decisions ----\nI chose a plain list for recency because it was the quickest thing to write in the time limit, and the capacities I tried were small. I considered the standard library's OrderedDict but wanted to show that I understood the mechanics. If the gateway were to hold hundreds of thousands of sessions I would revisit this. I would also add a background sweep so expired entries do not sit in memory forever."
+  },
+  "FTECH-CTX-G1": {
+   "title": "Candidate's take-home write-up: etcd cluster debug (Nimbuscrest)",
+   "text": "TAKE-HOME WRITE-UP: FLEET RELIABILITY CLUSTER DEBUG\nCandidate: Dashiell Marrow | Submitted to Nimbuscrest Cloud | Time used: 84 of 90 minutes\n\nEnvironment as given\nThree control-plane nodes (fr-cp-1, fr-cp-2, fr-cp-3), Kubernetes 1.30 with stacked etcd 3.5 on each node. Each node has local NVMe and a shared volume mounted at /mnt/shared.\n\nSymptoms\n- kubectl calls failed intermittently with \"etcdserver: request timed out\".\n- etcd logged 14 leader elections in the first 20 minutes I watched.\n- API server latency for LIST calls jumped from about 80 ms to several seconds during each election.\n\nStep 1: clocks\nchronyc tracking on fr-cp-3 showed an offset of 1.8 s from the other two nodes. I corrected it by restarting chronyd against the internal NTP pool. The election rate did not change (13 elections in the next 20 minutes), so I recorded the skew as a secondary finding, not the root cause. Raft elections in etcd are driven by heartbeat and election timeouts measured locally, not by wall-clock agreement between nodes.\n\nStep 2: disk\nI pulled etcd_disk_wal_fsync_duration_seconds from each member. p99 on fr-cp-1 was 480 ms; on fr-cp-2 and fr-cp-3 it was 6 ms. The etcd guidance we follow wants WAL fsync p99 under 10 ms. On fr-cp-1, /var/lib/etcd was a symlink into /mnt/shared, which is an NFS export. Every time fr-cp-1 was leader it stalled on fsync, missed heartbeats (heartbeat-interval 100 ms, election-timeout 1000 ms), and the followers started a new election.\n\nStep 3: fix\nI removed fr-cp-1 from the cluster with etcdctl member remove, wiped its data directory, pointed it at /var/lib/etcd on local NVMe, and added it back with etcdctl member add. It then caught up from the leader's snapshot. I chose remove and re-add over copying the files because a copy would have carried over a WAL written during the fsync stalls, and the member had to go down either way. During the change the cluster ran on the two healthy members, so writes continued, but it could not have survived another failure until fr-cp-1 caught up.\n\nResult: fsync p99 on fr-cp-1 dropped to 7 ms, and there were 0 leader elections in the following 60 minutes of observation.\n\nStep 4: certificates\nWhile checking member health I noticed the peer TLS certificate on fr-cp-2 expires on 2026-10-03. I renewed it with kubeadm certs renew etcd-peer and restarted that member. This was not causing the outage but would have caused one.\n\nNot finished\n- I wrote a Prometheus alert for WAL fsync p99 above 25 ms for 10 minutes, but did not have time to test that it fires.\n- I did not check whether other workloads also write to /mnt/shared from fr-cp-1.\n\nWhat I would monitor\n- WAL fsync and backend commit durations per member.\n- Leader changes per hour, alerting above 3.\n- Certificate expiry, alerting 30 days out."
+  },
+  "PI-B:RESUME": {
+   "title": "the user's résumé (Dashiell Marrow)",
+   "text": "DASHIELL MARROW\nPlatform / Infrastructure Engineer\nTacoma, WA | dash.marrow@example.com | (555) 019-8840 | github.com/dmarrow-example\n\nSUMMARY\nInfrastructure-focused engineer with about 1.5 years of full-time experience after a B.S. in Computer Engineering. Works mainly with Kubernetes, Terraform, Prometheus, Python and Rust. Interested in SLOs, alert quality, and removing manual toil. Certified Kubernetes Administrator.\n\nEXPERIENCE\n\nHollowbrook Data | Infrastructure Engineer (Contract) | Seattle, WA | Jun 2026 - Present\n- Moved 23 Terraform root modules from local state files to a remote S3 backend with DynamoDB state locking.\n- Wrote Kestrel, a Python CLI that checks Terraform plans against 17 Open Policy Agent rules before merge; it blocked 9 public-bucket changes in its first 10 weeks.\n- Right-sized node pools on two EKS clusters, lowering compute spend from about $41,300 to $29,800 per month.\n- Replaced hand-edited IAM policies with 11 reusable Terraform modules reviewed through pull requests.\n\nCindervale Systems | Site Reliability Engineer I | Tacoma, WA | Jul 2025 - Jan 2026\n- Member of a 5-person SRE team supporting 140 microservices on three GKE clusters.\n- Built Grafana SLO dashboards for the 12 tier-1 services; pages fell from about 260 to 70 per month after moving to multi-window burn-rate alerts.\n- Automated TLS certificate rotation with cert-manager, retiring a 47-step wiki runbook.\n- Wrote Lanternfish, a Rust sidecar that exports per-pod DNS lookup latency to Prometheus; it showed that 31% of p99 latency on the checkout path came from DNS resolution.\n- Ran a quarterly game day for GKE node-pool upgrades with 3 service teams, using a scripted drain-and-cordon checklist.\n- Shadowed the on-call rotation from August 2025; primary on-call from November 2025.\n\nOrrin Telematics | Platform Engineering Intern | Spokane, WA | May 2024 - Aug 2024\n- Containerized 6 legacy Java services and wrote Helm charts for each.\n- Cut CI time for the main monorepo from 34 minutes to 13 minutes with Buildkite build caching.\n- Demoed ephemeral preview environments to about 80 engineers at the internship showcase.\n\nSIDE PROJECT\nTidepool Homelab\n- 4-node Raspberry Pi k3s cluster managed through Flux GitOps.\n- Hosts a self-hosted Matrix chat server; measured 99.2% uptime over 180 days with Uptime Kuma.\n- Loki and Grafana for logs; all manifests public on GitHub.\n\nEDUCATION\nPuget Cascade University | B.S. Computer Engineering | May 2025\n- Capstone: Brine, a distributed key-value store in Rust using Raft consensus (team of 3).\n- Teaching assistant, CPE 342 Operating Systems, two semesters.\n- Relevant coursework: Operating Systems, Computer Networks, Distributed Systems.\n\nCERTIFICATIONS\n- Certified Kubernetes Administrator (CKA), 2025\n\nSKILLS\nInfrastructure: Kubernetes (GKE, EKS, k3s), Helm, Terraform, Flux, cert-manager\nObservability: Prometheus, Grafana, Loki, OpenTelemetry, Uptime Kuma\nLanguages: Python, Rust, Bash, some Java\nCloud: GCP, AWS\nOther: Linux networking, DNS, TLS, Buildkite, GitHub Actions, Open Policy Agent"
+  },
+  "PI-B:JD": {
+   "title": "the job description the user is targeting",
+   "text": "PLATFORM RELIABILITY ENGINEER (EARLY CAREER)\nNimbuscrest Cloud | Portland, OR\n\nABOUT NIMBUSCREST\nNimbuscrest Cloud runs managed PostgreSQL and S3-compatible object storage for about 9,000 customers across four regions: Portland, Frankfurt, Singapore and Sao Paulo. We operate our own fleet of roughly 3,000 bare-metal hosts rather than renting from a hyperscaler, and we publish a 99.95% monthly availability target for managed databases.\n\nTHE TEAM\nFleet Reliability is 7 engineers reporting to Engineering Manager Oyelaran Fitch. We own host provisioning, the Kubernetes control planes that run our storage services, and the incident process for the whole company.\n\nWHAT YOU WILL DO\n- Operate and harden the Kubernetes control planes behind our storage and database services.\n- Automate host provisioning and firmware updates across the bare-metal fleet.\n- Define and review SLOs with service teams, and tune alerting so pages are actionable.\n- Respond to incidents as part of a follow-the-sun rotation and write blameless postmortems.\n- Build capacity forecasts for disk and network in each region.\n- Retire manual runbooks by turning them into tested automation.\n\nWHAT WE ARE LOOKING FOR\n- 1-3 years in SRE, infrastructure, or platform engineering (internships count).\n- Hands-on Kubernetes operations experience.\n- Proficiency in at least one of Go, Python or Rust.\n- Solid understanding of Linux internals and networking fundamentals (DNS, TCP, TLS).\n- Infrastructure as code with Terraform or Pulumi.\n- Willingness to participate in on-call after a ramp-up period.\n\nNICE TO HAVE\n- eBPF-based debugging or observability tooling.\n- Ceph or other distributed storage operations.\n- Running PostgreSQL in production.\n- PXE-based bare-metal provisioning.\n- Experience with Prometheus and multi-window burn-rate alerting.\n\nWORK ARRANGEMENT\nHybrid: two days a week in the Portland Pearl District office. Occasional travel (about twice a year) to the Frankfurt region for data-center work.\n\nHOW WE HIRE\nA recruiter conversation, a 90-minute take-home in which you debug a broken three-node cluster, a systems deep-dive with two engineers, and a conversation with Oyelaran.\n\nNimbuscrest Cloud welcomes applicants from all backgrounds."
+  },
+  "TECH-CTX-G2": {
+   "title": "Technical interview scorecard",
+   "text": "Halden Labs - Technical Interview Scorecard\nShared with candidates before the onsite loop so that everyone knows what is being looked at.\n\nFormat\nThe loop has three technical rounds of 45 minutes each: a coding round, a system design round, and a code discussion round based on your take-home. Each round is scored from 1 (strong no) to 4 (strong yes) on the dimensions below. Interviewers write their feedback independently before the debrief.\n\nCoding round\n- Clarifying questions: does the candidate confirm inputs, limits and edge cases before writing code?\n- Approach before code: is a plan stated, including a simple baseline, before the optimized version?\n- Correctness: does the final code work on the examples and on edge cases such as empty input and duplicates?\n- Verification: does the candidate trace at least one example by hand and think of their own cases?\n- Complexity: can the candidate state and justify time and space cost, including recursion stack and hidden costs?\n- Communication: does the candidate think out loud and respond to hints?\nInterviewers may give up to two hints. Each hint is noted, and a solution reached with more than one hint cannot score above a 3.\n\nSystem design round\n- Requirements: functional and non-functional requirements agreed within the first ten minutes.\n- Estimates: rough numbers for traffic, storage and bandwidth, with the arithmetic shown.\n- Interface and data model: the main API calls and the core entities.\n- High-level design: components and how a request flows through them.\n- Deep dive: the candidate picks one or two areas, such as storage, caching or fan-out, and goes into depth.\n- Trade-offs: alternatives named, reasons given, failure modes discussed.\nReaching for a distributed solution when a single database would do is scored down. Not knowing a specific technology is fine if the reasoning is sound.\n\nCode discussion round\nWe walk through your take-home. Expect questions on complexity, edge cases, and what you would change for streaming input or for ten times the load.\n\nWhat we do not score\nTyping speed, memorized syntax, which of the four supported languages you choose, or whether you use an IDE-style editor or a plain text editor.\n\nWhat tends to lower a score\n- Long silences.\n- Announcing an answer without checking it against an example.\n- Claiming a complexity without explaining it.\n- Ignoring the limits given in the problem statement.\n- Adding components that nobody asked for and cannot be justified.\n\nLogistics\nPlease bring a laptop, or ask us to provide one. Interviewers do not share their scores with each other until the debrief. If a round ends early, the remaining time is not carried over to the next round."
+  },
+  "TECH-CTX-G1": {
+   "title": "Take-home brief: Maintenance Window Consolidator",
+   "text": "Halden Labs - Backend Engineer Take-Home\nProblem: Maintenance Window Consolidator\n\nBackground\nHalden Labs operates a fleet-management platform. Operations teams schedule maintenance windows for each region, and the scheduling service emits them as flat records. Before windows are shown on the ops calendar, overlapping or touching windows in the same region must be consolidated into one.\n\nInput\nA list of records. Each record has:\n- region: a string, case-sensitive, at most 32 characters\n- start: integer epoch seconds\n- end: integer epoch seconds, always greater than start\n\nOutput\nFor every region, the consolidated windows sorted by start time. Two windows in the same region are merged when they overlap or when one ends exactly at the second the other starts. Windows in different regions never merge. The function must not modify its input.\n\nLimits\n- Up to 2,000,000 records per run.\n- Up to 500 distinct regions.\n- The input is not sorted in any way and may contain exact duplicate records.\n- Timestamps fit in a signed 64-bit integer.\n- The grading machine gives your process 2 vCPUs and 256 MB of memory.\n- A full run must finish in 10 seconds.\n\nExamples\nRegion eu-west with windows (100, 200), (150, 300), (300, 400) consolidates to one window (100, 400), because the last window starts exactly when the merged one ends.\nRegion us-east with windows (10, 20) and (30, 40) stays as two windows.\n\nPart 2, discussion only\nIn the follow-up interview we will ask how your design changes if windows arrive as a live stream, possibly out of order by up to five minutes, and the calendar must always show consolidated data. You do not need to implement this part.\n\nDeliverables\n1. Your solution in Python, Java, Go or TypeScript.\n2. Unit tests, including at least one case with more than one region.\n3. A README of at most one page containing the time and space complexity of your solution and any assumptions you made.\n4. A short note on how you checked performance at the upper limits.\n\nHow we review\nReviewers read for correctness first, then clarity, then performance. Our hidden checks include empty input, a single record, all records in one region, all records identical, and 2,000,000 records spread over 500 regions. A solution that is correct but exceeds the memory limit is marked as failing the performance checks. Please do not use third-party libraries beyond the standard library of your language.\n\nSubmission\nSend a zip file or a repository link to your recruiter contact, Priya Raman, within 72 hours of receiving this brief. Questions about the problem are welcome and will be answered within one business day."
+  },
+  "TECH-CTX-I1": {
+   "title": "Facilities notice: kitchen renovation",
+   "text": "Facilities Notice - Kitchen Renovation Schedule (Third Floor)\n\nHello everyone,\n\nThe third-floor kitchen will be renovated over the next three weeks. Here is what to expect.\n\nWeek 1: The old cabinets and the dishwasher will be removed. The sink and the water dispenser will stay in use until Thursday, after which they are turned off for two days. Please use the second-floor kitchen during that time.\n\nWeek 2: New cabinets and the countertop go in. Expect some noise between 9 and 11 in the morning. The contractors will finish by 3 pm each day so that the afternoon is quiet.\n\nWeek 3: Plumbing is reconnected, the new dishwasher is installed, and the coffee machine moves to the wall next to the window. The old machine is going to the second floor for people who want a backup.\n\nCoffee rota: While the kitchen is closed, the rota for buying milk and oat drinks moves to the second floor. Ravi is in charge this month. If you have a favourite mug in the third-floor kitchen, please take it home by Friday, because we cannot promise that everything in the cabinets will be kept.\n\nRefrigerator: The shared refrigerator will be emptied on Wednesday of week 1. Anything left inside after 5 pm that day will be thrown away.\n\nQuestions can go to the facilities desk at extension 4410. Thank you for your patience, and we hope you like the new kitchen."
+  }
+ },
+ "items": [
+  {
+   "jid": "c5e87241c372",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Why not just sort?",
+   "conversation": [
+    "INTERVIEWER: Say we have a list of words and we want to group the anagrams together.",
+    "USER (spoken): I'd use a hash map where the key is the word's letters sorted, and the value is the list of words.",
+    "INTERVIEWER: Alright.",
+    "INTERVIEWER (heard): Why a hash map?",
+    "NATIVELY: Because the thing I need is a lookup by a canonical form of each word. Sorting the letters gives every anagram the same key, so a hash map lets me find the right group in constant time instead of scanning all the groups I've built so far. That turns the whole thing into one pass over the words, and the map is what keeps the groups together as I go."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Sorting the whole list only orders the words, it doesn't group them. Two anagrams aren't necessarily adjacent in lexicographic order, so I'd still have to compare neighbors and handle cases where a group's members are scattered. Sorting each word's letters is the key step either way. The hash map is what actually collects the groups in one pass, so I'd rather sort the letters and bucket than sort the list and then scan."
+  },
+  {
+   "jid": "3730aff6cf59",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Can't we just make the counter volatile and skip the lock?",
+   "conversation": [
+    "INTERVIEWER: We run this on a server with sixteen cores handling web requests.",
+    "USER (spoken): Understood, so many requests can be in flight at once.",
+    "INTERVIEWER: Exactly. Keep that in mind.",
+    "INTERVIEWER (heard): What's the difference between a process and a thread?",
+    "NATIVELY: A process is an independent execution unit with its own memory space, so processes are isolated from each other. A thread is a unit of execution inside a process, and threads in the same process share that memory. So threads are cheaper to create and switch between, but they can step on each other's data, which is why you need synchronization.",
+    "INTERVIEWER (heard): So what happens if two threads increment the same counter?",
+    "NATIVELY: It's a race condition. The increment isn't atomic, it's a read, a modify, and a write. If both threads read the same value before either writes back, they both write the same result and one increment is lost. So the counter ends up lower than it should be. You fix it with a lock or an atomic operation."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "No, volatile only guarantees visibility, not atomicity. Two threads can still read the same value and both write back, so the increment is still lost. You need a lock or an atomic operation."
+  },
+  {
+   "jid": "8012f494386d",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "in my session cache file, a session I update with put() disappears way earlier than the ttl. find the bug",
+   "conversation": [],
+   "evidence_ids": [
+    "TECH-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The bug is in `put()` on the update path. When the key already exists, it overwrites the value and refreshes recency, but it never resets `self.expires[key]`. So the entry keeps the expiry from the original write, and it dies at the original ttl even though you just put it again. The fix is to set `self.expires[key] = time.time() + self.ttl` in that branch too, before returning.\n\n```python\ndef put(self, key, value):\n    if key in self.values:\n        self.values[key] = value\n        self.expires[key] = time.time() + self.ttl\n        self.order.remove(key)\n        self.order.append(key)\n        return\n```\n\nThat also explains why your tests missed it: none of them updates an existing key, so the stale-expiry path never runs."
+  },
+  {
+   "jid": "74cf0b2a95eb",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "he's asking why I removed and re-added the etcd member instead of just copying the data dir to local disk, and what I didn't finish. what did I actually do",
+   "conversation": [],
+   "evidence_ids": [
+    "FTECH-CTX-G1",
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I removed and re-added the member because that's the clean way to get etcd to rejoin with a fresh peer identity and re-sync from the existing quorum, rather than copying a data directory that could carry stale WAL and snapshot state. The part I didn't finish was the certificate work: I found the peer TLS cert on fr-cp-2 expiring 2026-10-03, renewed it with kubeadm certs renew etcd-peer and restarted that member, but that was separate from the outage itself."
+  },
+  {
+   "jid": "91ad29b96dbc",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "What should I say to them?",
+   "conversation": [
+    "INTERVIEWER: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "INTERVIEWER: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Two weeks is workable, but I want to understand the knock-on effects before we commit to a new date. Can you walk me through what the vendor changed and which parts of our integration it touches? Then let's look at what we can pull forward or descope so the original date isn't the only thing we're measuring against."
+  },
+  {
+   "jid": "1c55261c0000",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "why does this crash with a ConcurrentModificationException, and what's the cleanest fix?\n\nList<Integer> nums = new ArrayList<>(List.of(1, 2, 3, 4, 5, 6));\nfor (Integer n : nums) {\n    if (n % 2 == 0) {\n        nums.remove(n);\n    }\n}\nSystem.out.println(nums);",
+   "conversation": [
+    "INTERVIEWER: Before we start, are you okay with me taking notes on my laptop?",
+    "USER (spoken): Sure, of course.",
+    "INTERVIEWER: Great. Also, the team offsite is in Lisbon this year, so if you join, start packing.",
+    "USER (spoken): Ha, that sounds wonderful."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The for-each loop uses an iterator under the hood, and calling `nums.remove(n)` modifies the list directly instead of through that iterator. The iterator's next `next()` call detects the structural change and throws `ConcurrentModificationException`.\n\nThe cleanest fix is `removeIf`, which handles the iteration and removal safely:\n\n```java\nList<Integer> nums = new ArrayList<>(List.of(1, 2, 3, 4, 5, 6));\nnums.removeIf(n -> n % 2 == 0);\nSystem.out.println(nums);\n```\n\nIf you need to keep the explicit loop, use `Iterator.remove()` instead, since that's the one removal the iterator knows about and accounts for."
+  },
+  {
+   "jid": "3b3bc00820f1",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "using the scorecard they sent me, give me a structure for the system design round, what to clarify first and in what order to draw things",
+   "conversation": [],
+   "evidence_ids": [
+    "TECH-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The scorecard lays out the system design round in a clear order, so I'd follow it directly. First, in the opening ten minutes, I'd nail down functional and non-functional requirements and get them agreed out loud. Then rough estimates for traffic, storage and bandwidth, showing the arithmetic. After that the interface and data model, the main API calls and core entities. Then the high-level design, components and how a request flows through them. Then I pick one or two areas to go deep on, like storage, caching or fan-out. Throughout, I'd name alternatives, give reasons, and discuss failure modes. One thing I'd watch: reaching for a distributed solution when a single database would do gets scored down, so I'd start simple and justify each added component."
+  },
+  {
+   "jid": "3fa794dc0d62",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What's the difference between BFS and DFS?",
+   "conversation": [
+    "INTERVIEWER: I saw on your resume that you run marathons.",
+    "USER (spoken): Yes, my third one was in April.",
+    "INTERVIEWER: That takes real discipline. How do you fit the training in around work?",
+    "USER (spoken): Early mornings, mostly before standup.",
+    "INTERVIEWER: I could never do that."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "BFS explores level by level using a queue, so it finds the shortest path in an unweighted graph. DFS goes deep down one branch before backtracking, using a stack or recursion. So BFS is better for shortest paths, DFS for things like cycle detection, topological sort, and exploring whole components."
+  },
+  {
+   "jid": "f591ad6fd279",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about Lanternfish. How exactly did it measure DNS lookup time per pod, and what did it tell you about checkout?",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "Lanternfish was a Rust sidecar I wrote that exports per-pod DNS lookup latency to Prometheus, so we could see resolution time broken out by pod instead of buried in overall request latency. That data showed 31% of p99 latency on the checkout path came from DNS resolution."
+  },
+  {
+   "jid": "b9f5167a2a44",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What's the biggest risk?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The biggest risk is building the wrong thing well. So I'd want the riskiest assumption tested first, with the smallest thing that proves or kills it, before we invest in scale."
+  },
+  {
+   "jid": "8cacf8494d42",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How would you handle this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd start by pinning down the actual problem before proposing anything, since \"this\" could mean a few different things. Assuming it's the technical issue we're looking at, my approach is to reproduce it first, isolate where it breaks, then fix the smallest thing that resolves it rather than rewriting more than I need to. I'd also want to confirm what success looks like here, so I'm solving the right problem and not just the visible symptom."
+  },
+  {
+   "jid": "ee3429b59604",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Walk me through the worst incident you handled as primary on-call at Cindervale: what paged you, what you found, how long it took to mitigate, and what the postmortem changed.",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I was primary on-call at Cindervale from November 2025, on a five-person SRE team covering 140 microservices across three GKE clusters. The worst one I owned was a p99 latency spike on the checkout path. I'd built Lanternfish, a Rust sidecar exporting per-pod DNS lookup latency to Prometheus, and it showed 31% of that p99 came from DNS resolution. That pointed me straight at the resolver rather than the app, so I stopped chasing the service and went after DNS. I don't have the exact page-to-mitigation time in front of me, so I won't guess at it. The lasting change was the alerting: we moved to multi-window burn-rate alerts on the Grafana SLO dashboards for the 12 tier-1 services, and pages dropped from about 260 to 70 a month."
+  },
+  {
+   "jid": "98a9ee2420df",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "abstract class vs interface in java, clean answer and when to pick which",
+   "conversation": [
+    "INTERVIEWER: Quick heads up, we have a hard stop at four because of a fire drill.",
+    "USER (spoken): No problem.",
+    "INTERVIEWER: Also, HR will email you the parking form afterwards.",
+    "USER (spoken): Got it, thanks."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "An abstract class is a partial implementation you extend, so it can hold state, constructors, and concrete methods. An interface is a pure contract you implement, and since Java 8 it can have default and static methods, but no instance fields.\n\nPick an abstract class when subclasses share state or common code and are genuinely a kind of the parent. Pick an interface when unrelated types need to expose the same capability, or when you need multiple inheritance of type, since a class can implement many interfaces but extend only one class.\n\nIn practice I lean interface first for the contract, then an abstract class if shared state shows up."
+  },
+  {
+   "jid": "addca5175b2a",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So it's at about five hundred requests a second and it needs to handle fifty thousand in two months. Talk me through what you would measure, what you would change first, and what you would leave alone.",
+   "conversation": [
+    "INTERVIEWER: Let's talk about growth. Tell me about the service you described earlier.",
+    "USER (spoken): It's an order API. Peak traffic is about five thousand requests a second today.",
+    "INTERVIEWER: Got it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "First I'd measure where the time actually goes: p50 and p99 latency, error rate, CPU and memory per instance, and the database's query times and connection pool, because a hundredfold jump is almost never solved by adding boxes alone. Then I'd fix the cheapest bottleneck first, usually the database, with indexing, caching, and read replicas. What I'd leave alone is anything not on the critical path, and premature sharding until the numbers say I need it."
+  },
+  {
+   "jid": "66d321831c55",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Can we do better on space if the array is already sorted?",
+   "conversation": [
+    "INTERVIEWER (heard): Given an array of integers and a target, return the indices of the two numbers that add up to the target. How would you solve it?",
+    "NATIVELY: ## Approach\nUse a hash map from value to index. For each element, check whether its complement (target minus the current value) is already in the map; if it is, return both indices. Otherwise store the current value and index and move on. This finds the pair in a single pass.\n\n## Code\n```python\ndef two_sum(nums, target):\n    seen = {}\n    for i, num in enumerate(nums):\n        complement = target - num\n        if complement in seen:\n            return [seen[complement], i]\n        seen[num] = i\n    return []\n```\n\n## Complexity\nTime is O(n) because each element is visited once and hash lookups are constant time on average. Space is O(n) for the map, which can hold up to n entries.",
+    "INTERVIEWER (heard): And the complexity?",
+    "NATIVELY: Time is **O(n)**, since it's a single pass and each hash lookup is constant time on average. Space is **O(n)** for the map, which can hold up to n entries in the worst case."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes. If it's sorted, use two pointers, one at each end, and move them inward based on the sum. That drops space to **O(1)** while time stays **O(n)**."
+  },
+  {
+   "jid": "fc287cd21d6d",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Can you explain that?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Can you point me to which part you mean? I want to make sure I explain the right piece rather than guessing at it."
+  },
+  {
+   "jid": "c7e1267381a6",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Let me think about it.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Sounds good, take your time. I'm happy to walk through any part of it again, or dig into the tradeoffs if that helps you decide."
+  },
+  {
+   "jid": "a03dd03555eb",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "same thing in javascript",
+   "conversation": [
+    "USER (typed to Natively): write code to check if a string is a palindrome in python",
+    "NATIVELY: ```python\ndef is_palindrome(s: str) -> bool:\n    left, right = 0, len(s) - 1\n    while left < right:\n        if s[left] != s[right]:\n            return False\n        left += 1\n        right -= 1\n    return True\n```\n\nTwo pointers walk inward from both ends and bail out on the first mismatch, so it never scans more than half the string. Time O(n), space O(1).",
+    "USER (typed to Natively): now ignore spaces, punctuation and letter case",
+    "NATIVELY: ```python\ndef is_palindrome(s: str) -> bool:\n    cleaned = [c.lower() for c in s if c.isalnum()]\n    return cleaned == cleaned[::-1]\n```\n\nFiltering out non-alphanumeric characters and lowercasing handles the spaces, punctuation, and case. Then it's just a comparison against the reversed copy. Time O(n), space O(n) for the cleaned list."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "```javascript\nfunction isPalindrome(s) {\n  const cleaned = s.toLowerCase().replace(/[^a-z0-9]/g, '');\n  let left = 0, right = cleaned.length - 1;\n  while (left < right) {\n    if (cleaned[left] !== cleaned[right]) return false;\n    left++;\n    right--;\n  }\n  return true;\n}\n```\n\nThe regex strips anything that isn't a letter or digit, `toLowerCase` handles case, then two pointers walk inward and bail on the first mismatch. Time O(n), space O(n) for the cleaned string."
+  },
+  {
+   "jid": "825ecd76214a",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Let's go back to your take-home. Before any optimization, what's the brute force way to consolidate those windows, and why doesn't it survive the input limits?",
+   "conversation": [],
+   "evidence_ids": [
+    "TECH-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The brute force is pairwise: for each region, compare every window against every other one and merge any pair that overlaps or touches, repeating until nothing changes. That's quadratic in the number of windows per region, so with two million records it's on the order of trillions of comparisons, and it also needs the whole set in memory to keep re-scanning it. Against 2 vCPUs, 256 MB, and a 10 second budget, it blows both the time and memory limits. The fix is to sort by start within each region and do a single linear sweep."
+  },
+  {
+   "jid": "1dd697acb605",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Design the home timeline for a social network like Twitter. People follow other people, and when I open the app I want recent posts from everyone I follow. Do you push posts to followers or pull them at read time, and what do you do about accounts with millions of followers?",
+   "conversation": [],
+   "evidence_ids": [
+    "TECH-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'd go hybrid: fan-out on write for normal accounts, and pull at read time for the big ones. When someone posts, a fan-out service pushes the post id into the timeline caches of their followers, so opening the app is just a read of a precomputed list. That keeps reads fast and cheap.\n\nThe problem is accounts with millions of followers. Pushing one post to millions of caches is a huge write spike, so for those I'd skip the fan-out and instead have each user's timeline merge in the recent posts from the high-follower accounts they follow at read time. So a read pulls the precomputed timeline plus a small query against those big accounts, then merges and ranks.\n\nThat gives me fast reads for the common case and bounded write cost for celebrities. The tradeoff is read-time merge complexity and a bit more latency for users who follow many big accounts, which I'd handle by caching the merged result briefly."
+  }
+ ]
+}

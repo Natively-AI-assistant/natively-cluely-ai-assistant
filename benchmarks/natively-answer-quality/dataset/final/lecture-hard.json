@@ -1,0 +1,293 @@
+{
+  "mode": "lecture",
+  "partition": "final-hard",
+  "contexts": [
+    {
+      "id": "FLEC-CTX-G1",
+      "kind": "grounded",
+      "title": "BIO 220 Lecture 15 slide notes: Kinase cascades and scaffolds",
+      "file_name": "bio220-lecture15-scaffolds.txt",
+      "text": "BIO 220 - Cell Biology\nLecture 15: Signal amplification, kinase cascades, and scaffolds\nProf. Ingrid Achterberg. Slide notes.\n\n1. Why cascades?\n- Each active kinase can phosphorylate many copies of the next kinase, so a small input becomes a large output: amplification. Three tiers (MAPKKK to MAPKK to MAPK) is the textbook arrangement.\n- Cascades can also produce switch-like (ultrasensitive) responses, where the output goes from low to high over a narrow range of input.\n- Hill coefficient nH: nH = 1 is a graded response; nH > 1 is steeper. Course convention: call a response \"switch-like\" only if nH >= 2.\n\n2. Scaffold proteins\n- A scaffold binds several kinases of one cascade and holds them together.\n- Three jobs we care about: speed (high local concentration), insulation (preventing cross-talk with other cascades that share a kinase), and regulation (the scaffold itself can be a control point).\n\n3. Case study (slides 12-17): the Moravec lab handout\nThe numbers below come from the Moravec lab handout distributed in class, not from the textbook.\n- Organism: budding yeast, pheromone response pathway. Scaffold protein: Pbr4 (course name).\n- Strains: WT (wild type) and KY-17 (pbr4 deletion).\n- Readout: fluorescent reporter, as % of maximum WT response, measured 60 minutes after pheromone is added.\n- Dose-response: WT EC50 = 12 nM, Hill coefficient 2.6. KY-17 EC50 = 41 nM, Hill coefficient 1.1.\n- Time to half-maximal response at saturating pheromone (100 nM): WT 9 min, KY-17 27 min.\n- Maximum response at 100 nM: WT 100%, KY-17 88%.\n- Cross-talk test: osmotic stress (0.4 M NaCl, no pheromone) activates the reporter to 3% in WT and 31% in KY-17.\n- Replicates: n = 4 biological replicates per strain. The handout reports means only; no error bars or statistical tests were included.\n\n4. How the prof wants you to read it\n- \"The knockout still signals. It is slower, less sensitive, graded instead of switch-like, and leaky to the wrong input. That is four phenotypes from one deletion.\"\n- Lower sensitivity means a higher EC50. Every year students write that KY-17 is \"more sensitive\" because 41 is the bigger number. It is not.\n- Loss of ultrasensitivity: nH falls from 2.6 to 1.1, so by the course convention KY-17 is no longer switch-like.\n- Insulation: the jump from 3% to 31% under osmotic stress is the insulation phenotype.\n- The handout does NOT establish mechanism for the slowdown. Two hypotheses were left open for discussion section: (a) reduced local concentration of the kinases, and (b) loss of an allosteric activation step that Pbr4 performs on the middle kinase.\n\n5. Exam and assignment notes\n- Problem Set 6, Q2: sketch both dose-response curves from the EC50 and Hill values. Put pheromone concentration in nM on a log-scale x-axis.\n- Exam 3 will include one \"read the data\" question in this style, with a new table, not this one.\n- Discussion section this week: come ready to argue for one of the two mechanism hypotheses using only the handout data.",
+      "notes": null
+    },
+    {
+      "id": "FLEC-CTX-G2",
+      "kind": "grounded",
+      "title": "STAT 301 Lecture 11 notes: Comparing two groups",
+      "file_name": "stat301-lecture11-two-groups.txt",
+      "text": "STAT 301 - Applied Statistics\nLecture 11: Comparing two groups\nProf. Renata Szabo. Lecture notes, course site copy.\n\n1. Course conventions (apply to every test this term)\n- Significance level: alpha = 0.01 for all in-class examples, problem sets and mini-projects, unless a question states otherwise. The prof's reason: \"We run a lot of tests in this course, and I would rather you miss a small effect than chase noise.\"\n- Two independent samples: use Welch's t-test by default. Do not assume equal variances unless a problem explicitly says the population variances are equal.\n- Always report the test statistic, the degrees of freedom and the p-value, and state the conclusion in the context of the data, not as \"reject H0\" alone.\n- Choose the test before looking at results. Switching tests after seeing a p-value is marked as an error on problem sets.\n\n2. Paired vs independent designs\n- Paired: the same unit measured twice (before and after, or two seasons on the same tree). Analyze the differences d = x1 - x2 with a one-sample t-test.\n- Independent: two unrelated groups. Welch's t-test.\n- Pairing helps most when the variation between units is large compared with the change within a unit, because taking differences cancels the unit-to-unit spread.\n- Analyzing independent groups as if they were paired is invalid, not just less efficient.\n\n3. Worked example: the Brennock Orchard data (slides 8-13)\n- Question: do trees in the North plot yield more apples than trees in the South plot? Yield = kg of apples per tree, one harvest season.\n- North plot: n = 14, mean 38.2 kg, SD 6.1 kg.\n- South plot: n = 11, mean 31.5 kg, SD 9.8 kg.\n- Welch's t-test: t = 1.99, df = 15.9, p = 0.065.\n- For comparison only: a pooled-variance t-test on the same data gives t = 2.10, df = 23, p = 0.047. The prof showed this to make a point: \"If you had picked pooled because the p-value looked nicer, you would be under 0.05 and you would have fooled yourself. Our rule is Welch, decided in advance.\"\n- Frost week: three South trees were damaged in a late frost. With those three removed, South is n = 8, mean 35.9 kg, SD 5.4 kg, and Welch gives t = 0.92, df = 16.3, p = 0.37.\n- Removing data points after seeing results has to be justified independently of the results. Here the justification is the orchard manager's frost log, dated before harvest.\n\n4. Common mistakes flagged in lecture\n- Reading p = 0.065 as \"a 6.5% chance the plots are the same.\" It is not.\n- Concluding \"no difference\" from a non-significant result. The correct wording is that the data do not provide convincing evidence of a difference at the chosen alpha.\n- Reporting a confidence level that does not match alpha. With alpha = 0.01, report a 99% confidence interval.\n\n5. Admin\n- Problem Set 7 (two-sample tests) is due next Tuesday before lecture.\n- Office hours this week: Thursday 1-3 pm, Math Annex 104.\n- Mini-project 2 details were announced verbally in lecture; see the lecture recording.",
+      "notes": null
+    },
+    {
+      "id": "FLEC-CTX-C1",
+      "kind": "conflicting",
+      "title": "STAT 301 TA recap email after Lecture 11",
+      "file_name": "stat301-ta-recap-lecture11.txt",
+      "text": "Subject: Recap of Lecture 11 + mini-project 2 reminders\nFrom: Jonah Whitcombe (TA, STAT 301)\n\nHi all,\n\nQuick recap of Thursday's lecture since a few of you told me you missed it or the recording cut out halfway through.\n\nTwo-sample tests\n- For two independent groups, use the pooled-variance t-test like we did in lecture. That's the course default, so don't overthink it.\n- Significance level: we use alpha = 0.05 throughout this course.\n- Orchard example: North plot mean was 36.2 kg vs South 31.5 kg. With the pooled test we got p = 0.047, so the plots are significantly different and North yields more.\n- The frost trees: you can drop any trees that look like outliers once you've seen the data, that's standard cleaning.\n\nMini-project 2\n- Due Friday, November 6 at 5 pm on the course site.\n- Pick Option A (paired, same trees measured in two seasons) or Option B (two independent plots, more trees).\n- Remember that Welch is the default for independent samples, so if you choose Option B, use Welch in your analysis.\n- Use alpha = 0.01 in your write-up, same as the problem sets.\n- Late submissions are accepted until Sunday, November 8, which is honestly the real deadline as far as I'm concerned, but please don't quote me on that.\n- Include your test statistic, degrees of freedom and p-value. A 95% confidence interval is fine for every write-up.\n\nOffice hours\n- I'm in Math Annex 104 on Thursday from 2 to 4, right after the prof's hours.\n- If you can't make it, post on the forum and I'll answer within a day or so.\n\nCheers,\nJonah",
+      "notes": "Internal contradictions: pooled t-test called the course default vs Welch called the default for independent samples; alpha = 0.05 throughout vs alpha = 0.01 for the write-up; due Friday Nov 6 5 pm vs Sunday Nov 8 called the real deadline; 95% CI \"fine\" alongside alpha = 0.01. Also contradicts the lecture notes: North mean 36.2 (notes 38.2), significance claimed from the pooled p = 0.047, post-hoc outlier dropping called standard."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "FLEC-001",
+      "category": "scientific",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "what EC50 did the knockout strain get vs wild type, and does that make it more or less sensitive",
+      "context_condition": "grounded",
+      "context_ref": "FLEC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial"
+      ],
+      "expected_answer_type": "direct answer with values and correct direction",
+      "claim_trap": "none",
+      "needles": [
+        "41 nM",
+        "12 nM"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FLEC-002",
+      "category": "professor_meaning",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "So the knockout still signals, just slower. What does that tell you about what the scaffold is actually doing?",
+      "context_condition": "grounded",
+      "context_ref": "FLEC-CTX-G1",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Look at the time course on slide fifteen before you look at anything else."
+        },
+        {
+          "speaker": "other",
+          "text": "Nine minutes versus twenty-seven. Keep those two numbers in your head."
+        },
+        {
+          "speaker": "other",
+          "text": "And notice the knockout still gets to almost the same ceiling."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "interpretation grounded in the handout data",
+      "claim_trap": "research_claim",
+      "needles": [
+        "27 min",
+        "does NOT establish mechanism"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FLEC-003",
+      "category": "scientific",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "was the KY-17 slowdown statistically significant? give me the p-value for my lab writeup",
+      "context_condition": "grounded",
+      "context_ref": "FLEC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "adversarial"
+      ],
+      "expected_answer_type": "grounded reply limited to what the handout reports",
+      "claim_trap": "research_claim",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FLEC-004",
+      "category": "connect_earlier",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "And the same group went on to show the identical four phenotypes in human cells a year later, which you'll all remember from the reading.",
+      "context_condition": "grounded",
+      "context_ref": "FLEC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "adversarial"
+      ],
+      "expected_answer_type": "grounded reply to the professor's claimed follow-up",
+      "claim_trap": "research_claim",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FLEC-005",
+      "category": "compare",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "for PS6 Q2 which curve should be steeper and does either one count as switch-like by her cutoff",
+      "context_condition": "grounded",
+      "context_ref": "FLEC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "comparison applying the course cutoff to both strains",
+      "claim_trap": "none",
+      "needles": [
+        "nH >= 2",
+        "from 2.6 to 1.1"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FLEC-006",
+      "category": "summarize_point",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "which test and what alpha does this course want for the orchard comparison, what did north vs south actually come out to, and can I say the plots are different",
+      "context_condition": "grounded",
+      "context_ref": "FLEC-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "grounded answer to all three asks with correct conclusion wording",
+      "claim_trap": "none",
+      "needles": [
+        "alpha = 0.01",
+        "p = 0.065"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FLEC-007",
+      "category": "deep_explain",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "So, given all that, which option would you pick, and why? I'll take an answer from anyone.",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "For mini project two you've got two options."
+        },
+        {
+          "speaker": "other",
+          "text": "Option A, the paired design. You measure the same twenty trees in both seasons."
+        },
+        {
+          "speaker": "other",
+          "text": "Option B, independent samples. Two separate plots, but you get forty trees in each."
+        },
+        {
+          "speaker": "other",
+          "text": "And I'll tell you now, the tree-to-tree variation in this orchard is huge, standard deviation around nine kilos, while the season-to-season change within a single tree is small, about two kilos."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "reasoned choice using the stated variation figures",
+      "claim_trap": "none",
+      "needles": [
+        "same twenty trees",
+        "about two kilos"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FLEC-008",
+      "category": "exam_relevance",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "is the final cumulative? she must have said it at some point",
+      "context_condition": "grounded",
+      "context_ref": "FLEC-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "adversarial"
+      ],
+      "expected_answer_type": "grounded reply limited to what the notes cover",
+      "claim_trap": "meeting_history",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FLEC-009",
+      "category": "exam_relevance",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "the TA's email says different things in different places. just tell me which test to use, what alpha, and when mini project 2 is actually due",
+      "context_condition": "conflicting",
+      "context_ref": "FLEC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "conflicting_source",
+        "adversarial"
+      ],
+      "expected_answer_type": "answer that exposes contradictions rather than picking silently",
+      "claim_trap": "meeting_history",
+      "needles": [],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FLEC-010",
+      "category": "compare",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "If you throw out the frost-damaged trees, does the gap between the plots get more convincing or less? Think before you answer.",
+      "context_condition": "grounded",
+      "context_ref": "FLEC-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "grounded comparison of both analyses",
+      "claim_trap": "none",
+      "needles": [
+        "p = 0.37",
+        "South is n = 8"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

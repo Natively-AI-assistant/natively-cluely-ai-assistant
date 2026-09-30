@@ -1,0 +1,426 @@
+[
+ {
+  "jid": "d48292cbae94",
+  "scores": {
+   "correctness": 4,
+   "grounding": 2.5,
+   "role_fidelity": 5,
+   "direct_usefulness": 3,
+   "relevance": 3,
+   "speakability_usability": 6,
+   "cognitive_load": 6,
+   "concision": 5,
+   "continuity": 10,
+   "mode_fit": 3.5
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 3.2,
+  "one_sentence_reason": "Invents the user's blocker status and drags irrelevant office-move dates into a work stand-up answer.",
+  "specific_problem": "'Nothing's blocking me' and 'on track' are unsupported; office-move FAQ is irrelevant to the question.",
+  "minimal_improvement": "Answer with a conditional/neutral status line without forcing office-move details."
+ },
+ {
+  "jid": "2388525afc23",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 8,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 9.5,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.2,
+  "one_sentence_reason": "Sensible area-based split with clear sign-off, correctly ignoring the small talk.",
+  "specific_problem": "'Core flows he already knows' assumes Tomas's familiarity; could be more concrete.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "d438a7f9dd9e",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9.5,
+   "relevance": 10,
+   "speakability_usability": 9.5,
+   "cognitive_load": 9.5,
+   "concision": 9.5,
+   "continuity": 10,
+   "mode_fit": 9.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.6,
+  "one_sentence_reason": "Accurate, complete recap of all four decisions with owners and times.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "8d631ff72884",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.6,
+  "one_sentence_reason": "Concrete, fair pushback questions to turn 'mostly on track' into a tracked list.",
+  "specific_problem": "Could offer one crisp line the user can say aloud.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "cc070d13afd3",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 10,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 6.5,
+   "relevance": 7,
+   "speakability_usability": 7,
+   "cognitive_load": 7.5,
+   "concision": 6.5,
+   "continuity": 9,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.9,
+  "one_sentence_reason": "Correctly refuses to invent a recap with nothing heard, gives a closing frame and asks for inputs.",
+  "specific_problem": "Frame is vague (no placeholders, no concrete next-meeting proposal); wordy.",
+  "minimal_improvement": "Provide a fill-in closing template with placeholders and a proposed next-meeting slot."
+ },
+ {
+  "jid": "f67f2cb4f344",
+  "scores": {
+   "correctness": 6,
+   "grounding": 3.5,
+   "role_fidelity": 7,
+   "direct_usefulness": 5.5,
+   "relevance": 6,
+   "speakability_usability": 7,
+   "cognitive_load": 7.5,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 6
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 4.8,
+  "one_sentence_reason": "Avoids a number but implicitly confirms the migration and invents how its sizing worked.",
+  "specific_problem": "'That migration' and 'sizing came down to how many systems touched the payment flow' are unsupported personal history.",
+  "minimal_improvement": "Neither confirm nor invent; offer to follow up and size this project from its own scope."
+ },
+ {
+  "jid": "1fa1bc88ad57",
+  "scores": {
+   "correctness": 7,
+   "grounding": 9.5,
+   "role_fidelity": 8,
+   "direct_usefulness": 5.5,
+   "relevance": 6.5,
+   "speakability_usability": 7,
+   "cognitive_load": 8,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 6.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.3,
+  "one_sentence_reason": "Safely avoids inventing a prior decision but is evasive.",
+  "specific_problem": "Says 'what I can say is where export stands now' then never says it; 'in front of me' is meta-ish.",
+  "minimal_improvement": "Drop the dangling promise and propose settling the scope call now."
+ },
+ {
+  "jid": "1bb1a24daf76",
+  "scores": {
+   "correctness": 9.5,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 8,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 9.5,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.6,
+  "one_sentence_reason": "Correctly states Priya is on Ledger v5 and Marcus on conflict resolution, matching notes and the live round.",
+  "specific_problem": "'I don't have anything showing' / 'what I have' sounds tool-like; could cite the round just heard.",
+  "minimal_improvement": "Point to the round just now and the 17 September action items."
+ },
+ {
+  "jid": "c2a6caa32363",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.8,
+  "one_sentence_reason": "Gives a usable neutral line and sound framing to raise the blocker without blaming Dana.",
+  "specific_problem": "Could include a concrete need-by date in the example line.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "c4b8cf31356d",
+  "scores": {
+   "correctness": 7,
+   "grounding": 9,
+   "role_fidelity": 6.5,
+   "direct_usefulness": 4.5,
+   "relevance": 5,
+   "speakability_usability": 6.5,
+   "cognitive_load": 8,
+   "concision": 7.5,
+   "continuity": 10,
+   "mode_fit": 5.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 5.3,
+  "one_sentence_reason": "Safe but weak: asked for the user's view, it asks the asker to share the plan.",
+  "specific_problem": "Offers only a generic heuristic; 'don't have ... in front of me' sounds evasive for a user asked their own view.",
+  "minimal_improvement": "Give a hedged view (e.g. unowned or unestimated items, QA capacity) without asking the asker for the plan."
+ },
+ {
+  "jid": "bb0056454a9f",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.3,
+  "one_sentence_reason": "Clear recommendation with a deadline and throwaway-stub fallback.",
+  "specific_problem": "Could consider building behind an interface in parallel; slight tension between 'hold off' and 'stub'.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "3a5e913367c5",
+  "scores": {
+   "correctness": 7.5,
+   "grounding": 7,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 7.5,
+   "cognitive_load": 7.5,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.6,
+  "one_sentence_reason": "Constructive pushback asking to quantify cost before killing offline mode.",
+  "specific_problem": "'Conflict work is already in' and 'anyone who built on it' are assumptions; a bit long.",
+  "minimal_improvement": "Drop the unsupported assumptions and keep the quantify-then-decide ask."
+ },
+ {
+  "jid": "14d88723fef4",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9.5,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 6.5,
+   "relevance": 7.5,
+   "speakability_usability": 7.5,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 8,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7,
+  "one_sentence_reason": "Gives a sensible general answer (scope owner decides) and proposes naming them now.",
+  "specific_problem": "Opens with another 'can't answer' hedge after two prior dodges.",
+  "minimal_improvement": "Lead with 'the scope owner's call' and propose naming that person now."
+ },
+ {
+  "jid": "f65af3c9c6e4",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9.5,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 7,
+   "relevance": 8,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 7.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Avoids inventing a crash status and commits to check and report back.",
+  "specific_problem": "Invents nothing but also gives no timing for the follow-up.",
+  "minimal_improvement": "Add when the user will report back."
+ },
+ {
+  "jid": "2d23f3e742be",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 9,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.9,
+  "one_sentence_reason": "Frames it as a trade, offers options, and gives natural words that don't sound like dodging.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "8303d2ec4e7d",
+  "scores": {
+   "correctness": 7,
+   "grounding": 9.5,
+   "role_fidelity": 8,
+   "direct_usefulness": 6,
+   "relevance": 6,
+   "speakability_usability": 7.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.4,
+  "one_sentence_reason": "Suggests a private ask, but the sample line asks for meeting time, not an actual date.",
+  "specific_problem": "Line 'what does your week look like?' does not get Marcus to commit to a date.",
+  "minimal_improvement": "Give a line that asks privately for a target date he'd commit to."
+ },
+ {
+  "jid": "d072903abb2d",
+  "scores": {
+   "correctness": 9.5,
+   "grounding": 10,
+   "role_fidelity": 9,
+   "direct_usefulness": 4,
+   "relevance": 3.5,
+   "speakability_usability": 6,
+   "cognitive_load": 7,
+   "concision": 5,
+   "continuity": 4,
+   "mode_fit": 5.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 4.4,
+  "one_sentence_reason": "Repeats the prior summary verbatim instead of converting it into owner/date action items.",
+  "specific_problem": "Ignores the requested action-item format; includes non-action decisions.",
+  "minimal_improvement": "List action items as owner - task - date (Dana/strings/Thu EOD; Priya/invite+pairing/9:30 tomorrow)."
+ },
+ {
+  "jid": "1d41432b5b91",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9.5,
+   "relevance": 10,
+   "speakability_usability": 9.5,
+   "cognitive_load": 9.5,
+   "concision": 9.5,
+   "continuity": 10,
+   "mode_fit": 9.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.6,
+  "one_sentence_reason": "Accurately recaps the tablet-layout decision and its reason for the colleague who dropped off.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "f82174aa7327",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 9.5,
+   "direct_usefulness": 9.5,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9.5,
+   "concision": 9,
+   "continuity": 9.5,
+   "mode_fit": 9.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.5,
+  "one_sentence_reason": "Correctly names the v4 fallback, 5 October go/no-go and its owners, and the read-only consequence.",
+  "specific_problem": "Markdown bold in a spoken line.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "d39ce0703471",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 8.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.3,
+  "one_sentence_reason": "Rightly tempers the 'breathing room' claim with the unchecked store buffer and customers told 28 October.",
+  "specific_problem": "Omits that the notes are an unreviewed draft and conflict internally on the code-freeze date.",
+  "minimal_improvement": "Add that the notes are an unreviewed draft, so the new date isn't confirmed."
+ }
+]

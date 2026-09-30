@@ -1,0 +1,310 @@
+{
+ "batch": "b044-seminar",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "SEMINAR-CTX-G2": {
+   "title": "Paper excerpt: TidalLog compaction scheduling for embedded key-value stores (computer systems)",
+   "text": "TidalLog: Load-Aware Compaction Scheduling for Embedded Key-Value Stores on Flash Storage\nMarek Oyelaran and Thi Han Vuong, Corvane Polytechnic\nWorkshop on Storage for Small Devices, 2025\n\nABSTRACT\nEmbedded key-value stores built on log-structured merge (LSM) trees suffer from write amplification and unpredictable read tail latency when compaction runs on fixed thresholds regardless of foreground load. We present TidalLog, a compaction scheduler that estimates a \"tide\" signal, the ratio of the recent foreground write rate to the device's smoothed sustainable write rate, and defers or advances compaction accordingly. On a quad-core ARM board with eMMC storage, TidalLog cuts write amplification by 34% on a write-heavy workload and p99 read latency by 21% on a balanced workload relative to a fixed-threshold baseline, at a cost of 4.1 MB of extra memory.\n\n1. RELATED WORK\nFixed-ratio leveled compaction, which we call StaticLevel (size ratio 10), is the default in many embedded stores. LazyTier uses tiered compaction to lower write amplification but leaves more overlapping files, which raises read cost. BurstGuard rate-limits compaction when the foreground request queue grows past a length threshold; it does not consider device capacity and was evaluated only on read-heavy traces. Workload-predictive schedulers exist for server-class SSDs. We do not evaluate them because they need more memory than our target devices have.\n\n2. METHOD\nEvery 5-second window, TidalLog computes w, the bytes written by the foreground in that window, and divides by S, an exponentially weighted moving average (alpha = 0.2) of the device throughput measured during compaction bursts. The smoothed ratio is the tide T. When T is above 0.7 (high tide), compaction of level 2 and deeper is deferred, for at most 3 consecutive windows (15 seconds). When T is below 0.3 (low tide), compaction is advanced: the level with the highest overlap score is compacted opportunistically. Level 0 is exempt: it compacts once it holds 8 files, and writes stall at 12 files. The implementation is about 2,900 lines of C++17 on top of MicroLSM, our in-house open-source store. The thresholds 0.7 and 0.3 were chosen by grid search (0.5 to 0.9 and 0.1 to 0.4) on workload W-B only.\n\n3. EXPERIMENTAL SETUP\nHardware: quad-core ARM Cortex-A53 at 1.4 GHz, 2 GB RAM, 32 GB eMMC 5.1. Workloads: W-A write-heavy (80% writes), W-B balanced (50% writes), W-C read-heavy (5% writes). Each workload issues 64 million operations with 16-byte keys and 240-byte values under a Zipfian key distribution (theta = 0.9). Each configuration was run 5 times and we report means. We compare StaticLevel, LazyTier, BurstGuard and TidalLog.\n\n4. RESULTS\nTable 1. Main results (means of 5 runs)\nSystem | Write amplification (W-A) | p99 read latency, ms (W-B) | Throughput, kops/s (W-A)\nStaticLevel | 14.2 | 9.8 | 18.4\nLazyTier | 9.7 | 14.6 | 21.9\nBurstGuard | 12.5 | 8.9 | 19.1\nTidalLog | 9.4 | 7.7 | 22.6\n\nRun-to-run standard deviation was at most 0.4 for write amplification and 0.6 ms for p99 latency. On W-C, p99 read latency was within 3% across all four systems. Over the W-A run, StaticLevel performed 1.92 million block erases and TidalLog 1.27 million. Sensitivity to the smoothing factor: alpha = 0.1 gave write amplification 9.9, alpha = 0.2 gave 9.4, alpha = 0.4 gave 9.6. Crash consistency: we injected 200 power losses during W-B; every run recovered with no acknowledged write lost.\n\n5. LIMITATIONS\nWe used one board and one storage type (eMMC); we did not evaluate NVMe or SD cards. Workloads are synthetic with fixed value sizes. The tide thresholds were tuned on W-B and not re-tuned per workload. Five runs per configuration is a small sample and we report no formal significance tests. We did not study multi-tenant setups or wear beyond 64 million operations. Deferral of up to 15 seconds can let compaction debt build up under sustained bursts.\n\n6. CONCLUSION\nTidalLog is a low-overhead scheduler that lowers write amplification and tail latency on flash-backed embedded stores without changing the on-disk format. Future work includes per-level thresholds and multi-device setups."
+  },
+  "SEMINAR-CTX-I1": {
+   "title": "Slide deck: tone sandhi in Ostrelle compound nouns (linguistics)",
+   "text": "SLIDE 1. Tone Sandhi in Ostrelle Compound Nouns\nDr. Prakash Venkatesan-Holm, Department of Linguistics, Lower Ridgeway University\nReading group talk, 5 November 2024\n\nSLIDE 2. The phenomenon\n- Ostrelle is a small tonal language variety with three lexical tones: high (H), mid (M) and low (L).\n- In two-noun compounds the tone of the first noun changes when the second noun begins with a high tone.\n- Earlier descriptions treated this as a fixed rule. We ask whether it depends on how frequent the compound is.\n\nSLIDE 3. Data\n- Elicited recordings from native speakers in the river villages, 2023.\n- 214 compound nouns, each read three times in a carrier sentence.\n- Pitch measured at five points along the first syllable.\n\nSLIDE 4. Findings\n- L + H compounds: the first tone rises to M in 83% of tokens.\n- M + H compounds: the first tone rises to H in 61% of tokens.\n- H + H compounds: no change in 97% of tokens.\n- More frequent compounds showed the change more often, but the effect was small.\n\nSLIDE 5. Analysis note\n- Frequency comes from a written corpus of local radio scripts, 1.4 million words.\n- Change rates are reported per compound type, not per speaker.\n\nSLIDE 6. Open questions\n- Does the pattern hold in spontaneous speech?\n- Do younger speakers apply the rule less often?\n- How should we treat borrowed compounds?"
+  },
+  "FSEM-CTX-G1": {
+   "title": "Thesis chapter 5 - battery capacity fade in a shared e-bike fleet",
+   "text": "Ph.D. thesis draft, School of Electrical and Energy Engineering, Castleford Institute\nChapter 5 - Battery capacity fade in the Portmere shared e-bike fleet\n\n5.1 Data\nThe operator shared battery management system (BMS) telemetry for all 1,140 bikes in the Portmere fleet from October 2021 to November 2023 (26 months). Every bike uses the same pack model, the LX-36 (36 V, 14 Ah). Remaining capacity was estimated monthly from the BMS state-of-health field. Usage is expressed as equivalent full cycles.\n\n97 packs running BMS firmware 2.x were excluded because that firmware misreported state of health after partial charges. The analysis therefore uses 1,043 packs.\n\n5.2 Charging temperature rather than depot\nPacks are charged overnight at one of three depots. Depot B is unheated; depots A and C are heated. Because the operator rebalanced bikes between depots almost every week, a pack's depot was not stable over time. Instead of depot, each pack was characterised by its median charging temperature, taken from the cell temperature sensor at the start of each charge.\n\n5.3 Model\nA linear mixed model of capacity against equivalent full cycles, with a random slope for each pack. Candidate predictors of the fade rate were median charging temperature, share of fast charges (above 1C), and share of trips that ended below 10% state of charge.\n\n5.4 Results\nThe median fade rate across the fleet was 2.1% of original capacity per 100 equivalent full cycles.\n\nCharging temperature was the strongest predictor. Packs whose median charging temperature was below 5 degrees C faded at 3.3% per 100 cycles, compared with 1.9% per 100 cycles for packs whose median charging temperature was above 15 degrees C.\n\nOnce charging temperature was in the model, the share of fast charges had no significant effect on fade rate (p = 0.31). In a model without temperature, fast charging did appear significant, because fast chargers were concentrated at depot B.\n\nPacks that regularly ended trips below 10% state of charge faded 0.4 percentage points faster per 100 cycles than packs that rarely did.\n\nBy the end of the study, 212 of the 1,043 analysed packs (20.3%) had fallen below the operator's end-of-life threshold of 80% of original capacity.\n\n5.5 Implications\nThe results support moving winter charging out of depot B and into heated depots. The operator began a trial of this in January 2024. Its effect is outside the period of this chapter and has not been analysed. No cost or savings estimate was made in this chapter.\n\n5.6 Limitations\n- Capacity comes from BMS estimates, not from bench discharge tests or teardown of packs.\n- Internal resistance was not measured.\n- Only one pack model (LX-36) and one city's climate.\n- Cell temperature at the start of charging is a proxy for charging conditions; temperature during the whole charge was not logged.\n- Excluding the firmware 2.x packs may bias results if those packs were used differently; their usage pattern was not compared."
+  },
+  "FSEM-CTX-C1": {
+   "title": "Draft 3 extended abstract - sleep coaching for night-shift nurses",
+   "text": "Extended abstract (Draft 3) - Sleep hygiene coaching for night-shift nurses\nNursing and Health Sciences Research Seminar\n\nAbstract\nIn a randomized controlled trial with 96 nurses working permanent night shifts at Brenmoor General Hospital, a six-session sleep hygiene coaching programme increased sleep duration by 48 minutes per day at 8 weeks compared with usual care. Coaching covered light exposure, caffeine timing, and a fixed pre-sleep routine.\n\nMethods\n88 nurses enrolled across 6 wards. Allocation was by ward: 3 wards were allocated to coaching and 3 to usual care, so all nurses on the same ward received the same condition. Coaching was delivered by a trained occupational health nurse in six fortnightly sessions. The primary outcome was sleep duration measured by self-report sleep diary, recorded for one week at baseline and one week at the 12-week follow-up. A subset of 30 nurses also wore wrist actigraphs.\n\nResults\nOf the nurses enrolled, 79 completed follow-up. Mean sleep duration increased by 34 minutes (SD 41) in the coaching wards and by 6 minutes (SD 38) in usual-care wards. Nurses in coaching wards also reported lower daytime sleepiness. Actigraphy results for the subset are still being processed.\n\nDiscussion\nCoaching appears to lengthen daytime sleep for night-shift nurses. Because allocation was by ward, ward culture and staffing levels could partly explain differences between groups; the analysis did not yet account for clustering by ward. Two coaching-ward nurses and seven usual-care nurses were lost to follow-up, mostly because of transfers to day shifts. The coaching programme took about six hours of each nurse's time in total and was scheduled during paid shifts. A larger trial across three hospitals is being planned."
+  },
+  "SEMINAR-CTX-C1": {
+   "title": "Slide deck: flywheel assist for municipal bus depots (transport engineering)",
+   "text": "SLIDE 1. Flywheel Assist for Municipal Bus Depots: Trial Results\nLorcan Adeyemi-Fisk, Tarnbrook Transit Authority\nDepot managers briefing, October 2024\n\nSLIDE 2. Context\n- Tarnbrook Transit runs 120 diesel buses from two depots, Millgate and Eastfield.\n- We ran a 6-month trial (February to July 2024) of a flywheel regenerative-braking assist on Route family 14.\n- 48 buses at Millgate depot were fitted.\n\nSLIDE 3. Method\n- Baseline period: November 2023 to January 2024, before fitting.\n- Fuel logged per shift by on-board telematics, compared with the same buses' baseline.\n- Buses with telematics faults were excluded from the analysis.\n\nSLIDE 4. Headline\n- Fuel use down 31% on fitted buses.\n- Brake pad replacements per bus per year fell from 3.1 to 2.4.\n\nSLIDE 5. Results table\nMetric | Baseline | Trial\nBuses in analysis | 42 | 42\nFuel use, L per 100 km | 41.2 | 32.6\nChange in fuel use | - | -20.9%\nTrial dates | - | 1 February to 30 September 2024\np-value (paired by bus) | - | 0.09\nBrake pad replacements per bus per year | 3.1 | 2.4\n\nSLIDE 6. Cost\n- Capital cost of fitting the buses, installation included: USD 1.86 million.\n- Annual fuel and maintenance saving: USD 0.31 million.\n- Payback: under 3 years.\n\nSLIDE 7. Conclusion\n- The retrofit cut fuel use by roughly a quarter, with statistically significant results, and pays back within three years.\n- Recommendation: roll out to all 120 buses.\n\nSLIDE 8. Caveats\n- One depot only.\n- The baseline covers winter months only."
+  },
+  "SEMINAR-CTX-G3": {
+   "title": "Thesis chapter: pollinator visitation in restored grassland fragments (ecology)",
+   "text": "CHAPTER 4. POLLINATOR VISITATION IN RESTORED CALCAREOUS GRASSLAND FRAGMENTS\nSofia Ekwueme-Lindqvist, PhD thesis, University of Northhaven, 2025\n\n4.1 RESEARCH QUESTIONS\nRQ1: Does fragment area predict pollinator species richness?\nRQ2: Does distance to the nearest source grassland predict visitation rate?\nRQ3: Does time since restoration predict visitation rate once area and distance are accounted for?\nWe expected richness to rise with area and visitation to fall with distance. For restoration age we had no prior expectation, so RQ3 is exploratory.\n\n4.2 METHODS\nStudy system. We surveyed 24 restored fragments in the Vellmark Hills. Fragment area ranged from 0.4 to 11.2 ha, and fragments had been restored between 3 and 19 years before the study. Source grasslands were remnant, never-ploughed sites larger than 40 ha.\nSampling. Each fragment was surveyed four times per season (May, June, July, August) in 2022 and 2023, between 10:00 and 16:00, in dry conditions above 14 degrees C. At each visit, observers ran eight timed 10-minute watches at 1 square metre patches of flowering plants. Three observers collected the data. Bees were netted under permit and identified to species from voucher specimens. Hoverflies and butterflies were identified from photographs and field keys; 9% of hoverfly visits could only be assigned to genus. Moths were not sampled.\nAnalysis. Species richness was modelled with a Poisson generalised linear mixed model (GLMM) and visitation rate (visits per hour of watch) with a negative binomial GLMM. Both had fragment as a random intercept and year as a fixed effect. Predictors were log10 area, distance to the nearest source grassland (m), restoration age (years) and floral cover (percentage points). Spatial autocorrelation in residuals was checked with Moran's I.\n\n4.3 RESULTS\nWe recorded 14,207 visits by 71 species: 38 bees, 21 hoverflies and 12 butterflies. The Chao2 estimator put true richness at 83 species (SE 6). The smallest fragments (under 1 ha, n = 5) held 9 to 17 species; the largest (over 8 ha, n = 4) held 31 to 44.\n\nTable 4.1. GLMM results\nResponse | Predictor | Estimate | 95% CI | p\nSpecies richness | log10 area | rate ratio 1.36 per tenfold increase | 1.12 to 1.65 | 0.002\nVisitation rate | distance to source | rate ratio 0.92 per 100 m | 0.87 to 0.97 | 0.003\nVisitation rate | restoration age | rate ratio 1.01 per year | 0.98 to 1.04 | 0.48\nVisitation rate | floral cover | rate ratio 1.06 per percentage point | 1.04 to 1.08 | <0.001\nMoran's I on residuals: p = 0.41. Area and floral cover were moderately correlated (r = 0.44).\n\n4.4 DISCUSSION\nRQ1 was supported, in line with a species-area relationship. RQ2 was supported: at 0.92 per 100 m, a fragment 500 m from a source grassland is expected to receive roughly a third fewer visits than one adjacent to it. This fits the limited foraging ranges reported in the literature for small solitary bees, although we did not measure foraging range here. For RQ3 we found no evidence of an effect of restoration age. This may reflect variation in seed mix and management between sites, which we did not quantify. Floral cover was the strongest single predictor of visitation.\n\n4.5 THREATS TO VALIDITY\n- Only two seasons were sampled. 2022 was a drought summer (July rainfall was 38% of the 30-year mean) and floral cover was lower that year.\n- Fragments were chosen by landowner access, not at random.\n- Three observers took part. Calibration walks reduced but did not remove differences between them, and observer identity was not included in the models.\n- Visits are not pollination: no pollen-load data were collected.\n- Nocturnal pollinators were not sampled.\n- Land use in the surrounding matrix was not controlled.\n- All results are correlational."
+  },
+  "SEMINAR-CTX-G1": {
+   "title": "Slide deck: weekly SMS reminders and household water filter upkeep (public health cluster trial)",
+   "text": "SLIDE 1. Title\nWeekly Text Reminders and Household Water Filter Upkeep: A Cluster-Randomised Trial in Harrowmere District\nDr. Ilse Brandvold, Harrowmere Institute of Community Health\nDepartmental seminar, 14 March 2025\nTrial registry ID: HCT-2024-0117\n\nSLIDE 2. Background\n- Ceramic household water filters were handed out to 6,400 households in Harrowmere District in 2022.\n- A 2023 survey found that 38% of filters had a cracked or bypassed element by 12 months.\n- Diarrhoeal illness in children under 5 is still the district's leading reason for clinic visits in that age group.\n- Question: can cheap reminders keep filters working after the handout?\n\nSLIDE 3. Hypotheses (pre-registered)\n- H1: Weekly SMS reminders lower 7-day diarrhoea prevalence in children under 5.\n- H2: Reminders raise the share of households with a functioning filter at follow-up.\n- H1 is the primary outcome. Everything else is secondary.\n\nSLIDE 4. Design\n- Cluster-randomised: 60 villages, 30 per arm.\n- 1,812 households enrolled between June and August 2024 (about 30 per village).\n- Randomisation at village level, stratified by distance to the nearest clinic (5 km or less, or more than 5 km).\n- Sample size: assumed intracluster correlation of 0.05; 80% power to detect a fall in prevalence from 16% (pilot estimate) to 10%.\n- Follow-up survey at 26 weeks; the last surveys finished in February 2025.\n- Enumerators for the diarrhoea survey did not know each village's arm. Households could not be blinded.\n\nSLIDE 5. Intervention and control\n- Reminder arm: one SMS every Tuesday at 17:00 for 26 weeks, in the local language, Karvi.\n- Each message said three things: clean the ceramic element, look for cracks, keep filtered water in a covered container.\n- Control arm: the original handout only, no messages.\n- Cost: USD 0.011 per SMS, so about USD 0.29 per household over 26 weeks. One-off platform set-up: USD 1,150.\n\nSLIDE 6. Measures and analysis\n- Primary: caregiver-reported diarrhoea in the past 7 days in children under 5 (three or more loose stools in 24 hours).\n- Secondary: functioning filter, defined as an observed flow of at least 1.0 litre per hour; filtered-water turbidity below 5 NTU.\n- Follow-up completed in 1,764 of 1,812 households (48 lost, 2.6%).\n- Children under 5 measured: 902 in reminder villages, 874 in control villages.\n- Analysis: intention to treat, generalised estimating equations with village as the cluster.\n\nSLIDE 7. Results\nOutcome | Reminder | Control | Estimate (95% CI)\n7-day diarrhoea, children under 5 | 11.4% | 15.8% | risk ratio 0.72 (0.55 to 0.95)\nFunctioning filter (flow at least 1.0 L/h) | 64.2% | 47.9% | difference 16.3 points (9.8 to 22.7)\nFiltered water below 5 NTU | 81.0% | 70.3% | difference 10.7 points (3.4 to 18.0)\nAll estimates account for clustering by village.\n\nSLIDE 8. Subgroups (exploratory)\n- Villages more than 5 km from a clinic: risk ratio 0.61 (0.42 to 0.89).\n- Villages 5 km or less from a clinic: risk ratio 0.83 (0.58 to 1.19).\n- Interaction: p = 0.21. This was not a pre-registered confirmatory comparison.\n\nSLIDE 9. Delivery\n- The SMS gateway logged 91% of messages as delivered.\n- We could not verify that messages were read.\n- Control households were not contacted about their filters during the trial.\n\nSLIDE 10. Limitations\n- Diarrhoea is caregiver-reported, so it may be affected by recall and social desirability. No stool samples were collected.\n- One follow-up window only: 26 weeks.\n- Contamination between neighbouring villages was not checked.\n- Every household had the same ceramic filter model, so results may not carry over to other filters.\n- No cost-effectiveness analysis was done in this trial.\n\nSLIDE 11. Conclusions and next steps\n- Weekly SMS reminders were associated with a 28% lower relative risk of diarrhoea and better filter function at 26 weeks.\n- Next trial (planned for 2026): weekly versus fortnightly messages.\n- Not yet studied: durability beyond 26 weeks, other filter types, cost per case averted.\n\nSLIDE 12. Funding\nHarrowmere Regional Health Fund, grant RHF-22-408. The funder had no role in the analysis."
+  },
+  "SEMINAR-CTX-G4": {
+   "title": "Experiment writeup: RetrievalPath spaced retrieval practice with ablation (education)",
+   "text": "RetrievalPath: Adaptive Spaced Retrieval Practice in a First-Year Statistics Course\nAnnika Feldmarsh and Tobias Quenby, Westerlund College. Technical report WC-EDU-TR-12, January 2025\n\n1. SYSTEM\nRetrievalPath is a plugin for the course learning platform that serves short retrieval quizzes. The item bank holds 640 multiple-choice and short-numeric items tagged to 11 topics. It has three components. (a) Difficulty estimator: each item carries an Elo-style rating updated after every response (K = 24), and items are chosen to target a 75% success rate for the student. (b) Interval scheduler: after a correct answer the next review interval is multiplied by 2.2 if the student reported high confidence and by 1.4 if low confidence; after an incorrect answer the interval resets to 1 day. (c) Confidence prompt: before seeing feedback, the student rates confidence on a 3-point scale.\n\n2. STUDY DESIGN\nThe study ran in the autumn 2024 semester (12 teaching weeks) across six sections of STAT 101. 449 students enrolled and consented, and were randomised individually within section to four conditions:\n- Control: a standard weekly 10-item quiz, no adaptation.\n- Full: all three components.\n- No adaptation: difficulty-matched selection and expanding intervals replaced by a fixed 3-day repeat of randomly chosen items.\n- No confidence prompts: the prompt removed and a single multiplier of 1.8 used after every correct answer.\nThe analysis sample is the 412 students who sat the final exam (37, or 8.2%, did not). Ethics approval: WC-EDU-2024-31. The primary outcome is the final exam score (0 to 100), marked by instructors from anonymised scripts. The secondary outcome is an unannounced delayed retention quiz (0 to 40) given 4 weeks after the end of term; 331 of the 412 students (80.3%) took it.\n\n3. RESULTS\nTable 1. Outcomes by condition\nCondition | n | Final exam, mean (SD) | Delayed retention, mean (of 40)\nControl weekly quiz | 103 | 68.1 (14.2) | 19.8\nFull RetrievalPath | 105 | 74.9 (13.6) | 26.3\nNo adaptation | 102 | 71.0 (14.0) | 22.9\nNo confidence prompts | 102 | 73.6 (13.9) | 25.4\n\nFull versus Control on the final exam: +6.8 points, Cohen's d = 0.49 (95% CI 0.21 to 0.77), p = 0.001. On delayed retention the difference was +6.5 points out of 40. Ablation: removing adaptation gave up 3.9 points, 57% of the total gain (Holm-adjusted p = 0.048 for Full versus No adaptation). Removing confidence prompts gave up 1.3 points, 19% of the gain (adjusted p = 0.41). Usage: students in the Full condition completed a median of 24 sessions and 71% completed at least 20; the median for No adaptation and No confidence prompts was 23 and 24 sessions. Median session length was 9 minutes.\n\n4. DEPLOYMENT\nMedian time to serve an item was 180 ms (95th percentile 640 ms). Server cost for the semester was about USD 310. Instructors spent 14 hours tagging the item bank to topics.\n\n5. LIMITATIONS\nOne course, one college, one semester. Students were not blind to condition. Sharing of tips between students within a section may have leaked some effects across conditions. Only 80.3% of students took the delayed quiz, so selective drop-out is possible, and retention results are for those who took it. The analysis plan was written before the exam but was not publicly registered. A planned subgroup analysis for first-generation students is not reported because the subgroups are too small. Difficulty matching and expanding intervals were removed together in the No adaptation condition, so the ablation cannot separate their contributions.\n\n6. CONCLUSION\nAdaptive scheduling accounts for most of the measured benefit. The confidence prompt made a smaller contribution whose statistical support is weak. We plan a pre-registered replication across two courses in 2025-26."
+  }
+ },
+ "items": [
+  {
+   "jid": "808fc406acb0",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "And the tiered one?",
+   "conversation": [
+    "EXAMINER (heard): How much did write amplification drop?",
+    "NATIVELY: Write amplification dropped by **34%** on the write-heavy workload, W-A, relative to the fixed-threshold baseline. In the main results table that's TidalLog at 9.4 versus StaticLevel at 14.2."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "On W-A, LazyTier, the tiered one, came in at 9.7 write amplification versus StaticLevel's 14.2, so about a 32% drop. That's close to TidalLog's 9.4, but the tradeoff shows up on reads: LazyTier's p99 on W-B was 14.6 ms against TidalLog's 7.7, because tiered compaction leaves more overlapping files."
+  },
+  {
+   "jid": "7f23aff22be8",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Do you think the results would generalise to other countries?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The honest answer is that I can't say yet. The data come from elicited recordings with native speakers in the river villages, so the pattern is grounded in that one variety and that one setting. What would decide it is whether the same frequency effect shows up in other tonal languages with comparable compounding, and that's not something this study tests. So I'd treat the finding as solid for Ostrelle and an open question elsewhere."
+  },
+  {
+   "jid": "99762150cd1f",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "The bikes get shuffled between depots every week. So how can you say anything at all about depot B being the problem?",
+   "conversation": [],
+   "evidence_ids": [
+    "FSEM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The shuffle is exactly why I look at the pattern rather than any single week. If depot B's bikes keep showing up with the same issue no matter which depot they came from, that points at something in B's handling, not at the bikes themselves. The rotation is what lets me separate the depot from the bike."
+  },
+  {
+   "jid": "51d74466d1b4",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Your conclusion says the intervention works. Doesn't that overclaim given what you showed us?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The conclusion is about what the design can support, not a claim that the effect is universal. What I showed is a measured change under the conditions I tested, and I'm careful to scope it to those conditions rather than to the intervention in general. If the evidence is narrower than the wording suggests, that's a fair point and I'd tighten the claim to match what the data actually shows."
+  },
+  {
+   "jid": "ad9c6ee3a1e7",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "How much extra sleep did the nurses actually get, and when was that measured?",
+   "conversation": [],
+   "evidence_ids": [
+    "FSEM-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The measured gain was **34 minutes** a day in the coaching wards versus 6 minutes in usual care, and it was measured by self-report sleep diary over one week at baseline and one week at the **12-week follow-up**. The actigraphy results from the subset of 30 nurses are still being processed, so those aren't in yet.\n\nOne thing worth flagging: the abstract's summary line says 48 minutes at 8 weeks, which doesn't match the 34 minutes at 12 weeks in the results, so I'd treat the results section as the accurate figure."
+  },
+  {
+   "jid": "1cc07923850d",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "What did the education study say about the delayed retention quiz?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The deck doesn't mention a delayed retention quiz. What it reports is the tone-change findings: L + H compounds rise to M in 83% of tokens, M + H rise to H in 61%, and H + H show no change in 97%, with more frequent compounds changing slightly more often. If you're thinking of a different study, that material wasn't part of what I have here."
+  },
+  {
+   "jid": "4352c1c87227",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Is that realistic?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That depends on what we're calling realistic, so let me put the assumption on the table. The mechanism itself is sound, and the numbers hold together under the conditions I set out. What I'd want to check before calling it realistic in practice is whether those conditions actually hold in the setting we care about, because that's where the gap usually shows up."
+  },
+  {
+   "jid": "08cdf0d66d92",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "Flag anything in this deck that contradicts itself.",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I can't point to specific contradictions in the deck, because the slides weren't retrieved for this turn, so I don't have their content in front of me. What I can do is tell you the kinds of conflicts worth checking for, and then we can go through the deck together.\n\nThe usual ones are numbers that don't reconcile across slides, like a total that doesn't match the sum of its parts, or a percentage that implies a different base than the one stated elsewhere. Then there's terminology drift, where the same thing gets two different names or two different definitions on different slides. And timeline conflicts, where a date or sequence on one slide contradicts another.\n\nIf you tell me which slides to look at, or re-share the deck, I can go through it and flag the actual contradictions rather than the categories."
+  },
+  {
+   "jid": "e6cd3e2dd3ee",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "What am I missing?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have your slides or paper in front of me for this one, so I can't tell you what's missing from your specific material. What I can say is what a defence or seminar audience usually probes: the gap between what you claim and what you actually measured, the assumptions you never stated out loud, and the alternative explanation you didn't rule out. If you tell me the topic and what you've covered, I can point at the specific hole."
+  },
+  {
+   "jid": "85436f569469",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "How many species did you actually record?",
+   "conversation": [
+    "EXAMINER: You mentioned bees, hoverflies and butterflies.",
+    "USER (spoken): Yes, those were the three groups."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "We recorded 71 species in total: 38 bees, 21 hoverflies and 12 butterflies, from 14,207 visits. The Chao2 estimator put true richness at 83 species."
+  },
+  {
+   "jid": "d5312b47568f",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "So you followed all eleven hundred and forty bikes and about a fifth reached end of life, which would be roughly two hundred and thirty packs. Is that right?",
+   "conversation": [],
+   "evidence_ids": [
+    "FSEM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Close, but the numbers are a bit off. The fleet was 1,140 bikes, and 97 packs were excluded for firmware 2.x, so the analysis used 1,043 packs. Of those, 212, about 20.3%, fell below the 80% end-of-life threshold."
+  },
+  {
+   "jid": "5d5e8227d7f7",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "What was the cost per case of diarrhoea averted?",
+   "conversation": [
+    "EXAMINER: Thanks for the talk, that was clear.",
+    "USER (spoken): Thanks. Happy to take questions.",
+    "EXAMINER: I work in health economics, so I am looking at this through a cost lens."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The deck doesn't report a cost per case averted. Slide 10 says plainly that no cost-effectiveness analysis was done in this trial, and slide 11 lists cost per case averted as not yet studied. What we do have on cost is the intervention itself: USD 0.011 per SMS, about USD 0.29 per household over the 26 weeks, plus a one-off platform set-up of USD 1,150. So I can't give you a figure for cost per case averted, because it wasn't calculated here."
+  },
+  {
+   "jid": "6ead40ee8b06",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "How many fragments?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The chapter doesn't state a total number of fragments. What it does give is fragment counts by size class: five under 1 ha and four over 8 ha, with the rest not broken out in the retrieved section."
+  },
+  {
+   "jid": "97d0a0ee6ffe",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "Explain the tide signal to me like I am not a storage person.",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "I don't have the tide signal in front of me from your slides, so I can't tell you what your deck says it is. If you mean the general storage idea, a tide signal is a way of telling the system when to move data between fast and slow tiers based on a repeating pattern, like the daily ebb and flow of demand. The system watches that rhythm and shifts hot data up and cold data down on schedule rather than reacting to each individual request. If you point me at the slide, I can explain exactly how yours defines it."
+  },
+  {
+   "jid": "9df60582ee6a",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "In one sentence, what is the take-home message?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The take-home is that tone change in Ostrelle two-noun compounds isn't a fixed rule: it happens most in L + H compounds, less in M + H, barely at all in H + H, and more frequent compounds show the change a bit more often."
+  },
+  {
+   "jid": "6688ce0c3d92",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "So did the drought year make you miss the other twelve?",
+   "conversation": [
+    "EXAMINER: You mentioned bees, hoverflies and butterflies.",
+    "USER (spoken): Yes, those were the three groups.",
+    "EXAMINER (heard): How many species did you actually record?",
+    "NATIVELY: We recorded 71 species in total: 38 bees, 21 hoverflies and 12 butterflies, from 14,207 visits. The Chao2 estimator put true richness at 83 species.",
+    "EXAMINER (heard): Is that all?",
+    "NATIVELY: Yes, that's the full species count. What the 71 doesn't capture is the area effect: the smallest fragments held 9 to 17 species, the largest 31 to 44, and richness scaled with log area at a rate ratio of 1.36 per tenfold increase."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The gap between 71 and 83 is what the estimator says we didn't detect, not what the drought removed. The sampling was spread across the sites and seasons, and the twelve are the species the model infers were present but that we never recorded. So it's a detection gap, not a drought effect. What I can't tell you from this is whether the drought year itself shifted the counts, because that comparison isn't in what we've looked at."
+  },
+  {
+   "jid": "d3a26838cb6c",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "Explain what a confidence interval is in plain words so I can answer the committee.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A confidence interval is a range of values that's likely to contain the true value we're estimating, along with a stated level of confidence. If I say a 95% confidence interval for a mean runs from 4.2 to 5.8, it means that if we repeated the same sampling procedure many times, about 95% of the intervals we built that way would capture the true mean. It's not a 95% chance that the true value sits in this particular interval, and it's not a range of the data itself. The width tells you how precise the estimate is: narrower means more precise, and it usually tightens as the sample grows or the data varies less."
+  },
+  {
+   "jid": "1910d741b28a",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "Put the deployment and cost numbers from the report into one plain sentence I can say out loud.",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-G4"
+   ],
+   "forbidden_ids": [],
+   "answer": "The report puts median time to serve an item at 180 milliseconds, with the 95th percentile at 640 milliseconds, and server cost for the semester at about USD 310."
+  },
+  {
+   "jid": "ec8b2aff34c3",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Okay, so age did not matter, area mattered, distance mattered a bit, and flower cover mattered most. Doesn't that mean the restoration work itself was basically irrelevant and the money was wasted?",
+   "conversation": [
+    "USER (spoken): That covers the four predictors in Table 4.1.",
+    "EXAMINER: I have been reading the table while you talk."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, that's not what the model says. Flower cover came out as the strongest predictor, and flower cover is exactly what the restoration work is meant to build, so the result points to the restoration mattering most, not least. Age not mattering just means sites of different ages performed similarly, which is a different question from whether the work had an effect. What the model doesn't tell us is the counterfactual, what these sites would look like without the restoration, so I'd be careful about reading cost-effectiveness straight off these coefficients."
+  },
+  {
+   "jid": "3dfdd6199d01",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "What should we do next?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Let me pull together where things stand, what's still open, and anything blocking us, and I'll send that around right after this."
+  }
+ ]
+}

@@ -1,0 +1,424 @@
+[
+ {
+  "jid": "a4ce0bb208ce",
+  "scores": {
+   "correctness": 7,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 8,
+   "cognitive_load": 10,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8,
+  "one_sentence_reason": "Evocative, on-topic haiku, but the middle line has eight syllables, breaking 5-7-5.",
+  "specific_problem": "'one paw, a slow catastrophe' is 8 syllables.",
+  "minimal_improvement": "Trim the middle line to seven syllables."
+ },
+ {
+  "jid": "223b71ecdd42",
+  "scores": {
+   "correctness": 8,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 7,
+   "relevance": 8,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Covers all three asks with drink-free, inclusive ideas, but thin and assumes accessibility without venue caveats.",
+  "specific_problem": "Claims a nature walk is easily wheelchair accessible; no late-October weather or venue-accessibility check; few concrete options.",
+  "minimal_improvement": "Specify accessible/paved venues and add one or two more concrete ideas."
+ },
+ {
+  "jid": "ab12c9d9e160",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 6,
+   "relevance": 7,
+   "speakability_usability": 6,
+   "cognitive_load": 8,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.5,
+  "one_sentence_reason": "Correctly avoids inventing the user's job, but opens with meta text and mostly coaches rather than giving a ready line.",
+  "specific_problem": "'I don't have anything about your actual job here' is robotic meta; the example line guesses 'operations'.",
+  "minimal_improvement": "Give a short fill-in-the-blank line plus a playful generic option, without the meta opener."
+ },
+ {
+  "jid": "05ffd7698a19",
+  "scores": {
+   "correctness": 8,
+   "grounding": 8,
+   "role_fidelity": 9,
+   "direct_usefulness": 7,
+   "relevance": 8,
+   "speakability_usability": 8,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 8,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Natural, speakable small-talk reply that turns the question back after the meeting wrap-up.",
+  "specific_problem": "'I've been watching a couple of things' invites 'like what?' with nothing to follow.",
+  "minimal_improvement": "Drop the vague claim and keep a neutral hedge before turning it back."
+ },
+ {
+  "jid": "6dcc1fd39300",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 9,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8,
+  "one_sentence_reason": "Correctly separates the return window from defect rights and gives warranty and chargeback steps, speakable to the friend.",
+  "specific_problem": "Awkward 'ask for the manufacturer's warranty claim'; skips asking the store for a defective-item exchange first.",
+  "minimal_improvement": "Mention asking the store for a defect exchange before escalating to the manufacturer."
+ },
+ {
+  "jid": "25f8a4cf15da",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 10,
+   "concision": 9,
+   "continuity": 9,
+   "mode_fit": 10
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9,
+  "one_sentence_reason": "Takes a clear, playful, speakable stance with quick reasons that fit the casual moment.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "136e9867fc77",
+  "scores": {
+   "correctness": 4,
+   "grounding": 4,
+   "role_fidelity": 10,
+   "direct_usefulness": 5,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 8
+  },
+  "hard_flags": [
+   "retrieval_failure"
+  ],
+  "code_central": false,
+  "overall_estimate": 4,
+  "one_sentence_reason": "Says the pet deposit is refundable but ignores the lease's move-out clause calling the $400 pet fee non-refundable.",
+  "specific_problem": "Lease contradicts itself (PETS: refundable; move-out checklist: non-refundable); answer presents one side as settled.",
+  "minimal_improvement": "Flag the conflict and advise confirming with Brightwater in writing before move-out."
+ },
+ {
+  "jid": "46cfb07bc70a",
+  "scores": {
+   "correctness": 8,
+   "grounding": 8,
+   "role_fidelity": 9,
+   "direct_usefulness": 6,
+   "relevance": 8,
+   "speakability_usability": 8,
+   "cognitive_load": 9,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 6
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.5,
+  "one_sentence_reason": "Safe, invention-free answer, but it sounds like a job-interview answer in a casual family-friend chat.",
+  "specific_problem": "Corporate 'more scope' phrasing ignores the warm tone and the 'you've been busy' opener.",
+  "minimal_improvement": "Keep it lighter and conversational, acknowledging the busy remark."
+ },
+ {
+  "jid": "e626a80b9a4b",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.8,
+  "one_sentence_reason": "Correctly debunks the ten-percent myth and addresses the gummies concisely and speakably.",
+  "specific_problem": "Slightly blunt opener lands as a flat correction in casual chat.",
+  "minimal_improvement": "Soften the opening a touch."
+ },
+ {
+  "jid": "8412ddb69b06",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 10
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.2,
+  "one_sentence_reason": "Accurately lists cabinet inclusions and exclusions and correctly computes $40,000, noting it is not under 40k.",
+  "specific_problem": null,
+  "minimal_improvement": "Could note the $4,500 contingency sits outside the contract price."
+ },
+ {
+  "jid": "12988f235c0e",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Playful, speakable reply to the friend's joke with a practical warranty pointer.",
+  "specific_problem": "Misses that at two weeks the store's own return window may still apply.",
+  "minimal_improvement": "Suggest checking the store's return window first."
+ },
+ {
+  "jid": "da1c43fa2b19",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 10,
+   "relevance": 10,
+   "speakability_usability": 10,
+   "cognitive_load": 10,
+   "concision": 10,
+   "continuity": 10,
+   "mode_fit": 10
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.8,
+  "one_sentence_reason": "Pulls the exact gate code and parking spot from the conversation, concisely.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "6f0b693159b1",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 10
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9,
+  "one_sentence_reason": "Correctly explains escrow-driven payment increases despite a fixed rate, building simply on the prior turns.",
+  "specific_problem": null,
+  "minimal_improvement": "Could mention escrow shortage or cushion adjustments as another cause."
+ },
+ {
+  "jid": "5ac83c98f902",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 8,
+   "direct_usefulness": 5,
+   "relevance": 6,
+   "speakability_usability": 7,
+   "cognitive_load": 9,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6,
+  "one_sentence_reason": "Safe, invention-free reply, but it deflects the whole question as if the user could not state their own allergies.",
+  "specific_problem": "Says they lack allergy details 'in front of me' and defers everything; users usually know allergies and can answer part now.",
+  "minimal_improvement": "Let the user state known allergies now and offer to confirm exact medication names and doses before Thursday."
+ },
+ {
+  "jid": "01c796077207",
+  "scores": {
+   "correctness": 6,
+   "grounding": 7,
+   "role_fidelity": 10,
+   "direct_usefulness": 7,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 8,
+   "concision": 9,
+   "continuity": 9,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.5,
+  "one_sentence_reason": "Right that an hour's delay still works, but misreads Nuno's noon deadline and wrongly calls the 5:30 Lello slot tight.",
+  "specific_problem": "Arrival about 2:00 leaves 3+ hours before Lello; the noon arrival-time message can still be sent from the train.",
+  "minimal_improvement": "Say everything still fits; just send Nuno the updated arrival time before noon."
+ },
+ {
+  "jid": "248b08e13215",
+  "scores": {
+   "correctness": 4,
+   "grounding": 6,
+   "role_fidelity": 9,
+   "direct_usefulness": 5,
+   "relevance": 7,
+   "speakability_usability": 7,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 4.5,
+  "one_sentence_reason": "Asking how it ended while claiming to have caught the last few minutes is self-contradictory and invents a viewing fact.",
+  "specific_problem": "If the user saw the last minutes they saw the ending; the fabricated detail makes the line incoherent.",
+  "minimal_improvement": "Just say they missed it and ask how it ended."
+ },
+ {
+  "jid": "8bdb16d4083b",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 8,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 9,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.3,
+  "one_sentence_reason": "Gives cheaper, still-thoughtful options that follow the earlier ideas; speakable to the friend.",
+  "specific_problem": "No concrete price points or example games.",
+  "minimal_improvement": "Add a rough price for each option."
+ },
+ {
+  "jid": "838b2adbd9ea",
+  "scores": {
+   "correctness": 6,
+   "grounding": 9,
+   "role_fidelity": 7,
+   "direct_usefulness": 3,
+   "relevance": 3,
+   "speakability_usability": 4,
+   "cognitive_load": 6,
+   "concision": 6,
+   "continuity": 10,
+   "mode_fit": 4
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 3.5,
+  "one_sentence_reason": "Evasive and incoherent: offers 'the short version' then gives none, sounding odd in casual coworker small talk.",
+  "specific_problem": "Robotic non-answer; asking 'which piece would be most useful' is unnatural for this question.",
+  "minimal_improvement": "Give a natural brief line with a slot for the previous company and role."
+ },
+ {
+  "jid": "9d14bc76ac61",
+  "scores": {
+   "correctness": 9,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 9,
+   "relevance": 10,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.8,
+  "one_sentence_reason": "Accurately recaps unclaimed items from the conversation, adds sensible extras, and prompts for breakfast.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "d8e4dc8ffd85",
+  "scores": {
+   "correctness": 10,
+   "grounding": 10,
+   "role_fidelity": 10,
+   "direct_usefulness": 10,
+   "relevance": 10,
+   "speakability_usability": 10,
+   "cognitive_load": 10,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 9
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 9.3,
+  "one_sentence_reason": "Correct answer with a short useful note on the common mix-up.",
+  "specific_problem": "Slightly more than needed for a one-word trivia question.",
+  "minimal_improvement": null
+ }
+]

@@ -1,0 +1,187 @@
+{
+ "batch": "b014-technical-interview",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "HTECH-CTX-G1": {
+   "title": "Tallowmarket Go coding session pre-read: Escrow Hold Overlap",
+   "text": "TALLOWMARKET - GO CODING SESSION PRE-READ\nProblem: Escrow Hold Overlap (version 2)\n\nBackground\nWhen a restaurant places an order, Tallowmarket places an escrow hold on the funds until the grower confirms delivery. Our Risk team wants to know how many holds are open at the same time, because the banking partner charges a fee tier based on the peak number of simultaneous holds in a day.\n\nPart A (required)\nYou are given n holds. Each hold has an id, a start minute and an end minute. A hold covers the half-open interval [start, end): it is active at minute start and no longer active at minute end. Two holds that touch (one ends at 40, the other starts at 40) do not overlap.\nReturn two integers: the maximum number of holds active at the same instant, and the earliest instant at which that maximum is reached. If n is 0, return \"0 -1\".\n\nConstraints\n- 0 <= n <= 200,000\n- 0 <= start < end <= 1,000,000,000 (integers, minutes since the start of the settlement epoch)\n- Holds are NOT sorted. Ids are unique strings of up to 12 characters.\n- Target: O(n log n) time. Your solution runs with a 2 second limit and 256 MB of memory.\n\nExample 1\nInput:\nH1 10 50\nH2 20 40\nH3 40 70\nH4 45 60\nH5 70 90\nOutput: 3 45\nExplanation: at minute 45, H1, H3 and H4 are active. At minute 40, H2 has already ended, so only H1 and H3 are active there.\n\nExample 2\nInput:\nH1 5 15\nH2 15 25\nH3 25 35\nOutput: 1 5\n\nExample 3\nInput: (no holds)\nOutput: 0 -1\n\nPart B (required)\nEach hold also carries amount_cents, a positive integer up to 50,000,000. Return the maximum total amount_cents held at the same instant and the earliest instant it is reached. Use a 64-bit integer; the sum can exceed 2^31.\n\nExample 4\nInput:\nH1 0 30 5000\nH2 10 20 9000\nH3 20 40 7000\nOutput: 14000 10\nExplanation: during [10, 20) H1 and H2 are both held, 14000 in total. At minute 20, H2 ends and H3 starts, so the total drops to H1 + H3 = 12000.\n\nPart C (discussion only, no code)\nHolds will eventually arrive as a stream from Kafka, up to 50,000 inserts per second at peak, and a hold may also be cancelled before its end minute. Describe how you would keep the Part A answer current after each insert or cancel. We care about the data structure and its complexity, not a full implementation.\n\nWhat we look at\n- Correct handling of touching intervals. This is the most common mistake we see.\n- Tie-breaking: when the maximum is reached more than once, report the earliest instant.\n- Clear naming and small functions. Standard library only; no third-party packages.\n- A few table-driven tests.\n\nPlease do not share this problem publicly. Questions about the statement can be raised with the session interviewer at the start of the call."
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "PI-B:RESUME": {
+   "title": "the user's résumé (Dashiell Marrow)",
+   "text": "DASHIELL MARROW\nPlatform / Infrastructure Engineer\nTacoma, WA | dash.marrow@example.com | (555) 019-8840 | github.com/dmarrow-example\n\nSUMMARY\nInfrastructure-focused engineer with about 1.5 years of full-time experience after a B.S. in Computer Engineering. Works mainly with Kubernetes, Terraform, Prometheus, Python and Rust. Interested in SLOs, alert quality, and removing manual toil. Certified Kubernetes Administrator.\n\nEXPERIENCE\n\nHollowbrook Data | Infrastructure Engineer (Contract) | Seattle, WA | Jun 2026 - Present\n- Moved 23 Terraform root modules from local state files to a remote S3 backend with DynamoDB state locking.\n- Wrote Kestrel, a Python CLI that checks Terraform plans against 17 Open Policy Agent rules before merge; it blocked 9 public-bucket changes in its first 10 weeks.\n- Right-sized node pools on two EKS clusters, lowering compute spend from about $41,300 to $29,800 per month.\n- Replaced hand-edited IAM policies with 11 reusable Terraform modules reviewed through pull requests.\n\nCindervale Systems | Site Reliability Engineer I | Tacoma, WA | Jul 2025 - Jan 2026\n- Member of a 5-person SRE team supporting 140 microservices on three GKE clusters.\n- Built Grafana SLO dashboards for the 12 tier-1 services; pages fell from about 260 to 70 per month after moving to multi-window burn-rate alerts.\n- Automated TLS certificate rotation with cert-manager, retiring a 47-step wiki runbook.\n- Wrote Lanternfish, a Rust sidecar that exports per-pod DNS lookup latency to Prometheus; it showed that 31% of p99 latency on the checkout path came from DNS resolution.\n- Ran a quarterly game day for GKE node-pool upgrades with 3 service teams, using a scripted drain-and-cordon checklist.\n- Shadowed the on-call rotation from August 2025; primary on-call from November 2025.\n\nOrrin Telematics | Platform Engineering Intern | Spokane, WA | May 2024 - Aug 2024\n- Containerized 6 legacy Java services and wrote Helm charts for each.\n- Cut CI time for the main monorepo from 34 minutes to 13 minutes with Buildkite build caching.\n- Demoed ephemeral preview environments to about 80 engineers at the internship showcase.\n\nSIDE PROJECT\nTidepool Homelab\n- 4-node Raspberry Pi k3s cluster managed through Flux GitOps.\n- Hosts a self-hosted Matrix chat server; measured 99.2% uptime over 180 days with Uptime Kuma.\n- Loki and Grafana for logs; all manifests public on GitHub.\n\nEDUCATION\nPuget Cascade University | B.S. Computer Engineering | May 2025\n- Capstone: Brine, a distributed key-value store in Rust using Raft consensus (team of 3).\n- Teaching assistant, CPE 342 Operating Systems, two semesters.\n- Relevant coursework: Operating Systems, Computer Networks, Distributed Systems.\n\nCERTIFICATIONS\n- Certified Kubernetes Administrator (CKA), 2025\n\nSKILLS\nInfrastructure: Kubernetes (GKE, EKS, k3s), Helm, Terraform, Flux, cert-manager\nObservability: Prometheus, Grafana, Loki, OpenTelemetry, Uptime Kuma\nLanguages: Python, Rust, Bash, some Java\nCloud: GCP, AWS\nOther: Linux networking, DNS, TLS, Buildkite, GitHub Actions, Open Policy Agent"
+  },
+  "PI-B:JD": {
+   "title": "the job description the user is targeting",
+   "text": "PLATFORM RELIABILITY ENGINEER (EARLY CAREER)\nNimbuscrest Cloud | Portland, OR\n\nABOUT NIMBUSCREST\nNimbuscrest Cloud runs managed PostgreSQL and S3-compatible object storage for about 9,000 customers across four regions: Portland, Frankfurt, Singapore and Sao Paulo. We operate our own fleet of roughly 3,000 bare-metal hosts rather than renting from a hyperscaler, and we publish a 99.95% monthly availability target for managed databases.\n\nTHE TEAM\nFleet Reliability is 7 engineers reporting to Engineering Manager Oyelaran Fitch. We own host provisioning, the Kubernetes control planes that run our storage services, and the incident process for the whole company.\n\nWHAT YOU WILL DO\n- Operate and harden the Kubernetes control planes behind our storage and database services.\n- Automate host provisioning and firmware updates across the bare-metal fleet.\n- Define and review SLOs with service teams, and tune alerting so pages are actionable.\n- Respond to incidents as part of a follow-the-sun rotation and write blameless postmortems.\n- Build capacity forecasts for disk and network in each region.\n- Retire manual runbooks by turning them into tested automation.\n\nWHAT WE ARE LOOKING FOR\n- 1-3 years in SRE, infrastructure, or platform engineering (internships count).\n- Hands-on Kubernetes operations experience.\n- Proficiency in at least one of Go, Python or Rust.\n- Solid understanding of Linux internals and networking fundamentals (DNS, TCP, TLS).\n- Infrastructure as code with Terraform or Pulumi.\n- Willingness to participate in on-call after a ramp-up period.\n\nNICE TO HAVE\n- eBPF-based debugging or observability tooling.\n- Ceph or other distributed storage operations.\n- Running PostgreSQL in production.\n- PXE-based bare-metal provisioning.\n- Experience with Prometheus and multi-window burn-rate alerting.\n\nWORK ARRANGEMENT\nHybrid: two days a week in the Portland Pearl District office. Occasional travel (about twice a year) to the Frankfurt region for data-center work.\n\nHOW WE HIRE\nA recruiter conversation, a 90-minute take-home in which you debug a broken three-node cluster, a systems deep-dive with two engineers, and a conversation with Oyelaran.\n\nNimbuscrest Cloud welcomes applicants from all backgrounds."
+  },
+  "HTECH-CTX-I1": {
+   "title": "Riverbend Commons elevator modernization notice",
+   "text": "RIVERBEND COMMONS - RESIDENT NOTICE\nEast Tower Elevator Modernization\n\nDear residents,\n\nStarting Monday, October 12, the east tower passenger elevator (Car 2) will be out of service for modernization. The work is expected to take about six weeks. Car 1 will remain in service for the whole period, and the freight elevator will be available for residents with mobility needs between 8 a.m. and 6 p.m. on weekdays. Please call the front desk at extension 400 to book it.\n\nWhat is changing\n- New controller and door operators on Car 2.\n- Brighter LED cab lighting and a new emergency phone.\n- The hall buttons on floors 2 through 14 will be replaced one floor at a time, so you may see a temporary panel near your elevator lobby.\n\nNoise\nContractors will work from 8:30 a.m. to 4:30 p.m., Monday through Friday. The loudest work, removing the old machine, is scheduled for the first week.\n\nDeliveries\nLarge furniture deliveries should be rescheduled after the work is complete if possible. If you cannot move a delivery, let the management office know at least 48 hours in advance so we can reserve Car 1.\n\nThank you for your patience. Questions can go to the management office, open weekdays from 9 a.m. to 5 p.m.\n\nRiverbend Commons Management"
+  },
+  "HTECH-CTX-G2": {
+   "title": "Dockhand design summary v1.3 (candidate project)",
+   "text": "DOCKHAND - Design Summary (v1.3)\nAuthor: Tobias Venkataraman | Larkspur Freight, Platform Backend | Last updated: 2024-11-18\nStatus: in production since June 2024\n\n1. Purpose\nDockhand moves shipment status events (picked up, in transit, delayed, delivered, exception) from the services that record them into Kafka, so that billing, the customer portal and the carrier-settlement services from Project Tern can react without polling the database. Volume is about 2.3 million events per day on average, with a morning peak of roughly 410 events per second between 07:30 and 09:00 Eastern.\n\n2. Why an outbox\nBefore Dockhand, services wrote to PostgreSQL and then published to Kafka in the same request. When the publish failed after the commit, the event was lost; when the commit failed after the publish, consumers saw an event for a change that never happened. Dockhand uses a transactional outbox: the service writes the business row and an outbox row in the same PostgreSQL transaction. Nothing is published inside the request.\n\n3. Components\n- outbox_events table: one row per event (event_id UUID, shipment_id, event_type, payload JSONB, created_at, published_at). Partitioned by day; partitions older than 72 hours are dropped by a scheduled job, which is cheaper than DELETE plus vacuum.\n- Relay: a Go service that polls unpublished rows every 250 ms in batches of up to 500, ordered by created_at, publishes them, then sets published_at. Two relay instances run, but only one is active at a time: the active one holds a PostgreSQL advisory lock. If it dies, the standby acquires the lock; failover has taken up to 30 seconds in drills.\n- Topic shipment-status.v2: 24 partitions, keyed by shipment_id, replication factor 3, producer acks=all.\n- Consumers: each consumer records processed event_id values in a dedupe table (processed_events) inside the same transaction as its own side effects. Entries are kept for 7 days.\n- Dead-letter topic shipment-status.dlq: a message goes there after 5 failed attempts with exponential backoff starting at 2 seconds.\n\n4. Delivery guarantees\nDockhand is at-least-once, not exactly-once. The relay can publish a batch and crash before it sets published_at; on restart that batch is published again. Duplicates are expected and are removed by the consumer-side dedupe on event_id. Ordering is guaranteed per shipment only (same key, same partition). There is no ordering across shipments.\n\n5. Service levels\nTarget: p99 time from outbox commit to consumer receipt under 4 seconds. Measured in October 2024: p50 0.6 s, p99 2.9 s, excluding relay failovers.\n\n6. Alternatives considered\n- Debezium change data capture: rejected for v1 because the platform team did not run Kafka Connect yet, and we did not want to own a Connect cluster for one pipeline. Revisit in 2025.\n- Publishing directly from the request with retries: rejected; it cannot close the gap between commit and publish.\n- SQS FIFO: rejected because the billing and settlement teams already consumed from Kafka, and FIFO throughput limits per message group would have needed careful sharding.\n\n7. Known limitations\n- The single active relay is a throughput ceiling; load tests showed it saturates near 3,000 events per second.\n- JSON payloads carry a schema_version field, but there is no schema registry; breaking changes are coordinated by hand.\n- The dedupe window is 7 days, so replaying older messages from the DLQ requires a manual override flag.\n\n8. Open questions\n- Whether to move the relay to logical replication once Kafka Connect exists.\n- Whether 24 partitions is enough if the Tern consumers need more parallelism."
+  }
+ },
+ "items": [
+  {
+   "jid": "0ff1dc131853",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Now say holds come in one at a time off a stream and some get cancelled early. How do you keep that answer current without redoing the whole sweep?",
+   "conversation": [
+    "INTERVIEWER (heard): Okay, you've had the escrow holds problem for a few minutes. Before you write any code, tell me how you'd get the max number of overlapping holds and the first time it happens.",
+    "NATIVELY: I'd sweep the endpoints. Turn each hold into two events: a start at `start` with +1, and an end at `end` with -1. Sort all events by minute, and for ties process the -1 before the +1, so a hold ending at 40 is gone before one starting at 40 counts. Then walk the sorted events keeping a running count, track the max, and record the minute the first time the count hits a new max. That gives the peak and the earliest instant it occurs in O(n log n) time and O(n) space. For Part B I'd carry the amount in the event instead of +1/-1 and track the running sum the same way.",
+    "INTERVIEWER (heard): Run that on example one out loud. What do you get?",
+    "NATIVELY: I don't have example one's actual numbers in front of me, so I'd need you to read them out. But the walk is the same: sort the events, process ends before starts at the same minute, and the running count's first peak is the answer."
+   ],
+   "evidence_ids": [
+    "HTECH-CTX-G1",
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'd keep a running count instead of re-sweeping. Each insert is a start event at +1 and a cancel or natural end is a -1, so I apply the delta at that minute and update the running count and the max in O(log n) with a balanced tree or a Fenwick tree over compressed minutes. That way each event is one update, not a full re-sort."
+  },
+  {
+   "jid": "351f43fe1ffb",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Design the nightly settlement batch for a marketplace like ours. It takes the day of ledger entries, computes payouts per grower, sends them to the bank, and has to be done before banks open. How do you split up the work, how do you make a rerun safe if it dies halfway, and what do you page on?",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'd split it into three stages with a durable workflow engine driving them, since the whole thing is a long-running payment process. Stage one reads the day's ledger entries and computes per-grower payout totals, partitioned by grower so it parallelizes. Stage two writes the payout records and hands them to the bank as a batch. Stage three reconciles the bank's response back against the ledger.\n\nFor rerun safety, every stage is idempotent and keyed on a settlement date plus a run id. I'd compute payouts into a staging table with a unique constraint on grower and settlement date, so a rerun just upserts the same rows instead of double-paying. The bank submission carries an idempotency key per payout, so if we die after sending but before recording the response, the retry gets the same result rather than a second transfer. The workflow engine checkpoints each stage, so a restart resumes from the last completed step rather than the top.\n\nWhat I'd page on is the batch not finishing before banks open, a reconciliation mismatch between what we sent and what the bank confirms, and any payout that fails after retries. Those are the ones where money is either stuck or wrong. A single grower's payout failing is a ticket, not a page."
+  },
+  {
+   "jid": "ebe4ca63bc63",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "quick, what does this print in go: x := []int{1, 2, 3}; y := x[:2]; y = append(y, 99); fmt.Println(x, len(y))",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "It prints **`[1 2 99] 3`**.\n\nThe key is that `x[:2]` shares the same backing array as `x`, and it has spare capacity, so `append` writes 99 into that array's third slot, overwriting the 3. `y` becomes length 3, and `x` sees the change too."
+  },
+  {
+   "jid": "4e364a50d218",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What about split brain?",
+   "conversation": [
+    "INTERVIEWER (heard): Okay, design question. Say we run managed Postgres for thousands of customers on our own bare metal. Each database has one primary and two replicas. Design automatic failover: how you detect the primary is dead, how you pick the new one, how clients find it, and how you avoid losing acknowledged writes.",
+    "NATIVELY: I'd run a consensus layer, something like etcd or Patroni, as the source of truth for who's primary, rather than trusting the nodes to agree among themselves. Each primary streams WAL to both replicas, and the leader key is held with a lease that has to be renewed. If the primary can't renew, the lease expires and the consensus layer promotes the replica with the most advanced WAL, so we don't lose acknowledged writes. Clients never hardcode an address, they go through a proxy or a virtual IP that follows the leader key. And I'd fence the old primary hard before promotion, so it can't come back and accept writes."
+   ],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "Split brain is exactly what the fencing and the lease are there to prevent. The consensus layer only ever has one leader key, so only one node can be primary at a time. If the old primary is partitioned and can't renew its lease, it loses the key, and before the new one is promoted I fence the old one hard, so even if it's still up it can't accept writes. The risk window is a primary that's alive but cut off from the consensus layer, and the lease expiry plus fencing closes that."
+  },
+  {
+   "jid": "29848023e8c2",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So what does the refund endpoint look like? Request, response, and what happens on a retry.",
+   "conversation": [
+    "INTERVIEWER: For this one, you're designing the refund side of a payments API.",
+    "INTERVIEWER: Mobile clients are on bad networks, so they retry a lot, sometimes the same request three or four times.",
+    "USER (spoken): Okay. Are amounts in dollars or cents?",
+    "INTERVIEWER: Integer cents, always. And we support partial refunds, as many as you want, up to the original charge amount in total."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd do POST /charges/{charge_id}/refunds with an Idempotency-Key header. The body is just amount_cents, an integer, plus a reason. The response returns the refund id, status, amount_cents, and the charge id. On a retry, the same key returns the original response instead of creating a second refund, so a client that retries three times still only refunds once."
+  },
+  {
+   "jid": "52e9d091f28a",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "they want REST endpoints for managing feature flags, what should the routes be",
+   "conversation": [],
+   "evidence_ids": [
+    "HTECH-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "For feature flags, I'd keep it resource-oriented: `GET /flags` to list, `POST /flags` to create, `GET /flags/{key}` for one flag, `PATCH /flags/{key}` to update it, and `DELETE /flags/{key}` to remove it. For toggling, I'd add `PUT /flags/{key}/state` with the environment in the body, so you can enable or disable per environment without a full update."
+  },
+  {
+   "jid": "01e3c8ac077a",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Quick one. for i := 1; i < n; i *= 2 { for j := 0; j < i; j++ { sum++ } }. That's n log n, right?",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "Not quite. The outer loop runs log n times, but the inner loop runs i times, and i doubles each pass, so the total work is 1 + 2 + 4 + ... up to n, which sums to about 2n. So it's **O(n)**, not n log n. The n log n case is when the inner loop runs a fixed n times for each of the log n outer iterations."
+  },
+  {
+   "jid": "1b475645f557",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So, Dockhand. The outbox means you never publish the same event twice, right? Walk me through how the relay guarantees that.",
+   "conversation": [],
+   "evidence_ids": [
+    "HTECH-CTX-G2",
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, not exactly. Dockhand is at-least-once, not exactly-once. The relay polls unpublished rows every 250 ms in batches of up to 500, ordered by created_at, publishes them, then sets published_at. If it crashes after publishing but before setting published_at, that batch gets published again on restart, so duplicates are expected. What removes them is consumer-side dedupe: each consumer records processed event_id values in a processed_events table inside the same transaction as its own side effects, and those entries are kept for 7 days. So the guarantee is at-least-once delivery plus idempotent consumers, not a relay that never publishes twice."
+  },
+  {
+   "jid": "43ff7ce978e6",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "they want an LRU cache in Go with O(1) get and put, and I can't use container/list. write it",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "```go\npackage lru\n\ntype node struct {\n\tkey, val   int\n\tprev, next *node\n}\n\ntype LRUCache struct {\n\tcapacity   int\n\titems      map[int]*node\n\thead, tail *node // head = most recent, tail = least recent\n}\n\nfunc Constructor(capacity int) LRUCache {\n\thead := &node{}\n\ttail := &node{}\n\thead.next = tail\n\ttail.prev = head\n\treturn LRUCache{\n\t\tcapacity: capacity,\n\t\titems:    make(map[int]*node, capacity),\n\t\thead:     head,\n\t\ttail:     tail,\n\t}\n}\n\nfunc (c *LRUCache) Get(key int) int {\n\tn, ok := c.items[key]\n\tif !ok {\n\t\treturn -1\n\t}\n\tc.moveToFront(n)\n\treturn n.val\n}\n\nfunc (c *LRUCache) Put(key int, value int) {\n\tif n, ok := c.items[key]; ok {\n\t\tn.val = value\n\t\tc.moveToFront(n)\n\t\treturn\n\t}\n\tn := &node{key: key, val: value}\n\tc.items[key] = n\n\tc.addToFront(n)\n\tif len(c.items) > c.capacity {\n\t\tlru := c.tail.prev\n\t\tc.remove(lru)\n\t\tdelete(c.items, lru.key)\n\t}\n}\n\nfunc (c *LRUCache) addToFront(n *node) {\n\tn.prev = c.head\n\tn.next = c.head.next\n\tc.head.next.prev = n\n\tc.head.next = n\n}\n\nfunc (c *LRUCache) remove(n *node) {\n\tn.prev.next = n.next\n\tn.next.prev = n.prev\n}\n\nfunc (c *LRUCache) moveToFront(n *node) {\n\tc.remove(n)\n\tc.addToFront(n)\n}\n```\n\nI hand-rolled a doubly linked list with sentinel head and tail nodes, so every insert and removal is just pointer swaps, and the map gives O(1) lookup by key. Get moves the node to the front, Put updates in place or inserts and evicts the tail when over capacity.\n\nTime: O(1) for both Get and Put. Space: O(capacity)."
+  },
+  {
+   "jid": "307dd1fa4151",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Run that on example one out loud. What do you get?",
+   "conversation": [
+    "INTERVIEWER (heard): Okay, you've had the escrow holds problem for a few minutes. Before you write any code, tell me how you'd get the max number of overlapping holds and the first time it happens.",
+    "NATIVELY: I'd sweep the endpoints. Turn each hold into two events: a start at `start` with +1, and an end at `end` with -1. Sort all events by minute, and for ties process the -1 before the +1, so a hold ending at 40 is gone before one starting at 40 counts. Then walk the sorted events keeping a running count, track the max, and record the minute the first time the count hits a new max. That gives the peak and the earliest instant it occurs in O(n log n) time and O(n) space. For Part B I'd carry the amount in the event instead of +1/-1 and track the running sum the same way."
+   ],
+   "evidence_ids": [
+    "HTECH-CTX-G1",
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I don't have example one's actual numbers in front of me, so I'd need you to read them out. But the walk is the same: sort the events, process ends before starts at the same minute, and the running count's first peak is the answer."
+  }
+ ]
+}

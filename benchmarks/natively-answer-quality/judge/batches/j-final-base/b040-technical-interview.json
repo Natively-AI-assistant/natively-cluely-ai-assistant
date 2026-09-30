@@ -1,0 +1,267 @@
+{
+ "batch": "b040-technical-interview",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "TECH-CTX-C1": {
+   "title": "Cluster Count problem statement (draft 3)",
+   "text": "Cluster Count - Problem Statement (draft 3)\n\nYou are given n servers and a list of direct network links between them. Two servers belong to the same cluster if they are connected by any chain of links. Return the number of clusters.\n\nInput\n- n, the number of servers. Servers are numbered from 0 to n - 1.\n- links, a list of pairs [a, b], each meaning server a has a direct link to server b.\n\nConstraints\n- 1 <= n <= 100,000\n- 0 <= number of links <= 200,000\n- Each pair appears at most once in links.\n- Links are undirected.\n\nRequirements\n- Your solution must run in O(n + m) time, where m is the number of links.\n- Use at most O(n) extra memory.\n\nNotes from the platform team (added later)\n- The stress runs use n up to 1,000,000,000 with the links given as an n by n adjacency matrix, so make sure your solution handles that.\n- Because the stress runs are large, O(n log n) time is acceptable.\n- Servers in the stress runs are numbered from 1 to n.\n- In production, a link from a to b is one-way, so a link from a to b does not mean b can reach a. Count clusters the way you think is most useful.\n- Duplicate links show up in real data. Ignore them.\n\nExample\nn = 5, links = [[0,1],[1,2],[3,4]] returns 2.\n\nPlease explain your reasoning in your submission, including any assumptions you had to make about the input."
+  },
+  "TECH-CTX-G1": {
+   "title": "Take-home brief: Maintenance Window Consolidator",
+   "text": "Halden Labs - Backend Engineer Take-Home\nProblem: Maintenance Window Consolidator\n\nBackground\nHalden Labs operates a fleet-management platform. Operations teams schedule maintenance windows for each region, and the scheduling service emits them as flat records. Before windows are shown on the ops calendar, overlapping or touching windows in the same region must be consolidated into one.\n\nInput\nA list of records. Each record has:\n- region: a string, case-sensitive, at most 32 characters\n- start: integer epoch seconds\n- end: integer epoch seconds, always greater than start\n\nOutput\nFor every region, the consolidated windows sorted by start time. Two windows in the same region are merged when they overlap or when one ends exactly at the second the other starts. Windows in different regions never merge. The function must not modify its input.\n\nLimits\n- Up to 2,000,000 records per run.\n- Up to 500 distinct regions.\n- The input is not sorted in any way and may contain exact duplicate records.\n- Timestamps fit in a signed 64-bit integer.\n- The grading machine gives your process 2 vCPUs and 256 MB of memory.\n- A full run must finish in 10 seconds.\n\nExamples\nRegion eu-west with windows (100, 200), (150, 300), (300, 400) consolidates to one window (100, 400), because the last window starts exactly when the merged one ends.\nRegion us-east with windows (10, 20) and (30, 40) stays as two windows.\n\nPart 2, discussion only\nIn the follow-up interview we will ask how your design changes if windows arrive as a live stream, possibly out of order by up to five minutes, and the calendar must always show consolidated data. You do not need to implement this part.\n\nDeliverables\n1. Your solution in Python, Java, Go or TypeScript.\n2. Unit tests, including at least one case with more than one region.\n3. A README of at most one page containing the time and space complexity of your solution and any assumptions you made.\n4. A short note on how you checked performance at the upper limits.\n\nHow we review\nReviewers read for correctness first, then clarity, then performance. Our hidden checks include empty input, a single record, all records in one region, all records identical, and 2,000,000 records spread over 500 regions. A solution that is correct but exceeds the memory limit is marked as failing the performance checks. Please do not use third-party libraries beyond the standard library of your language.\n\nSubmission\nSend a zip file or a repository link to your recruiter contact, Priya Raman, within 72 hours of receiving this brief. Questions about the problem are welcome and will be answered within one business day."
+  }
+ },
+ "items": [
+  {
+   "jid": "309a412f2f2f",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What is REST then?",
+   "conversation": [
+    "INTERVIEWER (heard): Let's start simple. What is an API?",
+    "NATIVELY: An API is a defined interface that lets two pieces of software talk to each other. You call it with a request, it hands back a response, and you don't need to know how it works inside."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "REST is an architectural style for APIs, not a protocol. It uses HTTP methods like GET, POST, PUT and DELETE, treats things as resources with URLs, and keeps each request stateless, so the server holds no session between calls."
+  },
+  {
+   "jid": "9b0e39d26222",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "this binary search is correct right? dry run it on [1, 3, 5, 7, 9] searching for 9, show every step, and tell me if anything is off\n\nfunction search(arr, x) {\n  let lo = 0, hi = arr.length - 1;\n  while (lo < hi) {\n    const mid = Math.floor((lo + hi) / 2);\n    if (arr[mid] === x) return mid;\n    if (arr[mid] < x) lo = mid + 1;\n    else hi = mid - 1;\n  }\n  return -1;\n}",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Let me trace it on [1, 3, 5, 7, 9] with x = 9.\n\nStart: lo = 0, hi = 4.\nStep 1: lo < hi (0 < 4), mid = 2, arr[2] = 5. 5 < 9, so lo = 3.\nStep 2: lo < hi (3 < 4), mid = 3, arr[3] = 7. 7 < 9, so lo = 4.\nStep 3: lo < hi is 4 < 4, false. Loop exits.\nReturn -1.\n\nSo it's **not correct**. The bug is the loop condition: `lo < hi` stops as soon as lo equals hi, so the last remaining element never gets checked. Here 9 sits at index 4, and we exit before testing it. It should be `lo <= hi`, which would give mid = 4, arr[4] = 9, and return 4."
+  },
+  {
+   "jid": "0bc30dbe5761",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "pagination for an endpoint that returns millions of rows: offset vs cursor, what do I say?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Offset pagination breaks down at that scale: the database still has to walk and discard every skipped row, so deep pages get slow, and rows shifting between requests cause duplicates or gaps. Cursor pagination fixes both. You encode the last row's sort key, usually an indexed column like id or created_at, and the next query becomes a simple \"where key > last key\" with a limit, so it's a constant-time index seek no matter how deep you are.\n\nThe tradeoff is you lose random access, so no jumping to page 500, and the cursor has to be opaque and stable. For a feed or infinite scroll, cursor wins. If the client genuinely needs page numbers, offset is fine for shallow pages only."
+  },
+  {
+   "jid": "61573c60a274",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How does garbage collection work in the language you know best, and when does it actually hurt you in production?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I know the JVM best. It's a generational, tracing collector: new objects go in Eden, survivors get promoted, and the old generation is collected with a concurrent or compacting collector. It hurts when allocation rate outruns collection, so you get long stop-the-world pauses, or when promotion pressure fills the old gen and you thrash. That's when you tune heap sizing and pick the right collector."
+  },
+  {
+   "jid": "15bedb59af67",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What do you think?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd want to know what problem we're actually solving before I form a view. My instinct is to start from the outcome we care about, then work backward to whether this gets us there, and what it costs us in time or complexity. If it's cheap to try and easy to undo, I'd rather test it than debate it. If it's hard to reverse, I'd want the tradeoffs on the table first."
+  },
+  {
+   "jid": "790a5e1108de",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Now say one post gets a hundred million likes. What breaks?",
+   "conversation": [
+    "INTERVIEWER: Let's do some data modelling.",
+    "USER (spoken): Sure.",
+    "INTERVIEWER: Assume the app is mostly reads. People scroll and like far more than they post.",
+    "USER (spoken): Got it, read heavy.",
+    "INTERVIEWER (heard): Design the tables for a social app where users write posts and other users can like them.",
+    "NATIVELY: Here's the schema I'd go with, keeping the read-heavy access pattern in mind.\n\n```sql\nCREATE TABLE users (\n    id          BIGSERIAL PRIMARY KEY,\n    handle      TEXT NOT NULL UNIQUE,\n    display_name TEXT NOT NULL,\n    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE TABLE posts (\n    id          BIGSERIAL PRIMARY KEY,\n    author_id   BIGINT NOT NULL REFERENCES users(id),\n    body        TEXT NOT NULL,\n    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE TABLE likes (\n    user_id     BIGINT NOT NULL REFERENCES users(id),\n    post_id     BIGINT NOT NULL REFERENCES posts(id),\n    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),\n    PRIMARY KEY (user_id, post_id)\n);\n\nCREATE INDEX idx_posts_author_created ON posts (author_id, created_at DESC);\nCREATE INDEX idx_posts_created        ON posts (created_at DESC);\nCREATE INDEX idx_likes_post           ON likes (post_id);\n```\n\nThree tables: users, posts, and a likes join table. The composite primary key on `(user_id, post_id)` enforces one like per user per post and gives you the \"has this user liked this post\" lookup for free. I index `likes(post_id)` so counting likes on a post is a cheap index scan, and index posts by `created_at DESC` for the feed.\n\nSince it's read-heavy, I'd keep a denormalized `like_count` on posts, updated on write, so the feed doesn't aggregate the likes table on every scroll. The tradeoff is a counter that can drift, so I'd reconcile it periodically or make the increment part of the same transaction as the like insert."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A hundred million likes on one post breaks the counter first. Every like is a write to the same row, so the `like_count` update serializes on that row and you get lock contention. The fix is to shard the counter, keep N sub-counters and sum them on read, or move the count into a cache like Redis and reconcile to the table. The `likes(post_id)` index also gets huge, so counting from the table stops being cheap. And the feed now has a hot post everyone's reading, so I'd cache that post's rendered page at the edge."
+  },
+  {
+   "jid": "d6c819aad163",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "make it faster",
+   "conversation": [
+    "USER (typed to Natively): what's the time complexity of this?\n\nfunction hasDuplicate(nums: number[]): boolean {\n  for (let i = 0; i < nums.length; i++) {\n    for (let j = i + 1; j < nums.length; j++) {\n      if (nums[i] === nums[j]) return true;\n    }\n  }\n  return false;\n}",
+    "NATIVELY: **O(n²)** time, since the outer loop runs n times and the inner loop scans the rest of the array each pass, giving roughly n²/2 comparisons. Space is **O(1)**, just the two loop counters, no extra storage."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The nested loops make it **O(n²)** time, since for each element we scan the rest of the array, and **O(1)** space. To make it faster, trade space for time: use a **Set** and check membership as you go, which brings it down to **O(n)** time and **O(n)** space.\n\n```typescript\nfunction hasDuplicate(nums: number[]): boolean {\n  const seen = new Set<number>();\n  for (const num of nums) {\n    if (seen.has(num)) return true;\n    seen.add(num);\n  }\n  return false;\n}\n```\n\nOld: O(n²) time, O(1) space. New: O(n) time, O(n) space."
+  },
+  {
+   "jid": "6d96997bf301",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Minimum window substring. You get two strings, s and t. Find the smallest substring of s that contains every character of t, counting duplicates. How would you solve it?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "## Approach\nSliding window with two pointers and a frequency count. Expand the right pointer until the window covers all of t, then shrink from the left while it still covers t, recording the smallest valid window. A `need` map tracks required counts and a `have`/`missing` counter tells you when the window is valid.\n\n## Code\n```python\nfrom collections import Counter\n\ndef minWindow(s: str, t: str) -> str:\n    if not t or not s:\n        return \"\"\n    need = Counter(t)\n    required = len(need)\n    formed = 0\n    window = {}\n    left = 0\n    best = (float(\"inf\"), 0, 0)\n\n    for right, ch in enumerate(s):\n        window[ch] = window.get(ch, 0) + 1\n        if ch in need and window[ch] == need[ch]:\n            formed += 1\n\n        while formed == required:\n            if right - left + 1 < best[0]:\n                best = (right - left + 1, left, right)\n            lc = s[left]\n            window[lc] -= 1\n            if lc in need and window[lc] < need[lc]:\n                formed -= 1\n            left += 1\n\n    return \"\" if best[0] == float(\"inf\") else s[best[1]:best[2] + 1]\n```\n\n## Complexity\nTime is O(n + m) where n is the length of s and m is the length of t, since each pointer moves at most n times. Space is O(k) for the frequency maps, where k is the number of distinct characters."
+  },
+  {
+   "jid": "bf4943f9f962",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "optimize this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd need to see the code to optimize it properly. Can you paste the function or the snippet you're working with, plus what's slow or what the constraints are? With that I can look at the complexity and suggest concrete changes."
+  },
+  {
+   "jid": "f78ab7abedb0",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Is there anything else I should know?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I think we've covered the main things. What I'd still want to understand is how you measure success in this role in the first few months, and what the team's biggest priority is right now."
+  },
+  {
+   "jid": "5978f4e0e119",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "dry run this with nums = [3, 2, 4] and target = 6, show me the state each iteration\n\ndef two_sum(nums, target):\n    seen = {}\n    for i, x in enumerate(nums):\n        need = target - x\n        if need in seen:\n            return [seen[need], i]\n        seen[x] = i\n    return []",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "i=0, x=3, need=3, not in seen, seen={3:0}.\ni=1, x=2, need=4, not in seen, seen={3:0, 2:1}.\ni=2, x=4, need=2, found at index 1, return [1, 2]."
+  },
+  {
+   "jid": "33babce9c9f8",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "write code to check if a string is a palindrome in python",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "```python\ndef is_palindrome(s: str) -> bool:\n    left, right = 0, len(s) - 1\n    while left < right:\n        if s[left] != s[right]:\n            return False\n        left += 1\n        right -= 1\n    return True\n```\n\nTwo pointers walk inward from both ends and bail out on the first mismatch, so it never scans more than half the string. Time O(n), space O(1)."
+  },
+  {
+   "jid": "3d9a8c4d1c34",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So building a heap from an array is n log n, right? Walk me through why.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Not quite. Building a heap from an array is actually **O(n)**, not O(n log n). The n log n figure comes from doing n separate insertions, but heapify works differently.\n\nThe key is that heapify sifts down from the last internal node up to the root. The cost of sifting down depends on the height of the node, and most nodes are near the bottom where the height is small. Only a few nodes near the root have large heights.\n\nIf you sum the work across all levels, you get n/2 nodes doing 1 swap, n/4 doing 2, n/8 doing 3, and so on. That series converges to a constant times n, so the total is **O(n)**.\n\nThe n log n bound is a loose upper bound, but the tight bound is linear."
+  },
+  {
+   "jid": "1f07635811c4",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "how does a database index speed up reads and what does it cost me on writes? short version",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "An index is a sorted structure, usually a B-tree, that lets the engine jump straight to matching rows instead of scanning the whole table, so a lookup goes from linear to roughly logarithmic.\n\nThe cost is on writes. Every insert, update, or delete has to update the index too, so writes get slower, and each index takes extra disk space. More indexes means more write overhead, so I only add ones the queries actually use."
+  },
+  {
+   "jid": "349599c7c771",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "what's the new time and space complexity?",
+   "conversation": [
+    "USER (typed to Natively): what's the time complexity of this?\n\nfunction hasDuplicate(nums: number[]): boolean {\n  for (let i = 0; i < nums.length; i++) {\n    for (let j = i + 1; j < nums.length; j++) {\n      if (nums[i] === nums[j]) return true;\n    }\n  }\n  return false;\n}",
+    "NATIVELY: **O(n²)** time, since the outer loop runs n times and the inner loop scans the rest of the array each pass, giving roughly n²/2 comparisons. Space is **O(1)**, just the two loop counters, no extra storage.",
+    "USER (typed to Natively): make it faster",
+    "NATIVELY: The nested loops make it **O(n²)** time, since for each element we scan the rest of the array, and **O(1)** space. To make it faster, trade space for time: use a **Set** and check membership as you go, which brings it down to **O(n)** time and **O(n)** space.\n\n```typescript\nfunction hasDuplicate(nums: number[]): boolean {\n  const seen = new Set<number>();\n  for (const num of nums) {\n    if (seen.has(num)) return true;\n    seen.add(num);\n  }\n  return false;\n}\n```\n\nOld: O(n²) time, O(1) space. New: O(n) time, O(n) space."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Time Complexity: **O(n)**,  one pass through the array, and each Set lookup and insert is O(1) on average.\n\nSpace Complexity: **O(n)**,  the Set can hold up to n elements in the worst case, when there are no duplicates."
+  },
+  {
+   "jid": "526ed79ad733",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Design the tables for a social app where users write posts and other users can like them.",
+   "conversation": [
+    "INTERVIEWER: Let's do some data modelling.",
+    "USER (spoken): Sure.",
+    "INTERVIEWER: Assume the app is mostly reads. People scroll and like far more than they post.",
+    "USER (spoken): Got it, read heavy."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Here's the schema I'd go with, keeping the read-heavy access pattern in mind.\n\n```sql\nCREATE TABLE users (\n    id          BIGSERIAL PRIMARY KEY,\n    handle      TEXT NOT NULL UNIQUE,\n    display_name TEXT NOT NULL,\n    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE TABLE posts (\n    id          BIGSERIAL PRIMARY KEY,\n    author_id   BIGINT NOT NULL REFERENCES users(id),\n    body        TEXT NOT NULL,\n    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE TABLE likes (\n    user_id     BIGINT NOT NULL REFERENCES users(id),\n    post_id     BIGINT NOT NULL REFERENCES posts(id),\n    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),\n    PRIMARY KEY (user_id, post_id)\n);\n\nCREATE INDEX idx_posts_author_created ON posts (author_id, created_at DESC);\nCREATE INDEX idx_posts_created        ON posts (created_at DESC);\nCREATE INDEX idx_likes_post           ON likes (post_id);\n```\n\nThree tables: users, posts, and a likes join table. The composite primary key on `(user_id, post_id)` enforces one like per user per post and gives you the \"has this user liked this post\" lookup for free. I index `likes(post_id)` so counting likes on a post is a cheap index scan, and index posts by `created_at DESC` for the feed.\n\nSince it's read-heavy, I'd keep a denormalized `like_count` on posts, updated on write, so the feed doesn't aggregate the likes table on every scroll. The tradeoff is a counter that can drift, so I'd reconcile it periodically or make the increment part of the same transaction as the like insert."
+  },
+  {
+   "jid": "a6143bd1732e",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "given the limits in that statement, would plain recursive dfs be safe for counting the clusters or should I go iterative?",
+   "conversation": [],
+   "evidence_ids": [
+    "TECH-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Plain recursive DFS is not safe here. The stress runs go up to n = 1,000,000,000, and a chain of links can make the recursion depth O(n), which blows the call stack long before you finish. So I'd go iterative: an explicit stack or queue, which keeps the extra memory at O(n) as the statement allows.\n\nThere's a bigger problem though. The statement says the stress runs give links as an n by n adjacency matrix with n up to a billion, so you can't materialize that matrix at all. I'd treat the input as an adjacency list built from the link pairs, and note that assumption in the submission. Also, since production links are one-way, I'd decide whether \"cluster\" means weakly or strongly connected and state which I picked."
+  },
+  {
+   "jid": "203e329858c5",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So what's the plan?",
+   "conversation": [
+    "INTERVIEWER: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "INTERVIEWER: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Two weeks is recoverable if we cut scope rather than rush the integration. I'd freeze the current API version, get the vendor to confirm the change in writing, and re-baseline the date with the team today."
+  },
+  {
+   "jid": "9a4b448656be",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Alright, let's code the core of your take-home now. Write the function that consolidates the windows for one region.",
+   "conversation": [],
+   "evidence_ids": [
+    "TECH-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "```python\ndef consolidate_region(windows):\n    \"\"\"Consolidate overlapping or touching windows for a single region.\n\n    windows: iterable of (start, end) tuples, unsorted, may contain duplicates.\n    Returns a new list of (start, end) tuples sorted by start, input untouched.\n    \"\"\"\n    ordered = sorted(windows)\n    merged = []\n    for start, end in ordered:\n        if merged and start <= merged[-1][1]:\n            if end > merged[-1][1]:\n                merged[-1] = (merged[-1][0], end)\n        else:\n            merged.append((start, end))\n    return merged\n```\n\nSorting first makes the merge a single linear pass, and `start <= merged[-1][1]` is what catches the touching case where one window ends exactly when the next begins. It builds a fresh list, so the input is never mutated.\n\nTime O(n log n), space O(n)."
+  },
+  {
+   "jid": "a9e4f9ee7e80",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "what data structure gives me the running median of a stream of numbers?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Two heaps: a max-heap for the lower half and a min-heap for the upper half. Keep their sizes within one of each other, and the median is either the top of the larger heap or the average of both tops. Insertion is O(log n), and reading the median is O(1)."
+  }
+ ]
+}

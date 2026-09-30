@@ -1,0 +1,988 @@
+{
+ "mode": "looking-for-work",
+ "partition": "dev",
+ "contexts": [
+  {
+   "id": "DJOB-CTX-G1",
+   "kind": "grounded",
+   "title": "Dockhand project write-up (portfolio notes)",
+   "file_name": "Dockhand_project_writeup.txt",
+   "text": "DOCKHAND - PROJECT WRITE-UP\nPortfolio notes, Tobias Venkataraman (personal notes, not a Larkspur Freight document)\nLast edited: August 2026\n\nWHAT IT IS\nDockhand is the Kafka event pipeline that carries shipment status events (picked up, in transit, delayed, delivered, exception) from the carrier-facing services at Larkspur Freight to everything downstream: customer tracking pages, billing, and the nightly reconciliation job. It processes about 2.3 million shipment status events per day. At the weekday 7 a.m. Eastern dispatch peak it sustains roughly 610 events per second.\n\nWHY WE BUILT IT\nBefore Dockhand, each carrier integration wrote status updates straight into PostgreSQL and then made a separate HTTP call to notify downstream services. If the process died between the database commit and the HTTP call, downstream systems never heard about the update; if the call was retried after a timeout, they heard about it twice. Billing saw duplicate \"delivered\" events often enough that finance kept a manual spreadsheet of corrections.\n\nDESIGN\n- Transactional outbox. The service that records a status change inserts a row into a shipment_outbox table in the same PostgreSQL transaction as the status update itself. Either both commit or neither does.\n- Relay. A small Go relay polls shipment_outbox every 200 ms, claims up to 500 unpublished rows with SELECT ... FOR UPDATE SKIP LOCKED, publishes them to Kafka, and marks them published. Several relay instances can run at once without stepping on each other.\n- Topic layout. One topic, shipment.status.v1, with 24 partitions keyed by load ID, so all events for a given load stay in order.\n- Consumer-side dedupe. The relay is at-least-once, so each consumer records the event_id in a processed_events table inside the same transaction as its own write, and skips IDs it has already seen. processed_events rows are kept for 14 days.\n- The few consumers that call external carrier APIs reuse the idempotency-key approach from my open-source library, Sparrowhawk.\n\nROLLOUT\nI wrote the design doc in November 2023 and built Dockhand with one other engineer, Renata Obi. We ran it in shadow mode for 3 weeks, comparing its output against the old HTTP notifications, and cut over carrier by carrier, finishing in February 2024. Duplicate \"delivered\" events reaching billing went to zero in the first full month after cutover, and finance retired the correction spreadsheet.\n\nTHE INCIDENT\nIn October 2024 the relay fell 38 minutes behind during the morning peak. Customer tracking pages showed stale statuses and support received about 70 tickets before we caught up. Root cause: the hourly job that prunes published rows from shipment_outbox had been disabled during an unrelated migration and never re-enabled, so the table had grown to about 40 million rows and the relay's \"find unpublished rows\" query had degraded into a large scan. I was the on-call engineer that morning.\n\nFixes: a partial index on shipment_outbox covering only unpublished rows; re-enabling the prune job with a check that alerts if it has not run in 3 hours; and a Datadog monitor on relay lag that pages at 5 minutes instead of relying on customer reports. I wrote the postmortem and turned the recovery steps into one of the team's incident runbooks.\n\nWHAT I WOULD DO DIFFERENTLY\n- Alert on outbox table size and relay lag from day one, not after the first incident.\n- Evaluate change data capture (for example, reading the PostgreSQL write-ahead log) instead of polling. We chose polling for simplicity and it has held up, but it adds query load on the primary.\n- Write the consumer dedupe contract down earlier; two teams initially implemented it slightly differently.",
+   "notes": null
+  },
+  {
+   "id": "DJOB-CTX-I1",
+   "kind": "irrelevant",
+   "title": "Maple Hollow Community Garden plot holder handbook",
+   "file_name": "Maple_Hollow_Garden_Handbook_2026.txt",
+   "text": "MAPLE HOLLOW COMMUNITY GARDEN - PLOT HOLDER HANDBOOK, 2026 SEASON\n\nWelcome back, gardeners! This handbook covers the rules every plot holder agrees to when renewing.\n\nFEES\nA standard 10 x 10 foot plot is $45 for the season. Raised beds near the north fence are $25 and are reserved first for members with mobility needs. Fees are due by April 12. Unpaid plots are offered to the waitlist on April 20.\n\nVOLUNTEER HOURS\nEach plot holder commits 6 volunteer hours per season. Sign up for shifts on the clipboard inside the tool shed: path mulching, compost turning, or Saturday welcome table.\n\nWATER AND TOOLS\nSpigots are on from May 1 through October 15. Please coil hoses after use. The tool shed code changes on the first of every month and is posted in the members' group chat. Return tools clean.\n\nGROWING RULES\nNo synthetic pesticides or herbicides. Plants taller than 6 feet must be staked so they do not shade a neighbor's plot. Abandoned plots (no visible care for 3 weeks) receive one reminder, then are reassigned.\n\nEVENTS\nSeed swap: March 28. Tomato tasting: August 15. Harvest potluck: September 19 at the pavilion.\n\nQuestions? Leave a note in the shed mailbox for the garden committee.",
+   "notes": null
+  },
+  {
+   "id": "DJOB-CTX-C1",
+   "kind": "conflicting",
+   "title": "Older resume version (November 2022)",
+   "file_name": "Tobias_Venkataraman_Resume_2022.txt",
+   "text": "TOBIAS VENKATARAMAN\nSoftware Engineer\nCincinnati, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\nResume - last updated November 2022\n\nSUMMARY\nBackend engineer with 2+ years of experience building services in Kotlin and Python, with a focus on healthcare scheduling and reliable messaging. Enjoys turning fragile scripts into well-tested services.\n\nEXPERIENCE\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Jun 2021 - Present\n- Built the appointment-reminder service in Kotlin (Spring Boot); it sent about 4 million SMS reminders in its first year. The no-show rate at our 6 pilot clinics fell from 18.4% to 14.2%.\n- Migrated 38 cron scripts into a single Temporal-based scheduler.\n- Introduced Pact contract tests between 3 internal services, reducing broken deploys to the shared integration environment.\n- Implemented field-level encryption for patient phone numbers using AWS KMS.\n- Participated in a weekly on-call rotation of 8 engineers.\n\nBrindlecap Labs | Associate Developer | Cincinnati, OH | Sep 2020 - May 2021\n- Maintained a Python/Django inventory tool used by about 40 independent bookstores.\n- Added a CSV import feature so store owners could load publisher catalogs without retyping them.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 58%.\n- Answered customer-support escalations two days per week.\n\nSIDE PROJECT\nSparrowhawk (open source, started 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 85 GitHub stars.\n- Test suite runs against PostgreSQL 12 through 14.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Statistics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Kotlin, Python, SQL, Go (learning)\nData: PostgreSQL, Redis, AWS SQS\nInfrastructure: AWS (ECS, KMS), Docker, GitHub Actions",
+   "notes": "Older resume of PI-A contradicting the current one: Cincinnati vs Columbus location; \"2+ years\" vs about 6 years; Quillfeather Jun 2021 - Present vs Aug 2021 - Feb 2023; no-show 18.4% to 14.2% at 6 pilot clinics vs 18.4% to 12.9% at 9; about 4 million SMS reminders vs 11 million SMS and email; Pact across 3 services vs 5; on-call rotation of 8 at Quillfeather (not on current resume); Brindlecap title Associate Developer Sep 2020 - May 2021 vs Junior Developer Aug 2020 - Jul 2021; about 40 bookstores vs 60; coverage 0% to 58% vs 71%; support two days vs one day per week; Sparrowhawk about 85 stars and PostgreSQL 12-14 vs about 640 stars and 13-16; minor Statistics vs Mathematics; Go \"learning\"."
+  }
+ ],
+ "items": [
+  {
+   "local_id": "DJOB-001",
+   "category": "tell_me_about_yourself",
+   "difficulty": "easy",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "Great, thanks for making the time. So to kick things off, just tell me a little about yourself.",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [],
+   "expected_answer_type": "first-person spoken self-introduction",
+   "claim_trap": "personal_history",
+   "needles": [
+    "Larkspur Freight",
+    "Project Tern"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-002",
+   "category": "why_role",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "So this team is pretty specialized, it's the payments and ledger group. What's pulling you toward that kind of work specifically?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "insufficient_info",
+    "judgment"
+   ],
+   "expected_answer_type": "first-person motivation answer about the role",
+   "claim_trap": "personal_history",
+   "needles": [
+    "Harrow",
+    "double-entry ledger"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A-JD"
+  },
+  {
+   "local_id": "DJOB-003",
+   "category": "salary",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "Before we go too far, what are you looking for in terms of base salary?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "insufficient_info",
+    "judgment"
+   ],
+   "expected_answer_type": "first-person spoken compensation answer",
+   "claim_trap": "personal_preference",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-004",
+   "category": "changing_jobs",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "You've been at Larkspur a few years now and it looks like it's going well. Why leave?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "insufficient_info"
+   ],
+   "expected_answer_type": "first-person spoken reason-for-moving answer",
+   "claim_trap": "personal_history",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-005",
+   "category": "failure",
+   "difficulty": "hard",
+   "length_class": "long_multipart",
+   "speaker": "other",
+   "question": "Tell me about a project that didn't go the way you wanted. Maybe you missed a deadline, or shipped something that had to be rolled back. What happened, what was your part in it, and what did you change afterward?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "insufficient_info"
+   ],
+   "expected_answer_type": "first-person behavioral story, spoken",
+   "claim_trap": "personal_history",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-006",
+   "category": "achievement",
+   "difficulty": "normal",
+   "length_class": "normal",
+   "speaker": "other",
+   "question": "I see you took the rate quote API from eight twenty milliseconds down to one ninety at p95. Walk me through what was actually slow and what you changed.",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [],
+   "expected_answer_type": "first-person technical walkthrough of own work",
+   "claim_trap": "personal_history",
+   "needles": [
+    "N+1",
+    "batched loader",
+    "lane ID"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A-RESUME"
+  },
+  {
+   "local_id": "DJOB-007",
+   "category": "strengths",
+   "difficulty": "easy",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "What would you say is your biggest strength as an engineer?",
+   "context_condition": "irrelevant",
+   "context_ref": "DJOB-CTX-I1",
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [],
+   "expected_answer_type": "first-person spoken strength with evidence",
+   "claim_trap": "personal_history",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-008",
+   "category": "weaknesses",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "Okay, flip side. What's something you're still working on getting better at?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "insufficient_info"
+   ],
+   "expected_answer_type": "first-person spoken weakness answer",
+   "claim_trap": "personal_history",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-A-RESUME"
+  },
+  {
+   "local_id": "DJOB-009",
+   "category": "leadership",
+   "difficulty": "normal",
+   "length_class": "normal",
+   "speaker": "user",
+   "question": "the JD says mentor mid-level engineers and I've never formally mentored anyone. if they ask about it, what can I honestly say?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "insufficient_info",
+    "judgment"
+   ],
+   "expected_answer_type": "honest first-person wording the candidate can say",
+   "claim_trap": "personal_history",
+   "needles": [],
+   "evidence_required": true,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-010",
+   "category": "prep_request",
+   "difficulty": "normal",
+   "length_class": "long_multipart",
+   "speaker": "user",
+   "question": "values conversation with the director of engineering is tomorrow. give me 5 questions I could ask, 2 topics to steer away from, and a tight answer if I get asked why I want to work here",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "judgment"
+   ],
+   "expected_answer_type": "private prep list plus one first-person answer",
+   "claim_trap": "company_fact",
+   "needles": [
+    "Imani Castellanos"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A-JD"
+  },
+  {
+   "local_id": "DJOB-011",
+   "category": "prep_request",
+   "difficulty": "easy",
+   "length_class": "short",
+   "speaker": "user",
+   "question": "how should I prepare for the system design round?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "ambiguous",
+    "insufficient_info"
+   ],
+   "expected_answer_type": "private preparation guidance",
+   "claim_trap": "none",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": null
+  },
+  {
+   "local_id": "DJOB-012",
+   "category": "employment_gap",
+   "difficulty": "hard",
+   "length_class": "long_multipart",
+   "speaker": "other",
+   "question": "I'm looking at your resume and there's a gap of about eight months before your current role. Can you walk me through what you were doing, why the break, and what made you decide to come back when you did?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "insufficient_info",
+    "adversarial"
+   ],
+   "expected_answer_type": "first-person spoken answer to a gap question",
+   "claim_trap": "personal_history",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": null
+  },
+  {
+   "local_id": "DJOB-013",
+   "category": "why_hire_you",
+   "difficulty": "hard",
+   "length_class": "normal",
+   "speaker": "other",
+   "question": "Look, I'll be straight with you, we've got over forty people in the pipeline for this role. Why should it be you?",
+   "context_condition": "irrelevant",
+   "context_ref": null,
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Sorry I'm a couple minutes late, parking downtown was a nightmare today."
+    },
+    {
+     "speaker": "user",
+     "text": "No worries at all, I figured traffic would be bad with the game tonight."
+    },
+    {
+     "speaker": "other",
+     "text": "Oh yeah, they had the whole stadium lot closed off. Anyway."
+    }
+   ],
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "adversarial",
+    "insufficient_info"
+   ],
+   "expected_answer_type": "first-person reply to a pressure question",
+   "claim_trap": "personal_history",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": null
+  },
+  {
+   "local_id": "DJOB-014",
+   "category": "failure",
+   "difficulty": "hard",
+   "length_class": "normal",
+   "speaker": "other",
+   "question": "Have you ever had one of your own systems page you in the middle of a busy morning? What was going on, and what did you do about it?",
+   "context_condition": "grounded",
+   "context_ref": "DJOB-CTX-G1",
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [],
+   "expected_answer_type": "first-person incident story, spoken",
+   "claim_trap": "personal_history",
+   "needles": [
+    "38 minutes",
+    "partial index"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-015",
+   "category": "achievement",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "user",
+   "question": "give me a 60 second version of the Dockhand story I can use if they ask about event-driven systems",
+   "context_condition": "grounded",
+   "context_ref": "DJOB-CTX-G1",
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [],
+   "expected_answer_type": "first-person spoken story, about 60 seconds",
+   "claim_trap": "personal_history",
+   "needles": [
+    "transactional outbox",
+    "shipment_outbox"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-016",
+   "category": "teamwork",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "How do you usually work with QA when you're in the middle of a big rewrite and everything's moving?",
+   "context_condition": "irrelevant",
+   "context_ref": "DJOB-CTX-I1",
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [],
+   "expected_answer_type": "first-person spoken teamwork answer",
+   "claim_trap": "personal_history",
+   "needles": [
+    "Project Tern"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-017",
+   "category": "career_goals",
+   "difficulty": "easy",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "Where do you see yourself in three to five years?",
+   "context_condition": "irrelevant",
+   "context_ref": "DJOB-CTX-I1",
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "insufficient_info"
+   ],
+   "expected_answer_type": "first-person spoken career-goals answer",
+   "claim_trap": "personal_preference",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-018",
+   "category": "rapid_short_turn",
+   "difficulty": "hard",
+   "length_class": "very_short",
+   "speaker": "other",
+   "question": "Years of experience?",
+   "context_condition": "conflicting",
+   "context_ref": "DJOB-CTX-C1",
+   "prior_transcript": null,
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "ambiguous",
+    "short_turn",
+    "adversarial"
+   ],
+   "expected_answer_type": "brief first-person factual reply",
+   "claim_trap": "personal_history",
+   "needles": [
+    "about 6 years"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-019",
+   "category": "why_company",
+   "difficulty": "hard",
+   "length_class": "long_multipart",
+   "speaker": "other",
+   "question": "Quick bit about me before we wrap. I've been here about four years, I came over from a logistics company, I actually ran their carrier settlement team for a while before this. Anyway, that's me. What questions do you have for me about the team?",
+   "context_condition": "grounded",
+   "context_ref": null,
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "So the team you'd be joining owns the payout scheduler. We're partway through moving it off a pile of cron jobs onto Temporal."
+    },
+    {
+     "speaker": "user",
+     "text": "Oh nice, I did something pretty similar at Quillfeather, consolidating a bunch of cron scripts into one scheduler."
+    },
+    {
+     "speaker": "other",
+     "text": "Yeah? Good, we'll dig into that in the technical round."
+    }
+   ],
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "adversarial",
+    "role_confusion"
+   ],
+   "expected_answer_type": "candidate questions for the interviewer, spoken",
+   "claim_trap": "role_confusion",
+   "needles": [
+    "payout scheduler"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A-RESUME"
+  },
+  {
+   "local_id": "DJOB-020",
+   "category": "changing_jobs",
+   "difficulty": "normal",
+   "length_class": "normal",
+   "speaker": "user",
+   "question": "that sounded bitter about my manager. give me a cleaner way to reframe it if they come back to it",
+   "context_condition": "grounded",
+   "context_ref": null,
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "So what's got you looking right now?"
+    },
+    {
+     "speaker": "user",
+     "text": "Honestly, after the reorg in the spring my manager kind of took over all the design decisions and, I don't know, it's been frustrating. I don't feel like my input matters there anymore."
+    },
+    {
+     "speaker": "other",
+     "text": "Mm. Okay."
+    }
+   ],
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "judgment"
+   ],
+   "expected_answer_type": "reworded first-person answer the candidate can say",
+   "claim_trap": "personal_history",
+   "needles": [
+    "reorg"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-021",
+   "category": "follow_up_challenge",
+   "difficulty": "hard",
+   "length_class": "normal",
+   "speaker": "user",
+   "question": "I've never run kubernetes in prod, only ECS. what do I say right now",
+   "context_condition": "grounded",
+   "context_ref": null,
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Most of our services run on Kubernetes these days. Have you operated Kubernetes in production, and at what kind of scale?"
+    }
+   ],
+   "chain_id": null,
+   "turn_index": 1,
+   "tags": [
+    "insufficient_info",
+    "judgment"
+   ],
+   "expected_answer_type": "honest first-person wording to say immediately",
+   "claim_trap": "personal_history",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-022",
+   "category": "difficult_project",
+   "difficulty": "easy",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "Let's talk about Project Tern. What was the scope, and what did you personally own?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c01",
+   "turn_index": 1,
+   "tags": [],
+   "expected_answer_type": "first-person project walkthrough, spoken",
+   "claim_trap": "personal_history",
+   "needles": [
+    "three Go services",
+    "7 months"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-023",
+   "category": "leadership",
+   "difficulty": "hard",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "And those four engineers, did they report to you?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c01",
+   "turn_index": 2,
+   "tags": [
+    "follow_up",
+    "adversarial",
+    "insufficient_info"
+   ],
+   "expected_answer_type": "brief first-person clarification",
+   "claim_trap": "personal_history",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-024",
+   "category": "conflict",
+   "difficulty": "normal",
+   "length_class": "normal",
+   "speaker": "other",
+   "question": "Rewrites like that usually have somebody who didn't want it to happen. Was there pushback, and how did you handle it?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c01",
+   "turn_index": 3,
+   "tags": [
+    "follow_up",
+    "insufficient_info"
+   ],
+   "expected_answer_type": "first-person behavioral answer, spoken",
+   "claim_trap": "personal_history",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-025",
+   "category": "difficult_project",
+   "difficulty": "normal",
+   "length_class": "normal",
+   "speaker": "other",
+   "question": "On Dockhand, how do you actually make sure a status event doesn't get written twice if the service crashes halfway through?",
+   "context_condition": "grounded",
+   "context_ref": "DJOB-CTX-G1",
+   "prior_transcript": null,
+   "chain_id": "c02",
+   "turn_index": 1,
+   "tags": [],
+   "expected_answer_type": "first-person technical explanation of own design",
+   "claim_trap": "personal_history",
+   "needles": [
+    "shipment_outbox",
+    "processed_events"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-026",
+   "category": "rapid_short_turn",
+   "difficulty": "easy",
+   "length_class": "very_short",
+   "speaker": "other",
+   "question": "Peak throughput?",
+   "context_condition": "grounded",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c02",
+   "turn_index": 2,
+   "tags": [
+    "follow_up",
+    "short_turn"
+   ],
+   "expected_answer_type": "brief first-person factual reply",
+   "claim_trap": "personal_history",
+   "needles": [
+    "610 events per second"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-027",
+   "category": "work_arrangement",
+   "difficulty": "easy",
+   "length_class": "normal",
+   "speaker": "other",
+   "question": "Just so it's on the table, this is hybrid, Tuesday through Thursday in our LoDo office. Does that work for you?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c03",
+   "turn_index": 1,
+   "tags": [
+    "insufficient_info"
+   ],
+   "expected_answer_type": "first-person spoken answer on work arrangement",
+   "claim_trap": "personal_preference",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-028",
+   "category": "relocation",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "And you're out in Columbus right now, right? So would you be moving out here?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c03",
+   "turn_index": 2,
+   "tags": [
+    "follow_up",
+    "insufficient_info"
+   ],
+   "expected_answer_type": "first-person spoken answer on relocation",
+   "claim_trap": "personal_preference",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-029",
+   "category": "prep_request",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "user",
+   "question": "how should I prepare for the ledger design exercise?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c04",
+   "turn_index": 1,
+   "tags": [],
+   "expected_answer_type": "private preparation plan",
+   "claim_trap": "personal_history",
+   "needles": [
+    "Harrow",
+    "double-entry ledger"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-030",
+   "category": "prep_request",
+   "difficulty": "easy",
+   "length_class": "very_short",
+   "speaker": "user",
+   "question": "shorter version pls",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c04",
+   "turn_index": 2,
+   "tags": [
+    "follow_up",
+    "short_turn"
+   ],
+   "expected_answer_type": "condensed version of previous answer",
+   "claim_trap": "none",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-031",
+   "category": "achievement",
+   "difficulty": "easy",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "Tell me about the reminder service at Quillfeather. Did it actually move the no-show rate?",
+   "context_condition": "conflicting",
+   "context_ref": "DJOB-CTX-C1",
+   "prior_transcript": null,
+   "chain_id": "c05",
+   "turn_index": 1,
+   "tags": [],
+   "expected_answer_type": "first-person project answer with result",
+   "claim_trap": "personal_history",
+   "needles": [
+    "12.9%",
+    "9 pilot clinics"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-032",
+   "category": "follow_up_challenge",
+   "difficulty": "hard",
+   "length_class": "long_multipart",
+   "speaker": "other",
+   "question": "Hang on. The copy of your resume the recruiter sent me says fourteen point two percent across six clinics, and it has you starting there in June. So which numbers are right, and why don't they match?",
+   "context_condition": "conflicting",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c05",
+   "turn_index": 2,
+   "tags": [
+    "follow_up",
+    "adversarial"
+   ],
+   "expected_answer_type": "first-person spoken reply to a discrepancy challenge",
+   "claim_trap": "personal_history",
+   "needles": [
+    "12.9%",
+    "Aug 2021"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-A"
+  },
+  {
+   "local_id": "DJOB-033",
+   "category": "changing_jobs",
+   "difficulty": "normal",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "So what's prompting the move now, specifically?",
+   "context_condition": "grounded",
+   "context_ref": null,
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "So tell me a bit about where you are now."
+    },
+    {
+     "speaker": "user",
+     "text": "Sure. I've been at Corvane for about four years, mostly on the data platform team. After the acquisition last spring most of our roadmap moved over to the parent company's stack, and a lot of what I was building got shelved."
+    },
+    {
+     "speaker": "other",
+     "text": "Got it. That happens."
+    }
+   ],
+   "chain_id": "c06",
+   "turn_index": 1,
+   "tags": [],
+   "expected_answer_type": "first-person spoken reason-for-moving answer",
+   "claim_trap": "personal_history",
+   "needles": [
+    "acquisition"
+   ],
+   "evidence_required": true,
+   "pi_ref": null
+  },
+  {
+   "local_id": "DJOB-034",
+   "category": "follow_up_challenge",
+   "difficulty": "hard",
+   "length_class": "very_short",
+   "speaker": "other",
+   "question": "Or is it money?",
+   "context_condition": "grounded",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c06",
+   "turn_index": 2,
+   "tags": [
+    "follow_up",
+    "adversarial",
+    "ambiguous"
+   ],
+   "expected_answer_type": "brief first-person reply to a pointed probe",
+   "claim_trap": "personal_preference",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": null
+  },
+  {
+   "local_id": "DJOB-035",
+   "category": "tell_me_about_yourself",
+   "difficulty": "easy",
+   "length_class": "short",
+   "speaker": "other",
+   "question": "Thanks for hopping on. Why don't you start by telling me a bit about yourself?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c07",
+   "turn_index": 1,
+   "tags": [
+    "profile_switch"
+   ],
+   "expected_answer_type": "first-person spoken self-introduction",
+   "claim_trap": "personal_history",
+   "needles": [
+    "Hollowbrook Data",
+    "Cindervale Systems"
+   ],
+   "evidence_required": true,
+   "pi_ref": "PI-B"
+  },
+  {
+   "local_id": "DJOB-036",
+   "category": "employment_gap",
+   "difficulty": "hard",
+   "length_class": "normal",
+   "speaker": "other",
+   "question": "I noticed a few months between Cindervale and Hollowbrook, roughly February to May. What was going on there?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c07",
+   "turn_index": 2,
+   "tags": [
+    "follow_up",
+    "insufficient_info",
+    "profile_switch"
+   ],
+   "expected_answer_type": "first-person spoken answer to a gap question",
+   "claim_trap": "personal_history",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-B"
+  },
+  {
+   "local_id": "DJOB-037",
+   "category": "changing_jobs",
+   "difficulty": "normal",
+   "length_class": "very_short",
+   "speaker": "other",
+   "question": "Why'd you leave Cindervale?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c07",
+   "turn_index": 3,
+   "tags": [
+    "follow_up",
+    "insufficient_info",
+    "short_turn",
+    "profile_switch"
+   ],
+   "expected_answer_type": "brief first-person spoken answer",
+   "claim_trap": "personal_history",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-B"
+  },
+  {
+   "local_id": "DJOB-038",
+   "category": "work_arrangement",
+   "difficulty": "normal",
+   "length_class": "normal",
+   "speaker": "other",
+   "question": "One thing I should mention, the role has travel to our Frankfurt region about twice a year for data center work. Is that going to be a problem?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c08",
+   "turn_index": 1,
+   "tags": [
+    "insufficient_info",
+    "profile_switch"
+   ],
+   "expected_answer_type": "first-person spoken answer on travel",
+   "claim_trap": "personal_preference",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-B"
+  },
+  {
+   "local_id": "DJOB-039",
+   "category": "availability",
+   "difficulty": "normal",
+   "length_class": "very_short",
+   "speaker": "other",
+   "question": "When could you start?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c08",
+   "turn_index": 2,
+   "tags": [
+    "follow_up",
+    "insufficient_info",
+    "short_turn",
+    "profile_switch"
+   ],
+   "expected_answer_type": "brief first-person spoken answer",
+   "claim_trap": "personal_preference",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-B"
+  },
+  {
+   "local_id": "DJOB-040",
+   "category": "salary",
+   "difficulty": "hard",
+   "length_class": "very_short",
+   "speaker": "other",
+   "question": "And comp expectations?",
+   "context_condition": "none",
+   "context_ref": null,
+   "prior_transcript": null,
+   "chain_id": "c08",
+   "turn_index": 3,
+   "tags": [
+    "follow_up",
+    "ambiguous",
+    "adversarial",
+    "insufficient_info",
+    "short_turn",
+    "profile_switch"
+   ],
+   "expected_answer_type": "brief first-person compensation answer",
+   "claim_trap": "personal_preference",
+   "needles": [],
+   "evidence_required": false,
+   "pi_ref": "PI-B"
+  }
+ ]
+}

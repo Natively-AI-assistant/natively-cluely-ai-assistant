@@ -1,0 +1,300 @@
+{
+ "batch": "b004-general",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "FGENH-CTX-G1": {
+   "title": "Condo association board meeting minutes",
+   "text": "Harbor Point Condominium Association - Board Meeting Minutes\nDate: Thursday, September 24\nLocation: Community room, Building B\nPresent: Linda Marsh (President), Owen Castellano (Treasurer), Priya Nair (Secretary), Hal Jensen, Beatriz Soto. Also present: Renee Okoro (property manager, Seaside Management) and 11 owners.\nQuorum confirmed. Meeting called to order at 7:02 pm.\n\n1. Approval of August minutes\nApproved unanimously without changes.\n\n2. Treasurer's report\nOwen Castellano reported the operating account is on budget for the year. The reserve fund balance is $179,500. Delinquent dues stand at three units, total $4,210; the management company has sent second notices.\n\n3. Building A elevator\nThe Building A elevator has been out of service intermittently since July because of a failing controller. Two quotes were received. The board voted 4-1 (Jensen opposed) to accept the Carver Lift Services quote of $38,500 to replace the controller, paid from the reserve fund. Carver estimates the work takes six to eight weeks once parts arrive; parts are on order and no arrival date has been given. Renee Okoro will post updates in the lobby and by email.\n\n4. Roof replacement, Buildings A and B\nThree bids were reviewed for full roof replacement on both buildings:\n- Kessler Roofing: $212,000\n- Summit Exteriors: $236,500\n- Delgado & Sons: $249,000\nThe board voted unanimously to move forward with Kessler Roofing, subject to reference checks and a signed contract. A start date will be negotiated after the contract is signed. The treasurer noted that after the elevator payment the reserve fund cannot cover the full roof cost. A special assessment across all 64 units was discussed at length. Several owners asked for a payment plan option. The motion on a special assessment was tabled to the October 22 meeting, pending an updated reserve study. No assessment amount was agreed.\n\n5. Pet policy\nThe board voted 5-0 to remove the 35-pound weight limit for dogs. The limit of two pets per unit is unchanged. All pets, including existing ones, must be registered with the management office using the new form, with proof of rabies vaccination for dogs and cats. Registration deadline: November 15.\n\n6. Guest parking\nThe old paper guest passes are being retired because of misuse. Each unit will receive two numbered hang-tag guest passes. Renee Okoro will order the passes and distribute them to units by October 10. Vehicles in guest spaces without a hang-tag after October 10 may be towed after one warning sticker.\n\n7. Open forum\nOwners raised noise from the pool pump at night (management to check timer), a request for a second bike rack by Building B (board to get a price), and a question about EV charging (no action; to be revisited in spring).\n\nAction items\n- Renee Okoro: sign Carver contract; order guest hang-tags and distribute by October 10; post elevator updates.\n- Owen Castellano: request updated reserve study before October 22.\n- Priya Nair: circulate new pet registration form to all owners by October 1.\n- Linda Marsh: contact Kessler references.\n\nNext meeting: Thursday, October 22, 7 pm, community room.\nAdjourned 8:41 pm."
+  },
+  "FGEN-CTX-G1": {
+   "title": "Maple Court Apartments - resident notice, fall building works",
+   "text": "MAPLE COURT APARTMENTS - RESIDENT NOTICE\nIssued September 28, 2026 by the Management Office, 410 Alder Street\n\nDear residents,\n\nThis notice covers building work planned for October and November, plus a few reminders about payments and common areas. Please keep it for reference.\n\n1. Water shutoff\nThe water supply to all units will be shut off on Wednesday, October 14, from 9:00 a.m. to 1:00 p.m. while the plumbing contractor replaces the main riser valve on the ground floor. Please fill containers the night before if you need water during that window. When service returns, run your cold tap for two to three minutes to clear any discoloured water. If water has not returned by 2:00 p.m., call the office.\n\n2. Elevator modernization\nThe passenger elevator will be out of service from Monday, October 19 through Friday, November 6 while the cab, controls and doors are replaced. The freight elevator is not available to residents during this period. Residents who need mobility assistance during the elevator work should contact the office by October 9 so we can arrange help with groceries and deliveries. Large deliveries and move-ins will not be scheduled during these three weeks.\n\n3. Parking permits\nAnnual parking permits expire on October 31. Renewal costs $45 per vehicle and can be completed through the resident portal or at the office. Vehicles without a current permit after November 7 may be towed at the owner's expense. Guest parking is limited to 48 hours per visit; guests must display a paper pass available from the office.\n\n4. Rent payments\nRent is due on the 1st of each month. A late fee of $75 applies if rent has not been received by the end of the 5th. Payments through the resident portal by bank transfer (ACH) have no processing fee. Card payments are accepted but carry a 2.5% processing fee charged by the payment provider. Cash is not accepted at the office.\n\n5. Package room\nThe package room on the lobby level is open from 7:00 a.m. to 10:00 p.m. daily. Packages not collected within 10 days will be returned to the carrier. Perishable deliveries should be picked up the same day.\n\n6. Pest inspection\nOur pest control vendor will carry out a routine inspection of all kitchens and bathrooms on Tuesday, October 27, between 8:00 a.m. and 3:00 p.m. You do not need to be home. Please clear the area under your kitchen sink.\n\n7. Quiet hours and common areas\nQuiet hours are 10:00 p.m. to 7:00 a.m. The rooftop terrace closes for the season on November 1. The bike storage room is currently full; ask the office to join the waitlist.\n\n8. Lease renewals\nResidents whose leases end in the coming months will receive a renewal offer at least 60 days before the lease end date. If you have not received yours by then, please contact the office.\n\nOffice hours are Monday to Friday, 9:00 a.m. to 5:30 p.m. The property manager is Dana Okafor. For after-hours emergencies such as flooding or no heat, call the emergency line listed on the back of your unit door.\n\nThank you for your patience while we complete these improvements.\n\nMaple Court Management Office"
+  },
+  "FGEN-CTX-I1": {
+   "title": "Sourdough starter feeding schedule",
+   "text": "SOURDOUGH STARTER - FEEDING SCHEDULE\n\nDay 1: Mix 50 g whole wheat flour with 50 g lukewarm water in a clean jar. Cover loosely and leave at room temperature, ideally 24 to 26 C.\n\nDay 2: You may see a few bubbles or nothing at all. Both are normal. Leave it alone.\n\nDays 3 to 6: Once a day, discard all but 50 g of the starter, then add 50 g flour (half whole wheat, half white) and 50 g water. Stir well and mark the level on the jar with a rubber band.\n\nDays 7 onward: Switch to two feedings a day, about 12 hours apart. A healthy starter should roughly double within 4 to 8 hours of feeding and smell pleasantly sour, like yogurt.\n\nTroubleshooting\n- Grey liquid on top (\"hooch\") means it is hungry. Pour it off and feed.\n- No rise after day 10: move it somewhere warmer and use more whole wheat flour.\n- Pink or orange streaks: throw it out and start again.\n\nStorage\nOnce established, keep it in the fridge and feed once a week. Take it out the night before baking and give it two room-temperature feedings before mixing dough."
+  },
+  "FGEN-CTX-C1": {
+   "title": "Brightline Home Renovations - quote Q-2291, hall bathroom remodel",
+   "text": "BRIGHTLINE HOME RENOVATIONS\nQuote Q-2291 - Hall bathroom remodel\nPrepared for: homeowner, 27 Birchwood Lane\nPrepared by: Sam Ferreira, project lead\nDate: September 24, 2026\n\nSummary\nFull remodel of the hall bathroom: remove existing tub and tile, install walk-in shower, new vanity, toilet, flooring, lighting and exhaust fan. Quoted total: $14,200, including materials, labor, disposal and permit.\n\nSchedule\nStart date: Monday, October 12. Estimated duration: 3 weeks.\n\nLine items\nDemolition and disposal - $1,350\nPlumbing rough-in and fixtures - $3,900\nWalk-in shower, tile and glass - $5,200\nVanity, toilet and hardware - $2,300\nFlooring - $1,200\nElectrical, lighting and fan - $1,100\nPaint and finish - $600\nLine item total: $15,650\n\nPayment terms\nA deposit of 30% is due on signing to reserve the start date. The balance is due in two installments: 40% at completion of rough-in and the remainder at final walkthrough. For this project the deposit is $5,000.\n\nPermits\nBrightline pulls the building permit on your behalf. Permit fees are billed separately at cost, typically $250 to $400 depending on the city.\n\nWarranty\nAll workmanship carries a 2-year warranty from the completion date. Manufacturer warranties apply to fixtures.\n\nTimeline notes\nWork begins October 19 pending tile delivery. Most bathrooms of this size take approximately 5 weeks, including inspection. Water to the bathroom will be off for most of the project; the rest of the house stays connected.\n\nTerms\nThis quote is valid for 30 days. Changes after signing are handled by written change order. Workmanship warranty: 12-month on labor, excluding misuse and normal wear.\n\nQuestions: Sam Ferreira, project lead."
+  },
+  "FGEN-CTX-G2": {
+   "title": "Riverbend Family Clinic - preparing for your annual physical",
+   "text": "RIVERBEND FAMILY CLINIC\nPreparing for Your Annual Physical\n\nThank you for booking your annual physical with Riverbend Family Clinic. This sheet explains how to prepare so your visit runs smoothly. Your visit will be with Dr. Hollis Varga or a member of her care team.\n\nBefore your visit\n- If your provider ordered fasting bloodwork (such as a lipid panel or fasting glucose), do not eat or drink anything except water for 10 hours before your appointment. Please avoid coffee, including black coffee, and chewing gum during the fasting period. Take your usual medications with water unless your provider has told you otherwise.\n- Complete the health history questionnaire in the patient portal at least 2 days before your visit. If you cannot use the portal, arrive 30 minutes early to fill it in on paper.\n- Make a list of every medication, vitamin and supplement you take, including the dose.\n\nWhat to bring\n- Photo ID and your current insurance card.\n- Your medication list.\n- Glasses or hearing aids if you use them.\n- Any home blood pressure readings from the last month.\n\nArriving\nPlease arrive 15 minutes before your appointment time to check in. If you are more than 15 minutes late, we may need to reschedule you. Parking is available in Lot B behind the building; bring your ticket to the front desk for 2 hours of free validated parking. Street parking on Weller Avenue is metered.\n\nDuring your visit\nYour visit includes a review of your history, vital signs, a physical exam, and any screenings recommended for your age. Flu shots are available at no extra charge during your physical from October through March while supplies last. If you have a specific concern, mention it at check-in so enough time can be set aside; a separate appointment may be needed for complex issues.\n\nAfter your visit\nLab results are posted to the patient portal, usually within 3 business days. Your provider will message you if anything needs follow-up. Normal results may be posted without a personal note. Follow-up visits can often be done by telehealth.\n\nCancellations\nWe ask for at least 24 hours notice if you need to cancel or reschedule. Appointments missed or cancelled with less than 24 hours notice are subject to a $40 missed-appointment fee, which is not covered by insurance.\n\nBilling\nMost insurance plans cover one preventive physical per year at no cost to you. Additional services discussed or treated during the visit, such as a new problem or a chronic condition review, may be billed separately and may involve a copay. Questions about coverage should be directed to your insurance company; our billing office can provide the procedure codes.\n\nFront desk hours: Monday to Friday, 7:30 a.m. to 6:00 p.m.; Saturday, 8:00 a.m. to 12:00 p.m."
+  }
+ },
+ "items": [
+  {
+   "jid": "fe8edbed0632",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Who's handling the new guest parking passes and when are we supposed to have them?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGENH-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Renee Okoro is handling the new guest passes. She's ordering the numbered hang-tag passes and distributing them to units by **October 10**. After that date, cars in guest spaces without a hang-tag can be towed following one warning sticker."
+  },
+  {
+   "jid": "0fc2bc182ca6",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "And the elevator thing, how long is that going on for?",
+   "conversation": [
+    "OTHER PERSON (heard): Hey, did you see the notice about the water being shut off? When is that again?",
+    "NATIVELY: Yeah, it's **Wednesday, October 14**, from **9 a.m. to 1 p.m.**, while they replace the main riser valve. If the water's not back by 2, call the office."
+   ],
+   "evidence_ids": [
+    "FGEN-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The elevator's out from **Monday, October 19** through **Friday, November 6**, while they replace the cab, controls and doors. The freight elevator isn't available to residents during that stretch either, and if you need help with groceries or deliveries, contact the office by October 9."
+  },
+  {
+   "jid": "d6354615e2f6",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Funnier, but not embarrassing.",
+   "conversation": [
+    "USER (typed to Natively): I have to give a two minute toast at my brother's wedding on Saturday. Help me write the opening.",
+    "NATIVELY: I don't have any details about your brother, his partner, or the wedding, so I can't write a personal opening that's actually true. What I can give you is a shape that works, and you fill in the real names and moments.\n\nSomething like: \"Good evening, everyone. For those who don't know me, I'm [name], [brother]'s brother. I've had a front-row seat to his life for as long as I can remember, and tonight I finally get to say the thing I've been thinking for a while: he found the right one.\"\n\nThen go straight into one specific memory of the two of them, or of your brother before he met them, and land on a wish for the marriage. Two minutes is roughly 250 to 300 words, so keep it to one story, one turn, one toast.\n\nIf you tell me your brother's name, his partner's name, and one real thing about them, I'll write the actual opening for you."
+   ],
+   "evidence_ids": [
+    "FGEN-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I still don't have your brother's name, his partner's name, or one real thing about them, so I can't write a true opening yet. Give me those three and I'll make it funny without being embarrassing."
+  },
+  {
+   "jid": "dee0f4f3b35f",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Like I said, fourteen two is everything, all in, no surprises.",
+   "conversation": [
+    "OTHER PERSON (heard): So you've had a chance to look over the quote. Any questions before we lock in the start date?",
+    "NATIVELY: I've got a couple of things I want to nail down before we set the date. The quote says start October 12 in one place and October 19 in the timeline notes, so which one are we locking in? And the deposit is $5,000 on signing, right?"
+   ],
+   "evidence_ids": [
+    "FGEN-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's the number I had, $14,200, so we're aligned on the total. But it doesn't answer my two questions. The quote shows October 12 as the start date and October 19 in the timeline notes, so which one are we locking in? And is the deposit $5,000 on signing?"
+  },
+  {
+   "jid": "d889e147296d",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "I didn't get the job. Honestly I'm starting to think I'm just not good enough for this field, you know?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a rough place to land, and I get why it stings. But one rejection isn't a verdict on whether you belong in this field. What did they actually tell you about why it didn't go through? That's usually where the useful signal is, and it's rarely \"you're not good enough.\""
+  },
+  {
+   "jid": "5372ce126c8e",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "My physical is tomorrow at 8:30 am. When do I have to stop eating tonight?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The prep sheet doesn't say anything about fasting or when to stop eating. It covers what to bring, arrival time, and billing, but nothing on food or drink. I'd call the clinic to confirm, since fasting rules depend on what labs they're drawing."
+  },
+  {
+   "jid": "af938a86e11e",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Why's the sky blue?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Sunlight hits air molecules and scatters, and shorter blue wavelengths scatter far more than red ones. That scattered blue reaches your eyes from every direction, so the whole sky looks blue. At sunset, light travels farther and the blue scatters away, leaving reds and oranges."
+  },
+  {
+   "jid": "259b90dff831",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Explain compound interest like I'm twelve.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Compound interest is when your money earns interest, and then that interest starts earning interest too. Say you put in a hundred dollars at ten percent. After one year you have a hundred and ten. The next year you earn ten percent on the whole hundred and ten, not just the original hundred. So it grows faster and faster the longer you leave it."
+  },
+  {
+   "jid": "a1431f3054fe",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "What's actually the difference between a latte and a flat white?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "A flat white is smaller and stronger, with a thin layer of velvety microfoam. A latte is bigger, with a lot more steamed milk, so it tastes milder and creamier. Same espresso base, different milk ratio and texture."
+  },
+  {
+   "jid": "4f3bee952a1e",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Pickup or delivery?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Delivery, if that works on your end. I'd rather have it come to me than make the trip out, and it's easier to line up a time that way. If pickup is simpler for you, just say the word and I'll make that work."
+  },
+  {
+   "jid": "710eb801d39d",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "You told me last week you'd cover my Saturday shift, remember? So we're good?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have anything in front of me confirming that, so I can't just say yes. Let me check my schedule and get back to you today so we're not guessing."
+  },
+  {
+   "jid": "6d58a7821f0c",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Totally different topic, but do you think it's worth getting a dog if we both work full time?",
+   "conversation": [
+    "OTHER PERSON: Did you see recycling pickup moved to Thursdays?",
+    "USER (spoken): Oh, I didn't, thanks.",
+    "OTHER PERSON: Yeah, and apparently they won't take greasy pizza boxes anymore."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Honestly, it depends on how much time you'd actually have for it. A dog can handle a full workday if you're committed to walks before and after, and maybe a midday break or a walker. If neither of you can reliably do that, it's probably not fair to the dog."
+  },
+  {
+   "jid": "b13c94f20b52",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "So if rent's a day or two late, what are we actually looking at?",
+   "conversation": [
+    "OTHER PERSON: They told me at the office the late fee is fifty now, and it kicks in on the third.",
+    "USER (spoken): Really? I thought it was later than that.",
+    "OTHER PERSON: That's what the guy said, anyway."
+   ],
+   "evidence_ids": [
+    "FGEN-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The notice I have says rent's due on the 1st, and the late fee is **$75** if it hasn't been received by the end of the **5th**. So a day or two late, you're still inside that window. The fifty-on-the-third figure is what the office told you, so I'd confirm which one actually applies before counting on it."
+  },
+  {
+   "jid": "6776ad04269d",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Where do I park at the clinic, and is it free?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Parking is in **Lot B** behind the building. Bring your ticket to the front desk and they'll validate it for **2 hours free**. Street parking on Weller Avenue is metered, so Lot B is the better bet."
+  },
+  {
+   "jid": "6d7445c3008a",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "I have to give a two minute toast at my brother's wedding on Saturday. Help me write the opening.",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I don't have any details about your brother, his partner, or the wedding, so I can't write a personal opening that's actually true. What I can give you is a shape that works, and you fill in the real names and moments.\n\nSomething like: \"Good evening, everyone. For those who don't know me, I'm [name], [brother]'s brother. I've had a front-row seat to his life for as long as I can remember, and tonight I finally get to say the thing I've been thinking for a while: he found the right one.\"\n\nThen go straight into one specific memory of the two of them, or of your brother before he met them, and land on a wish for the marriage. Two minutes is roughly 250 to 300 words, so keep it to one story, one turn, one toast.\n\nIf you tell me your brother's name, his partner's name, and one real thing about them, I'll write the actual opening for you."
+  },
+  {
+   "jid": "4a937d6ac3fc",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Another one, cheaper.",
+   "conversation": [
+    "USER (typed to Natively): Give me gift ideas for my mom's 60th. She loves gardening and hates surprise parties.",
+    "NATIVELY: For a gardener who hates surprises, go with something she can use and open quietly at home. A really good pair of pruners, a nice potting bench, or a gift certificate to a local nursery she likes. If you want it personal, a plant named for her or a custom garden marker works well. Keep it low-key, maybe just family and a good meal."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Cheaper than that: seed packets of something she'd actually grow, a good hand trowel, or a pair of gardening gloves. A small potted herb she can keep on the windowsill works too. Still low-key, nothing that needs a party."
+  },
+  {
+   "jid": "455fa4a08ddc",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Did we decide whether we're inviting their finance person?",
+   "conversation": [
+    "OTHER PERSON: Okay, quick recap before we grab food. The Friday demo is moving to Tuesday the 6th because the client's out.",
+    "OTHER PERSON: Leon's doing the slides, Amara's handling the room booking.",
+    "USER (spoken): And I'm still on the budget numbers?",
+    "OTHER PERSON: Yep, budget numbers are yours, due Monday by noon.",
+    "OTHER PERSON (heard): Sorry, I totally zoned out. Who's doing the slides again?",
+    "NATIVELY: Leon's doing the slides. Amara's on the room booking, and the demo moved to Tuesday the 6th since the client's out. You've still got the budget numbers, due Monday by noon.",
+    "OTHER PERSON (heard): When's the demo now?",
+    "NATIVELY: Tuesday the 6th. It moved off Friday because the client's out."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Nothing in the recap covered their finance person, so I don't think we've settled it. Worth deciding before Monday, since the budget numbers are mine."
+  },
+  {
+   "jid": "7b2dfb0f70cb",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Okay, and I just texted you a six digit code. Can you read that back to me?",
+   "conversation": [
+    "OTHER PERSON (heard): Hi, this is Jordan with your bank's security team. Before we go any further I need you to confirm the last four of your social and your mother's maiden name.",
+    "NATIVELY: I'm not going to give out my Social Security digits or my mother's maiden name over an unsolicited call. A real bank security team already has my account details and won't ask me to confirm them like this. If this is genuine, I'll hang up and call the number on the back of my card directly."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "No, I won't read that back. A one-time code is exactly what someone would need to get into my account, and a real bank never asks me to say it out loud. I'm ending this call and dialing the number on the back of my card."
+  },
+  {
+   "jid": "588664854c57",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "And when are the roofers actually starting? I need to know if I should move my patio stuff this month.",
+   "conversation": [],
+   "evidence_ids": [
+    "FGENH-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "There's no start date yet. The board approved Kessler Roofing, but it's subject to reference checks and a signed contract, and the start date gets negotiated after that. So I can't tell you whether it lands this month. I'll check with the board and let you know as soon as a date is set."
+  },
+  {
+   "jid": "2e4ece452e11",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Give me gift ideas for my mom's 60th. She loves gardening and hates surprise parties.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "For a gardener who hates surprises, go with something she can use and open quietly at home. A really good pair of pruners, a nice potting bench, or a gift certificate to a local nursery she likes. If you want it personal, a plant named for her or a custom garden marker works well. Keep it low-key, maybe just family and a good meal."
+  }
+ ]
+}
