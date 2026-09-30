@@ -2,10 +2,11 @@ import React, { useEffect, useRef } from 'react';
 import { useT } from '../i18n';
 import {
     Github, Twitter, Linkedin, Instagram, Send, Star, Bug, Mail, Heart,
-    Zap, ListOrdered, Gauge, RefreshCw, Boxes,
+    CalendarCheck, Palette, Smartphone, ListOrdered,
     LayoutGrid, Search, FileText, UserRound,
     HardDrive, Sliders, Lock,
 } from 'lucide-react';
+import { AutoAnswerIcon } from './AutoAnswerIcon';
 import evinProfile from '../assets/evin.png';
 import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -39,12 +40,20 @@ type AboutIcon = React.ComponentType<{ size?: number; className?: string; stroke
 
 interface AboutItem { title: string; body: string; badge?: string; Icon: AboutIcon }
 
+// 2.9 official build, the owner's picks from the last 30 days of commits:
+// Auto Answer (off by default and "Beta" in General; the judge skips asks
+// named to someone else, 2cf229bd), embeddings + rerankers, Phone Mirror 2.0
+// (nav label "Sync"), Calendar sync (calendarSessionMatch + follow-up draft),
+// and the month's UI pass (Liquid Glass controls, the motion passes across
+// Settings, overlay, meeting notes and cards). Undetectable is
+// deliberately not claimed here: the owner won't promise it. Nothing here
+// needs the Companion extension.
 const WHATS_NEW: AboutItem[] = [
-    { title: 'Direct Assist', body: 'Sends your last three minutes and files verbatim. In AI Providers.', badge: 'Off by default', Icon: Zap },
-    { title: 'Rerankers', body: 'Jina AI, OpenRouter, or a local model. In Retrieval.', Icon: ListOrdered },
-    { title: 'Lighter and faster', body: 'About a quarter less memory. Windows open faster.', Icon: Gauge },
-    { title: 'Provider failover', body: 'Stalled providers switch to a spare. Local models are untouched.', Icon: RefreshCw },
-    { title: 'Embedding models', body: 'Gemini, OpenAI, Voyage AI, Ollama and more. In Retrieval.', Icon: Boxes },
+    { title: 'Auto Answer', body: 'Answers when a question ends, and skips ones meant for others. In General.', badge: 'Beta', Icon: AutoAnswerIcon },
+    { title: 'Embeddings and rerankers', body: 'Gemini, OpenAI, Voyage AI, Jina AI or local models. In Retrieval.', Icon: ListOrdered },
+    { title: 'Phone Mirror 2.0', body: 'Live transcript, streaming answers and photos from your phone. In Sync.', Icon: Smartphone },
+    { title: 'Calendar sync', body: 'Meetings link to their event, with names and a follow-up email. In Calendar.', Icon: CalendarCheck },
+    { title: 'Better UI and animations', body: 'Liquid Glass controls, and smoother motion in every window.', Icon: Palette },
 ];
 
 // Compressed 2026-09-25 at the owner's request; every claim still checked
