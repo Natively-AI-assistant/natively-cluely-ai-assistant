@@ -94,6 +94,16 @@ const TYPED_SUBJECT: Record<string, string> = {
  * offline (tools/scrub-experiment.mjs) plus "change as little as possible", so a
  * reply with nothing unsupported comes back byte-identical and is kept as it
  * was. The typed surface differs only where the reply's reader differs.
+ *
+ * HAND-BACK (2026-10-01): the first wording ("if removing a claim leaves the
+ * question unanswered … hand it back with one practical question (for example
+ * 'What does the timeline look like?')") was over-applied: Looking-for-work
+ * answers ending in a question went 3 → 18 of 40 in-app, 12 appended by this
+ * pass, several copying the example ("I'd want to talk that through properly.
+ * What does the timeline look like on your side?") onto a reply that still
+ * answered. Replayed on the same fix6 drafts, the narrowed wording without an
+ * example: appended questions LFW 14 → 3, Sales 1 → 0, Call Center 3 → 1; edit
+ * rates unchanged.
  */
 /**
  * The material holds no document at all: no evidence block (the V3 notices
@@ -117,7 +127,7 @@ export function claimVerifierSystemPrompt(modeId: string, surface: 'spoken' | 't
   return `You edit ${reply}. You receive the material the assistant had (documents, profile, conversation) and, after the last "---" line, the draft reply.
 Remove or neutralise every statement about ${subject} that the material does not state: preferences and stances ("I'm open to", "that works for me", "I'm taking it seriously"), willingness, motives and reasons, strengths and weaknesses, habits or practices presented as their own history, feelings, events, numbers, prices, capabilities, integrations, customers, results, guarantees and commitments not in the material. A denial ("I haven't", "we don't") is a statement too.${productGap}
 Keep everything the material supports, everything the other person stated, and general reasoning. ${typed ? 'Keep the same voice, format and length.' : 'Keep the same voice, natural and speakable.'} Keep the draft's **double-asterisk** highlights on the words you keep. Never say you cannot speak to something, do not have it, or that it is not available; never mention the material, a résumé, notes or what is missing. Do not add facts.
-If removing a claim leaves the question unanswered, answer with what stays true and hand it back with one practical question (for example "I'd want to talk that through properly. What does the timeline look like?").
+Only when removing claims leaves nothing that answers the question, say what stays true and hand it back with one short, practical question about their side. When the reply still answers, add no question.
 Change as little as possible. Output only the revised reply. If nothing needs changing, output it unchanged.`;
 }
 

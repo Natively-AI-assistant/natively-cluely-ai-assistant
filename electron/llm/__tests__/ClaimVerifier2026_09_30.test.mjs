@@ -60,6 +60,11 @@ describe('the prompt', () => {
     assert.match(claimVerifierSystemPrompt('sales'), /the seller, their product or their company/);
     assert.match(claimVerifierSystemPrompt('call-center'), /company or its policies/);
     assert.match(claimVerifierSystemPrompt('looking-for-work'), /the speaker themselves/);
+    // Hand-back only when nothing answers any more, and no example phrase to copy (2026-10-01).
+    for (const m of ['looking-for-work', 'sales', 'call-center']) {
+      assert.match(claimVerifierSystemPrompt(m), /When the reply still answers, add no question\./);
+      assert.doesNotMatch(claimVerifierSystemPrompt(m), /timeline look like/);
+    }
   });
   test('asks for the smallest change and forbids the epistemic wording the judge penalises', () => {
     const p = claimVerifierSystemPrompt('looking-for-work');
