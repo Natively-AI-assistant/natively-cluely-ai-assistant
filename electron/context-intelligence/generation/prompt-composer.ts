@@ -1133,7 +1133,7 @@ export function heardQuestionPerspective(modeId: string | undefined): string {
  * rule is restated next to the question only when the question asks for it.
  */
 const PERSONAL_PREFERENCE_RE = /\b(?:relocat\w*|mov(?:e|ing) (?:out )?(?:here|there|to)|commut\w*|in[- ]office|on-?site|hybrid|remote(?:ly)?|travel\w*|salary|base pay|compensation|pay(?:ing)? (?:range|expectations?)|in terms of (?:base|pay|salary|comp)|notice period|start date|when (?:can|could) you start|available to start|why (?:did|do|would) you (?:leave|want to leave)|why'?d you leave|why leave|reason for leaving|weakness|getting better at|(?:does|would) that work for you|are you (?:ok|okay|comfortable|open|willing) (?:with|to))\b/i;
-const PERSONAL_EXPERIENCE_RE = /\bhave you (?:ever )?(?:used|run|built|worked|done|managed|led|shipped|deployed|written|dealt|handled|operated)\b|\b(?:any|much) (?:hands-on )?experience (?:with|in)\b/i;
+const PERSONAL_EXPERIENCE_RE = /\bhave you (?:ever )?(?:used|run|built|worked|done|managed|led|shipped|deployed|written|dealt|handled|operated)\b|\b(?:any|much) (?:hands-on )?experience (?:with|in)\b|\bhow long have you (?:been|worked|done)\b|\b(?:what'?s|tell me about|what is) your (?:own )?background\b|\bwere you (?:ever )?(?:an?|in)\b|\bare you familiar with\b|\bdo you know (?:much about )?(?:the |our )?\w+ (?:space|industry|market|well)\b/i;
 const NO_COMMITMENT_MODES: ReadonlySet<string> = new Set(['recruiting', 'lecture']);
 
 export function personalCommitmentNotice(question: string, modeId: string | undefined, heard: boolean): string {
