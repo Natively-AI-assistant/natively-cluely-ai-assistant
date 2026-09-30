@@ -479,7 +479,9 @@ describe('mode×action voice contract (Phase 2, deterministic axis separation)',
       const p = v2.buildSystemPromptV2({ mode: 'recruiting', action, tier: 'cloud' });
       assert.ok(p.includes('words for the INTERVIEWER'), `${action}: interviewer-addressed overlay missing`);
       assert.ok(p.includes('one short observation'), `${action}: observation requirement missing`);
-      assert.ok(p.includes('Lead with the exact probe the interviewer should ask next'), `${action}: probe-first requirement missing`);
+      // 2026-09-30: probe-first applies after a candidate ANSWER; a candidate QUESTION gets the interviewer's own reply.
+      assert.ok(p.includes('Otherwise lead with the exact probe the interviewer should ask next'), `${action}: probe-first requirement missing`);
+      assert.ok(p.includes("give the interviewer\\'s own first-person reply to it") || p.includes("give the interviewer's own first-person reply to it"), `${action}: candidate-question branch missing`);
       assert.ok(p.includes("Never write a first-person answer on the candidate's behalf"), `${action}: candidate-voice ban missing`);
       assert.ok(p.includes('a whisper between turns, never an assessment write-up'), `${action}: whisper-length rule missing`);
     }
@@ -494,7 +496,10 @@ describe('mode×action voice contract (Phase 2, deterministic axis separation)',
   test('sales mode keeps momentum: forward close, decide-now, brevity (loss mining: "stalls the negotiation")', () => {
     const p = v2.buildSystemPromptV2({ mode: 'sales', action: 'what_to_say', tier: 'cloud' });
     assert.ok(p.includes('End on the one concrete next step or forward question'));
-    assert.ok(p.includes('never stall with a clarifying question when the prospect asked for something you can decide'));
+    // 2026-09-30: 'never stall … give the decision now' pushed unsafe commitments (dev set: 12/40 Sales answers invented
+    // capabilities or terms). Momentum now comes from the forward question; claims come only from the material.
+    assert.ok(p.includes('offer to confirm and ask what they need it to do'));
+    assert.ok(!p.includes('give the decision now'));
     assert.ok(p.includes('Usually two to four sentences'));
   });
 

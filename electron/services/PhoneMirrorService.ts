@@ -11,6 +11,7 @@ import { PHONE_MIRROR_HTML } from './phoneMirrorClient';
 import { DOM_CONTEXT_MAX_CHARS } from '../config/constants';
 import { sanitizeContextEnvelope } from './browser-context/sanitize';
 import { isPhoneImagePath } from '../utils/phoneImage';
+import { splitGistLine, stripGistTrailer } from '../../src/lib/displayMarkup';
 
 export interface PhoneMirrorInfo {
   running: boolean;
@@ -508,10 +509,10 @@ export class PhoneMirrorService {
     } catch { /* non-fatal */ }
     if (this.livePartial?.streamId === streamId) this.cancelLiveRender();
     if (content.trim()) {
-      const rendered = this.renderAnswer(content);
-      const msg: PersistedMessage = { id: 'a:' + streamId, role: 'assistant', content, createdAt, ...(rendered || {}) };
+      const payload = this.answerPayload(content);
+      const msg: PersistedMessage = { id: 'a:' + streamId, role: 'assistant', createdAt, ...payload };
       this.recordHistory(msg);
-      this.broadcast({ type: 'done', streamId, content, createdAt, ...(rendered || {}) });
+      this.broadcast({ type: 'done', streamId, createdAt, ...payload });
     } else {
       // Nothing to show (suppressed, or no words came): still end it, so the
       // phone clears the Thinking it shows for this answer.
@@ -542,17 +543,16 @@ export class PhoneMirrorService {
       if (shouldSuppressModelOutput(content)) return;
     } catch { /* non-fatal */ }
     const createdAt = new Date().toISOString();
-    const rendered = this.renderAnswer(content);
+    const payload = this.answerPayload(content);
     const msg: PersistedMessage = {
       id: 'a:' + id,
       role: 'assistant',
-      content,
       createdAt,
       label,
-      ...(rendered || {}),
+      ...payload,
     };
     this.recordHistory(msg);
-    this.broadcast({ type: 'assistant', id: msg.id, content: msg.content, label, createdAt, ...(rendered || {}) });
+    this.broadcast({ type: 'assistant', id: msg.id, label, createdAt, ...payload });
   }
 
   /**
@@ -751,6 +751,21 @@ export class PhoneMirrorService {
    */
   setAnswerRenderer(renderer: PhoneAnswerRenderer | null): void {
     this.answerRenderer = renderer;
+  }
+
+  /**
+   * A finished answer as the phone receives and stores it. `content` is the
+   * answer TEXT (what "Copy conversation" and replays use), without the
+   * trailing [[GIST]] line; the gist rides separately in `gist` for the chip.
+   * Rendered from the RAW answer first, so the desktop renderer still sees
+   * the marker it splits.
+   */
+  private answerPayload(raw: string): { content: string; html?: string; gist?: string | null } {
+    const rendered = this.renderAnswer(raw);
+    const content = stripGistTrailer(raw);
+    if (rendered) return { content, html: rendered.html, gist: rendered.gist };
+    const gist = content === raw ? null : splitGistLine(raw).gist;
+    return gist ? { content, gist } : { content };
   }
 
   private renderAnswer(markdown: string, streaming = false): { html: string; gist: string | null } | null {

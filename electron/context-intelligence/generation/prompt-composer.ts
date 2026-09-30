@@ -33,6 +33,9 @@ export interface ComposeInput {
   /** The question was HEARD — asked aloud by the other person (what-to-answer),
    *  not typed by the user. See HEARD_QUESTION_PERSPECTIVE. */
   heardQuestion?: boolean;
+  /** The chosen question is the USER's own spoken line (what-to-answer picked
+   *  it because the user asked after the other party). Never set with heardQuestion. */
+  questionSpokenByUser?: boolean;
   /** The answer is READ, not said: the launcher's chat (2026-09-29). Drops the
    *  spoken-delivery rules that contradict the chat layout. Every live surface
    *  (what-to-answer, the overlay's typed box) leaves it unset. */
@@ -195,13 +198,26 @@ const PERMANENT_RULES = [
     // schedule?" came back as "I don't have the release scope in front of me"
     // and an interviewer heard a note about missing notes. The anti-invention
     // half is unchanged; only a question ABOUT a source narrates the source.
+    // Denials are facts too (2026-09-30, measured on the dev set after the
+    // user-facts rule: Call Center answers swapped invented capabilities for
+    // invented refusals — "I can't send a reset by text", "I'm not able to
+    // bring a manager on", "I can't see an outage from here" — 8 of 40 fell
+    // by 2+ points). Neither a yes nor a no is the user's to invent.
+    + 'This includes saying something is NOT offered, possible, allowed or happening (no text reset, no manager available, '
+    + 'no outage, not a feature): without evidence, neither confirm nor refuse; say what you will check and do next. '
     + 'If no evidence states such a fact, do not supply one. When the question asks what a document, the notes or the '
     + 'meeting said, say plainly that they do not state it and describe what they do say. Otherwise answer in the '
     + 'user\'s voice without it, saying what they would check or confirm, and never present a general-knowledge number as theirs. '
     + 'Asked about the user\'s OWN process, next steps, schedule, policy or benefits (an interview process, a rollout plan, '
     + 'on-call, PTO) that the evidence does not describe, never describe a typical one, not even as a first step: '
     + 'WRONG: "From here it\'s a technical screen, a system design round, then a final with the team." '
-    + 'RIGHT: "I\'ll confirm the exact steps and send them over today."',
+    + 'RIGHT: "I\'ll confirm the exact steps and follow up with you." '
+    // Parroting (2026-09-30, dev iteration 4): the old RIGHT line ("… send them
+    // over today") came back near-verbatim on three straight recruiting turns —
+    // an invented timeline — and a turn whose evidence held the on-call pay
+    // deferred the whole question. Answer the stated part first; vary the rest.
+    + 'Answer every part the evidence does state first, then defer only what it does not. Never promise a follow-up time, '
+    + 'and do not repeat the same deferral line from an earlier turn.',
   // Measured live after the history fix (2026-09-24): the user typed "their
   // budget ceiling is $83,700 — how should I position premium?" and got "the
   // $83,700 figure isn't in anything I can see from this call, so I can't
@@ -251,7 +267,12 @@ const PERMANENT_RULES = [
   // band and the BATNA. This overlay is private to the user: giving them their
   // own number is never disclosure, and they decide what to say aloud.
   'Never ask the user to repeat, rephrase or clarify. When a request is ambiguous, state the most likely reading in one short clause and answer it; offer the alternative reading afterwards only if it changes the answer.',
-  'When the other party asks for a value, name or fact that the evidence states — a salary band, a rate, a deadline, a target, a floor — give that value plainly first, then any coaching about whether or how to say it. The user reads this privately and decides what to disclose.',
+  // Floors are the exception (2026-09-30, owner decision): the "give that
+  // value plainly first" rule named "a floor" and, rendered after the persona,
+  // outranked the Sales and Looking-for-work confidentiality lines. A private
+  // minimum is never something the user should say, so it is never offered.
+  'When the other party asks for a value, name or fact that the evidence states — a salary band, a rate, a deadline, a target — give that value plainly first, then any coaching about whether or how to say it. The user reads this privately and decides what to disclose. '
+    + 'A private floor, walk-away number, lowest acceptable price or BATNA is the exception: never state it, even when the evidence holds it and the other party presses for it; hold the target or range and move to value or the next step.',
   // Measured 2026-09-08: asked for the key points of a six-chunk speaker-notes
   // file, the model was handed its top two chunks and answered "the file
   // contains only the heading and one section" / "the file itself contains no
@@ -273,12 +294,30 @@ const PERMANENT_RULES = [
   // the anti-fabrication rules above are unchanged.
   'When a question turns on something only the user knows and nothing above states it (their history, a status, a '
     + 'plan, a number, a document you have not seen), answer as the user would without it: for a personal question, '
-    + 'how they work and what they value, never their field, what they have built, whom they have led, or how long they have worked, in first person and without claiming any specific event; for a status or commitment, what '
+    + 'how they generally approach that kind of thing, never their field, what they have built, whom they have led, how long they have worked, or a specific preference or decision, in first person and without claiming any specific event; for a status or commitment, what '
     + 'they would check and the next step, never a promised outcome; for something not seen yet, a reasonable '
     + 'conditional view and what would decide it. Never say the information is missing, never hand the question back '
     + '("tell me more and I\'ll…"), and never output a template, framework or placeholder. The only exceptions are a '
     + 'question about what a source says and a turn whose notice below requires saying what is not covered. An action '
     + 'whose whole output is a question for the other person (clarify) still asks it.',
+  // THE USER'S OWN FACTS (2026-09-30, measured on the 9-mode dev set: 30 of
+  // 360 answers invented a fact about the user — "I came up through
+  // engineering" for a recruiter, "HVAC is newer for me" for a seller, "I'm
+  // open to relocating", "I'm planning to renew", "I missed it, honestly", a
+  // failure story stitched from two résumé bullets). The rules above name
+  // experience and figures; preferences, status, decisions and small
+  // first-person asides had no rule, and the no-context contract asked for
+  // "what they value". Words the user says must stay true whatever the truth is.
+  'Speaking as the user, never state a fact about the user themselves that nothing above states: their background, '
+    + 'role history, what they did, saw or felt, a preference (relocating, remote or office, a salary expectation, liking or '
+    + 'disliking something), a current status, a decision or plan, or their availability. Without it, say what stays true '
+    + 'whatever the answer is: keep it open or conditional, or turn it into the natural next question. '
+    + 'WRONG: "Denver works for me, I\'d be happy to relocate." RIGHT: "I\'m open to talking about relocation. What timeline '
+    + 'are you working with?" WRONG: "I came up through engineering myself." RIGHT: "Happy to share more about me later. '
+    + 'I\'d rather spend the time on your background." WRONG (heard: "Did you catch the game?"): "I missed it, honestly." '
+    + 'RIGHT: "How did it end?" '
+    + 'A story or example the user tells must come from the evidence event by event: never add what went wrong, who '
+    + 'pushed back, what they learned, or a result the evidence does not give, and never merge two separate items into one story.',
   'Produce one natural, speakable answer.',
   // §20, measured: 7.1% of answers opened with attribution boilerplate
   // ("According to the provided documentation...") and 14.3% ran past 120 words,
@@ -435,7 +474,7 @@ const NO_CONTEXT_EXAMPLES = ' With nothing about the topic above — asked "wher
 
 function gapHandling(heardQuestion: boolean, hint = ''): string {
   const spoken = 'do not mention sources, notes, or what is missing: where the question turns on such a fact, answer so '
-    + 'it stays true without it, as the no-context rule above describes (about the user: how they work and what they value, never their field, what they have built, whom they have led, or how long they have worked).'
+    + 'it stays true without it, as the no-context rule above describes (about the user: how they generally approach it, never a specific preference, decision, their field, what they have built, whom they have led, or how long they have worked).'
     + NO_CONTEXT_EXAMPLES;
   if (heardQuestion) return ` Invent nothing about the user or their work, and ${spoken}`;
   return ' If the question asks what a source or the user\'s own records say (for example "what is my CGPA?"), say plainly '
@@ -530,7 +569,7 @@ function absenceNoticeBody(
     // missed a dependency…" by gemini-3.1-flash-lite 5/5; with this line 0/5.
     const personalPast = d.claimRequirements.some((c) => /^USER_/.test(c.claimType))
       ? ' This question asks about the user\'s own past. No source holds any event from it, so tell no story: no "I once", '
-        + 'no project, incident, employer or date. Speak only to how they work and what they value.'
+        + 'no project, incident, employer or date. Speak only to how they generally approach it, never a specific preference or decision.'
       : '';
     if (generalKnowledgeAllowed) {
       return '# Evidence\nNo reference material is attached to the active mode, so nothing was searched. '
@@ -572,7 +611,7 @@ function absenceNoticeBody(
       // still opened "Tell me about yourself" with "I've spent my career
       // building scalable systems and leading technical teams" 5/5; naming
       // what counts as a background fact took it to 0/5.
-      + 'speak only to how they work and what they value, never their field, what they have built, whom they have led, or how long they have worked. '
+      + 'speak only to how they generally approach it, never a specific preference or decision, their field, what they have built, whom they have led, or how long they have worked. '
       + 'A specific figure for the user\'s own history that no source states is fabrication.'
     : '';
   const subject = has('MEETING_TRANSCRIPT') && types.length === 1
@@ -1064,6 +1103,66 @@ export const HEARD_QUESTION_PERSPECTIVE = '\n(Asked aloud by the other person in
   + '"we" and "our" mean that speaker; "you" and "your" mean the user you are answering for.)';
 
 /**
+ * Who the other person IS, per mode (2026-09-30). Every mode's transcript
+ * labels the other side THEM / INTERVIEWER, so in Recruiting the candidate
+ * read as the interviewer and a candidate's "what's the team size?" came back
+ * as a probe for the recruiter to ask. The mode already knows both roles
+ * (IntentFrame MODE_ROUTING describes the same pairs); the heard-question note
+ * now names them. Unknown ids keep the neutral wording.
+ */
+const HEARD_SPEAKER_BY_MODE: Readonly<Record<string, { speaker: string; user: string }>> = {
+  recruiting: { speaker: 'the candidate', user: 'the recruiter (interviewer) you are helping' },
+  sales: { speaker: 'the prospect', user: 'the seller you are helping' },
+  'call-center': { speaker: 'the customer', user: 'the support agent you are helping' },
+  'looking-for-work': { speaker: 'the interviewer', user: 'the candidate you are answering for' },
+  'technical-interview': { speaker: 'the interviewer', user: 'the candidate you are answering for' },
+  seminar: { speaker: 'an examiner or audience member', user: 'the presenter you are answering for' },
+  'team-meet': { speaker: 'a colleague in the meeting', user: 'the user you are answering for' },
+  lecture: { speaker: 'the lecturer', user: 'the student you are helping' },
+};
+
+export function heardQuestionPerspective(modeId: string | undefined): string {
+  const r = modeId ? HEARD_SPEAKER_BY_MODE[modeId] : undefined;
+  if (!r) return HEARD_QUESTION_PERSPECTIVE;
+  return `\n(Said aloud by ${r.speaker}, not by the user: in it, "I", "me", "my", "we" and "our" mean ${r.speaker}; `
+    + `"you" and "your" mean ${r.user}.)`;
+}
+
+/**
+ * A heard question that asks the user to COMMIT (2026-09-30). The permanent
+ * user-facts rule sits deep in a long system prompt; measured on the dev set
+ * after it landed, heard "does Tuesday to Thursday in LoDo work for you?",
+ * "would you be moving out here?", "what are you looking for in base?", "why
+ * leave?" and "have you run Postgres in production?" still came back as an
+ * invented yes, a relocation, "the upper half of the band", a motive, and
+ * experience the résumé does not show (10/40 Looking-for-work answers). The
+ * rule is restated next to the question only when the question asks for it.
+ */
+const PERSONAL_PREFERENCE_RE = /\b(?:relocat\w*|mov(?:e|ing) (?:out )?(?:here|there|to)|commut\w*|in[- ]office|on-?site|hybrid|remote(?:ly)?|travel\w*|salary|base pay|compensation|pay(?:ing)? (?:range|expectations?)|in terms of (?:base|pay|salary|comp)|notice period|start date|when (?:can|could) you start|available to start|why (?:did|do|would) you (?:leave|want to leave)|why'?d you leave|why leave|reason for leaving|weakness|getting better at|(?:does|would) that work for you|are you (?:ok|okay|comfortable|open|willing) (?:with|to))\b/i;
+const PERSONAL_EXPERIENCE_RE = /\bhave you (?:ever )?(?:used|run|built|worked|done|managed|led|shipped|deployed|written|dealt|handled|operated)\b|\b(?:any|much) (?:hands-on )?experience (?:with|in)\b|\bhow long have you (?:been|worked|done)\b|\b(?:what'?s|tell me about|what is) your (?:own )?background\b|\bwere you (?:ever )?(?:an?|in)\b|\bare you familiar with\b|\bdo you know (?:much about )?(?:the |our )?\w+ (?:space|industry|market|well)\b/i;
+const NO_COMMITMENT_MODES: ReadonlySet<string> = new Set(['recruiting', 'lecture']);
+
+export function personalCommitmentNotice(question: string, modeId: string | undefined, heard: boolean): string {
+  if (!heard || (modeId && NO_COMMITMENT_MODES.has(modeId))) return '';
+  const q = String(question ?? '');
+  if (PERSONAL_PREFERENCE_RE.test(q)) {
+    return '(This asks for the user\'s own preference, commitment or reason. Unless something above states the user\'s own answer, '
+      + 'do not decide it for them: no yes or no, no reason, no number of their own. Answer so it stays true either way, open or '
+      + 'conditional, naming what they would weigh or asking the next practical question. What the other side stated, such as a '
+      + 'band, a schedule or relocation support, may be acknowledged.)';
+  }
+  if (PERSONAL_EXPERIENCE_RE.test(q)) {
+    return '(This asks whether the user has done something. Claim it only if the evidence above shows it. Otherwise do not '
+      + 'say they have or have not: answer the substance, and name only the closest experience the evidence does show.)';
+  }
+  return '';
+}
+
+/** The user's OWN spoken line was chosen as the question (they asked after the
+ *  other party did): their "I" and "we" are the user's side. */
+export const USER_SPOKEN_QUESTION_PERSPECTIVE = '\n(Said aloud by the user in the meeting: "I", "we" and "our" mean the user and their side.)';
+
+/**
  * A personal story told FROM evidence (2026-09-29). With a résumé attached but
  * no story of the kind asked ("a difficult stakeholder"), both models grafted
  * invented people and reactions onto a real project — "the payments team lead
@@ -1170,7 +1269,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
   ].filter((s) => s.trim()).join('\n\n');
 
   const user = [
-    push('question', `# Question\n${d.resolvedQuestion}${input.heardQuestion ? HEARD_QUESTION_PERSPECTIVE : ''}`),
+    push('question', `# Question\n${d.resolvedQuestion}${input.heardQuestion ? heardQuestionPerspective(policy.id) : input.questionSpokenByUser ? USER_SPOKEN_QUESTION_PERSPECTIVE : ''}`),
     // The header carries the rule, not just a label (Pattern E, 2026-08-01):
     // some surfaces pass a raw transcript window here, in which the
     // assistant's own prior output appears. Without the rule in the section
@@ -1250,6 +1349,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
       ? push('privacy_withheld', privacyWithholdingNotice(input.withheldScopes, true))
       : '',
     push('evidence_story', evidenceStoryGuard(d, Boolean(packed.evidenceBlock))),
+    push('personal_commitment', personalCommitmentNotice(d.resolvedQuestion, policy.id, Boolean(input.heardQuestion))),
     // Steps or a counted set: the numbered-list rule lives in the system prompt,
     // which the sections above outrank — see isEnumerableAsk. Format, not
     // length, so it rides even when the user set a length. Coding turns keep

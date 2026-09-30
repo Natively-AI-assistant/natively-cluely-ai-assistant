@@ -69,6 +69,8 @@ import { recordAttribution } from './intelligence/IntelligenceAttribution';
 // Follow-up: type getKnowledgeOrchestrator() properly and drop this import.
 import type { PromptAssemblyResult } from './premium/contracts';
 import type { AnswerType } from './llm/AnswerPlanner';
+import { isProfileIntelligenceAllowed } from './context-intelligence/policies/mode-policy-registry';
+import { stripUnsupportedDerivedResumeFields } from './context-intelligence/retrieval/profile-derived-support';
 
 /**
  * Credential-scrub a trace payload before it is stringified.
@@ -1869,6 +1871,15 @@ export class IntelligenceEngine extends EventEmitter {
         // every live token (#3) so the renderer can drop stale-generation batches.
         const snapshotModeInfo = this.getActiveModeInfo();
         const documentGroundedCustomModeActive = snapshotModeInfo?.documentGroundedCustomModeActive === true;
+        // PROFILE INTELLIGENCE GATE (2026-09-30), read from the t0 snapshot so a
+        // mode switch mid-request cannot change it. The legacy WTA path (V3 low
+        // confidence / no segments / clarification) had three résumé/JD routes
+        // gated only by the turn source decision, which ALLOWS the profile when
+        // the mode has no source contract and when no mode is active at all.
+        // The ONE rule (mode-policy-registry, by template type) now bounds the
+        // orchestrator grounding, the evidence JIT and the coordinator's
+        // profile arm. No mode → not eligible.
+        const snapshotProfileIntelligenceAllowed = isProfileIntelligenceAllowed(snapshotModeInfo?.templateType ?? null);
         // Defect C split (2026-08-01): STRICT knowledge suppression vs broad
         // source isolation. Strictness consumers below (skip-legacy-retrieval,
         // forceDocumentGrounding, the generic-knowledge bypass gate, and the
@@ -1918,7 +1929,12 @@ export class IntelligenceEngine extends EventEmitter {
         // Keep the same loaded structured-data objects that informed source
         // availability. The canonical evidence coordinator uses these snapshots,
         // never a fresh orchestrator read after a pre-stream await.
-        const snapshotProfileFacts = (snapshotKnowledge as any)?.activeResume?.structured_data ?? null;
+        // Derived-evidence hygiene (2026-09-30): only raw-text-supported
+        // project descriptions reach evidence (profile-derived-support.ts).
+        const snapshotProfileFacts = stripUnsupportedDerivedResumeFields(
+            (snapshotKnowledge as any)?.activeResume?.structured_data ?? null,
+            (snapshotKnowledge as any)?.activeResume?.raw_text,
+        );
         const snapshotJobDescriptionFacts = (snapshotKnowledge as any)?.activeJD?.structured_data ?? null;
         const snapshotSourceAvailability = Object.freeze({
             hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
@@ -2103,6 +2119,8 @@ export class IntelligenceEngine extends EventEmitter {
 
             const lastInterviewerTurn = this.session.getLastInterviewerTurn();
             const extractedQuestion = extractLatestQuestion(transcriptTurns);
+            // Set when the user's OWN spoken line is chosen as the question below.
+            let questionSpokenByUser = false;
             // SPEAKER-MISATTRIBUTION FALLBACK (2026-09-07, always answer). Real
             // diarization labels the other party as "user" often enough that a
             // manual press can arrive with a transcript and NO interviewer turn.
@@ -2117,6 +2135,7 @@ export class IntelligenceEngine extends EventEmitter {
                     extractedQuestion.latestQuestion = String(lastAnyTurn.text).trim();
                     extractedQuestion.confidence = Math.max(extractedQuestion.confidence ?? 0, 0.6);
                     trace.mark('repair_used', { reason: 'question_from_any_speaker', role: lastAnyTurn.role });
+                    if (lastAnyTurn.role === 'user') questionSpokenByUser = true;
                     console.log('[IntelligenceEngine] no interviewer turn — answering the latest utterance regardless of speaker label', { role: lastAnyTurn.role, chars: extractedQuestion.latestQuestion.length });
                 }
             }
@@ -2145,6 +2164,7 @@ export class IntelligenceEngine extends EventEmitter {
                     extractedQuestion.latestQuestion = userText;
                     extractedQuestion.confidence = Math.max(extractedQuestion.confidence ?? 0, 0.75);
                     trace.mark('repair_used', { reason: 'question_from_user_utterance' });
+                    questionSpokenByUser = true;
                     console.log('[IntelligenceEngine] the user asked after the other party — answering the user\'s own question', { chars: userText.length });
                 }
             }
@@ -2677,7 +2697,7 @@ export class IntelligenceEngine extends EventEmitter {
                     processQuestion(question: string): Promise<PromptAssemblyResult | null>;
                 }) | undefined = this.llmHelper.getKnowledgeOrchestrator?.();
                 if (orchestrator?.isKnowledgeMode?.() && !strictDocumentGroundedActive
-                    && wtaDecisionAllowsCandidateProfile) {
+                    && wtaDecisionAllowsCandidateProfile && snapshotProfileIntelligenceAllowed) {
                     const extracted = extractedQuestion;
                     // Only ground question types that resolve to the candidate's
                     // own plain facts. jd_alignment/company questions are
@@ -3044,11 +3064,14 @@ export class IntelligenceEngine extends EventEmitter {
             const _jitAnswerType = (() => { try { return _wtaPlan?.answerType ?? null; } catch { return null; } })();
             const _jdShapeAllowed = _jitAnswerType !== null && IntelligenceEngine.shouldJitForAnswerType(_jitAnswerType)
                 && /^jd_/.test(_jitAnswerType);
-            if (!candidateProfile && wtaDecisionAllowsCandidateProfile
+            if (!candidateProfile && wtaDecisionAllowsCandidateProfile && snapshotProfileIntelligenceAllowed
                 && (wtaProfileAllowed || _jdShapeAllowed)) {
                 try {
                     const orch = this.llmHelper.getKnowledgeOrchestrator?.();
-                    const resume = (orch as any)?.activeResume?.structured_data ?? null;
+                    const resume = stripUnsupportedDerivedResumeFields(
+                        (orch as any)?.activeResume?.structured_data ?? null,
+                        (orch as any)?.activeResume?.raw_text,
+                    );
                     const jd = (orch as any)?.activeJD?.structured_data ?? null;
                     // Campaign-3 fix (2026-07-19, fix/answer-policy-engine): the
                     // original gate ONLY fired on questionType ∈ {identity,
@@ -3400,6 +3423,7 @@ export class IntelligenceEngine extends EventEmitter {
                 && wtaTurnContract
                 && canonicalTurn.turnSourceDecision
                 && wtaCoordinatorInScope
+                && snapshotProfileIntelligenceAllowed
                 && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
                 && isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled')) {
                 try {
@@ -3782,6 +3806,8 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!_ctx) return undefined;
                     const _v3 = await buildV3Prompt({
                         surface: 'what-to-answer',
+                        // The user's own spoken line was chosen above: its "we" is theirs.
+                        questionSpeaker: questionSpokenByUser && !question?.trim() ? 'user' : 'other',
                         // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
                         queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(this.llmHelper),
                         screenText: _screenDescription,
@@ -4225,6 +4251,23 @@ export class IntelligenceEngine extends EventEmitter {
             // the emit state, so holding cannot trip a provider timeout.
             let scaffoldStreamHoldDecided = false;
             let scaffoldStreamHold = false;
+            // Meta-preamble gate (2026-09-30). The post-stream planning-preamble
+            // strip below removed "The interviewer is asking…" openers only
+            // AFTER they had painted, and the final emit then visibly swapped
+            // the row. The gate holds the opening only while it could still be
+            // such a preamble and drops it before the first paint; it shares
+            // one scanner with stripPlanningPreamble, so the streamed text and
+            // the final text agree and no swap happens. Enabled exactly where
+            // that post-stream strip runs (not speculative — completeSpeculativeRun
+            // never strips — and not coding).
+            const preambleGate = (!isSpeculative && !codingGate && !isCodingAnswerType(answerPlan.answerType))
+                ? (() => {
+                    try {
+                        const { PreambleStreamGate } = require('./llm/planningPreamble') as typeof import('./llm/planningPreamble');
+                        return new PreambleStreamGate();
+                    } catch { return null; }
+                })()
+                : null;
 
             // ── LIVE LATENCY GUARDRAIL (Phase 9) ───────────────────────────────
             // Full-JIT policy: provider stalls/failures may not be repaired with
@@ -4339,6 +4382,10 @@ export class IntelligenceEngine extends EventEmitter {
             // hold canned openers, and paint the first SAFE prefix, then stream.
             // Shared by every live token and by the adoption flush below.
             const paintBuffered = (token: string): void => {
+                if (preambleGate) {
+                    token = preambleGate.push(token);
+                    if (!token) return;
+                }
                 streamingTokenBuffer += token;
                 // RC-4: decide the hold once, on the first visible
                 // characters. A leading markdown heading on a spoken
@@ -6486,7 +6533,18 @@ export class IntelligenceEngine extends EventEmitter {
                     this.emit('suggested_answer_token', streamingTokenBuffer, question || 'inferred', confidence, generationId);
                 }
                 if (!emittedStreamingToken) {
-                    this.emit('suggested_answer_token', fullAnswer, question || 'inferred', confidence, generationId);
+                    // Nothing painted yet (a short answer, or one the gate
+                    // held to the end): paint it WITHOUT a leading preamble —
+                    // the same strip the final applies below, so the final emit
+                    // does not swap the row.
+                    let unpainted = fullAnswer;
+                    if (preambleGate) {
+                        try {
+                            const { stripPlanningPreamble } = require('./llm/planningPreamble') as typeof import('./llm/planningPreamble');
+                            unpainted = stripPlanningPreamble(fullAnswer).text;
+                        } catch { /* paint unmodified */ }
+                    }
+                    this.emit('suggested_answer_token', unpainted, question || 'inferred', confidence, generationId);
                 }
             }
             // (leaked-schema-stub / provider-transport-error guards now run much
@@ -6616,6 +6674,17 @@ export class IntelligenceEngine extends EventEmitter {
             // compatible with all existing consumers (code-hint, brainstorm,
             // legacy answerLLM, etc.).
             this.emit('suggested_answer', finalWtaAnswer, question || 'What to Answer', confidence, generationId);
+            // Compile-only syntax check of fenced JavaScript (observe-only: the
+            // turn trace + telemetry record it, the answer is never changed).
+            try {
+                const { observeAnswerJsSyntax } = require('./llm/codeVerification/syntaxCheckReport') as typeof import('./llm/codeVerification/syntaxCheckReport');
+                const syntax = observeAnswerJsSyntax(finalWtaAnswer, 'what_to_answer');
+                if (syntax) {
+                    trace.mark('code_syntax_checked' as any, {
+                        blocks: syntax.blocks, valid: syntax.valid, invalid: syntax.invalid, skipped: syntax.skipped,
+                    });
+                }
+            } catch { /* observe only */ }
             // ANSWER VISIBILITY (live session A follow-up, 2026-08-21): the
             // answer is delivered as an EVENT to the renderer and never
             // touches stdout, so a session log records the question, the
@@ -6703,6 +6772,9 @@ export class IntelligenceEngine extends EventEmitter {
                     trace,
                     generationId,
                     verificationCancellationToken.signal,
+                    // The shape the prompt asked for, so a correction never
+                    // demands sections the answer was told to leave out.
+                    (require('./llm/codingShape') as typeof import('./llm/codingShape')).detectCodingShape(answerPlan.question),
                 ).finally(() => {
                     this.whatToAnswerBackgroundCancellationTokens.delete(verificationCancellationToken);
                 });
@@ -6778,6 +6850,7 @@ export class IntelligenceEngine extends EventEmitter {
         trace: PiLatencyTrace,
         generationId: number,
         abortSignal?: AbortSignal,
+        codingShape?: import('./llm/codingContract').CodingShape,
     ): Promise<void> {
         // Supersession guard: if the user fired a newer generation while this
         // background verification ran, its result belongs to a now-abandoned
@@ -6790,6 +6863,7 @@ export class IntelligenceEngine extends EventEmitter {
                 answer: shownAnswer,
                 question,
                 screenText,
+                codingShape,
                 // Correction call: regenerate a fixed answer via the same chat path.
                 // Bounded to ONE attempt inside verifyCodingAnswer.
                 correct: async (repairPrompt: string) => {

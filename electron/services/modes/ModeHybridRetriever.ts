@@ -8,7 +8,7 @@ import { VectorStore, ScoredChunk } from '../../rag/VectorStore';
 import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import Database from 'better-sqlite3';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks } from './DocumentMap';
-import { wordsOf, buildLexicalStats, queryWeights, weightedOverlapScore, anchorTerms, anchorCoverage, corpusAnchorsQuestion, isProbeFunctionWord, type LexicalStats } from './lexicalTokens';
+import { wordsOf, buildLexicalStats, queryWeights, weightedOverlapScore, anchorTerms, anchorCoverage, corpusAnchorsQuestion, smallPoolAnchorsQuestion, isProbeFunctionWord, type LexicalStats } from './lexicalTokens';
 import { CHUNKER_VERSION, semanticChunks, normalizeLineEndings } from './semanticChunker';
 import { resolveRerankBudgetMs, rerankBudgetFitsDeadline, type RerankSurface } from '../reranking/rerankBudget';
 import { buildRerankPool, RERANK_CANDIDATE_POOL, resolveRerankPoolSize } from './rerankPool';
@@ -77,11 +77,22 @@ export interface RetrievalConfidence {
     reasons: Array<'weak_top' | 'flat_margin' | 'thin_results' | 'lexical_degraded' | 'no_candidates'>;
 }
 
+/** See ModeRetrievedContext.degradedReason. */
+export type RetrievalDegradedReason = 'embedding_unavailable' | 'local_lexical' | 'hybrid_threw';
+
 export interface ModeRetrievedContext {
     chunks: ModeRetrievedChunk[];
     formattedContext: string;
     usedFallback: boolean;
     usedHybrid: boolean;
+    /**
+     * WHY this turn's ranking had no semantic arm, when it had none (2026-09-30).
+     * `usedFallback` cannot say it: it is `!isEmbeddingAvailable() || localLexical`
+     * and so reads FALSE when the query embed hard-failed mid-turn
+     * (`hybrid_threw`) — the most common degraded case, and the one that was
+     * invisible in the [V3] line. Absent = the semantic arm ran.
+     */
+    degradedReason?: RetrievalDegradedReason;
     /**
      * Present only when the `ragConfidenceGate` flag is on (Phase 0, observe
      * only). Optional so the default-OFF path is byte-for-byte unchanged.
@@ -1144,17 +1155,86 @@ export class ModeHybridRetriever {
      * Corpus arbitration (lexicalTokens.corpusAnchorsQuestion): does some chunk
      * of these files hold the question's distinctive terms together? Lexical
      * and synchronous — no embedding, no model — so the orchestrator can ask it
-     * on a turn the classifier sent down the no-retrieval path. False for a
-     * pool too small for document frequencies to mean anything.
+     * on a turn the classifier sent down the no-retrieval path. A pool too
+     * small for document frequencies (under IDF_MIN_POOL chunks — every upload
+     * of a few pages) is judged by content-word share instead of returning
+     * false, which silently disabled arbitration for small files (2026-09-30).
      */
     public probeAnchors(files: ModeReferenceFile[], question: string): boolean {
         try {
-            const pool = this.getModeFileChunks(files);
-            const { stats } = this.lexicalStatsFor(pool);
-            return stats ? corpusAnchorsQuestion(question, stats) : false;
+            const probe = this.probePoolFor(files);
+            if (!probe) return false;
+            return probe.stats ? corpusAnchorsQuestion(question, probe.stats) : smallPoolAnchorsQuestion(question, probe.texts);
         } catch {
             return false; // a probe must never break a turn
         }
+    }
+
+    /**
+     * The probe's pool and statistics, reused while the files' chunk arrays are
+     * unchanged. getModeFileChunks() builds a NEW candidate array per call, so
+     * lexicalStatsFor()'s identity cache never hit for the probe, and the probe
+     * now runs on every FAST turn with files attached (including live-meeting
+     * turns) — a large file would rebuild its idf table on the main process each
+     * time. The per-file chunk arrays ARE stable (chunkCache), so they key this.
+     */
+    private probePoolCache: { chunkArrays: string[][]; texts: string[]; stats: LexicalStats | null } | null = null;
+
+    private probePoolFor(files: ModeReferenceFile[]): { texts: string[]; stats: LexicalStats | null } | null {
+        const pool = this.getModeFileChunks(files);
+        if (pool.length === 0) return null;
+        const chunkArrays = files
+            .filter((f) => f.content.trim())
+            .map((f) => this.chunkCache.get(f.id)?.chunks)
+            .filter((c): c is string[] => Array.isArray(c));
+        const cached = this.probePoolCache;
+        if (cached && cached.chunkArrays.length === chunkArrays.length
+            && cached.chunkArrays.every((c, i) => c === chunkArrays[i])) {
+            return cached;
+        }
+        const texts = pool.map((c) => c.text);
+        this.probePoolCache = { chunkArrays, texts, stats: buildLexicalStats(texts) };
+        return this.probePoolCache;
+    }
+
+    /**
+     * The lexical branches' floors, shared by the embedder-unavailable branch and
+     * the hybrid_threw catch (2026-09-30):
+     *
+     * EMPTY-LEXICAL FLOOR (2026-09-11) — zero chunks over the threshold while the
+     * corpus has some → the best-overlapping chunks at a zero threshold. Strictly
+     * positive: a query sharing NO token with the corpus keeps its honest zero.
+     *
+     * THIN-RESULTS TOP-UP, lexical (2026-09-19). With one or two chunks over the
+     * threshold the evidence budget went out mostly EMPTY — room for eight
+     * chunks, one sent — and a paraphrased question whose answer sat in the
+     * third-best chunk read as "not in the file". A weak extra costs a slot.
+     */
+    private applyLexicalFloors(
+        candidates: ChunkCandidate[],
+        allCandidates: ChunkCandidate[],
+        queryWords: Set<string>,
+        mark: (stage: string, details?: Record<string, unknown>) => void,
+        stageSuffix: string,
+    ): ChunkCandidate[] {
+        if (candidates.length === 0 && allCandidates.length > 0) {
+            const floored = this.performLexicalRetrieval(allCandidates, queryWords, 0).filter((c) => c.ftsScore > 0);
+            mark(`empty_lexical_floor${stageSuffix}`, { candidateCount: floored.length, pool: allCandidates.length });
+            return floored;
+        }
+        if (candidates.length < THIN_RESULTS_TOPUP_BELOW && allCandidates.length > candidates.length) {
+            const seen = new Set(candidates.map((c) => `${c.sourceId}#${c.chunkIndex}`));
+            const extra = this.performLexicalRetrieval(allCandidates, queryWords, 0)
+                .filter((c) => c.ftsScore > 0 && !seen.has(`${c.sourceId}#${c.chunkIndex}`))
+                .sort((a, b) => b.ftsScore - a.ftsScore)
+                .slice(0, THIN_RESULTS_TOPUP_MAX);
+            if (extra.length) {
+                const out = candidates.concat(extra);
+                mark(`thin_results_topup_lexical${stageSuffix}`, { added: extra.length, candidateCount: out.length, pool: allCandidates.length });
+                return out;
+            }
+        }
+        return candidates;
     }
 
     /** Lexical score (and anchor boost) for every candidate of `pool`, index-aligned. */
@@ -1633,6 +1713,7 @@ export class ModeHybridRetriever {
         let candidates: ChunkCandidate[] = [];
 
         const usingLexicalForLocalManualQuery = this.shouldUseLexicalForLocalManualQuery(hasTranscript, params.meetingActive);
+        let degradedReason: RetrievalDegradedReason | undefined;
 
         const h4StageTrace = process.env.NATIVELY_E2E === '1'
             && process.env.NATIVELY_H4_STAGE_TRACE === '1';
@@ -1691,9 +1772,16 @@ export class ModeHybridRetriever {
                     modeId: params.modeId,
                     errorClass: error instanceof Error ? error.constructor.name : typeof error,
                 });
+                degradedReason = 'hybrid_threw';
                 candidates = this.performLexicalRetrieval(allCandidates, queryWords, toLexicalThreshold(adaptiveThreshold));
+                // Same floors as the embedder-unavailable branch (2026-09-30): this
+                // catch is where a query embed that hard-failed MID-TURN lands, and
+                // it handed the model nothing whenever the lexical threshold kept
+                // no chunk — the one branch of the three without a floor.
+                candidates = this.applyLexicalFloors(candidates, allCandidates, queryWords, markH4HybridStage, '_after_throw');
             }
         } else {
+            degradedReason = usingLexicalForLocalManualQuery ? 'local_lexical' : 'embedding_unavailable';
             if (usingLexicalForLocalManualQuery) {
                 console.warn('[ModeHybridRetriever] Local ONNX provider active for manual query; using lexical fallback');
             } else {
@@ -1718,27 +1806,7 @@ export class ModeHybridRetriever {
             // still judged for answerability downstream.
             // Strictly positive: a query sharing NO token with the corpus keeps
             // its honest zero (the confidence signal reports no_candidates).
-            if (candidates.length === 0 && allCandidates.length > 0) {
-                candidates = this.performLexicalRetrieval(allCandidates, queryWords, 0).filter((c) => c.ftsScore > 0);
-                markH4HybridStage('empty_lexical_floor', { candidateCount: candidates.length, pool: allCandidates.length });
-            } else if (candidates.length < THIN_RESULTS_TOPUP_BELOW && allCandidates.length > candidates.length) {
-                // THIN-RESULTS TOP-UP, lexical branch (2026-09-19). The hybrid
-                // branch has had this since 2026-09-11; the branch a key-less
-                // user lives in did not. With one or two chunks over the
-                // threshold the evidence budget went out mostly EMPTY — room for
-                // eight chunks, one sent — and a paraphrased question whose
-                // answer sat in the third-best chunk read as "not in the file".
-                // An unused budget buys nothing; a weak extra costs a slot.
-                const seen = new Set(candidates.map((c) => `${c.sourceId}#${c.chunkIndex}`));
-                const extra = this.performLexicalRetrieval(allCandidates, queryWords, 0)
-                    .filter((c) => c.ftsScore > 0 && !seen.has(`${c.sourceId}#${c.chunkIndex}`))
-                    .sort((a, b) => b.ftsScore - a.ftsScore)
-                    .slice(0, THIN_RESULTS_TOPUP_MAX);
-                if (extra.length) {
-                    candidates = candidates.concat(extra);
-                    markH4HybridStage('thin_results_topup_lexical', { added: extra.length, candidateCount: candidates.length, pool: allCandidates.length });
-                }
-            }
+            candidates = this.applyLexicalFloors(candidates, allCandidates, queryWords, markH4HybridStage, '');
         }
 
         markH4HybridStage('ranking_complete', { candidateCount: candidates.length });
@@ -2088,6 +2156,7 @@ export class ModeHybridRetriever {
                 formattedContext: finalContext,
                 usedFallback,
                 usedHybrid: !usedFallback,
+                ...(degradedReason ? { degradedReason } : {}),
                 ...(confidence ? { confidence } : {})
             };
         }
@@ -2109,6 +2178,7 @@ export class ModeHybridRetriever {
             formattedContext,
             usedFallback,
             usedHybrid: this.isEmbeddingAvailable(),
+            ...(degradedReason ? { degradedReason } : {}),
             ...(confidence ? { confidence } : {})
         };
     }

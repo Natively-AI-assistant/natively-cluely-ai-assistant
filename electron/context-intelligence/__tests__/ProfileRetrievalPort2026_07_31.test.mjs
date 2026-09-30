@@ -435,14 +435,14 @@ describe('identity & contact lookups (2026-08-02)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2026-08-02: PROFILE_FACT was a planned source type with a structurally empty
-// pool. "What is my expected salary" planned [RESUME, PROFILE_FACT]; the résumé
-// is silent on the subject by nature, PROFILE_FACT resolved to nothing, and the
-// turn answered DOCUMENT_FACT_NOT_FOUND — about a figure SalaryIntelligence had
-// already computed and written to the log ("Resume-based estimate: INR
-// 350,000-650,000 (medium)"). Derived facts now hydrate that pool.
+// 2026-08-02 → 2026-09-30. PROFILE_FACT used to be hydrated with the résumé-
+// based salary ESTIMATE so "what is my expected salary" had evidence. That
+// estimate is an LLM's market guess for the role and location, not the
+// candidate's expectation, and PROFILE_FACT carries first-person authority —
+// the model stated the guess as the user's own figure. It is refused now, at
+// the renderer, even if a caller still hands it in.
 // ---------------------------------------------------------------------------
-describe('derived profile facts (PROFILE_FACT, 2026-08-02)', () => {
+describe('the salary estimate is never PROFILE_FACT evidence (2026-09-30)', () => {
   const SALARY = { salary_estimate: {
     role: 'Software Engineer', location: 'Kochi, India', currency: 'INR',
     min: 350000, max: 650000, confidence: 'medium',
@@ -452,37 +452,19 @@ describe('derived profile facts (PROFILE_FACT, 2026-08-02)', () => {
     kind: 'fact', sourceId: 'psrc_fact_test', versionId: 'fv1',
     fileName: 'Derived profile facts (Profile Intelligence)', structured: SALARY,
   };
-  const factPort = () => lfwPort([FACT_DOC]);
 
-  test('"what is my expected salary" resolves (was DOCUMENT_FACT_NOT_FOUND)', async () => {
+  test('"what is my expected salary" gets no PROFILE_FACT evidence from the estimate', async () => {
     const decision = lfwDecision('what is my expected salary');
     assert.ok(decision.retrievalPlan.sourceTypes.includes('PROFILE_FACT'),
-      'the planner asks for PROFILE_FACT — that is why the empty pool was a defect');
-    const r = await factPort().retrieve({ decision });
-    const fact = r.evidence.find((e) => e.sourceType === 'PROFILE_FACT');
-    assert.ok(fact, 'the computed estimate must be reachable');
-    assert.match(fact.content, /350,000/);
-    assert.equal(fact.provenance, 'PROFILE_FACT');
+      'the planner still asks for PROFILE_FACT; the pool simply holds no estimate');
+    assert.equal(lfwPort([FACT_DOC]), null, 'an estimate-only fact doc renders nothing, so no source is registered');
+    const r = await lfwPort([RESUME_DOC, JD_DOC, FACT_DOC]).retrieve({ decision });
+    assert.ok(!r.evidence.some((e) => e.sourceType === 'PROFILE_FACT'), 'no PROFILE_FACT evidence');
+    assert.ok(!r.evidence.some((e) => /350,000|650,000/.test(e.content)), 'the estimated band never reaches evidence');
   });
 
-  test('the estimate carries its own "derived, not on the résumé" qualification', async () => {
-    const r = await factPort().retrieve({ decision: lfwDecision('what is my expected salary') });
-    const fact = r.evidence.find((e) => e.sourceType === 'PROFILE_FACT');
-    // The retrieved CHUNK is what the model sees, so the qualification has to
-    // travel with the number rather than live in a prompt rule that may not be
-    // restated. Without it the model reports an estimate as a résumé line item.
-    assert.match(fact.content, /DERIVED ESTIMATE/);
-    assert.match(fact.content, /NOT stated\s+anywhere on the résumé|NOT stated anywhere on the résumé/);
-    assert.match(fact.content, /NOT an offer/);
-  });
-
-  test('a derived fact never licenses an absence claim', () => {
-    const sections = renderProfileSections('fact', SALARY);
-    assert.ok(sections.length > 0);
-    for (const s of sections) {
-      assert.equal(s.completeInventory, false,
-        'one computed figure enumerates nothing and must not ground a negative');
-    }
+  test('the fact renderer refuses a salary estimate', () => {
+    assert.deepEqual(renderProfileSections('fact', SALARY), []);
   });
 
   test('a mode that does not opt into PROFILE_FACT gets no fact source', () => {
@@ -494,27 +476,6 @@ describe('derived profile facts (PROFILE_FACT, 2026-08-02)', () => {
       profileSources: ti.profileSources, userId: 'local',
     });
     assert.equal(port, null, 'fail closed: an unauthorized type is never registered');
-  });
-
-  test('the fact is POLICY-ADMITTED only — never lexically discovered (review find)', async () => {
-    // The disclaimer sentence inside the fact chunk ("calculated from the
-    // résumé — role, location, skills and years of experience…") is a BM25
-    // keyword magnet: before policyOnly scoring it ranked #2 on "tell me about
-    // my experience" and "what are my skills" in a real-DB probe, wasting an
-    // evidence slot and injecting salary noise into non-salary answers.
-    const port = lfwPort([RESUME_DOC, JD_DOC, FACT_DOC]);
-    for (const q of [
-      'tell me about my experience', 'what are my skills',
-      'do I meet the job requirements', 'tell me about my projects',
-    ]) {
-      const r = await port.retrieve({ decision: lfwDecision(q) });
-      assert.ok(!r.evidence.some((e) => e.sourceType === 'PROFILE_FACT'),
-        `"${q}" is not a compensation question — the derived salary fact must not consume an evidence slot`);
-    }
-    // …and the question it exists for still resolves it.
-    const salary = await port.retrieve({ decision: lfwDecision('what is my expected salary') });
-    assert.ok(salary.evidence.some((e) => e.sourceType === 'PROFILE_FACT'),
-      'policy admission must still fire on a genuine compensation question');
   });
 
   test('a malformed or absent estimate yields no source, never a throw', () => {

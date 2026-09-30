@@ -508,6 +508,8 @@ describe('Fast Response keeps the profile / résumé step', () => {
         processQuestion: async () => { asked++; return { systemPromptInjection: 'PERSONA_MARKER', contextBlock: 'RESUME_MARKER' }; },
       },
       isPremiumKnowledgeInterceptAllowed: () => true,
+      // A Profile-Intelligence mode (Looking for work): the intercept runs.
+      isProfileIntelligenceAllowedForTurn: () => true,
     };
     const { h, first } = await withMeasurements({}, () => drive(
       { active: 'gemini-3.8-flash', vendors: ['gemini', 'openai'], pick: 'gpt-5.4-mini' },

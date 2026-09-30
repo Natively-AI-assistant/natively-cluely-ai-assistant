@@ -117,8 +117,8 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
   });
 
   test('the JIT profile-evidence fetch is gated on both the never-retrieve decision and the profile-allowed contract', () => {
-    assert.match(body, /if \(!candidateProfile && wtaDecisionAllowsCandidateProfile\s*\n?\s*&& \(wtaProfileAllowed \|\| _jdShapeAllowed\)\)/s,
-      'the JIT profile-evidence fetch must AND the canonical + contract gates');
+    assert.match(body, /if \(!candidateProfile && wtaDecisionAllowsCandidateProfile && snapshotProfileIntelligenceAllowed\s*\n?\s*&& \(wtaProfileAllowed \|\| _jdShapeAllowed\)\)/s,
+      'the JIT profile-evidence fetch must AND the canonical + contract gates and Profile Intelligence eligibility');
   });
 
   test('wtaDecisionAllowsCandidateProfile is derived from the canonical turnSourceDecision', () => {
