@@ -147,15 +147,21 @@ async function collect(gen) {
 
 const lastRequest = () => requests[requests.length - 1];
 
-describe('Chat Completions (DeepSeek)', () => {
+const prompts = require(dist('llm/prompts.js'));
+const OpenAI = require('openai').default ?? require('openai');
+
+describe('Chat Completions (GPT and anything not Claude or DeepSeek)', () => {
   test('`data: null` events are skipped, reasoning is not shown, the answer arrives whole', async () => {
-    const h = makeHelper('agentrouter/deepseek-v4-flash');
+    // AgentRouter's Chat Completions stream carries literal `data: null`
+    // events (measured). DeepSeek no longer takes this route, GPT still does,
+    // so the regression lives on a GPT id.
+    const h = makeHelper('agentrouter/gpt-6-sol');
     const text = await collect(h.streamWithAgentRouter('How would you rate-limit an API?', 'SYS'));
     assert.equal(text, 'A token bucket per API key.');
   });
 
-  test('what goes on the wire: path, key, identity header, stripped id, thinking off, streamed', async () => {
-    const h = makeHelper('agentrouter/deepseek-v4-flash');
+  test('what goes on the wire: path, key, identity header, stripped id, streamed', async () => {
+    const h = makeHelper('agentrouter/gpt-6-sol');
     await collect(h.streamWithAgentRouter('q', 'SYS'));
     const r = lastRequest();
     assert.equal(r.method, 'POST');
@@ -163,47 +169,9 @@ describe('Chat Completions (DeepSeek)', () => {
     assert.equal(r.headers.authorization, `Bearer ${KEY}`);
     assert.equal(r.headers.originator, 'codex_cli_rs', 'the client-identity header must be on every request');
     assert.match(r.headers['user-agent'], /^OpenAI\/JS /, 'the User-Agent stays the SDK\'s own');
-    assert.equal(r.body.model, 'deepseek-v4-flash', 'the agentrouter/ prefix must never reach the wire');
-    assert.deepEqual(r.body.thinking, { type: 'disabled' });
+    assert.equal(r.body.model, 'gpt-6-sol', 'the agentrouter/ prefix must never reach the wire');
     assert.equal(r.body.stream, true);
     assert.equal(r.body.messages[0].role, 'system');
-  });
-
-  test('PARITY: the body is byte-for-byte what direct DeepSeek sends, except the model id', async () => {
-    // The real direct-DeepSeek streamer, on a real OpenAI client pointed at the
-    // same replay server. Same system prompt, same user content (a long,
-    // multi-line context), so any difference in what reaches the model — a
-    // dropped message, a missing sampling parameter, a different output cap —
-    // shows up as a body diff. The first AgentRouter version failed this: it
-    // sent no temperature, seed or max_tokens.
-    const OpenAI = require('openai').default ?? require('openai');
-    const context = Array.from({ length: 200 }, (_, i) => `Speaker ${i % 3}: line ${i} of the meeting transcript.`).join('\n');
-    const user = `${context}\n\nCurrent question: how would you rate-limit this API?`;
-
-    const direct = Object.create(LLMHelper.prototype);
-    Object.assign(direct, {
-      isLocalOnlyMode: false, currentModelId: 'deepseek-flash', assertOutboundScopes: () => {},
-      rateLimiters: { deepseek: { acquire: async () => {} } },
-    });
-    direct._deepseekClient = new OpenAI({ apiKey: 'sk-direct', baseURL: `${origin}/v1` });
-    await collect(direct.streamWithDeepseek(user, 'SYS PROMPT', 'deepseek-flash'));
-    const d = lastRequest();
-
-    const h = makeHelper('agentrouter/deepseek-v4-flash');
-    await collect(h.streamWithAgentRouter(user, 'SYS PROMPT'));
-    const a = lastRequest();
-
-    assert.equal(d.path, a.path);
-    const { model: dm, ...dRest } = d.body;
-    const { model: am, ...aRest } = a.body;
-    assert.equal(dm, 'deepseek-flash');
-    assert.equal(am, 'deepseek-v4-flash');
-    assert.deepEqual(aRest, dRest, 'AgentRouter DeepSeek must send exactly the direct DeepSeek request');
-    // Spelled out, so a failure names the parameter rather than a blob diff.
-    assert.equal(a.body.temperature, 0.2);
-    assert.equal(a.body.seed, 7);
-    assert.equal(a.body.max_tokens, 8192);
-    assert.equal(a.body.messages[1].content, user, 'the whole context arrives, untrimmed');
   });
 
   test('GPT gets the native OpenAI parameters: output cap and no sampling params', async () => {
@@ -218,21 +186,19 @@ describe('Chat Completions (DeepSeek)', () => {
     assert.equal(r.body.thinking, undefined);
   });
 
-  test('the blocking adapter drains the stream too', async () => {
+  test('the fast-model seam gives a GPT model room for its reasoning (512, as native)', async () => {
     const h = makeHelper('agentrouter/deepseek-v4-flash');
-    assert.equal(await h.generateWithAgentRouter('q', 'SYS'), 'A token bucket per API key.');
-    assert.equal(lastRequest().body.stream, true);
+    await h.callFastModel('judge', { modelId: 'agentrouter/gpt-6-sol', timeoutMs: 5000 });
+    const r = lastRequest();
+    assert.equal(r.path, '/v1/chat/completions');
+    assert.equal(r.body.max_completion_tokens, 512);
+    assert.equal(r.body.temperature, undefined);
   });
 
-  test('the fast-model seam caps the output with the parameter DeepSeek takes', async () => {
-    const h = makeHelper('agentrouter/claude-opus-5');
-    const out = await h.callFastModel('judge', { modelId: 'agentrouter/deepseek-v4-flash', timeoutMs: 5000 });
-    assert.equal(out, 'A token bucket per API key.');
-    const r = lastRequest();
-    assert.equal(r.body.max_tokens, 256);
-    assert.equal(r.body.max_completion_tokens, undefined);
-    assert.equal(r.body.temperature, 0, 'a judge verdict is sampled at 0, like every other gateway rung');
-    assert.deepEqual(r.body.thinking, { type: 'disabled' });
+  test('the blocking adapter drains the stream too', async () => {
+    const h = makeHelper('agentrouter/gpt-6-sol');
+    assert.equal(await h.generateWithAgentRouter('q', 'SYS'), 'A token bucket per API key.');
+    assert.equal(lastRequest().body.stream, true);
   });
 
   test('a 402 from the rationed pool is explained, with the status kept', async () => {
@@ -255,14 +221,14 @@ describe('Chat Completions (DeepSeek)', () => {
   });
 });
 
-describe('Anthropic Messages (Claude)', () => {
+describe('Anthropic Messages (Claude and DeepSeek)', () => {
   test('Claude streams over /v1/messages; only text deltas reach the user', async () => {
     const h = makeHelper('agentrouter/claude-opus-5');
     const text = await collect(h.streamWithAgentRouter('q', 'SYS'));
     assert.equal(text, 'Use a sliding window log.', 'thinking deltas must not leak into the answer');
   });
 
-  test('what goes on the wire: /v1/messages (no doubled /v1), x-api-key, identity, string system', async () => {
+  test('Claude on the wire: /v1/messages (no doubled /v1), x-api-key, identity, native Claude params', async () => {
     const h = makeHelper('agentrouter/claude-opus-5');
     await collect(h.streamWithAgentRouter('q', 'SYS'));
     const r = lastRequest();
@@ -279,19 +245,82 @@ describe('Anthropic Messages (Claude)', () => {
     assert.deepEqual(r.body.thinking, { type: 'disabled' }, 'extended thinking off, as the native Claude rung sends');
   });
 
+  test('DeepSeek goes to /v1/messages with DEEPSEEK\'s values, not Claude\'s', async () => {
+    // Measured: on Chat Completions AgentRouter ignored DeepSeek's thinking-off
+    // on 9 of 12 requests and returned an EMPTY long answer (all 8192 tokens
+    // spent reasoning); on /v1/messages thinking was off 12 of 12.
+    const h = makeHelper('agentrouter/deepseek-v4-flash');
+    const text = await collect(h.streamWithAgentRouter('q', 'SYS'));
+    assert.equal(text, 'Use a sliding window log.');
+    const r = lastRequest();
+    assert.equal(r.path, '/v1/messages');
+    assert.equal(r.body.model, 'deepseek-v4-flash');
+    assert.equal(r.body.max_tokens, 8192, 'getDeepseekMaxOutput');
+    assert.equal(r.body.temperature, 0.2);
+    assert.deepEqual(r.body.thinking, { type: 'disabled' });
+    assert.equal(r.body.seed, undefined, 'the Anthropic API has no seed');
+  });
+
+  test('PARITY with direct DeepSeek: same system, same full context, same temperature, cap and thinking', async () => {
+    // The real direct-DeepSeek streamer on a real OpenAI client, against the
+    // same replay server, with the same long multi-line context. The two go
+    // out in different formats now (direct = Chat Completions, AgentRouter =
+    // Messages), so they are normalised and compared field by field: anything
+    // that reaches one model and not the other fails here.
+    const context = Array.from({ length: 200 }, (_, i) => `Speaker ${i % 3}: line ${i} of the meeting transcript.`).join('\n');
+    const user = `${context}\n\nCurrent question: how would you rate-limit this API?`;
+
+    const direct = Object.create(LLMHelper.prototype);
+    Object.assign(direct, {
+      isLocalOnlyMode: false, currentModelId: 'deepseek-flash', assertOutboundScopes: () => {},
+      rateLimiters: { deepseek: { acquire: async () => {} } },
+    });
+    direct._deepseekClient = new OpenAI({ apiKey: 'sk-direct', baseURL: `${origin}/v1` });
+    await collect(direct.streamWithDeepseek(user, 'SYS PROMPT', 'deepseek-flash'));
+    const d = lastRequest().body;
+
+    const h = makeHelper('agentrouter/deepseek-v4-flash');
+    await collect(h.streamWithAgentRouter(user, 'SYS PROMPT'));
+    const a = lastRequest().body;
+
+    const aUserText = (Array.isArray(a.messages[0].content) ? a.messages[0].content : [{ type: 'text', text: a.messages[0].content }])
+      .filter((b) => b.type === 'text').map((b) => b.text).join('');
+    const normal = {
+      direct: { system: d.messages[0].content, user: d.messages[1].content, turns: d.messages.length - 1, temperature: d.temperature, cap: d.max_tokens, thinking: d.thinking },
+      agentrouter: { system: a.system, user: aUserText, turns: a.messages.length, temperature: a.temperature, cap: a.max_tokens, thinking: a.thinking },
+    };
+    assert.deepEqual(normal.agentrouter, normal.direct, 'AgentRouter DeepSeek must receive what direct DeepSeek receives');
+    assert.equal(aUserText, user, 'the whole context arrives, untrimmed');
+    // The one deliberate difference, pinned so it stays deliberate.
+    assert.equal(d.seed, 7);
+    assert.equal(a.seed, undefined, 'no seed on the Messages API; it did not make direct DeepSeek repeatable anyway');
+  });
+
+  test('DeepSeek falls back to the system prompt direct DeepSeek uses, not Claude\'s', () => {
+    // It shares Claude's ROUTE; the fallback must follow the MODEL.
+    const h = makeHelper('agentrouter/deepseek-v4-flash');
+    assert.equal(h.agentRouterDefaultSystemPrompt('agentrouter/deepseek-v4-flash'), prompts.OPENAI_SYSTEM_PROMPT);
+    assert.equal(h.agentRouterDefaultSystemPrompt('agentrouter/claude-opus-5'), prompts.CLAUDE_SYSTEM_PROMPT);
+    assert.equal(h.agentRouterDefaultSystemPrompt('agentrouter/gpt-6-astra'), prompts.OPENAI_SYSTEM_PROMPT);
+  });
+
   test('the blocking adapter streams, so the text/plain non-streaming reply is never parsed', async () => {
     const h = makeHelper('agentrouter/claude-opus-5');
     assert.equal(await h.generateWithAgentRouter('q', 'SYS'), 'Use a sliding window log.');
+    const h2 = makeHelper('agentrouter/deepseek-v4-flash');
+    assert.equal(await h2.generateWithAgentRouter('q', 'SYS'), 'Use a sliding window log.');
   });
 
-  test('the fast-model seam streams Claude too, with max_tokens', async () => {
+  test('the fast-model seam: DeepSeek judge at temperature 0 with a 256 cap, thinking off', async () => {
     const h = makeHelper('agentrouter/claude-opus-5');
-    const out = await h.callFastModel('judge', { modelId: 'agentrouter/claude-opus-5', timeoutMs: 5000 });
+    const out = await h.callFastModel('judge', { modelId: 'agentrouter/deepseek-v4-flash', timeoutMs: 5000 });
     assert.equal(out, 'Use a sliding window log.');
     const r = lastRequest();
     assert.equal(r.path, '/v1/messages');
     assert.equal(r.body.stream, true);
     assert.equal(r.body.max_tokens, 256);
+    assert.equal(r.body.temperature, 0, 'a judge verdict is sampled at 0, like every other gateway rung');
+    assert.deepEqual(r.body.thinking, { type: 'disabled' });
   });
 
   test('a 402 on the Anthropic route is explained the same way', async () => {

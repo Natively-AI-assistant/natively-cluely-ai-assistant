@@ -151,6 +151,7 @@ import {
   agentRouterError,
   agentRouterProtocolFor,
   agentRouterWireModel,
+  isAgentRouterClaudeWireModel,
   isAgentRouterModelId,
 } from './llm/agentRouter'
 import { createAgentRouterClients } from './llm/agentRouterClients'
@@ -1710,8 +1711,8 @@ export class LLMHelper {
 
   /**
    * Configure AgentRouter. One key, BOTH clients: the protocol is a property of
-   * the MODEL here (agentRouterProtocolFor — Claude on /v1/messages, the rest
-   * on /v1/chat/completions), so unlike setFluxionConfig there is no protocol
+   * the MODEL here (agentRouterProtocolFor — Claude and DeepSeek on
+   * /v1/messages, the rest on /v1/chat/completions), so unlike setFluxionConfig there is no protocol
    * argument and nothing for the user to choose. Both clients carry the
    * client-identity header; see AGENTROUTER_CLIENT_HEADERS for what it is and
    * whose decision it was.
@@ -4858,7 +4859,8 @@ let isMultimodal = !!(imagePaths?.length);
       // model that reads them — DeepSeek and gpt-6-astra answer as text.
       if (this.isAgentRouterModel(this.currentModelId) && this.hasAgentRouterCredential()) {
         const sendImages = cloudIsMultimodal && this.agentRouterModelSupportsVision(this.currentModelId);
-        const arSystem = agentRouterProtocolFor(agentRouterWireModel(this.currentModelId)) === 'anthropic' ? claudeSystemPrompt : openaiSystemPrompt;
+        // Model family, not protocol — see agentRouterDefaultSystemPrompt.
+        const arSystem = isAgentRouterClaudeWireModel(agentRouterWireModel(this.currentModelId)) ? claudeSystemPrompt : openaiSystemPrompt;
         return await this.generateWithAgentRouter(cloudUserContent, arSystem, sendImages ? cloudImagePaths : undefined);
       }
       if (this.isGroqModel(this.currentModelId) && this.groqClient) {
@@ -7019,15 +7021,19 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
-   * Anthropic Messages parameters for an AgentRouter Claude model = what
+   * Anthropic Messages parameters. For a Claude model = what
    * streamWithClaude sends: getClaudeMaxOutput, temperature 0.2, thinking
    * explicitly disabled (native's "made explicit" choice, for first-token time).
    * The system prompt stays a plain string, not cache blocks — see
    * buildFluxionAnthropicRequest for why a relay cannot use them.
    */
   private agentRouterAnthropicParams(model: string, opts?: AgentRouterCallOptions): Record<string, unknown> {
+    // DeepSeek rides this route too (see agentRouterProtocolFor), and takes
+    // streamWithDeepseek's values, not Claude's: getDeepseekMaxOutput, 0.2,
+    // thinking off. NO seed — the Anthropic API has none, and direct
+    // DeepSeek's seed did not make its replies repeatable anyway (measured).
     return {
-      max_tokens: opts?.maxTokens ?? this.getClaudeMaxOutput(model),
+      max_tokens: opts?.maxTokens ?? (isDeepseekModelId(model) ? this.getDeepseekMaxOutput(model) : this.getClaudeMaxOutput(model)),
       temperature: opts?.temperature ?? INTERACTIVE_TEMPERATURE,
       thinking: { type: 'disabled' as const },
     };
@@ -7040,7 +7046,9 @@ let isMultimodal = !!(imagePaths?.length);
    * one, as direct DeepSeek and OpenAI do.
    */
   private agentRouterDefaultSystemPrompt(modelId: string): string {
-    return agentRouterProtocolFor(agentRouterWireModel(modelId)) === 'anthropic' ? CLAUDE_SYSTEM_PROMPT : OPENAI_SYSTEM_PROMPT;
+    // Keyed on the model FAMILY, never the protocol: DeepSeek travels the
+    // Anthropic route but is DeepSeek, and direct DeepSeek uses the OpenAI one.
+    return isAgentRouterClaudeWireModel(agentRouterWireModel(modelId)) ? CLAUDE_SYSTEM_PROMPT : OPENAI_SYSTEM_PROMPT;
   }
 
   /**
@@ -7075,9 +7083,10 @@ let isMultimodal = !!(imagePaths?.length);
 
   /**
    * AgentRouter, streaming. The protocol is chosen per MODEL
-   * (agentRouterProtocolFor): Claude on the Anthropic Messages API, everything
-   * else on Chat Completions — the docs' rule, and it covers the whole live
-   * catalogue. Every failure goes through agentRouterError(), so a user reads
+   * (agentRouterProtocolFor): Claude and DeepSeek on the Anthropic Messages
+   * API, everything else on Chat Completions — DeepSeek there because the Chat
+   * Completions route ignored its thinking-off switch (measured; the function's
+   * comment has the numbers). Every failure goes through agentRouterError(), so a user reads
    * "today's Claude allowance is used up" rather than a bare 402.
    */
   private async * streamWithAgentRouter(

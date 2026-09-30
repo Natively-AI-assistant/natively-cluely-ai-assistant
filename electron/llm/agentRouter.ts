@@ -33,9 +33,10 @@
  *    `supported_endpoint_types` per model: claude-* and deepseek-* take both
  *    `anthropic` and `openai`, gpt-6-astra takes `openai` only. The docs say to
  *    prefer the Anthropic endpoint for the Claude Opus series and the OpenAI
- *    one for everything else, "in parallel, never mixed". Base URLs differ the
- *    same way Fluxion's do: the Anthropic SDK appends `/v1/messages` itself, so
- *    its base has NO `/v1`.
+ *    one for everything else, "in parallel, never mixed" — but for DeepSeek
+ *    the measurements overrule the docs (see agentRouterProtocolFor). Base
+ *    URLs differ the same way Fluxion's do: the Anthropic SDK appends
+ *    `/v1/messages` itself, so its base has NO `/v1`.
  *
  * 4. RATIONED CLAUDE AND GPT. Per the site's own announcement (2026-08-28),
  *    Claude and GPT are released in daily batches at 02:00 and 11:00 UTC and
@@ -52,8 +53,10 @@
  *      empty answer, not an error. Every AgentRouter call streams.
  *    - DeepSeek streams its hidden reasoning first (`reasoning_content`), which
  *      also counts against `max_tokens`: a 60-token cap ended `finish_reason:
- *      length` mid-sentence. `thinking:{type:"disabled"}` is honoured on BOTH
- *      protocols (measured), so every DeepSeek request sends it.
+ *      length` mid-sentence. `thinking:{type:"disabled"}` turns it off — on
+ *      the Anthropic route every time, on Chat Completions only when the
+ *      request lands on DeepSeek's own backend (3 of 12 did). That is why
+ *      DeepSeek travels the Anthropic route (agentRouterProtocolFor).
  *
  * 6. ERRORS are new-api's, some in Chinese: `无效的令牌` (invalid token),
  *    `未提供令牌` (no token), and for an unknown or retired model `503 当前分组
@@ -142,13 +145,39 @@ export function agentRouterWireModel(modelId: string): string {
 }
 
 /**
- * Which endpoint a model is sent to. The docs' rule (fact 3): Claude on the
- * Anthropic Messages API, everything else on Chat Completions. This covers the
- * whole live catalogue — gpt-6-astra is openai-only, and claude-* / deepseek-*
- * accept both — and it is the ONE line to change if a measurement disagrees.
+ * Which endpoint a model is sent to: Claude AND DeepSeek on the Anthropic
+ * Messages API, everything else (gpt-6-astra, which is openai-only) on Chat
+ * Completions.
+ *
+ * DeepSeek is here against the docs' "OpenAI format for the rest", because of
+ * what the Chat Completions route did with it (measured 2026-09-30, compared
+ * against DeepSeek's own API with the same body):
+ *   - `thinking:{type:"disabled"}` was IGNORED on 9 of 12 requests. Those
+ *     replies carried no `system_fingerprint` (DeepSeek's own API and the
+ *     other 3 carried `aeb56401…`), streamed hidden reasoning first, and were
+ *     slower — a different upstream channel.
+ *   - on that channel a long answer came back EMPTY: all 8192 output tokens
+ *     went to reasoning (`finish_reason: "max_tokens"` — an Anthropic stop
+ *     reason in an OpenAI reply, which suggests the channel is an
+ *     Anthropic-format upstream dropping the thinking field in translation;
+ *     an inference, not confirmed).
+ * On the Anthropic route thinking was off on 12 of 12, the same long answer
+ * returned 8192 tokens of text (34,412 chars; direct DeepSeek 34,635), all
+ * three needles were recalled at ~155k tokens, and first tokens came faster
+ * and steadier. What is lost is `seed`, which the Anthropic API does not
+ * have — and which did not make direct DeepSeek deterministic anyway (3
+ * distinct replies from 3 identical seeded requests).
+ *
+ * Covers the whole live catalogue, and is the ONE line to change if a later
+ * measurement disagrees.
  */
 export function agentRouterProtocolFor(wireModel: string): AgentRouterProtocol {
-    return /^claude-/i.test(wireModel) ? 'anthropic' : 'openai';
+    return /^(?:claude-|deepseek-)/i.test(wireModel) ? 'anthropic' : 'openai';
+}
+
+/** Claude family (not protocol): picks the native Claude system prompt and parameters. */
+export function isAgentRouterClaudeWireModel(wireModel: string): boolean {
+    return /^claude-/i.test(wireModel);
 }
 
 /**

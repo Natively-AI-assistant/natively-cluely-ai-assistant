@@ -51,14 +51,25 @@ describe('ids', () => {
 });
 
 describe('protocol per model', () => {
-  test('Claude goes to /v1/messages, everything else to /v1/chat/completions', () => {
+  test('Claude and DeepSeek go to /v1/messages, everything else to /v1/chat/completions', () => {
     assert.equal(ar.agentRouterProtocolFor('claude-opus-5'), 'anthropic');
     assert.equal(ar.agentRouterProtocolFor('claude-opus-4-8'), 'anthropic');
+    // DeepSeek on the Anthropic route AGAINST the docs: on Chat Completions its
+    // thinking-off switch was ignored on 9 of 12 requests and a long answer came
+    // back empty (all 8192 tokens spent reasoning). Measured 2026-09-30.
+    assert.equal(ar.agentRouterProtocolFor('deepseek-v4-flash'), 'anthropic');
     // gpt-6-astra's supported_endpoint_types is ['openai'] only (measured) —
     // the anthropic route would fail for it.
     assert.equal(ar.agentRouterProtocolFor('gpt-6-astra'), 'openai');
-    assert.equal(ar.agentRouterProtocolFor('deepseek-v4-flash'), 'openai');
     assert.equal(ar.agentRouterProtocolFor('glm-5.3'), 'openai');
+  });
+
+  test('the Claude-family check is about the model, not the route', () => {
+    // DeepSeek shares Claude's route but must keep DeepSeek's system prompt and
+    // output cap; this is the predicate that keeps them apart.
+    assert.equal(ar.isAgentRouterClaudeWireModel('claude-opus-5'), true);
+    assert.equal(ar.isAgentRouterClaudeWireModel('deepseek-v4-flash'), false);
+    assert.equal(ar.isAgentRouterClaudeWireModel('gpt-6-astra'), false);
   });
 
   test('base URLs: the Anthropic one has NO /v1 (the SDK appends /v1/messages)', () => {
