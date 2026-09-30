@@ -2460,6 +2460,43 @@ export function initializeIpcHandlers(appState: AppState): void {
             // payload is already an object, so this is additive and older
             // renderers simply ignore it) and record it in the debug trace as a
             // non-success, which is what it is.
+            // CLAIM VERIFIER (2026-09-30): the typed surface's copy of the
+            // hotkey pass (IntelligenceEngine.verifyAnswerClaims; see
+            // llm/claimVerifier.ts). The row streamed as written; an accepted
+            // edit replaces it through finalText on 'gemini-stream-done'. Not
+            // on a screenshot turn: the edit would not see what the answer saw.
+            if (v3Stream.outcome.truncated !== true && finalText.trim() && !(imagePaths?.length)
+                && process.env.NATIVELY_CLAIM_VERIFIER !== '0') {
+              try {
+                const cv = require('./llm/claimVerifier') as typeof import('./llm/claimVerifier');
+                const cvMode = modeInfo?.templateType ?? null;
+                const cvKind = cv.claimVerifierKind({ modeId: cvMode, question: String(message || ''), draft: finalText });
+                if (cvKind && cvMode) {
+                  const cvSystem = cv.claimVerifierSystemPrompt(cvMode, 'typed');
+                  const run = await cv.runClaimVerifier({
+                    answer: finalText,
+                    material: composed.user,
+                    budgetMs: cv.CLAIM_VERIFIER_BUDGET_MS,
+                    startStream: (body, signal) => llmHelper.streamChat(
+                      cv.claimVerifierStandaloneMessage(composed.user, body), undefined, undefined, cvSystem,
+                      true, true, composed.packedDataScopes ?? [], signal, undefined, { v3Owned: true },
+                    ) as AsyncGenerator<string>,
+                    parentSignal: myController.signal,
+                    isSuperseded: () => _chatStreamsBySender.get(senderId)?.streamId !== myStreamId,
+                    clean: (t) => require('./llm').cleanAnswerArtifacts?.(t) ?? t,
+                    observe: secondaryStreamObserver('verification'),
+                  });
+                  console.log(`[ClaimVerifier] typed kind=${cvKind} ${run.changed ? 'edited' : 'kept'} (${run.outcome}) ${run.ms}ms`);
+                  if (run.changed) finalText = run.text;
+                }
+              } catch (cvErr: any) {
+                console.warn('[IPC] claim verifier skipped:', cvErr?.message);
+              }
+              if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
+                finishDebug(finalText, false, 'superseded_by_newer_stream');
+                return null;
+              }
+            }
             const v3Truncated = v3Stream.outcome.truncated === true;
             if (v3Truncated) {
               console.warn('[IPC] manual chat answer is INCOMPLETE — not storing it as conversation history', {

@@ -340,6 +340,46 @@ export class IntelligenceEngine extends EventEmitter {
         return text;
     }
 
+    /**
+     * CLAIM VERIFIER pass (llm/claimVerifier.ts). Returns the answer to ship:
+     * the verified edit when the rails accept it, otherwise the answer as it
+     * was. Never throws past its caller's try, never waits past its budget.
+     */
+    private async verifyAnswerClaims(opts: {
+        answer: string;
+        modeId: string | null;
+        question: string;
+        material: string;
+        turnKey: object;
+        signal: AbortSignal;
+        isSuperseded: () => boolean;
+        trace: PiLatencyTrace;
+    }): Promise<string> {
+        const cv = require('./llm/claimVerifier') as typeof import('./llm/claimVerifier');
+        const kind = cv.claimVerifierKind({ modeId: opts.modeId, question: opts.question, draft: opts.answer });
+        if (!kind || !opts.modeId) return opts.answer;
+        const system = cv.claimVerifierSystemPrompt(opts.modeId, 'spoken');
+        // The replayed answer call carries the material itself (its own user
+        // message comes first); without one, the V3 user message stands in.
+        const h: any = this.llmHelper;
+        const canReplay = Boolean(h.replayAnswerCall?.(opts.turnKey, ''));
+        const run = await cv.runClaimVerifier({
+            answer: opts.answer,
+            material: opts.material,
+            budgetMs: h.replayedAnswerHasImages?.(opts.turnKey) === true ? cv.CLAIM_VERIFIER_IMAGE_BUDGET_MS : cv.CLAIM_VERIFIER_BUDGET_MS,
+            startStream: (body, signal) => this.llmHelper.streamChat(...(canReplay
+                ? this.repairCallArgs(opts.turnKey, cv.claimVerifierDraftMessage(body), signal, system)
+                : this.repairCallArgs(undefined, cv.claimVerifierStandaloneMessage(opts.material, body), signal, system))) as AsyncGenerator<string>,
+            parentSignal: opts.signal,
+            isSuperseded: opts.isSuperseded,
+            clean: cleanAnswerArtifacts,
+            observe: secondaryStreamObserver('verification'),
+        });
+        console.log(`[ClaimVerifier] hotkey kind=${kind} ${run.changed ? 'edited' : 'kept'} (${run.outcome}) ${run.ms}ms`);
+        opts.trace.mark('repair_used', { reason: 'claim_verifier', outcome: run.outcome, changed: run.changed, ms: run.ms });
+        return run.text;
+    }
+
     private repairFirstUsefulMs(minMs: number = 7000, turnKey?: object): number {
         const h: any = this.llmHelper;
         const isUserEndpoint = typeof h?.isUsingUserEndpoint === 'function' ? h.isUsingUserEndpoint() === true : false;
@@ -5972,6 +6012,30 @@ export class IntelligenceEngine extends EventEmitter {
                     }
                 } catch (avErr: any) {
                     console.warn('[IntelligenceEngine] assistant-voice guard skipped:', avErr?.message);
+                }
+            }
+
+            // CLAIM VERIFIER (2026-09-30): an answer spoken as the user, their
+            // product or their company must not state what the material behind
+            // it does not — see llm/claimVerifier.ts for the measurements. One
+            // short edit pass on the answer's own replayed call, bounded by a
+            // total budget, kept only when the deterministic rails accept it.
+            if (fullAnswer && !isCodingAnswerType(answerPlan.answerType)
+                && !IntelligenceEngine.isNonAnswerSentinel(fullAnswer)
+                && requestSnapshot.v3Prompt && process.env.NATIVELY_CLAIM_VERIFIER !== '0') {
+                try {
+                    fullAnswer = await this.verifyAnswerClaims({
+                        answer: fullAnswer,
+                        modeId: requestSnapshot.modeId ?? null,
+                        question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                        material: requestSnapshot.v3Prompt.user ?? '',
+                        turnKey: whatToAnswerCancellationToken.signal,
+                        signal: whatToAnswerCancellationToken.signal,
+                        isSuperseded: isWtaSuperseded,
+                        trace,
+                    });
+                } catch (cvErr: any) {
+                    console.warn('[IntelligenceEngine] claim verifier skipped:', cvErr?.message);
                 }
             }
 
