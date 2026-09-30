@@ -25,7 +25,8 @@ export const DynamicActionBar: React.FC<Props> = ({
   staleAfterMs = 60_000,
 }) => {
   const [actions, setActions] = useState<DynamicActionPayload[]>([]);
-  const acceptingRef = useRef(false);
+  const acceptingRef = useRef<string | null>(null);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const acceptedIdsRef = useRef(new Set<string>());
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
@@ -48,6 +49,7 @@ export const DynamicActionBar: React.FC<Props> = ({
   );
 
   const dismiss = useCallback((id: string) => {
+    if (acceptingRef.current === id) return;
     setActions((prev) => prev.filter((a) => a.id !== id));
     window.electronAPI?.dismissDynamicAction?.(id).catch(() => {
       /* swallow */
@@ -57,7 +59,8 @@ export const DynamicActionBar: React.FC<Props> = ({
   const accept = useCallback(
     async (action: DynamicActionPayload) => {
       if (acceptingRef.current || acceptedIdsRef.current.has(action.id)) return;
-      acceptingRef.current = true;
+      acceptingRef.current = action.id;
+      setAcceptingId(action.id);
       try {
         // A failed capture or busy answer flow must leave the card retryable.
         if (!await onAcceptAction(action)) return;
@@ -67,7 +70,8 @@ export const DynamicActionBar: React.FC<Props> = ({
       } catch {
         /* Keep the card on parent failure; backend acknowledgement is best effort. */
       } finally {
-        acceptingRef.current = false;
+        acceptingRef.current = null;
+        setAcceptingId(null);
       }
     },
     [onAcceptAction],
@@ -97,6 +101,8 @@ export const DynamicActionBar: React.FC<Props> = ({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Tab' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+      // A pending acceptance must not consume normal keyboard navigation.
+      if (acceptingRef.current) return;
       const visible = actionsRef.current.slice(0, maxVisible);
       if (visible.length === 0) return;
       // Don't hijack Tab if focus is in an editable element — the user is typing.
@@ -141,6 +147,7 @@ export const DynamicActionBar: React.FC<Props> = ({
             key={a.id}
             action={a}
             isPrimary={i === 0}
+            isAccepting={acceptingId === a.id}
             onAccept={accept}
             onDismiss={dismiss}
           />

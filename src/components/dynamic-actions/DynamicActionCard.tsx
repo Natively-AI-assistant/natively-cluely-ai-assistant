@@ -6,6 +6,7 @@ import type { DynamicActionPayload } from '@/types/electron'
 interface Props {
   action: DynamicActionPayload
   isPrimary: boolean
+  isAccepting?: boolean
   onAccept: (action: DynamicActionPayload) => void
   onDismiss: (actionId: string) => void
 }
@@ -15,7 +16,7 @@ interface Props {
 // Cards are intentionally lightweight — clicking accept fires the parent
 // callback which is responsible for kicking off the answer stream so the
 // card itself stays presentation-only.
-export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept, onDismiss }) => {
+export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, isAccepting = false, onAccept, onDismiss }) => {
   const [busy, setBusy] = useState(false)
   const evidence = action.evidenceRefs?.[0]
   const evidenceText = evidence?.text?.trim() ?? ''
@@ -41,7 +42,7 @@ export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept
         'transition-colors duration-150 cursor-pointer',
       ].join(' ')}
       onClick={async () => {
-        if (busy) return
+        if (busy || isAccepting) return
         setBusy(true)
         try {
           await onAccept(action)
@@ -77,6 +78,7 @@ export const DynamicActionCard: React.FC<Props> = ({ action, isPrimary, onAccept
         <ChevronRight className="w-3.5 h-3.5 text-white/40 group-hover:text-white/70 transition-colors" />
         <button
           type="button"
+          disabled={busy || isAccepting}
           onClick={(e) => {
             e.stopPropagation()
             onDismiss(action.id)
