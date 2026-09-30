@@ -14,7 +14,16 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const BASE_URL = process.env.ASTRA_BASE_URL || 'https://co.agentrouter.org/v1';
+// The spec named https://co.agentrouter.org/v1; that host is a different gateway and answers this key with
+// 401 "Invalid API Key!". The key belongs to https://agentrouter.org (measured by the agentrouter-provider
+// session on 2026-09-30), which serves gpt-6-astra over the OpenAI protocol.
+export const BASE_URL = process.env.ASTRA_BASE_URL || 'https://agentrouter.org/v1';
+/**
+ * CLIENT IDENTITY — AgentRouter answers only allow-listed coding tools (401 unauthorized_client_error otherwise).
+ * Same single header the product integration sends (electron/llm/agentRouter.ts AGENTROUTER_CLIENT_HEADERS),
+ * approved by Evin for this benchmark judge on 2026-09-30 ("Yes, full volume"), with the ToS/suspension risk stated.
+ */
+export const CLIENT_HEADERS = Object.freeze({ originator: 'codex_cli_rs' });
 export const JUDGE_MODEL = 'gpt-6-astra';
 export const KEY_VAR = 'AGENTROUTER_API_KEY';
 // The app worktrees deliberately carry no .env; the key lives in the MAIN checkout's .env.
@@ -90,7 +99,7 @@ export async function rawCall(method, route, body, { timeoutMs = 120000 } = {}) 
   try {
     const res = await fetch(BASE_URL + route, {
       method,
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': 'natively-bench/1.0' },
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'application/json', ...CLIENT_HEADERS },
       body: body ? JSON.stringify(body) : undefined,
       signal: ctl.signal,
     });

@@ -12,8 +12,12 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 let ORACLES = null;
 export function oracles() {
   if (ORACLES) return ORACLES;
-  const f = path.join(HERE, '..', 'dataset', 'oracles-objective-v1.json');
-  ORACLES = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')).oracles ?? {} : {};
+  // Every dataset/oracles-*.json sidecar (objective, conflict, supplementary sets), merged by item id.
+  const dir = path.join(HERE, '..', 'dataset');
+  ORACLES = {};
+  for (const f of fs.readdirSync(dir).filter((x) => /^oracles-.*\.json$/.test(x)).sort()) {
+    Object.assign(ORACLES, JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).oracles ?? {});
+  }
   return ORACLES;
 }
 

@@ -5,9 +5,9 @@
 // 2. Refuse unless the exact id gpt-6-astra is listed. No substitute model, ever.
 // 3. Minimal chat probe; if an OPTIONAL parameter is rejected, drop only that parameter and retry.
 import fs from 'node:fs';
-import { rawCall, JUDGE_MODEL, BASE_URL, KEY_VAR, PROBE_FILE, scrub } from './client.mjs';
+import { rawCall, JUDGE_MODEL, BASE_URL, KEY_VAR, PROBE_FILE, CLIENT_HEADERS, scrub } from './client.mjs';
 
-const out = { at: new Date().toISOString(), base_url: BASE_URL, key_var: KEY_VAR, requested_model: JUDGE_MODEL, ok: false, model_listed: false, steps: [] };
+const out = { at: new Date().toISOString(), base_url: BASE_URL, client_headers: CLIENT_HEADERS, key_var: KEY_VAR, requested_model: JUDGE_MODEL, ok: false, model_listed: false, steps: [] };
 const save = () => fs.writeFileSync(PROBE_FILE, JSON.stringify(out, null, 2) + '\n');
 
 const models = await rawCall('GET', '/models', null, { timeoutMs: 30000 });

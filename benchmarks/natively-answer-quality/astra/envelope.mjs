@@ -61,13 +61,18 @@ export function objectiveOracles() {
   return OBJECTIVE;
 }
 
+const WHO = {
+  general: ['the user', 'the person they are talking to'], sales: ['the seller', 'the prospect'], recruiting: ['the recruiter', 'the candidate'],
+  'team-meet': ['the user (a meeting participant)', 'a colleague'], 'looking-for-work': ['the candidate', 'the interviewer'], lecture: ['the student', 'the lecturer'],
+  'technical-interview': ['the candidate', 'the interviewer'], seminar: ['the presenter', 'the examiner or audience'], 'call-center': ['the support agent', 'the customer'],
+};
 export function buildOracle(item, ds) {
   const heard = item.speaker === 'other';
-  const r = ROLES[item.mode];
+  const [u, o] = WHO[item.mode] ?? ['the user', 'the other party'];
   const expectedRole = item.mode === 'lecture'
-    ? `Natively privately helps the ${r.user}.`
-    : heard ? `Natively gives the ${r.user} what to say next to the ${r.other}${item.mode === 'recruiting' ? ' (the recruiter\'s own words or next probe)' : ' (first person, as the user)'}.`
-      : `The ${r.user} typed privately to Natively; Natively answers the user directly.`;
+    ? `Natively privately helps ${u} understand what ${o} said${heard ? '' : ' (typed request)'}.`
+    : heard ? `Natively gives ${u} the words to say next to ${o}${item.mode === 'recruiting' ? ' (the recruiter\'s own words or next probe)' : ', in first person as ' + u}.`
+      : `${u[0].toUpperCase() + u.slice(1)} typed privately to Natively; Natively answers ${u} directly.`;
   const acceptable = [];
   if (item.context_condition === 'none' || item.context_condition === 'irrelevant') acceptable.push('No relevant material was attached: anything that depends on the user\'s own facts, the company\'s facts or prior meetings is genuinely unknown to Natively.');
   const pi = item.pi_ref ? (ds.pi_profiles ?? []).find((p) => item.pi_ref === p.id || item.pi_ref.startsWith(p.id + '-')) : null;

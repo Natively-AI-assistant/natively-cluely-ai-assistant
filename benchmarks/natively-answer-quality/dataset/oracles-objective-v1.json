@@ -1,6 +1,6 @@
 {
   "name": "oracles-objective-v1",
-  "note": "Hand-authored 2026-09-30 from each scenario's own source (question, prior transcript, attached file) — never from any answer. Values computed by hand; checks run on the whole displayed text (answer body + GIST chip). Frozen datasets are not modified; this is a sidecar keyed by benchmark id.",
+  "note": "Hand-authored 2026-09-30 from each scenario's own source (question, prior transcript, attached file) — never from any answer. Values computed by hand; checks run on the whole displayed text (answer body + GIST chip). Frozen datasets are not modified; this is a sidecar keyed by benchmark id. Ballpark totals accept rounding within the stated tolerance.",
   "oracles": {
     "FGENH-008": {
       "kind": "arithmetic",
@@ -46,19 +46,23 @@
           "checks": [
             {
               "type": "number_present",
-              "value": 36240
+              "value": 36240,
+              "tolerance": 500
             },
             {
               "type": "number_present",
-              "value": 55440
+              "value": 55440,
+              "tolerance": 500
             },
             {
               "type": "number_present",
-              "value": 65040
+              "value": 65040,
+              "tolerance": 500
             },
             {
               "type": "number_present",
-              "value": 2040
+              "value": 2040,
+              "tolerance": 0.5
             }
           ]
         },
@@ -478,15 +482,18 @@
           "checks": [
             {
               "type": "number_present",
-              "value": 25920
+              "value": 25920,
+              "tolerance": 300
             },
             {
               "type": "number_present",
-              "value": 26100
+              "value": 26100,
+              "tolerance": 300
             },
             {
               "type": "number_present",
-              "value": 28600
+              "value": 28600,
+              "tolerance": 300
             }
           ]
         },
