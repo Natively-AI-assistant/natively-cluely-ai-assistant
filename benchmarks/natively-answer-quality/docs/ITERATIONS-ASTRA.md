@@ -253,3 +253,7 @@ likely overstated by this setup. Not changed mid-experiment, to keep the pair co
   wait, 3–5 business days, v6.3 + clear cache, 10 business days); 15 cut; 56 replace wording.
 * Replay on fix6 prompts (evidence-bearing items, n=2 per arm): dataset needles in answers 312 → 327 of 522, but Call
   Center 27 → 23 and Lecture 30 → 27. Within sampling noise; not worth judge budget yet.
+
+### Final set on fix6 (aq2-final-fix6, 1038 rows, 0 failed) — AGGREGATE ONLY, no per-item inspection
+* vs the previous campaign's final run (aq-final-fix2 @ d327f6a8): validators 10/16 → 14/16; reference needles in
+  prompt 168 → 185/188; epistemic 85 → 51; coaching 31 → 17; TTFT p50 889 → 728 ms; total p50 1279 → 1374 ms.
