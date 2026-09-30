@@ -664,8 +664,9 @@ test('a confirm asked from inside Settings opens above it', () => {
 // Settings → Advanced → "Genie animation" off: every card falls back to the
 // reduced-motion fade, and no picture is decoded ahead of time, taken, or kept.
 test('the genie setting stands the animation down and stops its pictures', () => {
-  assert.ok(/const reducedNow = \(useReducedMotion\(\) \?\? false\) \|\| !genieEnabled;/.test(hook), 'off takes the reduced-motion path');
-  assert.ok(hook.includes('reduced: reducedNow };'), 'the host sees the switch as it is now');
+  assert.ok(hook.includes("const motionNow: CardMotion = osReduced ? 'fade' : genieEnabled ? 'genie' : 'lift';"),
+    'off takes the lift; the OS asking for reduced motion keeps the fade');
+  assert.ok(hook.includes("const reducedNow = motionNow !== 'genie';") && hook.includes('reduced: reducedNow };'), 'the host sees the switch as it is now');
   // Pictures follow the combined flag, so reduced motion alone also keeps none.
   assert.ok(modal.includes('const pictureless = genie.reduced;'));
   assert.ok(/if \(pictureless\) \{ lastShotRef\.current = null; releaseGenieSnapshots\(\); \}\s*else void warmGenieSnapshots\(\);\s*\}, \[pictureless\]\);/.test(modal),
@@ -689,9 +690,9 @@ test('flipping the switch never restarts a genie that is on screen', () => {
   assert.equal(deps('}, [shown, genie, scrim, renderGenie]'), '}, [shown, genie, scrim, renderGenie]', 'the open');
   assert.equal(deps('}, [closing, genie, scrim, finishClose, renderGenie]'), '}, [closing, genie, scrim, finishClose, renderGenie]', 'the close');
   const render = hook.slice(hook.indexOf('const renderGenie = useCallback('), hook.indexOf("useEffect(() => genie.on('change', renderGenie)"));
-  assert.ok(render.includes('if (runReducedRef.current) {') && render.trimEnd().endsWith('}, [bandCount]);'), 'renderGenie keeps its identity');
-  assert.ok(/if \(!shown\) return;\s*const reduced = runReducedRef\.current = reducedNowRef\.current;/.test(hook), 'the open takes the switch as it starts');
-  assert.ok(hook.includes('const reduced = runReducedRef.current = genie.get() <= 0.001 ? reducedNowRef.current : runReducedRef.current;'),
+  assert.ok(render.includes('const motion = runMotionRef.current;') && render.trimEnd().endsWith('}, [bandCount]);'), 'renderGenie keeps its identity');
+  assert.ok(/if \(!shown\) return;\s*const motion = runMotionRef\.current = motionNowRef\.current;/.test(hook), 'the open takes the switch as it starts');
+  assert.ok(hook.includes('const motion = runMotionRef.current = genie.get() <= 0.001 ? motionNowRef.current : runMotionRef.current;'),
     'a close from rest takes it too; one mid-open keeps its open’s mode');
 });
 
@@ -741,4 +742,92 @@ test('letting go of the pictures: an in-flight warm-up or capture does not bring
     snapsMod.releaseGenieSnapshots();
     delete globalThis.window; delete globalThis.document; delete globalThis.createImageBitmap;
   }
+});
+
+// ─── Genie off: the lift ────────────────────────────────────────
+
+// A stand-in element for the Web Animations API: records each animate() call,
+// and lets a test freeze or finish them.
+function fakeCard() {
+  const el = { style: {}, anims: [] };
+  el.getAnimations = () => el.anims.filter(a => !a.cancelled);
+  el.animate = (frames, opts) => {
+    let resolve, reject;
+    const finished = new Promise((res, rej) => { resolve = res; reject = rej; });
+    finished.catch(() => {});
+    const prop = Object.keys(frames[1])[0];
+    const a = { frames, opts, prop, id: '', cancelled: false, finished, progress: 0,
+      commitStyles() { const f = frames[0][prop], t = frames[1][prop]; el.style[prop] = a.progress >= 1 ? t : a.progress > 0 ? `${prop}@${a.progress}` : f; },
+      cancel() { if (!a.cancelled) { a.cancelled = true; reject(new Error('cancelled')); } },
+      finish() { a.progress = 1; resolve(a); } };
+    el.anims.push(a);
+    return a;
+  };
+  return el;
+}
+
+test('genie off: the lift, at half the lab’s first speed, eases out and closes quicker than it opens', () => {
+  const { LIFT, LIFT_EASE, liftMs } = genieMod;
+  assert.equal(LIFT_EASE, 'cubic-bezier(0.23, 1, 0.32, 1)');
+  assert.deepEqual(LIFT.hidden, { transform: 'translateY(14px) scale(0.985)', opacity: '0', filter: 'blur(6px)' });
+  assert.deepEqual(LIFT.shown,  { transform: 'translateY(0px) scale(1)', opacity: '1', filter: 'blur(0px)' });
+  assert.deepEqual(LIFT.closed, { transform: 'translateY(8px) scale(0.99)', opacity: '0', filter: 'blur(4px)' });
+  // The lab's Lift (320 / 220 / 260, close 180 / 160 / 160, dim 280 / 180), doubled.
+  assert.deepEqual(LIFT.open, { transform: 640, opacity: 440, filter: 520, dim: 560 });
+  assert.deepEqual(LIFT.close, { transform: 360, opacity: 320, filter: 320, dim: 360 });
+  for (const k of ['transform', 'opacity', 'filter', 'dim']) assert.ok(LIFT.close[k] < LIFT.open[k], `${k}: the close is the quicker`);
+  // Legible before it lands: the fade ends first, the blur next, the travel last.
+  assert.ok(LIFT.open.opacity < LIFT.open.filter && LIFT.open.filter < LIFT.open.transform);
+  assert.equal(liftMs('open'), 640);
+  assert.equal(liftMs('close'), 360);
+});
+
+test('genie off: the lift plays on the compositor, lands with nothing left on the card, and a close reverses from where it is', async () => {
+  const { LIFT, LIFT_EASE, playLift } = genieMod;
+  const card = fakeCard();
+  playLift(card, 'open');
+  assert.deepEqual(card.anims.map(a => a.prop), ['transform', 'opacity', 'filter']);
+  for (const a of card.anims) {
+    assert.equal(a.id, 'lift');
+    assert.equal(a.opts.easing, LIFT_EASE);
+    assert.equal(a.opts.duration, LIFT.open[a.prop]);
+    assert.deepEqual(a.frames, [{ [a.prop]: LIFT.hidden[a.prop] }, { [a.prop]: LIFT.shown[a.prop] }]);
+  }
+  // Landed: the animations go, and so does every inline style they would leave.
+  card.style.transform = 'translateY(0px) scale(1)'; card.style.filter = 'blur(0px)'; card.style.opacity = '1';
+  for (const a of card.anims) a.finish();
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(card.getAnimations().length, 0);
+  assert.deepEqual([card.style.transform, card.style.opacity, card.style.filter], ['', '', '']);
+
+  // A close from rest starts at the card as it is and ends at the closed state.
+  const rest = fakeCard();
+  playLift(rest, 'close');
+  for (const a of rest.anims) {
+    assert.equal(a.opts.duration, LIFT.close[a.prop]);
+    assert.deepEqual(a.frames, [{ [a.prop]: LIFT.shown[a.prop] }, { [a.prop]: LIFT.closed[a.prop] }]);
+  }
+
+  // Closed mid-open: the open is frozen where it got to and the close starts from there.
+  const mid = fakeCard();
+  playLift(mid, 'open');
+  for (const a of mid.anims) a.progress = 0.4;
+  playLift(mid, 'close');
+  const live = mid.getAnimations();
+  assert.equal(live.length, 3, 'only the close runs');
+  for (const a of live) assert.deepEqual(a.frames[0], { [a.prop]: `${a.prop}@0.4` }, `${a.prop} reverses from what is on screen`);
+  await new Promise(r => setTimeout(r, 0));
+  assert.notEqual(mid.style.transform, '', 'the cancelled open does not wipe the close');
+});
+
+test('genie off: the hook hands the card to the lift and keeps the clock and the dim in step', () => {
+  assert.ok(hook.includes("const LIFT_OPEN_CLOCK  = { duration: liftMs('open') / 1000, ease: 'linear' as const };"));
+  assert.ok(hook.includes("const LIFT_CLOSE_CLOCK = { duration: liftMs('close') / 1000, ease: 'linear' as const };"));
+  assert.ok(hook.includes("if (motion === 'lift' && card) playLift(card, 'open');"));
+  assert.ok(hook.includes("if (motion === 'lift' && card) playLift(card, 'close');"));
+  const render = hook.slice(hook.indexOf('const renderGenie = useCallback('), hook.indexOf("useEffect(() => genie.on('change', renderGenie)"));
+  assert.ok(render.indexOf("if (motion === 'fade') {") < render.indexOf("if (motion === 'lift') return;"), 'reduced motion is decided first');
+  assert.ok(/const b = animate\(scrim, 1, motion === 'lift' \? LIFT_DIM_OPEN : \{ duration: SCRIM_OPEN_S, ease: EASE_FM as any \}\);/.test(hook));
+  assert.ok(/: motion === 'fade' \? REDUCED_FADE : LIFT_DIM_CLOSE\);/.test(hook), 'the dim leaves with the card');
+  assert.ok(!/settle/.test(modal.replace(/settled/g, '')), 'no per-placement variant any more');
 });

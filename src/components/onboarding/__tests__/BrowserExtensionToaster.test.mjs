@@ -183,8 +183,8 @@ test('the genie is drawn by one per-frame write, straight to the DOM', () => {
   assert.ok(hook.includes('const r = wrapRef.current?.getBoundingClientRect();'),
     'the transformed card cannot report its resting position; the wrapper can');
   assert.ok(hook.includes('slotY: window.innerHeight - SLOT_INSET'), 'the slot is at the bottom of the window');
-  assert.ok(hook.includes('animate(genie, 1, reduced ? REDUCED_FADE : GENIE_CLOSE)'));
-  assert.ok(hook.includes('animate(genie, 0, reduced ? REDUCED_FADE : GENIE_OPEN)'));
+  assert.ok(hook.includes("animate(genie, 1, motion === 'genie' ? GENIE_CLOSE : motion === 'fade' ? REDUCED_FADE : LIFT_CLOSE_CLOCK)"));
+  assert.ok(hook.includes("animate(genie, 0, motion === 'genie' ? GENIE_OPEN : motion === 'fade' ? REDUCED_FADE : LIFT_OPEN_CLOCK)"));
 });
 
 test('the content warps with the funnel: bands of the card, not a clipped card', () => {
@@ -228,7 +228,7 @@ test('the genie does not bring the content in twice', () => {
 });
 
 test('reduced motion gets a plain fade, with no warp or travel', () => {
-  const reducedBranch = hook.slice(hook.indexOf('if (runReducedRef.current) {'), hook.indexOf('if ((p <= 0.001 && settling) || !geom) {'));
+  const reducedBranch = hook.slice(hook.indexOf("if (motion === 'fade') {"), hook.indexOf("if (motion === 'lift') return;"));
   assert.ok(reducedBranch.includes('card.style.opacity = String(1 - p);'));
   assert.ok(reducedBranch.includes('return;'));
 });

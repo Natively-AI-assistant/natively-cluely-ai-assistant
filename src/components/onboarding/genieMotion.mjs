@@ -289,3 +289,68 @@ export function genieTrack(from, to, ease, durationMs, geom, rows, hz = 120) {
   }
   return { offsets, bands, layerOpacity, shadowTransform, shadowOpacity };
 }
+
+// ─── Without the genie: Lift ────────────────────────────────────
+// Turned off in Settings (and the OS not asking for reduced motion, which
+// keeps its plain fade), a card lifts in instead: it rises 14 px out of a soft
+// 6 px focus, from 98.5 %, and lands; closing, it sinks 8 px back into a
+// 4 px focus as it fades. Chosen by Evin in the motion lab at half the lab's
+// first speed, so the durations are twice the usual UI ones.
+// Every property has its own clock on the one strong ease-out (Emil
+// Kowalski's (0.23, 1, 0.32, 1)): the fade finishes first, the blur next,
+// and the travel settles last, so the card is legible before it has landed.
+// The close is the quicker of the two.
+
+/** Emil Kowalski's strong ease-out. */
+export const LIFT_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
+
+export const LIFT = {
+  hidden: { transform: 'translateY(14px) scale(0.985)', opacity: '0', filter: 'blur(6px)' },
+  shown:  { transform: 'translateY(0px) scale(1)',      opacity: '1', filter: 'blur(0px)' },
+  closed: { transform: 'translateY(8px) scale(0.99)',   opacity: '0', filter: 'blur(4px)' },
+  open:  { transform: 640, opacity: 440, filter: 520, dim: 560 },
+  close: { transform: 360, opacity: 320, filter: 320, dim: 360 },
+};
+
+const LIFT_PROPS = ['transform', 'opacity', 'filter'];
+
+/** How long a lift runs, ms: its slowest property. */
+export function liftMs(phase) {
+  return Math.max(...LIFT_PROPS.map(k => LIFT[phase][k]));
+}
+
+/**
+ * Play the lift on `card` with the Web Animations API (on the compositor,
+ * not a per-frame main-thread write). A lift that is already running is
+ * frozen where it has got to and the new one starts from there, so a close
+ * during the open reverses from what is on screen. A finished open leaves
+ * nothing on the card: a transform or a filter would become the containing
+ * block of anything position: fixed inside it (a dropdown, a tooltip).
+ * Returns a function that stops it.
+ */
+export function playLift(card, phase) {
+  const running = card.getAnimations().filter(a => a.id === 'lift');
+  let from;
+  if (running.length) {
+    for (const a of running) { try { a.commitStyles(); } catch { /* not rendered */ } a.cancel(); }
+    from = {};
+    for (const k of LIFT_PROPS) from[k] = card.style[k] || LIFT.shown[k];
+  } else {
+    from = phase === 'open' ? LIFT.hidden : LIFT.shown;
+  }
+  const to = phase === 'open' ? LIFT.shown : LIFT.closed;
+  const anims = LIFT_PROPS.map(k => {
+    const a = card.animate([{ [k]: from[k] }, { [k]: to[k] }], { duration: LIFT[phase][k], easing: LIFT_EASE, fill: 'both' });
+    a.id = 'lift';
+    return a;
+  });
+  let stopped = false;
+  if (phase === 'open') {
+    Promise.all(anims.map(a => a.finished)).then(() => {
+      if (stopped) return;
+      for (const a of anims) a.cancel();
+      for (const k of LIFT_PROPS) card.style[k] = '';
+    }, () => { /* cancelled: a close took over */ });
+  }
+  return () => { stopped = true; for (const a of anims) a.cancel(); };
+}
