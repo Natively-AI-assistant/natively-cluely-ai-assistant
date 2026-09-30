@@ -211,7 +211,13 @@ const PERMANENT_RULES = [
     + 'Asked about the user\'s OWN process, next steps, schedule, policy or benefits (an interview process, a rollout plan, '
     + 'on-call, PTO) that the evidence does not describe, never describe a typical one, not even as a first step: '
     + 'WRONG: "From here it\'s a technical screen, a system design round, then a final with the team." '
-    + 'RIGHT: "I\'ll confirm the exact steps and send them over today."',
+    + 'RIGHT: "I\'ll confirm the exact steps and follow up with you." '
+    // Parroting (2026-09-30, dev iteration 4): the old RIGHT line ("… send them
+    // over today") came back near-verbatim on three straight recruiting turns —
+    // an invented timeline — and a turn whose evidence held the on-call pay
+    // deferred the whole question. Answer the stated part first; vary the rest.
+    + 'Answer every part the evidence does state first, then defer only what it does not. Never promise a follow-up time, '
+    + 'and do not repeat the same deferral line from an earlier turn.',
   // Measured live after the history fix (2026-09-24): the user typed "their
   // budget ceiling is $83,700 — how should I position premium?" and got "the
   // $83,700 figure isn't in anything I can see from this call, so I can't
