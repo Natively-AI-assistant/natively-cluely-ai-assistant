@@ -221,3 +221,21 @@ likely overstated by this setup. Not changed mid-experiment, to keep the pair co
   handout's own error ("SE = 12 / 36 = 0.33") present in BOTH baseline and fix prompts; the baseline passed by
   sampling. A heard STATEMENT of a computed figure ("comes out to about a third of a minute") never triggers the
   calculation step (asks only). Candidate class for a later iteration; not tuned on this blind item.
+
+### Run-integrity incident: network outage during aq2-dev-fix5 (2026-09-30 ~14:40Z)
+* 52 rows (run order 195–277, Lecture/TI mostly) got no real answer: 27 "Connection error." (success=false) and 25
+  of the APP'S OWN canned lines ("The answer didn't come through from the AI provider. Press again to retry.") that the
+  app reports as success. First re-run pass only caught the 27; the canned ones were found by their 5 s TTFT.
+* Harness fixed (f865e919): run.mjs --resume sets failed rows (either kind) aside with their chains and re-runs them;
+  the supervisor keeps resuming while any remain. No other run had any such row (checked all aq2 runs).
+* Decision: fix6 (= fix5 + I8c + I15, clean full run) is the dev candidate for the judge; fix5's supp-behavior 9/9,
+  supp-quant and holdout 2/2 runs were clean and stand for the same code minus I8c/I15.
+* fix5 objective (excluding the outage rows): Sales conflict validators 3/3 (fix2 2/3, fix4 1/3) — freshness statuses
+  work in-app; supp-behavior 9/9 (fix2 8/9).
+
+### I13 did not work in-app; I15 replaces it (f0cf5ad6)
+* Team Meet epistemic lines fix4 7 → fix5 10 of 40 with the I13 clause in the prompt (the clause quoted the phrases it
+  forbade). A non-quoting rewording (tm-no-access-v2) replayed 23 → 21 of 120: wording is not the lever.
+* I15 strips a leading notes/records sentence in spoken Team Meet / Recruiting replies when what follows asks or
+  proposes the check and the sentence carries no commitment of its own (fix5 dev: 9 TM + 1 REC would change; DREC-031/
+  032, DCC-036, DTEAM-014 excluded as measured false positives).
