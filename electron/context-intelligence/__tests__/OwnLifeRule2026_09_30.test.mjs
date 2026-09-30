@@ -23,13 +23,22 @@ const compose = (modeId, q) => composePrompt({
   policy: resolveModePolicy(modeId), evidence: [], heardQuestion: true,
 });
 
-describe('the own-life rule is in every composed system prompt', () => {
-  for (const modeId of ['looking-for-work', 'technical-interview', 'general', 'sales']) {
+describe('the own-life rule is in the job modes\' system prompts', () => {
+  for (const modeId of ['looking-for-work', 'technical-interview']) {
     test(modeId, () => {
       const { system } = compose(modeId, 'Why did you leave your last job?');
       assert.match(system, /Speaking as the user about their own life/);
       assert.match(system, /never cite their résumé or profile as a document/);
       assert.match(system, /never with "I don't have a specific example"/);
+    });
+  }
+  // Scoped (2026-09-30): in Team Meet the rule turned a colleague's "You did a payments
+  // migration at your last company, right?" into "I don't have a payments migration in
+  // my background" 6 of 6 times (0 of 6 without it).
+  for (const modeId of ['team-meet', 'general', 'sales', 'recruiting', 'call-center', 'lecture', 'seminar']) {
+    test(`not in ${modeId}`, () => {
+      const { system } = compose(modeId, 'You did a payments migration at your last company, right?');
+      assert.doesNotMatch(system, /Speaking as the user about their own life/);
     });
   }
   test('its example names no benchmark person or employer', () => {
