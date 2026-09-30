@@ -3,7 +3,7 @@
 import * as crypto from 'crypto';
 import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
-import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import { setOpenAtLogin, getOpenAtLogin } from './utils/windowsTaskbarPolicy';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
@@ -6676,6 +6676,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     return persisted ? { success: true } : { success: false, error: 'settings_write_refused' };
   });
 
+  // Clipboard write from main. `navigator.clipboard.writeText` needs a focused
+  // document, and the Windows overlay is WS_EX_NOACTIVATE — it never is one. The
+  // main process has no such requirement, so every copy button routes through
+  // here (src/lib/copyText.ts). Same behaviour on macOS, just focus-independent.
+  safeHandle('clipboard:write-text', async (_, text: string) => {
+    clipboard.writeText(typeof text === 'string' ? text : '');
+    return { success: true };
+  });
+
   safeHandle('get-stealth-shortcut-guard', async () => {
     return appState.getStealthShortcutGuardEnabled();
   });
@@ -8157,6 +8166,28 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (win.isDestroyed()) return;
       try {
         win.webContents.send('interface-theme:changed', theme);
+      } catch {
+        // Renderer may be tearing down between isDestroyed() and send.
+      }
+    });
+  });
+
+  // Light theme warm/cool tint cross-window broadcast — same rationale and
+  // allowlist pattern as 'interface-theme:set' above. The value lands in a
+  // `data-light-temp={value}` DOM attribute (lightThemeTemperature.ts).
+  const VALID_LIGHT_TEMPS = new Set(['neutral', 'warm', 'cool']);
+  safeOn('light-theme-temp:set', (_event, temp: string) => {
+    if (typeof temp !== 'string' || !VALID_LIGHT_TEMPS.has(temp)) {
+      const safe = typeof temp === 'string'
+        ? temp.slice(0, 64).replace(/[\r\n\x00-\x1f]/g, '?')
+        : typeof temp;
+      console.warn(`[light-theme-temp:set] Rejected unknown temp: ${safe}`);
+      return;
+    }
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (win.isDestroyed()) return;
+      try {
+        win.webContents.send('light-theme-temp:changed', temp);
       } catch {
         // Renderer may be tearing down between isDestroyed() and send.
       }
@@ -16536,7 +16567,27 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch {
         microphone = 'granted';
       }
-      return { microphone, screen: 'granted', platform: 'win32' };
+      // Windows has no per-app screen-capture consent for desktop apps, and
+      // getMediaAccessStatus('screen') is hardcoded 'granted' there — it says
+      // nothing. So verify capture the only way that means anything: enumerate
+      // screen sources, bounded like the darwin probe above. A source means
+      // capture works; none, a throw or a timeout means it does not right now
+      // (remote session, capture blocked by policy or a driver). Reported as
+      // 'unknown', never 'denied', so App.tsx's blocked() re-raise stays
+      // reserved for a real OS denial.
+      let screen = 'unknown';
+      try {
+        const sources = await Promise.race([
+          desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('screen-capture-probe-timeout')), 5000),
+          ),
+        ]);
+        if (sources.some((s) => s.id.startsWith('screen:'))) screen = 'granted';
+      } catch {
+        // keep 'unknown'
+      }
+      return { microphone, screen, platform: 'win32' };
     }
     // Linux: no queryable per-app permission model here.
     return { microphone: 'granted', screen: 'granted', platform: process.platform };

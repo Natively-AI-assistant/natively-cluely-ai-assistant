@@ -25,6 +25,7 @@ import { isMac } from '../utils/platformUtils';
 import { APP_VERSION } from '../utils/appVersion';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { useT } from '../i18n';
+import { copyText } from '../lib/copyText';
 
 export const LATEST_RELEASE_URL = 'https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest';
 
@@ -229,7 +230,7 @@ const CopyBlock: React.FC<{ command: string; ink: Ink }> = ({ command, ink }) =>
     const t = useT();
     const [copied, setCopied] = useState(false);
     const copy = () => {
-        navigator.clipboard.writeText(command);
+        copyText(command);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
@@ -610,6 +611,20 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
 // modal: no scrim, so the app stays usable; a thumbnail of the version panel
 // keeps the wave going. The body brings the full card back; × closes it.
 
+// The toast's third line: the transfer figures while downloading, the two
+// actions once ready. Both take this one type style and the line-height they
+// inherit, so Ready is exactly as tall as Downloading whatever the platform's
+// font (a fixed px height would fit one font and miss the other).
+const TOAST_LINE3: React.CSSProperties = {
+    marginTop: '4px', fontSize: '11.5px', fontWeight: 500,
+};
+const TOAST_ACTION: React.CSSProperties = {
+    position: 'relative', pointerEvents: 'auto',
+    padding: 0, background: 'none', border: 0, cursor: 'pointer',
+    fontFamily: FONT, fontSize: 'inherit', fontWeight: 'inherit', lineHeight: 'inherit', whiteSpace: 'nowrap',
+    transition: `color 180ms ${EASE_CSS}, opacity 180ms ${EASE_CSS}`,
+};
+
 interface UpdateCornerToastProps {
     isOpen: boolean;
     updateInfo: any;
@@ -660,16 +675,28 @@ export const UpdateCornerToast: React.FC<UpdateCornerToastProps> = ({
             radius={16}
         >
                     <style>{KEYFRAMES}</style>
+                    {/* Ready and Downloading are one notification changing state,
+                        so both are built from the same parts: the 52px tile, three
+                        lines of text (the third in TOAST_LINE3) and the 2px bar.
+                        Only what fills them changes, never the box.
+
+                        The whole body brings the card back. It is a transparent
+                        button laid over the content rather than a wrapper, because
+                        Ready's actions are buttons too and cannot nest inside one. */}
                     <button
                         type="button"
                         onClick={onExpand}
                         aria-label={t('Show update details')}
                         style={{
-                            display: 'grid', gridTemplateColumns: '52px minmax(0, 1fr)', columnGap: '14px', alignItems: 'center',
-                            width: '100%', padding: '14px 44px 14px 14px', textAlign: 'left',
-                            background: 'none', border: 0, cursor: 'pointer', fontFamily: FONT, outline: 'none',
+                            position: 'absolute', inset: 0, padding: 0,
+                            background: 'none', border: 0, cursor: 'pointer', outline: 'none',
                         }}
-                    >
+                    />
+                    <div style={{
+                        display: 'grid', gridTemplateColumns: '52px minmax(0, 1fr)', columnGap: '14px', alignItems: 'center',
+                        padding: '14px 44px 14px 14px', pointerEvents: 'none',
+                        fontFamily: FONT, textAlign: 'left',
+                    }}>
                         <span aria-hidden style={{
                             position: 'relative', width: '52px', height: '52px', borderRadius: '11px', overflow: 'hidden',
                             background: PANEL, boxShadow: isLight ? 'inset 0 0 0 1px rgba(11,16,32,0.07)' : 'none',
@@ -690,33 +717,53 @@ export const UpdateCornerToast: React.FC<UpdateCornerToastProps> = ({
                             <span style={{ display: 'block', marginTop: '3px', fontSize: '15px', fontWeight: 500, letterSpacing: '-0.015em', color: ink.strong }}>
                                 {ready ? t('Ready to restart.') : t('Downloading…')}
                             </span>
-                            {!ready && (
-                                <span style={{ display: 'block', marginTop: '4px', fontSize: '11.5px', fontWeight: 500, color: ink.faint, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {ready ? (
+                                <span style={{ ...TOAST_LINE3, display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => window.electronAPI?.restartAndInstall?.()}
+                                        style={{
+                                            ...TOAST_ACTION, color: ink.strong, fontWeight: 600,
+                                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                        }}
+                                        onMouseEnter={e => { e.currentTarget.style.opacity = '0.75'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+                                    >
+                                        {t('Restart and update')}
+                                        <ArrowRight size={12} strokeWidth={2.2} aria-hidden />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={onClose}
+                                        style={{ ...TOAST_ACTION, color: ink.faint }}
+                                        onMouseEnter={e => { e.currentTarget.style.color = ink.strong; }}
+                                        onMouseLeave={e => { e.currentTarget.style.color = ink.faint; }}
+                                    >
+                                        {t('Later')}
+                                    </button>
+                                </span>
+                            ) : (
+                                <span style={{ ...TOAST_LINE3, display: 'block', color: ink.faint, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                     {describeDownload(downloadDetail, progress, t)}
                                 </span>
                             )}
                         </span>
-                    </button>
+                    </div>
 
-                    {!ready && (
-                        <div
-                            role="progressbar"
-                            aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}
-                            aria-label={t('Download progress')}
-                            style={{ height: '2px', background: ink.rule }}
-                        >
-                            <div style={{ width: `${progress}%`, height: '100%', background: ink.strong, transition: reduced ? undefined : 'width 200ms linear' }} />
-                        </div>
-                    )}
-
-                    {ready && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', padding: '0 14px 14px 80px' }}>
-                            <CtaButton ink={ink} isLight={isLight} reduced={reduced} onClick={() => window.electronAPI?.restartAndInstall?.()}>
-                                {t('Restart and update')}
-                            </CtaButton>
-                            <QuietButton ink={ink} onClick={onClose}>{t('Later')}</QuietButton>
-                        </div>
-                    )}
+                    {/* Full once the download is done, so the bar ends where the
+                        download did instead of vanishing and moving the edge. */}
+                    <div
+                        {...(ready
+                            ? { 'aria-hidden': true }
+                            : {
+                                role: 'progressbar',
+                                'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': Math.round(progress),
+                                'aria-label': t('Download progress'),
+                            })}
+                        style={{ height: '2px', background: ink.rule }}
+                    >
+                        <div style={{ width: `${progress}%`, height: '100%', background: ink.strong, transition: reduced ? undefined : 'width 200ms linear' }} />
+                    </div>
 
                     <button
                         type="button"

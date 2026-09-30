@@ -39,7 +39,7 @@ import { classifyMicStatus } from './micPermissionPolicy.mjs';
  * @property {boolean} actionable  Whether the row responds to a click at all.
  * @property {string}  sublabel    The second line, already platform-correct.
  * @property {string|null} actionLabel  Trailing pill text, null when inert.
- * @property {'none'|'wait'|'request'|'settings'|'policy'|'unsupported'} remedy
+ * @property {'none'|'wait'|'request'|'settings'|'policy'|'recheck'|'unsupported'} remedy
  *   What clicking the row should DO. The component switches on this rather than
  *   re-deriving intent from the status string.
  */
@@ -74,15 +74,29 @@ const BLOCKED = {
 };
 
 /**
- * Screen Recording. macOS-only: Windows has no per-app screen-capture gate
- * (permissions:check hardcodes 'granted' there and says so), so the row has
- * nothing to ask for off darwin and the card does not render it.
+ * Screen Recording. Windows has no per-app screen-capture consent, so
+ * permissions:check reports whether capture actually works (a desktopCapturer
+ * probe): 'granted' when a screen source enumerates, anything else when it
+ * does not. There is no Settings panel that fixes that, so the only honest
+ * action is to check again. Linux has no gate and the card does not render it.
  *
  * @param {string|undefined|null} platform
  * @param {RowStatus|string|undefined|null} status
  * @returns {RowPresentation}
  */
 function describeScreenRow(platform, status) {
+  if (platform === 'win32') {
+    if (status === 'loading') return CHECKING;
+    if (status === 'granted') return GRANTED;
+    return {
+      tone: 'action',
+      actionable: true,
+      sublabel: 'Screen capture unavailable',
+      actionLabel: 'Check Again',
+      remedy: 'recheck',
+    };
+  }
+
   if (platform !== 'darwin') {
     return {
       tone: 'granted',
@@ -195,7 +209,7 @@ export function describePermRow(platform, kind, status) {
  */
 export function allPermissionsResolved(platform, statuses) {
   const rows = [describePermRow(platform, 'microphone', statuses.microphone)];
-  if (platform === 'darwin') {
+  if (platform === 'darwin' || platform === 'win32') {
     rows.push(describePermRow(platform, 'screen', statuses.screen));
   }
   return rows.every((r) => r.tone === 'granted' || r.tone === 'blocked');

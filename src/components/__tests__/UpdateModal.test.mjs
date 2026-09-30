@@ -104,3 +104,20 @@ test('every phrase the card shows is translated in es, ja, zh and ru', () => {
     assert.deepEqual(missing, [], `${lang} is missing: ${missing.join(' | ')}`);
   }
 });
+
+test('the corner toast keeps one size from Downloading to Ready', () => {
+  const toast = modal.slice(modal.indexOf('export const UpdateCornerToast'));
+  // One width for both states.
+  assert.equal((toast.match(/wrapStyle=\{\{ width: '340px'/g) || []).length, 1);
+  // The third line takes one type style in both branches, so it is one height.
+  const ready = toast.slice(toast.indexOf('{ready ? ('), toast.indexOf(') : ('));
+  const downloading = toast.slice(toast.indexOf(') : ('), toast.indexOf('describeDownload('));
+  assert.ok(ready.includes('...TOAST_LINE3'), 'Ready actions sit in the TOAST_LINE3 line');
+  assert.ok(downloading.includes('...TOAST_LINE3'), 'the transfer line is TOAST_LINE3 too');
+  assert.ok(!/height: ['"]?\d/.test(ready + downloading), 'no fixed px height that only one platform font would fit');
+  // The 2px bar is always there; Ready fills it instead of removing it.
+  assert.ok(!/\{!ready && \(\s*<div\s+role="progressbar"/.test(toast), 'the bar is not dropped in Ready');
+  assert.ok(toast.includes("style={{ height: '2px', background: ink.rule }}"));
+  // No full-size CTA row under the text any more.
+  assert.ok(!toast.includes('<CtaButton'), 'Ready uses the compact line-three actions');
+});

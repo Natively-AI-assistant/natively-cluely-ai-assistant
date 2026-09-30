@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { SttErrorCategory } from '../../lib/sttErrorMapper';
+import { copyText } from '../../lib/copyText';
 
 interface ChannelCardProps {
     /** Channel name displayed in header */
@@ -45,7 +46,7 @@ const ChannelCard: React.FC<ChannelCardProps> = ({
 
     const handleCopy = () => {
         if (cleanedError) {
-            navigator.clipboard.writeText(cleanedError);
+            copyText(cleanedError);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }

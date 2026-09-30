@@ -735,6 +735,8 @@ export interface ElectronAPI {
   setWindowMode: (mode: 'launcher' | 'overlay', inactive?: boolean) => Promise<void>
   setMeetingInterfaceTheme: (theme: string) => void
   onMeetingInterfaceThemeChanged: (callback: (theme: string) => void) => () => void
+  setLightThemeTemperature: (temp: string) => void
+  onLightThemeTemperatureChanged: (callback: (temp: string) => void) => () => void
 
   // Phase 3 — Cluely-style dynamic action cards.
   onIntelligenceDynamicAction: (callback: (data: { action: DynamicActionPayload }) => void) => () => void
@@ -945,6 +947,10 @@ export interface ElectronAPI {
   stealthTapRefreshIme: () => Promise<boolean>
   onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => () => void
   onStealthKeyCaptured: (cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void) => () => void
+  /** Write the OS clipboard from the main process. Needed because the Windows
+   *  overlay is WS_EX_NOACTIVATE and never a focused document, which
+   *  navigator.clipboard.writeText requires. */
+  clipboardWriteText: (text: string) => Promise<{ success: boolean }>
 
   // Profile Engine API
   profileUploadResume: (filePath: string) => Promise<{ success: boolean; error?: string }>

@@ -211,6 +211,44 @@
 }
 
 /*
+  A lighter green body (the badge's lifted #2f7350) for a CTA that sits on a
+  light card, where #1b352a reads as near-black and its faint rims vanish.
+  Lit like .lg-sky — a lighter body inverts the lighting: a bright top face and
+  specular, a darkened underside and a contact shadow instead of a bottom rim.
+  Declared before the hover rule (same specificity) so hover still wins on
+  source order; hover only swaps background-color, so the sheen stays.
+*/
+.lg-button.lg-green.lg-green-light {
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .24) 0%, rgba(255, 255, 255, .06) 42%,
+            rgba(255, 255, 255, 0) 60%, rgba(0, 0, 0, .06) 100%),
+        #2f7350;
+    --lg-tint-hover: #37835c;
+    --lg-lens-tint: rgba(236, 255, 244, .14);
+    --lg-lens-rim: rgba(236, 255, 244, .44);
+    --lg-lens-rim-soft: rgba(236, 255, 244, .18);
+    --lg-rim-1: rgba(236, 255, 244, .52);
+    --lg-rim-2: rgba(236, 255, 244, .22);
+    --lg-rim-3: rgba(236, 255, 244, .10);
+    box-shadow:
+        inset 0 -1px 0 rgba(4, 40, 24, .30),
+        0 1px 2px rgba(4, 40, 24, .18),
+        0 6px 16px rgba(24, 96, 60, .24);
+}
+/* specular on the top face only, as .lg-sky */
+.lg-button.lg-green.lg-green-light::before {
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+}
+.lg-button.lg-green.lg-green-light::after { opacity: .3; }
+.lg-green.lg-green-light .lg-content { color: #f2fff0; }
+
+/*
   .lg-action — the material in the HOST application's action colour, read from
   its own tokens, so the button still reads as that app's primary action rather
   than importing the reference's green.

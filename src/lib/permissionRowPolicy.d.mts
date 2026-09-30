@@ -14,6 +14,7 @@ export type RowRemedy =
   | 'request'
   | 'settings'
   | 'policy'
+  | 'recheck'
   | 'unsupported';
 
 export interface RowPresentation {

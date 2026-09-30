@@ -95,10 +95,22 @@ describe('describePermRow — screen recording', () => {
     assert.notEqual(row.actionLabel, 'Grant');
   });
 
-  test('win32 has no screen-capture gate, so the row asks for nothing', () => {
+  test('win32 granted (capture probe succeeded) is the same check as macOS', () => {
     const row = describePermRow('win32', 'screen', 'granted');
-    assert.equal(row.remedy, 'unsupported');
-    assert.equal(row.actionable, false);
+    assert.deepEqual(row, describePermRow('darwin', 'screen', 'granted'));
+  });
+
+  test('win32 probe failure offers a recheck, never a macOS Settings panel', () => {
+    for (const status of ['unknown', 'denied', 'not-determined']) {
+      const row = describePermRow('win32', 'screen', status);
+      assert.equal(row.tone, 'action');
+      assert.equal(row.remedy, 'recheck');
+      assert.doesNotMatch(row.sublabel, /System Settings|Privacy & Security|restart/i);
+    }
+  });
+
+  test('linux still has no gate', () => {
+    assert.equal(describePermRow('linux', 'screen', 'granted').remedy, 'unsupported');
   });
 });
 
@@ -110,7 +122,6 @@ describe('no row ever self-reports a grant', () => {
       for (const kind of ['microphone', 'screen']) {
         for (const status of ['denied', 'not-determined', 'loading']) {
           const row = describePermRow(platform, kind, status);
-          if (platform === 'win32' && kind === 'screen') continue; // no gate
           assert.notEqual(
             row.tone,
             'granted',
@@ -143,13 +154,24 @@ describe('allPermissionsResolved', () => {
     );
   });
 
-  test('win32 ignores screen, which has no gate there', () => {
+  test('win32 requires BOTH the mic grant and a working capture probe', () => {
     assert.equal(
-      allPermissionsResolved('win32', { microphone: 'granted', screen: 'not-determined' }),
-      true,
+      allPermissionsResolved('win32', { microphone: 'granted', screen: 'unknown' }),
+      false,
     );
     assert.equal(
       allPermissionsResolved('win32', { microphone: 'denied', screen: 'granted' }),
+      false,
+    );
+    assert.equal(
+      allPermissionsResolved('win32', { microphone: 'granted', screen: 'granted' }),
+      true,
+    );
+  });
+
+  test('win32 device-level mic switch off (restricted) is NOT resolved', () => {
+    assert.equal(
+      allPermissionsResolved('win32', { microphone: 'restricted', screen: 'granted' }),
       false,
     );
   });

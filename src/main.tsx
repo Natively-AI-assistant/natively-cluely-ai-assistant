@@ -1,6 +1,7 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
 import "./index.css"
+import { getLightThemeTemperature, applyLightThemeTemperature } from "./lib/lightThemeTemperature"
 
 // ── Renderer crash/hang diagnostics ─────────────────────────────────────────
 // Surface uncaught errors and unhandled promise rejections through console.error
@@ -54,6 +55,11 @@ document.documentElement.setAttribute(
 // This ensures useResolvedTheme()'s initial useState read sees the correct value.
 const cachedTheme = localStorage.getItem(THEME_CACHE_KEY) as 'light' | 'dark' | null;
 document.documentElement.setAttribute('data-theme', cachedTheme ?? 'dark');
+applyLightThemeTemperature(getLightThemeTemperature());
+window.electronAPI?.onLightThemeTemperatureChanged?.((temp) => {
+  applyLightThemeTemperature(temp as 'neutral' | 'warm' | 'cool');
+  localStorage.setItem('natively_light_theme_temp', temp);
+});
 
 // Step 2: Confirm/correct from main process (authoritative) and keep cache in sync.
 if (window.electronAPI?.getThemeMode) {

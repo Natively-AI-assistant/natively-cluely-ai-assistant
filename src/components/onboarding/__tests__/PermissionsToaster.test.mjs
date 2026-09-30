@@ -85,13 +85,17 @@ test('the genie pours the card out whole: nothing inside animates in on top of i
 });
 
 test('both platforms keep their layout', () => {
-  // Windows: microphone only, no macOS guide, a narrower card with its close
-  // in the corner. None of that moves with the genie.
-  assert.ok(rendered.includes("const CARD_W = isMac ? '600px' : '420px';"));
+  // macOS and Windows share the split card; each gets its own guide (never
+  // the other OS's). Any other platform keeps the narrow mic-only card with
+  // its close in the corner. None of that moves with the genie.
+  assert.ok(rendered.includes('const hasGuide = isMac || isWin;'));
+  assert.ok(rendered.includes("const CARD_W = hasGuide ? '600px' : '420px';"));
   assert.ok(rendered.includes("wrapStyle={{ width: CARD_W, maxWidth: '92vw' }}"));
-  assert.ok(rendered.includes('{!isMac && ('), 'Windows keeps its corner close');
-  assert.ok(rendered.includes('{isMac && (\n        <PermItem'), 'the screen row is macOS only');
-  assert.ok(/\{isMac && \(\s*<motion\.div[\s\S]{0,200}flex: '0 0 40%'/.test(rendered), 'the guide is macOS only');
+  assert.ok(rendered.includes('{!hasGuide && ('), 'the narrow card keeps its corner close');
+  assert.ok(rendered.includes("const hasScreenRow = platform === 'darwin' || platform === 'win32';"), 'the screen row is macOS and Windows');
+  assert.ok(rendered.includes('{screenRow && (\n        <PermItem'), 'the screen row renders only where it exists');
+  assert.ok(/\{hasGuide && \(\s*<motion\.div[\s\S]{0,200}flex: '0 0 40%'/.test(rendered), 'the guide pane is macOS and Windows');
+  assert.ok(/isWin\s*\?\s*<WinGuideSteps[\s\S]{0,120}:\s*<GuideSteps/.test(rendered), 'Windows never shows the macOS consent mock');
 });
 
 test('dialog semantics', () => {
