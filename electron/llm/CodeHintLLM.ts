@@ -31,11 +31,16 @@ export class CodeHintLLM {
     ): AsyncGenerator<string> {
         try {
             // No capability gate here (2026-10-01). streamChat sends every
-            // image-bearing turn through the vision chain, which answers with any
-            // configured provider that reads images and says plainly when none
-            // can. Gating on the SELECTED model refused screenshots the chain
-            // would have answered: a DeepSeek user with a Gemini key never got
-            // a hint.
+            // image-bearing turn through the vision chain, the same path Ask AI
+            // takes with a screenshot. Gating on the SELECTED model refused
+            // screenshots the chain would have answered: a DeepSeek user with a
+            // Gemini key never got a hint.
+            //
+            // Known gap, shared with Ask AI: a SELECTED LiteLLM / NVIDIA NIM /
+            // OpenRouter / Fluxion model is seated by the chain whether or not
+            // its upstream reads images (only the user knows theirs). Provider
+            // data (phase 2) and the per-model override (phase 4) close it —
+            // docs/plans/2026-10-01-vision-capability-design.md.
 
             const message = buildCodeHintMessage(
                 questionContext ?? null,

@@ -192,9 +192,10 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
   // `nvidia_nim/meta/llama-3.2-90b-vision-instruct` while the vision chain and
   // the provider registry were both willing to call them.
   //
-  // Only ever widens: a name with no vision marker still resolves to false, so a
-  // genuinely text-only route (`litellm/deepseek-v4-chat`) keeps its clean early
-  // refusal instead of a 400 from the upstream.
+  // Only ever widens: a name with no vision marker still resolves to false. (That
+  // false no longer buys a gateway an early refusal: Code Hint's gate is gone
+  // since 2026-10-01, and the vision chain seats a SELECTED LiteLLM/NIM model
+  // whatever this says — see the known gap noted in CodeHintLLM.ts.)
   const isGatewayRouted = id !== (modelId || '');
   const gatewayVisionHint = isGatewayRouted && modelNameSuggestsVision(id);
 

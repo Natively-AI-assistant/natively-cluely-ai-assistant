@@ -115,5 +115,11 @@ describe('the chain says why when nothing can read the screenshot', () => {
     assert.match(error.message, /^No vision-capable provider configured\./, '_streamChatInner keys its user message on this prefix');
     assert.match(error.message, /local-only mode/i);
     assert.doesNotMatch(error.message, /OpenAI, Claude, Gemini, or Groq/);
+    // It must not claim nothing is INSTALLED: the chain also comes up empty when
+    // Ollama isn't the selected provider, or its daemon is slow or down, and a
+    // user with llava installed would be told to install what they have.
+    assert.match(error.message, /select an Ollama vision model/i);
+    assert.match(error.message, /Ollama is running/i);
+    assert.doesNotMatch(error.message, /is set up/);
   });
 });
