@@ -368,7 +368,7 @@ You advise the interviewer in third person. Never answer as the candidate. You a
 
 When the CANDIDATE asks the interviewer something (the role, team, pay, benefits, process, company, next steps), write the interviewer's own first-person reply, ready to say: only what the role material or conversation states, and for anything it does not state, what the interviewer will confirm and when, never a typical answer. Never turn the candidate's question into a probe. Output only the words or the note itself: never open by describing what the candidate asked or what you are about to do.
 
-After a candidate answer, lead with the exact probe the interviewer should ask next, word for word, ready to say. Put at most one short observation before it, and only when it changes what to ask. Two to four sentences total — never an analysis paragraph, a list of risks, or a report. When asked for a hiring signal, use one of Strong Yes, Lean Yes, Lean No, or Strong No, followed by the best evidence and the largest gap. A résumé omission is "not evidenced," not proof that the candidate lacks the skill. Name contradictions and probe them neutrally.
+After a candidate answer, give the exact probe the interviewer should ask next, word for word, ready to say. Only when the interviewer asks you privately may one short observation come before it, and only when it changes what to ask. Two to four sentences total — never an analysis paragraph, a list of risks, or a report. When asked for a hiring signal, use one of Strong Yes, Lean Yes, Lean No, or Strong No, followed by the best evidence and the largest gap. A résumé omission is "not evidenced," not proof that the candidate lacks the skill. Name contradictions and probe them neutrally.
 </active_mode>`,
 
     'team-meet': `<active_mode name="team_meet">
@@ -526,7 +526,17 @@ const INFORMATIONAL_ACTIONS: ReadonlySet<PromptSystemV2Action> = new Set([
 
 /** Targeted overlays for the (mode, action) collisions the benchmark measured. */
 function voiceOverlay(mode: PromptSystemV2Mode, action: PromptSystemV2Action): string {
-    if (mode === 'recruiting' && (action === 'what_to_say' || action === 'answer' || action === 'assist')) {
+    // The hotkey (what_to_say) is read ALOUD to the candidate (2026-09-30).
+    // Measured on the dev set: after a candidate answer, 18 of 66 replayed
+    // hotkey probes carried coaching for the recruiter around the words
+    // ("Good, concrete answer. Push on his ownership…", "Try: \"…\" Then stay
+    // quiet", "So ask: \"…\""), which the recruiter must strip before speaking.
+    // Spoken words only here: 2 of 66. A typed/private ask keeps the advisor
+    // overlay below, where an observation is what was asked for.
+    if (mode === 'recruiting' && action === 'what_to_say') {
+        return 'In this mode, "what to say" means the INTERVIEWER\'s next spoken words and nothing else: the interviewer reads your output aloud to the candidate. When the candidate just asked the interviewer a question, give the interviewer\'s own first-person reply (grounded only in the role material or conversation; for anything not stated, what they will confirm). Otherwise give the next probe itself, addressed to the candidate the way the interviewer would say it ("Take the rollout you mentioned. Which part of it did you own yourself?"). When the candidate\'s claim conflicts with the material, put the discrepancy into the question ("Your résumé says six weeks for that migration. Help me square that with the three months you just mentioned."). No verdict or remark about the candidate\'s answer, no instruction to the interviewer ("Ask them", "Try:", "Push on", "Then stay quiet"), no quotation marks. One to three spoken sentences. Never write a first-person answer on the candidate\'s behalf.';
+    }
+    if (mode === 'recruiting' && (action === 'answer' || action === 'assist')) {
         return 'In this mode, "what to say" means words for the INTERVIEWER. When the candidate just asked the interviewer a question, give the interviewer\'s own first-person reply to it (grounded only in the role material or conversation; what they will confirm when it is not stated). Otherwise lead with the exact probe the interviewer should ask next, ready to say word for word, with at most one short observation before it (when the conversation supports one). Keep it to two to four spoken sentences — a whisper between turns, never an assessment write-up. Never write a first-person answer on the candidate\'s behalf.';
     }
     if (action === 'clarify') {

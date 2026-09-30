@@ -474,8 +474,8 @@ describe('mode×action voice contract (Phase 2, deterministic axis separation)',
     }
   });
 
-  test('recruiting + what_to_say/answer/assist = third-person advisor, probe-FIRST, whisper-length (benchmark class 5 + loss mining)', () => {
-    for (const action of ['what_to_say', 'answer', 'assist']) {
+  test('recruiting + answer/assist (private) = advisor overlay, probe-FIRST, whisper-length (benchmark class 5 + loss mining)', () => {
+    for (const action of ['answer', 'assist']) {
       const p = v2.buildSystemPromptV2({ mode: 'recruiting', action, tier: 'cloud' });
       assert.ok(p.includes('words for the INTERVIEWER'), `${action}: interviewer-addressed overlay missing`);
       assert.ok(p.includes('one short observation'), `${action}: observation requirement missing`);
@@ -485,6 +485,17 @@ describe('mode×action voice contract (Phase 2, deterministic axis separation)',
       assert.ok(p.includes("Never write a first-person answer on the candidate's behalf"), `${action}: candidate-voice ban missing`);
       assert.ok(p.includes('a whisper between turns, never an assessment write-up'), `${action}: whisper-length rule missing`);
     }
+  });
+
+  test('recruiting + what_to_say (hotkey) = the interviewer\'s spoken words only (2026-09-30: 18/66 → 2/66 coaching wrappers)', () => {
+    const p = v2.buildSystemPromptV2({ mode: 'recruiting', action: 'what_to_say', tier: 'cloud' });
+    assert.ok(p.includes("the INTERVIEWER's next spoken words and nothing else"));
+    assert.ok(p.includes('reads your output aloud to the candidate'));
+    assert.ok(p.includes('put the discrepancy into the question'));
+    assert.ok(p.includes('no instruction to the interviewer'));
+    assert.ok(p.includes("Never write a first-person answer on the candidate's behalf"));
+    assert.ok(!p.includes('a whisper between turns'), 'the advisor overlay is for private asks only');
+    assert.ok(p.includes('Only when the interviewer asks you privately may one short observation come before it'));
   });
 
   test('recruiting mode is coach-in-the-ear, not report (loss mining: "verbose and analytical")', () => {
