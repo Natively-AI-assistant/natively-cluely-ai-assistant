@@ -38,7 +38,7 @@ const I8_MODES = 'looking-for-work,sales,call-center,technical-interview,seminar
 //   7  blind pairwise reference-vs-fix11.   8  fix10.   9  reasoning for the other modes; lfw-bridge-v1; the two "c" sets.
 // After the tiers, always: astra/decide.mjs applies the pre-registered rule to the three pairs (no judge calls).
 // Then by hand: tools/compose-run.mjs for aq2-dev-fix12c / fix13c and astra/final-report.mjs (docs/REPORT-ASTRA.md §3).
-const R = (name, replay, run) => [name, ['astra/judge-replay.mjs', '--replay', `results/replay/${replay}.jsonl`, '--run', `results/${run}`, '--concurrency', '4'], `results/replay/${replay}.jsonl`];
+const R = (name, replay, run, conc = '4') => [name, ['astra/judge-replay.mjs', '--replay', `results/replay/${replay}.jsonl`, '--run', `results/${run}`, '--concurrency', conc], `results/replay/${replay}.jsonl`];
 const J = (name, set, run) => [name, ['astra/judge.mjs', '--set', set, '--runs', `results/${run}`, '--concurrency', C], `results/${run}`];
 const TIERS = [
   [
@@ -50,25 +50,22 @@ const TIERS = [
     J('holdout-c2-fix13', 'abs-holdout-c2', 'aq2-holdout-fix13'),
     J('dev-c2-fix12', 'abs-dev-c2', 'aq2-dev-fix12'),
   ],
-  [
-    // Looking for work, a question the material cannot answer: the verifier's fallback rule reworded after the
-    // judge's own expected behaviour (facts nearest the question, then one forward-looking or conditional sentence;
-    // no holding line). Same 40 dev drafts through the fix12 verifier and the reworded rule.
-    R('lfw-base', 'lfw-base', 'aq2-dev-fix11'),
-    R('lfw-bridge-v2', 'lfw-bridge-v2', 'aq2-dev-fix11'),
-  ],
-  [
-    // Call Center with no policy document: a generator-side "no policy on file" notice, then the unchanged fix12
-    // verifier.
-    R('ccfin-base', 'ccfin-base', 'aq2-dev-fix11'),
-    R('ccfin-nopolicy-v1h', 'ccfin-nopolicy-v1h', 'aq2-dev-fix11'),
-  ],
-  [
-    // Sales with no reference file: a short "how to say it when nothing can be stated" notice to the generator,
-    // then the unchanged fix12 verifier.
-    R('salesfin-base', 'salesfin-base', 'aq2-dev-fix11'),
-    R('salesfin-shape-v1h', 'salesfin-shape-v1h', 'aq2-dev-fix11'),
-  ],
+  // Each deciding pair is two CONSECUTIVE tiers, base then variant. Side by side, the variant reached a row whose
+  // answer it shares with base (a carried row, or a byte-identical verifier output) before base had written the
+  // judge's cache file, and the same answer was judged twice — two scores for one answer, and a call paid twice.
+  // Looking for work, a question the material cannot answer: the verifier's fallback rule reworded after the
+  // judge's own expected behaviour (facts nearest the question, then one forward-looking or conditional sentence;
+  // no holding line). Same 40 dev drafts through the fix12 verifier and the reworded rule.
+  [R('lfw-base', 'lfw-base', 'aq2-dev-fix11', '8')],
+  [R('lfw-bridge-v2', 'lfw-bridge-v2', 'aq2-dev-fix11', '8')],
+  // Call Center with no policy document: a generator-side "no policy on file" notice on heard turns, then the
+  // unchanged fix12 verifier.
+  [R('ccfin-base', 'ccfin-base', 'aq2-dev-fix11', '8')],
+  [R('ccfin-nopolicy-v1h', 'ccfin-nopolicy-v1h', 'aq2-dev-fix11', '8')],
+  // Sales with no reference file: a short "how to say it when nothing can be stated" notice to the generator on
+  // heard turns, then the unchanged fix12 verifier.
+  [R('salesfin-base', 'salesfin-base', 'aq2-dev-fix11', '8')],
+  [R('salesfin-shape-v1h', 'salesfin-shape-v1h', 'aq2-dev-fix11', '8')],
   [
     J('dev-c2-cur', 'abs-dev-c2', 'aq2-dev-cur'),
     J('holdout-c2-cur', 'abs-holdout-c2', 'aq-holdout-fix2'),

@@ -1051,8 +1051,25 @@ Positive but interval includes 0 → not promoted; fix13 stays the kept build an
 * The deciding pairs are therefore `ccfin-nopolicy-v1h` and `salesfin-shape-v1h` (typed rows carry base's answer:
   23 and 26 of 40 carried). The rule is unchanged and stays on all 40 rows, so the touched rows have to move further
   than before for it to pass (about +0.7 on 17 rows, +0.86 on 14). The all-turns sets ("c") go to the last tier and
-  are reported, not built. By a simple pattern count on the heard rows: Call Center replies that name the check
-  7 → 13 of 17, median 40 → 36 words; Sales replies that say "let me confirm…" 5 → 11 of 14, median 52 → 44 words.
+  are reported, not built.
+* The heard rows counted with the instrument of the original measurement (`tools/nodoc-shape.mjs`, which reproduces
+  the all-turns figures 7 → 1, 8 → 17 and 7 → 2, 8 → 14): Call Center, 17 rows — asks for a verification detail
+  4 → 0, names what will be checked 6 → 11, median 40 → 36 words. Sales, 14 rows — preamble 5 → 1, "depends on"
+  1 → 0, says what it will confirm 5 → 11, median 52 → 42 words. So most of Call Center's 7 → 1 was on typed rows
+  the gate now leaves alone. A wider pattern that also counts the softer justification ("rather than a guess",
+  "can't stand behind") reads 2 → 4 on the Sales rows: the notice's own example ("…so I can give you an accurate
+  number") invites it. "Says what it will confirm" is the notice's own phrase, so it shows the model followed the
+  notice, not that the reply is better — that is the judge's question. The notice text is not changed.
 * `npm run typecheck:electron` clean; intelligence suite 2,823 tests, 2,812 pass, 0 fail (2 skipped, 9 todo); llm
   suite 5,678 tests, 5,650 pass, 0 fail, 28 skipped. Build output deleted afterwards (3.3 GB free).
 * Rule 7 of the fix14 promotion rule (typed refinement still met) stays as a check, though no typed turn changes now.
+
+### One more correction to the batch, 22:45Z: a pair's two arms are judged one after the other
+* Both arms of a pair ran in the same tier. The judge writes its cache file only after the response arrives, so a
+  variant row carrying base's answer was usually sent before base's score existed: the same answer judged twice,
+  two scores for one answer, exactly the noise the carried rows were meant to remove (and a second call paid for).
+  Each deciding pair is now two consecutive tiers, base then variant, at concurrency 8.
+* `astra/decide.mjs` counts rows whose answer is the same in both arms but whose scores differ; it must print 0.
+* aq-fix2 c399f399: the notice's code comment now cites the heard-turn counts. Candidate head is c399f399.
+* For the app run (runbook): if the dev wires show the notice on no heard Call Center / Sales row, check first
+  whether the hotkey path passed the attached-file count as undefined — the gate stays closed on an unknown count.

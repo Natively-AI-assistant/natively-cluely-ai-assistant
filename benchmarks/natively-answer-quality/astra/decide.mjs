@@ -28,6 +28,19 @@ const rowsOf = (f) => (fs.existsSync(path.join(ROOT, f)) ? fs.readFileSync(path.
 const mean = (x) => x.reduce((p, q) => p + q, 0) / x.length;
 const sd = (x) => { const m = mean(x); return Math.sqrt(x.reduce((p, q) => p + (q - m) ** 2, 0) / Math.max(1, x.length - 1)); };
 
+// Answers shared by both arms of a pair (carried rows, byte-identical verifier outputs) must have ONE score: the
+// judge's cache is keyed by answer text. A different score means the same answer was judged twice (a race).
+function sharedAnswerMismatches(base, variant) {
+  const a = Object.fromEntries(rowsOf(`results/replay/${base}.jsonl`).map((r) => [`${r.id}#${r.k ?? 0}`, r.answer]));
+  const A = load(`results/replay/${base}.judged.jsonl`); const B = load(`results/replay/${variant}.judged.jsonl`);
+  let shared = 0; let mismatched = 0;
+  for (const r of rowsOf(`results/replay/${variant}.jsonl`)) {
+    if ((r.k ?? 0) !== 0 || a[`${r.id}#0`] !== r.answer || !A[r.id] || !B[r.id]) continue;
+    shared++; if (A[r.id].s !== B[r.id].s) mismatched++;
+  }
+  return { shared, mismatched };
+}
+
 function pair(A, B, ids) {
   const both = ids.filter((id) => A[id] && B[id]);
   if (!both.length) return { n: 0, expected: ids.length };
@@ -67,6 +80,11 @@ const table = (pairs, verdicts) => { for (const [label, base, variant] of pairs)
   console.log(`| ${label} | ${p.n} of ${p.expected} | ${p.a.toFixed(2)} | ${p.b.toFixed(2)} | ${f2(p.diff)} (±${p.half.toFixed(2)}) | ${p.hfA} → ${p.hfB} | ${p.changed} | ${verdicts ? `${pass ? 'BUILD' : 'DO NOT BUILD'}${why}` : 'reported only'} |`);
 } };
 table(PAIRS, true);
+for (const [label, base, variant] of [...PAIRS, ...SECONDARY]) {
+  const m = sharedAnswerMismatches(base, variant);
+  if (m.mismatched) console.log(`\nWARNING ${label}: ${m.mismatched} of ${m.shared} rows with the SAME answer in both arms have different scores — judged twice; that pair's interval is inflated.`);
+}
+console.log(`\nSame-answer rows scored differently in the deciding pairs: ${PAIRS.reduce((n, [, b, v]) => n + sharedAnswerMismatches(b, v).mismatched, 0)} (must be 0).`);
 console.log('\n## Reported only (same rule shown, nothing is built from these)\n');
 console.log('| variant | rows judged | base | variant | gain (95%) | hard fails | rows that moved | |');
 console.log('|---|---:|---:|---:|---:|---:|---:|---|');
