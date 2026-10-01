@@ -561,3 +561,48 @@ Priority in the spec puts realtime usability above p10 and the mean, so the late
   Over-verification flags: 0 edits end in a question, 6 "decision lost" (heuristic), 6 cut to under half.
 * Latency vs fix6: TTFT p50 854 ms (779), p95 1644 (1363); TOTAL p50 2114 ms (1485), p95 3612 (2811).
   The run restarted once (app exit at row 51, resumed on the same committed build).
+
+### fix11 supp-behavior (aq2-sb-fix11, 72 rows, 0 failed) — validators 6/9 vs fix6 8/9: rule 5 is NOT met as built
+* Fails: SBLEC-002 (Lecture, no verifier there: the draft itself missed the lecturer's error — sampling, passes in
+  fix6 and fix10), SBSEM-002 (source conflict 23 vs 32 minutes: fails in fix6 too; the edit swapped one value for the
+  other instead of naming both — blocker 4), SBSEM-007 (VERIFIER-CAUSED: the draft said "We didn't measure anything
+  about colonies or nests", which is what the validator requires; the edit removed it).
+* Repeated 6 times in replay: SBSEM-007 passes 2/6 with the fix11 verifier. So this one is a defect, not a sample.
+* Latency on this set: total p50 2281 ms (fix6 1581), p95 4509 (2741).
+
+### I25 — an honest limit is not a claim (aq-fix2 e7325287 = fix12 candidate; replay only so far)
+* Class (tools/limits-lost.mjs): drafts that state a limit ("I can't confirm a credit on this call", "we didn't
+  measure that", "I can't confirm that was agreed") and lose it in the edit. fix11 dev 21 of 41 such drafts (fix6: 8
+  of 38), supp-behavior 3 of 6, holdout 7 of 18 (fix6: 4 of 19). Read one by one on dev + supp-behavior: about half
+  are harmless (a hedge before "I'll confirm and follow up"); 8 leave the question unanswered or imply a yes
+  (DCC-036 "am I getting money back or not?" → "I'll get the outage documented…"; DCC-011 "can you delete them now?"
+  → "I can help with that."; DTEAM-006 / DTEAM-026 a claimed past agreement no longer challenged; SBSEM-006 / 007).
+* Cause, from the pass's own list: it files the limit as a claim — "I can't confirm a credit on this call [promise]",
+  "I can't confirm it as a freeze [past]", "We didn't measure anything about colonies [past]".
+* Change — three narrowings of existing rules, no new step: (1) the never-list names an honest limit (not knowing,
+  cannot confirm or promise yet) and what the request itself states; (2) "Never say you cannot speak to…" → "Never
+  add…" (a rule for the edit; the `epistemic_introduced` rail still refuses an edit that adds one); (3) Seminar only:
+  a study's scope is closed, "we did not measure X" is supported when the material describes the study without X.
+  Capability / policy limits ("I can't send a reset by text") stay listed — the cc-keep-v1 variant showed that a
+  blanket "keep every can't" brings the invented restrictions back.
+* Replay on the same drafts (base = fix11 verifier re-sampled, variant = tools/variants/_cv-limits-v1.mjs, whose
+  prompts are byte-identical to the built source for every mode / surface):
+  | | fix11 | I25 |
+  |---|---:|---:|
+  | dev: limits lost (of 41 drafts) | 19 | 10 |
+  | supp-behavior: limits lost (of 6) | 3 | 1 |
+  | dev edits | 109 | 94 |
+  | dev: decisions lost / cut to under half | 11 / 21 | 11 / 20 |
+  | dev validators | 8/9 | 8/9 |
+  | SBSEM-007 validator, 6 repeats | 2/6 | 6/6 |
+  | DCC-036, DTEAM-006, SBSEM-006 keep the limit, 6 repeats | 0/6 | 6/6 |
+  | DCC-032 invented "can't reset by text" still removed, 6 repeats | 5/6 | 6/6 |
+  | DSALES-023 stale-sheet validator, 6 repeats | 6/6 | 6/6 |
+  | SBSEM-002 conflict validator, 6 repeats | 1/6 | 2/6 |
+* Not fixed by it: the source-conflict rewrite (blocker 4), DSEM-005 ("I didn't run quantization-aware training"
+  still removed), DJOB-021 (kept 3/6).
+* Tests: the verifier's file 63/63 (module transpiled alone). The full llm suite and the electron build were NOT run
+  yet — the machine was at load 19–24 from another session's builds; they run before any app run of fix12.
+* Status: NOT judged, NOT run in the app. It is built only if fix11's holdout read keeps fix11 as the base; then it
+  needs its own dev + holdout + supp-behavior runs and the 02:00Z batch.
+* Harness: tools/verifier-replay.mjs now passes the surface to the gate (spoken General turns were skipped in replay).

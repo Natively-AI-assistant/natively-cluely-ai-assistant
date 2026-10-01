@@ -27,7 +27,7 @@ const outFile = path.join(ROOT, 'results', 'replay', `${name}.jsonl`); fs.writeF
 await Promise.all(rows.map((r) => L(async () => {
   const answer = (opt('draft') === 'raw' ? r.raw_answer : (r.rendered_answer ?? r.raw_answer)) ?? '';
   const material = (wires[r.benchmark_id]?.messages ?? []).filter((m) => m.role === 'user').map((m) => m.text ?? m.content).join('\n\n');
-  const kind = cv.claimVerifierKind({ modeId: r.mode, question: r.question, draft: answer });
+  const kind = cv.claimVerifierKind({ modeId: r.mode, question: r.question, draft: answer, surface: r.surface_path === 'typed' ? 'typed' : 'spoken' });
   const rec = { id: r.benchmark_id, mode: r.mode, surface: r.surface_path, variant: 'verifier', k: 0, answer, original: answer, kind, outcome: 'not_gated', ms: 0 };
   if (kind && answer.trim()) {
     const system = cv.claimVerifierSystemPrompt(r.mode, r.surface_path === 'typed' ? 'typed' : 'spoken', { noDocuments: cv.materialHasNoDocuments(material) });
