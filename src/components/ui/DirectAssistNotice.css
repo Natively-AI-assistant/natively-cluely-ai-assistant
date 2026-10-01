@@ -1,0 +1,113 @@
+/* DirectAssistNotice — motion.
+ *
+ * On the transitions.dev motion-token scale and under the meeting overlay's
+ * own rules (the `@overlay-motion` block in index.css). The tokens are not
+ * installed globally, so the values are literals; the token each one stands
+ * for is named beside it.
+ *
+ *  - Only transform, opacity and filter move. Animating a size would feed the
+ *    viewport ResizeObserver every frame and fight the card's height tween.
+ *  - Entrances use @starting-style: they play once, when the node is
+ *    inserted, and never replay on a re-render or across Cmd+B. A provider
+ *    that fails later adds a row, and only that row enters.
+ *  - Nothing moves on hover.
+ *
+ * What plays:
+ *  - the notice arriving ........ #18 texts reveal, one stagger step a line
+ *  - the hairline beside the provider's words draws down behind its line
+ *  - a failure's mark ........... one pop (badge pop open). No shake: a shake
+ *    is for a rejected input, and this arrives in the middle of a meeting.
+ *  - "Trying X…" → "Answered by X" ... #04 text states swap (SwapText)
+ *  - the mark changing under it ...... #09 icon swap (.t-icon-swap)
+ *  - "Trying X…" itself ......... the overlay's existing "Thinking..." sweep
+ * The last three reuse rules that already live in index.css and are timed by
+ * the `.ov-motion` variables; nothing here restates them.
+ */
+
+.ov-notice {
+  --notice-reveal-dur: 500ms;                                 /* --duration-very-slow: text reveal */
+  --notice-reveal-distance: 12px;                             /* --distance-medium: text reveal */
+  --notice-reveal-blur: 3px;                                  /* --blur-medium: text reveal */
+  --notice-reveal-ease: cubic-bezier(0.22, 1, 0.36, 1);       /* --ease-smooth-out */
+  --notice-stagger: 40ms;                                     /* --duration-stagger: per-line offset */
+  --notice-rule-delay: 80ms;                                  /* --duration-micro: the path-draw beat */
+  --notice-pop-dur: 500ms;                                    /* --duration-very-slow: badge appear */
+  --notice-pop-ease: cubic-bezier(0.34, 1.36, 0.64, 1);       /* --ease-bounce: badge pop open */
+  --notice-pop-from: 0.25;                                    /* the icon swap's start scale */
+}
+
+/* A line of the notice: the headline, the provider's words under it, each
+   provider that failed, the action. Each waits one stagger step more than the
+   line above, so the eye lands on the headline first. */
+.ov-notice-line {
+  transition:
+    opacity   var(--notice-reveal-dur) var(--notice-reveal-ease),
+    transform var(--notice-reveal-dur) var(--notice-reveal-ease),
+    filter    var(--notice-reveal-dur) var(--notice-reveal-ease);
+  transition-delay: calc(var(--i, 0) * var(--notice-stagger));
+}
+@starting-style {
+  .ov-notice-line {
+    opacity: 0;
+    transform: translateY(var(--notice-reveal-distance));
+    filter: blur(var(--notice-reveal-blur));
+  }
+}
+
+/* The hairline beside the provider's own words. It is a layer of its own so
+   it can grow from the top without stretching the text, one beat behind the
+   line it belongs to. */
+.ov-notice-words {
+  position: relative;
+}
+.ov-notice-words::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: var(--overlay-border);
+  transform-origin: 50% 0;
+  transition: transform var(--notice-reveal-dur) var(--notice-reveal-ease);
+  transition-delay: calc(var(--i, 0) * var(--notice-stagger) + var(--notice-rule-delay));
+}
+@starting-style {
+  .ov-notice-words::before {
+    transform: scaleY(0);
+  }
+}
+
+/* The mark of an answer that failed or broke off: it pops once, with the
+   headline. Entrances only overshoot — nothing here bounces on the way out. */
+.ov-notice-mark--pop {
+  transition:
+    opacity   var(--notice-pop-dur) var(--notice-reveal-ease),
+    transform var(--notice-pop-dur) var(--notice-pop-ease);
+}
+@starting-style {
+  .ov-notice-mark--pop {
+    opacity: 0;
+    transform: scale(var(--notice-pop-from));
+  }
+}
+
+/* "Trying X…" carries the overlay's "Thinking..." sweep. That sweep rests on
+   the muted text token, about 3:1 on the light theme — fine for a one-word
+   label, not for a sentence someone reads. Here it rests on the notice's own
+   quietest text instead; the bright band is unchanged. */
+.ov-notice .natively-thinking-label {
+  --natively-thinking-base: color-mix(in srgb, var(--overlay-text-primary) 76%, transparent);
+}
+
+/* Required by every recipe used here. With the transitions gone the
+   @starting-style values have nothing to interpolate from, so the notice is
+   simply there. The shimmer, the text swap and the icon swap carry their own
+   guards in index.css. */
+@media (prefers-reduced-motion: reduce) {
+  .ov-notice-line,
+  .ov-notice-words::before,
+  .ov-notice-mark--pop {
+    transition: none !important;
+  }
+}

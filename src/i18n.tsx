@@ -5,6 +5,7 @@ import { ZH_GENERATED } from './i18n.zh.generated';
 import { JA_GENERATED } from './i18n.ja.generated';
 import { ES_GENERATED } from './i18n.es.generated';
 import { ONBOARDING_RU, ONBOARDING_ZH, ONBOARDING_JA, ONBOARDING_ES } from './i18n.onboarding';
+import { DIRECT_ASSIST_RU, DIRECT_ASSIST_ZH, DIRECT_ASSIST_JA, DIRECT_ASSIST_ES } from './i18n.directAssist';
 
 // ─── Lightweight in-house i18n ────────────────────────────────────────────────
 // No external dependency. `t(englishText)` returns the translation for the
@@ -47,6 +48,7 @@ const RU: Record<string, string> = {
     ...RU_GENERATED,
     ...RU_GENERATED2,
     ...ONBOARDING_RU,
+    ...DIRECT_ASSIST_RU,
     // ── Settings sidebar / navigation ──
     'General': 'Основные',
     'AI Providers': 'AI-провайдеры',
@@ -275,6 +277,7 @@ const RU: Record<string, string> = {
 const ZH: Record<string, string> = {
     ...ZH_GENERATED,
     ...ONBOARDING_ZH,
+    ...DIRECT_ASSIST_ZH,
     'Language': '语言',
     'English': '英语',
     'Russian': '俄语',
@@ -292,6 +295,7 @@ const ZH: Record<string, string> = {
 const JA: Record<string, string> = {
     ...JA_GENERATED,
     ...ONBOARDING_JA,
+    ...DIRECT_ASSIST_JA,
     'Language': '言語',
     'English': '英語',
     'Russian': 'ロシア語',
@@ -308,6 +312,7 @@ const JA: Record<string, string> = {
 const ES: Record<string, string> = {
     ...ES_GENERATED,
     ...ONBOARDING_ES,
+    ...DIRECT_ASSIST_ES,
     'Language': 'Idioma',
     'English': 'Inglés',
     'Russian': 'Ruso',
