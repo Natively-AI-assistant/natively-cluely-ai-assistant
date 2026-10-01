@@ -939,3 +939,22 @@ at the median. So the lever costs about 1.4 s to the first word at the median an
 * Not built. All three sets are queued for the 02:00Z judge batch (tier 2). Rule, written now: build v2 (or v1) as a
   Looking-for-work-only change if its paired gain over lfw-base on these 40 drafts is at least +0.3 with the interval
   excluding 0 and its hard fails are not up; then it needs its own app runs (that mode only) and a holdout read.
+
+### Prepared for the judge — Call Center with no policy document: a "no policy on file" notice to the GENERATOR (16:10Z)
+* 21 of 40 dev Call Center answers score under 8.5; 16 of them have no document. The judge's expected behaviour on
+  those is one shape: name what the customer asked, say plainly what cannot be confirmed yet, say exactly what will
+  be checked ("I can't confirm a refund for today yet. I'll check whether a refund or credit is available for this
+  issue"), and no verification step, team, time or access claim.
+* First tried in the verifier (`_cv-cc-check-v1.mjs`, rule 4 reworded for this case): it does not get there — the
+  pass makes minimal edits, so the invented verification ask stays (9 → 7 of 29 replies), and its own
+  `epistemic_introduced` rail refuses the edits that add "cannot be confirmed yet" (4 refusals). Not the place.
+* Generator side (`tools/variants/cc-nopolicy-v1.mjs`, a notice at the end of the user message on Call Center turns
+  with no reference file), then the UNCHANGED fix12 verifier (tools/verifier-replay.mjs --answers), 24 no-document
+  dev rows: replies asking for a verification detail 7 → 1; replies naming what will be checked 8 → 17; median
+  length 41 → 36 words. "I want to cancel. Today." → "I hear you. Let me check on the cancellation and come back to
+  you right away." (was: "Before I do anything, I need to verify the account with you…").
+* Open risk the judge has to settle: every no-document reply now has the same check-and-come-back shape.
+* Not built. ccfin-base and ccfin-nopolicy-v1 (40 rows each) are queued for 02:00Z. Rule, written now: build it as a
+  Call Center-only composer notice if the paired gain on dev is at least +0.3 with the interval excluding 0 and hard
+  fails are not up; then that mode's app runs and a holdout read.
+* Harness: tools/verifier-replay.mjs takes `--answers <replay.jsonl>` (verify a generator replay's output).

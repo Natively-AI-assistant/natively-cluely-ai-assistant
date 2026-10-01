@@ -49,6 +49,10 @@ const TIERS = [
     R('lfw-base', 'lfw-base', 'aq2-dev-fix11'),
     R('lfw-bridge-v1', 'lfw-bridge-v1', 'aq2-dev-fix11'),
     R('lfw-bridge-v2', 'lfw-bridge-v2', 'aq2-dev-fix11'),
+    // Call Center with no policy document: a generator-side "no policy on file" notice, then the unchanged fix12
+    // verifier (40 dev drafts regenerated both ways).
+    R('ccfin-base', 'ccfin-base', 'aq2-dev-fix11'),
+    R('ccfin-nopolicy-v1', 'ccfin-nopolicy-v1', 'aq2-dev-fix11'),
     R('think-off-til', 'think-off-til', 'aq2-dev-fix11'),
     R('think-low-til', 'think-low-til', 'aq2-dev-fix11'),
     J('sb-c2-fix11', 'abs-sb-c2', 'aq2-sb-fix11'),

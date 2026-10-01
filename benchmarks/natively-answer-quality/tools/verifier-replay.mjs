@@ -16,6 +16,7 @@ const args = process.argv.slice(2);
 const opt = (k, d = null) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : d; };
 const run = opt('run'); const name = opt('name'); const modes = opt('mode') ? new Set(opt('mode').split(',')) : null; const ids = opt('ids') ? new Set(opt('ids').split(',')) : null;
 const cv = await import(pathToFileURL(path.resolve(opt('module'))).href);
+const ANSWERS = opt('answers') ? Object.fromEntries(fs.readFileSync(path.resolve(opt('answers')), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((x) => (x.k ?? 0) === 0).map((x) => [x.id, x.answer])) : null;
 const env = fs.readFileSync(process.env.NATIVELY_ENV_FILE || '/Users/evin/natively-cluely-ai-assistant/.env', 'utf8');
 const KEY = (env.match(/^DEEPSEEK_API_KEY=(.*)$/m)?.[1] ?? '').trim().replace(/^["']|["']$/g, '');
 const rows = fs.readFileSync(path.join(ROOT, 'results', run, 'natively_benchmark_full.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
@@ -25,7 +26,11 @@ const lim = (n) => { let a = 0; const q = []; const nx = () => { if (a >= n || !
 const L = lim(Number(opt('concurrency', 8)));
 const outFile = path.join(ROOT, 'results', 'replay', `${name}.jsonl`); fs.writeFileSync(outFile, '');
 await Promise.all(rows.map((r) => L(async () => {
-  const answer = (opt('draft') === 'raw' ? r.raw_answer : (r.rendered_answer ?? r.raw_answer)) ?? '';
+  // --answers <replay.jsonl>: verify a generator REPLAY's answers (k = 0) instead of the run's own; rows the replay
+  // does not hold are skipped. The material stays the recorded prompt (a notice a variant added is an instruction,
+  // not evidence).
+  if (ANSWERS && !(r.benchmark_id in ANSWERS)) return;
+  const answer = (ANSWERS ? ANSWERS[r.benchmark_id] : opt('draft') === 'raw' ? r.raw_answer : (r.rendered_answer ?? r.raw_answer)) ?? '';
   const material = (wires[r.benchmark_id]?.messages ?? []).filter((m) => m.role === 'user').map((m) => m.text ?? m.content).join('\n\n');
   const kind = cv.claimVerifierKind({ modeId: r.mode, question: r.question, draft: answer, surface: r.surface_path === 'typed' ? 'typed' : 'spoken' });
   const rec = { id: r.benchmark_id, mode: r.mode, surface: r.surface_path, variant: 'verifier', k: 0, answer, original: answer, kind, outcome: 'not_gated', ms: 0 };
