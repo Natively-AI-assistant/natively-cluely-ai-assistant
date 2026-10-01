@@ -231,13 +231,55 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
    images; a selected DeepSeek Flash reads its own screenshots in the chat path
    and Direct Assist. The screen-reading path gets its DeepSeek rung in phase 5.
 4. **Auto / On / Off override** plus the picker marker.
-5. **Selected model first in both chains**, the cURL / Codex / Antigravity rungs,
-   the local-only fix and the clearer messages. Fixes defects 4, 6, 7, 8, 9, 10.
-   Also the on-the-spot test: when a screenshot arrives, the selected model is
-   still unknown and nothing else can read it, test first and send only on a
-   pass. It needs rungs that send to the selected model, which this phase adds;
-   until then an untested selection behaves as before while its background
-   test runs.
+5. **Selected model first in both chains.** Built before phase 4 (Evin,
+   2026-10-01: phase 4 is Settings UI and needs the dev app; this is
+   main-process routing). In two parts.
+
+   **Phase 5a** (built), the chat screenshot path (`streamVisionWithFallback`):
+   - One ordering rule, `orderVisionCandidates` (`electron/llm/visionOrdering.ts`,
+     pure): the selection's own rung leads unless its circuit breaker is open,
+     then cloud rungs by health, then local ones. A selected model that keeps
+     failing stops leading until it recovers.
+   - A selected direct OpenAI, Claude, Gemini, Groq, Natively or Antigravity
+     model reads its own screenshot first when the resolver says it reads
+     images. Each vendor's fixed vision model stays as a fallback. A text-only
+     or unknown selection gets no rung of its own and the fallback order is
+     unchanged, so nothing is sent blind. Fixes defect 10 for this path.
+   - The change is held to that by an order baseline: 225 combinations of
+     configured providers and selected model, recorded before the change; 34
+     differ after it, each by the selection's own rung moving first.
+   - Measured cost: Gemini Flash is the default selection, and its first token
+     on a screenshot is about 2.8 s where the Flash-Lite rung that led before
+     takes about 1.1 s (5 runs each, 2026-10-01).
+   - Claude: `thinking: disabled` was sent on every native Claude request, and
+     Opus 5.5, Sonnet 5.5, Fable and Mythos answer it with a 400 (Anthropic's
+     per-model table). `claudeThinkingParam` sends each model the setting it
+     accepts. Request shapes are tested on the wire; not run against Anthropic
+     (no key).
+   - The clearer "nothing can read this screenshot" messages of section 3 were
+     already added in phases 1 to 3b (local-only, OpenRouter text-only,
+     DeepSeek Pro, AgentRouter).
+
+   **Phase 5b** (not built): the screen-reading path adopts
+   `orderVisionCandidates` and gains cURL, Codex, Antigravity and DeepSeek
+   rungs (defects 6, 7, 8, 9); the non-streaming image paths
+   (`generateWithVisionFallback`, `chatWithGemini`, `streamChatWithGemini`)
+   follow the same order; "Keep screenshots on this device" reads `/api/show`
+   and any installed vision model (defect 4); and the on-the-spot test: when a
+   screenshot arrives, the selected model is still unknown and nothing else can
+   read it, test first and send only on a pass.
+
+### Verification status
+
+| Phase | Tests | Live, real adapters and keys | In the running app |
+| --- | --- | --- | --- |
+| 1 | full suite | Code Hint before / after | yes |
+| 2 | full suite | OpenRouter text-only model before / after | yes |
+| 3a | full suite | one-time test through 7 real models | **not run** (closed by Evin, 2026-10-01: the machine was held by another session's app). Unverified: the app starting the test at startup and writing the `tests` section of `vision-capabilities.json`. Covered instead by the startup-order unit test and the script run. |
+| 3b | full suite | DeepSeek Flash reads a real screenshot; Pro refused | **not run**, same reason |
+| 5a | full suite | Gemini Flash / Pro / Natively selected, with an OpenAI key present, before / after | not run (no renderer change) |
+
+Windows: no phase added OS-specific code; none has been run on Windows.
 
 ## Out of scope
 
