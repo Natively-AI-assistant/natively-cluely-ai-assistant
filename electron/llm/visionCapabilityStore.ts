@@ -24,7 +24,11 @@ const SCHEMA_VERSION = 1;
 const GLOBAL_KEY = '__nativelyVisionCapabilityStore';
 
 interface ProviderCatalogue { fetchedAt: number; models: Record<string, boolean> }
-interface PersistedShape { version: number; providers: Record<string, ProviderCatalogue> }
+interface TestResult { reads: boolean; at: number }
+// `tests` is optional and was added in phase 3 WITHOUT a version bump: load()
+// starts empty on any other version, so bumping it would have erased every
+// user's saved OpenRouter catalogue on upgrade.
+interface PersistedShape { version: number; providers: Record<string, ProviderCatalogue>; tests?: Record<string, Record<string, TestResult>> }
 
 const catalogueKey = (provider: string, baseURL: string) => `${provider}|${baseURL}`;
 
@@ -32,6 +36,7 @@ export class VisionCapabilityStore {
   private readonly filePath: string | null;
   private readonly now: () => number;
   private providers = new Map<string, ProviderCatalogue>();
+  private tests = new Map<string, Record<string, TestResult>>();
 
   constructor(opts: { filePath?: string | null; now?: () => number } = {}) {
     this.filePath = opts.filePath ?? null;
@@ -56,6 +61,19 @@ export class VisionCapabilityStore {
     this.save();
   }
 
+  /** A saved one-time test result, or undefined when this model was never tested. */
+  tested(provider: string, baseURL: string, wireModel: string): TestResult | undefined {
+    const models = this.tests.get(catalogueKey(provider, baseURL));
+    return models && Object.prototype.hasOwnProperty.call(models, wireModel) ? models[wireModel] : undefined;
+  }
+
+  /** Save a definite test result. Transient failures are never recorded. */
+  recordTest(provider: string, baseURL: string, wireModel: string, reads: boolean): void {
+    const key = catalogueKey(provider, baseURL);
+    this.tests.set(key, { ...(this.tests.get(key) ?? {}), [wireModel]: { reads, at: this.now() } });
+    this.save();
+  }
+
   private load(): void {
     if (!this.filePath) return;
     try {
@@ -69,15 +87,27 @@ export class VisionCapabilityStore {
           this.providers.set(key, { fetchedAt: cat.fetchedAt, models });
         }
       }
+      // Optional since phase 3. A phase-2 file has no tests section.
+      if (parsed.tests && typeof parsed.tests === 'object') {
+        for (const [key, models] of Object.entries(parsed.tests)) {
+          if (!models || typeof models !== 'object') continue;
+          const clean: Record<string, TestResult> = {};
+          for (const [id, r] of Object.entries(models)) {
+            if (r && typeof r.reads === 'boolean' && Number.isFinite(r.at)) clean[id] = { reads: r.reads, at: r.at };
+          }
+          this.tests.set(key, clean);
+        }
+      }
     } catch {
       this.providers.clear(); // corrupt: start empty; the next write repairs the file
+      this.tests.clear();
     }
   }
 
   private save(): void {
     if (!this.filePath) return;
     try {
-      const payload: PersistedShape = { version: SCHEMA_VERSION, providers: Object.fromEntries(this.providers) };
+      const payload: PersistedShape = { version: SCHEMA_VERSION, providers: Object.fromEntries(this.providers), tests: Object.fromEntries(this.tests) };
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
       // tmp + rename, as ProviderPerformanceStore and SettingsManager do: a crash
       // mid-write leaves the previous good file, not a truncated one.
@@ -114,4 +144,15 @@ export function __setVisionCapabilityStore(store: VisionCapabilityStore | null):
 export function storedVisionAnswer(provider: string, routedModel: string, baseURL = ''): boolean | undefined {
   const wire = (routedModel || '').startsWith(`${provider}/`) ? routedModel.slice(provider.length + 1) : routedModel;
   return getVisionCapabilityStore().answer(provider, baseURL, wire);
+}
+
+/** One spelling for a self-hosted endpoint, so the writer and the reader build the same key. */
+export function normalizeVisionBaseURL(url: string | null | undefined): string {
+  return String(url ?? '').trim().replace(/\/+$/, '').replace(/\/v1$/, '').replace(/\/+$/, '');
+}
+
+/** A saved one-time test result for a ROUTED id. */
+export function storedVisionTest(provider: string, routedModel: string, baseURL = ''): { reads: boolean; at: number } | undefined {
+  const wire = (routedModel || '').startsWith(`${provider}/`) ? routedModel.slice(provider.length + 1) : routedModel;
+  return getVisionCapabilityStore().tested(provider, baseURL, wire);
 }
