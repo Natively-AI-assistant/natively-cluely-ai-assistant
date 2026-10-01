@@ -19,6 +19,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { VISION_TEST_FRESH_MS } from './visionProbeOutcome';
 
 const SCHEMA_VERSION = 1;
 const GLOBAL_KEY = '__nativelyVisionCapabilityStore';
@@ -75,8 +76,9 @@ export class VisionCapabilityStore {
     // they changed, or when the saved copy's refresh time is over an hour old.
     const unchanged = previous !== undefined && sameAnswers(previous.models, models);
     if (unchanged && now - (this.savedAt.get(key) ?? 0) < RESAVE_UNCHANGED_AFTER_MS) return;
-    this.savedAt.set(key, now);
-    this.save();
+    // Remembered only when the write HAPPENED: a failed one (a locked file on
+    // Windows, a folder that is not there yet) is tried again next time.
+    if (this.save()) this.savedAt.set(key, now);
   }
 
   /** A saved one-time test result, or undefined when this model was never tested. */
@@ -123,8 +125,9 @@ export class VisionCapabilityStore {
     }
   }
 
-  private save(): void {
-    if (!this.filePath) return;
+  /** True when the file was written (or there is no file to write). */
+  private save(): boolean {
+    if (!this.filePath) return true;
     try {
       const payload: PersistedShape = { version: SCHEMA_VERSION, providers: Object.fromEntries(this.providers), tests: Object.fromEntries(this.tests) };
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
@@ -133,8 +136,10 @@ export class VisionCapabilityStore {
       const tmp = `${this.filePath}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(payload));
       fs.renameSync(tmp, this.filePath);
+      return true;
     } catch {
       // Cannot persist: answers stay in memory for this session.
+      return false;
     }
   }
 }
@@ -170,8 +175,14 @@ export function normalizeVisionBaseURL(url: string | null | undefined): string {
   return String(url ?? '').trim().replace(/\/+$/, '').replace(/\/v1$/, '').replace(/\/+$/, '');
 }
 
-/** A saved one-time test result for a ROUTED id. */
-export function storedVisionTest(provider: string, routedModel: string, baseURL = ''): { reads: boolean; at: number } | undefined {
+/**
+ * A saved one-time test result for a ROUTED id, while it is FRESH. An older one
+ * is not an answer (2026-10-01 review): the probe re-tests after 30 days, and
+ * when that re-test came back inconclusive the stale result — a "no" above
+ * all — stayed in force for as long as the re-tests kept failing.
+ */
+export function storedVisionTest(provider: string, routedModel: string, baseURL = '', now: number = Date.now()): { reads: boolean; at: number } | undefined {
   const wire = (routedModel || '').startsWith(`${provider}/`) ? routedModel.slice(provider.length + 1) : routedModel;
-  return getVisionCapabilityStore().tested(provider, baseURL, wire);
+  const saved = getVisionCapabilityStore().tested(provider, baseURL, wire);
+  return saved && now - saved.at < VISION_TEST_FRESH_MS ? saved : undefined;
 }

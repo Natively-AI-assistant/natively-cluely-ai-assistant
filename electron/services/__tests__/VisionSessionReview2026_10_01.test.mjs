@@ -342,3 +342,113 @@ describe('small ones from the audit', () => {
     assert.deepEqual(sent, ['deepseek-v4-flash']);
   });
 });
+
+// ── Found by the independent state/logic audit (2026-10-01) ──────────────────
+
+describe('the one-time image test: only positive evidence saves a "no"', () => {
+  const { judgeProbeReply, judgeProbeError } = require(dist('llm/visionProbeOutcome.js'));
+  const { VisionProbe } = require(dist('llm/visionProbe.js'));
+  test('a failure sentence delivered as an ordinary reply is unknown, never a no', () => {
+    // Any reply of six letters without the number was judged "a real answer
+    // without the number". A gateway that answers HTTP 200 with its error as
+    // text does so on the confirmation attempt too, so one outage saved "can't
+    // read images" for 30 days.
+    for (const reply of [
+      'Internal Server Error', 'Error 502: Bad Gateway', 'Service Unavailable', 'Request timed out.', 'upstream request timeout',
+      'No available channel for model x under group default', '504 Gateway Time-out', 'An unexpected error occurred.',
+    ]) assert.equal(judgeProbeReply(reply, '7392'), 'unknown', reply);
+  });
+  test('a refusal to answer, or an answer in another form, says nothing about seeing', () => {
+    for (const reply of [
+      "I'm sorry, I can't help with that.", 'seven thousand three hundred ninety-two', 'The image shows black digits on a white background.',
+      '<think>The user wants the number shown.</think>',
+    ]) assert.equal(judgeProbeReply(reply, '7392'), 'unknown', reply);
+  });
+  test('saying it cannot see the image, or giving a different number, is still a no', () => {
+    for (const reply of [
+      "I can't see any image in this chat.", 'I do not have the ability to view images.', "I don't see an image attached.", 'There is no image in your message.',
+      "Images aren't supported here.", 'As a text-only model I am unable to view pictures.', 'No image was provided.', 'The number is 1234.', '42',
+    ]) assert.equal(judgeProbeReply(reply, '7392'), 'no', reply);
+  });
+  test('through the probe: two error sentences in a row record nothing', async () => {
+    const recorded = [];
+    const probe = new VisionProbe({
+      ask: async function* () { yield 'Internal Server Error'; },
+      writeImage: () => '/tmp/x.png', removeImage: () => {}, recorded: () => undefined,
+      record: (s, reads) => recorded.push(reads), keyOf: (s) => `${s.provider}|${s.model}`,
+    });
+    assert.equal(await probe.ensure({ provider: 'fluxion', model: 'fluxion/glm-5.3' }), 'unknown');
+    assert.deepEqual(recorded, []);
+  });
+  test('an auth or plan error that mentions images is about the account, not the model', () => {
+    for (const m of ['401 Unauthorized: your plan does not support image input', '403 Forbidden: vision is not supported on this API key', 'Billing required: image input is not supported on the free tier'])
+      assert.equal(judgeProbeError(new Error(m)), 'unknown', m);
+    assert.equal(judgeProbeError(new Error('404 No endpoints found that support image input')), 'no');
+  });
+});
+
+describe('a saved test result is an answer only while it is fresh', () => {
+  const { resolveVision } = require(dist('llm/visionResolver.js'));
+  const { storedVisionTest } = require(dist('llm/visionCapabilityStore.js'));
+  const DAY = 24 * 3600_000;
+  const facts = { testedVision: (p, m) => storedVisionTest(p, m)?.reads };
+  afterEach(() => __setVisionCapabilityStore(new VisionCapabilityStore({ filePath: null })));
+  test('a "no" older than 30 days no longer blocks the model (its re-test may be inconclusive for days)', () => {
+    let now = Date.now() - 31 * DAY;
+    const store = new VisionCapabilityStore({ filePath: null, now: () => now });
+    store.recordTest('fluxion', '', 'glm-5.3', false);
+    __setVisionCapabilityStore(store);
+    assert.deepEqual(resolveVision({ provider: 'fluxion', model: 'fluxion/glm-5.3' }, facts), { reads: 'unknown', source: null },
+      'a stale "no" stayed in force whenever the re-test came back unknown');
+    now = Date.now() - 29 * DAY;
+    store.recordTest('fluxion', '', 'glm-5.3', false);
+    assert.equal(resolveVision({ provider: 'fluxion', model: 'fluxion/glm-5.3' }, facts).reads, 'no', 'a fresh one still answers');
+  });
+});
+
+describe('the image-refusal list and a model id that ends in "vision"', () => {
+  const { classifyStreamError, isImageRefusalMessage } = require(dist('llm/streamFallbackEngine.js'));
+  test('"model llama3.2-vision is not found" is a missing model, not an image refusal', () => {
+    const err = Object.assign(new Error('model llama3.2-vision is not found'), { status: 404 });
+    assert.equal(classifyStreamError(err, false), 'model_gone');
+    assert.equal(isImageRefusalMessage('Vision is not supported for this model'), true);
+  });
+});
+
+describe('the saved-answers file', () => {
+  const fsmod = require('node:fs'); const pathmod = require('node:path'); const osmod = require('node:os');
+  test('a write that failed is tried again on the next refresh, not an hour later', () => {
+    const dir = fsmod.mkdtempSync(pathmod.join(osmod.tmpdir(), 'vision-store-'));
+    const blocker = pathmod.join(dir, 'not-a-dir');
+    fsmod.writeFileSync(blocker, 'x');
+    const file = pathmod.join(blocker, 'vision-capabilities.json');     // cannot be created: its parent is a FILE
+    const store = new VisionCapabilityStore({ filePath: file });
+    const answers = new Map([['a/b', true]]);
+    store.replaceProviderAnswers('openrouter', '', answers);             // save fails
+    fsmod.rmSync(blocker); fsmod.mkdirSync(blocker);                     // the folder becomes writable
+    store.replaceProviderAnswers('openrouter', '', answers);             // same answers, seconds later
+    assert.equal(fsmod.existsSync(file), true, 'the unchanged-answers shortcut skipped the retry of a write that never happened');
+    fsmod.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe('the screen text goes to the turn it belongs to', () => {
+  const store = require(dist('context-intelligence/question/conversation-state-store.js'));
+  const { SCREEN_NOT_TRANSCRIBED } = require(dist('services/screen/screenDescription.js'));
+  const S = 'review-turn-identity';
+  beforeEach(() => store.clearConversationState(S));
+  test('two turns with the same answer: the one that HAD the screenshot gets its text', () => {
+    const first = store.recordAnswerSummary(S, 'Yes, that looks right.', SCREEN_NOT_TRANSCRIBED, 'is this config ok?');
+    store.recordAnswerSummary(S, 'Yes, that looks right.', undefined, 'and this one?');
+    assert.ok(first, 'recordAnswerSummary returns the turn it wrote');
+    assert.equal(store.attachScreenToAnsweredTurn(S, 'Yes, that looks right.', 'port: 8080', { turn: first, placeholder: SCREEN_NOT_TRANSCRIBED }), true);
+    const turns = store.getConversationState(S).turns;
+    assert.deepEqual(turns.map((t) => t.screen), ['port: 8080', undefined], 'the text landed on the later turn, which had no screenshot');
+  });
+  test('without the turn in hand, only a turn still waiting for its text is filled', () => {
+    store.recordAnswerSummary(S, 'Same.', SCREEN_NOT_TRANSCRIBED, 'q1');
+    store.recordAnswerSummary(S, 'Same.', undefined, 'q2');
+    assert.equal(store.attachScreenToAnsweredTurn(S, 'Same.', 'text', { placeholder: SCREEN_NOT_TRANSCRIBED }), true);
+    assert.deepEqual(store.getConversationState(S).turns.map((t) => t.screen), ['text', undefined]);
+  });
+});

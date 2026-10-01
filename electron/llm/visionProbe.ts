@@ -14,7 +14,7 @@
 //     asking; an unknown is retried only after a backoff.
 
 import type { VisionQuery } from './visionResolver';
-import { judgeProbeError, judgeProbeReply, type ProbeOutcome } from './visionProbeOutcome';
+import { judgeProbeError, judgeProbeReply, VISION_TEST_FRESH_MS, type ProbeOutcome } from './visionProbeOutcome';
 import { newVisionTestNumber, renderDigitsPng } from './visionTestImage';
 
 // Worded like a person asking, on purpose: AgentRouter's content filter rejects
@@ -24,7 +24,7 @@ export const VISION_PROBE_SYSTEM = 'Answer with the number only.';
 
 const DEFAULT_TIMEOUT_MS = 45_000;            // GPT-6 Astra's first token takes 8–13 s
 const DEFAULT_RETRY_MS = 10 * 60 * 1000;
-const DEFAULT_STALE_MS = 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_STALE_MS = VISION_TEST_FRESH_MS;
 // A reply longer than this without the number is not judged at all: it was cut
 // off, and a model that describes the image before answering must not be read
 // as "no". One short stream once a month; the cap only stops a runaway.

@@ -74,12 +74,34 @@ describe('"Keep screenshots on this device" with a local custom endpoint selecte
     assert.deepEqual(h.cloud, [], 'no cloud adapter and no Ollama');
   });
   test('a HOSTED endpoint stays refused, and no request is made', async () => {
+    // The hosted URL is redirected to the fake endpoint, so "no request" is a
+    // real observation (it was asserted against a server the provider never
+    // pointed at).
     endpoint = fakeEndpoint();
-    await endpoint.start();
-    const h = helperWith(provider('https://api.example.com'));
-    assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE);
-    assert.equal(endpoint.requests.length, 0);
-    assert.deepEqual(h.cloud, []);
+    const local = await endpoint.start();
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (input, init) => realFetch(String(input).replace('https://api.example.com', local), init);
+    try {
+      const h = helperWith(provider('https://api.example.com'));
+      assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE);
+      assert.equal(endpoint.requests.length, 0);
+      assert.deepEqual(h.cloud, []);
+      // Control: the redirect works — the same provider answers a TEXT turn.
+      assert.equal(await ask(h, 'hello', undefined), 'endpoint reply');
+      assert.equal(endpoint.requests.length, 1);
+    } finally { globalThis.fetch = realFetch; }
+  });
+  test('a hosted endpoint with a localhost Referer header is still hosted', async () => {
+    endpoint = fakeEndpoint();
+    const local = await endpoint.start();
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (input, init) => realFetch(String(input).replace('https://openrouter.example.com', local), init);
+    try {
+      const p = { id: 'or', name: 'OR', responsePath: 'choices[0].message.content',
+        curlCommand: `curl -H "HTTP-Referer: http://localhost:3000" https://openrouter.example.com/v1/chat/completions ${MESSAGES_BODY}` };
+      assert.equal(await ask(helperWith(p), 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE);
+      assert.equal(endpoint.requests.length, 0, 'LEAK: the keep-on-device screenshot was posted to a hosted endpoint');
+    } finally { globalThis.fetch = realFetch; }
   });
   test('a local endpoint whose template cannot carry an image stays refused', async () => {
     endpoint = fakeEndpoint();

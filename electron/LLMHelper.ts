@@ -6980,7 +6980,9 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isLocalOnlyMode || this.isProviderDisabled('openrouter')) return;
     const store = getVisionCapabilityStore();
     const now = Date.now();
-    if (now - (store.fetchedAt('openrouter', '') ?? 0) < OPENROUTER_VISION_TTL_MS) return;
+    // (A fetchedAt in the future — a clock that was set back — is not fresh.)
+    const age = now - (store.fetchedAt('openrouter', '') ?? 0);
+    if (age >= 0 && age < OPENROUTER_VISION_TTL_MS) return;
     if (now - this.openrouterVisionLastFailureAt < OPENROUTER_VISION_RETRY_MS) return;
     if (this.openrouterVisionFetch) return this.openrouterVisionFetch;
     this.openrouterVisionFetch = (async () => {

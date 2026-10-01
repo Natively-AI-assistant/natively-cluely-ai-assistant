@@ -174,7 +174,7 @@ const IMAGE_REFUSAL_PATTERNS: readonly RegExp[] = [
   /images?(?: input| inputs)? (?:is|are)(?: not|n't) supported/, // "images are not supported", "image input is not supported"
   /images? not supported/,
   /\bno vision\b/,
-  /vision is not/,
+  /vision is not (?:supported|available|enabled)/,                // not "model x-vision is not found"
 ];
 
 export function isImageRefusalMessage(message: string): boolean {
