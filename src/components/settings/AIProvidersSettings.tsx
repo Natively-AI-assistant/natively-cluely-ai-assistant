@@ -4,10 +4,9 @@ import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, 
 import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
-import { Presence, SettingsMenu, SettingsMotionReady, SwapLabel, useMotionReadyAfter } from './SettingsRow';
+import { PICKER_MENU_WIDTH, Presence, SettingsMenu, SettingsMotionReady, SwapLabel, capPickerLabel, useMotionReadyAfter } from './SettingsRow';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToggleInit } from './useToggleInit';
-import { PICKER_LABEL_MAX_CHARS, PICKER_MENU_WIDTH, capPickerLabel } from './SettingsRow';
 import { motion, useReducedMotion } from 'framer-motion';
 
 // Official provider marks, vendored from @lobehub/icons-static-svg v1.94.0 (MIT).

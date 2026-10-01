@@ -8,7 +8,9 @@ import type { BrowserContextSettings, PhoneMirrorInfo } from '../../types/electr
 import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 import { isMac } from '../../utils/platformUtils';
-import { NativelyLogoMark } from '../NativelyLogoMark';
+// The real Natively mark (icon.png in the text colour), as Setup & Help's
+// Natively API row draws it — not the hand-drawn NativelyLogoMark approximation.
+import { NativelyGlyph } from './help/HelpGraphics';
 import { Disclosure, DisclosureChevron } from '../ui/AccordionSection';
 import { SettingsToggle } from './SettingsToggle';
 
@@ -234,6 +236,13 @@ const BTN_BASE =
   'px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] motion-reduce:active:scale-100';
 const BTN_NEUTRAL = 'bg-bg-component hover:bg-bg-elevated text-text-primary border-border-subtle';
 const BTN = `${BTN_BASE} ${BTN_NEUTRAL}`;
+// Phone Mirror's two buttons, one above the other (Pair a phone's Show code /
+// Hide code, Reset pairing's Reset / Done), share the wider pair's width.
+const PAIR_BTN_WIDTH = 'min-w-[112px]';
+// Browser Extension's two buttons, one above the other (Re-pair, Pair manually's
+// Show/Hide), share one width: Re-pair's own, measured 90.7px (Show 79.6, Hide
+// 74.7). min-width, so a longer translation still grows.
+const EXT_BTN_WIDTH = 'min-w-[92px]';
 
 const EMPTY_BROWSER_CTX: BrowserContextSettings = {
   autoDetectCoding: true,
@@ -1060,7 +1069,7 @@ export const PhoneMirrorSettings: React.FC = () => {
                   ? t('Scan the code with your phone camera, or open the link on it.')
                   : t('LAN is off. Turn it on, or open the link on this computer.')
               }
-              control={revealButton(showPairing, () => setShowPairing((v) => !v), t('Show code'), t('Hide code'), 'min-w-[112px]')}
+              control={revealButton(showPairing, () => setShowPairing((v) => !v), t('Show code'), t('Hide code'), PAIR_BTN_WIDTH)}
             >
               <Collapse open={showPairing}>
                 <div className="pb-3">
@@ -1186,7 +1195,7 @@ export const PhoneMirrorSettings: React.FC = () => {
                   ) : (
                     <button
                       type="button"
-                      className={`${BTN_BASE} min-w-[92px] ${resetDone ? okTone : BTN_NEUTRAL}`}
+                      className={`${BTN_BASE} ${PAIR_BTN_WIDTH} ${resetDone ? okTone : BTN_NEUTRAL}`}
                       onClick={() => {
                         if (inFlightRef.current) return;
                         setResetDone(false);
@@ -1215,7 +1224,7 @@ export const PhoneMirrorSettings: React.FC = () => {
           <SectionHeading title={t('Browser Extension')} subtitle={t("Send the page you're reading to Natively.")} />
 
           <SyncRow
-            icon={<NativelyLogoMark size={20} />}
+            icon={<NativelyGlyph size={20} />}
             title="Natively Companion"
             badge={extBadge}
             descriptionKey={shownRunning ? 'ext-on' : 'ext-off'}
@@ -1236,7 +1245,7 @@ export const PhoneMirrorSettings: React.FC = () => {
               // Always mounted, so the outgoing control can animate away.
               <Presence kind="control" id={extControlKey}>
                   {extControlKey === null ? null : extControlKey === 'repair' ? (
-                    <button type="button" className={BTN} onClick={onArmExtension} aria-label={t('Re-pair browser extension')}>
+                    <button type="button" className={`${BTN} ${EXT_BTN_WIDTH}`} onClick={onArmExtension} aria-label={t('Re-pair browser extension')}>
                       <RefreshCw size={14} />
                       {t('Re-pair')}
                     </button>
@@ -1273,7 +1282,7 @@ export const PhoneMirrorSettings: React.FC = () => {
               icon={<ClipboardPaste size={20} />}
               title={t('Pair manually')}
               description={t('If one-click pairing fails, paste this into the extension manually.')}
-              control={revealButton(showManualPair, () => setShowManualPair((v) => !v), t('Show'), t('Hide'), 'min-w-[84px]')}
+              control={revealButton(showManualPair, () => setShowManualPair((v) => !v), t('Show'), t('Hide'), EXT_BTN_WIDTH)}
             >
               <Collapse open={showManualPair}>
                 <div className="pb-3">

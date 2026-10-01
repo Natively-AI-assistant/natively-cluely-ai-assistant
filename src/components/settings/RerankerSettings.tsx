@@ -4,8 +4,7 @@ import { AlertCircle, Check, ChevronDown, Download, ExternalLink, Filter, Folder
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSaveLabel, AipSelect, AipSwitch, AipTestLabel, type AipSelectOption, type AipTone } from './AIProvidersSettings';
-import { Presence, useMotionReadyAfter } from './SettingsRow';
-import { RETRIEVAL_HERO_PICKER_ATTR, RETRIEVAL_HERO_PICKER_MIN_WIDTH, capPickerLabel } from './SettingsRow';
+import { Presence, RETRIEVAL_HERO_PICKER_ATTR, RETRIEVAL_HERO_PICKER_MIN_WIDTH, capPickerLabel, useMotionReadyAfter } from './SettingsRow';
 import { isMac, isWindows } from '../../utils/platformUtils';
 import { candidateControlApplies, candidateControlRationale } from '../../lib/rerankCandidateControl.mjs';
 
@@ -401,7 +400,7 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
             {isOpen && (
                 <div
                     role="listbox"
-                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1.5 w-full z-50 max-h-64 p-1 custom-scrollbar shadow-2xl rounded-md border border-white/10 bg-[#161618]"
+                    className={`aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1.5 w-full z-50 max-h-64 p-1 custom-scrollbar shadow-2xl rounded-md border border-white/10 bg-[#161618]`}
                 >
                     {options.map((option) => (
                         <button
