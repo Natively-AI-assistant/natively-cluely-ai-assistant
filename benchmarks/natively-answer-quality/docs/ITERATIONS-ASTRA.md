@@ -304,3 +304,53 @@ likely overstated by this setup. Not changed mid-experiment, to keep the pair co
 * Rule from here: ONE app instance at a time, no parallel builds. The paired run is not repeated; the latency
   deliverable is the recorded runs + these 35 paired rows.
 * Judge chains re-armed with `astra/arm.mjs` (own session via detached spawn, wall-clock sleeps): 0200 and 1100.
+
+## External judge — batch 2026-10-01 02:00 UTC (calibration 20/20)
+Paired per-mode reads with `astra/paired.mjs` (same items, official score, 95% interval on the per-item difference).
+
+### fix6 (I8–I15) vs I5 on dev, 359/360 judged — KEEP the bundle
+| mode | I5 | fix6 | Δ (95%) | hard fails |
+|---|---:|---:|---:|---:|
+| General | 7.87 | 8.53 | +0.66 (±0.65) | 10 → 5 |
+| Sales | 6.93 | 8.02 | +1.09 (±0.73) | 18 → 8 |
+| Recruiting | 8.58 | 8.83 | +0.25 (±0.36) | 6 → 5 |
+| Team Meet | 8.77 | 8.63 | −0.14 (±0.50) | 3 → 5 |
+| Looking for work | 6.73 | 7.33 | +0.60 (±0.52) | 22 → 18 |
+| Lecture | 8.86 | 9.03 | +0.17 (±0.38) | 4 → 3 |
+| Technical interview | 8.09 | 8.00 | −0.09 (±0.50) | 10 → 10 |
+| Seminar | 8.55 | 8.64 | +0.09 (±0.45) | 5 → 3 |
+| Call Center | 6.35 | 7.07 | +0.72 (±0.74) | 20 → 14 |
+| ALL | 7.86 | 8.23 | +0.37 (±0.19) | 98 → 71 |
+
+* I8 alone (fix4 vs I5, 25 per mode on its modes): LFW +0.84, Sales +0.74, Call Center +0.53, Seminar +0.43,
+  General −0.01, Technical interview −0.84 (±0.73; fix6 on the same items is back at +0.72 over fix4 — TI's capped
+  answers are reasoning/factual errors of the generator and swing ±0.8 between runs). ALL +0.28 (±0.32). KEEP I8.
+* I16 hand-back (replay on fix6 drafts, 137 gated rows): +0.09 (±0.17). Neutral; kept (removes the copied example).
+
+### Judge-date artefact found and fixed (harness, 55c00a33)
+* Team Meet first read −0.39 with hard fails 3 → 7. Two were replies that used a relative day ("1 October, so
+  that's tomorrow", generated 30 September, judged 1 October as a factual error). The envelope now states the
+  generation date when a reply uses a relative day (3–5 items per run; all other cached judgments stand):
+  DTEAM-031 4.0 → 10.0, DTEAM-016 4.0 → 8.4. The TODAY line (I11) stays; replay without it lost DSALES-026 (0/2).
+
+### Generator ceiling — NOT generator-bound
+* Same recorded I5 prompts, same 15 items per mode: deepseek-flash replay 7.80, deepseek-v4-pro 7.61
+  (−0.20 ±0.34), hard fails 37 → 44; flash replay vs the in-app I5 answers −0.08 (±0.25), so replay is a fair
+  proxy. A larger DeepSeek model with the same prompts does not close the gap; the capped classes are structural.
+
+### I18 — the verifier LISTS the unsupported phrases, then rewrites; Team Meet and Recruiting are verified too
+* Root cause: after the verifier, 18 of 40 LFW answers were still capped (16 unsupported_personal_claim): "Twice a
+  year sounds manageable", "I'd be looking at a few weeks", "level and ownership matter more to me". A longer
+  description of what to remove (reframe-v1) left them unchanged — the edit model does not see them when asked only
+  to output the edited reply.
+* Variant scratch-v1: one hidden line `UNSUPPORTED: … | …`, a `---` line, then the reply. Replay on fix6's drafts,
+  judged: LFW 7.33 → 8.20 (+0.87 ±0.49, hard fails 18 → 5); Call Center 7.07 → 7.46 (+0.39 ±0.38, 14 → 10);
+  Sales 8.02 → 7.93 (−0.09 ±0.50). ~96 output tokens, p50 0.95 s (0.8 s before).
+* scratch-v2 (more rules per claim kind): 7.99 vs 8.20 (−0.21 ±0.39) — sampling noise; the same item swings
+  9.7 ↔ 5.0 between samples. Structure is the lever, not the extra wording; v1 kept.
+* scratch-v3 = v1 + Team Meet and Recruiting verified on every turn: Team Meet 8.37 → 8.93 (+0.56 ±0.49, hard
+  fails 7 → 2), Recruiting 8.83 → 9.11 (+0.27 ±0.36, 5 → 2).
+* What it leaves in LFW: questions about the candidate's own past with no evidence ("why did you leave", the gap)
+  now deflect ("What would you like to know about that stretch?" 6.0–7.7, important_question_unanswered). The judge
+  wants neither an invented reason nor a counter-question — the architectural blocker noted earlier.
+* Cost: Team Meet and Recruiting now pay the verifier's ~0.9 s on the total and the replace-after-stream.
