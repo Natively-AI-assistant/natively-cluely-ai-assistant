@@ -69,9 +69,6 @@ export function resolveVision(q: VisionQuery, facts: VisionFacts = {}): VisionVe
     case 'codex-cli':
     case 'antigravity':
       return answer(true, 'route');
-    // Natively's DeepSeek adapter never attaches an image (phase 3 adds it for Flash).
-    case 'deepseek':
-      return answer(false, 'route');
     // An explicit multimodal flag, an {{IMAGE_BASE64}} placeholder, or an OpenAI-compatible body.
     case 'custom':
     case 'curl':

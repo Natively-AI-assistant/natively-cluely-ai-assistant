@@ -136,9 +136,19 @@ describe('the fluxion/ prefix survives the capability layer (EXECUTED, all 36)',
     // the prefix reaches it unstripped every Fluxion model resolves text-only —
     // the Code Hint refusal class. Comparing against the bare id proves the
     // prefix is transparent rather than merely "not crashing".
+    // One deliberate exception since 2026-10-01: DeepSeek Flash is KNOWN to read
+    // images directly and through AgentRouter (both measured). Through Fluxion
+    // it is unmeasured, so the name list does not claim it there; the one-time
+    // image test settles it when a Fluxion DeepSeek model is selected.
+    const MEASURED_DIRECT_ONLY = /^deepseek-(?:v\d+-)?flash(?:$|-)/;
     for (const id of FLUXION_CATALOGUE) {
       const bare = getModelCapabilities(id, false);
       const prefixed = getModelCapabilities(`fluxion/${id}`, false);
+      if (MEASURED_DIRECT_ONLY.test(id)) {
+        assert.equal(bare.supportsImages, true, `${id} reads images directly`);
+        assert.equal(prefixed.supportsImages, false, `fluxion/${id} is not assumed to`);
+        continue;
+      }
       assert.equal(
         prefixed.supportsImages, bare.supportsImages,
         `fluxion/${id} image support diverged from ${id}`,

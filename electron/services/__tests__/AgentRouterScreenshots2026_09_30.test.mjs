@@ -37,12 +37,13 @@ describe('capability table', () => {
     assert.equal(reads('agentrouter/deepseek-v4-flash'), true);
   });
 
-  test('direct DeepSeek stays text-only — its adapter never sends an image', () => {
-    assert.equal(reads('deepseek-flash'), false);
-    assert.equal(reads('deepseek-v4-flash'), false);
+  test('direct DeepSeek Flash reads images since 2026-10-01 (its adapter now attaches them); Pro does not', () => {
+    assert.equal(reads('deepseek-flash'), true);
+    assert.equal(reads('deepseek-v4-flash'), true);
+    assert.equal(reads('deepseek-v4-pro'), false);
   });
 
-  test('the DeepSeek entry is AgentRouter\'s alone, and Flash only', () => {
+  test('other gateways are not covered, and Flash only', () => {
     assert.equal(reads('openrouter/deepseek/deepseek-v4-flash'), false, 'other gateways are not measured');
     assert.equal(reads('fluxion/deepseek-v4-flash-0731'), false);
     assert.equal(reads('agentrouter/deepseek-v4-pro'), false, "DeepSeek's docs list no vision for V4 Pro");
