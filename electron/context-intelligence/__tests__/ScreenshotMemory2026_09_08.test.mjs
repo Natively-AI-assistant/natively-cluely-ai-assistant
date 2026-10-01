@@ -403,7 +403,7 @@ test('a screenshot that could not be transcribed is still recorded as having exi
   assert.match(engine, /fallbackText \|\| \(\(imageCount > 0 \|\| screenContext\) \? SCREEN_NOT_TRANSCRIBED : undefined\)/);
   // And screenContext is a real fallback source, not an unread parameter.
   assert.match(engine, /const fallbackText = screenContext \? \(compose\(screenContext as never\) \|\| ''\) : '';/);
-  assert.match(engine, /if \(screenText\) attachScreenToAnsweredTurn\(sessionId, answer, screenText\);/);
+  assert.match(engine, /if \(screenText\) attachScreenToAnsweredTurn\(sessionId, answer, screenText, \{ turn, placeholder \}\);/);
   assert.match(engine, /this\.recordLiveTurn\(answer, options\?\.screenContext, question, imagePaths\?\.length \?\? 0, imagePaths\)/);
   // The recorded text is a DEDICATED transcription, not the answering call's
   // output — that reuse is what stored a paraphrase with no identifiers.

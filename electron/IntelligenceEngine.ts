@@ -1673,14 +1673,15 @@ export class IntelligenceEngine extends EventEmitter {
             // was assembled without this answer — the assistant had forgotten
             // what it said ten seconds earlier. The turn is written now and
             // the screen's text is attached to it when it is ready.
-            recordAnswerSummary(
+            const placeholder = fallbackText || ((imageCount > 0 || screenContext) ? SCREEN_NOT_TRANSCRIBED : undefined);
+            const turn = recordAnswerSummary(
                 sessionId,
                 answer,
                 // A screen that was THERE is recorded as there even before (or
                 // without) its text. Recording nothing is what let a follow-up
                 // deny the screenshot ever existed, which is a worse answer
                 // than "I can't read it".
-                fallbackText || ((imageCount > 0 || screenContext) ? SCREEN_NOT_TRANSCRIBED : undefined),
+                placeholder,
                 // Seeds state for a turn that never reached orchestrate() (V3
                 // off, or a legacy route). runAssistMode deliberately passes
                 // nothing: an unprompted insight has no question, and a
@@ -1701,7 +1702,10 @@ export class IntelligenceEngine extends EventEmitter {
             if (imagePaths?.length) {
                 const { transcribeScreenForMemory } = require('./services/screen/screenTranscription');
                 const screenText = await transcribeScreenForMemory(imagePaths, question);
-                if (screenText) attachScreenToAnsweredTurn(sessionId, answer, screenText);
+                // To THIS turn: by the turn object, else the newest turn with
+                // this answer that is still waiting. By the answer alone, a later
+                // turn that happened to give the same answer took the text.
+                if (screenText) attachScreenToAnsweredTurn(sessionId, answer, screenText, { turn, placeholder });
             }
         } catch (error: any) {
             // NEVER silent: a lost turn leaves the next follow-up with no

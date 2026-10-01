@@ -164,3 +164,21 @@ export async function resolveOllamaRecordTarget(): Promise<void> {
     /* no local record this turn */
   }
 }
+
+
+/**
+ * Is Ollama the selected provider? Asked separately from readActiveSelection
+ * because that one has no answer while Ollama is selected with no model named
+ * yet (startup, or nothing installed), and "no selection known" must not be
+ * read as "not local".
+ */
+export function readUsingOllama(): boolean {
+  try {
+    const g = globalThis as any;
+    if (typeof g.__nativelyGetLLMHelper !== 'function') return false;
+    const helper = g.__nativelyGetLLMHelper();
+    return !!helper && typeof helper.isUsingOllama === 'function' && helper.isUsingOllama() === true;
+  } catch {
+    return false;
+  }
+}

@@ -26,7 +26,7 @@ import {
 } from '../../llm/visionCapability';
 import {
   readActiveCustomProvider, readActiveCurlProvider, readActiveModelId, readActiveSelection, readFixedVisionModels,
-  readOllamaRecordTarget,
+  readOllamaRecordTarget, readUsingOllama,
 } from '../../llm/activeCustomProvider';
 import { gatewaySeatReadsImages, readsImages, resolveVision } from '../../llm/visionResolver';
 import { normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from '../../llm/visionCapabilityStore';
@@ -594,7 +594,9 @@ function curl(_creds: CredentialsManager, inputs: VisionProviderBuildInputs): Vi
  */
 function selectionIsLocal(): boolean {
   const selection = readActiveSelection();
-  if (!selection) return false;
+  // No nameable selection: still local when Ollama is the selected provider
+  // (it has no model name at startup, or with nothing installed).
+  if (!selection) return readUsingOllama();
   if (selection.provider === 'ollama') return true;
   if (selection.provider === 'custom') return customProviderIsLocal(readActiveCustomProvider());
   if (selection.provider === 'curl') return customProviderIsLocal(readActiveCurlProvider());

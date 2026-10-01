@@ -207,24 +207,41 @@ export function appendTurn(
     .slice(-MAX_HISTORY_TURNS);
 }
 
+/** The screen text as a turn stores it: trimmed, capped, marked when cut. */
+function capScreen(screen: unknown): string {
+  const raw = String(screen ?? '').trim();
+  return raw.length > MAX_TURN_SCREEN_CHARS ? raw.slice(0, MAX_TURN_SCREEN_CHARS) + SCREEN_TRUNCATION_MARKER : raw;
+}
+
 /**
  * Fill in the screen text of a turn that is ALREADY recorded (2026-10-01).
  *
  * The live writer records the answer the moment it exists and attaches the
  * screen's text when its transcription arrives, which for a local model can be
- * tens of seconds later. The turn is found by its answer, newest first; a turn
- * that has left the ring is simply not there. Same cap and marker as appendTurn.
+ * tens of seconds later. Which turn:
+ *   1. `opts.turn` — the very turn object the writer recorded — when it is
+ *      still in the ring;
+ *   2. else the newest turn with that answer that is still WAITING, i.e. whose
+ *      screen is `opts.placeholder` (what the writer recorded in its place).
+ * Matching on the answer alone put a first turn's screen on a later turn that
+ * happened to give the same answer and never had a screenshot.
  */
-export function withTurnScreen(turns: readonly HistoryTurn[], a: string, screen: string): HistoryTurn[] | null {
+export function withTurnScreen(
+  turns: readonly HistoryTurn[], a: string, screen: string,
+  opts: { turn?: HistoryTurn | null; placeholder?: string } = {},
+): HistoryTurn[] | null {
   const answer = String(a ?? '').slice(0, MAX_TURN_ANSWER_CHARS);
-  const rawShot = String(screen ?? '').trim();
-  if (!answer.trim() || !rawShot) return null;
-  let at = -1;
-  for (let i = turns.length - 1; i >= 0; i--) { if (turns[i].a === answer) { at = i; break; } }
+  const shot = capScreen(screen);
+  if (!shot) return null;
+  let at = opts.turn ? turns.indexOf(opts.turn) : -1;
+  if (at < 0) {
+    if (!answer.trim()) return null;
+    const waiting = opts.placeholder === undefined ? undefined : capScreen(opts.placeholder);
+    for (let i = turns.length - 1; i >= 0; i--) {
+      if (turns[i].a === answer && (waiting === undefined || (turns[i].screen ?? '') === waiting)) { at = i; break; }
+    }
+  }
   if (at < 0) return null;
-  const shot = rawShot.length > MAX_TURN_SCREEN_CHARS
-    ? rawShot.slice(0, MAX_TURN_SCREEN_CHARS) + SCREEN_TRUNCATION_MARKER
-    : rawShot;
   const next = [...turns];
   next[at] = { ...next[at], screen: shot };
   return next;

@@ -69,9 +69,13 @@ describe('"Keep screenshots on this device": the screenshot goes to the Ollama m
     await boot({ 'qwen2.5:4b': false, 'llava:7b': true });
     setMode('private_vision');
     const h = helper(url, 'qwen2.5:4b');
-    h.streamWithOllama = async function* (...args) { h.cloud.push({ provider: 'ollama-text', args }); yield 'text'; };
+    // The text route's failover wrapper needs the whole text engine; reduced
+    // here to "open the selected provider" so the REAL adapter's request is seen.
+    h.streamSelectedProviderWithFailover = async function* (rung) { yield* rung.open(new AbortController().signal); };
     await ask(h, 'hello', undefined);
-    assert.ok(!ollama.chats().some((c) => c.body.model === 'llava:7b'), 'the vision model is for screenshots only');
+    const chats = ollama.chats();
+    assert.ok(chats.length >= 1, 'the text turn reached Ollama');
+    assert.ok(chats.every((c) => c.body.model === 'qwen2.5:4b'), `models asked: ${chats.map((c) => c.body.model)}`);
   });
 });
 

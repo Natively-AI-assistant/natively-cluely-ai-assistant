@@ -250,7 +250,9 @@ test('each selected rung opens the SELECTED model, with the screenshot', async (
     const { chain } = await chainOf(VENDORS, model, stubs);
     await drain(chain[0].open(new AbortController().signal, 1));
   }
-  assert.deepEqual(calls, [['openai', 'gpt-5.5', 1], ['claude', 'claude-opus-5', 1], ['gemini', 'gemini-2.5-flash', 1], ['groq', 'qwen/qwen3.6-27b', 1]]);
+  // Groq: qwen3.6 is RETIRED (free and developer tiers), so the rung sends its
+  // successor, as Groq's text path does (review fix, 2026-10-01).
+  assert.deepEqual(calls, [['openai', 'gpt-5.5', 1], ['claude', 'claude-opus-5', 1], ['gemini', 'gemini-2.5-flash', 1], ['groq', 'qwen/qwen3.8-27b', 1]]);
 });
 test('a selected rung refused as image-unsupported re-tests the selected model', async () => {
   const forced = [];
