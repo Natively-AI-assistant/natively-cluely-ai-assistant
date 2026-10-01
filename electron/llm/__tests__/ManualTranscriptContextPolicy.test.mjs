@@ -14,6 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron');
 
 const { planAnswer } = await import(pathToFileURL(path.join(distRoot, 'llm/AnswerPlanner.js')).href);
+const { SessionTracker } = await import(pathToFileURL(path.join(distRoot, 'SessionTracker.js')).href);
 const { extractLatestPriorAssistantTurn, isTranscriptBoundManualQuestion, shouldAutoAttachManualTranscriptContext } = await import(
   pathToFileURL(path.join(distRoot, 'llm/manualTranscriptContextPolicy.js')).href
 );
@@ -106,25 +107,50 @@ describe('manual transcript context policy', () => {
   });
 
   test('refinements can recover only the latest prior assistant answer', () => {
-    const snapshot = [
-      '[INTERVIEWER]: Explain the migration plan.',
-      '[ASSISTANT (PREVIOUS SUGGESTION)]: First answer',
-      'with a second line.',
-      '[ME]: Ask for another version.',
-      '[ASSISTANT (PREVIOUS SUGGESTION)]: Latest answer',
-      'continued here.',
-      '[INTERVIEWER]: Unrelated live meeting speech.',
-    ].join('\n');
-    assert.equal(extractLatestPriorAssistantTurn(snapshot), 'Latest answer\ncontinued here.');
-    assert.equal(extractLatestPriorAssistantTurn('[INTERVIEWER]: No prior answer'), undefined);
+    const items = [
+      { role: 'interviewer', text: 'Explain the migration plan.', timestamp: 1 },
+      { role: 'assistant', text: 'First answer\nwith a second line.', timestamp: 2, surface: 'manual_chat' },
+      { role: 'user', text: 'Ask for another version.', timestamp: 3 },
+      { role: 'assistant', text: 'Latest answer\ncontinued here.', timestamp: 4, surface: 'manual_chat' },
+      { role: 'interviewer', text: 'Unrelated live meeting speech.', timestamp: 5 },
+    ];
+    assert.equal(extractLatestPriorAssistantTurn(items, 'manual_chat'), 'Latest answer\ncontinued here.');
+    assert.equal(extractLatestPriorAssistantTurn(items.slice(0, 1), 'manual_chat'), undefined);
   });
 
-  test('unknown speaker tags cannot leak into a prior assistant answer', () => {
-    assert.equal(extractLatestPriorAssistantTurn([
-      '[ASSISTANT (PREVIOUS SUGGESTION)]: Keep this answer',
-      '[GUEST]: unrelated speech',
-      'continued speech',
-    ].join('\n')), 'Keep this answer');
+  test('labels inside an answer are preserved while speech and other surfaces stay excluded', () => {
+    const answer = 'Keep this answer\n[NOTE]: preserve this detail\n[GUEST]: a quoted example\n[ASSISTANT (PREVIOUS SUGGESTION)]: another quoted label';
+    const items = [
+      { role: 'assistant', text: answer, timestamp: 1, surface: 'manual_chat' },
+      { role: 'user', text: '[ASSISTANT (PREVIOUS SUGGESTION)]: user speech', timestamp: 2 },
+      { role: 'guest', text: 'unrelated speech\ncontinued speech', timestamp: 3 },
+      { role: 'assistant', text: 'Phone answer', timestamp: 4, surface: 'phone_mirror' },
+      { role: 'assistant', text: 'Unknown-surface answer', timestamp: 5 },
+      { role: 'assistant', text: 'Live suggestion', timestamp: 6, surface: 'what_to_answer' },
+    ];
+    assert.equal(extractLatestPriorAssistantTurn(items, 'manual_chat'), answer);
+    assert.equal(extractLatestPriorAssistantTurn(items, 'phone_mirror'), 'Phone answer');
+    assert.equal(extractLatestPriorAssistantTurn(items, 'screenshot'), undefined);
+  });
+
+  test('SessionTracker preserves the surface and the existing 100-second context window', () => {
+    const originalNow = Date.now;
+    let now = 1_000_000;
+    Date.now = () => now;
+    try {
+      const tracker = new SessionTracker();
+      tracker.addAssistantMessage('An older manual answer that is long enough to be stored.', undefined, 'manual_chat');
+      now += 101_000;
+      tracker.addAssistantMessage('A newer phone answer that is long enough to be stored.', undefined, 'phone_mirror');
+      tracker.addAssistantMessage('A legacy answer that must not be attributed to either surface.');
+      assert.equal(extractLatestPriorAssistantTurn(tracker.getContext(100), 'manual_chat'), undefined);
+      const answer = 'The current manual answer stays complete.\n[NOTE]: Keep the final detail.';
+      tracker.addAssistantMessage(answer, undefined, 'manual_chat');
+      assert.equal(extractLatestPriorAssistantTurn(tracker.getContext(100), 'manual_chat'), answer);
+      assert.equal(extractLatestPriorAssistantTurn(tracker.getContext(100), 'phone_mirror'), 'A newer phone answer that is long enough to be stored.');
+    } finally {
+      Date.now = originalNow;
+    }
   });
 
   test('active modes do not turn standalone typed questions into transcript follow-ups', () => {
@@ -153,7 +179,8 @@ describe('manual transcript context policy wiring', () => {
       ipcSrc,
       /else if \(!context && autoContextSnapshot && isRefinementFollowUp\(message\)\s*&& !isTranscriptBoundManualQuestion\(message\)\s*&& \(!turnContract \|\| turnContract\.memoryReadPolicy\.allowPriorAssistantFacts\)\)/,
     );
-    assert.match(ipcSrc, /extractLatestPriorAssistantTurn\(autoContextSnapshot\)/);
+    assert.match(ipcSrc, /autoContextItems = intelligenceManager\.getContext\(100\)/);
+    assert.match(ipcSrc, /extractLatestPriorAssistantTurn\(autoContextItems, 'manual_chat'\)/);
     assert.match(ipcSrc, /Injected latest prior assistant answer for manual refinement; rolling transcript excluded/);
   });
 
@@ -168,7 +195,7 @@ describe('manual transcript context policy wiring', () => {
       ipcSrc,
       /if \(snap && snap\.trim\(\)\.length > 0 && isRefinementFollowUp\(message\)\s*&& !isTranscriptBoundManualQuestion\(message\) && !phoneDocGrounded\)/,
     );
-    assert.match(ipcSrc, /extractLatestPriorAssistantTurn\(snap\)/);
+    assert.match(ipcSrc, /extractLatestPriorAssistantTurn\(items, 'phone_mirror'\)/);
     assert.match(ipcSrc, /\[PhoneMirror\] Injected latest prior assistant answer for refinement; rolling transcript excluded/);
   });
 });
@@ -181,13 +208,18 @@ describe('manual transcript integration with existing chat history', () => {
   const end = ipc.indexOf('// MANUAL REGRESSION FIX', start);
   assert.ok(start > 0 && end > start);
   const branch = ipc.slice(start, end).replace(/^} else if/, 'if');
-  function route(message, initialContext, documentGrounded = false) {
-    return new Function('message', 'context', 'autoContextSnapshot', 'answerPlan',
+  function route(message, initialContext, documentGrounded = false, priorAnswer = 'Prior answer') {
+    return new Function('message', 'context', 'autoContextSnapshot', 'autoContextItems', 'answerPlan',
       'isRefinementFollowUp', 'isTranscriptBoundManualQuestion', 'shouldAutoAttachManualTranscriptContext',
       'extractLatestPriorAssistantTurn', 'manualActiveMode', 'turnContract', 'isDocGroundedAnswerType',
       'stripPriorAssistantTurns', 'isIntelligenceFlagEnabled', 'console', 'iTrace',
       branch + '; return context;')(
-        message, initialContext, '[INTERVIEWER]: Meeting fact\n[ASSISTANT (PREVIOUS SUGGESTION)]: Prior answer', plan(message),
+        message, initialContext, '[INTERVIEWER]: Meeting fact\n[ASSISTANT (PREVIOUS SUGGESTION)]: Prior answer',
+        [
+          { role: 'assistant', text: priorAnswer, timestamp: 1, surface: 'manual_chat' },
+          { role: 'assistant', text: 'Other surface answer', timestamp: 2, surface: 'phone_mirror' },
+          { role: 'interviewer', text: 'Meeting fact', timestamp: 3 },
+        ], plan(message),
         (text) => text === 'make that shorter', isTranscriptBoundManualQuestion,
         shouldAutoAttachManualTranscriptContext, extractLatestPriorAssistantTurn,
         { documentGroundedCustomModeActive: documentGrounded }, null, () => documentGrounded,
@@ -209,6 +241,11 @@ describe('manual transcript integration with existing chat history', () => {
     const output = route('make that shorter', undefined);
     assert.match(output, /Prior answer/);
     assert.doesNotMatch(output, /Meeting fact/);
+    assert.doesNotMatch(output, /Other surface answer/);
     assert.equal(route('make that shorter', 'Chat history'), 'Chat history');
+  });
+  test('refinement passes the entire labeled answer through the actual attachment branch', () => {
+    const answer = 'Here is the answer.\n[NOTE]: A detail to preserve.\nLast line.';
+    assert.ok(route('make that shorter', undefined, false, answer).includes(answer));
   });
 });
