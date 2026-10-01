@@ -6509,9 +6509,9 @@ export class AppState {
     const meetingGeneration = ++this._meetingGeneration;
     this.isMeetingActive = true;
     this.autoAnswerUsage.meetingStarted();
-    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingStarted(this.intelligenceManager.getAnswerCount()); } catch { /* analytics never blocks a meeting */ }
     // The user's name as a transcription hint, before any STT connects (sttContextTerms.ts).
     try { setSttContextTerms(nameTerms(this.currentUserName())); } catch { /* a hint, never a blocker */ }
+    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingStarted(this.intelligenceManager.getAnswerCount()); } catch { /* analytics never blocks a meeting */ }
     this.broadcastMeetingState()
     if (metadata) {
       this.intelligenceManager.setMeetingMetadata(metadata);

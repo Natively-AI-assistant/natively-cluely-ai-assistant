@@ -7155,7 +7155,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     // reach disk the in-memory value is put back, so `success: false` here means
     // the setting did NOT change and the switch must say so.
     const persisted = SettingsManager.getInstance().set('telemetryEnabled', enabled);
-    if (!persisted) return { success: false, error: 'settings_write_refused' };
+    if (!persisted) return { success: false, error: 'settings_store_degraded' };
     try {
       require('./services/telemetry/TelemetryService').telemetryService.configure({ enabled });
     } catch { /* that service reads the setting again at the next launch */ }
