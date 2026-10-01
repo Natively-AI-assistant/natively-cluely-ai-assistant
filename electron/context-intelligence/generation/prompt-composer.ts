@@ -1267,6 +1267,56 @@ export function calculationNotice(question: string, ...context: Array<string | u
   return figures >= 2 ? CALCULATION_NOTICE : '';
 }
 
+/**
+ * A typed REFINEMENT of the previous reply (2026-10-01): "shorter", "simpler
+ * please", "another one, less pushy". The resolver already anchors it —
+ * `shorter (rephrasing request: how to phrase the answer to "…")` — and the
+ * model then answered the earlier question again at the same length: asked
+ * "shorter" after a 50-word reply it returned 49 words (the same sentences
+ * minus one word), after 112 words 97-101, after "simpler please" 129-146 for
+ * 132. The external judge read it as the request not met (6.5-7.9 where the
+ * neighbouring answers score 9+), and a user who types "shorter" and gets the
+ * same text back has been ignored.
+ * The notice names the PREVIOUS reply as the thing to revise and gives a word
+ * budget computed from it. Replayed three times each on the recorded prompts:
+ * "shorter" 50 -> 31-33 words, 112 -> 38-41, 46 -> 27-28, 49 -> 27-31;
+ * "simpler" 132 -> 88-100, 59 -> 33-41; "another one" shares 41-46% of its
+ * words with the last reply instead of 51-76%.
+ * Typed turns only (a "shorter" HEARD in a meeting is not addressed to the
+ * assistant), never when the previous reply holds code, and only when the
+ * resolver marked the turn a rephrasing request — every other prompt is
+ * byte-identical.
+ */
+const REFINEMENT_KINDS: ReadonlyArray<readonly ['shorter' | 'simpler' | 'another', RegExp]> = [
+  ['shorter', /\b(?:shorter|short version|shorten|tighter|more concise|briefer|trim it|cut it down|one[- ]liner)\b/i],
+  ['simpler', /\b(?:simpler|simple words|plain(?:er)? (?:english|words)|easier|eli5|dumb it down|less technical)\b/i],
+  ['another', /\b(?:another one|a different one|one more|try again|give me another|something else)\b/i],
+];
+const REPHRASING_MARK_RE = /\s*\(rephrasing request: [\s\S]*$/;
+const countWords = (s: string): number => s.replace(/\*\*/g, '').split(/\s+/).filter(Boolean).length;
+
+/** The assistant's most recent reply in the conversation block, without its summary-chip trailer. */
+export function previousAssistantReply(conversation: string | undefined): string {
+  const text = String(conversation ?? '');
+  const lines = [...text.matchAll(/(?:^|\n)(?:Assistant|\[ASSISTANT \(PREVIOUS SUGGESTION\)\]): ([\s\S]*?)(?=\n(?:User|Assistant|Question heard in the meeting|\[[A-Z ()]+\]):|\n# |$)/g)];
+  const last = lines[lines.length - 1];
+  return last ? last[1].replace(/\n*\s*\[\[GIST\]\][\s\S]*$/, '').trim() : '';
+}
+
+export function refinementNotice(resolvedQuestion: string, conversation: string | undefined, heard = false): string {
+  const q = String(resolvedQuestion ?? '');
+  if (heard || !REPHRASING_MARK_RE.test(q)) return '';
+  const request = q.replace(REPHRASING_MARK_RE, '').trim();
+  const kind = REFINEMENT_KINDS.find(([, re]) => re.test(request))?.[0];
+  const previous = previousAssistantReply(conversation);
+  const n = countWords(previous);
+  if (!kind || n < 8 || /```/.test(previous)) return '';
+  const head = `# Revise your previous reply\nThe user's message "${request}" is about your LAST reply above (${n} words), not a new question. Do not answer the earlier question afresh.`;
+  if (kind === 'shorter') return `${head}\nGive the same reply in at most ${Math.max(8, Math.ceil(n / 2))} words: keep what it says, cut the lead-in, the hedges and anything said twice. Output only the shorter reply.`;
+  if (kind === 'simpler') return `${head}\nSay the same thing in plainer words and shorter sentences, in at most ${Math.max(12, Math.ceil(n * 0.7))} words: no jargon the listener would have to look up, no step-by-step detail they did not ask for. Output only the simpler reply.`;
+  return `${head}\nGive a DIFFERENT one that applies the change they asked for: do not reuse the sentences or the angle of the last reply. Output only the new reply.`;
+}
+
 /** The user's OWN spoken line was chosen as the question (they asked after the
  *  other party did): their "I" and "we" are the user's side. */
 export const USER_SPOKEN_QUESTION_PERSPECTIVE = '\n(Said aloud by the user in the meeting: "I", "we" and "our" mean the user and their side.)';
@@ -1480,6 +1530,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
     push('evidence_story', evidenceStoryGuard(d, Boolean(packed.evidenceBlock))),
     push('personal_commitment', personalCommitmentNotice(d.resolvedQuestion, policy.id, Boolean(input.heardQuestion))),
     push('calculation', calculationNotice(d.resolvedQuestion, input.conversationSummary, packed.evidenceBlock)),
+    push('refinement', refinementNotice(d.resolvedQuestion, input.conversationSummary, input.heardQuestion === true)),
     // Steps or a counted set: the numbered-list rule lives in the system prompt,
     // which the sections above outrank — see isEnumerableAsk. Format, not
     // length, so it rides even when the user set a length. Coding turns keep
