@@ -7881,8 +7881,8 @@ export function initializeIpcHandlers(appState: AppState): void {
               sequence: lastSequence + 1,
               partial: lastSequence > 0,
               error: directAssistError(
-                'INCOMPLETE_STREAM',
-                'The Direct Assist stream ended before completion.',
+                'INTERNAL_ERROR',
+                'Natively lost track of this answer.',
                 true,
               ),
             });
@@ -7902,8 +7902,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             sequence: lastSequence + 1,
             partial: lastSequence > 0,
             error: directAssistError(
-              'INCOMPLETE_STREAM',
-              'The Direct Assist stream failed before completion.',
+              'INTERNAL_ERROR',
+              'Natively lost track of this answer.',
               true,
             ),
           });

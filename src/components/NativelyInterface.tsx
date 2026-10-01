@@ -320,6 +320,14 @@ import {
 import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError } from '../lib/chatStreamGuard.mjs';
 import { buildDirectWhatToSayPayload } from '../lib/directAssistWhatToSayPayload.mjs';
 import {
+  DIRECT_ASSIST_OPEN_PROVIDERS,
+  directAssistFailureText,
+  directAssistNoticeView,
+  type DirectAssistAnswerFailure,
+  type DirectAssistFallbackHop,
+  type DirectAssistFallbackNotice,
+} from '../lib/directAssistFailure.mjs';
+import {
   applyFirstStreamingToken,
   commitStreamingFlush,
   finalizeImperativeStreamMessages,
@@ -380,6 +388,8 @@ import GlassEffectLayer from './ui/GlassEffectLayer';
 import { OverlayBanner, OverlayBannerButton } from './ui/OverlayBanner';
 import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
+import { modelSelectorGroupLabel } from './ui/modelSelectorGroups';
+import { DirectAssistNotice } from './ui/DirectAssistNotice';
 import RollingTranscript from './ui/RollingTranscript';
 import SwapText from './ui/SwapText';
 import ScreenshotTray from './overlay/ScreenshotTray';
@@ -497,10 +507,17 @@ interface Message {
   // and "gone" are different things to a reader judging an answer.
   shortenedFields?: string[];
   // Set when the ladder answered with a DIFFERENT provider than the one the
-  // user selected (a fallback rung fired). Verbatim provider ids, never a
-  // mapping table — the point is telling the user which provider actually
-  // received their request and got billed, not a pretty label.
-  fallbackNotice?: string;
+  // user selected (a fallback rung fired): each provider that failed, why,
+  // and — once someone has answered — who. Kept as data and worded at render
+  // time by directAssistNoticeView. Providers are named the way the model
+  // dropdown names them (modelSelectorGroupLabel), so the notice and the
+  // picker agree on who received the request and got billed.
+  fallbackNotice?: DirectAssistFallbackNotice;
+  // Set when the answer failed: outright, or partway (`partial`). Data, not a
+  // sentence — `text` holds one plain sentence for Copy and later context,
+  // and the row draws DirectAssistNotice from this instead. The provider's
+  // own words live only here, never in `text`.
+  failure?: DirectAssistAnswerFailure;
   isCode?: boolean;
   intent?: string;
   // Verified code execution: set when the code in this message passed N executed
@@ -556,6 +573,9 @@ interface ActiveDirectAssistRequest {
   /** True once at least one provider_switch has fired for this request, so
    *  'done' knows whether to surface a fallback notice at all. */
   hasSwitched?: boolean;
+  /** The provider the ladder last moved to. An answer that breaks off
+   *  partway was being written by this one, not by the original selection. */
+  switchedTo?: string;
 }
 
 type DirectAssistRendererEvent =
@@ -569,9 +589,35 @@ type DirectAssistRendererEvent =
       from: { provider: string; model: string };
       to: { provider: string; model: string };
       reason: string;
+      status?: number;
+      detail?: string;
+      waitedMs: number;
+      unreachable?: boolean;
     }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
-  | { type: 'error'; requestId: string; sequence: number; error: { code: string; message: string; retryable: boolean } }
+  | {
+      type: 'error';
+      requestId: string;
+      sequence: number;
+      error: {
+        code: string;
+        message: string;
+        retryable: boolean;
+        status?: number;
+        detail?: string;
+        unreachable?: boolean;
+        /** Every provider tried, when more than one was and none answered. */
+        attempts?: Array<{
+          provider: string;
+          model: string;
+          reason: string;
+          status?: number;
+          detail?: string;
+          unreachable?: boolean;
+          waitedMs: number;
+        }>;
+      };
+    }
   | { type: 'cancel'; requestId: string; sequence: number };
 
 const createDirectAssistRequestId = (): string => {
@@ -585,9 +631,6 @@ const directAssistSkillId = (request: string): string | undefined => {
   const match = request.match(/^\s*[/$]([a-z0-9][a-z0-9_-]*)(?=\s|$)/i);
   return match?.[1];
 };
-
-const directAssistErrorText = (code: string, message: string): string =>
-  `❌ ${code}: ${message}`;
 
 interface NativelyInterfaceProps {
   /** The pill's Stop ended the meeting (main already did the stopping). */
@@ -1079,6 +1122,13 @@ const MessageRow = React.memo(
     const t = useT();
     // Which attached screenshot (if any) is currently enlarged in this card.
     const [expandedPreview, setExpandedPreview] = React.useState<number | null>(null);
+    // Worded here, at render time, so it follows the interface language.
+    const directAssistNotice = msg.role === 'system' && (msg.failure || msg.fallbackNotice)
+      ? directAssistNoticeView(
+          { failure: msg.failure, fallbackNotice: msg.fallbackNotice, ended: !msg.isStreaming },
+          t,
+        )
+      : null;
     const isCodeMsg = msg.role === 'system' && (msg.isCode || msg.text.includes('```'));
     // bubbleMaxClass: user bubbles are tighter; system + code use the same width.
     const bubbleMaxClass =
@@ -1228,7 +1278,9 @@ const MessageRow = React.memo(
                 <span>{t('Corrected answer')}{msg.correctionNote ? ` — ${msg.correctionNote}` : ''}</span>
               </div>
             )}
-            {renderMessageText(msg)}
+            {/* An answer that failed outright has no text worth a bubble: the
+                notice below stands in for it. A cut-off answer keeps its text. */}
+            {msg.role === 'system' && msg.failure && !msg.failure.partial ? null : renderMessageText(msg)}
             {/* Direct Assist dropped one or more context fields to fit the
                 model's context window (see requestBuilder's per-source drop
                 order) — surfaced so a thin-looking answer isn't a silent
@@ -1250,14 +1302,16 @@ const MessageRow = React.memo(
                 </span>
               </div>
             ) : null}
-            {/* The ladder answered with a different provider than the one the
-                user selected — the label above must never lie about who
-                actually received the request and got billed. */}
-            {msg.role === 'system' && msg.fallbackNotice && (
-              <div className="flex items-center gap-1 mt-1.5 text-[10px] opacity-60">
-                <HelpCircle className="w-2.5 h-2.5 flex-shrink-0" />
-                <span className="truncate max-w-[260px]">{msg.fallbackNotice}</span>
-              </div>
+            {/* A provider failed: another one answered, is being tried, or
+                nobody did. The notice must never lie about who actually
+                received the request and got billed. */}
+            {directAssistNotice && (
+              <DirectAssistNotice
+                view={directAssistNotice}
+                isLightTheme={isLightTheme}
+                actionLabel={t(DIRECT_ASSIST_OPEN_PROVIDERS)}
+                onAction={() => window.electronAPI?.openSettingsTab?.('ai-providers')}
+              />
             )}
             {/* Verified badge: the code in this message passed executed tests. */}
             {msg.role === 'system' && msg.codeVerified && (
@@ -6575,6 +6629,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const settleDirectAssistIncomplete = useCallback((
     active: ActiveDirectAssistRequest,
     terminalLabel: string,
+    // Set when a provider (or the app) FAILED, as opposed to a cancel. The
+    // row draws the notice from it; `terminalLabel` is then the one plain
+    // sentence kept as the text of an answer that never started.
+    failure?: DirectAssistAnswerFailure,
   ) => {
     if (streamingMsgIdRef.current === active.placeholderId) {
       if (streamingRafRef.current !== null) {
@@ -6603,20 +6661,35 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (!active.answerText && terminalLabel === 'Request cancelled.') {
         return prev.filter((_, messageIndex) => messageIndex !== idx);
       }
-      const text = active.answerText
-        ? `${active.answerText}\n\n_Incomplete — ${terminalLabel}_`
-        : terminalLabel;
+      // A failure leaves the text clean — the answer so far, or the plain
+      // sentence — because the notice says the rest ("Answer cut off", why).
+      // A cancel has no notice, so it still marks the text itself.
+      const text = failure
+        ? active.answerText || terminalLabel
+        : active.answerText
+          ? `${active.answerText}\n\n_Incomplete — ${terminalLabel}_`
+          : terminalLabel;
       const updated = [...prev];
       updated[idx] = {
         ...updated[idx],
         text,
         isStreaming: false,
         isCode: text.includes('```') || text.includes('#include'),
+        ...(failure ? { failure: { ...failure, partial: Boolean(active.answerText) } } : {}),
       };
       return updated;
     });
     setIsProcessing(false);
   }, []);
+
+  // Every way a direct-ask answer can fail goes through here with DATA; the
+  // wording is directAssistFailureText's and directAssistNoticeView's.
+  const settleDirectAssistFailure = useCallback((
+    active: ActiveDirectAssistRequest,
+    failure: DirectAssistAnswerFailure,
+  ) => {
+    settleDirectAssistIncomplete(active, directAssistFailureText(failure, t), failure);
+  }, [settleDirectAssistIncomplete, t]);
 
   useEffect(() => {
     if (!window.electronAPI?.onDirectAssistEvent) return;
@@ -6669,16 +6742,26 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // produced a single token — and on an A -> B -> C walk, main queues
         // switches and drains them back to back just before the first
         // delta, so the renderer can see switch(A->B) then switch(B->C) with
-        // B never having answered anything. Word this as an ATTEMPT, never
-        // an outcome, so it stays accurate at every intermediate step and
+        // B never having answered anything. So this only RECORDS the hop —
+        // who failed, why, and who is tried next — and names no outcome:
+        // the notice is worded as an attempt at every intermediate step and
         // even if the ladder later fails entirely. 'done' (below) is the
-        // only place that upgrades this to "answered by".
+        // only place that says who answered.
         active.hasSwitched = true;
+        active.switchedTo = event.to.provider;
         const placeholderId = active.placeholderId;
-        const noticeText = `${event.from.provider} didn't respond — trying ${event.to.provider}…`;
+        const hop: DirectAssistFallbackHop = {
+          provider: modelSelectorGroupLabel(event.from.provider),
+          next: modelSelectorGroupLabel(event.to.provider),
+          code: event.reason,
+          status: event.status,
+          detail: event.detail,
+          waitedMs: event.waitedMs,
+          unreachable: event.unreachable,
+        };
         setMessages((prev) => prev.map((message) =>
           message.id === placeholderId
-            ? { ...message, fallbackNotice: noticeText }
+            ? { ...message, fallbackNotice: { hops: [...(message.fallbackNotice?.hops ?? []), hop] } }
             : message,
         ));
         return;
@@ -6704,25 +6787,28 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const answer = event.fullText ?? active.answerText;
         if (!answer) {
           activeDirectAssistRef.current = null;
-          settleDirectAssistIncomplete(
-            active,
-            directAssistErrorText('INCOMPLETE_STREAM', 'The model returned no answer.'),
-          );
+          // Not the provider's doing: main turns a stream that returned
+          // nothing into an error, so a `done` with no text means the text
+          // was lost on the way here.
+          settleDirectAssistFailure(active, {
+            code: 'INTERNAL_ERROR',
+            message: '',
+          });
           return;
         }
 
         // Content actually arrived: if any provider_switch fired for this
         // request, this is where — and only where — the attempt-worded
-        // notice upgrades to an outcome. Name the ORIGINAL selection and the
-        // provider that actually answered (event.provider, from done, not
-        // whichever rung a queued switch last opened). If the ladder never
-        // switched, leave fallbackNotice untouched (absent).
-        if (active.hasSwitched && active.originalProvider) {
-          const finalNoticeText = `${active.originalProvider} didn't respond — answered by ${event.provider}.`;
+        // notice upgrades to an outcome. The hops already name the ORIGINAL
+        // selection first; this adds the provider that actually answered
+        // (event.provider, from done, not whichever rung a queued switch
+        // last opened). If the ladder never switched, there is no notice to
+        // add it to and fallbackNotice stays absent.
+        if (active.hasSwitched) {
           const finalPlaceholderId = active.placeholderId;
           setMessages((prev) => prev.map((message) =>
-            message.id === finalPlaceholderId
-              ? { ...message, fallbackNotice: finalNoticeText }
+            message.id === finalPlaceholderId && message.fallbackNotice
+              ? { ...message, fallbackNotice: { ...message.fallbackNotice, answeredBy: modelSelectorGroupLabel(event.provider) } }
               : message,
           ));
         }
@@ -6765,10 +6851,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
       if (event.type === 'error') {
         activeDirectAssistRef.current = null;
-        settleDirectAssistIncomplete(
-          active,
-          directAssistErrorText(event.error.code, event.error.message),
-        );
+        // With nothing answered yet the error is the SELECTED provider's (main
+        // reports the first rung's failure), the one 'start' recorded. An
+        // answer that had already begun was cut off by whoever was writing
+        // it — the provider the ladder last moved to, if it moved.
+        const failedProvider = (active.answerText.length > 0 && active.switchedTo) || active.originalProvider;
+        settleDirectAssistFailure(active, {
+          provider: failedProvider ? modelSelectorGroupLabel(failedProvider) : undefined,
+          code: event.error.code,
+          message: event.error.message,
+          status: event.error.status,
+          unreachable: event.error.unreachable,
+          detail: event.error.detail,
+          // Nobody answered and more than one provider was tried: each one,
+          // with its own reason.
+          attempts: event.error.attempts?.map((attempt) => ({
+            provider: modelSelectorGroupLabel(attempt.provider),
+            code: attempt.reason,
+            status: attempt.status,
+            unreachable: attempt.unreachable,
+            detail: attempt.detail,
+            waitedMs: attempt.waitedMs,
+          })),
+        });
         return;
       }
 
@@ -6776,7 +6881,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       settleDirectAssistIncomplete(active, 'Request cancelled.');
     });
     return () => unsubscribe?.();
-  }, [finalizeWhenRevealCaughtUp, queueToken, settleDirectAssistIncomplete]);
+  }, [finalizeWhenRevealCaughtUp, queueToken, settleDirectAssistFailure, settleDirectAssistIncomplete]);
 
   const beginDirectAssist = useCallback(async ({
     source,
@@ -6862,22 +6967,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (activeDirectAssistRef.current?.requestId !== requestId) return;
       if (!response.accepted || response.requestId !== requestId) {
         activeDirectAssistRef.current = null;
-        const code = response.error?.code || 'DIRECT_ASSIST_REJECTED';
-        const message = response.error?.message || 'Direct Assist could not start this request.';
-        settleDirectAssistIncomplete(active, directAssistErrorText(code, message));
+        // Refused before any provider was asked, so there is no provider to
+        // name: main's own sentence is the explanation.
+        settleDirectAssistFailure(active, {
+          code: response.error?.code || 'DIRECT_ASSIST_REJECTED',
+          message: response.error?.message || '',
+        });
       }
     } catch (error) {
       if (activeDirectAssistRef.current?.requestId !== requestId) return;
       activeDirectAssistRef.current = null;
-      settleDirectAssistIncomplete(
-        active,
-        directAssistErrorText(
-          'DIRECT_ASSIST_UNAVAILABLE',
-          error instanceof Error ? error.message : String(error),
-        ),
-      );
+      // The call itself threw: the request never reached main's handler.
+      settleDirectAssistFailure(active, {
+        code: 'INTERNAL_ERROR',
+        message: '',
+      });
     }
-  }, [flushToken, forceFinalizeStaleRagStream, settleDirectAssistIncomplete]);
+  }, [flushToken, forceFinalizeStaleRagStream, settleDirectAssistFailure, settleDirectAssistIncomplete]);
 
   const cancelActiveChatStream = useCallback(() => {
     const direct = activeDirectAssistRef.current;

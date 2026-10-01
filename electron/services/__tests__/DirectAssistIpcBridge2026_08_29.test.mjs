@@ -93,8 +93,21 @@ test('stream relay enforces correlation, monotonic deltas, and one terminal even
   assert.match(streamBlock, /streamEvent\.sequence <= lastSequence/);
   assert.match(streamBlock, /if \(terminalSent\) return/);
   assert.match(streamBlock, /terminalSent = true/);
-  assert.match(streamBlock, /INCOMPLETE_STREAM/);
   assert.match(streamBlock, /controller\.signal\.aborted/);
+});
+
+test('a relay fault is reported as OUR fault, never as the provider returning nothing', () => {
+  // Both fallbacks fire when the relay itself breaks (a correlation or
+  // ordering violation, or the service ending without a terminal event). They
+  // used to send INCOMPLETE_STREAM, which the overlay words as "<provider>
+  // returned an empty answer" — blaming a provider for an app bug.
+  const relayFallbacks = streamBlock.match(/error: directAssistError\(\s*'([A-Z_]+)',\s*'([^']+)'/g) || [];
+  assert.equal(relayFallbacks.length, 2, 'the two relay fallbacks are where they were');
+  for (const fallback of relayFallbacks) {
+    assert.match(fallback, /'INTERNAL_ERROR'/);
+    assert.doesNotMatch(fallback, /Direct Assist/, 'no internal product jargon in a sentence the user can see');
+  }
+  assert.doesNotMatch(streamBlock, /INCOMPLETE_STREAM/);
 });
 
 test('provider_switch is forwarded in order without being swallowed into the terminal fall-through', () => {

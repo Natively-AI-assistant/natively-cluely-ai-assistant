@@ -681,7 +681,7 @@ test('empty upstream stream is INCOMPLETE_STREAM and never done', async () => {
   assert.equal(result.state, 'failed');
 });
 
-test('provider error normalization never exposes prompt, context, or response bodies', async () => {
+test('provider error normalization never exposes prompt or context, in the message or in the provider words', async () => {
   const { DirectAssistService, normalizeDirectAssistError } = await loadDirectAssist();
   const secret = 'RAW_PRIVATE_PROMPT_981276';
   const normalized = normalizeDirectAssistError({
@@ -694,13 +694,20 @@ test('provider error normalization never exposes prompt, context, or response bo
   const service = new DirectAssistService({
     streamDirectAssist() {
       return (async function* () {
-        throw new Error(`provider echoed ${secret}`);
+        throw new Error(`provider echoed ${secret} ${'and kept going '.repeat(60)}`);
       })();
     },
   });
   const { events } = await collect(service.stream(baseInput({ manualContext: secret })));
+  const error = events.at(-1).error;
   assert.equal(events.at(-1).type, 'error');
-  assert.doesNotMatch(events.at(-1).error.message, new RegExp(secret));
+  assert.doesNotMatch(error.message, new RegExp(secret));
+  // What the provider said is shown to the person who asked (2026-10-01), as
+  // one capped line — with anything it quoted from the request cut out. The
+  // context travelled in the prompt, so it must not come back on the event.
+  assert.match(error.detail, /^provider echoed … and kept going/);
+  assert.ok(error.detail.length <= 241, `detail is capped, got ${error.detail.length}`);
+  assert.doesNotMatch(JSON.stringify(events.at(-1)), new RegExp(secret));
 });
 
 test('already-aborted request emits one cancel terminal and performs no dispatch', async () => {
