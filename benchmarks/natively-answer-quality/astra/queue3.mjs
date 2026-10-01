@@ -56,6 +56,11 @@ const TIERS = [
     J('dev-c2-fix10', 'abs-dev-c2', 'aq2-dev-fix10'),
     J('holdout-c2-fix10', 'abs-holdout-c2', 'aq2-holdout-fix10'),
   ],
+  [
+    // Reasoning on vs off for the other seven modes (280 rows each) — last: no objective sign that it helps there.
+    R('think-off-rest', 'think-off-rest', 'aq2-dev-fix11'),
+    R('think-low-rest', 'think-low-rest', 'aq2-dev-fix11'),
+  ],
 ];
 
 const logDir = path.join(HERE, 'out', 'logs');

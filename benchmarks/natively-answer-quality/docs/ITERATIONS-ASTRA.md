@@ -896,3 +896,7 @@ recurring, rule-shaped defect left in the clean answers.
   reasoning buys on the modes where the generator's own errors are 11 of the 15 dev hard fails of that class. If it is
   large, the product change is a routing decision (reasoning on for typed Technical interview and Lecture turns),
   which is Evin's to make because of the delay; nothing is built.
+* The other seven modes replayed the same way (280 rows each, think-off-rest / think-low-rest): total time p50 1.24 s
+  → 2.54 s (p95 1.7 → 5.5 s), validators 6 of 7 both ways, drafts carrying a first-person past claim 34 vs 33. No
+  objective sign that reasoning helps where the failures are invented claims rather than wrong reasoning; queued
+  last for the judge.
