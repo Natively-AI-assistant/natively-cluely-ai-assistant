@@ -106,12 +106,12 @@ only if it passes. A screenshot is never sent blind.
 
 | Provider | Field | Status |
 |---|---|---|
-| OpenRouter | `architecture.input_modalities` includes `image` | Verified 2026-09-30 |
-| 9Router | `capabilities.vision` | In use |
-| Ollama | `/api/show` → `capabilities` includes `vision` | In use (streaming chain only) |
+| OpenRouter | `architecture.input_modalities` includes `image` | In use since phase 2, trusted both ways (OpenRouter refuses images to models it lists as text-only) |
+| 9Router | `capabilities.vision` | In use (catalogue kept with the 9Router credentials, not in the capability store) |
+| Ollama | `/api/show` → `capabilities` includes `vision` | In use, in memory per session; saved, and used by the screen-reading path and private-vision check, in phase 5 |
 | Gemini | Family rule: every Gemini model takes images | Verified 2026-09-30 by name only (44/44 Gemini ids on the key), not a published field |
-| Anthropic | Models API `capabilities` | **Unconfirmed**: no key available; name list covers Claude meanwhile |
-| LiteLLM | `/model/info` → `supports_vision` | **Unconfirmed**: check during the build |
+| Anthropic | Models API `capabilities` | Not needed: the name list covers every Claude model |
+| LiteLLM | `/model/info` → `model_info.supports_vision` | Confirmed in LiteLLM's docs (admin-set per model). Only `true` is trusted: absence and `false` also mean "not set". Used from phase 3, where it lets the test skip a model |
 | OpenAI, DeepSeek, AgentRouter, Fluxion, Groq, NVIDIA | none | One-time test |
 
 The one-time test:
@@ -200,10 +200,16 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
    9Router's answers where they are held today. Known gap left open: with
    Code Hint's gate removed, a SELECTED LiteLLM / NVIDIA NIM / OpenRouter /
    Fluxion model gets Code Hint screenshots whatever its upstream reads,
-   exactly as Ask AI already did; phases 2 and 4 close it for both.
-2. **Provider data**: OpenRouter, 9Router, Ollama, Gemini family; Anthropic and
-   LiteLLM once confirmed.
-3. **One-time test** plus image support in the direct DeepSeek adapter (Flash).
+   exactly as Ask AI already did. Phase 2 closed it for OpenRouter; LiteLLM,
+   NVIDIA NIM and Fluxion wait for the override (phase 4).
+2. **Provider data**: the saved capability store (`userData/vision-capabilities.json`)
+   and OpenRouter's catalogue, fetched in the background when an OpenRouter
+   model is selected and on Settings' Refresh. A model OpenRouter lists as
+   text-only no longer gets screenshots on either path or in Direct Assist.
+   9Router and Ollama were already wired in phase 1; Gemini and Claude are
+   covered by the name list.
+3. **One-time test** plus image support in the direct DeepSeek adapter (Flash),
+   and LiteLLM's `supports_vision: true` (it lets the test skip a model).
 4. **Auto / On / Off override** plus the picker marker.
 5. **Selected model first in both chains**, the cURL / Codex / Antigravity rungs,
    the local-only fix and the clearer messages. Fixes defects 4, 6, 7, 8, 9, 10.

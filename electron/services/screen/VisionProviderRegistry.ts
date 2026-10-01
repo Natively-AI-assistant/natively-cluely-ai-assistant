@@ -27,6 +27,7 @@ import {
 } from '../../llm/visionCapability';
 import { readActiveCustomProvider, readActiveModelId } from '../../llm/activeCustomProvider';
 import { gatewaySeatReadsImages } from '../../llm/visionResolver';
+import { storedVisionAnswer } from '../../llm/visionCapabilityStore';
 import { agentRouterWireModel, isAgentRouterModelId } from '../../llm/agentRouter';
 
 export interface VisionProviderBuildInputs {
@@ -408,7 +409,10 @@ function openrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInput
     modelId,
     isLocal: false,
     isConfigured: !!apiKey && isSelected,
-    supportsVision: !!apiKey && isSelected,
+    // The rule LLMHelper's streaming chain seats this rung by (2026-10-01):
+    // OpenRouter's own catalogue, when fetched, decides.
+    supportsVision: !!apiKey && isSelected
+      && gatewaySeatReadsImages('openrouter', modelId, { providerReportsVision: (p, m) => storedVisionAnswer(p, m) }),
     scopeAllowsScreenshots: true,
     hint: 'generic',
     invoke: async (p) => callLLMHelperVision('openrouter', p),

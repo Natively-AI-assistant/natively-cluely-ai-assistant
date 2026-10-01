@@ -37,9 +37,10 @@ export class CodeHintLLM {
             // Gemini key never got a hint.
             //
             // Known gap, shared with Ask AI: a SELECTED LiteLLM / NVIDIA NIM /
-            // OpenRouter / Fluxion model is seated by the chain whether or not
-            // its upstream reads images (only the user knows theirs). Provider
-            // data (phase 2) and the per-model override (phase 4) close it —
+            // Fluxion model is seated by the chain whether or not its upstream
+            // reads images (only the user knows theirs). OpenRouter's own
+            // catalogue closed it for OpenRouter (phase 2); the per-model
+            // override (phase 4) closes it for the rest —
             // docs/plans/2026-10-01-vision-capability-design.md.
 
             const message = buildCodeHintMessage(

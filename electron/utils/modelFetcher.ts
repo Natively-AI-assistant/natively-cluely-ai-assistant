@@ -6,6 +6,8 @@
 import axios from 'axios';
 import { DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PRO_MODEL, isDeepseekModelId } from '../llm/deepseekModels';
 import { AGENTROUTER_MODELS_URL, agentRouterCatalogue, agentRouterHttpHeaders } from '../llm/agentRouter';
+import { getVisionCapabilityStore } from '../llm/visionCapabilityStore';
+import { parseOpenRouterVision } from '../llm/providerVisionData';
 
 export interface ProviderModel {
     id: string;
@@ -71,6 +73,10 @@ async function fetchOpenRouterModels(apiKey: string): Promise<ProviderModel[]> {
     const response = await axios.get('https://openrouter.ai/api/v1/models', {
         headers: { Authorization: `Bearer ${apiKey}` }, timeout: 15000,
     });
+    // The same response says which models read images (2026-10-01): Refresh in
+    // Settings updates the saved answers too.
+    const vision = parseOpenRouterVision(response.data);
+    if (vision.size > 0) getVisionCapabilityStore().replaceProviderAnswers('openrouter', '', vision);
     return (response.data?.data || [])
         .filter((m: any) => m?.id && !String(m.id).endsWith(':batch'))
         // `openrouter/` is Natively's own routing prefix and is NOT optional:
