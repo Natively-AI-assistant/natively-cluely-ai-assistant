@@ -8669,8 +8669,13 @@ let isMultimodal = !!(imagePaths?.length);
       // list the model as text-only: OpenRouter refuses those images (404 "No
       // endpoints found that support image input", which the chain then took for
       // a retired model and demoted for a day). No catalogue yet: seated, as before.
-      if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient
-        && gatewaySeatReadsImages('openrouter', this.currentModelId, this.visionFacts({ provider: 'openrouter', model: this.currentModelId }))) {
+      const openrouterSeatReads = this.isOpenRouterModel(this.currentModelId) && this.openrouterClient
+        ? gatewaySeatReadsImages('openrouter', this.currentModelId, this.visionFacts({ provider: 'openrouter', model: this.currentModelId }))
+        : null;
+      // Skipping the seat on the catalogue's "no": recheck it isn't stale (see
+      // directSelectionSupportsImages; a no-op while fresh).
+      if (openrouterSeatReads === false) void this.refreshOpenRouterVisionData();
+      if (openrouterSeatReads) {
         cloud.push({ id: 'openrouter', name: `OpenRouter (${this.openrouterWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithOpenRouter(userContent, systemPrompt, imagePaths, sig) });
       }
@@ -13895,8 +13900,14 @@ let isMultimodal = !!(imagePaths?.length);
       // the rest (2026-10-01). With its catalogue saying "no", Direct Assist
       // gives its own clear refusal instead of forwarding into OpenRouter's 404;
       // with no catalogue yet it forwards, as every gateway below does.
-      case 'openrouter':
-        return readsImages(this.visionVerdict(selection, custom, curl), true);
+      case 'openrouter': {
+        const reads = readsImages(this.visionVerdict(selection, custom, curl), true);
+        // Refusing on the catalogue's "no": make sure it isn't a stale one (a
+        // no-op while the data is fresh). The refresh otherwise only runs on
+        // setModel, and a model can stay selected for days.
+        if (!reads) void this.refreshOpenRouterVisionData();
+        return reads;
+      }
       case 'litellm':
       case 'nvidia_nim':
       case 'fluxion':

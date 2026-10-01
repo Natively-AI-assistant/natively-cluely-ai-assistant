@@ -205,3 +205,27 @@ describe('refreshOpenRouterVisionData', () => {
     assert.match(body, /replaceProviderAnswers\('openrouter'/);
   });
 });
+
+describe('a catalogue "no" is rechecked when it refuses a screenshot (review fix)', () => {
+  // The catalogue only refreshed from setModel, so a model kept selected for
+  // days could be refused on a "no" OpenRouter had since changed. Refusing on a
+  // "no" now asks for a refresh — a no-op while the data is fresh.
+  const counting = () => { const c = { n: 0 }; c.fn = () => { c.n += 1; return Promise.resolve(); }; return c; };
+  test('the chain asks for a refresh when it skips the OpenRouter seat', async () => {
+    const c = counting();
+    await chainOrder(TEXT_ONLY, { gemini: true, state: { refreshOpenRouterVisionData: c.fn } });
+    assert.equal(c.n, 1);
+  });
+  test('Direct Assist asks for a refresh when it refuses', () => {
+    const c = counting();
+    const h = helper({ refreshOpenRouterVisionData: c.fn });
+    assert.equal(h.directSelectionSupportsImages({ provider: 'openrouter', model: TEXT_ONLY }, null, null), false);
+    assert.equal(c.n, 1);
+  });
+  test('a model the catalogue says reads images, or has no answer for, asks for nothing', async () => {
+    const c = counting();
+    await chainOrder(VISION, { gemini: true, state: { refreshOpenRouterVisionData: c.fn } });
+    helper({ refreshOpenRouterVisionData: c.fn }).directSelectionSupportsImages({ provider: 'openrouter', model: 'openrouter/never/listed' }, null, null);
+    assert.equal(c.n, 0);
+  });
+});
