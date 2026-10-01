@@ -1,12 +1,14 @@
 # Natively answer quality — report after phase 3 (judge gpt-6-astra, charter v2)
 
-Status 2026-10-01 12:35 UTC. Generator: deepseek-flash. Judge: gpt-6-astra through AgentRouter, charter v2
+Status 2026-10-01 12:55 UTC. Generator: deepseek-flash. Judge: gpt-6-astra through AgentRouter, charter v2
 `c725615a54f6` (claim kinds), calibration 25 of 25. Every score in this report is under charter v2; nothing from
 charter v1 is mixed in. Holdout is reported in aggregate only.
 
 ## 1. Outcome
 
-* **Kept build: `fix12` = app commit `f0c3a263` on branch `fix/aq-astra-i5`. Not landed on main.**
+* **Kept build: `fix13` = app commit `e000db4a` on branch `fix/aq-astra-i5`. Not landed on main.** fix13 is fix12
+  (`f0c3a263`) plus one prompt notice that touches 7 of 360 dev rows and 4 of 270 holdout rows; it was kept on an
+  objective rule and is not judged yet, so **every judged number below is fix12's**.
 * Holdout, paired against the previous reference (fix6): **8.02 → 8.43, +0.41 (±0.23)**, hard fails **60 → 31**,
   no mode down. Dev: 8.24 → 8.49, +0.25 (±0.18), hard fails 66 → 38.
 * Against main as it was at the start — PARTIAL, not a headline: the judge account's quota ran out before the
@@ -17,6 +19,9 @@ charter v1 is mixed in. Holdout is reported in aggregate only.
   02:00 UTC batch of 2026-10-02.
 * **No mode is at 9.5.** Highest: Team Meet 9.12 and Recruiting 9.01 on dev; on holdout General 8.92. Lowest:
   Looking for work 7.74–7.88, Call Center 7.62–7.93. Section 9 says why local fixes do not close the gap.
+* **9.5 on every mode is not reachable by fixing failures alone.** The 78% of answers with no flagged failure
+  average 9.23 on both sets; with every failure class fully repaired the modes would land between 8.5 (Call Center)
+  and 9.5 (Technical interview, Lecture). See section 9.
 * Price of the gain: the answer settles about 0.45–0.65 s later at the median (time to first word unchanged) and the
   text shown is replaced after streaming on 24–30% of turns. That trade is Evin's to accept or change (section 9).
 
@@ -26,10 +31,10 @@ eight modes are fix11's runs and judgments (`tools/compose-run.mjs`, runs `aq2-*
 
 ## 2. Iterations: attempted, kept, reverted
 
-41 changes were tried; 25 are in the kept build, 16 were rejected or taken back. Every one is described, with its
+42 changes were tried; 26 are in the kept build, 16 were rejected or taken back. Every one is described, with its
 evidence, in `docs/ITERATIONS-ASTRA.md`; every dev question with each run's answer is in `docs/ITERATIONS-QA.md`.
 
-**In the kept build (25):** I1 small corpus read whole · I2 hidden arithmetic scratch block · I3 the user's own
+**In the kept build (26):** I1 small corpus read whole · I2 hidden arithmetic scratch block · I3 the user's own
 life is remembered, not checked · I4 the recruiting hotkey is the interviewer's spoken words · I5 own-life rule
 only in the job modes · I6 a heard question about the user's own life is theirs to answer · I7 no product material
 → no product facts · I8 claim verifier · I8b no-document product clause ·
@@ -38,7 +43,8 @@ Center states the rule, then verifies · I11 "Today" line · I13 Team Meet wordi
 freshness status · I15 spoken replies do not open by reporting their notes · I16 no question handed back when
 something answers · I18 the verifier lists, then rewrites; Team Meet and Recruiting verified · language rail ·
 I21 every spoken General turn verified · I22 every Seminar turn verified · tidy edits · claim kinds (decisions,
-ownership, small commitments are not claims; a conflict is surfaced) · source-word rail · I25 Seminar study scope.
+ownership, small commitments are not claims; a conflict is surfaced) · source-word rail · I25 Seminar study scope ·
+I26 a typed "shorter" / "simpler" / "another one" revises the previous reply.
 
 **Rejected or taken back (16):** conflict wording · past-event notice · "use the specifics" · I13 wording in
 the app · I17 removing the Today line · scratch-v2 · I19 technical second look · I20 missing-facts line · I23 "what
@@ -342,19 +348,42 @@ Time to first word: unchanged (dev 854 → 867 ms, holdout 779 → 868 ms at the
 
 ## 8. Final regression set and supplementary sets
 
-* Final set (1,038 items): last full run is fix6 (`aq2-final-fix6`, 0 failed rows, aggregate only). The fix12 run
-  (`aq2-final-fix12`, with `aq2-sq-fix12`) is queued behind a quiet-machine guard (`tools/when-quiet.mjs`): another
-  session's app instance was running, and two apps at once took the whole session down earlier. It is an objective
-  read (failed rows, validators, latency); it is not judged.
+* Final set (1,038 items): last full run is fix6 (`aq2-final-fix6`, 0 failed rows, aggregate only). The run on the
+  kept build (`aq2-final-fix13`) started 12:52 UTC behind a stall watchdog and takes about 2.7 hours; it is an
+  objective read (failed rows, validators, latency), not judged. NOT FINISHED at the time of writing.
+* Refinement follow-ups (I26, `tools/refine-check.mjs`, objective): a typed "shorter" / "simpler" / "another one"
+  was met 2 of 8 times on dev in the main-code run, 1 of 8 in fix11 and 8 of 8 in fix13; on holdout 2 of 6 in fix11
+  and 4 of 4 (the ones that get the notice) in fix13. "Shorter" now returns a median 52% of the previous reply's
+  words (92–96% before).
 * supp-behavior (72): fix12 validators 8 of 9 (fix6 8 of 9). The one failure is an unedited Lecture answer (Lecture
   has no verifier). Seminar: 5 of 5 (fix11 3 of 5, fix6 4 of 5).
-* supp-quant (32), arithmetic validators: main 25 of 32; later builds 28–31 of 32 (fix6 31, fix10 29) — the same
-  code path since I2, the spread is sampling.
+* supp-quant (32), arithmetic validators: main 25 of 32; later builds 28–31 of 32 (fix6 31, fix10 29, fix12 30) —
+  the same code path since I2, the spread is sampling.
 * Not judged under charter v2 because the account quota ran out at 12:26 UTC: supp-behavior, the blind A/B fix6 vs
   fix11, fix10, 2 dev Seminar rows of fix12, and about 45% of the starting baseline (dev 159 of 360, holdout 68 of
   270 missing). They are queued, in that priority, in the judge chain armed for the 02:00 UTC batch.
 
 ## 9. Remaining architectural weaknesses (stop condition B)
+
+**How far failures explain the gap** (`astra/headroom.mjs`, kept build, from the existing judgments). Each answer is
+put in one class by its flags; "if fixed" is the set's mean if that class scored like the clean answers.
+
+| | dev (358) | holdout (270) |
+|---|---:|---:|
+| mean | 8.49 | 8.43 |
+| clean answers (no flagged failure): share, mean | 78%, 9.23 | 78%, 9.23 |
+| clean answers at 9.5 or above | 128 of 280 | 95 of 210 |
+| if the generator's own errors were fixed (item 2) | 8.70 | 8.57 |
+| if unsupported company / policy / research claims were (item 4) | 8.63 | 8.69 |
+| if "no stored answer" answers were (item 1) | 8.82 | 8.74 |
+| if missed-evidence answers were (item 5) | 8.53 | 8.53 |
+
+Clean mean per mode (dev / holdout): General 9.21 / 9.28 · Sales 8.83 / 9.10 · Recruiting 9.41 / 9.27 · Team Meet
+9.35 / 9.40 · Looking for work 9.20 / 9.19 · Lecture 9.47 / 9.41 · Technical interview 9.55 / 9.26 · Seminar 9.37 /
+9.21 · Call Center 8.54 / 8.94. That is the ceiling of fixing failures. What the judge takes off a clean answer is
+intent fulfilment and direct usefulness (7.5–7.8 on the answers under 9.5, in every mode; correctness and grounding
+are 9.0–9.3): right and grounded, but not fully what was asked. Its suggested improvements are item-specific; the one
+rule-shaped pattern among them, refinement follow-ups, is fixed in I26.
 
 The loop stops changing production code here. What is left needs design work, not another rule; each item is
 written up with the measurements, a proposal, expected benefit and risk in `docs/BLOCKERS-ASTRA.md`.
