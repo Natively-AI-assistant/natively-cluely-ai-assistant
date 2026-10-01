@@ -29,7 +29,7 @@ We've designed Natively to keep as much of your data on your device as possible.
 - When you use a cloud AI, speech-to-text, or search feature, **the relevant text or audio leaves your device only to be processed by the provider you've chosen** (e.g., OpenAI, Anthropic, Google, Groq, Deepgram, ElevenLabs, Azure, IBM, Soniox, Tavily). The result comes back to your device.
 - For **paid products** (Natively Pro, Natively API), we **do** store a small amount of operational data on our servers — your license key, hardware identifier, plan, billing email, and quota counters. We need this to make billing and licensing actually work. We do not store the content you generate.
 - For the **Free Trial**, we additionally store anti-abuse signals (rate-limited IP, trial tokens, basic usage counters).
-- We **do not sell** your data. We **do not use your content to train AI models**. We don't use third-party analytics or marketing trackers inside the desktop app.
+- We **do not sell** your data. We **do not use your content to train AI models**. The desktop app also sends anonymous usage events to **Google Analytics**: that the app was opened or closed, which feature or AI model was used, and how long a session lasted. These events never contain anything you say, see or type, and IP addresses are anonymised. We don't use advertising or marketing trackers inside the desktop app.
 
 The rest of this document explains those flows in detail.
 
@@ -108,6 +108,26 @@ This is the standard data sent by any GitHub-hosted update check and is governed
 ### 3.5 Phone Mirror (Beta)
 
 When you pair the desktop app with a phone via the Phone Mirror beta feature, a short-lived pairing token is generated and used to establish the connection. The session content (the mirrored screen and notifications) is **not** stored on our servers. You are responsible for the security of any device you pair and for the network on which the pairing happens.
+
+### 3.6 Google Calendar (optional)
+
+Connecting Google Calendar is optional. If you connect it, Natively asks Google for **read-only** access to your name and email address (to show which account is connected), the list of calendars you have turned on, and the events on those calendars. Natively cannot add, change, or delete anything in your calendar.
+
+We use this data only for the calendar features you see in the app:
+
+- showing your upcoming meetings, with a Join button that opens the meeting link stored in the event;
+- linking a session you start to the calendar event it belongs to, so the saved notes carry that meeting's title, time, and attendees;
+- naming the speakers in your notes: your own first name and, in a one-to-one meeting, the other attendee's first name;
+- filling in the recipients of a follow-up email, which opens as a draft in your own Gmail. Natively never sends email for you.
+
+The app fetches calendar data directly from Google to your device. The sign-in tokens are encrypted with your operating system's secure storage, and the details of an event are kept on your device with the meeting they belong to. Your calendar events are **not** stored on a Natively-operated server. Two things derived from this data leave your device:
+
+- When Natively writes notes, answers, or a follow-up for a meeting, the text it sends to the AI provider you have chosen (see section 4.2; this can be Natively AI) can include the meeting's title and those speaker first names.
+- To show attendee pictures, the app asks Gravatar for an image using a SHA-256 hash of each attendee's email address. The address itself is not sent.
+
+**Limited Use.** Natively's use and transfer of information received from Google APIs adheres to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. The use of raw or derived user data received from Workspace APIs will adhere to the Google User Data Policy, including the Limited Use requirements. We do not use Google user data, whether raw, aggregated, or derived, to create, train, or improve foundational or generalized AI or machine-learning models, and we do not transfer it to anyone for that purpose. We do not sell it or use it for advertising.
+
+You can disconnect at any time in Settings › Calendar, which deletes the stored tokens from your device. You can also remove Natively's access from your [Google Account](https://myaccount.google.com/permissions).
 
 ---
 
