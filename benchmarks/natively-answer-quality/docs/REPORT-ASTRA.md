@@ -1,6 +1,6 @@
 # Natively answer quality — report after phase 3 (judge gpt-6-astra, charter v2)
 
-Status 2026-10-01 12:55 UTC. Generator: deepseek-flash. Judge: gpt-6-astra through AgentRouter, charter v2
+Status 2026-10-01 14:55 UTC. Generator: deepseek-flash. Judge: gpt-6-astra through AgentRouter, charter v2
 `c725615a54f6` (claim kinds), calibration 25 of 25. Every score in this report is under charter v2; nothing from
 charter v1 is mixed in. Holdout is reported in aggregate only.
 
@@ -348,12 +348,21 @@ Time to first word: unchanged (dev 854 → 867 ms, holdout 779 → 868 ms at the
 
 ## 8. Final regression set and supplementary sets
 
-* Final set (1,038 items): last full run is fix6 (`aq2-final-fix6`, 0 failed rows, aggregate only). The run on the
-  kept build (`aq2-final-fix13`) started 12:52 UTC behind a stall watchdog and takes about 2.7 hours; it is an
-  objective read (failed rows, validators, latency), not judged. NOT FINISHED at the time of writing.
+* Final set (1,038 items, objective read, aggregate only, not judged) — kept build `aq2-final-fix13`, one pass, no
+  stall:
+
+  | run | failed rows | validators | TTFT p50 / p95 ms | total p50 / p95 ms | text replaced |
+  |---|---:|---:|---:|---:|---:|
+  | main at the start (`aq-final-base`) | 0 | 13 of 16 | 825 / 1338 | 1249 / 2017 | 2% |
+  | fix6 (`aq2-final-fix6`) | 0 | 14 of 16 | 728 / 1196 | 1381 / 2404 | 18% |
+  | **fix13** (`aq2-final-fix13`) | 0 | 14 of 16 | 908 / 1336 | 2068 / 3003 | 21% (183 of 681 spoken turns) |
+
+  The two fix13 validator failures (one Lecture, one Call Center) are answers the verifier did not edit and whose
+  draft already failed: the generator's own reasoning, not a regression of the changes. Over-verification signs on
+  1,038 rows: 220 edits, 13 end in a question (fix6: 35), 15 flagged "decision lost" (7), 19 cut to under half (3).
 * Refinement follow-ups (I26, `tools/refine-check.mjs`, objective): a typed "shorter" / "simpler" / "another one"
   was met 2 of 8 times on dev in the main-code run, 1 of 8 in fix11 and 8 of 8 in fix13; on holdout 2 of 6 in fix11
-  and 4 of 4 (the ones that get the notice) in fix13. "Shorter" now returns a median 52% of the previous reply's
+  and 4 of 4 (the ones that get the notice) in fix13; on the final set 5 of 9 in fix6 and 9 of 9 in fix13. "Shorter" now returns a median 52% of the previous reply's
   words (92–96% before).
 * supp-behavior (72): fix12 validators 8 of 9 (fix6 8 of 9). The one failure is an unedited Lecture answer (Lecture
   has no verifier). Seminar: 5 of 5 (fix11 3 of 5, fix6 4 of 5).
@@ -394,6 +403,12 @@ written up with the measurements, a proposal, expected benefit and risk in `docs
    55 → 23. Proposal: a
    personal answer bank in Profile Intelligence, retrieved before generation. This is the largest remaining lever
    for Looking for work (7.7–7.9) and for the no-profile turns of Sales, Recruiting and Seminar.
+2. *(measured after this list was written)* **The generator runs with its reasoning switched off on every turn**
+   (`thinking: disabled`, for a fast first word). With reasoning on at low effort the complexity question every
+   build got wrong is right in 4 of 5 samples (0 of 5 off). Cost, measured with streaming on 30 Technical interview
+   and Lecture prompts: first answer token 0.78 s → 2.22 s at the median, p95 1.0 s → 6.6 s. The judged comparison
+   (80 rows each way) is queued for the 02:00 UTC batch. If it is large, reasoning on for TYPED Technical interview
+   and Lecture turns is the cheapest fix for item 2 — a routing decision, because of the delay.
 2. **The generator's own reasoning errors** (arithmetic, complexity, a wrong trace): 15 of the 38 dev hard fails
    and 7 of the 31 on holdout, mostly Technical interview and Lecture. A second look by the same model did not find them and a larger
    model of the same family scored no better. Proposal: code execution that gates the answer (the module exists but

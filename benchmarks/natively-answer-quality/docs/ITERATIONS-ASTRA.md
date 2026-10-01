@@ -900,3 +900,21 @@ recurring, rule-shaped defect left in the clean answers.
   → 2.54 s (p95 1.7 → 5.5 s), validators 6 of 7 both ways, drafts carrying a first-person past claim 34 vs 33. No
   objective sign that reasoning helps where the failures are invented claims rather than wrong reasoning; queued
   last for the judge.
+
+### Final set on fix13 (aq2-final-fix13, 1,038 rows) — AGGREGATE ONLY — 14:15Z
+* One pass, 0 failed rows, no stall (watchdog made no intervention).
+* Validators 14 of 16 (fix6 14 of 16, main 13 of 16). The two failures — arithmetic_conflict in Lecture and
+  policy_reasoning in Call Center — are answers the verifier did not edit and whose draft already failed.
+* Latency: TTFT p50 908 ms, p95 1336 (fix6 728 / 1196, main 825 / 1338 — run-to-run spread); total p50 2068 ms, p95
+  3003 (fix6 1381 / 2404, main 1249 / 2017). Text replaced on 220 rows (21%), 183 of 681 spoken turns (fix6 18%).
+* Refinement follow-ups met 9 of 9 (fix6 5 of 9); "shorter" at a median 37% of the previous reply.
+* Over-verification signs: 220 edits, 13 end in a question (fix6 35), 15 "decision lost" by the heuristic (7), 19 cut
+  to under half (3).
+* Requests that state a spoken duration (strict detector): 2 of 1,038 here, 3 on holdout, 3 on dev — rare, which is
+  why the stated-length change stays a next step.
+* App stopped, aq-fix2/dist-electron deleted.
+
+### First answer token with reasoning on, measured with streaming (tools/ttft-thinking.mjs) — 14:55Z
+30 dev Technical interview + Lecture prompts, same messages, deepseek-flash: reasoning off 783 ms p50 / 1004 ms p95;
+reasoning on (effort low) 2220 ms p50 / 6551 ms p95 (one Technical interview turn took 18.8 s). Total 1.6 s → 3.0 s
+at the median. So the lever costs about 1.4 s to the first word at the median and has a long tail.
