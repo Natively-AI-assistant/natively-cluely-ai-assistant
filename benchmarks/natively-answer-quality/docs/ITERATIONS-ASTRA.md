@@ -996,7 +996,7 @@ at the median. So the lever costs about 1.4 s to the first word at the median an
   fails not up; a pair with any row unjudged gets no verdict) and compares fix13's re-run rows with fix12's. Output:
   `astra/out/logs/decide.md`.
 
-### fix14 candidate built ahead of the verdict (aq-fix2 99bedc65 on `fix/aq-astra-i6`, 22:45Z) — NOT a kept build
+### fix14 candidate built ahead of the verdict (aq-fix2 99bedc65 on `fix/aq-astra-i6`, 22:22Z) — NOT a kept build
 * Built now so that a BUILD verdict at about 02:20Z can go straight to app runs instead of waiting a batch. One
   mechanism per layer, no new rule family: the claim pass's "left unanswered" rule becomes a per-mode entry (Looking
   for work gets the v2 wording); the composer gets one per-mode notice for a turn with no reference file among the
@@ -1013,7 +1013,7 @@ at the median. So the lever costs about 1.4 s to the first word at the median an
   their parts. Untested interaction: the replay wires pre-date fix13, so a typed "shorter" in Sales has never carried
   both the refinement notice and the shape notice — `tools/refine-check.mjs` on the app rows decides that.
 
-### Promotion rule for fix14, written 22:45Z before any of its rows or its replay pairs has a score
+### Promotion rule for fix14, written 22:24Z before any of its rows or its replay pairs has a score
 fix14 = fix13 (e000db4a) + the parts with a BUILD verdict. Each part changes only its own mode, so only those modes
 are re-run (dev and holdout) and compared by item with the kept build's rows (the fix13c composites).
 fix14 is promoted over fix13 only if ALL hold (charter v2, paired):
@@ -1029,5 +1029,5 @@ fix14 is promoted over fix13 only if ALL hold (charter v2, paired):
 6. `important_question_unanswered` (judge flag) is not up on those modes.
 7. typed refinement requests are still met (`tools/refine-check.mjs`: dev 8 of 8, holdout 4 of 4 in fix13).
 Positive but interval includes 0 → not promoted; fix13 stays the kept build and fix14 is reported as a candidate.
-* App runs need a quiet machine (one app), and free disk: at 22:45Z the volume had 2.9 GB free after I deleted my own
+* App runs need a quiet machine (one app), and free disk: at 22:20Z the volume had 2.9 GB free after I deleted my own
   1.3 GB build output; other sessions took about 1.5 GB in 40 minutes. No run starts under 4 GB free.
