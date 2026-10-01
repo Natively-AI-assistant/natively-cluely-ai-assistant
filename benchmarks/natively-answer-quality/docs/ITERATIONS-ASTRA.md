@@ -738,3 +738,17 @@ validator defect is reported as open.
   against fix11.
 * One Seminar sample of 10 supp-behavior rows decides a validator: if SBSEM-007 fails in the app the replay is
   re-checked before concluding either way.
+
+### Rejected — verifying the ungated turns that still carry a personal claim (replay only, 12:06Z)
+* Signal: in Lecture the draft-personal pattern matches 1 of 40 dev and 2 of 30 holdout drafts; every match is
+  judge-capped for an unsupported personal claim (4.2–5.0 against ~9.0 for the rest) and no capped one is missed.
+  The lecturer addresses the room ("who here has worked with messy real-world data?") and the draft answers AS the
+  student, against the persona ("a quiet study partner, not the student or lecturer"). In Technical interview,
+  DTECH-017 ("tell me honestly how much Go you've written in production") matches neither gate pattern.
+* `tools/variants/_cv-gate-v2.mjs` (gate Lecture on that pattern, widen the TI question pattern): the pass LISTS the
+  claims and then keeps them — DLEC-008 unchanged or still first-person in 5 of 6 replays, DTECH-017's "side
+  projects and coursework" kept in 4 of 6 and replaced by "I'll confirm that and come back to you" in the others.
+* `tools/variants/_cv-lecture-voice.mjs` (a dedicated "do not speak as the student" rewrite for those Lecture turns):
+  5 of 6 rewrites were refused by the `source_exposed` rail; the one shipped was good. Not a clean fit for the pass.
+* Not built. It is a persona-compliance error of the generator on 2–3% of Lecture turns (≈ +0.03 on the aggregate if
+  fully repaired); a proper fix belongs in the response-contract validator of that mode, not in the claim pass.
