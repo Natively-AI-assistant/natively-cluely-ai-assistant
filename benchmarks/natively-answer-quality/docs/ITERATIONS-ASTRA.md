@@ -500,7 +500,7 @@ promotion; replay gains are evidence, not a verdict.
   not confirmed. To count for answer quality the check would have to gate or replace the shown answer — an
   architecture change (docs/BLOCKERS-ASTRA.md §2), not a setting.
 
-### fix11 in-app, dev (aq2-dev-fix11, 360 rows, 0 failed) — objective read, written 10:20Z BEFORE any charter-v2 score
+### fix11 in-app, dev (aq2-dev-fix11, 360 rows, 0 failed) — objective read, written 10:05Z BEFORE any charter-v2 score
 * Validators 8/9 (DTEAM-034, the sampling case above). No non-English reply, no "the material" in a shown answer.
 * Verifier: passes its gate on 267/360 turns (74%), replaces the text on 110 (31%); spoken turns 92/245; Looking for
   work 24/32, Call Center 15/30, Team Meet 15/28.
@@ -530,7 +530,7 @@ Priority in the spec puts realtime usability above p10 and the mean, so the late
 * Aggregate ≤ 0 → revert to fix6; fix9 is read as the fallback (207 holdout rows, no Seminar / Call Center).
 * The swap itself (show then replace, vs hold until verified) stays Evin's decision either way.
 
-### What the 13 "decision lost" and 22 "cut to under half" edits in fix11 dev actually are (read 10:35Z, before scores)
+### What the 13 "decision lost" and 22 "cut to under half" edits in fix11 dev actually are (read 10:05Z, before scores)
 * "Decision lost" is mostly the heuristic: 8 of 13 matched "I'd rather …" inside a hedge the edit removed ("I don't
   have the reporting line in front of me, so I'd rather get you the accurate answer than guess" → "I'll confirm who
   this role reports to and follow up with you directly"). Those edits are shorter and no worse.
