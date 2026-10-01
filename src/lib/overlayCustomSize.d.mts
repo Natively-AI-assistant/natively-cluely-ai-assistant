@@ -82,6 +82,8 @@ export function clampCustomOverlaySize(
 export function maxWindowWidthFor(availWidth: number): number;
 export function maxWindowHeightFor(availHeight: number): number;
 export function collapsedWidthFor(windowWidth: number): number;
+export const QUICK_ROW_SLACK: number;
+export function collapsedWidthForRow(collapsed: number, expanded: number, rowNeed: number): number;
 
 export type OverlayResizeDirection = 'e' | 's' | 'se';
 

@@ -79,7 +79,12 @@ test('onSessionReset snaps shellWidth back to the collapsed baseline (imperative
     // window on every side, so the WINDOW width is no longer the panel's
     // expanded width and feeding it to collapsedWidthFor left the reset paths
     // 10px wider than the SHELL_WIDTH_COLLAPSED every other path derived.
-    /shellWidth\.set\(\s*(?:SHELL_WIDTH_COLLAPSED|defaultCollapsedPanelWidth\(\s*\)|collapsedWidthFor\(\s*OVERLAY_DEFAULT_WINDOW_WIDTH\s*\))\s*\)/.test(body),
+    //
+    // defaultCollapsedForRowRef.current (2026-09-27) is that same default,
+    // widened for the measured quick-action row, so a new meeting in a
+    // language with long chip labels does not open with Answer wrapped. It is
+    // a ref because onSessionReset is a long-lived subscription.
+    /shellWidth\.set\(\s*(?:SHELL_WIDTH_COLLAPSED|defaultCollapsedPanelWidth\(\s*\)|defaultCollapsedForRowRef\.current|collapsedWidthFor\(\s*OVERLAY_DEFAULT_WINDOW_WIDTH\s*\))\s*\)/.test(body),
     'BUG: onSessionReset must imperatively `shellWidth.set(SHELL_WIDTH_COLLAPSED)` so the OS window contracts to the collapsed width on the first paint of the new meeting — otherwise the previous meeting\'s expanded width is shown until the deferred checkCodeVisibility collapse fires ~1-2s later.',
   );
   // Must be an imperative set, NOT an animate() (which would play a visible
