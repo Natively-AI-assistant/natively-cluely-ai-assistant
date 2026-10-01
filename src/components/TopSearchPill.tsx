@@ -59,6 +59,8 @@ interface TopSearchPillProps {
     onLiteralSearch: (query: string) => void;
     onOpenMeeting: (meetingId: string) => void;
     onExpansionChange?: (isExpanded: boolean) => void;
+    /** Bumped to open the bar from outside it (Settings › About's Search). Each new value opens it once. */
+    openRequest?: number;
 }
 
 // ============================================
@@ -192,7 +194,8 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
     onAIQuery,
     onLiteralSearch,
     onOpenMeeting,
-    onExpansionChange
+    onExpansionChange,
+    openRequest,
 }) => {
     const isLight = useResolvedTheme() === 'light';
     const t = useT();
@@ -282,6 +285,14 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
         setState('focused');
         setTimeout(() => inputRef.current?.focus(), 50);
     }, []);
+
+    // A request that was already there when the bar mounted is not a new one.
+    const handledOpenRequest = useRef(openRequest ?? 0);
+    useEffect(() => {
+        if (!openRequest || openRequest === handledOpenRequest.current) return;
+        handledOpenRequest.current = openRequest;
+        open();
+    }, [openRequest, open]);
 
     const close = useCallback(() => {
         setState('idle');

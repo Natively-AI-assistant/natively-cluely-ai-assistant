@@ -6,6 +6,7 @@ import { app } from 'electron';
 import fs from 'fs';
 import * as sqliteVec from 'sqlite-vec';
 import { buildLegacySpaceCaseSql } from '../rag/embeddingSpace';
+import { decodeUsageMetadata, encodeUsageMetadata } from './usageMetadata';
 import type { ActionItem, DecisionItem, FollowUpDraft, MeetingSummaryGenerationMeta, MeetingSummaryModeMeta, MeetingSummarySectionV3, NoteBlock, PersonMention, QuestionItem, RiskItem, SourceQualityMeta, SpeakerLabelMap, SummaryStatus, TimelineItem } from '../services/meeting/types';
 
 // Interfaces for our data objects
@@ -58,6 +59,8 @@ export interface Meeting {
         question?: string;
         answer?: string;
         items?: string[];
+        /** JPEG data-URL previews of the screenshots the answer used (usagePreviews.ts). */
+        images?: string[];
     }>;
     calendarEventId?: string;
     /**
@@ -3070,17 +3073,9 @@ export class DatabaseManager {
             deleteInteractions.run(meeting.id);
             if (meeting.usage) {
                 for (const usage of meeting.usage) {
-                    let metadata = null;
-                    if (usage.items) {
-                        metadata = JSON.stringify(usage.items);
-                    } else if (usage.type === 'followup_questions' && usage.answer) {
-                        // Sometimes answer is the array for questions, or we store it in metadata
-                        // In intelligence manager we pushed: { type: 'followup_questions', answer: fullQuestions }
-                        // Let's store that 'answer' (array) in metadata for this type
-                        if (Array.isArray(usage.answer)) {
-                            metadata = JSON.stringify(usage.answer);
-                        }
-                    }
+                    // items (or a follow-up-questions answer array) and any screenshot
+                    // previews — see usageMetadata.ts for the stored shapes.
+                    const metadata = encodeUsageMetadata(usage);
 
                     // Normalization
                     const answerText = Array.isArray(usage.answer) ? null : usage.answer || null;
@@ -3475,26 +3470,16 @@ export class DatabaseManager {
         }));
 
         const usage = usageRows.map(row => {
-            let items: string[] | undefined;
-            let answer = row.ai_response;
-
-            if (row.metadata_json) {
-                try {
-                    const parsed = JSON.parse(row.metadata_json);
-                    if (Array.isArray(parsed)) {
-                        items = parsed;
-                        // Special case: for 'followup_questions', earlier we treated 'answer' as the array in memory
-                        // UI expects appropriate field. If type is 'followup_questions', usually answer is null and items has the questions.
-                    }
-                } catch (e) { console.warn('[DatabaseManager] Failed to parse metadata_json for interaction:', row?.id, e); }
-            }
-
+            // For 'followup_questions' the answer is usually null and `items` holds the questions.
+            const { items, images } = decodeUsageMetadata(row.metadata_json);
             return {
                 type: row.type,
                 timestamp: row.timestamp,
                 question: row.user_query,
-                answer: answer,
-                items: items
+                answer: row.ai_response,
+                items,
+                // Previews of the screenshots the answer used (usagePreviews.ts).
+                ...(images ? { images } : {}),
             };
         });
 

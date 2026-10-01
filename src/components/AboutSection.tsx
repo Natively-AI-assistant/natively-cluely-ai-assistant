@@ -3,8 +3,8 @@ import { useT } from '../i18n';
 import {
     Github, Twitter, Linkedin, Instagram, Send, Star, Bug, Mail, Heart,
     CalendarCheck, Palette, Smartphone, ListOrdered,
-    LayoutGrid, Search, FileText, UserRound,
-    HardDrive, Sliders, Lock,
+    LayoutGrid, Search, FileText, UserRound, PlayCircle,
+    HardDrive, Sliders, Lock, ArrowRight,
 } from 'lucide-react';
 import { AutoAnswerIcon } from './AutoAnswerIcon';
 import evinProfile from '../assets/evin.png';
@@ -13,11 +13,14 @@ import evinProfile from '../assets/evin.png';
 // 192px for an 80px header.
 import appIconMac from '../assets/about/app-icon-mac.webp';
 import appIconWin from '../assets/about/app-icon-win.webp';
-import { isMac } from '../utils/platformUtils';
+import { isMac, isWindows } from '../utils/platformUtils';
+import { getPlatformFacts } from '../lib/helpContent.mjs';
 import { APP_FEATURE_VERSION } from '../utils/appVersion';
 import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
-import { SettingsRow, SettingsSectionHeading } from './settings/SettingsRow';
+import { SETTINGS_BTN, SettingsRow, SettingsSectionHeading } from './settings/SettingsRow';
+// The learn-more hover (.t-learn), shared with Plans' "Open" / "Email" actions.
+import './settings/HowItWorksRefund.css';
 
 // Built from the AI Providers panel's `.aip-*` system (the same one Retrieval
 // adopts), so About reads as part of Settings rather than its own UI: aip-card
@@ -42,8 +45,20 @@ import { SettingsRow, SettingsSectionHeading } from './settings/SettingsRow';
 // (No backticks in this CSS: ABOUT_CSS is a template literal, as AIP_CSS is.)
 type AboutIcon = React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
 
-interface AboutItem { title: string; body: string; badge?: string; Icon: AboutIcon }
+/**
+ * A row of About. Glyphs are neutral, as in every other Settings pane; `go` is
+ * where the thing lives, so the row can take you there.
+ */
+type AboutGo = { tab: string; label: string } | 'modes' | 'profile' | 'search' | { meeting: string; label: string };
 
+// The meeting every install is seeded with (DatabaseManager.seedDemoMeeting).
+const DEMO_MEETING_ID = 'demo-meeting';
+interface AboutItem { title: string; body: string; badge?: string; Icon: AboutIcon; go?: AboutGo }
+
+// Every claim below was checked against the code on 2026-09-30. What's New
+// names where a feature lives in its line ("In Retrieval") rather than with a
+// button (the owner's call); a row that does carry a button keeps its line
+// under ~55 characters so it stays on one line beside it.
 // 2.9 official build, the owner's picks from the last 30 days of commits:
 // Auto Answer (off by default and "Beta" in General; the judge skips asks
 // named to someone else, 2cf229bd), embeddings + rerankers, Phone Mirror 2.0
@@ -60,15 +75,25 @@ const WHATS_NEW: AboutItem[] = [
     { title: 'Better UI and animations', body: 'Liquid Glass controls, and smoother motion in every window.', Icon: Palette },
 ];
 
-// Compressed 2026-09-25 at the owner's request; every claim still checked
-// against the code. Six capabilities, deliberately not numbered — they are not
-// a pipeline ("Modes" is not step three of anything).
+// Compressed 2026-09-25 at the owner's request. Not numbered: they are not a
+// pipeline ("Modes" is not step three of anything).
 const HOW_IT_WORKS: AboutItem[] = [
-    { title: 'Modes', body: 'Templates like Sales or Interview, plus your own.', Icon: LayoutGrid },
-    { title: 'Profile Intelligence', body: 'Resume, job description and company intel.', Icon: UserRound },
-    { title: 'Searches files and meetings', body: 'Indexed locally, on-device or cloud.', Icon: Search },
-    { title: 'Notes after every meeting', body: 'Structured notes and open questions.', Icon: FileText },
+    { title: 'Modes', body: 'Templates like Sales or Interview, plus your own.', Icon: LayoutGrid, go: 'modes' },
+    { title: 'Profile Intelligence', body: 'Resume, job description and company intel.', Icon: UserRound, go: 'profile' },
+    { title: 'Searches files and meetings', body: 'Indexed locally, on-device or cloud.', Icon: Search, go: 'search' },
+    { title: 'Notes after every meeting', body: 'Structured notes and open questions.', Icon: FileText, go: { meeting: DEMO_MEETING_ID, label: 'Demo meeting' } },
 ];
+
+// The last "How it works" row points at Setup & Help. It promises a recording
+// only where Setup & Help shows one (helpContent.mjs `clips.answer`: macOS);
+// elsewhere Setup & Help opens on the answer-flow figure and its guides.
+const SEE_IT_RECORDING: AboutItem = { title: 'See it in action', body: 'A recording of Natively answering a question.', Icon: PlayCircle, go: { tab: 'help', label: 'Setup & Help' } };
+const SEE_IT_GUIDES: AboutItem = { title: 'Setup and guides', body: 'Every part of Natively, step by step.', Icon: PlayCircle, go: { tab: 'help', label: 'Setup & Help' } };
+
+function helpShowsRecording(): boolean {
+    const platform = isMac ? 'darwin' : isWindows ? 'win32' : null;
+    return platform ? getPlatformFacts(platform).clips.answer : false;
+}
 
 const PRIVACY: AboutItem[] = [
     { title: 'Stored on your device', body: 'Local database. Audio is never saved.', Icon: HardDrive },
@@ -133,9 +158,34 @@ const CommunityActionRow: React.FC<{
 // and deliberately not reproduced: rows here separate by rhythm, as General's do.
 const ROW_GROUP = 'rounded-xl border bg-transparent border-transparent';
 
-interface AboutSectionProps { }
+interface AboutSectionProps {
+    /** Switches the Settings tab — the rows' buttons use it to take you to a feature. */
+    onNavigate?: (tab: string) => void;
+    /** Hands Settings over to the Modes manager / Profile Intelligence. */
+    onOpenModes?: () => void;
+    onOpenProfile?: () => void;
+    /** Closes Settings and opens the Launcher's search bar / a meeting. */
+    onOpenSearch?: () => void;
+    onOpenMeeting?: (id: string) => void;
+}
 
-export const AboutSection: React.FC<AboutSectionProps> = () => {
+/**
+ * A button in a row's control rail that takes you somewhere: "Modes →" —
+ * Setup & Help's GoButton, at one of two widths so neighbours match: the short
+ * labels (Modes, Profile, Search; widest measured 87px) and the long ones
+ * (Demo meeting, Setup & Help; widest 131px). min-width, not width, so a
+ * longer translation still grows.
+ */
+const GoButton: React.FC<{ label: string; onClick: () => void; wide?: boolean }> = ({ label, onClick, wide }) => (
+    // t-learn: the arrow leans 2px toward where the button goes on hover
+    // (transitions.dev "learn more hover", HowItWorksRefund.css).
+    <button type="button" onClick={onClick} className={`t-learn ${SETTINGS_BTN} ${wide ? 'min-w-[132px]' : 'min-w-[88px]'}`}>
+        {label}
+        <span className="t-learn-chevron" aria-hidden="true"><ArrowRight size={13} /></span>
+    </button>
+);
+
+export const AboutSection: React.FC<AboutSectionProps> = ({ onNavigate, onOpenModes, onOpenProfile, onOpenSearch, onOpenMeeting }) => {
     const t = useT();
     const donationClickTimeRef = useRef<number | null>(null);
     const appVersion = import.meta.env.VITE_APP_VERSION || 'unknown';
@@ -242,6 +292,19 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
         { title: t('Support Development'), body: t('Natively is independent source-available software.'), action: actionButton(t('Support Project'), DONATE_URL, Heart, 'group-hover:text-pink-500') },
     ];
 
+    // A row's glyph (neutral, the tile's own colour), and the button that takes
+    // you to the feature.
+    // A destination the host didn't wire (no onNavigate in a harness, say)
+    // leaves the row without a button rather than with a dead one.
+    const rowIcon = ({ Icon }: AboutItem) => <Icon size={20} />;
+    const rowGo = ({ go }: AboutItem): React.ReactNode => {
+        if (!go) return undefined;
+        if (go === 'modes') return onOpenModes && <GoButton label={t('Modes')} onClick={onOpenModes} />;
+        if (go === 'profile') return onOpenProfile && <GoButton label={t('Profile')} onClick={onOpenProfile} />;
+        if (go === 'search') return onOpenSearch && <GoButton label={t('Search')} onClick={onOpenSearch} />;
+        if ('meeting' in go) return onOpenMeeting && <GoButton wide label={t(go.label)} onClick={() => onOpenMeeting(go.meeting)} />;
+        return onNavigate && <GoButton wide label={t(go.label)} onClick={() => onNavigate(go.tab)} />;
+    };
     const shortCommit = buildCommit !== 'unknown' ? buildCommit.slice(0, 7) : null;
     const versionLine = `${t('Version')} ${appVersion}${shortCommit ? ` (${shortCommit})` : ''}`;
 
@@ -275,17 +338,18 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     subtitle={t('The changes you can see in this release.')}
                 />
                 <div className={ROW_GROUP}>
-                    {WHATS_NEW.map(({ title, body, badge, Icon }) => (
+                    {WHATS_NEW.map((item) => (
                         <SettingsRow
-                            key={title}
-                            icon={<Icon size={20} />}
-                            title={t(title)}
+                            key={item.title}
+                            icon={rowIcon(item)}
+                            title={t(item.title)}
                             /* The app's own tag. `neutral` is its documented default
                                because "a tag qualifies the thing beside it rather than
                                competing with it", and it is the only variant that clears
                                the AA floor at 9.5px type. */
-                            badge={badge ? <LiquidGlassBadge variant="neutral">{t(badge)}</LiquidGlassBadge> : undefined}
-                            description={t(body)}
+                            badge={item.badge ? <LiquidGlassBadge variant="neutral">{t(item.badge)}</LiquidGlassBadge> : undefined}
+                            description={t(item.body)}
+                            control={rowGo(item)}
                         />
                     ))}
                 </div>
@@ -297,8 +361,8 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     subtitle={t('From the conversation to the answer.')}
                 />
                 <div className={ROW_GROUP}>
-                    {HOW_IT_WORKS.map(({ title, body, Icon }) => (
-                        <SettingsRow key={title} icon={<Icon size={20} />} title={t(title)} description={t(body)} />
+                    {[...HOW_IT_WORKS, helpShowsRecording() ? SEE_IT_RECORDING : SEE_IT_GUIDES].map((item) => (
+                        <SettingsRow key={item.title} icon={rowIcon(item)} title={t(item.title)} description={t(item.body)} control={rowGo(item)} />
                     ))}
                 </div>
             </section>
@@ -309,8 +373,8 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                     subtitle={t('What stays local, and what you send.')}
                 />
                 <div className={ROW_GROUP}>
-                    {PRIVACY.map(({ title, body, Icon }) => (
-                        <SettingsRow key={title} icon={<Icon size={20} />} title={t(title)} description={t(body)} />
+                    {PRIVACY.map((item) => (
+                        <SettingsRow key={item.title} icon={rowIcon(item)} title={t(item.title)} description={t(item.body)} />
                     ))}
                 </div>
             </section>

@@ -826,6 +826,28 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
 }
 
+/* The overlay toolbar's settings and mouse-passthrough buttons: bare icons,
+   no box behind them (owner request). The 28px hit area is unchanged; only
+   the icon's colour answers: muted at rest, full on hover and while its
+   popover is open, accent while passthrough is on. Theme-aware through the
+   --overlay-text-* variables, so glass and modern follow without rules of
+   their own. */
+.overlay-bare-icon {
+  /* The primary text colour at 62% rather than --overlay-text-muted: muted is
+     a mid grey that all but vanished on the light panel, and sat too close to
+     the hover colour on the dark ones. */
+  color: color-mix(in srgb, var(--overlay-text-primary) 62%, transparent);
+  background: transparent;
+  border: 0;
+}
+.overlay-bare-icon:hover,
+.overlay-bare-icon[data-state="open"] {
+  color: var(--overlay-text-primary);
+}
+.overlay-bare-icon[data-state="on"] {
+  color: var(--accent-primary);
+}
+
 [data-interface-theme="modern"] .glass-shortcut-key,
 [data-interface-theme="modern"] .glass-toggle-track {
   background: var(--overlay-control-bg) !important;
@@ -11411,6 +11433,36 @@ html[data-platform="linux"][data-window="launcher"] body {
   transform: scale(0.99);                             /* --scale-tiny */
   pointer-events: none;
   transition-duration: 150ms;                         /* close: --duration-quick */
+}
+
+/* Answer ⇄ Stop keeps one width: both labels are laid out, invisibly, in the
+   same grid cell as the live one, so the chip is as wide as the wider label
+   and the rest of the (centred) row never slides sideways. */
+.ov-chip-stack {
+  display: inline-grid;
+}
+.ov-chip-stack > * {
+  grid-area: 1 / 1;
+}
+.ov-chip-sizer {
+  visibility: hidden;
+}
+
+/* A label drawn by CSS for a layout-only copy: sized like the text it names,
+   but not in the DOM's text (NativelyInterface `ghost`). */
+.ov-ghost-label::before {
+  content: attr(data-label);
+}
+
+/* The quick-action row laid out on one line, once per Interview Mode state,
+   out of flow and invisible: its width is what the collapsed panel needs. */
+.ov-row-measure {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 /* A colour set inline that must survive the answer card's

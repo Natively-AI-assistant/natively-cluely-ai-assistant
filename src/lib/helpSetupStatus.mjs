@@ -8,7 +8,7 @@
 // Facts, never verdicts. A row says "Deepgram · key saved", not
 // "working": a saved key can still be wrong, and only Test Connection in Audio
 // or a real answer can prove it. `done` means only that the step has been
-// taken, so the pane can tick it.
+// taken, so the pane stops offering it as the next thing to do.
 //
 // Sources, so the next edit can re-check them rather than trust this file:
 //   permissions  `permissions:check` (ipcHandlers.ts) + permissionAttentionPolicy.mjs,

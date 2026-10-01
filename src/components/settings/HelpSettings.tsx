@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-    ArrowRight, AudioLines, CalendarCheck, Check, Code, Crop, Eye, FileText, FlaskConical, Ghost, Info, Keyboard,
-    LayoutGrid, ListOrdered, MessageSquareText, MonitorUp, MousePointerClick, Move, PanelTop, PointerOff, ShieldCheck,
-    Smartphone, TriangleAlert, UserRound,
+    ArrowRight, AudioLines, CalendarCheck, Code, Crop, Eye, FileText, FlaskConical, Ghost, Info, Keyboard, LayoutGrid,
+    ListOrdered, MessageSquareText, MonitorUp, MousePointerClick, Move, PanelTop, PointerOff, ShieldCheck, Smartphone,
+    TriangleAlert, UserRound,
 } from 'lucide-react';
 import { AutoAnswerIcon } from '../AutoAnswerIcon';
 import { useT } from '../../i18n';
@@ -197,24 +197,6 @@ function useSetupStatus(platform: HelpPlatform): SetupStatus {
     };
 }
 
-/**
- * A step's tile glyph, with a green check at the tile's corner once the step is
- * done. The check pops in (Presence "badge") when a step completes while the
- * pane is open — the one motion in Get started, and one that means something.
- */
-const StepIcon: React.FC<{ done: boolean; children: React.ReactNode }> = ({ done, children }) => (
-    <span className="relative flex items-center justify-center">
-        {children}
-        <span className="absolute -right-[16px] -bottom-[16px] flex">
-            <Presence kind="badge" id={done ? 'done' : null}>
-                <span className="flex w-[18px] h-[18px] items-center justify-center rounded-full bg-emerald-500 text-white ring-2 ring-[var(--bg-main)]">
-                    <Check size={11} strokeWidth={3} />
-                </span>
-            </Presence>
-        </span>
-    </span>
-);
-
 export const HelpSettings: React.FC<{
     onNavigate?: (tab: string) => void;
     /** Hands Settings over to the Modes manager, as the Launcher header's button does. */
@@ -270,8 +252,8 @@ const HelpPane: React.FC<{
     const permissions = getPermissions(platform);
     const status = useSetupStatus(platform);
     // Get started opens on what is already true, with no motion: descriptions
-    // don't swap away from "Checking…" and ticks don't pop in for steps done
-    // long ago (SettingsRow's rule — state already true on open isn't news).
+    // don't swap away from "Checking…" for steps done long ago (SettingsRow's
+    // rule — state already true on open isn't news).
     // Only a change while the pane is open, such as a permission granted in
     // System Settings, animates.
     const setupReady = useMotionReadyAfter(status.loaded);
@@ -325,22 +307,23 @@ const HelpPane: React.FC<{
                     title={t('Get started')}
                     subtitle={t('Natively needs permissions, a speech provider and an AI model.')}
                 />
-                {/* How Natively works, where the answer-flow figure used to be: a
-                    recording on macOS, the figure where there is none. */}
+                {/* How Natively works, unlabelled: the answer path as a figure on
+                    every platform, then, where one was recorded (macOS), the real
+                    thing happening. */}
                 <div className="mt-3 mb-2 space-y-2">
-                    <HelpSubhead>{t('How Natively works')}</HelpSubhead>
-                    {answerClip ? (
-                        <HelpClip clip={answerClip} label={answerClip.label} />
-                    ) : (
-                        <HelpFigure>
-                            <AnswerFlowFigure />
-                        </HelpFigure>
+                    <HelpFigure>
+                        <AnswerFlowFigure />
+                    </HelpFigure>
+                    {answerClip && (
+                        <div className="pt-1">
+                            <HelpClip clip={answerClip} label={answerClip.label} />
+                        </div>
                     )}
                 </div>
                 <SettingsMotionReady.Provider value={setupReady}>
                 <div className={ROW_GROUP}>
                     <SettingsRow
-                        icon={<StepIcon done={status.natively.state === 'done'}><NativelyGlyph size={20} /></StepIcon>}
+                        icon={<NativelyGlyph size={20} />}
                         title={t('Natively API')}
                         badge={
                             <Presence kind="badge" id={status.natively.state === 'todo' ? 'quickest' : null}>
@@ -352,21 +335,21 @@ const HelpPane: React.FC<{
                         control={onNavigate && <GoButton label={t('Plans & Billing')} onClick={go('plans')} />}
                     />
                     <SettingsRow
-                        icon={<StepIcon done={status.permissions?.state === 'done'}><ShieldCheck size={20} /></StepIcon>}
+                        icon={<ShieldCheck size={20} />}
                         title={t('Allow permissions')}
                         description={t(status.permissions?.detail ?? rowCopy.permissionsStep)}
                         descriptionKey={status.permissions?.detail ?? 'unknown'}
                         control={stepAction(status.permissions, t('Open'), () => openPermission(permissions[0]))}
                     />
                     <SettingsRow
-                        icon={<StepIcon done={status.speech.state === 'done'}><AudioLines size={20} /></StepIcon>}
+                        icon={<AudioLines size={20} />}
                         title={t('Choose a speech provider')}
                         description={t(status.speech.detail)}
                         descriptionKey={status.speech.detail}
                         control={onNavigate && stepAction(status.speech, t('Audio'), go('audio'))}
                     />
                     <SettingsRow
-                        icon={<StepIcon done={status.model.state === 'done'}><FlaskConical size={20} /></StepIcon>}
+                        icon={<FlaskConical size={20} />}
                         title={t('Choose an AI model')}
                         description={t(status.model.detail)}
                         descriptionKey={status.model.detail}
@@ -376,7 +359,7 @@ const HelpPane: React.FC<{
                         each says what is set and opens its manager, which shows
                         its own Pro gate when locked. */}
                     <SettingsRow
-                        icon={<StepIcon done={status.mode.state === 'done'}><LayoutGrid size={20} /></StepIcon>}
+                        icon={<LayoutGrid size={20} />}
                         title={t('Pick a mode')}
                         badge={
                             <Presence kind="badge" id={status.mode.state === 'locked' ? 'pro' : 'optional'}>
@@ -388,7 +371,7 @@ const HelpPane: React.FC<{
                         control={onOpenModes && <GoButton label={t('Modes')} onClick={onOpenModes} />}
                     />
                     <SettingsRow
-                        icon={<StepIcon done={status.profile.state === 'done'}><UserRound size={20} /></StepIcon>}
+                        icon={<UserRound size={20} />}
                         title={t('Add your résumé')}
                         badge={
                             <Presence kind="badge" id={status.profile.state === 'locked' ? 'pro' : 'optional'}>

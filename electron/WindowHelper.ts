@@ -161,8 +161,10 @@ export class WindowHelper {
   // streamed by the renderer as the width spring runs so the toggle window
   // rides the panel's top-right corner frame-by-frame (the pre-aux-window
   // behavior, where a MotionValue did the riding inside one window). Default
-  // = collapsed panel right edge inside the fixed window: (732 + 600) / 2.
-  private togglePanelRight = 666;
+  // = collapsed panel right edge inside the fixed window: (732 + 604) / 2
+  // (defaultCollapsedPanelWidth in src/lib/overlayCustomSize.mjs). Only used
+  // until the renderer's first stream.
+  private togglePanelRight = 668;
   // The panel's LIVE left edge, streamed alongside the right one. Together
   // they are the panel's true extent inside the window — which the window's
   // own width stops describing while a resize drag renders inside a wider

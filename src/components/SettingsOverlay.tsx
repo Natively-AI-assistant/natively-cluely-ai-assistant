@@ -221,7 +221,7 @@ const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: M
                                         <ModelSelectorLabel>Gemini 3 Flash</ModelSelectorLabel>
                                         <ChevronDown size={12} className="shrink-0" />
                                     </div>
-                                    <div className="w-7 h-7 flex items-center justify-center rounded-[9px] border overlay-control-surface overlay-text-muted" style={appearance.controlStyle}>
+                                    <div className="w-7 h-7 rounded-[9px] flex items-center justify-center overlay-bare-icon">
                                         <SlidersHorizontal className="w-3.5 h-3.5" />
                                     </div>
                                 </div>
@@ -603,6 +603,9 @@ interface SettingsOverlayProps {
     /** Setup & Help's "Pick a mode" / "Add your résumé": hand over to that manager. */
     onOpenModes?: () => void;
     onOpenProfile?: () => void;
+    /** About's Search / Demo meeting: close Settings, open that in the Launcher. */
+    onOpenSearch?: () => void;
+    onOpenMeeting?: (id: string) => void;
 }
 
 /**
@@ -637,6 +640,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     closeInstantly = false,
     onOpenModes,
     onOpenProfile,
+    onOpenSearch,
+    onOpenMeeting,
 }) => {
     const resolvedTheme = useResolvedTheme();
     const isLight = resolvedTheme === 'light';
@@ -2857,10 +2862,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                             : 'bg-bg-component hover:bg-bg-elevated text-text-primary border-border-subtle'
                                                         }`}
                                                     >
-                                                        {/* justify-start puts the glyph where Theme's and Language's
-                                                            icons start; centred, it sat 12px further in. */}
                                                         {/* Each status is one glyph + one word: the glyph cross-fades
-                                                            in its 14px slot, the word swaps (Sync's Copy → Copied). */}
+                                                            in its 14px slot, the word swaps (Sync's Copy → Copied).
+                                                            justify-start puts the glyph where Theme's and Language's
+                                                            icons start; centred, it sat 12px further in. */}
                                                         <Presence kind="icon" id={updateStatus}>
                                                             {updateStatus === 'checking' ? <RefreshCw size={14} className="animate-spin" />
                                                                 : updateStatus === 'available' ? <ArrowDown size={14} />
@@ -3140,6 +3145,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 </p>
                                                             </div>
                                                         </div>
+                                                        {/* min-w-[105px] + px-2.5 like every other control in this column; it
+                                                            also holds "Exporting…", so the swap can't resize the box. */}
                                                         <button
                                                             type="button"
                                                             disabled={exportingLogs}
@@ -3159,9 +3166,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             }}
                                                             className="shrink-0 min-w-[105px] text-xs font-medium px-2.5 py-1.5 rounded-lg bg-bg-item-surface border border-border-subtle text-text-primary hover:bg-[color:var(--bg-row-hover)] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 disabled:opacity-50"
                                                         >
-                                                            {/* min-w-[105px] + px-2.5 like every other control in this
-                                                                column; it also holds "Exporting…", so the swap can't
-                                                                resize the box. */}
                                                             <LabelSwap id={exportingLogs ? 'exporting' : 'idle'}>
                                                                 {exportingLogs ? t('Exporting\u2026') : t('Export')}
                                                             </LabelSwap>
@@ -4478,7 +4482,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             )}
 
                             {activeTab === 'about' && (
-                                <AboutSection />
+                                <AboutSection onNavigate={setActiveTab} onOpenModes={onOpenModes} onOpenProfile={onOpenProfile} onOpenSearch={onOpenSearch} onOpenMeeting={onOpenMeeting} />
                             )}
                             </ErrorBoundary>
                             </motion.div>
