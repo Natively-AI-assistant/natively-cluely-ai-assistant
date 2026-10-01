@@ -1,4 +1,5 @@
 import type { ScreenUnderstandingResult } from './ScreenUnderstandingService';
+import { markOnDeviceScreenText } from '../../context-intelligence/question/on-device-screen';
 
 /**
  * The screenshot a user attached, rendered as text so it survives its own turn.
@@ -87,11 +88,15 @@ export function composeScreenDescription(
   const code = joinNonEmpty(result.codeBlocks ?? []);
   const tables = joinNonEmpty((result.tables ?? []).map((table) => table?.markdown));
 
-  return [
+  const text = [
     section(SCREEN_DESCRIPTION_SECTIONS.errors, errors),
     section(SCREEN_DESCRIPTION_SECTIONS.summary, result.visibleSummary ?? ''),
     section(SCREEN_DESCRIPTION_SECTIONS.text, result.extractedText ?? ''),
     section(SCREEN_DESCRIPTION_SECTIONS.code, code),
     section(SCREEN_DESCRIPTION_SECTIONS.tables, tables),
   ].filter(Boolean).join('\n\n');
+  // Made while screenshots were being kept on this device: the text says so
+  // itself, wherever it is stored next (the conversation ring, the description
+  // cache, Direct Assist's history). See on-device-screen.ts.
+  return result.keptOnDevice ? markOnDeviceScreenText(text) : text;
 }

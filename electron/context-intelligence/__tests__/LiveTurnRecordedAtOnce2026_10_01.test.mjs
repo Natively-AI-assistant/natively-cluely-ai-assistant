@@ -106,6 +106,21 @@ describe('recordLiveTurn', () => {
     assert.equal(await until(() => turns().length === 1, 500), true);
     assert.equal(turns()[0].screen, undefined);
   });
+  test('"keep on this device": the text a local model reads is recorded WITH its mark; without that setting it is not marked', async () => {
+    const { hasOnDeviceScreenText, ON_DEVICE_SCREEN_MARK } = require(dist('context-intelligence/question/on-device-screen.js'));
+    ollama = fakeOllama({ 'llava:7b': true }, { reply: 'FATAL E4012: disk quota exceeded' });
+    const h = helper(await ollama.start(), 'llava:7b');
+    globalThis.__nativelyGetLLMHelper = () => h;
+    setMode('private_vision');
+    engine().recordLiveTurn('Your disk is full.', undefined, 'what is this error?', 1, [shot()]);
+    assert.equal(await until(() => /E4012/.test(turns()[0]?.screen ?? ''), 4000), true, `never attached: ${JSON.stringify(turns())}`);
+    assert.ok(turns()[0].screen.startsWith(ON_DEVICE_SCREEN_MARK), turns()[0].screen.slice(0, 80));
+    setMode('vision_first');
+    clearConversationState(SESSION);
+    engine().recordLiveTurn('It is a login form.', undefined, 'and this?', 1, [shot()]);
+    assert.equal(await until(() => /E4012/.test(turns()[0]?.screen ?? ''), 4000), true);
+    assert.equal(hasOnDeviceScreenText(turns()[0].screen), false, 'not kept on device: an ordinary record');
+  });
   // LAST in this group: a failed read cools the Ollama rung for a while (as in
   // the app), which would make a later test's record be skipped.
   test('the read FAILS: the turn then says it could not be transcribed, not that it is still being read', async () => {

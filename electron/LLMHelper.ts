@@ -24,6 +24,7 @@ import {
 } from "./llm/tinyPrompts"
 import { gatewaySeatReadsImages, readsImages, resolveVision, resolveVisionAuto, type VisionFacts, type VisionModelState, type VisionVerdict } from "./llm/visionResolver"
 import { forgetBreakersOfOtherSelections, orderVisionCandidates } from "./llm/visionOrdering"
+import { hasOnDeviceScreenText, ON_DEVICE_SCREEN_REFUSED_MESSAGE } from "./context-intelligence/question/on-device-screen"
 import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, storedVisionOverride, storedVisionTest, visionWireModel } from "./llm/visionCapabilityStore"
 import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/visionProbe"
 import { parseOpenRouterVision } from "./llm/providerVisionData"
@@ -1485,7 +1486,35 @@ export class LLMHelper {
     if (family && this.isProviderDisabled(family)) {
       throw new ProviderDisabledError(provider);
     }
+    // Text read off a screenshot that was KEPT ON THIS DEVICE (2026-10-01).
+    // The prompt builders already leave it out unless the selected provider
+    // is local; this is the backstop for every way a payload can still reach
+    // a cloud provider after that — a cloud spare behind a local endpoint, a
+    // Background Model pick, a selection changed mid-turn. Fails closed.
+    if (hasOnDeviceScreenText(text) && !this.outboundLabelIsOnDevice(provider)) {
+      throw new VisionPolicyError(provider, ON_DEVICE_SCREEN_REFUSED_MESSAGE);
+    }
     assertProviderDataScopes(provider, this.scopesForPayload(text, imagePaths, extraScopes), this.getProviderScopePolicy());
+  }
+
+  /** Is this outbound label a provider on this device? Only a custom or cURL endpoint can be; every named provider is hosted. */
+  private outboundLabelIsOnDevice(provider: string): boolean {
+    if (provider === 'custom_provider') return customProviderIsLocal(this.customProvider);
+    if (provider === 'custom_curl') return customProviderIsLocal(this.activeCurlProvider);
+    return false;
+  }
+
+  /**
+   * Does a turn answered by the SELECTED provider stay on this device? Ollama
+   * on this machine or network, or a custom / cURL endpoint whose request goes
+   * to a private host. Same precedence as getDirectAssistSelection: a custom
+   * provider IS the selection even when the Ollama flag is still set.
+   */
+  public selectionStaysOnDevice(): boolean {
+    if (this.customProvider) return customProviderIsLocal(this.customProvider);
+    if (this.activeCurlProvider) return customProviderIsLocal(this.activeCurlProvider);
+    if (this.useOllama) return customProviderIsLocal({ curlCommand: this.ollamaUrl });
+    return false;
   }
 
   private getDeniedOutboundScopes(text: string, imagePaths?: string[], extraScopes: ProviderDataScope[] = []): ProviderDataScope[] {
@@ -2937,6 +2966,9 @@ export class LLMHelper {
     // cloud spare offered at all, so the failure mode is "no spare" rather
     // than "a spare that throws on every turn".
     if (this.isLocalOnlyMode) return spares;
+    // …and none for a turn carrying text from a kept-on-device screenshot:
+    // every spare is a cloud provider, and the boundary would refuse each one.
+    if (hasOnDeviceScreenText(userContent)) return spares;
     const skip = new Set(excludeIds);
     let prio = 1;
     if (!skip.has('natively') && this.hasNatively()) {
@@ -5384,6 +5416,10 @@ let isMultimodal = !!(imagePaths?.length);
     skipSystemPrompt = false,
     turn?: FastTurn | null,
   ): { modelId: string; family: FastModelFamily; auto: boolean; stream: AsyncGenerator<string, void, unknown> } | null {
+    // The Background Model is a cloud provider. A turn carrying text from a
+    // kept-on-device screenshot is answered by the Active Model, which is the
+    // local one that turn was assembled for.
+    if (hasOnDeviceScreenText(userContent)) return null;
     const pick = turn ? this.fastPickAtDispatch(turn) : this.fastPickForTextTurn();
     if (!pick) {
       if (this.groqFastTextMode && this.fastModelId) {
@@ -14753,6 +14789,17 @@ let isMultimodal = !!(imagePaths?.length);
       || (provider === 'curl' && customProviderIsLocal(curl));
     if (this.isLocalOnlyMode && !directProviderIsLocal) {
       throw new DirectAssistError('PROVIDER_ERROR', 'Cloud providers are disabled in local-only mode.');
+    }
+    // Text read off a screenshot that was kept on this device (an earlier
+    // turn's description, carried in the history): only a provider on this
+    // device may have it. Checked here because some Direct adapters pass an
+    // empty text to assertOutboundScopes. `ollama` is the daemon the user
+    // configured, and one on another machine is not this device.
+    const directOnDevice = provider === 'ollama'
+      ? customProviderIsLocal({ curlCommand: this.ollamaUrl })
+      : directProviderIsLocal;
+    if (!directOnDevice && (hasOnDeviceScreenText(request.userPrompt) || hasOnDeviceScreenText(request.systemPrompt))) {
+      throw new DirectAssistError('SCREENSHOT_BLOCKED_BY_PRIVACY', ON_DEVICE_SCREEN_REFUSED_MESSAGE);
     }
     // This is the shared last boundary for every Direct image dispatch. The
     // provider-specific streamers are intentionally not trusted to remember
