@@ -176,6 +176,10 @@ const OLLAMA_VISION_NEGATIVE_TTL_MS = 30_000
 // at all, so it gets longer than the cloud chain's 1.5 s (the old check allowed
 // 10 s). A daemon slower than this still fills the cache for the next turn.
 const OLLAMA_LOCAL_VISION_PROBE_BUDGET_MS = 5_000
+// How long a screenshot turn waits for the on-the-spot image test (see
+// testSelectedVisionNow). The background test has 45 s; a person waiting for
+// an answer does not. A test that is not done by then counts as "not known".
+const VISION_INLINE_TEST_BUDGET_MS = 10_000
 const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
 // Auto Answer judge on the OpenAI rung — chosen by MEASUREMENT, not by size.
@@ -810,6 +814,8 @@ export class LLMHelper {
   // the last one found nothing vision-capable or ran out of budget. Without it a
   // user with Ollama selected and no vision model re-paid the probe per screenshot.
   private ollamaVisionNegativeUntil = 0;
+  /** Test seam for VISION_INLINE_TEST_BUDGET_MS. */
+  private visionInlineTestBudgetMs?: number;
   /** The screen-record request in flight, if any; an Ollama answer cancels it (see runVisionRequest('ollama')). */
   private ollamaRecordAbort?: AbortController | null;
   private ollamaStartedByApp: boolean = false;
@@ -1355,17 +1361,40 @@ export class LLMHelper {
   private async resolveOutboundVisionDecision(
     imagePaths: string[] | undefined,
     screenshotsScopeAllowed: boolean,
-  ): Promise<{ decision: import('./llm/visionPolicy').VisionDecision; localAvailable: boolean }> {
+  ): Promise<{ decision: import('./llm/visionPolicy').VisionDecision; localAvailable: boolean; localTarget: 'ollama' | 'custom' | null }> {
     const decision = resolveVisionPolicy({
       hasImages: Boolean(imagePaths?.length),
       mode: readScreenUnderstandingMode(),
       screenshotsScopeAllowed,
       visionProviderAvailable: this.anyVisionProviderAvailable(),
     });
-    const localAvailable = decision.action === 'local_only'
-      ? (this.useOllama && await this.ensureOllamaModelSelected(true))
-      : false;
-    return { decision, localAvailable };
+    if (decision.action !== 'local_only') return { decision, localAvailable: false, localTarget: null };
+    // The SELECTED custom endpoint, when it is on this machine or the local
+    // network and reads images (2026-10-01). Only Ollama counted here, so an
+    // LM Studio or llama.cpp user in "Keep screenshots on this device" mode was
+    // told no local vision model exists and pointed at Ollama — while the
+    // screen pre-pass (VisionProviderRegistry) already used that same endpoint
+    // as a local one. A custom selection and Ollama are mutually exclusive.
+    //
+    // `localAvailable` keeps meaning "Ollama can take it": the three
+    // non-streaming callers dispatch to callOllama on it and know nothing of a
+    // custom endpoint. Only the live streaming site reads `localTarget`.
+    if (this.localCustomVisionProvider()) return { decision, localAvailable: false, localTarget: 'custom' };
+    const ollama = this.useOllama && await this.ensureOllamaModelSelected(true);
+    return { decision, localAvailable: ollama, localTarget: ollama ? 'ollama' : null };
+  }
+
+  /**
+   * The selected custom provider, when a screenshot that must stay on this
+   * device may go to it: its host is loopback or private (never assumed), its
+   * template can carry an image, and it is not switched off.
+   */
+  private localCustomVisionProvider(): CustomProvider | null {
+    const provider = this.customProvider;
+    if (!provider) return null;
+    if (!customProviderIsLocal(provider) || !customProviderSupportsVision(provider)) return null;
+    if (this.isProviderDisabled('custom') || this.isProviderDisabled(provider.id)) return null;
+    return provider;
   }
 
   /** Live, fail-OPEN: a credential-store failure must not start refusing turns
@@ -8803,6 +8832,8 @@ let isMultimodal = !!(imagePaths?.length);
    */
   private async buildVisionChain(
     req: { userContent: string; message: string; context?: string; imagePaths: string[]; systemPrompt: string },
+    /** True on the one rebuild after a passed on-the-spot test: never test twice. */
+    retested = false,
   ): Promise<VisionStreamProvider[]> {
     const { userContent, message, context, imagePaths, systemPrompt } = req;
 
@@ -9104,7 +9135,30 @@ let isMultimodal = !!(imagePaths?.length);
     forgetBreakersOfOtherSelections((this.visionLeadSelection ??= new Map()), this.visionHealth, front.map(p => p.id), selectionKey);
     const ordered = orderVisionCandidates({ selected: front, cloud, local, localOnly, health: this.visionHealth, now: nowMs });
 
+    // A LEADING selection is retried less than a fallback (2026-10-01). The
+    // engine retries a transient failure up to three times per rung; with the
+    // selection first that put a slow or unreachable selected provider between
+    // the user and every fallback (measured: Natively unreachable, three 4 s
+    // connect timeouts, ~16 s before another provider answered).
+    //   • a `<vendor>_selected` rung: ONE attempt — its retry is the vendor's
+    //     fixed vision model, which follows on the same key;
+    //   • any other leading selection: TWO.
+    // Only when something healthy sits behind it: a rung that is the user's
+    // only chance keeps the full attempts. A selection that is not leading
+    // (breaker open, or local-only mode dropped it) is not touched.
+    const isCooling = (p: VisionStreamProvider) => (this.visionHealth.get(p.id)?.openUntil ?? 0) > nowMs;
+    const leading = front.filter(p => ordered.includes(p) && (p.isLocal || !isCooling(p)));
+    if (leading.length > 0 && ordered.some(p => !leading.includes(p) && !isCooling(p))) {
+      for (const p of leading) p.maxAttempts = p.id.endsWith('_selected') ? 1 : 2;
+    }
+
     if (ordered.length === 0) {
+      // Nothing can read this screenshot. If that is only because the selected
+      // model has never been tested, test it now: a pass is saved, the resolver
+      // then says yes, and ONE rebuild seats its rung. Anything else — a fail,
+      // a slow test, a private mode — falls through to the messages below, and
+      // the screenshot is not sent.
+      if (!retested && await this.testSelectedVisionNow()) return this.buildVisionChain(req, true);
       // Local-only mode seats local providers only, so the cloud advice below
       // (add an OpenAI/Claude/Gemini/Groq key) would send the user to providers
       // this mode refuses to use (2026-10-01).
@@ -10207,7 +10261,7 @@ let isMultimodal = !!(imagePaths?.length);
     // assertOutboundScopes makes it true by construction; this block exists so
     // the user gets one clear sentence instead of a cascade of provider errors.
     {
-      const { decision: visionDecision, localAvailable: localVisionAvailable } =
+      const { decision: visionDecision, localAvailable: localVisionAvailable, localTarget: localVisionTarget } =
         await this.resolveOutboundVisionDecision(imagePaths, !deniedOutboundScopes.includes('screenshots'));
       if (visionDecision.action === 'block') {
         console.warn(`[VisionPolicy] blocked: ${visionDecision.reason}`);
@@ -10215,6 +10269,34 @@ let isMultimodal = !!(imagePaths?.length);
         return;
       }
       if (visionDecision.action === 'local_only') {
+        if (localVisionTarget === 'custom') {
+          // The selected local endpoint answers, and ONLY it: this is not the
+          // vision chain, so a failure is shown as a failure and nothing falls
+          // through to a cloud rung. streamWithCustom runs its own last-boundary
+          // check (assertOutboundImagesAllowed), which admits a local host.
+          console.warn(`[VisionPolicy] routing screenshot to the selected local endpoint: ${visionDecision.reason}`);
+          const endpointPrompt = this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT);
+          let emitted = false;
+          try {
+            for await (const piece of this.streamWithCustom(message, context, imagePaths, endpointPrompt, abortSignal)) {
+              emitted = true;
+              yield piece;
+            }
+          } catch (e: any) {
+            if (abortSignal?.aborted) return;
+            const refusal = this.describePrivacyRefusal(e);
+            if (refusal) { yield refusal; return; }
+            if (emitted) {
+              console.warn(`[LLMHelper] Local endpoint failed AFTER first token — ending stream: ${e?.message || e}`);
+              yield LLMHelper.TRUNCATION_SENTINEL;
+              return;
+            }
+            yield typeof e?.status === 'number'
+              ? `Error: Custom Provider returned HTTP ${e.status}`
+              : `Error: the local custom provider could not answer (${String(e?.message || 'unknown error').slice(0, 120)}).`;
+          }
+          return;
+        }
         if (localVisionAvailable) {
           console.warn(`[VisionPolicy] routing screenshot to local vision: ${visionDecision.reason}`);
           const localVisionPrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT));
@@ -14262,6 +14344,46 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.getDeniedOutboundScopes(VISION_PROBE_QUESTION, ['probe.png'], []).includes('screenshots')) return;
     } catch { return; }
     void this.getVisionProbe().ensure(selection, opts).catch(() => { /* a probe never surfaces an error */ });
+  }
+
+  /**
+   * The on-the-spot test (2026-10-01): a screenshot arrived, nothing configured
+   * can read it, and nothing yet says whether the SELECTED model reads images.
+   * Instead of refusing, ask the model the one-time test question now and send
+   * the screenshot only if it passes.
+   *
+   * True only for a pass. False at once — no test image is sent — when testing
+   * is off, in local-only mode, when screenshots may not leave this device,
+   * for a provider that cannot be tested, or when an answer already exists
+   * (a saved "no" is not asked again). The test goes through the same boundary
+   * as the background one (VisionProbe → streamDirectAssistFrozen), joins a
+   * test already in flight, and a test slower than its budget is "not known":
+   * a timeout is never recorded as "no".
+   */
+  private async testSelectedVisionNow(): Promise<boolean> {
+    if (!this.visionProbingEnabled || this.isLocalOnlyMode) return false;
+    let selection: DirectAssistSelection;
+    try { selection = this.getDirectAssistSelection(); } catch { return false; }
+    if (!LLMHelper.VISION_TESTABLE.has(selection.provider)) return false;
+    if (!this.directProviderHasCredential(selection.provider) || this.isProviderDisabled(selection.provider)) return false;
+    if (this.visionVerdict(selection).reads !== 'unknown') return false;
+    try {
+      this.assertOutboundImagesAllowed(selection.provider, true);
+      if (this.getDeniedOutboundScopes(VISION_PROBE_QUESTION, ['probe.png'], []).includes('screenshots')) return false;
+    } catch { return false; }
+    console.log(`[VisionProbe] nothing configured can read this screenshot — testing ${selection.provider} ${selection.model} now`);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const budget = this.visionInlineTestBudgetMs ?? VISION_INLINE_TEST_BUDGET_MS;
+    const timedOut = new Promise<'unknown'>((resolve) => { timer = setTimeout(() => resolve('unknown'), budget); });
+    try {
+      const outcome = await Promise.race([
+        this.getVisionProbe().ensure(selection).catch(() => 'unknown' as const),
+        timedOut,
+      ]);
+      return outcome === 'yes';
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** The vision resolver's answer for a selection. See electron/llm/visionResolver.ts. */

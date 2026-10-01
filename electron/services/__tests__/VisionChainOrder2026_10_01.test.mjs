@@ -342,3 +342,62 @@ test('a custom provider: a local one always leads; a hosted one stops leading wh
   h.customProvider = { ...h.customProvider, curlCommand: 'curl https://fixed.example.com/v1 -d \'{"image":"{{IMAGE_BASE64}}"}\'' };
   assert.equal((await h.buildVisionChain(REQ))[0].id, 'custom');
 });
+
+// ── Phase 5c-2: a leading selected rung is retried less ──────────────────────
+
+const attemptsOf = async (keys, selection, state = {}) => Object.fromEntries((await chainOf(keys, selection, state)).chain.map((p) => [p.id, p.maxAttempts]));
+
+test('the rung carrying the selected model itself is tried once: the vendor\'s fixed model follows on the same key', async () => {
+  const o = await attemptsOf(VENDORS, 'gpt-5.5');
+  assert.equal(o.openai_selected, 1);
+  assert.equal(o.openai, undefined, 'fallback rungs keep the engine default');
+  assert.equal((await attemptsOf(VENDORS, 'claude-opus-5')).claude_selected, 1);
+  assert.equal((await attemptsOf(VENDORS, 'gemini-2.5-flash')).gemini_selected, 1);
+});
+test('any other leading selection is tried twice, not three times', async () => {
+  assert.equal((await attemptsOf(VENDORS, 'natively')).natively, 2);
+  assert.equal((await attemptsOf(EVERYTHING, 'openrouter/openai/gpt-4o')).openrouter, 2);
+  assert.equal((await attemptsOf(['openai', 'gemini'], 'gemini-3.8-flash')).gemini_flash, 2);
+  assert.equal((await attemptsOf(VENDORS, 'gpt-5.4')).openai, 2, 'the fixed rung when it IS the selection');
+  assert.equal((await attemptsOf(EVERYTHING, 'deepseek-v4-flash')).deepseek, 2);
+  const ollama = SELECTIONS.find((s) => Array.isArray(s) && s[0] === 'ollama llava');
+  assert.equal((await attemptsOf(VENDORS, ollama)).ollama, 2, 'a local selection too: the cloud follows if it fails');
+});
+test('a rung that is the only chance keeps the full attempts', async () => {
+  assert.equal((await attemptsOf(['deepseek'], 'deepseek-v4-flash')).deepseek, undefined, 'alone in the chain');
+  const coolingOthers = new Map(['openai', 'claude', 'gemini_flash_lite', 'gemini_flash', 'gemini_pro', 'groq'].map((id) => [id, { openUntil: Date.now() + 60_000, consecutiveFails: 3, ttftEma: null }]));
+  assert.equal((await attemptsOf(VENDORS, 'natively', { visionHealth: coolingOthers })).natively, undefined, 'every rung behind it has its breaker open');
+});
+test('no selection rung, or one that does not lead: nothing is capped', async () => {
+  assert.deepEqual(Object.values(await attemptsOf(['openai', 'gemini'], 'gpt-3.5-turbo')).filter((v) => v !== undefined), []);
+  const cooling = await attemptsOf(EVERYTHING, 'fluxion/claude-opus-5', { visionHealth: coolingUntil('fluxion', Date.now() + 60_000) });
+  assert.equal(cooling.fluxion, undefined, 'a selection whose breaker is open is tried last, like any other rung');
+});
+test('through the engine: an unreachable selected provider is tried twice, then the next rung answers', async () => {
+  let natively = 0;
+  const h = Object.assign(helper(['openai', 'natively'], 'natively'), {
+    streamWithNatively: async function* () { natively++; throw new Error('Natively API connect timeout (4s)'); },
+    streamWithOpenaiMultimodal: async function* () { yield 'seen'; },
+  });
+  const out = [];
+  for await (const piece of h.streamVisionWithFallback(REQ)) out.push(piece);
+  assert.deepEqual(out, ['seen']);
+  assert.equal(natively, 2, 'three attempts cost ~16 s with Natively unreachable (measured 2026-10-01)');
+});
+test('the engine\'s log names the budget actually in force for a capped rung', async () => {
+  // It printed the engine default ("attempt 1/3") for a rung capped at 2, so a
+  // debug log showed a fallback after "one of three" tries that were never allowed.
+  const lines = [];
+  const real = { log: console.log, warn: console.warn };
+  console.log = (...a) => lines.push(a.join(' ')); console.warn = (...a) => lines.push(a.join(' '));
+  try {
+    const h = Object.assign(helper(['openai', 'natively'], 'natively'), {
+      streamWithNatively: async function* () { throw new Error('Natively API connect timeout (4s)'); },
+      streamWithOpenaiMultimodal: async function* () { yield 'seen'; },
+    });
+    for await (const _ of h.streamVisionWithFallback(REQ)) { /* drain */ }
+  } finally { console.log = real.log; console.warn = real.warn; }
+  const natively = lines.filter((l) => /\[Vision\] Natively API attempt/.test(l));
+  assert.deepEqual(natively.map((l) => l.match(/attempt (\d\/\d)/)[1]), ['1/2', '2/2']);
+  assert.match(lines.find((l) => /committed to OpenAI/.test(l)), /attempt 1\/3/, 'an uncapped fallback rung still reads 1/3');
+});

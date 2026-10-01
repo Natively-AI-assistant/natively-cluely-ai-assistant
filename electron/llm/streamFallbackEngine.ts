@@ -615,7 +615,7 @@ export async function* runStreamingFallback(
         committed = true;
         recordTtft(health, provider.id, now() - attemptStart);
         markHealthy(health, provider.id);
-        log(`[${cfg.logPrefix}] committed to ${provider.name} (attempt ${attempt}/${cfg.maxAttempts}, ttft=${now() - attemptStart}ms)`);
+        log(`[${cfg.logPrefix}] committed to ${provider.name} (attempt ${attempt}/${rungMaxAttempts}, ttft=${now() - attemptStart}ms)`);
         yield first.value;
 
         // Drain — post-commit failures cannot switch providers (would duplicate
@@ -656,7 +656,7 @@ export async function* runStreamingFallback(
         // Pre-commit failure → safe to retry / fall back silently.
         const timedOut = ctrl.signal.aborted;
         const cls = classifyStreamError(err, timedOut);
-        const detail = `${provider.name} attempt ${attempt}/${cfg.maxAttempts}: ${cls}`;
+        const detail = `${provider.name} attempt ${attempt}/${rungMaxAttempts}: ${cls}`;
         warn(`[${cfg.logPrefix}] ${detail} (${err?.message || err})`);
         failures.push(detail);
         // Keep the FIRST provider error itself, not just its classification.

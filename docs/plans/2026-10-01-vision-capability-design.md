@@ -53,6 +53,8 @@ capability must be known before a screenshot is sent.
 5. OpenAI gaps: o1/o3/o4-mini, chatgpt-4o-latest, gpt-4-turbo, gpt-4.5 are text-only; bare `o1`/`o3` are
    not even treated as cloud; `models/gemini-*` is cloud but not vision.
 6. The streaming vision chain has no rung for a selected cURL provider.
+   **Void (found in phase 5c-2):** that lane cannot be selected from the UI;
+   saved cURL providers run as custom providers, which have a rung.
 7. The screen-reading registry (`VisionProviderRegistry.ts`) decides Ollama by
    name only, hard-codes Codex to no vision, and has no Antigravity rung.
 8. The registry never moves the user's selected model to the front (so a
@@ -338,16 +340,39 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
      machine): how long a local model takes, and what loading a second model
      costs, are unmeasured.
 
-   **Phase 5c** (remaining, not built), in this order:
-   - Codex and Antigravity pre-pass rungs, each only if a measurement in the
+   **Phase 5c-2** (built), the chat screenshot path:
+   - **Defect 6 is void.** The cURL lane (`activeCurlProvider`) cannot be
+     selected in the running app: only the `switch-to-curl-provider` IPC sets
+     it, the preload does not expose that channel and nothing in the renderer
+     calls it. Saved cURL providers are loaded as custom providers and reach
+     the chain through the existing `custom` rung. No cURL rung was built; the
+     5b pre-pass `curl` rung is unreachable for the same reason.
+   - A selected LOCAL custom endpoint (LM Studio, llama.cpp: loopback or
+     private host, a template that carries an image, not switched off) answers
+     a screenshot in "Keep screenshots on this device" mode. Only Ollama
+     counted as local there before. It alone answers; a failure is shown and
+     nothing falls through to the cloud. A hosted endpoint stays refused.
+     Known limit, same as the Ollama branch of that mode: the answer is sent
+     with the base prompt and the raw question, before retrieval, document
+     grounding and the governed context pack are assembled. A screenshot
+     question in keep-on-device mode is answered from the screenshot and the
+     question alone (pinned by a test; moving both local branches below
+     prompt assembly is a separate change).
+   - A leading selected rung is retried less: one attempt for a
+     `<vendor>_selected` rung (the vendor's fixed model follows), two for any
+     other leading selection, and only when a rung with a closed breaker sits
+     behind it. The engine default is three.
+   - The on-the-spot test: when the chain would be empty and the selected
+     model has never been tested, it is tested first (10 s budget) and the
+     screenshot is sent only on a pass. Never in the private modes. Live:
+     DeepSeek Pro is tested in 2.4 s, saved as not reading images and refused.
+
+   **Still open after 5c-2:**
+   - Codex and Antigravity pre-pass rungs, each only if a measurement in a
      signed-in app shows it answers comfortably inside the 6 s budget (Evin:
-     "add them in 5c after measuring").
-   - a cURL rung in the chat screenshot chain
-   (defect 6); "Keep screenshots on this device" reading `/api/show` and any
-   installed vision model in `probeOllama` (defect 4); the on-the-spot test
-   when a screenshot arrives, the selected model is still unknown and nothing
-   else can read it; a cap on the leading selected rung's attempts (measured:
-   ~16 s before fallback with Natively unreachable).
+     "add them in 5c after measuring"). Needs Evin: the dev instance has its
+     own empty profile.
+   - Phase 4 (the Auto / On / Off override and the picker marker).
 
 ### Verification status
 
@@ -360,6 +385,7 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
 | 5a | full suite | Gemini Flash / Pro / Natively selected, with an OpenAI key present, before / after | not run (no renderer change) |
 | 5b | full suite | the real registry + pre-pass chain: DeepSeek Flash answers in 1.6–1.9 s; Pro not tried; cloud order unchanged with Gemini keyed | not run (no renderer change) |
 | 5c-1 | full suite | none possible: no Ollama on the development machine; a fake Ollama HTTP server, requests asserted on the wire | not run |
+| 5c-2 | full suite | the on-the-spot test with the real DeepSeek adapter (Pro: tested, refused); the local-endpoint path against a fake endpoint on loopback | not run |
 
 Windows: no phase added OS-specific code; none has been run on Windows.
 
