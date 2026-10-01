@@ -54,8 +54,12 @@ described as preventing write skew.
 
 **Proposed architecture.**
 - Deterministic first: the verified-code-execution module already in the app (`electron/llm/codeVerification`:
-  extract tests, run in a sandboxed subprocess, one correction) is switched off by default. Measured separately
-  (run `aq2-dev-fix10-cv`). It can catch wrong output, not a missed complexity requirement or a wrong explanation.
+  extract tests, run in a sandboxed subprocess, one correction) is switched off by default, AND it is wired as a
+  background step after the answer is shown: a pass adds a badge, a fix arrives as a separate later message. As built
+  it cannot change the answer the user first reads (a TI run with the switch set gave the same answers). To count,
+  it has to sit before the final answer on coding turns: run the tests while the code streams, and when they fail
+  replace the code with the corrected version (or mark it unverified) in the same message. It can catch wrong
+  output, not a missed complexity requirement or a wrong explanation.
 - For reasoning (complexity, isolation levels, system design): route the Technical interview and Lecture modes to a
   stronger reasoning model with a small thinking budget, on the typed surface first where latency allows, and keep
   the fast model for the first spoken words.
