@@ -384,3 +384,20 @@ test('through the engine: an unreachable selected provider is tried twice, then 
   assert.deepEqual(out, ['seen']);
   assert.equal(natively, 2, 'three attempts cost ~16 s with Natively unreachable (measured 2026-10-01)');
 });
+test('the engine\'s log names the budget actually in force for a capped rung', async () => {
+  // It printed the engine default ("attempt 1/3") for a rung capped at 2, so a
+  // debug log showed a fallback after "one of three" tries that were never allowed.
+  const lines = [];
+  const real = { log: console.log, warn: console.warn };
+  console.log = (...a) => lines.push(a.join(' ')); console.warn = (...a) => lines.push(a.join(' '));
+  try {
+    const h = Object.assign(helper(['openai', 'natively'], 'natively'), {
+      streamWithNatively: async function* () { throw new Error('Natively API connect timeout (4s)'); },
+      streamWithOpenaiMultimodal: async function* () { yield 'seen'; },
+    });
+    for await (const _ of h.streamVisionWithFallback(REQ)) { /* drain */ }
+  } finally { console.log = real.log; console.warn = real.warn; }
+  const natively = lines.filter((l) => /\[Vision\] Natively API attempt/.test(l));
+  assert.deepEqual(natively.map((l) => l.match(/attempt (\d\/\d)/)[1]), ['1/2', '2/2']);
+  assert.match(lines.find((l) => /committed to OpenAI/.test(l)), /attempt 1\/3/, 'an uncapped fallback rung still reads 1/3');
+});

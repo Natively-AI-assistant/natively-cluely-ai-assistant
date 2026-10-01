@@ -352,6 +352,12 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
      a screenshot in "Keep screenshots on this device" mode. Only Ollama
      counted as local there before. It alone answers; a failure is shown and
      nothing falls through to the cloud. A hosted endpoint stays refused.
+     Known limit, same as the Ollama branch of that mode: the answer is sent
+     with the base prompt and the raw question, before retrieval, document
+     grounding and the governed context pack are assembled. A screenshot
+     question in keep-on-device mode is answered from the screenshot and the
+     question alone (pinned by a test; moving both local branches below
+     prompt assembly is a separate change).
    - A leading selected rung is retried less: one attempt for a
      `<vendor>_selected` rung (the vendor's fixed model follows), two for any
      other leading selection, and only when a rung with a closed breaker sits

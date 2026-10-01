@@ -128,3 +128,28 @@ test('the decision names the local destination, and never offers a custom endpoi
   const open = await h.resolveOutboundVisionDecision([png], true);
   assert.deepEqual([open.decision.action, open.localTarget, open.localAvailable], ['allow', null, false]);
 });
+
+test('the refusal no longer points only at Ollama: a local endpoint that reads images is an answer too', () => {
+  assert.match(PRIVATE_VISION_NO_LOCAL_MESSAGE, /not sent anywhere/i);
+  assert.match(PRIVATE_VISION_NO_LOCAL_MESSAGE, /Ollama/);
+  assert.match(PRIVATE_VISION_NO_LOCAL_MESSAGE, /local endpoint that reads images/i);
+});
+
+test('PINNED DESIGN: the keep-on-device answer is sent as the Ollama one is — the base prompt and the raw question, before prompt assembly', async () => {
+  // Both local branches dispatch BEFORE retrieval, document grounding and the
+  // governed context pack are assembled (2026-10-01 review, accepted: the mode
+  // used to refuse here, and the Ollama branch has always worked this way). A
+  // screenshot question in this mode is therefore answered from the screenshot
+  // and the question alone. Moving both branches below prompt assembly is a
+  // separate change; this test makes any such change a deliberate one.
+  globalThis[CRED_SLOT] = { getDisabledProviders: () => [], anyVisionProviderConfigured: () => true, anyLocalVisionProviderConfigured: () => true };
+  setScopes({}); setMode('private_vision');
+  const endpoint = fakeEndpoint();
+  try {
+    const h = helperWith(provider(await endpoint.start()));
+    await ask(h, 'what is on my screen?', [png]);
+    const [system, user] = endpoint.requests[0].body.messages;
+    assert.match(system.content, /^SYS/, 'the caller\'s system prompt (plus the language line), not an assembled one');
+    assert.match(JSON.stringify(user.content), /what is on my screen\?/);
+  } finally { await endpoint.stop(); setMode('vision_first'); }
+});
