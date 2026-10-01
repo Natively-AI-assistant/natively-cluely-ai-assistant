@@ -29,7 +29,7 @@ We've designed Natively to keep as much of your data on your device as possible.
 - When you use a cloud AI, speech-to-text, or search feature, **the relevant text or audio leaves your device only to be processed by the provider you've chosen** (e.g., OpenAI, Anthropic, Google, Groq, Deepgram, ElevenLabs, Azure, IBM, Soniox, Tavily). The result comes back to your device.
 - For **paid products** (Natively Pro, Natively API), we **do** store a small amount of operational data on our servers — your license key, hardware identifier, plan, billing email, and quota counters. We need this to make billing and licensing actually work. We do not store the content you generate.
 - For the **Free Trial**, we additionally store anti-abuse signals (rate-limited IP, trial tokens, basic usage counters).
-- **Every installation**, paid or not, reports a small set of **product-usage events** to our own servers: that the app was opened on a given day, that a trial was started, that a plan page was opened, and the like. They are tied to a random installation identifier, not to your name or email, and they cannot contain anything you say, see or type. See §3.2.1.
+- **Every installation**, paid or not, reports **product-usage events** to our own servers: that the app was opened on a given day, that a meeting was held, which features were used, that a trial was started, that a plan page was opened, and the like. They are **linked to your device and, if you have one, your trial or account**. They cannot contain anything you say, see or type. You can turn them off. See §3.2.1.
 - We **do not sell** your data. We **do not use your content to train AI models**. The desktop app also sends anonymous usage events to **Google Analytics**: that the app was opened or closed, which feature or AI model was used, and how long a session lasted. These events never contain anything you say, see or type, and IP addresses are anonymised. We don't use advertising or marketing trackers inside the desktop app.
 
 The rest of this document explains those flows in detail.
@@ -93,32 +93,39 @@ directly. We do not present the two as the same kind of evidence, because they a
 first is a report from software running on your computer, and the second is something our own
 systems executed and measured.
 
-### 3.2.1 What every installation reports — product-usage events
+### 3.2.1 Product-usage events — what every installation reports, and who it is linked to
 
-The desktop app reports a small set of product-usage events to our own servers, whether or not
-you have bought anything. We use them to see how many people who install Natively go on to try
-it and to pay for it, and where the others stop. They go to us only, not to an analytics company.
+The desktop app reports product-usage events to our own servers, whether or not you have bought
+anything. We use them to follow how people move through the product: who installs it, who holds a
+first meeting, who tries it, who pays, where the others stop, and who comes back. They go to us
+only, not to an analytics company.
+
+**These events are linked to you, not anonymous.** Each one is tied to your device, and, when you
+have a trial or an account, to that trial or account.
 
 | Data | Purpose | Retained for |
 |---|---|---|
-| Installation identifier (the random value described in §3.2), application version and operating system | Count installations and tell them apart | 13 months |
-| Usage events — the app was opened for the first time; the app was used on a given day; a meeting started or ended, and how many whole minutes it lasted; a card or a locked feature was shown, and what you chose; a free trial was started, or could not be and why; a checkout page was opened, and from which screen; a licence key or API key was entered, and whether it was accepted | Understand how the product is used and where people give up | 13 months |
-| The state of the installation at that moment, as yes/no values — whether it is on a trial, has a plan, has a Pro licence, or uses its own AI keys | Compare those groups | 13 months |
+| Hardware identifier (the same device fingerprint used for trials and licences) and a random installation identifier | Recognise the same device across launches and reinstalls, and tell installations apart | 13 months |
+| Your trial or your Natively account, worked out by our server from the trial token or Natively key the app sends with the request (through the account: your billing email and plan) | Know which trial or customer an event belongs to | 13 months |
+| Usage events — the app was opened for the first time; the app was used on a given day; a getting-started step was shown or completed; a meeting started or ended, how many whole minutes it lasted and how many answers it produced; which features you used that day; a card or a locked feature was shown, and what you chose; a free trial was started, or could not be and why; a checkout page was opened, and from which screen; a licence key or API key was entered, and whether it was accepted | Understand how the product is used, where people give up, and what leads to a purchase | 13 months |
+| The state of the installation at that moment, as yes/no values — whether it is on a trial, has a plan, has a Pro licence, or uses its own AI keys — with the application version and operating system | Compare those groups | 13 months |
 
 Every event is a fixed name with fixed choices, whole numbers, or yes/no values. No field in it
 can hold text, so an event cannot contain anything you say, see, type or paste, a file name, a
-meeting title, the name of a model, or a key. We do not store your IP address with these events.
+meeting title, the name of a model, or a key. A count of answers is a number; the answers are
+never sent. We do not store your IP address with these events.
 
-**What gets linked.** When you start a free trial, the trial is linked to your installation
-identifier. When you open a checkout page from the app, the link carries your installation
-identifier and the screen you came from, and Dodo Payments returns both to us with the purchase.
-Through those links an installation identifier can be associated with a trial, and so with the
-hardware identifier that trial is bound to, or with a paying account.
+**What gets linked.** Events from one device are joined into one history, so we can see the steps
+one person took. When you start a free trial or use a Natively key, those events are linked to that
+trial or account. When you open a checkout page from the app, the link carries your installation
+identifier and the screen you came from, and Dodo Payments returns both to us with the purchase, so
+a purchase is linked to the installation it started from. We can look up one person's history by
+their email or device when we need to, for example to answer a support question.
 
 **Turning it off.** Open **Settings › General › Advanced** and turn off **Usage statistics**. That
 stops these events, discards any that had not been sent yet, and stops the identifier being added
 to checkout links. It is on by default. If you email **natively.contact@gmail.com**, we will also
-delete the events your installation has already reported.
+delete the events already reported for your device and account.
 
 The switch does not change the records described in §3.2 for paid products and the Free Trial
 (the usage ledger, licence activity and the feature activity a licensed app reports). Billing and

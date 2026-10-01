@@ -84,6 +84,27 @@ export const FUNNEL_CATALOG = Object.freeze({
   meeting_ended: {
     minutes: INT,
     first: BOOL,
+    // How many answers the assistant gave in it. A count, never the answers: a
+    // meeting with none is someone who started the app and got nothing from it.
+    answers: INT,
+  },
+
+  // ── Getting started ──────────────────────────────────────────────────────
+  // The steps before the first meeting: where a new user stops is the first
+  // thing a funnel has to say.
+  onboarding_stage: {
+    stage: ['welcome', 'tour', 'permissions'],
+    action: ['shown', 'completed', 'skipped'],
+  },
+
+  // ── What people use ──────────────────────────────────────────────────────
+  // At most once per feature per local day per install: which features someone
+  // used that day, not how often or on what.
+  feature_used: {
+    feature: [
+      'answer', 'follow_up', 'recap', 'suggest_questions', 'clarify', 'brainstorm',
+      'chat', 'search', 'copy_answer', 'pdf_export', 'calendar_connect',
+    ],
   },
 
   // ── Cards ────────────────────────────────────────────────────────────────

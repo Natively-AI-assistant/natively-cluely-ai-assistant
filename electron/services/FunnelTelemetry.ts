@@ -7,8 +7,10 @@
  * moments the main process reports for itself.
  *
  * WHO IT REPORTS FOR. Every install, with or without a key — that is the point
- * (see funnelClient.mjs). The subject is the random install id from
- * InstallPingManager, never the hardware id.
+ * (see funnelClient.mjs) — and, since 2026-10-01, the PERSON behind it: events
+ * carry the device id (the hardware id the app already sends for trials and
+ * licences), and requests carry the trial token and Natively key the app
+ * holds, from which the server works out the trial and the account.
  *
  * WHEN IT IS OFF
  *   - The user turned telemetry off (settings `telemetryEnabled: false`).
@@ -42,6 +44,15 @@ const DISPATCH_INTERVAL_MS = 30_000;
 const QUEUE_FILE = 'funnel_queue.json';
 const STATE_FILE = 'funnel_state.json';
 
+/** Who this is: the device, and the credentials the server can identify the account from. */
+export interface FunnelIdentity {
+    /** The hardware id; undefined when the machine has none. */
+    deviceId?: string;
+    trialToken?: string;
+    /** The Natively API key. Never the trial sentinel. */
+    apiKey?: string;
+}
+
 /** What the rest of the main process knows about this install right now. */
 export interface FunnelSnapshot {
     entitlement: FunnelEntitlement;
@@ -54,12 +65,17 @@ export interface FunnelSnapshot {
 interface StoredState extends FunnelState {
     /** True when this install began life with this code: only then is "first" meaningful. */
     newInstall: boolean;
+    /** The local day `featuresUsed` belongs to, and the features already reported for it. */
+    featuresDay: string;
+    featuresUsed: string[];
 }
 
 export class FunnelTelemetry {
     private static instance: FunnelTelemetry | null = null;
     private client: FunnelClient | null = null;
     private snapshot: (() => FunnelSnapshot) | null = null;
+    private identity: (() => FunnelIdentity) | null = null;
+    private answersAtMeetingStart = 0;
     private timer: NodeJS.Timeout | null = null;
     private state: StoredState | null = null;
     private meetingStartedAt: number | null = null;
@@ -117,7 +133,12 @@ export class FunnelTelemetry {
         if (!this.state) {
             let raw: any = null;
             try { raw = JSON.parse(this.readText(STATE_FILE) || 'null'); } catch { raw = null; }
-            this.state = { ...normalizeFunnelState(raw), newInstall: raw?.newInstall === true };
+            this.state = {
+                ...normalizeFunnelState(raw),
+                newInstall: raw?.newInstall === true,
+                featuresDay: typeof raw?.featuresDay === 'string' ? raw.featuresDay : '',
+                featuresUsed: Array.isArray(raw?.featuresUsed) ? raw.featuresUsed.filter((f: unknown) => typeof f === 'string').slice(0, 50) : [],
+            };
         }
         return this.state;
     }
@@ -174,6 +195,11 @@ export class FunnelTelemetry {
                 appSessionId: getAppSessionId(),
                 isEnabled: () => this.isEnabled(),
                 getEntitlement: () => this.snapshot?.().entitlement,
+                deviceId: () => this.identity?.().deviceId,
+                getCredentials: () => {
+                    const who = this.identity?.();
+                    return who ? { trialToken: who.trialToken, apiKey: who.apiKey } : undefined;
+                },
                 log: console,
             });
         }
@@ -189,6 +215,13 @@ export class FunnelTelemetry {
     public setSnapshotResolver(fn: () => FunnelSnapshot): void {
         this.snapshot = () => {
             try { return fn(); } catch { return { entitlement: 'none', hasOwnAi: false, hasApiKey: false, hasPro: false, meetingAi: 'none' }; }
+        };
+    }
+
+    /** ipcHandlers hands this in too: the device and the credentials, read fresh each time. */
+    public setIdentityResolver(fn: () => FunnelIdentity): void {
+        this.identity = () => {
+            try { return fn() || {}; } catch { return {}; }
         };
     }
 
@@ -253,25 +286,59 @@ export class FunnelTelemetry {
         if (changed) this.saveState();
     }
 
-    public meetingStarted(): void {
+    /**
+     * @param answersSoFar how many answers the session log holds as the meeting
+     *        starts; the meeting's own count is the difference at the end.
+     */
+    public meetingStarted(answersSoFar = 0): void {
         try {
             if (!this.isEnabled()) return;
             const st = this.loadState();
             st.meetings += 1;
             this.saveState();
             this.meetingStartedAt = Date.now();
+            this.answersAtMeetingStart = Number.isInteger(answersSoFar) && answersSoFar > 0 ? answersSoFar : 0;
             this.meetingWasFirst = st.newInstall && st.meetings === 1;
             this.track('meeting_started', { first: this.meetingWasFirst, ai: this.snapshot?.().meetingAi ?? 'none' });
         } catch { /* never into a meeting */ }
     }
 
-    public meetingEnded(): void {
+    /** @param answersNow the session log's answer count as the meeting ends. A count, never the answers. */
+    public meetingEnded(answersNow?: number): void {
         try {
             if (this.meetingStartedAt === null) return;
             const minutes = minutesSince(this.meetingStartedAt, Date.now()) ?? 0;
             this.meetingStartedAt = null;
-            this.track('meeting_ended', { minutes, first: this.meetingWasFirst });
+            const props: FunnelProps = { minutes, first: this.meetingWasFirst };
+            if (Number.isInteger(answersNow)) {
+                // The log is cleared when a meeting starts on some paths and not
+                // on others; either way the meeting's own count is not negative.
+                const n = (answersNow as number) >= this.answersAtMeetingStart
+                    ? (answersNow as number) - this.answersAtMeetingStart
+                    : (answersNow as number);
+                props.answers = Math.max(0, n);
+            }
+            this.track('meeting_ended', props);
         } catch { /* never into a meeting */ }
+    }
+
+    /**
+     * A feature was used. Reported at most once per feature per local day:
+     * which features someone used that day, not how often.
+     */
+    public featureUsed(feature: string): FunnelTrackResult {
+        try {
+            if (!this.isEnabled()) return 'disabled';
+            const st = this.loadState();
+            const day = localDay(Date.now());
+            if (st.featuresDay !== day) { st.featuresDay = day; st.featuresUsed = []; }
+            if (st.featuresUsed.includes(feature)) return 'duplicate';
+            const result = this.track('feature_used', { feature });
+            if (result === 'queued') { st.featuresUsed.push(feature); this.saveState(); }
+            return result;
+        } catch {
+            return 'error';
+        }
     }
 
     public trialStarted(): void {

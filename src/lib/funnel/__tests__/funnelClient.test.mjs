@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createFunnelClient, parseFunnelQueue,
+  createFunnelClient, parseFunnelQueue, funnelIdentityHeaders,
   FUNNEL_QUEUE_MAX, FUNNEL_BATCH, FUNNEL_MAX_AGE_MS, FUNNEL_BACKOFF_MS,
 } from '../funnelClient.mjs';
 
@@ -37,6 +37,8 @@ function harness(over = {}) {
     appSessionId: SESSION,
     isEnabled: () => h.enabled,
     getEntitlement: () => h.entitlement,
+    deviceId: () => h.device,
+    getCredentials: () => h.credentials,
     random: () => 0,
     log: { warn: (...a) => h.warnings.push(a.join(' ')) },
   });
@@ -309,4 +311,80 @@ test('an entitlement the catalogue does not know, or a resolver that throws, is 
     isEnabled: () => true, getEntitlement: () => { throw new Error('boom'); },
   });
   assert.equal(throwing.track('app_first_run'), 'queued');
+});
+
+// ── Who the event is about ───────────────────────────────────────────────────
+
+const HWID = 'a3f1c2d4e5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+const KEY = 'natively_sk_' + 'k'.repeat(40);
+const TOKEN = 'natively_trial_eyJpZCI6IngifQ.c2lnbmF0dXJl';
+
+test('an event carries the device id when the machine has one', () => {
+  const h = harness();
+  h.device = HWID;
+  h.client.track('app_first_run');
+  assert.equal(h.stored().events[0].device_id, HWID);
+});
+
+test('no device id, or the "unavailable" placeholder, is simply left out', () => {
+  for (const device of [undefined, '', 'unavailable', 'Unavailable', 'short', 'has spaces in it']) {
+    const h = harness();
+    h.device = device;
+    assert.equal(h.client.track('app_first_run'), 'queued', `${String(device)} must not cost the event`);
+    assert.equal('device_id' in h.stored().events[0], false);
+  }
+});
+
+test('a request carries the trial token and the key the app holds, in headers, read when it is sent', async () => {
+  const h = harness();
+  h.client.track('app_first_run');
+  h.credentials = { trialToken: TOKEN, apiKey: KEY };   // set AFTER the event was recorded
+  await h.client.dispatchOnce();
+  assert.deepEqual(h.calls[0].init.headers, { 'Content-Type': 'application/json', 'x-trial-token': TOKEN, 'x-natively-key': KEY });
+  assert.ok(!JSON.stringify(h.calls[0].body).includes(KEY), 'the key is never in the body');
+  assert.ok(!JSON.stringify(h.calls[0].body).includes(TOKEN));
+});
+
+test('credentials never reach the queue file', () => {
+  const h = harness();
+  h.credentials = { trialToken: TOKEN, apiKey: KEY };
+  h.client.track('app_first_run');
+  assert.ok(!h.file.includes(KEY));
+  assert.ok(!h.file.includes(TOKEN));
+});
+
+test('the trial sentinel is not a key and is never sent as one', async () => {
+  assert.deepEqual(funnelIdentityHeaders({ apiKey: '__trial__' }), {});
+  assert.deepEqual(funnelIdentityHeaders({ apiKey: '__trial__', trialToken: TOKEN }), { 'x-trial-token': TOKEN });
+  for (const junk of [undefined, null, {}, { apiKey: '' }, { apiKey: 'sk-openai-abc' }, { trialToken: 'not a token' }, { apiKey: 42 }]) {
+    assert.deepEqual(funnelIdentityHeaders(junk), {});
+  }
+  const h = harness();
+  h.credentials = { apiKey: '__trial__' };
+  h.client.track('app_first_run');
+  await h.client.dispatchOnce();
+  assert.deepEqual(Object.keys(h.calls[0].init.headers), ['Content-Type']);
+});
+
+test('a credentials resolver that throws costs the identity, not the delivery', async () => {
+  const c = createFunnelClient({
+    load: () => null, save: () => true,
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) }),
+    endpoint: 'x', now: () => T0, newId: () => SESSION, installId: () => INSTALL, appVersion: () => '2.9.2',
+    platform: 'darwin', isEnabled: () => true,
+    deviceId: () => { throw new Error('native module missing'); },
+    getCredentials: () => { throw new Error('credential store locked'); },
+  });
+  assert.equal(c.track('app_first_run'), 'queued');
+  assert.equal((await c.dispatchOnce()).delivered, 1);
+});
+
+test('with telemetry off no request is made, so no device id and no credentials leave', async () => {
+  const h = harness();
+  h.device = HWID;
+  h.credentials = { trialToken: TOKEN, apiKey: KEY };
+  h.client.track('app_first_run');
+  h.enabled = false;
+  await h.client.dispatchOnce();
+  assert.equal(h.calls.length, 0);
 });

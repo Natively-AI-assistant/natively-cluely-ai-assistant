@@ -181,3 +181,57 @@ test('the checkout parameters the app adds are the ones the server reads', { ski
     assert.deepEqual(server.readCheckoutAttribution(metadata), { install_id: install, surface: 'modes_settings', product: 'api_max' });
   }
 });
+
+// ── Identity ─────────────────────────────────────────────────────────────────
+
+test('the device ids the app sends are the ones the server keeps', { skip }, async () => {
+  const { createFunnelClient } = await import('../funnelClient.mjs');
+  const server = await import(pathToFileURL(path.join(path.dirname(SERVER_PATH), 'funnel.js')).href);
+  const now = Date.parse('2026-10-01T12:00:00Z');
+  const samples = [
+    'a3f1c2d4e5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90', // what the native module returns
+    'ABCDEF12-3456-7890-ABCD-EF1234567890', 'unavailable', 'short', '', undefined,
+  ];
+  for (const device of samples) {
+    let file = null; let n = 0;
+    const c = createFunnelClient({
+      load: () => file, save: (t) => { file = t; return true; }, fetchImpl: async () => ({}), endpoint: 'x', now: () => now,
+      newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`,
+      installId: () => '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b', appVersion: () => '2.9.2', platform: 'win32',
+      isEnabled: () => true, deviceId: () => device,
+    });
+    c.track('app_first_run');
+    const [event] = JSON.parse(file).events;
+    const row = server.validateFunnelEvent(event, now).row;
+    assert.equal(row.device_id, event.device_id ?? null, `client and server disagree about ${String(device)}`);
+    assert.equal(server.isDeviceId(device), 'device_id' in event, `client sent/omitted ${String(device)} but the server rule differs`);
+  }
+});
+
+test('the identity headers the app sends are the ones the server reads', { skip }, async () => {
+  const { funnelIdentityHeaders } = await import('../funnelClient.mjs');
+  const { createFunnelIdentity } = await import(pathToFileURL(path.join(path.dirname(SERVER_PATH), 'funnelIdentity.js')).href);
+  const key = 'natively_sk_' + 'k'.repeat(40);
+  const token = 'natively_trial_eyJpZCI6IngifQ.c2ln';
+  const TRIAL = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
+  const LICENSE = '9b2f6c1e-3d4a-4b5c-8d6e-7f8091a2b3c4';
+  const asked = [];
+  const identity = createFunnelIdentity({
+    supabase: { from: () => ({ select: () => ({ eq: (_k, v) => ({ limit: async () => { asked.push(v); return { data: v === key ? [{ id: LICENSE }] : [], error: null }; } }) }) }) },
+    parseTrialToken: (t) => (t === token ? { id: TRIAL } : null),
+    fingerprint: (k) => `fp${k.length}`,
+  });
+  assert.deepEqual(await identity.resolve(funnelIdentityHeaders({ trialToken: token, apiKey: key })), { trialId: TRIAL, licenseId: LICENSE, verified: true });
+  // The sentinel: the app sends no key header, so the server looks nothing up.
+  asked.length = 0;
+  assert.deepEqual(await identity.resolve(funnelIdentityHeaders({ apiKey: '__trial__' })), { trialId: null, licenseId: null, verified: false });
+  assert.deepEqual(asked, []);
+});
+
+test('every feature the analytics service can report is a feature the catalogue allows', async () => {
+  const src = fs.readFileSync(path.join(ROOT, 'src/lib/analytics/analytics.service.ts'), 'utf8');
+  const allowed = client.FUNNEL_CATALOG.feature_used.feature;
+  const union = src.match(/type FunnelFeature =([\s\S]*?);/)[1].match(/'([a-z_]+)'/g).map((q) => q.slice(1, -1));
+  assert.deepEqual([...union].sort(), [...allowed].sort(), 'FunnelFeature in analytics.service.ts and feature_used.feature in the catalogue must list the same features');
+  for (const f of src.matchAll(/reportFeatureUsed\('([a-z_]+)'\)/g)) assert.ok(allowed.includes(f[1]), `${f[1]} is reported but not in the catalogue`);
+});

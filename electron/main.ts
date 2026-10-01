@@ -6509,7 +6509,7 @@ export class AppState {
     const meetingGeneration = ++this._meetingGeneration;
     this.isMeetingActive = true;
     this.autoAnswerUsage.meetingStarted();
-    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingStarted(); } catch { /* analytics never blocks a meeting */ }
+    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingStarted(this.intelligenceManager.getAnswerCount()); } catch { /* analytics never blocks a meeting */ }
     // The user's name as a transcription hint, before any STT connects (sttContextTerms.ts).
     try { setSttContextTerms(nameTerms(this.currentUserName())); } catch { /* a hint, never a blocker */ }
     this.broadcastMeetingState()
@@ -6756,7 +6756,7 @@ export class AppState {
 
     this.cancelAutoAnswer();
     this.autoAnswerUsage.meetingEnded();
-    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingEnded(); } catch { /* analytics never blocks a meeting */ }
+    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingEnded(this.intelligenceManager.getAnswerCount()); } catch { /* analytics never blocks a meeting */ }
     // Cover the window between here and `_pendingTeardown` assignment, during which
     // the new in-flight-audio-init await below yields the event loop.
     this._endMeetingInFlight = true;

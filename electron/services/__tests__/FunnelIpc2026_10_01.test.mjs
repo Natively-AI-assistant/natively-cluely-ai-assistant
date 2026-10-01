@@ -241,13 +241,44 @@ describe('funnel telemetry through the real IPC handlers', { skip: HAVE_BUILD ? 
     assert.equal(events[0].entitlement, 'trial', 'by the time it is recorded the install is on its trial');
   });
 
-  test('no event anywhere in the queue carries the hardware id, a key or a token', () => {
+  test('every event carries the device id; no event carries a key or a token', () => {
     const text = fs.readFileSync(path.join(userData, 'funnel_queue.json'), 'utf8');
-    for (const secret of ['funnel-ipc-test-hardware-id', 'natively_trial_TEST', '__trial__']) {
-      assert.ok(!text.includes(secret), `${secret} must not be in the funnel queue`);
+    for (const secret of ['natively_trial_TEST', '__trial__', 'natively_sk_']) {
+      assert.ok(!text.includes(secret), `${secret} must not be in the funnel queue: credentials go in headers, at send time`);
     }
-    const allowed = new Set(['event_id', 'event_type', 'client_event_ts', 'install_id', 'app_session_id', 'app_version', 'platform', 'entitlement', 'props']);
-    for (const e of queue()) for (const k of Object.keys(e)) assert.ok(allowed.has(k), `unexpected field ${k}`);
+    const allowed = new Set(['event_id', 'event_type', 'client_event_ts', 'install_id', 'device_id', 'app_session_id', 'app_version', 'platform', 'entitlement', 'props']);
+    assert.ok(queue().length > 5);
+    for (const e of queue()) {
+      for (const k of Object.keys(e)) assert.ok(allowed.has(k), `unexpected field ${k}`);
+      // The identity resolver ran for real: this is the hardware id the (fake)
+      // native module returned, the same value trial:start sends as `hwid`.
+      assert.equal(e.device_id, 'funnel-ipc-test-hardware-id');
+    }
+  });
+
+  test('a feature is reported once per day however often the renderer says it', async () => {
+    const first = await during(() => call('funnel:track', 'feature_used', { feature: 'answer' }));
+    assert.deepEqual(first.result, { ok: true, result: 'queued' });
+    assert.deepEqual(first.events.map((e) => [e.event_type, e.props]), [['feature_used', { feature: 'answer' }]]);
+    await settle();
+    for (let i = 0; i < 3; i++) {
+      const again = await during(() => call('funnel:track', 'feature_used', { feature: 'answer' }));
+      assert.deepEqual(again.result, { ok: true, result: 'duplicate' });
+      assert.equal(again.events.length, 0);
+    }
+    const other = await during(() => call('funnel:track', 'feature_used', { feature: 'recap' }));
+    assert.equal(other.events.length, 1, 'another feature is its own event');
+    const bad = await during(() => call('funnel:track', 'feature_used', { feature: 'what the user asked' }));
+    assert.deepEqual(bad.result, { ok: false, error: 'bad_prop:feature' });
+    const state = JSON.parse(fs.readFileSync(path.join(userData, 'funnel_state.json'), 'utf8'));
+    assert.deepEqual(state.featuresUsed, ['answer', 'recap']);
+  });
+
+  test('the getting-started steps are reported by name', async () => {
+    const r = await during(() => call('funnel:track', 'onboarding_stage', { stage: 'permissions', action: 'completed' }));
+    assert.deepEqual(r.events.map((e) => [e.event_type, e.props]), [['onboarding_stage', { stage: 'permissions', action: 'completed' }]]);
+    const bad = await during(() => call('funnel:track', 'onboarding_stage', { stage: 'my secret step', action: 'shown' }));
+    assert.deepEqual(bad.result, { ok: false, error: 'bad_prop:stage' });
   });
 
   // ── The switch (Settings › General › Advanced › Usage statistics) ──────────
@@ -303,6 +334,26 @@ describe('funnel telemetry through the real IPC handlers', { skip: HAVE_BUILD ? 
 // from the source. Comment lines are dropped first and each pattern is anchored
 // to a statement, so prose in a comment cannot satisfy them.
 
+describe('who the funnel says this is (ipcHandlers.ts)', () => {
+  const ipc = fs.readFileSync(path.join(ROOT, 'electron/ipcHandlers.ts'), 'utf8')
+    .split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+  const start = ipc.indexOf('funnelTelemetry.setIdentityResolver(');
+  const resolver = ipc.slice(start, ipc.indexOf('const funnelSurface', start));
+
+  test('the trial sentinel is never handed over as a key', () => {
+    assert.ok(start > 0);
+    assert.match(resolver, /apiKey: nativelyKey && nativelyKey !== TRIAL_SENTINEL_KEY \? nativelyKey : undefined,/);
+  });
+
+  test('"unavailable" is the absence of a device id, not a device id', () => {
+    assert.match(resolver, /if \(typeof hwid === 'string' && hwid && hwid !== 'unavailable'\) funnelDeviceId = hwid;/);
+    // Read from the native module once per process; a failed read is tried again.
+    assert.match(resolver, /if \(!funnelDeviceId\) \{/);
+    assert.match(resolver, /deviceId: funnelDeviceId,/);
+    assert.match(resolver, /trialToken: cm\.getTrialToken\(\) \|\| undefined,/);
+  });
+});
+
 describe('funnel telemetry hooks in main.ts', () => {
   const main = fs.readFileSync(path.join(ROOT, 'electron/main.ts'), 'utf8')
     .split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
@@ -319,9 +370,12 @@ describe('funnel telemetry hooks in main.ts', () => {
   });
 
   test('a meeting start and a meeting end are each reported once, inside a try', () => {
-    assert.match(body('startMeetingTransition'), /^\s*try \{ require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.meetingStarted\(\); \} catch/m);
-    assert.match(body('endMeetingTransition'), /^\s*try \{ require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.meetingEnded\(\); \} catch/m);
-    assert.equal((main.match(/funnelTelemetry\.meetingStarted\(\)/g) || []).length, 1);
-    assert.equal((main.match(/funnelTelemetry\.meetingEnded\(\)/g) || []).length, 1);
+    assert.match(body('startMeetingTransition'), /^\s*try \{ require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.meetingStarted\(this\.intelligenceManager\.getAnswerCount\(\)\); \} catch/m);
+    assert.match(body('endMeetingTransition'), /^\s*try \{ require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.meetingEnded\(this\.intelligenceManager\.getAnswerCount\(\)\); \} catch/m);
+    assert.equal((main.match(/funnelTelemetry\.meetingStarted\(/g) || []).length, 1);
+    assert.equal((main.match(/funnelTelemetry\.meetingEnded\(/g) || []).length, 1);
+    // A count only: the manager hands over a number, never the answers.
+    const im = fs.readFileSync(path.join(ROOT, 'electron/IntelligenceManager.ts'), 'utf8');
+    assert.match(im, /getAnswerCount\(\): number \{\n\s+try \{ return this\.session\.getFullUsage\(\)\.length; \} catch \{ return 0; \}/);
   });
 });

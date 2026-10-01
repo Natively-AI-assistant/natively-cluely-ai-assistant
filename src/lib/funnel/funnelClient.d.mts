@@ -12,6 +12,10 @@ export interface FunnelQueue {
   nextAttemptAt: number;
 }
 
+export function funnelIdentityHeaders(
+  credentials: { trialToken?: string; apiKey?: string } | undefined,
+): Record<string, string>;
+
 export function parseFunnelQueue(text: string | null | undefined): FunnelQueue;
 
 export type FunnelTrackResult = 'queued' | 'disabled' | 'invalid' | 'no_install' | 'duplicate' | 'error';
@@ -29,6 +33,8 @@ export interface FunnelClientDeps {
   appSessionId?: string;
   isEnabled: () => boolean;
   getEntitlement?: () => string | undefined;
+  deviceId?: () => string | undefined;
+  getCredentials?: () => { trialToken?: string; apiKey?: string } | undefined;
   random?: () => number;
   log?: { warn: (...args: unknown[]) => void };
 }

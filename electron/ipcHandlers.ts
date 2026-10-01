@@ -383,6 +383,33 @@ export function initializeIpcHandlers(appState: AppState): void {
       meetingAi: resolveMeetingAi({ defaultModel, hasOwnAi }),
     };
   });
+  // Who this is. The device id is the hardware id the app already sends for
+  // trials and licences; the trial token and the key go out as headers, and the
+  // server works the trial and the account out from them. The trial sentinel is
+  // not a key and is never sent as one.
+  // The hardware id comes from the native module, synchronously, and this
+  // resolver runs for every event on the main thread: a good id is read once
+  // per process. A failed read is not remembered, so it is tried again.
+  let funnelDeviceId: string | undefined;
+  funnelTelemetry.setIdentityResolver(() => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    if (!funnelDeviceId) {
+      try {
+        const { LicenseManager } = require('../premium/electron/services/LicenseManager');
+        const hwid = LicenseManager.getInstance().getHardwareId();
+        // 'unavailable' is what every machine without the native module holds:
+        // the absence of an id, not an id.
+        if (typeof hwid === 'string' && hwid && hwid !== 'unavailable') funnelDeviceId = hwid;
+      } catch { /* premium module absent: no device id */ }
+    }
+    const nativelyKey = cm.getNativelyApiKey();
+    return {
+      deviceId: funnelDeviceId,
+      trialToken: cm.getTrialToken() || undefined,
+      apiKey: nativelyKey && nativelyKey !== TRIAL_SENTINEL_KEY ? nativelyKey : undefined,
+    };
+  });
   /** Where in the app something was clicked, when the renderer says; 'other' when it does not. */
   const funnelSurface = (v: unknown): string =>
     typeof v === 'string' && (FUNNEL_SURFACES as readonly string[]).includes(v) ? v : 'other';
@@ -12231,7 +12258,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Events only the renderer can see: a card on screen, a locked feature opened.
   // The event name is checked against this list and its properties against the
   // catalogue, so the renderer cannot send anything the catalogue does not hold.
-  const RENDERER_FUNNEL_EVENTS = new Set(['trial_card', 'upgrade_prompt', 'paywall_hit']);
+  const RENDERER_FUNNEL_EVENTS = new Set(['trial_card', 'upgrade_prompt', 'paywall_hit', 'onboarding_stage', 'feature_used']);
   safeHandle('funnel:track', async (_, eventType: unknown, props: unknown) => {
     if (typeof eventType !== 'string' || !RENDERER_FUNNEL_EVENTS.has(eventType)) return { ok: false, error: 'unknown_event' };
     const checked = checkFunnelProps(eventType, props);
@@ -12241,6 +12268,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (eventType === 'trial_card' && checked.props.action !== 'shown' && checked.props.action !== 'dismissed') {
       return { ok: false, error: 'bad_prop:action' };
     }
+    // Once per feature per day, however often the renderer says it.
+    if (eventType === 'feature_used') return { ok: true, result: funnelTelemetry.featureUsed(String(checked.props.feature)) };
     return { ok: true, result: funnelTelemetry.track(eventType, checked.props) };
   });
 

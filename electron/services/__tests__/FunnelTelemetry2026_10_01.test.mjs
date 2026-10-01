@@ -226,6 +226,76 @@ describe('FunnelTelemetry', { skip: HAVE_BUILD ? false : 'run `npm run build:ele
     assert.deepEqual(h.ft.tagOutgoingUrl('https://natively.software/', 'other'), { url: 'https://natively.software/', checkout: false, product: null, surface: 'other' });
   });
 
+  // ── Who it says this is ────────────────────────────────────────────────────
+
+  const HWID = 'a3f1c2d4e5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+  const KEY = 'natively_sk_' + 'k'.repeat(40);
+  const TOKEN = 'natively_trial_eyJpZCI6IngifQ.c2lnbmF0dXJl';
+
+  test('events carry the device id, and requests carry the trial token and key as headers', async () => {
+    const h = load({ packaged: true });
+    h.ft.setIdentityResolver(() => ({ deviceId: HWID, trialToken: TOKEN, apiKey: KEY }));
+    h.ft.track('trial_expired');
+    assert.equal(h.queue()[0].device_id, HWID);
+    const onDisk = fs.readFileSync(path.join(h.userData, 'funnel_queue.json'), 'utf8');
+    assert.ok(!onDisk.includes(KEY) && !onDisk.includes(TOKEN), 'credentials are never written to the queue file');
+    await h.ft.tick();
+    assert.deepEqual(h.posts[0].headers, { 'Content-Type': 'application/json', 'x-trial-token': TOKEN, 'x-natively-key': KEY });
+  });
+
+  test('an install with no device id and no credentials still reports, as itself', async () => {
+    const h = load({ packaged: true });
+    h.ft.setIdentityResolver(() => ({}));
+    h.ft.track('trial_expired');
+    assert.equal('device_id' in h.queue()[0], false);
+    await h.ft.tick();
+    assert.deepEqual(Object.keys(h.posts[0].headers), ['Content-Type']);
+  });
+
+  test('an identity resolver that throws costs the identity, not the event', async () => {
+    const h = load({ packaged: true });
+    h.ft.setIdentityResolver(() => { throw new Error('credential store locked'); });
+    assert.equal(h.ft.track('trial_expired'), 'queued');
+    await h.ft.tick();
+    assert.equal(h.posts.length, 1);
+  });
+
+  test('with Usage statistics off, neither the device id nor a credential is sent anywhere', async () => {
+    const h = load({ packaged: true, settings: { telemetryEnabled: false } });
+    h.ft.setIdentityResolver(() => ({ deviceId: HWID, trialToken: TOKEN, apiKey: KEY }));
+    h.ft.track('trial_expired');
+    assert.equal(h.ft.featureUsed('answer'), 'disabled');
+    await h.ft.tick();
+    assert.equal(h.posts.length, 0);
+    assert.deepEqual(h.queue(), []);
+  });
+
+  test('a feature is reported once per local day, and again the next day', () => {
+    const h = load({ packaged: true, state: { firstRunSent: true, featuresDay: '2020-01-01', featuresUsed: ['answer'] } });
+    assert.equal(h.ft.featureUsed('answer'), 'queued', 'a list from another day does not count');
+    assert.equal(h.ft.featureUsed('answer'), 'duplicate');
+    assert.equal(h.ft.featureUsed('recap'), 'queued');
+    assert.equal(h.ft.featureUsed('not_a_feature'), 'invalid');
+    assert.deepEqual(h.queue().map((e) => e.props.feature), ['answer', 'recap']);
+    assert.deepEqual(h.state().featuresUsed, ['answer', 'recap']);
+  });
+
+  test('a meeting reports how many answers it produced, as a count', () => {
+    const h = load({ packaged: true });
+    h.ft.setSnapshotResolver(() => SNAPSHOT);
+    h.ft.meetingStarted(3);          // three answers already in the log from before
+    h.ft.meetingEnded(7);
+    assert.equal(h.queue().at(-1).props.answers, 4);
+    return new Promise((r) => setTimeout(r, 2100)).then(() => {
+      h.ft.meetingStarted(7);
+      h.ft.meetingEnded(2);          // the log was cleared when the meeting started
+      assert.equal(h.queue().at(-1).props.answers, 2);
+      h.ft.meetingStarted(0);
+      h.ft.meetingEnded();           // no count available: the field is left out, not guessed
+      assert.equal('answers' in h.queue().at(-1).props, false);
+    });
+  });
+
   test('the queue and state files live in the user-data directory and nowhere else', () => {
     const h = load({ packaged: true });
     h.ft.trialStarted();

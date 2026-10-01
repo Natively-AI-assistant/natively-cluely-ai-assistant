@@ -6,8 +6,15 @@
 // until a Natively key exists, because its rows are attributed to a licence. A
 // funnel is about the installs that have no key — never tried, tried and left,
 // left through their own keys — so it cannot wait for one. These events go to
-// POST /v1/telemetry/funnel, which takes no key and identifies the install by
-// the random install id alone.
+// POST /v1/telemetry/funnel, which needs no key.
+//
+// WHO AN EVENT IS ABOUT. The person, not only the install (2026-10-01):
+//   - every event carries the install id and, when the machine has one, the
+//     device id — the hardware id the app already sends for trials and licences;
+//   - a request carries the trial token and the Natively key the app holds, in
+//     headers, and the SERVER works out the trial and the account from them. An
+//     event never names an account itself.
+// The trial sentinel ('__trial__') is not a key and is never sent as one.
 //
 // WHAT THIS IS NOT. Not evidence, not billing, not durable to the standard the
 // usage outbox is: a small JSON file, bounded, best effort. Losing a funnel
@@ -38,6 +45,21 @@ export const FUNNEL_BACKOFF_MS = Object.freeze([
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const VERSION = /^[0-9A-Za-z.\-+]{1,32}$/;
 const PLATFORMS = ['darwin', 'win32', 'linux'];
+const DEVICE_ID = /^[A-Za-z0-9_.:-]{8,128}$/;
+const API_KEY = /^natively_sk_[A-Za-z0-9_-]{8,200}$/;
+const TRIAL_TOKEN = /^natively_trial_[A-Za-z0-9_.=-]{8,2000}$/;
+
+/**
+ * The identity headers for a request. Only a real key and a real trial token:
+ * anything else the app happens to hold in those slots (the '__trial__'
+ * sentinel above all) is left out.
+ */
+export function funnelIdentityHeaders(credentials) {
+  const headers = {};
+  if (typeof credentials?.trialToken === 'string' && TRIAL_TOKEN.test(credentials.trialToken)) headers['x-trial-token'] = credentials.trialToken;
+  if (typeof credentials?.apiKey === 'string' && API_KEY.test(credentials.apiKey)) headers['x-natively-key'] = credentials.apiKey;
+  return headers;
+}
 
 /** Read a stored queue. Anything unreadable is an empty queue, never a throw. */
 export function parseFunnelQueue(text) {
@@ -70,6 +92,10 @@ export function parseFunnelQueue(text) {
  * @param {string} [deps.appSessionId]
  * @param {() => boolean} deps.isEnabled      false when the user turned telemetry off
  * @param {() => string | undefined} [deps.getEntitlement]
+ * @param {() => string | undefined} [deps.deviceId]   the hardware id, or
+ *        nothing when the machine has none ('unavailable' counts as none)
+ * @param {() => { trialToken?: string, apiKey?: string }} [deps.getCredentials]
+ *        read at SEND time: the credentials the app holds now
  * @param {() => number} [deps.random]
  * @param {{ warn: (...a: unknown[]) => void }} [deps.log]
  */
@@ -128,6 +154,9 @@ export function createFunnelClient(deps) {
       const version = deps.appVersion();
       if (typeof version === 'string' && VERSION.test(version)) event.app_version = version;
       if (PLATFORMS.includes(deps.platform)) event.platform = deps.platform;
+      let device;
+      try { device = deps.deviceId?.(); } catch { device = undefined; }
+      if (typeof device === 'string' && DEVICE_ID.test(device) && device.toLowerCase() !== 'unavailable') event.device_id = device;
       let entitlement;
       try { entitlement = deps.getEntitlement?.(); } catch { entitlement = undefined; }
       if (ENTITLEMENTS.includes(entitlement)) event.entitlement = entitlement;
@@ -201,11 +230,13 @@ export function createFunnelClient(deps) {
         return { sent: batch.length, delivered: 0, failed: reason };
       };
 
+      let credentials;
+      try { credentials = deps.getCredentials?.(); } catch { credentials = undefined; }
       let res;
       try {
         res = await deps.fetchImpl(deps.endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...funnelIdentityHeaders(credentials) },
           body: JSON.stringify({ events: batch }),
           signal: AbortSignal.timeout(10_000),
         });

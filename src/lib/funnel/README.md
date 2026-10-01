@@ -1,18 +1,24 @@
 # Funnel telemetry
 
-Install → trial → checkout → paid, for every install. Added 2026-10-01 after the trial review
-found that the funnel could only be measured for 59% of buyers, through a device id that happened
-to appear in an unrelated table, and not at all for anyone who did not buy.
+Install → trial → checkout → paid, for every user. Added 2026-10-01 after the trial review found
+that the funnel could only be measured for 59% of buyers, through a device id that happened to
+appear in an unrelated table, and not at all for anyone who did not buy.
+
+Events are tied to the person, not only to an install: the device (`device_id`, the hardware id),
+the trial (`trial_id`) and the account (`license_id`). The trial and the account are worked out by
+the server from the trial token and Natively key a request carries; an event never names them.
 
 ## What is recorded
 
-One table, `funnel_events` (natively-api migration 025), keyed on the random install id.
+One table, `funnel_events` (natively-api migrations 025 and 026).
 
 | Event | Written by | When |
 |---|---|---|
 | `app_first_run` | app | first launch of a new install |
 | `app_active_day` | app | once per local day the app is open, with yes/no state (own AI, API key, Pro) |
-| `meeting_started`, `meeting_ended` | app | every meeting; whose AI answers, whole minutes |
+| `onboarding_stage` | app | welcome, tour and permissions: shown, completed |
+| `meeting_started`, `meeting_ended` | app | every meeting; whose AI answers, whole minutes, how many answers (a count) |
+| `feature_used` | app | which features were used that day, once per feature per day |
 | `card` | app | every card the app raises, from the card ledger: shown, acted, later, never |
 | `trial_start_result` | app | every trial start, including the ones that fail and why |
 | `trial_expired` | app | the trial ran out |
@@ -26,9 +32,13 @@ One table, `funnel_events` (natively-api migration 025), keyed on the random ins
 Properties are enums, whole numbers and booleans only. The allowlist is
 `src/lib/funnel/funnelCatalog.mjs` and its twin `natively-api/lib/funnelCatalog.js`.
 
-Never recorded: IP address, hardware id, email, key, model name, any text.
+Never recorded: IP address, email (reach it through `license_id`), key, model name, any text.
 
 ## How the joins work
+
+- **Event ↔ person:** `device_id` equals `free_trials.hwid` and `review_prompt_state.hardware_id`;
+  `license_id` is `api_keys.id`; `trial_id` is `free_trials.id`. The report stitches every
+  identifier that shares a row into one person, so a reinstall or a second install is the same person.
 
 - **Trial ↔ install:** the app sends `install_id` with `/v1/trial/start`; the server writes `trial_started`.
 - **Purchase ↔ install:** the main process adds `metadata_install_id`, `metadata_surface` and
@@ -87,8 +97,18 @@ node scripts/funnel-report.mjs --days 30
 node scripts/funnel-report.mjs --from 2026-10-01 --to 2026-10-15 --json
 ```
 
-Read-only; prints counts and rates, never an id. `lib/funnelReport.js` says what each number
-means and what it cannot see (telemetry off, older app versions, purchases made outside the app).
+Read-only; prints counts and rates, never an id: by install, then by person (stage reached and
+where people stopped, conversion between stages, time between stages, retention, churn, and
+cohorts by week, platform and version). `lib/funnelReport.js` says what each number means and what
+it cannot see (telemetry off, older app versions, purchases made outside the app).
+
+One person's history, by email, device, install, trial or account:
+
+```
+node scripts/funnel-user.mjs --email someone@example.com
+```
+
+It prints that one person's events. Use it for a reason.
 
 ## Open before release
 

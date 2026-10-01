@@ -31,15 +31,16 @@
  * This is NOT analytics. This is NOT telemetry. This is a simple install counter.
  *
  * WHAT ELSE USES THE INSTALL ID (2026-10-01). Everything above describes the
- * PING. The id it creates is also the subject of two other things, and neither
- * is covered by the lists above:
- *   - usage events for licensed installs (UsageOutbox.ts), and
- *   - product-funnel events for every install (FunnelTelemetry.ts), which also
- *     puts the id on checkout links and sends it with a trial start.
- * Server-side, a trial start or a purchase therefore ties this id to that trial
- * (and its hardware id) or to that paying account. The id is still random and
- * still not derived from hardware; it is no longer unlinkable. PRIVACY.md §3.2.1
- * is where that is said to users.
+ * PING, and only the ping. The app as a whole is no longer anonymous:
+ *   - usage events for licensed installs (UsageOutbox.ts) carry this id, and
+ *   - product-funnel events for every install (FunnelTelemetry.ts) carry this
+ *     id AND the hardware id, and are linked by the server to the user's trial
+ *     and account. The id is also put on checkout links and sent with a trial
+ *     start.
+ * The id is still random and not derived from hardware; it is one of several
+ * identifiers a user's events are joined on. PRIVACY.md §3.2.1 is where that is
+ * said to users, and Settings › General › Advanced › Usage statistics turns the
+ * funnel events off.
  * ================================================================================
  */
 
