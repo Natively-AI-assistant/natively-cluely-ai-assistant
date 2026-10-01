@@ -327,3 +327,18 @@ test('a selected local model leads even while its breaker is open', async () => 
   const ids = await chainIds(VENDORS, ollama, { visionHealth: coolingUntil('ollama', Date.now() + 60_000) });
   assert.deepEqual(ids.slice(0, 2), ['ollama', 'openai'], 'the cloud follows only if the local model fails');
 });
+test('a custom provider: a local one always leads; a hosted one stops leading while cooling, until it is edited', async () => {
+  const custom = (curlCommand) => ['custom', { customProvider: { id: 'c1', name: 'Mine', curlCommand }, currentModelId: 'gemini-3.8-flash' }];
+  const cooling = () => coolingUntil('custom', Date.now() + 60_000);
+  const local = await chainIds(VENDORS, custom('curl http://localhost:1234/v1/chat -d \'{"image":"{{IMAGE_BASE64}}"}\''), { visionHealth: cooling() });
+  assert.equal(local[0], 'custom', 'a local custom endpoint leads even while cooling');
+  const h = Object.assign(helper(VENDORS, custom('curl https://example.com/v1 -d \'{"image":"{{IMAGE_BASE64}}"}\'')), { visionHealth: new Map() });
+  assert.equal((await h.buildVisionChain(REQ))[0].id, 'custom');
+  h.visionHealth = cooling();
+  const hosted = (await h.buildVisionChain(REQ)).map((p) => p.id);
+  assert.equal(hosted[0], 'openai', `a failing hosted endpoint must not cost its budget on every screenshot (got ${hosted.join(' > ')})`);
+  assert.ok(hosted.includes('custom'), 'still tried');
+  // The user fixes the endpoint: same provider id, new command. It leads at once.
+  h.customProvider = { ...h.customProvider, curlCommand: 'curl https://fixed.example.com/v1 -d \'{"image":"{{IMAGE_BASE64}}"}\'' };
+  assert.equal((await h.buildVisionChain(REQ))[0].id, 'custom');
+});

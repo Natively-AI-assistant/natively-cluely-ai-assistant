@@ -18,7 +18,7 @@
 
 import { orderByHealth, type HealthEntry } from './streamFallbackEngine';
 
-export function orderVisionCandidates<T extends { id: string; priority: number }>(args: {
+export function orderVisionCandidates<T extends { id: string; priority: number; isLocal?: boolean }>(args: {
   /** The rungs for the user's own selection, in the order they should lead. Each is also in `cloud` or `local`. */
   selected: readonly T[];
   cloud: readonly T[];
@@ -30,8 +30,10 @@ export function orderVisionCandidates<T extends { id: string; priority: number }
   const { selected, cloud, local, localOnly, health, now } = args;
   if (localOnly) return orderByHealth([...local], health, now);
   const cooling = (p: T) => (health.get(p.id)?.openUntil ?? 0) > now;
-  const isLocal = new Set(local.map((p) => p.id));
-  const lead = selected.filter((p) => isLocal.has(p.id) || !cooling(p));
+  // The rung's own flag, not which list it is in: with local-only mode off a
+  // HOSTED custom endpoint is seated among the local rungs with isLocal:false,
+  // and it is a cloud selection like any other.
+  const lead = selected.filter((p) => p.isLocal === true || !cooling(p));
   const leading = new Set(lead.map((p) => p.id));
   const backCloud = cloud.filter((p) => !leading.has(p.id));
   const backLocal = local.filter((p) => !leading.has(p.id));

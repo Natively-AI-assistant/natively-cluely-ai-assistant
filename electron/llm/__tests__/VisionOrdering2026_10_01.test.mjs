@@ -16,7 +16,7 @@ const { orderVisionCandidates } = require(dist('llm/visionOrdering.js'));
 
 const r = (id, priority) => ({ id, priority });
 const cloud = [r('openai', 0), r('claude', 1), r('gemini_flash', 2), r('fluxion', 3)];
-const local = [r('custom', 100), r('ollama', 101)];
+const local = [{ ...r('custom', 100), isLocal: true }, { ...r('ollama', 101), isLocal: true }];
 const ids = (list) => list.map((p) => p.id);
 const order = (over = {}) => ids(orderVisionCandidates({ selected: [], cloud, local, localOnly: false, health: new Map(), now: 1000, ...over }));
 const cooling = (id, until = 5000) => [id, { openUntil: until, consecutiveFails: 3, ttftEma: null }];
@@ -49,6 +49,15 @@ describe('orderVisionCandidates', () => {
     assert.deepEqual(order({ selected: [local[1]], health: new Map([cooling('ollama')]) }), ['ollama', 'openai', 'claude', 'gemini_flash', 'fluxion', 'custom']);
     assert.deepEqual(order({ selected: [local[0], cloud[3]], health: new Map([cooling('custom'), cooling('fluxion')]) }),
       ['custom', 'openai', 'claude', 'gemini_flash', 'fluxion', 'ollama'], 'the local one still leads; the cooling cloud one does not');
+  });
+  test('a HOSTED custom endpoint is a cloud selection: it sits with the local rungs but stops leading while cooling', () => {
+    // With local-only mode off, a remote custom provider is seated in the
+    // `local` list with isLocal:false. Being in that list does not make it local.
+    const hosted = { ...r('custom', 100), isLocal: false };
+    const list = [hosted, local[1]];
+    const args = { selected: [hosted], cloud, local: list, localOnly: false, now: 1000 };
+    assert.deepEqual(ids(orderVisionCandidates({ ...args, health: new Map([cooling('custom')]) })), ['openai', 'claude', 'gemini_flash', 'fluxion', 'custom', 'ollama']);
+    assert.deepEqual(ids(orderVisionCandidates({ ...args, health: new Map() })), ['custom', 'openai', 'claude', 'gemini_flash', 'fluxion', 'ollama']);
   });
   test('if the cooling selection is the only rung, it is still tried', () => {
     const only = [r('fluxion', 0)];

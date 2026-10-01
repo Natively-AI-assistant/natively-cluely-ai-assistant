@@ -237,9 +237,14 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
 
    **Phase 5a** (built), the chat screenshot path (`streamVisionWithFallback`):
    - One ordering rule, `orderVisionCandidates` (`electron/llm/visionOrdering.ts`,
-     pure): the selection's own rung leads unless its circuit breaker is open,
-     then cloud rungs by health, then local ones. A selected model that keeps
-     failing stops leading until it recovers.
+     pure): the selection's own rung leads, then cloud rungs by health, then
+     local ones. A CLOUD selection that keeps failing stops leading until its
+     circuit breaker closes (a hosted custom endpoint counts as cloud). A
+     LOCAL selection always leads: the cloud follows only if it fails.
+   - A breaker never outlives what it was about: a rung that last led for a
+     different selection (another model, an edited custom command) starts
+     clean, and every credential setter clears its own rungs. Without this a
+     retired model's one-day demotion carried over to the next model picked.
    - A selected direct OpenAI, Claude, Gemini, Groq, Natively or Antigravity
      model reads its own screenshot first when the resolver says it reads
      images. Each vendor's fixed vision model stays as a fallback. A text-only

@@ -8940,7 +8940,9 @@ let isMultimodal = !!(imagePaths?.length);
     // model, and their new selection would not lead. A rung that last led for
     // another selection starts clean; one that never led keeps its breaker (the
     // fixed `openai` rung failing as a fallback is about the key, not the pick).
-    const selectionKey = sel ? `${sel.provider}|${sel.model}` : '';
+    // (A custom provider keeps its id when its command is edited, so the
+    // command is part of what "this selection" means.)
+    const selectionKey = sel ? `${sel.provider}|${sel.model}|${this.customProvider?.curlCommand ?? ''}` : '';
     const ledFor = (this.visionLeadSelection ??= new Map());
     for (const p of front) {
       const last = ledFor.get(p.id);
