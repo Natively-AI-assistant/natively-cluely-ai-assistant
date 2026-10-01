@@ -161,17 +161,21 @@ export function parseOllamaSize(id: string): number | null {
 const OPENAI_VISION_EXTRA_RE = /^(?:o[13](?:-pro)?|o4-mini(?:-high)?|gpt-4-turbo)(?:-\d{4}-\d{2}-\d{2})?$/;
 
 /**
- * DeepSeek Flash reached THROUGH AGENTROUTER reads images; measured 2026-09-30:
- * `agentrouter/deepseek-v4-flash` read a test screenshot correctly on both of
- * AgentRouter's routes, and DeepSeek's own pricing page lists Vision for its
- * Flash model (not for V4 Pro). Scoped to the `agentrouter/` prefix on
- * purpose: Natively's DIRECT DeepSeek path is text-only by construction
- * (streamWithDeepseek never attaches an image), so marking bare `deepseek-*`
- * image-capable would make Code Hint and the vision gates promise a screenshot
- * read that the direct adapter would silently drop.
+ * DeepSeek Flash reads images. Measured twice: through AgentRouter
+ * (2026-09-30, both routes) and directly (2026-10-01, `deepseek-flash` and
+ * `deepseek-v4-flash` read the test image; DeepSeek's pricing page lists Vision
+ * for Flash). V4 Pro does NOT: sent an image directly it answers HTTP 200 with
+ * a made-up reply, so it must never be assumed.
+ *
+ * Covers the DIRECT id and AgentRouter's. Other gateways are left to their own
+ * data: OpenRouter's catalogue lists its DeepSeek Flash as text-only, and it
+ * refuses the image. Direct became true on 2026-10-01, when streamWithDeepseek
+ * learned to attach images; before that the direct adapter dropped them, and
+ * saying yes here would have promised a read that never happened.
  */
-function agentRouterDeepseekReadsImages(routedId: string, strippedLower: string): boolean {
-  return /^agentrouter\//i.test(routedId || '') && /^deepseek-(?:v\d+-)?flash(?:$|-)/.test(strippedLower);
+function deepseekFlashReadsImages(routedId: string, strippedLower: string): boolean {
+  const direct = (routedId || '').toLowerCase() === strippedLower;
+  return (direct || /^agentrouter\//i.test(routedId || '')) && /^deepseek-(?:v\d+-)?flash(?:$|-)/.test(strippedLower);
 }
 
 export function getModelCapabilities(modelId: string, isOllama: boolean): ModelCapabilities {
@@ -236,7 +240,7 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
       || lower.startsWith('gpt-6')
       || OPENAI_VISION_EXTRA_RE.test(lower)
       || lower === 'natively' || lower.startsWith('natively-')
-      || agentRouterDeepseekReadsImages(modelId, lower)
+      || deepseekFlashReadsImages(modelId, lower)
       || gatewayVisionHint;
     return {
       tier: 'cloud',

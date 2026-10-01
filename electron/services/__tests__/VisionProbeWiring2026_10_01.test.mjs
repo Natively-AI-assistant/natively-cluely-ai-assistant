@@ -73,7 +73,7 @@ describe('setModel starts a test only when it should', () => {
   });
   for (const [label, model] of [
     ['a model the name list already knows', 'fluxion/claude-opus-5'],
-    ['a direct DeepSeek model (its adapter carries no image)', 'deepseek-v4-flash'],
+    ['a direct DeepSeek Flash model (the name list knows it)', 'deepseek-v4-flash'],
     ['a Groq model (its own table decides)', 'llama-3.3-70b-versatile'],
     ['Natively', 'natively'],
   ]) {
@@ -84,6 +84,16 @@ describe('setModel starts a test only when it should', () => {
       assert.equal(seen.length, 0);
     });
   }
+  test('direct DeepSeek Pro is unknown, so it is tested once through the DeepSeek adapter', async () => {
+    const h = helper(); h.enableVisionProbing();
+    const seen = [];
+    h.streamWithDeepseek = async function* (_prompt, _system, model, _signal, imagePaths) { seen.push({ model, images: (imagePaths || []).length }); yield '42'; };
+    h.setModel('deepseek-v4-pro');
+    await settle();
+    assert.equal(seen.length, 2, 'a wrong number is confirmed with a second, different image');
+    assert.deepEqual(seen.map((s) => s.images), [1, 1]);
+    assert.equal(store.tested('deepseek', '', 'deepseek-v4-pro')?.reads, false);
+  });
   test('a model already tested this month is not asked again', async () => {
     const h = helper(); h.enableVisionProbing(); const seen = withAdapters(h, 'x');
     store.recordTest('fluxion', '', 'glm-5.3', true);

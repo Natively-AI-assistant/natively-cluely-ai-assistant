@@ -114,6 +114,11 @@ const INTENDED = [
     match: (k) => k.split('|')[2].startsWith('models/gemini-') },
   { why: 'one Ollama list: the shared list covers families the drifted copy lacked (incl. the no-dash qwen2.5vl)',
     match: (k) => k.split('|')[1] === 'ollama' && OLLAMA_NEWLY_LISTED.test(k.split('|')[2].toLowerCase()) },
+  { why: 'direct DeepSeek Flash reads images (measured 2026-10-01; its adapter attaches them since phase 3b)',
+    // By the id, not the provider kind: the corpus files OpenRouter's
+    // `~deepseek/…-latest` aliases under another kind, and a bare DeepSeek Flash
+    // id is a direct DeepSeek id whichever kind the corpus gave it.
+    match: (k) => /^deepseek-(?:v\d+-)?flash(?:$|-)/.test(k.split('|')[2]) },
 ];
 
 test('the corpus is the real one', () => {

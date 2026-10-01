@@ -51,9 +51,10 @@ describe('getCapabilities().supportsImages follows the selection that will run',
   test("a 9Router model its catalogue calls text-only", () => {
     assert.equal(caps({ currentModelId: 'ninerouter/openai/gpt-5', ninerouterVisionModels: new Set(['gemini/gemini-3.6-flash']) }), false);
   });
-  test('unchanged for plain selections', () => {
+  test('plain selections', () => {
     assert.equal(caps({ currentModelId: 'gpt-5.5' }), true);
-    assert.equal(caps({ currentModelId: 'deepseek-v4-flash' }), false);
+    assert.equal(caps({ currentModelId: 'deepseek-v4-flash' }), true);
+    assert.equal(caps({ currentModelId: 'deepseek-v4-pro' }), false);
     assert.equal(caps({ currentModelId: 'agentrouter/deepseek-v4-flash' }), true);
   });
   test('no usable selection never throws; it keeps the name answer', () => {

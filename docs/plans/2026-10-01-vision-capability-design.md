@@ -82,8 +82,11 @@ It answers **yes / no / unknown** plus the source (`override`, `provider`,
 yes:
 
 - **Can this route carry an image?** A static property of Natively's adapter per
-  provider. Direct DeepSeek's adapter drops images today, so this work adds image
-  parts to it (Flash only).
+  provider. Direct DeepSeek's adapter dropped images until phase 3b; it now
+  attaches them (OpenAI `image_url` parts, measured live). Which DeepSeek model
+  may be sent one is the second question: Flash is known to read images, and
+  any other DeepSeek model is tested once first, because V4 Pro answers HTTP
+  200 without seeing the image.
 - **Does this model read images?** First answer wins:
   1. user override;
   2. provider data;
@@ -224,8 +227,9 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
    test when an unknown model is selected, seats and Direct Assist following a
    result, a re-test when a real screenshot is refused, and LiteLLM's
    `supports_vision: true`. An image refusal is no longer mistaken for a
-   retired model. **Phase 3b**: image support in the direct DeepSeek adapter
-   (Flash).
+   retired model. **Phase 3b** (built): the direct DeepSeek adapter attaches
+   images; a selected DeepSeek Flash reads its own screenshots in the chat path
+   and Direct Assist. The screen-reading path gets its DeepSeek rung in phase 5.
 4. **Auto / On / Off override** plus the picker marker.
 5. **Selected model first in both chains**, the cURL / Codex / Antigravity rungs,
    the local-only fix and the clearer messages. Fixes defects 4, 6, 7, 8, 9, 10.

@@ -8620,6 +8620,13 @@ let isMultimodal = !!(imagePaths?.length);
     const cloud: VisionStreamProvider[] = [];
     const localOnly = this.isLocalOnlyMode;
     let prio = 0;
+    // Direct DeepSeek (2026-10-01): is it the model the user selected, and does
+    // the resolver say that model reads images? The name list for Flash
+    // (measured), or a passed one-time test. Never on unknown: deepseek-v4-pro
+    // answers HTTP 200 without seeing the image, so an unverified DeepSeek
+    // model would be a blind answer.
+    const deepseekSelected = !this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isDeepseekModel(this.currentModelId);
+    const deepseekReads = deepseekSelected && readsImages(this.visionVerdict({ provider: 'deepseek', model: this.currentModelId }), false);
 
     if (!localOnly) {
       if (this.openaiClient) {
@@ -8718,6 +8725,12 @@ let isMultimodal = !!(imagePaths?.length);
         cloud.push({ id: 'agentrouter', name: `AgentRouter (${agentRouterWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithAgentRouter(userContent, systemPrompt, imagePaths, sig) });
       }
+      // The same rule as the gateways: a rung only for the model the user
+      // picked. The session's 402 flag is honoured, as the text cascade does.
+      if (deepseekReads && this.deepseekClient && !this.deepseekPermanentlyDead) {
+        cloud.push({ id: 'deepseek', name: `DeepSeek (${deepseekWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithDeepseek(userContent, systemPrompt, this.currentModelId, sig, imagePaths) });
+      }
       // isCodexAvailable() — NOT `codexCliConfig.enabled` — is the gate every
       // other Codex call site uses. It additionally covers the disabled-provider
       // kill switch and "is ChatGPT actually signed in". streamWithCodexCli
@@ -8812,6 +8825,8 @@ let isMultimodal = !!(imagePaths?.length);
       // Same inversion, same fix: without this a SELECTED AgentRouter Claude
       // model lost its own screenshot turn to whichever vendor key sorted first.
       if (this.isAgentRouterModel(this.currentModelId)) { const ar = cloud.find(p => p.id === 'agentrouter'); if (ar) front.push(ar); }
+      // The selected DeepSeek model leads its own turn, like the gateways above.
+      if (deepseekSelected) { const ds = cloud.find(p => p.id === 'deepseek'); if (ds) front.push(ds); }
       const backLocal = local.filter(p => !front.includes(p));
       const backCloud = cloud.filter(p => !front.includes(p));
       ordered = [...front, ...orderVisionByHealth(backCloud, this.visionHealth, nowMs), ...backLocal];
@@ -8841,6 +8856,11 @@ let isMultimodal = !!(imagePaths?.length);
       // proxy is reachable" would be the wrong advice (2026-10-01).
       if (this.isOpenRouterModel(this.currentModelId) && storedVisionAnswer('openrouter', this.currentModelId) === false) {
         throw new Error(`No vision-capable provider configured. The selected OpenRouter model (${this.openrouterWireModel(this.currentModelId)}) can't read screenshots — OpenRouter lists it as text-only. Pick an OpenRouter model that can, or add another vision provider in Settings.`);
+      }
+      // A selected DeepSeek model that does not read images (Pro), and nothing
+      // else configured: name the model and the one that can (2026-10-01).
+      if (deepseekSelected && !deepseekReads) {
+        throw new Error(`No vision-capable provider configured. The selected DeepSeek model (${deepseekWireModel(this.currentModelId)}) can't read screenshots — DeepSeek Flash can. Pick DeepSeek Flash, or add another vision provider in Settings.`);
       }
       // AgentRouter is a hosted service with a fixed catalogue, so "check the
       // proxy is reachable" is the wrong advice there: the only way to land
@@ -10763,8 +10783,9 @@ let isMultimodal = !!(imagePaths?.length);
       return;
     }
 
-    // DeepSeek (text-only). When images are present, fall through so the
-    // vision-first chain (Gemini/Claude/OpenAI/Natively) handles them instead.
+    // DeepSeek, TEXT turns. An image turn never gets here: the unified vision
+    // chain above took it (and since 2026-10-01 seats a selected DeepSeek Flash
+    // there). The guard stays so this branch can never send an image itself.
     if (this.isDeepseekModel(this.currentModelId) && this.deepseekClient && !(isMultimodal && imagePaths)) {
       const deepseekSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
       const finalDeepseekSystem = this.injectLanguageInstruction(deepseekSystem);
@@ -11936,12 +11957,15 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
-   * Stream response from DeepSeek (OpenAI-compatible). Text-only by design.
+   * Stream response from DeepSeek (OpenAI-compatible). Carries images when the
+   * caller passes them (2026-10-01); the callers decide which model may get one.
    */
-  private async * streamWithDeepseek(userMessage: string, systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  private async * streamWithDeepseek(userMessage: string, systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal, imagePaths?: string[]): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.deepseekClient) throw new Error("DeepSeek client not initialized");
-    this.assertOutboundScopes('deepseek', userMessage);
+    // The image paths go to the scope guard too (2026-10-01): it used to be
+    // handed the text alone, because this adapter never carried an image.
+    this.assertOutboundScopes('deepseek', userMessage, imagePaths);
 
     await this.rateLimiters.deepseek.acquire();
 
@@ -11949,7 +11973,15 @@ let isMultimodal = !!(imagePaths?.length);
 
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
-    messages.push({ role: "user", content: userMessage });
+    // Images as OpenAI `image_url` parts, the format DeepSeek Flash read live
+    // (2026-10-01). This adapter attaches them for whichever model it is given:
+    // WHO may be sent one is decided above it (the vision resolver), because
+    // deepseek-v4-pro answers HTTP 200 without seeing the image.
+    if (imagePaths?.length) {
+      messages.push({ role: "user", content: [{ type: "text", text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)] });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
 
     if (abortSignal?.aborted) return;
     let stream;
@@ -13913,7 +13945,7 @@ let isMultimodal = !!(imagePaths?.length);
 
   /** Providers the one-time test can ask. The rest are decided by their route, their own table, or /api/show. */
   private static readonly VISION_TESTABLE: ReadonlySet<string> = new Set(
-    ['openai', 'claude', 'gemini', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'litellm', 'ninerouter'],
+    ['openai', 'claude', 'gemini', 'deepseek', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'litellm', 'ninerouter'],
   );
 
   public enableVisionProbing(): void { this.visionProbingEnabled = true; }
@@ -14286,7 +14318,7 @@ let isMultimodal = !!(imagePaths?.length);
         }
         return;
       case 'deepseek':
-        yield* this.streamWithDeepseek(directUserPrompt, request.systemPrompt, model, abortSignal);
+        yield* this.streamWithDeepseek(directUserPrompt, request.systemPrompt, model, abortSignal, imagePaths);
         return;
       case 'nvidia_nim':
         yield* this.streamWithNvidiaNim(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);

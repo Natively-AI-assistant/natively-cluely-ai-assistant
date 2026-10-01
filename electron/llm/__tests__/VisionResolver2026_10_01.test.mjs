@@ -30,8 +30,11 @@ describe('decided by the route', () => {
     assert.deepEqual(v('codex-cli', 'gpt-5.5'), yes('route'));
     assert.deepEqual(v('antigravity', 'antigravity:gemini-3.1-pro'), yes('route'));
   });
-  test("direct DeepSeek's adapter never attaches an image, whatever the model", () => {
-    assert.deepEqual(v('deepseek', 'deepseek-v4-flash'), no('route'));
+  test('direct DeepSeek: Flash reads images (measured); Pro is unknown until tested, never yes by default', () => {
+    assert.deepEqual(v('deepseek', 'deepseek-v4-flash'), yes('names'));
+    assert.deepEqual(v('deepseek', 'deepseek-flash'), yes('names'));
+    assert.deepEqual(v('deepseek', 'deepseek-v4-pro'), unknown);
+    assert.deepEqual(v('deepseek', 'deepseek-v4-pro', { testedVision: () => false }), no('test'));
   });
   test("custom and cURL follow the provider's template", () => {
     assert.deepEqual(v('custom', 'id', { customProvider: { multimodal: true } }), yes('route'));
@@ -113,7 +116,6 @@ describe('a one-time test result (phase 3)', () => {
     assert.deepEqual(v('ninerouter', 'ninerouter/a/b', tested({ 'ninerouter:ninerouter/a/b': true })), { reads: 'yes', source: 'test' });
   });
   test('never applies to route-decided providers or Ollama', () => {
-    assert.deepEqual(v('deepseek', 'deepseek-v4-flash', tested({ 'deepseek:deepseek-v4-flash': true })), { reads: 'no', source: 'route' });
     assert.deepEqual(v('natively', 'natively', tested({ 'natively:natively': false })), { reads: 'yes', source: 'route' });
     assert.deepEqual(v('ollama', 'llama3.1:8b', tested({ 'ollama:llama3.1:8b': true })), unknown);
   });
