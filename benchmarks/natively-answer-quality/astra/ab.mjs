@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { chat, limiter, JUDGE_MODEL, assertProbeOk, scrub } from './client.mjs';
+import { chat, limiter, JUDGE_KEY, assertProbeOk, scrub } from './client.mjs';
 import { buildEnvelope, answerOf, splitGist } from './envelope.mjs';
 import { CHARTER, CHARTER_VERSION, loadRun, stripFence, checkJudgment } from './judge.mjs';
 import { officialScore, DIMENSIONS } from './score.mjs';
@@ -90,7 +90,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const la = mk(L), rb = mk(R);
     const env = buildEnvelope({ item, ds: A.ds, answer: answerOf(L.row), rowsById: null, validator: null });
     const text = pairText(env, la, rb);
-    const key = sha(['pair', CHARTER_VERSION, JUDGE_MODEL, text, k].join('\u0000'));
+    const key = sha(['pair', CHARTER_VERSION, JUDGE_KEY, text, k].join('\u0000'));
     const cf = path.join(cacheDir, key + '.json');
     let res = fs.existsSync(cf) ? JSON.parse(fs.readFileSync(cf, 'utf8')) : null;
     if (!res) { res = await judgePair(text); if (res.ok) fs.writeFileSync(cf, JSON.stringify(res)); }

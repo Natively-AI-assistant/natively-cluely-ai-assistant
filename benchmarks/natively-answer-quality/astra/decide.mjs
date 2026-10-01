@@ -11,6 +11,9 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GAIN = 0.3;
+// AQ_JUDGE=fable reads the Fable series (its own replay files and abs-*-f1 sets); the two judges are never pooled.
+const FABLE = process.env.AQ_JUDGE === 'fable';
+const JUDGED = FABLE ? '.judged-fable.jsonl' : '.judged.jsonl';
 
 function load(f) {
   const p = path.join(ROOT, f);
@@ -32,7 +35,7 @@ const sd = (x) => { const m = mean(x); return Math.sqrt(x.reduce((p, q) => p + (
 // judge's cache is keyed by answer text. A different score means the same answer was judged twice (a race).
 function sharedAnswerMismatches(base, variant) {
   const a = Object.fromEntries(rowsOf(`results/replay/${base}.jsonl`).map((r) => [`${r.id}#${r.k ?? 0}`, r.answer]));
-  const A = load(`results/replay/${base}.judged.jsonl`); const B = load(`results/replay/${variant}.judged.jsonl`);
+  const A = load(`results/replay/${base}${JUDGED}`); const B = load(`results/replay/${variant}${JUDGED}`);
   let shared = 0; let mismatched = 0;
   for (const r of rowsOf(`results/replay/${variant}.jsonl`)) {
     if ((r.k ?? 0) !== 0 || a[`${r.id}#0`] !== r.answer || !A[r.id] || !B[r.id]) continue;
@@ -55,7 +58,7 @@ function pair(A, B, ids) {
 }
 const f2 = (x) => (x >= 0 ? '+' : '') + x.toFixed(2);
 
-console.log(`# Pre-registered decisions — ${new Date().toISOString()}\n`);
+console.log(`# Pre-registered decisions — judge ${FABLE ? 'claude-fable-5-1' : 'gpt-6-astra'} — ${new Date().toISOString()}\n`);
 console.log('## Prepared changes (dev replay pairs; rule: gain ≥ +0.3, interval excludes 0, hard fails not up)\n');
 console.log('| change | rows judged | base | variant | gain (95%) | hard fails | rows that moved | verdict |');
 console.log('|---|---:|---:|---:|---:|---:|---:|---|');
@@ -73,7 +76,7 @@ const SECONDARY = [
 ];
 const table = (pairs, verdicts) => { for (const [label, base, variant] of pairs) {
   const ids = [...new Set(rowsOf(`results/replay/${base}.jsonl`).filter((r) => (r.k ?? 0) === 0).map((r) => r.id))];
-  const p = pair(load(`results/replay/${base}.judged.jsonl`), load(`results/replay/${variant}.judged.jsonl`), ids);
+  const p = pair(load(`results/replay/${base}${JUDGED}`), load(`results/replay/${variant}${JUDGED}`), ids);
   if (p.n < p.expected) { console.log(`| ${label} | ${p.n} of ${p.expected} | | | | | | ${verdicts ? 'INCOMPLETE — no verdict' : 'incomplete'} |`); continue; }
   const pass = p.diff >= GAIN && p.diff - p.half > 0 && p.hfB <= p.hfA;
   const why = pass ? '' : ` (${[p.diff < GAIN ? 'gain under +0.3' : null, !(p.diff - p.half > 0) ? 'interval includes 0' : null, p.hfB > p.hfA ? 'hard fails up' : null].filter(Boolean).join('; ')})`;
@@ -93,7 +96,7 @@ table(SECONDARY, false);
 console.log('\n## fix13 (refinement notice) against fix12 on the rows it re-ran\n');
 console.log('| split | rows judged | fix12 | fix13 | difference (95%) | hard fails | verdict |');
 console.log('|---|---:|---:|---:|---:|---:|---|');
-for (const [split, set, a, b] of [['dev', 'abs-dev-c2', 'aq2-dev-fix12c', 'aq2-dev-fix13'], ['holdout', 'abs-holdout-c2', 'aq2-holdout-fix12c', 'aq2-holdout-fix13']]) {
+for (const [split, set, a, b] of [['dev', FABLE ? 'abs-dev-f1' : 'abs-dev-c2', 'aq2-dev-fix12c', 'aq2-dev-fix13'], ['holdout', FABLE ? 'abs-holdout-f1' : 'abs-holdout-c2', 'aq2-holdout-fix12c', 'aq2-holdout-fix13']]) {
   const B = load(`astra/out/${set}/${b}.jsonl`);
   const ids = rowsOf(`results/${b}/natively_benchmark_full.jsonl`).map((r) => r.benchmark_id ?? r.id).filter(Boolean);
   const p = pair(load(`astra/out/${set}/${a}.jsonl`), B, [...new Set(ids)]);

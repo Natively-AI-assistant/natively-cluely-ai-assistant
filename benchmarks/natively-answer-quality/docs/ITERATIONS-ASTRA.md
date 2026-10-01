@@ -1073,3 +1073,26 @@ Positive but interval includes 0 → not promoted; fix13 stays the kept build an
 * aq-fix2 c399f399: the notice's code comment now cites the heard-turn counts. Candidate head is c399f399.
 * For the app run (runbook): if the dev wires show the notice on no heard Call Center / Sales row, check first
   whether the hotkey path passed the attached-file count as undefined — the gate stays closed on an unknown count.
+
+## The judge changes: Fable (claude-fable-5-1), by Evin's instruction — 2026-10-01 23:50Z
+* gpt-6-astra has been unavailable since 12:26Z (AgentRouter account quota). Evin: "use fable model as the judge and
+  continue optimisations". This replaces the earlier "no Claude as judge" rule from here on, by his decision.
+* What stays the same: charter v2 (`c725615a54f6`), the envelope, the JSON schema, the official score, the
+  validators' precedence, every pre-registered rule. What is new is only who reads the envelope.
+* **Separate series, never pooled.** The cache key carries the judge; absolute sets are `abs-dev-f1`,
+  `abs-holdout-f1`, `abs-sb-f1`; replay judgments go to `<name>.judged-fable.jsonl`. A comparison is always made
+  within one judge. The gpt-6-astra numbers in docs/REPORT-ASTRA.md stand as they are; its 02:00Z chain stays armed
+  and fills its own gaps if the quota returns.
+* **Isolation.** The session doing the optimising runs on the same model, so a judgment must not see it. Each
+  judgment is a fresh headless `claude` process with every customisation off (`--safe-mode`: no CLAUDE.md, memory,
+  hooks, skills, MCP servers), no tools, the charter as the whole system prompt, a temporary working directory,
+  `--effort medium`, no session persistence (`astra/client.mjs`, AQ_JUDGE=fable). The answers come from
+  deepseek-flash, so judge and generator are still different models. Open bias that cannot be removed: the fixes
+  under test were designed from gpt-6-astra's notes by a Fable session; a Fable judge may share that session's
+  taste. Mitigation: the objective validators keep precedence, and the two judges are compared on the same answers
+  (`astra/agreement.mjs`) before the Fable series is relied on.
+* **Calibration, Fable:** 25 of 25 (gate 23), 24 "decisive" and 1 "clear", 68 s
+  (`astra/out/calibration/calibration-fable-*.json`).
+* Plan (`astra/queue-f.mjs`, decisions first): the three replay pairs (base, then variant) → the kept build on dev
+  (aq2-dev-fix13c, 360) and its fix13-vs-fix12 rows → the same on holdout → fix6 on holdout and dev → reported-only
+  sets. `AQ_JUDGE=fable node astra/decide.mjs` applies the rules written on 2026-10-01 unchanged.

@@ -11,7 +11,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import os from 'node:os';
+import crypto from 'node:crypto';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // The spec named https://co.agentrouter.org/v1; that host is a different gateway and answers this key with
@@ -24,7 +26,23 @@ export const BASE_URL = process.env.ASTRA_BASE_URL || 'https://agentrouter.org/v
  * approved by Evin for this benchmark judge on 2026-09-30 ("Yes, full volume"), with the ToS/suspension risk stated.
  */
 export const CLIENT_HEADERS = Object.freeze({ originator: 'codex_cli_rs' });
-export const JUDGE_MODEL = 'gpt-6-astra';
+/**
+ * WHICH JUDGE (2026-10-01 22:40Z). gpt-6-astra over AgentRouter was the only judge until the account's quota ran out;
+ * Evin then asked for the Fable model as the judge ("use fable model as the judge and continue optimisations").
+ * AQ_JUDGE=fable selects it. Nothing else changes: same charter, same envelope, same schema, same official score.
+ * The two judges' scores are separate series and are never pooled: the cache key carries the judge (JUDGE_KEY),
+ * replay judgments go to their own file (JUDGED_SUFFIX) and absolute sets get their own names (abs-*-f1).
+ * Transport for Fable: the local `claude` CLI, headless, one fresh process per judgment with every customisation
+ * off (no CLAUDE.md, memory, hooks, skills or MCP servers), no tools, the charter as the whole system prompt and a
+ * neutral working directory — so a judgment sees the charter and the envelope and nothing of the session that is
+ * doing the optimising. No key is read or sent by this path (the CLI's own login is used).
+ */
+export const JUDGE = process.env.AQ_JUDGE === 'fable' ? 'fable' : 'astra';
+export const FABLE_EFFORT = process.env.AQ_FABLE_EFFORT || 'medium';
+export const JUDGE_MODEL = JUDGE === 'fable' ? 'claude-fable-5-1' : 'gpt-6-astra';
+/** What the caches are keyed by. Unchanged for gpt-6-astra, so its existing cache stays valid. */
+export const JUDGE_KEY = JUDGE === 'fable' ? `${JUDGE_MODEL}/effort-${FABLE_EFFORT}` : JUDGE_MODEL;
+export const JUDGED_SUFFIX = JUDGE === 'fable' ? '.judged-fable.jsonl' : '.judged.jsonl';
 export const KEY_VAR = 'AGENTROUTER_API_KEY';
 // The app worktrees deliberately carry no .env; the key lives in the MAIN checkout's .env.
 function findEnv() {
@@ -69,6 +87,7 @@ export function readProbe() {
 
 /** Throws unless a successful probe against JUDGE_MODEL is on record. */
 export function assertProbeOk() {
+  if (JUDGE === 'fable') return { ok: true, model_listed: true, requested_model: JUDGE_MODEL, returned_model: JUDGE_MODEL, unsupported_params: [] };
   const p = readProbe();
   if (!p || !p.ok || !p.model_listed || p.requested_model !== JUDGE_MODEL) {
     const why = !p ? 'no probe on record (run astra/probe.mjs)' : !p.model_listed ? `${JUDGE_MODEL} unavailable for this AgentRouter key` : 'last probe failed';
@@ -123,6 +142,7 @@ export let RATIONED = null;
 /** Set once a route rejects temperature=0 (spec §19: drop only the rejected optional parameter). */
 export let TEMPERATURE_REJECTED = false;
 export async function chat(messages, { maxTokens = 4000, temperature = 0, retries = 5, timeoutMs = 180000 } = {}) {
+  if (JUDGE === 'fable') return chatFable(messages, { retries: Math.min(retries, 3), timeoutMs: Math.max(timeoutMs, 300000) });
   if (RATIONED) return { ok: false, rationed: true, status: 402, error: RATIONED, requested_model: JUDGE_MODEL, attempts: 0, at: new Date().toISOString() };
   const probe = assertProbeOk();
   const unsupported = new Set(probe.unsupported_params ?? []);
@@ -175,4 +195,60 @@ export async function chat(messages, { maxTokens = 4000, temperature = 0, retrie
     attempt++;
   }
   return { ok: false, status: last?.status ?? null, error: scrub(last?.text ?? 'unknown').slice(0, 600), requested_model: JUDGE_MODEL, attempts: attempt + 1, at: new Date().toISOString() };
+}
+
+// ---- Fable through the headless CLI ----
+let FABLE_DIR = null;
+function fableSystemFile(system) {
+  FABLE_DIR ??= fs.mkdtempSync(path.join(os.tmpdir(), 'aq-fable-judge-'));
+  const f = path.join(FABLE_DIR, `${crypto.createHash('sha256').update(system).digest('hex').slice(0, 12)}.txt`);
+  if (!fs.existsSync(f)) fs.writeFileSync(f, system);
+  return f;
+}
+function runClaude(system, prompt, timeoutMs) {
+  return new Promise((resolve) => {
+    const t0 = Date.now();
+    const args = ['-p', '--model', JUDGE_MODEL, '--effort', FABLE_EFFORT, '--safe-mode', '--tools', '', '--system-prompt-file', fableSystemFile(system), '--no-session-persistence', '--output-format', 'json'];
+    // CLAUDECODE etc. describe the parent session; the judge process gets none of it.
+    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^CLAUDE_CODE_|^CLAUDECODE$/.test(k)));
+    const child = spawn('claude', args, { cwd: FABLE_DIR, env, stdio: ['pipe', 'pipe', 'pipe'], shell: process.platform === 'win32' });
+    let out = ''; let err = ''; let done = false;
+    const finish = (r) => { if (done) return; done = true; clearTimeout(timer); resolve({ ...r, latencyMs: Date.now() - t0 }); };
+    const timer = setTimeout(() => { child.kill(); finish({ code: -1, out, err: `timeout after ${timeoutMs} ms` }); }, timeoutMs);
+    child.stdout.on('data', (d) => { out += d; }); child.stderr.on('data', (d) => { err += d; });
+    child.on('error', (e) => finish({ code: -1, out, err: String(e?.message ?? e) }));
+    child.on('close', (code) => finish({ code, out, err }));
+    child.stdin.on('error', () => { /* the process ended before reading */ });
+    child.stdin.end(prompt);
+  });
+}
+const FABLE_LIMIT_RE = /usage limit|limit reached|out of (?:extra )?usage|exceeded your|credit balance|quota/i;
+async function chatFable(messages, { retries = 3, timeoutMs = 300000 } = {}) {
+  if (RATIONED) return { ok: false, rationed: true, status: 429, error: RATIONED, requested_model: JUDGE_MODEL, attempts: 0, at: new Date().toISOString() };
+  const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
+  const rest = messages.filter((m) => m.role !== 'system');
+  // One prompt per process: a repair turn is sent as the original request, the earlier output and the repair request.
+  const prompt = rest.length === 1 ? rest[0].content
+    : rest.map((m, i) => (m.role === 'assistant' ? `--- YOUR PREVIOUS OUTPUT ---\n${m.content}\n--- END OF PREVIOUS OUTPUT ---` : i === 0 ? m.content : m.content)).join('\n\n');
+  let attempt = 0; let last = null;
+  while (attempt <= retries) {
+    const r = await runClaude(system, prompt, timeoutMs);
+    let j = null; try { j = JSON.parse(r.out); } catch { /* not JSON: an error line */ }
+    const text = j ? String(j.result ?? '') : `${r.out}\n${r.err}`.trim();
+    last = { status: r.code, text: text.slice(0, 600) };
+    if (r.code === 0 && j && j.is_error === false && typeof j.result === 'string' && j.result.trim()) {
+      const models = Object.keys(j.modelUsage ?? {});
+      return {
+        ok: true, content: j.result, requested_model: JUDGE_MODEL, returned_model: models.join(',') || null,
+        model_mismatch: !models.includes(JUDGE_MODEL), response_id: j.session_id ?? null, request_id: null,
+        finish_reason: j.stop_reason ?? j.subtype ?? null,
+        usage: j.usage ? { input_tokens: j.usage.input_tokens, cache_read_input_tokens: j.usage.cache_read_input_tokens, cache_creation_input_tokens: j.usage.cache_creation_input_tokens, output_tokens: j.usage.output_tokens } : null,
+        latency_ms: r.latencyMs, temperature: 'default', effort: FABLE_EFFORT, temperature_dropped: false, attempts: attempt + 1, at: new Date().toISOString(),
+      };
+    }
+    if (FABLE_LIMIT_RE.test(text)) { RATIONED = `fable usage limit at ${new Date().toISOString()}: ${text.slice(0, 160)}`; console.error(`[fable] ${RATIONED} — stopping new judge calls`); break; }
+    await sleep(Math.min(60000, 3000 * 2 ** attempt) * (0.75 + Math.random() * 0.5));
+    attempt++;
+  }
+  return { ok: false, status: last?.status ?? null, error: String(last?.text ?? 'unknown').slice(0, 600), requested_model: JUDGE_MODEL, attempts: attempt + 1, at: new Date().toISOString() };
 }

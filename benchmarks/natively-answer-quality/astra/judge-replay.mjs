@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { limiter, assertProbeOk } from './client.mjs';
+import { limiter, assertProbeOk, JUDGED_SUFFIX } from './client.mjs';
 import { loadRun, judgeRow } from './judge.mjs';
 import { mean } from './score.mjs';
 import { samplePerMode } from './sample.mjs';
@@ -25,7 +25,7 @@ if (opt('sample')) {
   recs = recs.filter((r) => keep.has(r.id));
 }
 const cacheDir = path.join(HERE, 'cache'); fs.mkdirSync(cacheDir, { recursive: true });
-const outFile = replayFile.replace(/\.jsonl$/, '.judged.jsonl');
+const outFile = replayFile.replace(/\.jsonl$/, JUDGED_SUFFIX);
 const done = new Set(fs.existsSync(outFile) ? fs.readFileSync(outFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((j) => j.ok).map((j) => `${j.benchmark_id}#${j.k}`) : []);
 const lim = limiter(Number(opt('concurrency', 6)));
 await Promise.all(recs.filter((r) => !done.has(`${r.id}#${r.k}`)).map((r) => lim(async () => {

@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { chat, limiter, JUDGE_MODEL, assertProbeOk, scrub } from './client.mjs';
+import { chat, limiter, JUDGE_KEY, assertProbeOk, scrub } from './client.mjs';
 import { buildEnvelope, answerOf } from './envelope.mjs';
 import { officialScore, DIMENSIONS, FLAGS } from './score.mjs';
 import { validate } from '../validators/index.mjs';
@@ -71,7 +71,7 @@ export async function judgeRow({ run, row, repeat = 0, cacheDir }) {
   const answer = answerOf(row);
   const validator = validate(item, answer, run.ds);
   const env = buildEnvelope({ item, ds: run.ds, answer, rowsById: run.rowsById, validator: validator.verdict === 'n/a' ? null : validator, generatedAt: row.started_at ?? null });
-  const key = sha([CHARTER_VERSION, JUDGE_MODEL, item.mode, item.question, env.text, answer, repeat].join('\u0000'));
+  const key = sha([CHARTER_VERSION, JUDGE_KEY, item.mode, item.question, env.text, answer, repeat].join('\u0000'));
   const cf = path.join(cacheDir, key + '.json');
   if (fs.existsSync(cf)) return { ...JSON.parse(fs.readFileSync(cf, 'utf8')), cached: true };
   const res = await judgeOnce(CHARTER, env.text);
