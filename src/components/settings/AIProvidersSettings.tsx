@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useT } from '../../i18n';
-import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, FileText, User, Boxes, ClipboardList, Laptop } from 'lucide-react';
+import type { VisionModelState } from '../../types/electron';
+import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, ImageOff, FileText, User, Boxes, ClipboardList, Laptop } from 'lucide-react';
 import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
@@ -827,6 +828,37 @@ export const AIP_CSS = `
    reserved for decorative glyphs and disabled states. */
 .aip-model-id { font-size:10.5px; color: var(--aip-secondary); margin-left:auto; flex-shrink:0; max-width:52%; }
 
+/* ── "Reads images" per model row. A glyph button that discloses an in-flow
+   line under its row — never a menu: the well scrolls, so a floating layer
+   would open into clipped space. No status colour: the glyph and its weight
+   carry the answer; the accent dot only says "you set this yourself". ── */
+.aip-vision-btn {
+    position:relative; display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; flex-shrink:0; padding:0; border:0;
+    border-radius: var(--aip-r-sm); background:transparent; color: var(--aip-secondary); cursor:pointer;
+    transition: background var(--aip-dur-state) var(--aip-ease-out),
+                color var(--aip-dur-state) var(--aip-ease-out),
+                transform var(--aip-dur-press) var(--aip-ease-out);
+}
+.aip-vision-btn:hover,
+.aip-vision-btn[aria-expanded='true'] { background: var(--aip-item-active); color: var(--aip-primary); }
+.aip-vision-btn:active { transform: scale(0.94); }
+.aip-vision-btn[data-reads='no'] { color: var(--aip-tertiary); }
+.aip-vision-btn[data-reads='unknown'] > svg { opacity:0.5; }
+.aip-vision-btn[data-set='true']::after {
+    content:''; position:absolute; top:3px; right:3px; width:4px; height:4px;
+    border-radius:9999px; background: var(--aip-accent);
+}
+/* 27px = the row's 8px inset + the 11px tick + its 8px gap: the line starts
+   under the model's NAME, so it reads as belonging to that row. */
+.aip-vision-detail {
+    display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+    padding:2px 6px 8px 27px;
+}
+.aip-vision-label { font-size:11px; color: var(--aip-secondary); margin-right:2px; }
+.aip-vision-status { font-size:10.5px; color: var(--aip-secondary); margin-left:auto; text-align:right; }
+.aip-vision-chip { border-style:solid; border-color: var(--aip-border); }
+
 .aip-chip {
     display:inline-flex; align-items:center; gap:4px; box-sizing:border-box;
     height:22px; padding:0 7px; border-radius: var(--aip-r-sm);
@@ -1521,6 +1553,151 @@ export const AipProviderMark: React.FC<AipProviderMarkProps> = ({ provider, name
     );
 };
 
+/* ── "Reads images: Auto / On / Off" per model ─────────────────────────────
+   Natively works out by itself whether a model can read a screenshot (the
+   provider's own model list, a one-time image test, known model names). This
+   is where the user sees that answer and can overrule it, per model AND
+   provider. Main owns the answer (vision-capability:* IPC); the renderer sends
+   picker ids and shows what comes back. */
+
+type VisionSetting = VisionModelState['setting'];
+
+/** What "Auto" means for this model right now, as one short line. */
+export function visionAutoText(state: VisionModelState, t: (text: string) => string): string {
+    if (state.checking) return t('Checking…');
+    const { reads, source } = state.auto;
+    if (reads === 'unknown') return state.testable ? t('Not known yet · tested when you select it') : t('Not known');
+    if (source === 'test') return reads === 'yes' ? t('Yes · tested') : t('No · tested');
+    if (source === 'provider') return reads === 'yes' ? t('Yes · reported by the provider') : t('No · reported by the provider');
+    return reads === 'yes' ? t('Yes') : t('No');
+}
+
+/**
+ * The answers for a set of picker ids, kept current: asked when `active`
+ * turns on or the ids change, and again whenever main says an answer changed
+ * (a setting saved in another window, a background image test that finished).
+ */
+export function useVisionStates(ids: readonly string[], active: boolean) {
+    const [states, setStates] = useState<Record<string, VisionModelState | null>>({});
+    const key = ids.join('\n');
+    // Only the newest request may write: a slow answer for an old id list must
+    // not overwrite a fresh one.
+    const seq = useRef(0);
+    const refresh = useCallback(async () => {
+        const mine = ++seq.current;
+        try {
+            const result = await window.electronAPI?.getVisionModelStates?.(key ? key.split('\n') : []);
+            if (mine === seq.current && result?.states) setStates(result.states);
+        } catch { /* the rows simply show no control */ }
+    }, [key]);
+    useEffect(() => {
+        if (!active || !key) return;
+        void refresh();
+        const off = window.electronAPI?.onVisionCapabilityChanged?.(() => { void refresh(); });
+        return () => { off?.(); };
+    }, [active, key, refresh]);
+
+    const set = useCallback(async (id: string, setting: VisionSetting) => {
+        // Shown at once; main's answer (which also carries the new "reads") replaces it.
+        setStates(prev => prev[id] ? { ...prev, [id]: { ...prev[id]!, setting } } : prev);
+        try {
+            const result = await window.electronAPI?.setVisionSetting?.(id, setting);
+            if (result?.state) setStates(prev => ({ ...prev, [id]: result.state }));
+            else void refresh();
+        } catch { void refresh(); }
+    }, [refresh]);
+    const retest = useCallback(async (id: string) => {
+        setStates(prev => prev[id] ? { ...prev, [id]: { ...prev[id]!, checking: true } } : prev);
+        try {
+            const result = await window.electronAPI?.retestVision?.(id);
+            if (result?.state) setStates(prev => ({ ...prev, [id]: result.state }));
+            else void refresh();
+        } catch { void refresh(); }
+    }, [refresh]);
+    return { states, set, retest };
+}
+
+/** The glyph at the end of a model row: does it read images, and did the user decide that. */
+export const AipVisionButton: React.FC<{
+    state: VisionModelState; open: boolean; onClick: () => void; controls: string;
+}> = ({ state, open, onClick, controls }) => {
+    const t = useT();
+    const answer = state.reads === 'yes' ? t('Reads images') : state.reads === 'no' ? t('Does not read images') : t('Not known whether it reads images');
+    return (
+        <button
+            type="button"
+            className="aip-vision-btn"
+            data-reads={state.reads}
+            data-set={state.setting !== 'auto' ? 'true' : 'false'}
+            aria-expanded={open}
+            aria-controls={controls}
+            aria-label={answer}
+            title={state.setting !== 'auto' ? `${answer} · ${t('set by you')}` : answer}
+            onClick={onClick}
+        >
+            {state.checking
+                ? <Loader2 size={12} strokeWidth={1.75} className="aip-spinner" aria-hidden="true" />
+                : state.reads === 'no'
+                    ? <ImageOff size={12} strokeWidth={1.75} aria-hidden="true" />
+                    : <Image size={12} strokeWidth={1.75} aria-hidden="true" />}
+        </button>
+    );
+};
+
+/** The line a row's glyph discloses: the Auto / On / Off choice, what Auto says, and "Test again". */
+export const AipVisionDetail: React.FC<{
+    id: string; state: VisionModelState; open: boolean;
+    onSet: (setting: VisionSetting) => void; onRetest: () => void;
+}> = ({ id, state, open, onSet, onRetest }) => {
+    const t = useT();
+    const auto = visionAutoText(state, t);
+    const choices: Array<{ value: VisionSetting; label: string; title: string }> = [
+        { value: 'auto', label: t('Auto'), title: t('Let Natively work it out') },
+        { value: 'on', label: t('On'), title: t('Always send this model screenshots') },
+        { value: 'off', label: t('Off'), title: t('Never send this model screenshots') },
+    ];
+    return (
+        <div className="aip-reveal" data-open={open ? 'true' : 'false'} id={id}>
+            <div>
+                <div className="aip-vision-detail" role="group" aria-label={t('Reads images')}>
+                    <span className="aip-vision-label">{t('Reads images')}</span>
+                    {choices.map(c => (
+                        <button
+                            key={c.value}
+                            type="button"
+                            tabIndex={open ? 0 : -1}
+                            className="aip-chip aip-vision-chip"
+                            aria-pressed={state.setting === c.value}
+                            title={c.title}
+                            onClick={() => { if (state.setting !== c.value) onSet(c.value); }}
+                        >
+                            {c.label}
+                        </button>
+                    ))}
+                    <span className="aip-vision-status" aria-live="polite">
+                        {state.setting === 'auto' ? auto : `${t('Auto would say')}: ${auto}`}
+                    </span>
+                    {/* Only on Auto, and only where a test can run: On and Off are the
+                        user's own answer, and a test would send an image they may have
+                        just said not to send. */}
+                    {state.setting === 'auto' && state.testable && (
+                        <button
+                            type="button"
+                            tabIndex={open ? 0 : -1}
+                            className="aip-btn aip-btn-sm"
+                            disabled={state.checking}
+                            title={t('Send this model a test image now and see whether it can read it')}
+                            onClick={onRetest}
+                        >
+                            {state.auto.source === 'test' ? t('Test again') : t('Test now')}
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export interface AipModelEntry {
     id: string;
     label: string;
@@ -1582,6 +1759,15 @@ interface AipModelListProps {
      * Everything else (the summary, the reveal, the row actions) is unchanged.
      */
     pickOnly?: boolean;
+    /**
+     * Chat-model lists only: each row shows whether the model reads images and
+     * discloses the Auto / On / Off choice. Off by default — this component
+     * also lists embedding, reranker and speech models, where the question
+     * does not exist. `visionId` maps a row id to the picker id main expects
+     * when they differ (identity otherwise).
+     */
+    visionControl?: boolean;
+    visionId?: (modelId: string) => string;
 }
 
 /** Above this many models, a filter field appears. */
@@ -1606,10 +1792,17 @@ const AIP_MODEL_FILTER_THRESHOLD = 12;
 export const AipModelList: React.FC<AipModelListProps> = ({
     models, enabled, onToggle, onReset, defaultId, onSetDefault, staleIds = [], error,
     onRefresh, refreshing, onFirstOpen, optIn = false, onBulkToggle,
-    catalogIsComplete = false, pickOnly = false,
+    catalogIsComplete = false, pickOnly = false, visionControl = false, visionId,
 }) => {
     const t = useT();
     const [open, setOpen] = useState(false);
+    // Asked only while the list is open: a closed list shows no rows.
+    const visionIds = useMemo(
+        () => visionControl ? models.map(m => visionId ? visionId(m.id) : m.id) : [],
+        [visionControl, models, visionId],
+    );
+    const vision = useVisionStates(visionIds, visionControl && open);
+    const [visionOpenId, setVisionOpenId] = useState<string | null>(null);
     const [query, setQuery] = useState('');
     const [activeIndex, setActiveIndex] = useState(0);
     const firstOpenFired = useRef(false);
@@ -1800,8 +1993,12 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                 const inert = soleEnabled === m.id;
                                 const stale = staleIds.includes(m.id);
                                 const isDefault = defaultId === m.id;
+                                const pickerId = visionId ? visionId(m.id) : m.id;
+                                const visionState = visionControl ? vision.states[pickerId] : null;
+                                const visionPanelId = `${idRef.current}-vision-${i}`;
                                 return (
-                                    <div key={m.id} className="aip-model-row aip-row">
+                                    <React.Fragment key={m.id}>
+                                    <div className="aip-model-row aip-row">
                                         <button
                                             type="button"
                                             data-index={i}
@@ -1828,6 +2025,14 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                             )}
                                         </button>
                                         {stale && <AipBadge tone="warn" label={t('Not offered')} />}
+                                        {visionState && (
+                                            <AipVisionButton
+                                                state={visionState}
+                                                open={visionOpenId === m.id}
+                                                controls={visionPanelId}
+                                                onClick={() => setVisionOpenId(cur => cur === m.id ? null : m.id)}
+                                            />
+                                        )}
                                         {/* One fixed-width slot for both states. The badge is an
                                             18px pill and the button is a wider 22px control, so
                                             without a reserved slot every row's right edge would
@@ -1851,6 +2056,16 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                             )}
                                         </div>
                                     </div>
+                                    {visionState && (
+                                        <AipVisionDetail
+                                            id={visionPanelId}
+                                            state={visionState}
+                                            open={visionOpenId === m.id}
+                                            onSet={(setting) => { void vision.set(pickerId, setting); }}
+                                            onRetest={() => { void vision.retest(pickerId); }}
+                                        />
+                                    )}
+                                    </React.Fragment>
                                 );
                             })}
                         </div>
@@ -2802,6 +3017,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // never promises on-device handling before it knows.
     const [localFallback, setLocalFallback] = useState<{ text: boolean; vision: boolean }>({ text: false, vision: false });
     const [ollamaStatus, setOllamaStatus] = useState<'checking' | 'detected' | 'not-found' | 'fixing'>('checking');
+    // "Reads images" for the installed Ollama models (their rows are not an AipModelList).
+    const ollamaVisionIds = useMemo(() => ollamaModels.map(m => `ollama-${m}`), [ollamaModels]);
+    const ollamaVision = useVisionStates(ollamaVisionIds, ollamaStatus === 'detected');
+    const [ollamaVisionOpen, setOllamaVisionOpen] = useState<string | null>(null);
     const [ollamaRestarted, setOllamaRestarted] = useState(false);
     const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
     const [confirmBusy, setConfirmBusy] = useState(false);
@@ -5105,6 +5324,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             so an empty allow-list still means ALL models. */}
                         {antigravityModels.length > 0 && !disabledProviders.includes('antigravity') && (
                             <AipModelList
+                                visionControl
                                 models={antigravityModels.map(({ id, label }) => ({ id: `antigravity:${id}`, label }))}
                                 enabled={cloudEnabledModels['antigravity'] || []}
                                 onToggle={(modelId) => handleToggleModel('antigravity', modelId)}
@@ -5273,6 +5493,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             {!disabledProviders.includes('codex-cli') && (
                                 <div className="aip-provider-row">
                                     <AipModelList
+                                        visionControl
                                         models={effectiveModels('codex-cli')}
                                         enabled={cloudEnabledModels['codex-cli'] || []}
                                         onToggle={(modelId) => handleToggleModel('codex-cli', modelId)}
@@ -5509,6 +5730,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 when the active model becomes unavailable. */}
                             {hasStoredKey.litellm && (
                                 <AipModelList
+                                    visionControl
                                     models={effectiveModels('litellm')}
                                     enabled={cloudEnabledModels['litellm'] || []}
                                     onToggle={(modelId) => handleToggleModel('litellm', modelId)}
@@ -5699,6 +5921,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
                             {hasStoredKey.ninerouter && (
                                 <AipModelList
+                                    visionControl
                                     models={effectiveModels('ninerouter')}
                                     enabled={cloudEnabledModels['ninerouter'] || []}
                                     onToggle={(modelId) => handleToggleModel('ninerouter', modelId)}
@@ -5815,12 +6038,36 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             </div>
 
                             <div className="grid grid-cols-1 gap-2">
-                                {ollamaModels.map(model => (
-                                    <div key={model} className="aip-well flex items-center justify-between gap-2 p-2">
-                                        <span className="aip-mono truncate">{model}</span>
-                                        <AipBadge tone="neutral" label={t('Local')} />
-                                    </div>
-                                ))}
+                                {ollamaModels.map((model, i) => {
+                                    const pickerId = `ollama-${model}`;
+                                    const visionState = ollamaVision.states[pickerId];
+                                    const panelId = `aip-ollama-vision-${i}`;
+                                    return (
+                                        <div key={model} className="aip-well p-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="aip-mono truncate flex-1 min-w-0">{model}</span>
+                                                {visionState && (
+                                                    <AipVisionButton
+                                                        state={visionState}
+                                                        open={ollamaVisionOpen === model}
+                                                        controls={panelId}
+                                                        onClick={() => setOllamaVisionOpen(cur => cur === model ? null : model)}
+                                                    />
+                                                )}
+                                                <AipBadge tone="neutral" label={t('Local')} />
+                                            </div>
+                                            {visionState && (
+                                                <AipVisionDetail
+                                                    id={panelId}
+                                                    state={visionState}
+                                                    open={ollamaVisionOpen === model}
+                                                    onSet={(setting) => { void ollamaVision.set(pickerId, setting); }}
+                                                    onRetest={() => { void ollamaVision.retest(pickerId); }}
+                                                />
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

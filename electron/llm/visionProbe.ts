@@ -56,6 +56,9 @@ export class VisionProbe {
 
   private now(): number { return (this.deps.now ?? Date.now)(); }
 
+  /** Is a test of this model running right now? (Settings shows "Checking…".) */
+  isRunning(selection: VisionQuery): boolean { return this.inFlight.has(this.deps.keyOf(selection)); }
+
   /** A fresh saved result, or run the test (one at a time per model). `force` ignores freshness and backoff. */
   ensure(selection: VisionQuery, opts: { force?: boolean } = {}): Promise<ProbeOutcome> {
     const key = this.deps.keyOf(selection);

@@ -14149,6 +14149,34 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { ids: ids.filter((id) => typeof id === 'string' && llmHelper.canDispatchFastModel(id)) };
   });
 
+  // ── "Reads images: Auto / On / Off" per model (2026-10-01) ────────────────
+  // Main answers for the same reason as above: the renderer sends picker ids
+  // and main, which owns the classifiers and the saved answers, says what each
+  // one is. The listener is (re)attached on every call so it follows the live
+  // helper; it tells every window to ask again when an answer changed — a
+  // setting, or a one-time image test that finished in the background.
+  const visionHelper = () => {
+    const llmHelper = appState.processingHelper.getLLMHelper();
+    llmHelper.onVisionCapabilityChanged(() => {
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('vision-capability-changed');
+      });
+    });
+    return llmHelper;
+  };
+  safeHandle('vision-capability:describe', async (_, ids: string[]) => {
+    if (!Array.isArray(ids)) return { states: {} };
+    return { states: visionHelper().describeVisionModels(ids.filter((id) => typeof id === 'string')) };
+  });
+  safeHandle('vision-capability:set', async (_, id: string, setting: 'auto' | 'on' | 'off') => {
+    if (typeof id !== 'string' || !['auto', 'on', 'off'].includes(setting)) return { state: null };
+    return { state: visionHelper().setVisionSetting(id, setting) };
+  });
+  safeHandle('vision-capability:retest', async (_, id: string) => {
+    if (typeof id !== 'string') return { state: null };
+    return { state: await visionHelper().retestVision(id) };
+  });
+
   safeHandle('get-fast-model', async () => {
     const { CredentialsManager } = require('./services/CredentialsManager');
     return { model: CredentialsManager.getInstance().getFastModel() };

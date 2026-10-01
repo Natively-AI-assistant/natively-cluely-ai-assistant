@@ -101,7 +101,7 @@ describe('the openrouter/ prefix is classified BEFORE the vendor catch-alls', ()
   });
 
   test('LLMHelper picks the provider for a direct request before the vendor predicates', () => {
-    const start = llm.indexOf("if (selected === 'natively') provider = 'natively';");
+    const start = llm.indexOf("if (selected === 'natively') return { provider: 'natively', model: selected };");
     assert.ok(start >= 0, 'the direct-assist provider selection chain should exist');
     const chain = llm.slice(start, start + 2000);
     const at = chain.indexOf('isOpenRouterModel(selected)');

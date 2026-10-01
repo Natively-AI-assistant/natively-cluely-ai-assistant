@@ -86,8 +86,10 @@ const modelAvailableSource = () => {
 };
 
 const directAssistSource = () => {
-  const start = llm.indexOf('public getDirectAssistSelection(): DirectAssistSelection {');
-  assert.ok(start >= 0, 'getDirectAssistSelection() should exist');
+  // The chain lives in classifyCloudModel since 2026-10-01 (shared with the
+  // Settings "Reads images" lookup); getDirectAssistSelection calls it.
+  const start = llm.indexOf('private classifyCloudModel(selected: string)');
+  assert.ok(start >= 0, 'classifyCloudModel() should exist');
   const end = llm.indexOf('\n  }', start);
   assert.ok(end > start, 'getDirectAssistSelection() should terminate');
   return llm.slice(start, end);

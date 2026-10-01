@@ -352,6 +352,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             // read as "All 444" in the summary and un-ticking the
                             // last model would have re-enabled the whole gateway.
                             optIn={isOptInModelProvider(providerId)}
+                            // Every provider this card is used for is a chat-model
+                            // provider, so each row can say whether it reads images.
+                            visionControl
                             models={selectableModels}
                             enabled={enabledModels || []}
                             onToggle={onToggleModel}

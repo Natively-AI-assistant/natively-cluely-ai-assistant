@@ -841,7 +841,9 @@ test('Direct private-vision guard blocks cloud images before Natively transport'
 
 test('Direct selection classifies LiteLLM and NVIDIA gateways before generic vendors', () => {
   const source = fs.readFileSync(path.resolve(root, 'electron/LLMHelper.ts'), 'utf8');
-  const start = source.indexOf('public getDirectAssistSelection()');
+  // The chain moved into classifyCloudModel (2026-10-01), which the live
+  // selection and the Settings "Reads images" lookup now share.
+  const start = source.indexOf('private classifyCloudModel(');
   const end = source.indexOf('\n  /**', start + 20);
   const selection = source.slice(start, end);
   const liteLlm = selection.indexOf('this.isLiteLLMModel(selected)');
@@ -853,8 +855,8 @@ test('Direct selection classifies LiteLLM and NVIDIA gateways before generic ven
   assert.ok(liteLlm >= 0 && liteLlm < genericOpenAi, 'litellm/openai/... must stay on LiteLLM');
   assert.ok(nvidiaNim >= 0 && nvidiaNim < genericOpenAi, 'nvidia_nim/openai/... must stay on NIM');
   assert.ok(nvidiaNim < genericGroq, 'nvidia_nim/openai/gpt-oss... must not be claimed by Groq');
-  assert.match(selection, /isLiteLLMModel\(selected\)\) provider = 'litellm'/);
-  assert.match(selection, /isNvidiaNimModel\(selected\)\) provider = 'nvidia_nim'/);
+  assert.match(selection, /isLiteLLMModel\(selected\)\) return \{ provider: 'litellm'/);
+  assert.match(selection, /isNvidiaNimModel\(selected\)\) return \{ provider: 'nvidia_nim'/);
 });
 
 test('Direct vision preflight preserves images for LiteLLM and NVIDIA gateways', () => {

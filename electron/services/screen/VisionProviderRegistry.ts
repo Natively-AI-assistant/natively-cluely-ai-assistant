@@ -29,7 +29,7 @@ import {
   readOllamaRecordTarget, readUsingOllama,
 } from '../../llm/activeCustomProvider';
 import { gatewaySeatReadsImages, readsImages, resolveVision } from '../../llm/visionResolver';
-import { normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from '../../llm/visionCapabilityStore';
+import { normalizeVisionBaseURL, storedVisionAnswer, storedVisionOverride, storedVisionTest } from '../../llm/visionCapabilityStore';
 import { agentRouterWireModel, isAgentRouterModelId } from '../../llm/agentRouter';
 
 export interface VisionProviderBuildInputs {
@@ -113,7 +113,7 @@ export function buildVisionProviders(
   providers.push(custom(credentials, inputs));
   providers.push(curl(credentials, inputs));
 
-  return providers.filter(p => p !== null) as VisionProviderConfig[];
+  return (providers.filter(p => p !== null) as VisionProviderConfig[]).map(withUserOverride);
 }
 
 // ─── Provider builders ────────────────────────────────────────────────────
@@ -629,7 +629,25 @@ function registryVisionFacts(baseURL = '', extra: { ninerouterVisionModels?: rea
     ...extra,
     providerReportsVision: (p: string, m: string) => storedVisionAnswer(p, m, baseURL),
     testedVision: (p: string, m: string) => storedVisionTest(p, m, baseURL)?.reads,
+    overriddenVision: (p: string, m: string) => storedVisionOverride(p, m, baseURL),
   };
+}
+
+// The rungs whose model is fixed, not asked of the resolver: rung id → the
+// provider its model is saved under. "Reads images: Off" (Settings, phase 4)
+// is about the MODEL, whichever rung would send to it — the same rule, and
+// the same list, as LLMHelper.buildVisionChain's fixedRungModel.
+const FIXED_RUNG_PROVIDER: Readonly<Record<string, string>> = {
+  natively: 'natively', openai: 'openai', claude: 'claude', groq_scout: 'groq',
+  gemini_flash_lite: 'gemini', gemini_flash: 'gemini', gemini_pro: 'gemini',
+};
+
+/** A fixed-model rung the user switched Off reads no screenshot. (A custom or
+ *  cURL provider has its own "Screenshot / Vision Support" control.) */
+function withUserOverride(p: VisionProviderConfig): VisionProviderConfig {
+  const provider = FIXED_RUNG_PROVIDER[p.id];
+  if (!p.supportsVision || !provider || !p.modelId) return p;
+  return storedVisionOverride(provider, p.modelId) === false ? { ...p, supportsVision: false } : p;
 }
 
 // Single definition, re-exported. The local copy this replaces had drifted:
