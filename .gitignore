@@ -656,6 +656,7 @@ docs/plans/*
 !docs/plans/2026-10-01-vision-capability-phase3a-plan.md
 !docs/plans/2026-10-01-vision-capability-phase3b-plan.md
 !docs/plans/2026-10-01-vision-capability-phase5a-plan.md
+!docs/plans/2026-10-01-vision-capability-phase5b-plan.md
 
 # Live RAG probe scratch userdata — the probes mkdir these and the app fills
 # them with a multi-MB natively.db. Generated output, not a fixture.
