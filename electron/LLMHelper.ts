@@ -8592,6 +8592,46 @@ let isMultimodal = !!(imagePaths?.length);
     req: { userContent: string; message: string; context?: string; imagePaths: string[]; systemPrompt: string },
     abortSignal?: AbortSignal,
   ): AsyncGenerator<string, void, unknown> {
+    const ordered = await this.buildVisionChain(req);
+
+    // Delegate the first-token-commit + retry + circuit-breaker state machine.
+    // hedgeEnabled:false — the Gemini cascade is strict serial (flash-lite →
+    // flash → pro), so no provider sets hedgeWith and nothing is raced.
+    yield* runStreamingVisionFallback(
+      ordered,
+      { ...DEFAULT_VISION_FALLBACK_CONFIG, hedgeEnabled: false },
+      this.visionHealth,
+      {
+        log: (m) => console.log(m),
+        warn: (m) => console.warn(m),
+        // Mirrors the non-streaming vision path's 404 handling (see the
+        // onModelError call in generateWithVisionFallback). Without this the
+        // LIVE vision path — the one users actually hit — could never tell the
+        // version manager its pinned model had been retired, so a decommissioned
+        // id stayed pinned indefinitely (Groq llama-4-scout, 2026-08-12).
+        onModelGone: (_id, name) => {
+          this.modelVersionManager.onModelError(name).catch(() => { });
+        },
+        // A real screenshot refused as image-unsupported contradicts whatever
+        // said this model reads images: test it again now (2026-10-01).
+        onNoVision: (id) => {
+          const selected = (() => { try { return this.getDirectAssistSelection().provider; } catch { return null; } })();
+          if (id === selected) this.maybeProbeSelectedVision({ force: true });
+        },
+      },
+      abortSignal,
+    );
+  }
+
+  /**
+   * The rungs for one screenshot turn, in the order they will be tried
+   * (2026-10-01: split out of streamVisionWithFallback so the order can be
+   * recorded and compared; phase 5a changes who leads). Throws the "No
+   * vision-capable provider configured…" errors when nothing can read it.
+   */
+  private async buildVisionChain(
+    req: { userContent: string; message: string; context?: string; imagePaths: string[]; systemPrompt: string },
+  ): Promise<VisionStreamProvider[]> {
     const { userContent, message, context, imagePaths, systemPrompt } = req;
 
     // ── Resolve per-family model tiers (tier1→tier2→tier3 across attempts) ──
@@ -8873,33 +8913,7 @@ let isMultimodal = !!(imagePaths?.length);
         : 'No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings.');
     }
 
-    // Delegate the first-token-commit + retry + circuit-breaker state machine.
-    // hedgeEnabled:false — the Gemini cascade is strict serial (flash-lite →
-    // flash → pro), so no provider sets hedgeWith and nothing is raced.
-    yield* runStreamingVisionFallback(
-      ordered,
-      { ...DEFAULT_VISION_FALLBACK_CONFIG, hedgeEnabled: false },
-      this.visionHealth,
-      {
-        log: (m) => console.log(m),
-        warn: (m) => console.warn(m),
-        // Mirrors the non-streaming vision path's 404 handling (see the
-        // onModelError call in generateWithVisionFallback). Without this the
-        // LIVE vision path — the one users actually hit — could never tell the
-        // version manager its pinned model had been retired, so a decommissioned
-        // id stayed pinned indefinitely (Groq llama-4-scout, 2026-08-12).
-        onModelGone: (_id, name) => {
-          this.modelVersionManager.onModelError(name).catch(() => { });
-        },
-        // A real screenshot refused as image-unsupported contradicts whatever
-        // said this model reads images: test it again now (2026-10-01).
-        onNoVision: (id) => {
-          const selected = (() => { try { return this.getDirectAssistSelection().provider; } catch { return null; } })();
-          if (id === selected) this.maybeProbeSelectedVision({ force: true });
-        },
-      },
-      abortSignal,
-    );
+    return ordered;
   }
 
   /**
