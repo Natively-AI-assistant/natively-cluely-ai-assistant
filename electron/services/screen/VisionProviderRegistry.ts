@@ -28,7 +28,7 @@ import {
 import {
   readActiveCustomProvider, readActiveCurlProvider, readActiveModelId, readActiveSelection, readFixedVisionModels,
 } from '../../llm/activeCustomProvider';
-import { gatewaySeatReadsImages } from '../../llm/visionResolver';
+import { gatewaySeatReadsImages, readsImages, resolveVision } from '../../llm/visionResolver';
 import { normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from '../../llm/visionCapabilityStore';
 import { agentRouterWireModel, isAgentRouterModelId } from '../../llm/agentRouter';
 
@@ -93,12 +93,14 @@ export function buildVisionProviders(
     // image — see ninerouter() for why that matters, and why an empty
     // catalogue still seats it.
     providers.push(ninerouter(credentials, inputs));
+    providers.push(deepseek(credentials, inputs));
   }
 
   // Local providers — always allowed, including in private_vision.
   providers.push(ollama(credentials, inputs));
   providers.push(codex(credentials, inputs));
   providers.push(custom(credentials, inputs));
+  providers.push(curl(credentials, inputs));
 
   return providers.filter(p => p !== null) as VisionProviderConfig[];
 }
@@ -500,6 +502,56 @@ function agentrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInpu
 // The saved facts both screenshot paths read: provider catalogues and one-time
 // test results (visionCapabilityStore). `baseURL` is the normalised address of a
 // self-hosted provider, '' for hosted services — the key LLMHelper writes under.
+/**
+ * Direct DeepSeek, for the model the user selected (2026-10-01). Seated only
+ * when the resolver says that model reads images — the name list for Flash
+ * (measured), or a passed one-time test. Never on unknown: deepseek-v4-pro
+ * answers HTTP 200 without seeing the image. Last among the cloud rungs, so it
+ * matters only when nothing faster is configured; before this a DeepSeek-only
+ * user got no pre-pass at all.
+ */
+function deepseek(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getDeepseekApiKey?.();
+  const selection = readActiveSelection();
+  const isSelected = selection?.provider === 'deepseek';
+  const modelId = isSelected ? selection!.model : '';
+  const reads = isSelected
+    && readsImages(resolveVision({ provider: 'deepseek', model: modelId }, registryVisionFacts()), false);
+  return {
+    id: 'deepseek',
+    displayName: modelId ? `DeepSeek (${modelId})` : 'DeepSeek',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey && isSelected,
+    supportsVision: !!apiKey && reads,
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('deepseek', p),
+  };
+}
+
+/**
+ * The cURL provider the user selected (2026-10-01), on the same two shared
+ * predicates as the custom rung above: it must be able to carry an image, and
+ * it is local only when its host is loopback or private — never by default, so
+ * a hosted endpoint cannot satisfy "Keep screenshots on this device".
+ */
+function curl(_creds: CredentialsManager, inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const selection = readActiveSelection();
+  const active = selection?.provider === 'curl' ? readActiveCurlProvider() : null;
+  return {
+    id: 'curl',
+    displayName: active?.name || 'cURL provider',
+    modelId: (active as any)?.model,
+    isLocal: customProviderIsLocal(active),
+    isConfigured: !!active,
+    supportsVision: customProviderSupportsVision(active),
+    scopeAllowsScreenshots: inputs.scopeAllowsScreenshots,
+    hint: 'custom',
+    invoke: async (p) => callLLMHelperVision('curl', p),
+  };
+}
+
 /**
  * Did the user select a model that runs on this machine? Ollama, or a custom /
  * cURL endpoint on a loopback or private host (customProviderIsLocal — never

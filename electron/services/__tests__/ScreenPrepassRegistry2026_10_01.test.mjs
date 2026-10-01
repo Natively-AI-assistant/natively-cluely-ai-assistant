@@ -135,6 +135,12 @@ function expected(name, before) {
   // (a) Evin, 2026-10-01: with a local model selected, the pre-pass stays off
   //     cloud providers. Only rungs that keep the screenshot on the machine remain.
   if (LOCAL_SELECTIONS.has(label)) rungs = rungs.filter((r) => r.endsWith(' (local)'));
+  const [mode, keys] = [name.split(' | ')[0], name.split(' | ')[1].replace('keys: ', '')];
+  // (b) A selected DeepSeek Flash can run the pre-pass (cloud, last). Pro cannot read images.
+  if (label === 'deepseek-v4-flash' && KEY_SETS[keys].includes('deepseek') && mode === 'vision_first') rungs.push('deepseek=deepseek-v4-flash');
+  // (c) A selected cURL provider that reads images: a local one in both modes, a hosted one only where cloud is allowed.
+  if (label === 'curl local, reads images') rungs.push('curl= (local)');
+  if (label === 'curl hosted, reads images' && mode === 'vision_first') rungs.push('curl=');
   // (d) Defect 9: the OpenAI rung said `gpt-4o` while the request went to the
   //     SELECTED OpenAI model. It now names, and sends to, the fixed vision model.
   rungs = rungs.map((r) => (r === 'openai=gpt-4o' ? `openai=${FIXED.openai}` : r));
@@ -252,5 +258,81 @@ describe('with a local model selected, no cloud provider gets the pre-pass scree
     const rungs = build({ mode: 'vision_first', localOnly: false, scopeAllowsScreenshots: true }, credentials(KEY_SETS.vendors))
       .filter((p) => p.isConfigured && p.supportsVision).map((p) => p.id);
     assert.deepEqual(rungs, want);
+  });
+});
+
+// ── Selected-only rungs: DeepSeek Flash and a cURL provider ──────────────────
+
+describe('a selected DeepSeek model', () => {
+  const ids = (list) => list.map((r) => r.split('=')[0]);
+  test('Flash, with a DeepSeek key: it runs the pre-pass, after every other cloud rung', () => {
+    assert.deepEqual(eligible('deepseek', 'deepseek-v4-flash', 'vision_first'), ['deepseek=deepseek-v4-flash']);
+    assert.equal(ids(eligible('everything', 'deepseek-v4-flash', 'vision_first')).at(-1), 'deepseek');
+  });
+  test('Pro: never seated — it answers without seeing the image', () => {
+    assert.ok(!ids(eligible('everything', 'deepseek-v4-pro', 'vision_first')).includes('deepseek'));
+  });
+  test('not selected, or no key: not seated', () => {
+    assert.ok(!ids(eligible('everything', 'gemini-3.8-flash', 'vision_first')).includes('deepseek'));
+    assert.deepEqual(eligible('gemini', 'deepseek-v4-flash', 'vision_first').filter((r) => r.startsWith('deepseek')), []);
+  });
+  test('never in "keep screenshots on this device" mode: it is a cloud provider', () => {
+    assert.deepEqual(eligible('everything', 'deepseek-v4-flash', 'private_vision'), []);
+    assert.equal(all('everything', 'deepseek-v4-flash', 'vision_first').find((p) => p.id === 'deepseek').isLocal, false);
+  });
+  test('a saved one-time test overrides the name: a passed unknown id is seated, a failed Flash is not', () => {
+    const unknown = { getCurrentModelId: () => 'deepseek-v9-next', getDirectAssistSelection: () => ({ provider: 'deepseek', model: 'deepseek-v9-next' }) };
+    assert.ok(!ids(eligible('deepseek', 'deepseek-v4-flash', 'vision_first', unknown)).includes('deepseek'), 'unknown and untested: not seated');
+    const store = new VisionCapabilityStore({ filePath: null });
+    store.recordTest('deepseek', '', 'deepseek-v9-next', true);
+    store.recordTest('deepseek', '', 'deepseek-v4-flash', false);
+    __setVisionCapabilityStore(store);
+    assert.deepEqual(eligible('deepseek', 'deepseek-v4-flash', 'vision_first', unknown), ['deepseek=deepseek-v9-next'], 'tested yes: seated');
+    assert.ok(!ids(eligible('deepseek', 'deepseek-v4-flash', 'vision_first')).includes('deepseek'), 'tested text-only: not seated, whatever its name says');
+  });
+});
+
+describe('a selected cURL provider', () => {
+  const ids = (list) => list.map((r) => r.split('=')[0]);
+  test('local and reads images: it alone runs the pre-pass, in both modes', () => {
+    assert.deepEqual(ids(eligible('everything', 'curl local, reads images', 'vision_first')), ['curl']);
+    assert.deepEqual(ids(eligible('everything', 'curl local, reads images', 'private_vision')), ['curl']);
+  });
+  test('hosted and reads images: last, after the cloud rungs; never in "keep on this device" mode', () => {
+    const rungs = ids(eligible('vendors', 'curl hosted, reads images', 'vision_first'));
+    assert.equal(rungs.at(-1), 'curl');
+    assert.equal(rungs[0], 'natively', 'the cloud order is untouched');
+    assert.deepEqual(eligible('vendors', 'curl hosted, reads images', 'private_vision'), []);
+  });
+  test('text-only (no image placeholder, no messages body): not seated', () => {
+    assert.deepEqual(eligible('everything', 'curl local, text only', 'vision_first'), []);
+  });
+  test('not selected: no rung', () => {
+    assert.ok(!all('everything', 'gemini-3.8-flash', 'vision_first').some((p) => p.id === 'curl' && p.isConfigured));
+  });
+});
+
+describe('runVisionRequest: the two new rungs go through the existing adapters', () => {
+  const stream = (name, calls) => async function* (...args) { calls.push({ name, args }); yield 'two '; yield 'pieces'; };
+  test('deepseek: the selected model, with the image, collected into one string', async () => {
+    const { h, calls } = bareHelper({ currentModelId: 'deepseek-v4-flash' });
+    h.streamWithDeepseek = stream('deepseek', calls);
+    const signal = new AbortController().signal;
+    assert.equal(await h.runVisionRequest('deepseek', 'user', 'system', '/tmp/x.png', { signal }), 'two pieces');
+    assert.deepEqual(calls[0].args, ['user', 'system', 'deepseek-v4-flash', signal, ['/tmp/x.png']]);
+  });
+  test('curl: the selected provider, with the image', async () => {
+    const provider = { id: 'u1', name: 'Mine', curlCommand: 'curl http://localhost:9000', responsePath: 'text' };
+    const { h, calls } = bareHelper({ activeCurlProvider: provider });
+    h.streamWithDirectCurl = stream('curl', calls);
+    const signal = new AbortController().signal;
+    assert.equal(await h.runVisionRequest('curl', 'user', 'system', '/tmp/x.png', { signal }), 'two pieces');
+    assert.deepEqual(calls[0].args, [provider, 'user', 'system', ['/tmp/x.png'], signal]);
+  });
+  test('curl with no provider selected: a clear error, no request', async () => {
+    const { h, calls } = bareHelper({ activeCurlProvider: null });
+    h.streamWithDirectCurl = stream('curl', calls);
+    await assert.rejects(() => h.runVisionRequest('curl', 'u', 's', '/tmp/x.png'), /No cURL provider selected/);
+    assert.equal(calls.length, 0);
   });
 });

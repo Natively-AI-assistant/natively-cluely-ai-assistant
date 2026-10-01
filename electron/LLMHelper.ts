@@ -2203,7 +2203,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter' | 'deepseek' | 'curl',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -2248,6 +2248,20 @@ export class LLMHelper {
         return this.generateWithNinerouter(userPrompt, systemPrompt, [imagePath]);
       case 'agentrouter':
         return this.generateWithAgentRouter(userPrompt, systemPrompt, [imagePath], undefined, opts?.signal);
+      // The two selected-only rungs (2026-10-01) reuse the streaming adapters
+      // and collect the answer: no second request shape to keep in step, and
+      // both adapters keep their own privacy gates (assertOutboundScopes).
+      case 'deepseek': {
+        let text = '';
+        for await (const piece of this.streamWithDeepseek(userPrompt, systemPrompt, this.currentModelId, opts?.signal, [imagePath])) text += piece;
+        return text;
+      }
+      case 'curl': {
+        if (!this.activeCurlProvider) throw new Error('No cURL provider selected');
+        let text = '';
+        for await (const piece of this.streamWithDirectCurl(this.activeCurlProvider, userPrompt, systemPrompt, [imagePath], opts?.signal)) text += piece;
+        return text;
+      }
       case 'gemini_flash_lite':
       case 'gemini_flash':
       case 'gemini_pro': {
