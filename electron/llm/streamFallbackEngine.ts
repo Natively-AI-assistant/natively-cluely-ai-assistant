@@ -168,7 +168,7 @@ export interface FallbackHooks {
 // about images. Defined in this file because the engine takes no imports; the
 // one-time vision test (visionProbeOutcome.ts) reads the same list from here.
 const IMAGE_REFUSAL_PATTERNS: readonly RegExp[] = [
-  /support(?:s)? image input/,                                   // OpenRouter: "No endpoints found that support image input"
+  /no endpoints found that support image input/,                 // OpenRouter (as sent); never the bare phrase "supports image input"
   /does(?: not|n't) support (?:image|vision)/,                   // "does not support image input", "doesn't support vision"
   /image_url is only supported/,                                 // OpenAI
   /images?(?: input| inputs)? (?:is|are)(?: not|n't) supported/, // "images are not supported", "image input is not supported"

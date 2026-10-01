@@ -150,7 +150,7 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 // ladder: if this id goes, Groq hosts nothing that accepts an image, and the
 // vision chain is meant to fall through to another provider.
 const GROQ_MODEL = GROQ_PRIMARY_MODEL
-import { GROQ_VISION_MODEL } from './llm/groqModels'
+import { GROQ_VISION_MODEL, isRetiredModelId as isRetiredGroqModelId } from './llm/groqModels'
 import { DEEPSEEK_DEFAULT_MODEL, deepseekWireModel, isDeepseekModelId } from './llm/deepseekModels'
 import {
   AGENTROUTER_JUDGE_MODEL,
@@ -2829,6 +2829,17 @@ export class LLMHelper {
       if (this.useOllama && this.ollamaModel && this.ollamaModel !== nextOllamaModel) {
         this.releaseOllamaPin(this.ollamaModel);
       }
+      // A DIFFERENT Ollama model was picked: forget which installed model reads
+      // images, so it is worked out again for the new selection (the resolver
+      // prefers the selected model when that one reads images). Without this,
+      // picking a vision model after a text model left the previously resolved
+      // model answering every screenshot — in the screenshot chain, and since
+      // 2026-10-01 in "Keep screenshots on this device" and the screen record
+      // too. Re-selecting the same model keeps what was learned.
+      if (!this.useOllama || this.ollamaModel !== nextOllamaModel) {
+        this.ollamaVisionModel = null;
+        this.ollamaVisionNegativeUntil = 0;
+      }
       this.useOllama = true;
       this.ollamaModel = nextOllamaModel;
       this.customProvider = null;
@@ -3361,8 +3372,9 @@ export class LLMHelper {
       }
       // An image goes to the model that reads images (2026-10-01): the one the
       // local-vision check resolved, which is the selected model whenever that
-      // one reads images itself. A text turn is unchanged.
-      const ollamaModel = (images && this.ollamaVisionModel) || this.ollamaModel;
+      // one reads images itself. A text turn is unchanged, and so is a daemon
+      // on another machine (localVisionOverride: the selected model answers).
+      const ollamaModel = (images && this.localVisionOverride(imagePaths)) || this.ollamaModel;
 
       const sys = systemPrompt ? this.resolveLocalSystemPrompt(systemPrompt) : TINY_SYSTEM_PROMPT;
       // Per-request hard guard: trim userContent (never sys) until total fits the model's max ctx.
@@ -8926,7 +8938,11 @@ let isMultimodal = !!(imagePaths?.length);
       }
       if (this.groqClient) {
         // The selected Groq model when it reads images, else Groq's vision model.
-        const groqVisionModel = selectedGroq ?? GROQ_VISION_MODEL;
+        // Never a RETIRED selection (qwen3.6 on free and developer tiers): this
+        // adapter calls Groq directly, without the successor substitution the
+        // text path has, so the retired id 404'd and the one Groq rung was
+        // demoted for a day.
+        const groqVisionModel = selectedGroq && !isRetiredGroqModelId(selectedGroq) ? selectedGroq : GROQ_VISION_MODEL;
         cloud.push({ id: 'groq', name: `Groq (${groqVisionModel})`, isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
           open: (sig) => this.streamWithGroqMultimodal(userContent, imagePaths, systemPrompt, sig, groqVisionModel) });
       }
@@ -9187,6 +9203,12 @@ let isMultimodal = !!(imagePaths?.length);
       // else configured: name the model and the one that can (2026-10-01).
       if (deepseekSelected && !deepseekReads) {
         throw new Error(`No vision-capable provider configured. The selected DeepSeek model (${deepseekWireModel(this.currentModelId)}) can't read screenshots — DeepSeek Flash can. Pick DeepSeek Flash, or add another vision provider in Settings.`);
+      }
+      // A gateway model the one-time image test found text-only: say that. The
+      // generic text below ("check the proxy is reachable") is the wrong advice
+      // for a model that answered the test and could not read the image.
+      if (gateway && sel && storedVisionTest(sel.provider, sel.model, this.visionStoreBaseURL(sel.provider))?.reads === false) {
+        throw new Error(`No vision-capable provider configured. The selected ${gateway} model can't read screenshots — Natively tested it with an image and it could not read it. Pick a model that can, or add another vision provider in Settings.`);
       }
       // AgentRouter is a hosted service with a fixed catalogue, so "check the
       // proxy is reachable" is the wrong advice there: the only way to land
