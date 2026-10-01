@@ -126,8 +126,21 @@ export class FunnelTelemetry {
         if (this.state) this.writeText(STATE_FILE, JSON.stringify(this.state));
     }
 
+    /**
+     * The install id, read once per process. getOrCreateInstallId hands back a
+     * NEW random id on every call when it cannot write the id file (a locked
+     * profile, antivirus holding it), and one launch must not look like many
+     * installs. UsageOutbox caches it for the same reason.
+     */
+    private cachedInstallId: string | undefined;
     private installId(): string | undefined {
-        try { return require('./InstallPingManager').getOrCreateInstallId(); } catch { return undefined; }
+        if (this.cachedInstallId) return this.cachedInstallId;
+        try {
+            this.cachedInstallId = require('./InstallPingManager').getOrCreateInstallId() || undefined;
+        } catch {
+            this.cachedInstallId = undefined;
+        }
+        return this.cachedInstallId;
     }
 
     /** When the install id file was created: the nearest thing to an install date. */

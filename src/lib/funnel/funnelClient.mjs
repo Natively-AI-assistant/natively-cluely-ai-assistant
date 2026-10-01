@@ -185,7 +185,13 @@ export function createFunnelClient(deps) {
       if (q.events.length === 0) return { sent: 0 };
       if (now < q.nextAttemptAt) return { sent: 0, skipped: 'backoff' };
 
-      const batch = q.events.slice(0, FUNNEL_BATCH);
+      // One install per request: the server refuses a request that speaks for
+      // several, and a refused request is dropped whole. The id is normally the
+      // same for every event, but an install whose id file cannot be written
+      // gets a new one each launch, and its queue then holds more than one.
+      // Events for the other ids go out on the following ticks.
+      const speakingFor = q.events[0].install_id;
+      const batch = q.events.filter((e) => e.install_id === speakingFor).slice(0, FUNNEL_BATCH);
       const ids = new Set(batch.map((e) => e.event_id));
       const fail = (reason) => {
         stats.failedAttempts++;

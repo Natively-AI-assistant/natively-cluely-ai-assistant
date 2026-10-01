@@ -228,6 +228,34 @@ test('at most one batch per request; the rest waits for the next one', async () 
   assert.equal(h.client.pending(), 7);
 });
 
+test('a queue holding events for two install ids sends them in two requests and drops nothing', async () => {
+  // An install whose id file cannot be written has a different id each launch.
+  const OTHER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  let current = INSTALL;
+  const h = harness({});
+  const c = createFunnelClient({
+    load: () => h.file, save: (t) => { h.file = t; return true; },
+    fetchImpl: async (url, init) => { h.calls.push({ body: JSON.parse(init.body) }); return { ok: true, status: 200, json: async () => ({ ok: true }) }; },
+    endpoint: 'https://example.test/x', now: () => h.now, newId: () => `00000000-0000-4000-8000-${String(++h.n).padStart(12, '0')}`,
+    installId: () => current, appVersion: () => '2.9.2', platform: 'win32', isEnabled: () => true,
+  });
+  c.track('app_first_run');
+  h.now += 3000; c.track('trial_expired');
+  current = OTHER;
+  h.now += 3000; c.track('app_first_run');
+  current = INSTALL;
+  h.now += 3000; c.track('paywall_hit', { feature: 'modes' });
+
+  await c.dispatchOnce();
+  assert.deepEqual(h.calls[0].body.events.map((e) => e.install_id), [INSTALL, INSTALL, INSTALL], 'every event in a request is for one install');
+  assert.equal(c.pending(), 1, 'the other install\'s event waits; it is not dropped');
+  await c.dispatchOnce();
+  assert.deepEqual(h.calls[1].body.events.map((e) => e.install_id), [OTHER]);
+  assert.equal(c.pending(), 0);
+  assert.equal(c.stats().delivered, 4);
+  assert.equal(c.stats().dropped + c.stats().rejected, 0);
+});
+
 test('the queue is bounded: past the cap the OLDEST events go', () => {
   const h = harness();
   for (let i = 0; i < FUNNEL_QUEUE_MAX + 5; i++) { h.now += 3000; h.client.track('trial_expired'); }

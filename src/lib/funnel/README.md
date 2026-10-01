@@ -45,6 +45,23 @@ Never recorded: IP address, hardware id, email, key, model name, any text.
   is recorded, checkout links are not tagged, and anything already queued is discarded. On by default.
 - Server: `FUNNEL_EVENTS_ENABLED=0` answers 503 and clients keep their events.
 
+## Made-up events
+
+The endpoint takes no key and the app is open source, so nothing can prove an event came from the
+real app. It is bounded instead (`natively-api/lib/funnelGuard.js`):
+
+- one install per request;
+- 300 events per install per day, 50 installs per address per day, 250,000 rows per day overall
+  (`FUNNEL_MAX_EVENTS_PER_INSTALL_PER_DAY`, `FUNNEL_MAX_INSTALLS_PER_IP_PER_DAY`, `FUNNEL_MAX_EVENTS_PER_DAY`);
+- an event must claim a time no more than 35 days back or 2 days ahead;
+- past the overall cap the endpoint answers 503, clients keep their events, and an alert goes out once.
+
+The counters live in the server's memory only; an address is held as a salted hash and never written.
+
+Trial starts and purchases are written by the server from what it saw, and cannot be made up. The
+report's "Can the client-side numbers be believed?" section sets claimed trial starts beside
+confirmed ones; a wide gap means the client-side counts for that period should not be trusted.
+
 ## Order of release
 
 1. Apply migration 025 (additive; safe before or after the code).

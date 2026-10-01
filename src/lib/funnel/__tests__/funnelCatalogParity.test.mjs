@@ -119,7 +119,9 @@ test('every event the client can build is accepted by the server validator, on b
     }
     const events = JSON.parse(file).events;
     assert.equal(events.length, client.FUNNEL_EVENT_NAMES.length);
-    const verdict = server.validateFunnelBatch({ events });
+    // Judged at the moment the client built them: the server refuses an event
+    // that claims a time outside its window, and "now" must not be the wall clock.
+    const verdict = server.validateFunnelBatch({ events }, now);
     assert.equal(verdict.ok, true);
     assert.deepEqual(verdict.rejected, [], `the server refused events a ${platform} client built`);
     assert.equal(verdict.rows.length, events.length);
@@ -129,6 +131,41 @@ test('every event the client can build is accepted by the server validator, on b
       assert.equal(row.install_id, '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b');
     }
   }
+});
+
+test('the app drops an event before the server would refuse it for age', { skip }, async () => {
+  const { FUNNEL_MAX_AGE_MS, FUNNEL_BATCH } = await import('../funnelClient.mjs');
+  const server = await import(pathToFileURL(path.join(path.dirname(SERVER_PATH), 'funnel.js')).href);
+  // Otherwise an event the app still believes is worth sending would be
+  // rejected, and dropped, for being exactly as old as the app allows.
+  assert.ok(FUNNEL_MAX_AGE_MS < server.MAX_FUNNEL_EVENT_AGE_MS);
+  assert.ok(FUNNEL_BATCH <= server.MAX_FUNNEL_EVENTS_PER_REQUEST, 'one client batch must fit one server request');
+});
+
+test('one client batch fits inside an install\'s daily allowance on the server', { skip }, async () => {
+  const { FUNNEL_BATCH } = await import('../funnelClient.mjs');
+  const guard = await import(pathToFileURL(path.join(path.dirname(SERVER_PATH), 'funnelGuard.js')).href);
+  assert.ok(FUNNEL_BATCH <= guard.FUNNEL_LIMIT_DEFAULTS.eventsPerInstallPerDay);
+});
+
+test('every request the client builds passes the server\'s one-install rule, even from a mixed queue', { skip }, async () => {
+  const { createFunnelClient } = await import('../funnelClient.mjs');
+  const server = await import(pathToFileURL(path.join(path.dirname(SERVER_PATH), 'funnel.js')).href);
+  const ids = ['3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'];
+  let file = null; let n = 0; let turn = 0;
+  let now = Date.parse('2026-10-01T12:00:00Z');
+  const verdicts = [];
+  const c = createFunnelClient({
+    load: () => file, save: (t) => { file = t; return true; },
+    fetchImpl: async (_url, init) => { verdicts.push(server.validateFunnelBatch(JSON.parse(init.body), now)); return { ok: true, status: 200, json: async () => ({ ok: true }) }; },
+    endpoint: 'x', now: () => now, newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`,
+    installId: () => ids[turn++ % ids.length], appVersion: () => '2.9.2', platform: 'win32', isEnabled: () => true,
+  });
+  for (let i = 0; i < 9; i++) { now += 3000; assert.equal(c.track('trial_expired'), 'queued'); }
+  for (let i = 0; i < 5 && c.pending(); i++) await c.dispatchOnce();
+  assert.equal(c.pending(), 0);
+  assert.equal(verdicts.length, 3, 'one request per install id');
+  for (const v of verdicts) assert.deepEqual([v.ok, v.rows.length, v.rejected.length], [true, 3, 0]);
 });
 
 test('the checkout parameters the app adds are the ones the server reads', { skip }, async () => {
