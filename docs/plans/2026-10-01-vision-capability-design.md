@@ -307,12 +307,27 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
      image paths `generateWithVisionFallback`, `chatWithGemini` with images
      (no renderer caller) and `streamChatWithGemini` (RAG passes no images).
 
-   **Phase 5c** (not built), in this order:
-   - The Ollama model makes the after-the-answer record when no cloud provider
-     is available, and in "Keep screenshots on this device" mode (Evin's rule
-     above). Needs a working Ollama rung fed by the live helper (today's reads
-     dead credential fields) and a longer time limit for record calls than the
-     pre-pass's 6 s. Cannot be measured on the development machine (no Ollama).
+   **Phase 5c-1** (built): Ollama and screenshots that stay on the machine.
+   - The Ollama model writes the after-the-answer record when no cloud
+     provider produced one, and in "Keep screenshots on this device" mode
+     (Evin's rule above). The registry's Ollama rung is rebuilt on the live
+     helper: only for the record, only when Ollama is the selected provider
+     and an installed model reads images (`/api/show`), and local only when
+     the daemon's host is loopback or private (the URL can point at another
+     machine). It runs as a second stage with 45 s; the cloud record keeps its
+     6 s. An Ollama answer cancels a record in flight. The pre-pass still never
+     uses Ollama.
+   - Defect 4: "Keep screenshots on this device" and a denied screenshots
+     scope asked whether the SELECTED model's name looked like a vision model,
+     then sent the image to it. They now ask the same resolver for any
+     installed model that reads images and send to that model; the selected
+     text model is left alone.
+   - Tested against a fake Ollama HTTP server, with the requests asserted on
+     the wire. NOT run against a real Ollama (none on the development
+     machine): how long a local model takes, and what loading a second model
+     costs, are unmeasured.
+
+   **Phase 5c** (remaining, not built), in this order:
    - Codex and Antigravity pre-pass rungs, each only if a measurement in the
      signed-in app shows it answers comfortably inside the 6 s budget (Evin:
      "add them in 5c after measuring").
@@ -333,6 +348,7 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
 | 3b | full suite | DeepSeek Flash reads a real screenshot; Pro refused | **not run**, same reason |
 | 5a | full suite | Gemini Flash / Pro / Natively selected, with an OpenAI key present, before / after | not run (no renderer change) |
 | 5b | full suite | the real registry + pre-pass chain: DeepSeek Flash answers in 1.6–1.9 s; Pro not tried; cloud order unchanged with Gemini keyed | not run (no renderer change) |
+| 5c-1 | full suite | none possible: no Ollama on the development machine; a fake Ollama HTTP server, requests asserted on the wire | not run |
 
 Windows: no phase added OS-specific code; none has been run on Windows.
 
