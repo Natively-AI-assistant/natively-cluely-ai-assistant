@@ -144,3 +144,127 @@ test('a selected model whose breaker is open does not lead its screenshot turn; 
   const recovered = await chainIds(EVERYTHING, 'fluxion/claude-opus-5', { visionHealth: coolingUntil('fluxion', Date.now() - 1) });
   assert.equal(recovered[0], 'fluxion');
 });
+
+// ── Phase 5a: a selected direct model reads its own screenshot (defect 10) ────
+
+const chainOf = async (keys, selection, state = {}) => {
+  const h = Object.assign(helper(keys, selection), state);
+  const chain = await h.buildVisionChain(REQ);
+  return { h, chain, ids: chain.map((p) => p.id), names: chain.map((p) => p.name) };
+};
+const drain = async (gen) => { for await (const _ of gen) { /* drain */ } };
+
+test('a selected Gemini model leads even when an OpenAI key exists', async () => {
+  assert.equal((await chainOf(['openai', 'gemini'], 'gemini-3.8-flash')).ids[0], 'gemini_flash');
+  assert.equal((await chainOf(VENDORS, 'gemini-3.1-pro-preview')).ids[0], 'gemini_pro');
+  assert.equal((await chainOf(VENDORS, 'gemini-3.1-flash-lite')).ids[0], 'gemini_flash_lite');
+});
+test('a `models/`-prefixed Gemini id is the same model: no second rung for it', async () => {
+  const r = await chainOf(VENDORS, 'models/gemini-3.8-flash');
+  assert.equal(r.ids[0], 'gemini_flash');
+  assert.ok(!r.ids.includes('gemini_selected'));
+});
+test('a selected Gemini model that is none of the three fixed ones gets its own rung, for that model', async () => {
+  const r = await chainOf(VENDORS, 'gemini-2.5-flash');
+  assert.equal(r.ids[0], 'gemini_selected');
+  assert.match(r.names[0], /gemini-2\.5-flash/);
+  assert.deepEqual(r.ids.slice(1), ['openai', 'claude', 'gemini_flash_lite', 'gemini_flash', 'gemini_pro', 'groq', 'natively'], 'everything else keeps its place');
+});
+test('a selected OpenAI or Claude model reads with ITSELF; the fixed vision model stays as the fallback', async () => {
+  const o = await chainOf(VENDORS, 'gpt-5.5');
+  assert.deepEqual(o.ids.slice(0, 2), ['openai_selected', 'openai']);
+  assert.match(o.names[0], /gpt-5\.5/);
+  const c = await chainOf(VENDORS, 'claude-opus-5');
+  assert.equal(c.ids[0], 'claude_selected');
+  assert.match(c.names[0], /claude-opus-5/);
+  assert.ok(c.ids.includes('claude'), 'the fixed Claude vision model is still there to fall back to');
+  // (`o3-pro`, not bare `o3`: isOpenAiModel does not claim a bare o-series id, so the app cannot route one at all.)
+  assert.equal((await chainOf(VENDORS, 'o3-pro')).ids[0], 'openai_selected');
+});
+test('a selection equal to the fixed vision model is not tried twice', async () => {
+  const o = await chainOf(VENDORS, 'gpt-5.4');
+  assert.equal(o.ids[0], 'openai');
+  assert.ok(!o.ids.includes('openai_selected'));
+  const c = await chainOf(VENDORS, 'claude-sonnet-4-6');
+  assert.equal(c.ids[0], 'claude');
+  assert.ok(!c.ids.includes('claude_selected'));
+});
+test('a text-only selected model gets no rung of its own: the vendor vision model answers', async () => {
+  const r = await chainOf(['openai'], 'gpt-3.5-turbo');
+  assert.deepEqual(r.ids, ['openai']);
+  assert.doesNotMatch(r.names.join(' '), /gpt-3\.5/);
+});
+test('a model nothing is known about gets no rung of its own until its test passes; a failed test keeps it out', async () => {
+  const before = await chainOf(VENDORS, 'gpt-next-unknown');
+  assert.ok(!before.ids.includes('openai_selected'));
+  try {
+    const yes = new VisionCapabilityStore({ filePath: null }); yes.recordTest('openai', '', 'gpt-next-unknown', true);
+    __setVisionCapabilityStore(yes);
+    assert.equal((await chainOf(VENDORS, 'gpt-next-unknown')).ids[0], 'openai_selected');
+    const no = new VisionCapabilityStore({ filePath: null }); no.recordTest('openai', '', 'gpt-5.5', false);
+    __setVisionCapabilityStore(no);
+    const refused = await chainOf(VENDORS, 'gpt-5.5');
+    assert.ok(!refused.ids.includes('openai_selected'), 'a model TESTED as text-only is not sent the screenshot, whatever its name says');
+    assert.equal(refused.ids[0], 'openai');
+  } finally { __setVisionCapabilityStore(new VisionCapabilityStore({ filePath: null })); }
+});
+test('Natively selected leads; a selected Groq vision model leads; a Groq text model does not', async () => {
+  assert.equal((await chainOf(VENDORS, 'natively')).ids[0], 'natively');
+  const g = await chainOf(VENDORS, 'qwen/qwen3.8-27b');
+  assert.equal(g.ids[0], 'groq');
+  assert.match(g.names[0], /qwen3\.8-27b/);
+  const t = await chainOf(VENDORS, 'llama-3.3-70b-versatile');
+  assert.equal(t.ids[0], 'openai');
+  assert.doesNotMatch(t.names.join(' '), /llama-3\.3/, 'the Groq rung still uses the Groq vision model');
+});
+test('a selected Antigravity model leads', async () => {
+  const r = await chainOf(EVERYTHING, 'antigravity:claude-opus-5');
+  assert.equal(r.ids[0], 'antigravity');
+  assert.match(r.names[0], /claude-opus-5/);
+});
+test('no key, or the provider switched off: no rung for the selection, and the chain still works', async () => {
+  const noKey = await chainOf(['gemini'], 'gpt-5.5');
+  assert.deepEqual(noKey.ids, ['gemini_flash_lite', 'gemini_flash', 'gemini_pro']);
+  const off = await chainOf(VENDORS, 'gpt-5.5', { isProviderDisabled: (p) => p === 'openai' });
+  assert.ok(!off.ids.some((id) => id.startsWith('openai')), off.ids.join(' > '));
+  assert.equal(off.ids[0], 'claude');
+});
+test('Ollama or a custom provider selected: a leftover cloud model id does not lead', async () => {
+  const o = await chainOf(VENDORS, SELECTIONS.find((s) => Array.isArray(s) && s[0] === 'ollama llava'));
+  assert.deepEqual(o.ids.slice(0, 2), ['ollama', 'openai']);
+  const c = await chainOf(VENDORS, SELECTIONS.find((s) => Array.isArray(s) && s[0].startsWith('custom')));
+  assert.deepEqual(c.ids.slice(0, 2), ['custom', 'openai']);
+});
+test('local-only mode: a selected cloud model gets no rung', async () => {
+  await assert.rejects(() => chainOf(VENDORS, 'gpt-5.5', { isLocalOnlyMode: true }), /Local-only mode is on/);
+});
+test('each selected rung opens the SELECTED model, with the screenshot', async () => {
+  const calls = [];
+  const stubs = {
+    streamWithOpenaiMultimodal: async function* (_u, imgs, _sys, model) { calls.push(['openai', model, imgs.length]); yield 'ok'; },
+    streamWithClaudeMultimodal: async function* (_u, imgs, _sys, model) { calls.push(['claude', model, imgs.length]); yield 'ok'; },
+    streamWithGeminiModel: async function* (_u, model, imgs) { calls.push(['gemini', model, imgs.length]); yield 'ok'; },
+    streamWithGroqMultimodal: async function* (_u, imgs, _sys, _sig, model) { calls.push(['groq', model, imgs.length]); yield 'ok'; },
+  };
+  for (const model of ['gpt-5.5', 'claude-opus-5', 'gemini-2.5-flash', 'qwen/qwen3.6-27b']) {
+    const { chain } = await chainOf(VENDORS, model, stubs);
+    await drain(chain[0].open(new AbortController().signal, 1));
+  }
+  assert.deepEqual(calls, [['openai', 'gpt-5.5', 1], ['claude', 'claude-opus-5', 1], ['gemini', 'gemini-2.5-flash', 1], ['groq', 'qwen/qwen3.6-27b', 1]]);
+});
+test('a selected rung refused as image-unsupported re-tests the selected model', async () => {
+  const forced = [];
+  // Only the SELECTED model refuses; the vendor's fixed vision model answers.
+  const openai = async function* (_u, _imgs, _sys, model) {
+    if (model === 'gpt-5.5') { const e = new Error('This model does not support image input'); e.status = 400; throw e; }
+    yield `seen by ${model}`;
+  };
+  const h = Object.assign(helper(['openai', 'gemini'], 'gpt-5.5'), {
+    streamWithOpenaiMultimodal: openai,
+    maybeProbeSelectedVision: (o) => { if (o?.force) forced.push(o); },
+  });
+  const out = [];
+  for await (const t of h.streamVisionWithFallback(REQ)) out.push(t);
+  assert.deepEqual(out, ['seen by gpt-5.4'], 'the screenshot is still answered, by the next rung');
+  assert.equal(forced.length, 1, 'the refusal contradicts "reads images": test the selected model again');
+});

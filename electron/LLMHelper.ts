@@ -8616,7 +8616,8 @@ let isMultimodal = !!(imagePaths?.length);
         // said this model reads images: test it again now (2026-10-01).
         onNoVision: (id) => {
           const selected = (() => { try { return this.getDirectAssistSelection().provider; } catch { return null; } })();
-          if (id === selected) this.maybeProbeSelectedVision({ force: true });
+          // `<provider>_selected` is the rung that ran the selected model itself.
+          if (id === selected || id === `${selected}_selected`) this.maybeProbeSelectedVision({ force: true });
         },
       },
       abortSignal,
@@ -8667,15 +8668,43 @@ let isMultimodal = !!(imagePaths?.length);
     // model would be a blind answer.
     const deepseekSelected = !this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isDeepseekModel(this.currentModelId);
     const deepseekReads = deepseekSelected && readsImages(this.visionVerdict({ provider: 'deepseek', model: this.currentModelId }), false);
+    // The user's own DIRECT model (2026-10-01): it reads its own screenshot when
+    // the resolver says it reads images — the name list, provider data or a
+    // passed one-time test. Unknown and "no" get no rung of their own: the
+    // vendor's fixed vision model below answers, so nothing is sent blind.
+    // Custom, cURL and Ollama selections win in getDirectAssistSelection, so a
+    // leftover cloud model id never leads their turn.
+    const sel = (() => { try { return this.getDirectAssistSelection(); } catch { return null; } })();
+    const selReads = sel ? readsImages(this.visionVerdict(sel), false) : false;
+    const selectedDirect = (provider: DirectAssistProvider): string | null =>
+      sel && selReads && sel.provider === provider ? sel.model : null;
+    const selectedOpenai = selectedDirect('openai');
+    const selectedClaude = selectedDirect('claude');
+    // `models/gemini-…` is the same model as `gemini-…`.
+    const selectedGemini = selectedDirect('gemini')?.replace(/^models\//, '') ?? null;
+    const selectedGroq = selectedDirect('groq');
+    const fixedGemini = { lite: GEMINI_FLASH_LITE_MODEL, flash: tierModel(ModelFamily.GEMINI_FLASH, 1) || GEMINI_FLASH_MODEL, pro: tierModel(ModelFamily.GEMINI_PRO, 1) || GEMINI_PRO_MODEL };
 
     if (!localOnly) {
       if (this.openaiClient) {
         cloud.push({ id: 'openai', name: 'OpenAI', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
           open: (sig, att) => this.streamWithOpenaiMultimodal(userContent, imagePaths, systemPrompt, tierModel(ModelFamily.OPENAI, att), sig) });
+        // …and a rung for the selected model itself, to lead the turn (see
+        // `front`), unless it IS the fixed vision model — then that rung leads.
+        // The reasoning-model budget: a selected o-series or GPT-6 model takes
+        // seconds to its first token where the fixed model takes one.
+        if (selectedOpenai && selectedOpenai !== tierModel(ModelFamily.OPENAI, 1)) {
+          cloud.push({ id: 'openai_selected', name: `OpenAI (${selectedOpenai})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+            open: (sig) => this.streamWithOpenaiMultimodal(userContent, imagePaths, systemPrompt, selectedOpenai, sig) });
+        }
       }
       if (this.claudeClient) {
         cloud.push({ id: 'claude', name: 'Claude', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
           open: (sig, att) => this.streamWithClaudeMultimodal(userContent, imagePaths, systemPrompt, tierModel(ModelFamily.CLAUDE, att), sig) });
+        if (selectedClaude && selectedClaude !== tierModel(ModelFamily.CLAUDE, 1)) {
+          cloud.push({ id: 'claude_selected', name: `Claude (${selectedClaude})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+            open: (sig) => this.streamWithClaudeMultimodal(userContent, imagePaths, systemPrompt, selectedClaude, sig) });
+        }
       }
       if (this.client) {
         // Strict serial Gemini cascade (flash-lite → flash → pro), no hedge.
@@ -8687,10 +8716,17 @@ let isMultimodal = !!(imagePaths?.length);
           open: (sig, att) => this.streamWithGeminiModel(userContent, tierModel(ModelFamily.GEMINI_FLASH, att) || GEMINI_FLASH_MODEL, imagePaths, systemPrompt, sig) });
         cloud.push({ id: 'gemini_pro', name: 'Gemini Pro', isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig, att) => this.streamWithGeminiModel(userContent, tierModel(ModelFamily.GEMINI_PRO, att) || GEMINI_PRO_MODEL, imagePaths, systemPrompt, sig) });
+        // A selected Gemini model that is none of the three above.
+        if (selectedGemini && !Object.values(fixedGemini).includes(selectedGemini)) {
+          cloud.push({ id: 'gemini_selected', name: `Gemini (${selectedGemini})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+            open: (sig) => this.streamWithGeminiModel(userContent, selectedGemini, imagePaths, systemPrompt, sig) });
+        }
       }
       if (this.groqClient) {
-        cloud.push({ id: 'groq', name: `Groq (${GROQ_VISION_MODEL})`, isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
-          open: (sig) => this.streamWithGroqMultimodal(userContent, imagePaths, systemPrompt, sig) });
+        // The selected Groq model when it reads images, else Groq's vision model.
+        const groqVisionModel = selectedGroq ?? GROQ_VISION_MODEL;
+        cloud.push({ id: 'groq', name: `Groq (${groqVisionModel})`, isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
+          open: (sig) => this.streamWithGroqMultimodal(userContent, imagePaths, systemPrompt, sig, groqVisionModel) });
       }
       if (this.hasNatively()) {
         cloud.push({ id: 'natively', name: 'Natively API', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
@@ -8868,6 +8904,21 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isAgentRouterModel(this.currentModelId)) { const ar = cloud.find(p => p.id === 'agentrouter'); if (ar) front.push(ar); }
       // The selected DeepSeek model leads its own turn, like the gateways above.
       if (deepseekSelected) { const ds = cloud.find(p => p.id === 'deepseek'); if (ds) front.push(ds); }
+      // A selected DIRECT model leads its own turn too (2026-10-01). Before
+      // this, OpenAI (priority 0) answered a Claude, Gemini, Groq or Natively
+      // user's screenshot whenever an OpenAI key was present: the vendor the
+      // user did NOT choose won the turn. `lead` is a no-op when the rung is
+      // not seated (no key, provider switched off).
+      const lead = (id: string) => { const p = cloud.find(c => c.id === id); if (p && !front.includes(p)) front.push(p); };
+      const seated = (id: string) => cloud.some(c => c.id === id);
+      if (selectedOpenai) lead(seated('openai_selected') ? 'openai_selected' : 'openai');
+      if (selectedClaude) lead(seated('claude_selected') ? 'claude_selected' : 'claude');
+      if (selectedGemini) lead(seated('gemini_selected') ? 'gemini_selected'
+        : selectedGemini === fixedGemini.lite ? 'gemini_flash_lite'
+        : selectedGemini === fixedGemini.pro ? 'gemini_pro' : 'gemini_flash');
+      if (selectedGroq) lead('groq');
+      if (sel?.provider === 'natively') lead('natively');
+      if (sel?.provider === 'antigravity') lead('antigravity');
     }
     const ordered = orderVisionCandidates({ selected: front, cloud, local, localOnly, health: this.visionHealth, now: nowMs });
 
