@@ -160,6 +160,26 @@ export interface FallbackHooks {
   onRungOpen?: (providerId: string, attempt: number) => void;
 }
 
+// Image-specific refusals: "this model cannot see images", from a real provider
+// or in Natively's own wording. Nothing generic ("does not support", "404")
+// belongs here: `does not support streaming` and a retired-model 404 are not
+// about images. Defined in this file because the engine takes no imports; the
+// one-time vision test (visionProbeOutcome.ts) reads the same list from here.
+const IMAGE_REFUSAL_PATTERNS: readonly RegExp[] = [
+  /support(?:s)? image input/,                                   // OpenRouter: "No endpoints found that support image input"
+  /does(?: not|n't) support (?:image|vision)/,                   // "does not support image input", "doesn't support vision"
+  /image_url is only supported/,                                 // OpenAI
+  /images?(?: input| inputs)? (?:is|are)(?: not|n't) supported/, // "images are not supported", "image input is not supported"
+  /images? not supported/,
+  /\bno vision\b/,
+  /vision is not/,
+];
+
+export function isImageRefusalMessage(message: string): boolean {
+  const m = String(message || '').toLowerCase();
+  return m.length > 0 && IMAGE_REFUSAL_PATTERNS.some((re) => re.test(m));
+}
+
 /**
  * Classify a provider error into a coarse bucket that drives retry-vs-skip.
  * `timedOut` is true when our own TTFT/stall controller aborted the attempt.
@@ -185,6 +205,10 @@ export function classifyStreamError(err: any, timedOut: boolean): StreamErrorCla
     status === 402 || /\b402\b/.test(msg) ||
     /billing|insufficient[_ ]?(?:credit|quota|funds)|no credits?|out of credits?|payment required|account.*(?:suspend|disabled|deactivat)|failed_precondition.*billing/.test(msg)
   ) return 'auth';
+  // An image-specific refusal means "this model can't see", whatever status
+  // carries it (2026-10-01). OpenRouter sends it as a 404, which the block
+  // below read as a retired model: demoted for 24 h and discovery triggered.
+  if (isImageRefusalMessage(msg)) return 'no_vision';
   // AFTER auth, deliberately: a 403 that also happens to mention a model name
   // is a credentials problem, and demoting the provider for 24h would be the
   // wrong remedy. The observed Groq body carries none of the auth tokens
