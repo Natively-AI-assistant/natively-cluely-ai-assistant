@@ -3450,7 +3450,10 @@ export class LLMHelper {
       const model = (this.ollamaModel && availableModels.includes(this.ollamaModel))
         ? this.ollamaModel
         : availableModels[0];
-      if (needsVision) {
+      // Is the daemon on this machine or the local network? OLLAMA_URL can point
+      // anywhere; "local" is earned from the host, as for a custom or cURL endpoint.
+      const daemonIsLocal = customProviderIsLocal({ curlCommand: this.ollamaUrl });
+      if (needsVision && daemonIsLocal) {
         // ANY installed model that reads images, per /api/show (2026-10-01).
         // This used to ask whether the SELECTED model's NAME looked like a
         // vision model, so a user on a text model with llava installed — and a
@@ -3458,11 +3461,6 @@ export class LLMHelper {
         // exists. The resolver is the one the cloud chain already uses; the
         // sites that dispatch on this answer send to the model it names
         // (localVisionOverride), never to `model`.
-        // "On this device" is earned from the daemon's HOST, as for a custom
-        // or cURL endpoint: OLLAMA_URL can point at another machine. Every
-        // caller of this branch is deciding whether a screenshot that must not
-        // leave the machine may go to Ollama, so a public host is a no.
-        if (!customProviderIsLocal({ curlCommand: this.ollamaUrl })) return { ok: false, model };
         const visionModel = await this.resolveLocalVisionModel();
         if (!visionModel) return { ok: false, model };
         // Fail CLOSED, as the text branch below does: the daemon must confirm
@@ -3481,6 +3479,12 @@ export class LLMHelper {
         if (!confirmed.ok && this.ollamaVisionModel === visionModel) this.ollamaVisionModel = null;
         return { ok: confirmed.ok, model, ...(confirmed.ok ? { visionModel } : {}) };
       }
+      // A daemon on ANOTHER machine gets exactly what it had before 2026-10-01
+      // and nothing new (Evin's decision): the SELECTED model, judged by its
+      // name, then confirmed below. Widening this to "any model installed
+      // there" would send a keep-on-device screenshot to a remote host in a
+      // state that used to be refused.
+      if (needsVision && !getModelCapabilities(model, true).supportsImages) return { ok: false, model };
       const response = await fetch(`${this.ollamaUrl}/api/show`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3542,7 +3546,11 @@ export class LLMHelper {
    */
   private localVisionOverride(imagePaths?: readonly string[] | string): string | undefined {
     const carriesImages = Array.isArray(imagePaths) ? imagePaths.length > 0 : Boolean(imagePaths);
-    return carriesImages ? (this.ollamaVisionModel ?? undefined) : undefined;
+    if (!carriesImages) return undefined;
+    // A daemon on another machine was admitted on the SELECTED model (see
+    // probeOllama), so that is the model that answers there.
+    if (!customProviderIsLocal({ curlCommand: this.ollamaUrl })) return undefined;
+    return this.ollamaVisionModel ?? undefined;
   }
 
   /**

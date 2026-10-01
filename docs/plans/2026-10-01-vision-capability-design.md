@@ -322,11 +322,14 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
      then sent the image to it. They now ask the same resolver for any
      installed model that reads images and send to that model; the selected
      text model is left alone.
-   - "This device" means a loopback or private host, for the chat path too:
-     an Ollama reached through `OLLAMA_URL` on a public host is refused in
-     "Keep screenshots on this device" mode and for a denied screenshots
-     scope, and the daemon must confirm the vision model at the moment of the
-     check (a name guess or a remembered answer is not enough).
+   - A daemon on ANOTHER machine (`OLLAMA_URL`) gets nothing new (Evin,
+     2026-10-01: "keep the old behaviour"). In "Keep screenshots on this
+     device" mode and for a denied screenshots scope it is admitted exactly as
+     before: only when the SELECTED model reads images, judged by its name.
+     The "any installed model" rule applies to a loopback or private host
+     only, and there the daemon must confirm the model at the moment of the
+     check (a name guess or a remembered answer is not enough). The
+     after-the-answer record never goes to a remote Ollama in that mode.
    - A live turn is written to the conversation history at once; the screen's
      text is attached to it when the record arrives. It used to wait for the
      record, which a local model can take 45 s to write.

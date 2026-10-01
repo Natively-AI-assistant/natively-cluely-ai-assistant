@@ -75,9 +75,14 @@ describe('"Keep screenshots on this device": the screenshot goes to the Ollama m
   });
 });
 
-describe('an Ollama on ANOTHER machine is not "this device"', () => {
-  // OLLAMA_URL can point anywhere. The fake listens on loopback; `fetch` is
-  // redirected so the helper believes it is talking to a public host.
+describe('an Ollama on ANOTHER machine (OLLAMA_URL)', () => {
+  // Evin, 2026-10-01: keep what was allowed before — a remote Ollama may take a
+  // keep-on-device screenshot when the SELECTED model itself reads images. What
+  // this phase added (any OTHER installed model that reads images) applies only
+  // to a daemon on this machine or the local network.
+  //
+  // The fake listens on loopback; `fetch` is redirected so the helper believes
+  // it is talking to a public host.
   let ollama; let realFetch;
   const REMOTE = 'http://ollama.example.com:11434';
   const remoteHelper = async (models, selected) => {
@@ -90,27 +95,32 @@ describe('an Ollama on ANOTHER machine is not "this device"', () => {
   afterEach(async () => { if (realFetch) globalThis.fetch = realFetch; realFetch = null; await ollama?.stop(); ollama = null; });
   beforeEach(() => { fakeCredentials(); setScopes({}); });
 
-  test('keep on device: refused, whether the vision model is another installed one or the selected one', async () => {
+  test('keep on device, a TEXT model selected: refused, even though another model there reads images', async () => {
     setMode('private_vision');
-    for (const selected of ['qwen2.5:4b', 'llava:7b']) {
-      const h = await remoteHelper({ 'qwen2.5:4b': false, 'llava:7b': true }, selected);
-      assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE, `selected ${selected}`);
-      assert.equal(ollama.chats().length, 0, `LEAK: the screenshot was posted to ${REMOTE} (selected ${selected})`);
-      globalThis.fetch = realFetch; realFetch = null; await ollama.stop(); ollama = null;
-    }
-  });
-  test('the Privacy panel does not claim on-device vision for it; text fallback is unaffected', async () => {
-    const h = await remoteHelper({ 'llava:7b': true }, 'llava:7b');
+    const h = await remoteHelper({ 'qwen2.5:4b': false, 'llava:7b': true }, 'qwen2.5:4b');
+    assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE);
+    assert.equal(ollama.chats().length, 0, `the new "any installed model" rule must not reach ${REMOTE}`);
     assert.equal(await h.scopeFallbackAvailable(true), false);
-    assert.equal(await h.scopeFallbackAvailable(false), true);
   });
-  test('outside keep-on-device mode the remote Ollama still answers a screenshot (the chat chain, unchanged)', async () => {
-    setMode('vision_first');
-    const h = await remoteHelper({ 'llava:7b': true }, 'llava:7b');
-    h.streamVisionWithFallback = LLMHelper.prototype.streamVisionWithFallback;
-    Object.assign(h, { modelVersionManager: { getAllVisionTiers: () => [] }, maybeProbeSelectedVision: () => {}, isCodexAvailable: () => false, antigravityFallbackModel: () => null, hasNatively: () => false, hasFluxionCredential: () => false, hasAgentRouterCredential: () => false, codexCliConfig: { model: 'x' }, ninerouterVisionModels: new Set() });
+  test('keep on device, the selected model reads images: allowed as before, and it is the SELECTED model that answers', async () => {
+    setMode('private_vision');
+    const h = await remoteHelper({ 'llava:7b': true, 'bakllava:latest': true }, 'bakllava:latest');
     assert.equal(await ask(h, 'what is on my screen?', [png]), 'local model reply');
-    assert.equal(ollama.chats()[0].body.model, 'llava:7b');
+    const chat = ollama.chats();
+    assert.equal(chat.length, 1);
+    assert.equal(chat[0].body.model, 'bakllava:latest');
+    assert.deepEqual(chat[0].body.messages.at(-1).images, [pngBase64]);
+    assert.equal(await h.scopeFallbackAvailable(true), true, 'the indicator answers as it did before');
+  });
+  test('the old rule judged the selected model by its NAME, and still does for a remote daemon', async () => {
+    setMode('private_vision');
+    const h = await remoteHelper({ 'acme-sight:latest': true }, 'acme-sight:latest');
+    assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE, 'a name on no list was refused before; a remote daemon gets nothing new');
+    assert.equal(ollama.chats().length, 0);
+  });
+  test('text fallback is unaffected', async () => {
+    const h = await remoteHelper({ 'qwen2.5:4b': false }, 'qwen2.5:4b');
+    assert.equal(await h.scopeFallbackAvailable(false), true);
   });
 });
 
