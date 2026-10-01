@@ -15,6 +15,11 @@ export type ProbeOutcome = 'yes' | 'no' | 'unknown';
 import { isImageRefusalMessage } from './streamFallbackEngine';
 export { isImageRefusalMessage };
 
+// A quota, rate-limit, auth, filter or outage notice delivered as ordinary text.
+// Deliberately broad: wrongly calling a reply "unknown" costs a retry later;
+// wrongly calling it "no" blocks a capable model for a month.
+const PROVIDER_NOTICE_RE = /quota|credit|billing|rate.?limit|too many requests|try again later|temporarily unavailable|overloaded|blocked|content.?filter|unauthori[sz]ed|api.?key|exhausted|无可用渠道|令牌/i;
+
 /**
  * Judge the model's reply to "what number is shown?". Separators between digits
  * are ignored ("7 3 9 2", "7,392"); the number must stand alone, so "173920"
@@ -23,8 +28,13 @@ export { isImageRefusalMessage };
  */
 export function judgeProbeReply(reply: string, number: string): ProbeOutcome {
   const text = String(reply || '');
-  const joined = text.replace(/(\d)[\s,.\-_]+(?=\d)/g, '$1');
-  if (new RegExp(`(?<!\\d)${number}(?!\\d)`).test(joined)) return 'yes';
+  const standsAlone = new RegExp(`(?<!\\d)${number}(?!\\d)`);
+  // The raw text first: "7392, 4 digits in bold" must not be joined into
+  // "73924". Then with separators between digits removed, for "7 3 9 2".
+  if (standsAlone.test(text) || standsAlone.test(text.replace(/(\d)[\s,.\-_]+(?=\d)/g, '$1'))) return 'yes';
+  // Some gateways answer HTTP 200 with the failure in the body. That is the
+  // provider talking, not the model: unknown, to be retried later.
+  if (PROVIDER_NOTICE_RE.test(text)) return 'unknown';
   return text.replace(/[^\p{L}\p{N}]/gu, '').length >= 6 ? 'no' : 'unknown';
 }
 

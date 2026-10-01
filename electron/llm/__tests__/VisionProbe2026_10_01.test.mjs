@@ -102,6 +102,24 @@ describe('a transient failure is never an answer', () => {
     assert.equal(aborted, true);
     assert.equal(state.saved.size, 0);
   });
+  test('an adapter that ignores cancellation still times out, and the model can be tested again (review fix)', async () => {
+    let calls = 0;
+    const { probe, state } = rig([() => { calls += 1; return new Promise(() => {}); }, shownBack]);
+    assert.equal(await probe.ensure(SEL), 'unknown', 'the probe bounds itself; it does not wait on the adapter');
+    assert.equal(state.saved.size, 0);
+    assert.equal(await probe.ensure(SEL, { force: true }), 'yes', 'the key was not left stuck in flight');
+    assert.equal(calls, 1);
+  });
+  test('a long reply that never states the number is unknown, not a no: it was cut off, not judged (review fix)', async () => {
+    const { probe, state } = rig(['The image shows several bold dark digits on a white background. '.repeat(120)]);
+    assert.equal(await probe.ensure(SEL), 'unknown');
+    assert.equal(state.asks.length, 1, 'no second request for a reply that was merely too long');
+    assert.equal(state.saved.size, 0);
+  });
+  test('a long description that does state the number is still a yes', async () => {
+    const { probe } = rig([(shown) => `${'I can see a white image with bold black digits. '.repeat(20)}The number is ${shown}.`]);
+    assert.equal(await probe.ensure(SEL), 'yes');
+  });
   test('a miss followed by a transient failure stays unknown', async () => {
     const { probe, state } = rig(['I cannot see an image.', new Error('429 rate limit')]);
     assert.equal(await probe.ensure(SEL), 'unknown');

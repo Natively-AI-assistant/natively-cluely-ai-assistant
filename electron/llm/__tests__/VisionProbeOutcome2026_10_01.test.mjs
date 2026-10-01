@@ -79,6 +79,26 @@ describe('judgeProbeReply', () => {
   test('the number inside a longer number does not count', () => {
     assert.equal(judgeProbeReply('173920', '7392'), 'no');
   });
+  test('another number after the answer does not turn a correct reply into a miss (review fix)', () => {
+    // Joining "7392, 4" into "73924" hid the answer; a model that formats its
+    // reply this way does so on both attempts, so it was saved as text-only.
+    for (const reply of ['7392, 4 digits in bold.', '7392\n\n1. The digits are black.', '7392 - 4 bold digits', 'The number is 7392. 2 colours: black and white.']) {
+      assert.equal(judgeProbeReply(reply, '7392'), 'yes', reply);
+    }
+  });
+  test("a provider's notice arriving as a normal reply is unknown, never a no (review fix)", () => {
+    // Some gateways answer HTTP 200 with the failure in the body.
+    for (const reply of [
+      'Budget pool quota has been exhausted, please try again later.',
+      'Rate limit exceeded. Too many requests.',
+      'Your request was blocked by the content filter.',
+      'Invalid API key provided.',
+      'Insufficient credits to complete this request.',
+      '当前分组 default 下对于模型 x 无可用渠道',
+      'The service is temporarily unavailable.',
+    ]) assert.equal(judgeProbeReply(reply, '7392'), 'unknown', reply);
+    assert.equal(judgeProbeReply('Rate limit note aside, the number is 7392', '7392'), 'yes', 'the number still wins');
+  });
 });
 
 describe('judgeProbeError', () => {

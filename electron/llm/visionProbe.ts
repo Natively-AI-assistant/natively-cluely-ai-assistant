@@ -25,7 +25,10 @@ export const VISION_PROBE_SYSTEM = 'Answer with the number only.';
 const DEFAULT_TIMEOUT_MS = 45_000;            // GPT-6 Astra's first token takes 8–13 s
 const DEFAULT_RETRY_MS = 10 * 60 * 1000;
 const DEFAULT_STALE_MS = 30 * 24 * 60 * 60 * 1000;
-const MAX_REPLY_CHARS = 600;
+// A reply longer than this without the number is not judged at all: it was cut
+// off, and a model that describes the image before answering must not be read
+// as "no". One short stream once a month; the cap only stops a runaway.
+const MAX_REPLY_CHARS = 4000;
 
 export interface VisionProbeDeps {
   /** Ask the model through Natively's own adapter. Throws on any refusal or failure. */
@@ -93,11 +96,20 @@ export class VisionProbe {
     const imagePath = this.deps.writeImage(renderDigitsPng(number));
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.deps.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    // The probe bounds ITSELF: an adapter that ignores the signal would otherwise
+    // leave this model "in flight" for the rest of the session.
+    const timedOut = new Promise<'timeout'>((resolve) => controller.signal.addEventListener('abort', () => resolve('timeout'), { once: true }));
+    let stream: AsyncIterator<string> | null = null;
     try {
       let reply = '';
-      for await (const piece of this.deps.ask(selection, imagePath, controller.signal)) {
-        reply += piece;
-        if (judgeProbeReply(reply, number) === 'yes' || reply.length >= MAX_REPLY_CHARS) break;
+      stream = this.deps.ask(selection, imagePath, controller.signal)[Symbol.asyncIterator]();
+      for (;;) {
+        const next = await Promise.race([stream.next(), timedOut]);
+        if (next === 'timeout') return { outcome: 'unknown', refused: false, number };
+        if (next.done) break;
+        reply += next.value;
+        if (judgeProbeReply(reply, number) === 'yes') break;
+        if (reply.length >= MAX_REPLY_CHARS) return { outcome: 'unknown', refused: false, number };
       }
       if (controller.signal.aborted) return { outcome: 'unknown', refused: false, number };
       return { outcome: judgeProbeReply(reply, number), refused: false, number };
@@ -108,6 +120,9 @@ export class VisionProbe {
     } finally {
       clearTimeout(timer);
       controller.abort(); // stop a stream we broke out of early
+      // …and let the adapter's own cleanup run. Not awaited: an adapter that
+      // ignores cancellation would never answer this either.
+      try { void stream?.return?.(undefined)?.catch(() => { /* best effort */ }); } catch { /* best effort */ }
       try { this.deps.removeImage(imagePath); } catch { /* best effort */ }
     }
   }

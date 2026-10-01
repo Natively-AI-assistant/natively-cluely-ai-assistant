@@ -31,12 +31,20 @@ interface TestResult { reads: boolean; at: number }
 interface PersistedShape { version: number; providers: Record<string, ProviderCatalogue>; tests?: Record<string, Record<string, TestResult>> }
 
 const catalogueKey = (provider: string, baseURL: string) => `${provider}|${baseURL}`;
+const RESAVE_UNCHANGED_AFTER_MS = 60 * 60 * 1000;
+
+function sameAnswers(a: Record<string, boolean>, b: Record<string, boolean>): boolean {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((k) => Object.prototype.hasOwnProperty.call(b, k) && a[k] === b[k]);
+}
 
 export class VisionCapabilityStore {
   private readonly filePath: string | null;
   private readonly now: () => number;
   private providers = new Map<string, ProviderCatalogue>();
   private tests = new Map<string, Record<string, TestResult>>();
+  /** When each catalogue was last written to disk (its fetchedAt in the file). */
+  private savedAt = new Map<string, number>();
 
   constructor(opts: { filePath?: string | null; now?: () => number } = {}) {
     this.filePath = opts.filePath ?? null;
@@ -57,7 +65,17 @@ export class VisionCapabilityStore {
 
   /** A fresh catalogue replaces the old one whole: a model gone from it is forgotten. */
   replaceProviderAnswers(provider: string, baseURL: string, answers: ReadonlyMap<string, boolean>): void {
-    this.providers.set(catalogueKey(provider, baseURL), { fetchedAt: this.now(), models: Object.fromEntries(answers) });
+    const key = catalogueKey(provider, baseURL);
+    const models = Object.fromEntries(answers);
+    const previous = this.providers.get(key);
+    const now = this.now();
+    this.providers.set(key, { fetchedAt: now, models });
+    // LiteLLM's catalogue is refreshed every five minutes while it is in use.
+    // The same answers again are not worth a disk write each time: write when
+    // they changed, or when the saved copy's refresh time is over an hour old.
+    const unchanged = previous !== undefined && sameAnswers(previous.models, models);
+    if (unchanged && now - (this.savedAt.get(key) ?? 0) < RESAVE_UNCHANGED_AFTER_MS) return;
+    this.savedAt.set(key, now);
     this.save();
   }
 
@@ -85,6 +103,7 @@ export class VisionCapabilityStore {
           const models: Record<string, boolean> = {};
           for (const [id, v] of Object.entries(cat.models)) if (typeof v === 'boolean') models[id] = v;
           this.providers.set(key, { fetchedAt: cat.fetchedAt, models });
+          this.savedAt.set(key, cat.fetchedAt);
         }
       }
       // Optional since phase 3. A phase-2 file has no tests section.

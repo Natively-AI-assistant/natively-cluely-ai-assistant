@@ -107,6 +107,28 @@ test('main configures the store before LLMHelper exists, under the dev:agent use
   assert.ok(configure > 0 && helper > 0 && configure < helper, 'configure must run before the first setModel');
   assert.match(main.slice(configure - 200, configure + 200), /app\.getPath\('userData'\)/);
 });
+describe('disk writes', () => {
+  test('an unchanged catalogue refreshed again within the hour is not rewritten (review fix)', () => {
+    // LiteLLM's /model/info refresh runs every 5 minutes while LiteLLM is in use.
+    const file = tmpFile(); let clock = 1_000_000;
+    const s = new S.VisionCapabilityStore({ filePath: file, now: () => clock });
+    s.replaceProviderAnswers('litellm', 'http://h', answers({ a: true }));
+    const first = fs.statSync(file).mtimeMs; const firstBytes = fs.readFileSync(file, 'utf8');
+    clock += 5 * 60_000;
+    s.replaceProviderAnswers('litellm', 'http://h', answers({ a: true }));
+    assert.equal(fs.readFileSync(file, 'utf8'), firstBytes, 'same answers, minutes later: no rewrite');
+    assert.equal(s.fetchedAt('litellm', 'http://h'), clock, 'but the refresh time moves on in memory');
+    clock += 5 * 60_000;
+    s.replaceProviderAnswers('litellm', 'http://h', answers({ a: true, b: true }));
+    assert.notEqual(fs.readFileSync(file, 'utf8'), firstBytes, 'changed answers are written at once');
+    const changed = fs.readFileSync(file, 'utf8');
+    clock += 61 * 60_000;
+    s.replaceProviderAnswers('litellm', 'http://h', answers({ a: true, b: true }));
+    assert.notEqual(fs.readFileSync(file, 'utf8'), changed, 'and an unchanged one is written once the saved time is over an hour old');
+    void first;
+  });
+});
+
 describe('test results (phase 3)', () => {
   test('a recorded test is returned with its time, for that provider, base URL and model only', () => {
     const s = new S.VisionCapabilityStore({ filePath: null, now: () => 500 });
