@@ -606,3 +606,8 @@ Priority in the spec puts realtime usability above p10 and the mean, so the late
 * Status: NOT judged, NOT run in the app. It is built only if fix11's holdout read keeps fix11 as the base; then it
   needs its own dev + holdout + supp-behavior runs and the 02:00Z batch.
 * Harness: tools/verifier-replay.mjs now passes the surface to the gate (spoken General turns were skipped in replay).
+
+## External judge — batch 2026-10-01 11:00 UTC, CHARTER v2 (calibration 25/25, gate 23)
+Probe OK 11:00:15Z. All 25 pairs correct, including the five claim-kind pairs (CAL-21 current decision, CAL-22
+over-deferral, CAL-23 decision vs invented history, CAL-24 source conflict, CAL-25 consequential commitment); 22
+decisive, 3 clear. Result sets: abs-dev-c2, abs-holdout-c2, abs-sb-c2; nothing from charter v1 is mixed in.
