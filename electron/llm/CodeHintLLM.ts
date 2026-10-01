@@ -36,12 +36,10 @@ export class CodeHintLLM {
             // screenshots the chain would have answered: a DeepSeek user with a
             // Gemini key never got a hint.
             //
-            // Known gap, shared with Ask AI: a SELECTED LiteLLM / NVIDIA NIM /
-            // Fluxion model is seated by the chain whether or not its upstream
-            // reads images (only the user knows theirs). OpenRouter's own
-            // catalogue closed it for OpenRouter (phase 2); the per-model
-            // override (phase 4) closes it for the rest —
-            // docs/plans/2026-10-01-vision-capability-design.md.
+            // A selected gateway model that its catalogue (OpenRouter, 9Router)
+            // or its one-time image test marks text-only is not seated. One
+            // still UNTESTED is seated as before while its background test runs
+            // — docs/plans/2026-10-01-vision-capability-design.md.
 
             const message = buildCodeHintMessage(
                 questionContext ?? null,

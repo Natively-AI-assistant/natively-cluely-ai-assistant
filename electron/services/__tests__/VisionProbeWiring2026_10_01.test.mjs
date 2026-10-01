@@ -235,3 +235,12 @@ describe("LiteLLM's supports_vision", () => {
     assert.equal(h.getCapabilities.call(helper({ currentModelId: 'litellm/internal-mm', litellmBaseURL: 'http://localhost:4000/v1' })).supportsImages, true);
   });
 });
+
+describe('startup', () => {
+  test('ProcessingHelper enables the test before it restores the saved model, so that selection is tested too', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../../ProcessingHelper.ts'), 'utf8');
+    const enable = src.indexOf('this.llmHelper.enableVisionProbing()');
+    const restore = src.indexOf('this.llmHelper.setModel(defaultModel, allProviders)');
+    assert.ok(enable > 0 && restore > 0 && enable < restore);
+  });
+});

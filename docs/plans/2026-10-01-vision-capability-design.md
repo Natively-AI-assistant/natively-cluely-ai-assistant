@@ -120,8 +120,14 @@ The one-time test:
   so a pass means a real screenshot will work.
 - Draws a **random 4-digit number** into a small generated image, asks naturally
   ("What number is shown in this image?"), and passes only if the answer
-  contains it. A 200 without the number is **no**. The question must read like
-  real use: AgentRouter's content filter rejects canned probe text.
+  contains it. A 200 without the number is **no**, but only after a second
+  miss with a different number (built in phase 3a: one misread must not block
+  a capable model for a month). The question must read like real use:
+  AgentRouter's content filter rejects canned probe text.
+- The image uses digits from the repo's Inter Bold, embedded as bitmaps and
+  composed in pure Node. Measured: a 5x7 block font was misread by GPT-4o mini
+  and Claude Haiku 4.5; Inter Bold was read 28 times out of 28 across seven
+  model families, plus Gemini.
 - Transient failures leave the model **unknown** and retry later with backoff:
   402 (empty daily pool), 429, 5xx, timeouts, `content-blocked`, network errors.
   They never mark a model "no".
@@ -129,8 +135,13 @@ The one-time test:
   save or catalogue refresh. Re-test after 30 days, or after a real screenshot
   on that model is rejected as image-unsupported.
 - Only the model the user selects, never a whole catalogue.
-- Respects local-only mode, switched-off providers and the screenshots outbound
-  scope: no cloud test when screenshots may not leave the device.
+- Respects switched-off providers, private-vision mode and the screenshots
+  outbound scope: no cloud test when screenshots may not leave the device. It
+  goes through Direct Assist's own boundary, so those gates are the real ones.
+  (Local-only mode is nominal app-wide: the flag has no production setter.)
+- Tested providers: OpenAI, Claude, Gemini, NVIDIA NIM, OpenRouter, Fluxion,
+  AgentRouter, LiteLLM, 9Router. Not tested: providers decided by their route,
+  Groq (its own table), Ollama (`/api/show`), custom/cURL (their template).
 
 ## 3. Routing: the selected model first, one ordering for both paths
 
@@ -200,19 +211,29 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
    9Router's answers where they are held today. Known gap left open: with
    Code Hint's gate removed, a SELECTED LiteLLM / NVIDIA NIM / OpenRouter /
    Fluxion model gets Code Hint screenshots whatever its upstream reads,
-   exactly as Ask AI already did. Phase 2 closed it for OpenRouter; LiteLLM,
-   NVIDIA NIM and Fluxion wait for the override (phase 4).
+   exactly as Ask AI already did. Phase 2 closed it for OpenRouter; phase 3a
+   closes it for any LiteLLM, NVIDIA NIM or Fluxion model once its one-time
+   test has run (an untested one behaves as before until then).
 2. **Provider data**: the saved capability store (`userData/vision-capabilities.json`)
    and OpenRouter's catalogue, fetched in the background when an OpenRouter
    model is selected and on Settings' Refresh. A model OpenRouter lists as
    text-only no longer gets screenshots on either path or in Direct Assist.
    9Router and Ollama were already wired in phase 1; Gemini and Claude are
    covered by the name list.
-3. **One-time test** plus image support in the direct DeepSeek adapter (Flash),
-   and LiteLLM's `supports_vision: true` (it lets the test skip a model).
+3. **One-time test** (phase 3a, built): the engine, saved results, a background
+   test when an unknown model is selected, seats and Direct Assist following a
+   result, a re-test when a real screenshot is refused, and LiteLLM's
+   `supports_vision: true`. An image refusal is no longer mistaken for a
+   retired model. **Phase 3b**: image support in the direct DeepSeek adapter
+   (Flash).
 4. **Auto / On / Off override** plus the picker marker.
 5. **Selected model first in both chains**, the cURL / Codex / Antigravity rungs,
    the local-only fix and the clearer messages. Fixes defects 4, 6, 7, 8, 9, 10.
+   Also the on-the-spot test: when a screenshot arrives, the selected model is
+   still unknown and nothing else can read it, test first and send only on a
+   pass. It needs rungs that send to the selected model, which this phase adds;
+   until then an untested selection behaves as before while its background
+   test runs.
 
 ## Out of scope
 
