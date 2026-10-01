@@ -529,3 +529,28 @@ Priority in the spec puts realtime usability above p10 and the mean, so the late
   mode) and that build needs its own holdout read before promotion; nothing else is tuned on holdout items.
 * Aggregate ≤ 0 → revert to fix6; fix9 is read as the fallback (207 holdout rows, no Seminar / Call Center).
 * The swap itself (show then replace, vs hold until verified) stays Evin's decision either way.
+
+### What the 13 "decision lost" and 22 "cut to under half" edits in fix11 dev actually are (read 10:35Z, before scores)
+* "Decision lost" is mostly the heuristic: 8 of 13 matched "I'd rather …" inside a hedge the edit removed ("I don't
+  have the reporting line in front of me, so I'd rather get you the accurate answer than guess" → "I'll confirm who
+  this role reports to and follow up with you directly"). Those edits are shorter and no worse.
+* Real losses, 3–4 items:
+  - Call Center, no document: the agent's own honest answer to a yes-or-no ask is removed with the invented process
+    around it. DCC-036 "am I getting money back for today or not?" → draft "I can't confirm a credit on this call…"
+    → shown "I'll get the outage documented… Can I get your account number": the question is no longer answered.
+    DCC-013 loses the refusal to hand over a neighbour's name. Cause: the no-policy clause lists "what the agent can
+    or cannot see or do" as unsupported.
+  - DREC-014: "Mid-November works on our side, so let's plan around that" → "I'll confirm the mid-November timing on
+    our side". Defensible (a start date is the hiring team's to accept) but it defers.
+  - DJOB-010 (typed prep): "a tight answer if I get asked why I want to work here" → "I'll confirm that and come back
+    to you on it". The motive blocker on the typed surface, where the holding line makes no sense.
+  - DJOB-003: the rewrite turned "how you're leveling the role" into "how I'm leveling the role".
+* Cuts to under half: most remove an invented self-claim or product behaviour (genuine). The cost shows in General
+  small talk with no profile: DGEN-027 "where do you see yourself in five years?" → "That's a big one, where do you
+  even start. What about you…", DGEN-028 "Biggest weakness?" → "Ha, depends who you ask. What's yours?" — deflections.
+  This is I21 (every spoken General turn verified); under the rule above General is the mode to watch.
+* Replay-only variant `tools/variants/_cv-cc-keep-v1.mjs` (keep "cannot confirm or promise on this call" and a refusal
+  to hand over another person's details): on the 40 dev Call Center drafts it kept the honest answer in DCC-008, 013,
+  015 but ALSO kept invented restrictions the clause exists to remove ("I can't send a password reset by text",
+  DCC-032) and still dropped DCC-036's answer. Mixed; NOT built. Kept as a variant in case the judged Call Center
+  result points at this class.
