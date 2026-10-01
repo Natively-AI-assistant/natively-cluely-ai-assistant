@@ -959,7 +959,7 @@ at the median. So the lever costs about 1.4 s to the first word at the median an
   fails are not up; then that mode's app runs and a holdout read.
 * Harness: tools/verifier-replay.mjs takes `--answers <replay.jsonl>` (verify a generator replay's output).
 
-### Prepared for the judge — Sales with no reference file: "how to say it when nothing can be stated" (16:05Z)
+### Prepared for the judge — Sales with no reference file: "how to say it when nothing can be stated" (15:56Z)
 * 18 of 40 dev Sales answers score under 8.6; 14 have no document. The existing notice (I7) holds the product facts
   back, and what is left is long and indirect: a preamble about not wanting to guess, an invented pricing driver
   ("it depends on how many people would be using it", capped at 4.0), a discovery detour, "on our next call". The
