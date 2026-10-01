@@ -388,3 +388,90 @@ test('with telemetry off no request is made, so no device id and no credentials 
   await h.client.dispatchOnce();
   assert.equal(h.calls.length, 0);
 });
+
+// ── The install token ────────────────────────────────────────────────────────
+
+function tokenHarness(over = {}) {
+  const h = harness();
+  h.token = { token: 'fit1.payload.sig' };
+  h.asked = [];
+  h.invalidated = [];
+  h.client = createFunnelClient({
+    load: () => h.file, save: (t) => { h.file = t; return true; },
+    fetchImpl: async (url, init) => { h.calls.push({ url, init, body: JSON.parse(init.body) }); return h.respond(url, init); },
+    endpoint: 'https://example.test/v1/telemetry/funnel', now: () => h.now,
+    newId: () => `00000000-0000-4000-8000-${String(++h.n).padStart(12, '0')}`,
+    installId: () => INSTALL, appVersion: () => '2.9.2', platform: 'darwin', isEnabled: () => h.enabled,
+    ensureInstallToken: async (id) => { h.asked.push(id); return h.token; },
+    invalidateInstallToken: (id) => { h.invalidated.push(id); },
+    random: () => 0,
+    ...over,
+  });
+  return h;
+}
+
+test('a request carries the install token, asked for by the install the batch speaks for', async () => {
+  const h = tokenHarness();
+  h.client.track('app_first_run');
+  await h.client.dispatchOnce();
+  assert.deepEqual(h.asked, [INSTALL]);
+  assert.equal(h.calls[0].init.headers['x-install-token'], 'fit1.payload.sig');
+  assert.ok(!h.file.includes('fit1.payload.sig'), 'the token is not written into the event queue');
+});
+
+test('without a token nothing is sent, nothing is dropped, and the retry clock is not pushed back', async () => {
+  for (const answer of [{ skipped: 'paused' }, { failed: 'network' }, { skipped: 'waiting' }, {}, null]) {
+    const h = tokenHarness();
+    h.token = answer;
+    h.client.track('app_first_run');
+    const r = await h.client.dispatchOnce();
+    assert.match(r.skipped, /^no_install_token:/);
+    assert.equal(h.calls.length, 0);
+    assert.equal(h.client.pending(), 1);
+    assert.deepEqual([h.stored().attempt, h.stored().nextAttemptAt], [0, 0]);
+  }
+});
+
+test('a registrar that throws is a missing token, not a crash', async () => {
+  const h = tokenHarness({ ensureInstallToken: async () => { throw new Error('boom'); } });
+  h.client.track('app_first_run');
+  assert.equal((await h.client.dispatchOnce()).skipped, 'no_install_token:error');
+  assert.equal(h.client.pending(), 1);
+});
+
+test('a 401 keeps every event and forgets the token, so the next attempt registers again', async () => {
+  const h = tokenHarness();
+  h.client.track('app_first_run');
+  h.respond = async () => ({ ok: false, status: 401, json: async () => ({ ok: false, error: 'install_token_invalid' }) });
+  const r = await h.client.dispatchOnce();
+  assert.equal(r.failed, 'http_401');
+  assert.deepEqual(h.invalidated, [INSTALL]);
+  assert.equal(h.client.pending(), 1, 'a 401 is never a reason to drop events');
+  // The next attempt, after the backoff, asks for a token again and delivers.
+  h.now = h.stored().nextAttemptAt;
+  h.token = { token: 'fit1.fresh.sig' };
+  h.respond = async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) });
+  await h.client.dispatchOnce();
+  assert.equal(h.calls.at(-1).init.headers['x-install-token'], 'fit1.fresh.sig');
+  assert.equal(h.client.pending(), 0);
+});
+
+test('telemetry turned off while the install was registering: nothing is sent', async () => {
+  const h = tokenHarness({ ensureInstallToken: async () => { h.enabled = false; return { token: 'fit1.payload.sig' }; } });
+  h.client.track('app_first_run');
+  const r = await h.client.dispatchOnce();
+  assert.equal(r.skipped, 'disabled');
+  assert.equal(h.calls.length, 0);
+});
+
+test('with a mixed queue the token asked for is the one for the install at the head of the queue', async () => {
+  const OTHER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  let current = INSTALL;
+  const h = tokenHarness({ installId: () => current });
+  h.client.track('app_first_run');
+  current = OTHER;
+  h.now += 3000; h.client.track('trial_expired');
+  await h.client.dispatchOnce();
+  await h.client.dispatchOnce();
+  assert.deepEqual(h.asked, [INSTALL, OTHER]);
+});

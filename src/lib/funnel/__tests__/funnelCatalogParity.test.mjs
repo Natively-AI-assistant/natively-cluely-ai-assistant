@@ -235,3 +235,107 @@ test('every feature the analytics service can report is a feature the catalogue 
   assert.deepEqual([...union].sort(), [...allowed].sort(), 'FunnelFeature in analytics.service.ts and feature_used.feature in the catalogue must list the same features');
   for (const f of src.matchAll(/reportFeatureUsed\('([a-z_]+)'\)/g)) assert.ok(allowed.includes(f[1]), `${f[1]} is reported but not in the catalogue`);
 });
+
+// ── Registration: the puzzle, the challenge, the token ───────────────────────
+
+const serverFile = (name) => path.join(path.dirname(SERVER_PATH), name);
+
+test('the puzzle is defined by the same text in the app and on the server', { skip }, () => {
+  const marker = '/** What gets hashed. */';
+  const body = (file) => { const t = fs.readFileSync(file, 'utf8'); const i = t.indexOf(marker); assert.ok(i > 0, `${file} lost its marker`); return t.slice(i); };
+  assert.equal(body(path.join(HERE, '..', 'funnelPow.mjs')), body(serverFile('funnelPow.js')));
+});
+
+test('the app will take on every difficulty the server asks a first install for, and the server never asks beyond its ceiling', { skip }, async () => {
+  const { INSTALL_MAX_BITS } = await import('../funnelInstall.mjs');
+  const server = await import(pathToFileURL(serverFile('funnelInstall.js')).href);
+  const pow = await import(pathToFileURL(serverFile('funnelPow.js')).href);
+  assert.ok(server.challengeBits(0) <= INSTALL_MAX_BITS, 'a first install must always be able to register');
+  assert.ok(server.challengeBits(3) <= INSTALL_MAX_BITS, 'so must a handful behind one address');
+  assert.ok(server.challengeBits(1000) <= pow.POW_MAX_BITS);
+  assert.ok(INSTALL_MAX_BITS <= pow.POW_MAX_BITS);
+});
+
+test('a real install registers with the real server and its events are accepted, on both platforms', { skip }, async () => {
+  const { createHash } = await import('node:crypto');
+  const { createFunnelClient } = await import('../funnelClient.mjs');
+  const { createInstallRegistrar } = await import('../funnelInstall.mjs');
+  const install = await import(pathToFileURL(serverFile('funnelInstall.js')).href);
+  const guardLib = await import(pathToFileURL(serverFile('funnelGuard.js')).href);
+  const funnel = await import(pathToFileURL(serverFile('funnel.js')).href);
+  const INSTALL_ID = '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b';
+
+  for (const platform of ['darwin', 'win32']) {
+    let now = Date.parse('2026-10-01T12:00:00Z');
+    // The server, as server.js wires it, with a low base so the test is quick.
+    const limits = { ...install.INSTALL_DEFAULTS, baseBits: 10 };
+    const srv = install.createFunnelInstall({ secret: 'parity-test-secret-0123456789abcdef', now: () => now, limits });
+    const guard = guardLib.createFunnelGuard({ now: () => now, salt: 's' });
+    const seen = [];
+    const fetchImpl = async (url, init) => {
+      const body = JSON.parse(init.body);
+      const json = (status, obj) => ({ ok: status >= 200 && status < 300, status, json: async () => obj });
+      if (url.endsWith('/challenge')) {
+        const turn = guard.nextChallenge('203.0.113.7');
+        const c = srv.issueChallenge(body.install_id, install.challengeBits(turn.asked, limits));
+        return json(200, { ok: true, challenge: c.challenge, difficulty: c.difficulty, expires_at: c.expires_at });
+      }
+      if (url.endsWith('/register')) {
+        const r = srv.register(body);
+        return r.ok ? json(200, { ok: true, install_token: r.install_token }) : json(422, { ok: false, error: r.error });
+      }
+      const parsed = funnel.validateFunnelBatch(body, now);
+      const reg = srv.verifyToken(init.headers['x-install-token'], parsed.rows[0]?.install_id);
+      seen.push({ parsed, reg });
+      return reg.ok ? json(200, { ok: true, rejected_ids: [] }) : json(401, { ok: false, error: reg.error });
+    };
+
+    const tokens = {};
+    const registrar = createInstallRegistrar({
+      fetchImpl, challengeEndpoint: 'https://x.test/v1/telemetry/challenge', registerEndpoint: 'https://x.test/v1/telemetry/register',
+      sha256: (input) => createHash('sha256').update(input).digest(),
+      now: () => now, yieldFn: async () => {}, sleep: async () => {}, isEnabled: () => true,
+      loadToken: (id) => tokens[id], saveToken: (id, t) => { tokens[id] = t; }, clearToken: (id) => { delete tokens[id]; },
+    });
+    let file = null; let n = 0;
+    const c = createFunnelClient({
+      load: () => file, save: (t) => { file = t; return true; }, fetchImpl, endpoint: 'https://x.test/v1/telemetry/funnel', now: () => now,
+      newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`,
+      installId: () => INSTALL_ID, appVersion: () => '2.9.2', platform, isEnabled: () => true,
+      ensureInstallToken: (id) => registrar.ensureToken(id), invalidateInstallToken: (id) => registrar.invalidate(id),
+    });
+
+    c.track('app_first_run');
+    now += 3000; c.track('trial_expired');
+    const sent = await c.dispatchOnce();
+    assert.equal(sent.delivered, 2, platform);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].reg.ok, true, 'the server accepted the token the app obtained');
+    assert.equal(seen[0].parsed.rows.length, 2);
+    assert.equal(seen[0].parsed.rows[0].platform, platform);
+
+    // A token the server no longer accepts (its key changed): the app keeps its
+    // events, registers again, and delivers.
+    tokens[INSTALL_ID] = 'fit1.e30.forged';
+    now += 3000; c.track('trial_expired');
+    const refused = await c.dispatchOnce();
+    assert.equal(refused.failed, 'http_401');
+    assert.equal(c.pending(), 1);
+    now = JSON.parse(file).nextAttemptAt;
+    assert.equal((await c.dispatchOnce()).delivered, 1);
+    assert.equal(c.pending(), 0);
+    assert.equal(guard.stats().refused.challenges, 0);
+  }
+});
+
+test('a token for one install is refused for another by the real server', { skip }, async () => {
+  const { createHash } = await import('node:crypto');
+  const { solvePow } = await import('../funnelInstall.mjs');
+  const install = await import(pathToFileURL(serverFile('funnelInstall.js')).href);
+  const srv = install.createFunnelInstall({ secret: 'parity-test-secret-0123456789abcdef', now: () => 1_800_000_000_000 });
+  const ch = srv.issueChallenge('3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b', 10);
+  const solved = await solvePow({ challenge: ch.challenge, bits: ch.difficulty, sha256: (i) => createHash('sha256').update(i).digest(), now: () => 0, yieldFn: async () => {}, sleep: async () => {} });
+  const token = srv.register({ challenge: ch.challenge, solution: solved.solution }).install_token;
+  assert.equal(srv.verifyToken(token, '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b').ok, true);
+  assert.equal(srv.verifyToken(token, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb').error, 'install_token_mismatch');
+});

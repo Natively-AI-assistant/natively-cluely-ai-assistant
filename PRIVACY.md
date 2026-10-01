@@ -115,6 +115,11 @@ can hold text, so an event cannot contain anything you say, see, type or paste, 
 meeting title, the name of a model, or a key. A count of answers is a number; the answers are
 never sent. We do not store your IP address with these events.
 
+**Registering the installation.** Before it reports anything, the app registers its installation
+with our server once: it does a short calculation in the background (about a second on most
+computers, never during a meeting) and receives a token that it sends with later events. This
+exists to stop made-up installations being reported to us; it sends nothing about you.
+
 **What gets linked.** Events from one device are joined into one history, so we can see the steps
 one person took. When you start a free trial or use a Natively key, those events are linked to that
 trial or account. When you open a checkout page from the app, the link carries your installation

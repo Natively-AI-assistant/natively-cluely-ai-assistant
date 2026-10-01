@@ -29,18 +29,23 @@
 import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createFunnelClient, type FunnelClient, type FunnelTrackResult } from '../../src/lib/funnel/funnelClient.mjs';
 import {
     normalizeFunnelState, isFirstRun, localDay, daysSince, minutesSince, type FunnelState,
 } from '../../src/lib/funnel/funnelState.mjs';
 import type { FunnelProps, FunnelEntitlement } from '../../src/lib/funnel/funnelCatalog.mjs';
 import { tagCheckoutUrl } from '../../src/lib/funnel/checkoutLinks.mjs';
+import { createInstallRegistrar, type InstallRegistrar } from '../../src/lib/funnel/funnelInstall.mjs';
 import { getAppSessionId, usageFlagEnabled } from './UsageOutbox';
 import { SettingsManager } from './SettingsManager';
 
 const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
 const DISPATCH_INTERVAL_MS = 30_000;
+// Nothing leaves, and the registration puzzle does not start, until the app
+// has been up this long: launch belongs to the user.
+const FIRST_TICK_MS = 30_000;
+const MAX_STORED_TOKENS = 5;
 const QUEUE_FILE = 'funnel_queue.json';
 const STATE_FILE = 'funnel_state.json';
 
@@ -68,6 +73,8 @@ interface StoredState extends FunnelState {
     /** The local day `featuresUsed` belongs to, and the features already reported for it. */
     featuresDay: string;
     featuresUsed: string[];
+    /** Registration tokens the server issued, by install id (funnelInstall.mjs). */
+    tokens: Record<string, string>;
 }
 
 export class FunnelTelemetry {
@@ -75,6 +82,7 @@ export class FunnelTelemetry {
     private client: FunnelClient | null = null;
     private snapshot: (() => FunnelSnapshot) | null = null;
     private identity: (() => FunnelIdentity) | null = null;
+    private registrar: InstallRegistrar | null = null;
     private answersAtMeetingStart = 0;
     private timer: NodeJS.Timeout | null = null;
     private state: StoredState | null = null;
@@ -138,6 +146,9 @@ export class FunnelTelemetry {
                 newInstall: raw?.newInstall === true,
                 featuresDay: typeof raw?.featuresDay === 'string' ? raw.featuresDay : '',
                 featuresUsed: Array.isArray(raw?.featuresUsed) ? raw.featuresUsed.filter((f: unknown) => typeof f === 'string').slice(0, 50) : [],
+                tokens: raw?.tokens && typeof raw.tokens === 'object' && !Array.isArray(raw.tokens)
+                    ? Object.fromEntries(Object.entries(raw.tokens).filter(([, v]) => typeof v === 'string').slice(-MAX_STORED_TOKENS)) as Record<string, string>
+                    : {},
             };
         }
         return this.state;
@@ -178,6 +189,48 @@ export class FunnelTelemetry {
         }
     }
 
+    // ── Registration ─────────────────────────────────────────────────────────
+
+    /** Where a funnel endpoint's siblings live: `…/funnel` → `…/challenge`, `…/register`. */
+    private endpoint(name: 'funnel' | 'challenge' | 'register'): string {
+        const dev = this.devEndpoint();
+        if (!dev) return `${NATIVELY_API_URL}/v1/telemetry/${name}`;
+        return name === 'funnel' ? dev : new URL(name, dev).toString();
+    }
+
+    private getRegistrar(): InstallRegistrar {
+        if (!this.registrar) {
+            this.registrar = createInstallRegistrar({
+                fetchImpl: (...args: Parameters<typeof fetch>) => fetch(...args),
+                challengeEndpoint: this.endpoint('challenge'),
+                registerEndpoint: this.endpoint('register'),
+                sha256: (input) => createHash('sha256').update(input).digest(),
+                now: () => Date.now(),
+                // setImmediate, not a worker thread: the solver gives the main
+                // thread back every few milliseconds, and nothing has to be
+                // found inside a packaged app on either platform.
+                yieldFn: () => new Promise<void>((resolve) => { setImmediate(resolve); }),
+                sleep: (ms) => new Promise<void>((resolve) => { const t = setTimeout(resolve, ms); t.unref?.(); }),
+                isEnabled: () => this.isEnabled(),
+                // Never during a meeting: it waits, and so do the events.
+                shouldPause: () => this.meetingStartedAt !== null,
+                loadToken: (installId) => this.loadState().tokens[installId],
+                saveToken: (installId, token) => {
+                    const st = this.loadState();
+                    const kept = Object.entries(st.tokens).filter(([id]) => id !== installId).slice(-(MAX_STORED_TOKENS - 1));
+                    st.tokens = Object.fromEntries([...kept, [installId, token]]);
+                    this.saveState();
+                },
+                clearToken: (installId) => {
+                    const st = this.loadState();
+                    if (installId in st.tokens) { delete st.tokens[installId]; this.saveState(); }
+                },
+                log: console,
+            });
+        }
+        return this.registrar;
+    }
+
     // ── The queue ────────────────────────────────────────────────────────────
 
     private getClient(): FunnelClient {
@@ -186,7 +239,9 @@ export class FunnelTelemetry {
                 load: () => this.readText(QUEUE_FILE),
                 save: (text) => this.writeText(QUEUE_FILE, text),
                 fetchImpl: (...args: Parameters<typeof fetch>) => fetch(...args),
-                endpoint: this.devEndpoint() || `${NATIVELY_API_URL}/v1/telemetry/funnel`,
+                endpoint: this.endpoint('funnel'),
+                ensureInstallToken: (installId) => this.getRegistrar().ensureToken(installId),
+                invalidateInstallToken: (installId) => this.getRegistrar().invalidate(installId),
                 now: () => Date.now(),
                 newId: () => randomUUID(),
                 installId: () => this.installId(),
@@ -230,9 +285,10 @@ export class FunnelTelemetry {
             if (this.timer) return;
             this.timer = setInterval(() => { void this.tick(); }, DISPATCH_INTERVAL_MS);
             this.timer.unref?.();
-            // The first tick waits a few seconds: the snapshot resolver is set
-            // when the IPC handlers register, and startup must not block here.
-            const first = setTimeout(() => { void this.tick(); }, 6000);
+            // The first tick waits: launch belongs to the user, the resolvers
+            // are set when the IPC handlers register, and the first tick may
+            // start the one-time registration puzzle.
+            const first = setTimeout(() => { void this.tick(); }, FIRST_TICK_MS);
             first.unref?.();
         } catch (e: any) {
             console.warn('[Funnel] start failed:', e?.message || e);
@@ -379,7 +435,7 @@ export class FunnelTelemetry {
     }
 
     public getStats(): Record<string, unknown> {
-        try { return { enabled: this.isEnabled(), ...this.getClient().stats() }; } catch { return { enabled: false }; }
+        try { return { enabled: this.isEnabled(), ...this.getClient().stats(), install: this.getRegistrar().stats() }; } catch { return { enabled: false }; }
     }
 }
 

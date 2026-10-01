@@ -35,6 +35,8 @@ export interface FunnelClientDeps {
   getEntitlement?: () => string | undefined;
   deviceId?: () => string | undefined;
   getCredentials?: () => { trialToken?: string; apiKey?: string } | undefined;
+  ensureInstallToken?: (installId: string) => Promise<{ token?: string; skipped?: string; failed?: string }>;
+  invalidateInstallToken?: (installId: string) => void;
   random?: () => number;
   log?: { warn: (...args: unknown[]) => void };
 }

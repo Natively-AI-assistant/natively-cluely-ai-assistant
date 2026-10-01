@@ -60,6 +60,12 @@ Never recorded: IP address, email (reach it through `license_id`), key, model na
 The endpoint takes no key and the app is open source, so nothing can prove an event came from the
 real app. It is bounded instead (`natively-api/lib/funnelGuard.js`):
 
+- every install registers once: it asks for a challenge, solves a small puzzle (about 2^19 hashes,
+  a second or so, in background slices, never during a meeting) and gets a signed token that every
+  funnel request must carry. The puzzle gets one bit harder for each further challenge an address
+  asks for in a day, so minting installs from one address costs exponentially more
+  (`natively-api/lib/funnelInstall.js`, `src/lib/funnel/funnelInstall.mjs`; base difficulty is
+  `FUNNEL_POW_BITS` on the server and can be raised during an attack without an app release);
 - one install per request;
 - 300 events per install per day; per address, 50 installs and 3,000 events per day, with IPv6
   addresses grouped by /64; 250,000 rows per day overall (`FUNNEL_MAX_EVENTS_PER_INSTALL_PER_DAY`,

@@ -60,13 +60,29 @@ function load({ packaged = true, settings, env = {}, state } = {}) {
   const { FunnelTelemetry } = require(COMPILED);
   const ft = FunnelTelemetry.getInstance();
   const posts = [];
+  // The registration a real server would do: a challenge (easy here), then a
+  // token for a solved one. `server` lets a case change how the server answers.
+  const registrations = [];
+  const server = { funnelStatus: 200, tokens: 0 };
   globalThis.fetch = async (url, init) => {
-    posts.push({ url: String(url), headers: init.headers, events: JSON.parse(init.body).events });
+    const u = String(url);
+    const body = JSON.parse(init.body);
+    if (u.endsWith('/challenge')) {
+      registrations.push({ url: u, body, headers: init.headers });
+      return { ok: true, status: 200, json: async () => ({ ok: true, challenge: `fic1.test${registrations.length}.sig`, difficulty: 6 }) };
+    }
+    if (u.endsWith('/register')) {
+      registrations.push({ url: u, body, headers: init.headers });
+      server.tokens++;
+      return { ok: true, status: 200, json: async () => ({ ok: true, install_token: `fit1.token${server.tokens}.sig` }) };
+    }
+    posts.push({ url: u, headers: init.headers, events: body.events });
+    if (server.funnelStatus !== 200) return { ok: false, status: server.funnelStatus, json: async () => ({ ok: false, error: 'install_token_invalid' }) };
     return { ok: true, status: 200, json: async () => ({ ok: true, rejected_ids: [] }) };
   };
   const read = (name) => { try { return JSON.parse(fs.readFileSync(path.join(userData, name), 'utf8')); } catch { return null; } };
   return {
-    ft, userData, posts,
+    ft, userData, posts, registrations, server,
     queue: () => read('funnel_queue.json')?.events ?? [],
     state: () => read('funnel_state.json'),
     installId: () => { try { return fs.readFileSync(path.join(userData, 'install_id.txt'), 'utf8').trim(); } catch { return null; } },
@@ -104,7 +120,8 @@ describe('FunnelTelemetry', { skip: HAVE_BUILD ? false : 'run `npm run build:ele
     assert.equal(h.ft.track('trial_expired'), 'queued');
     await h.ft.tick();
     assert.equal(h.posts[0].url, 'https://api.natively.software/v1/telemetry/funnel');
-    assert.deepEqual(Object.keys(h.posts[0].headers), ['Content-Type'], 'no key, no token');
+    assert.deepEqual(h.registrations.map((r) => r.url), ['https://api.natively.software/v1/telemetry/challenge', 'https://api.natively.software/v1/telemetry/register']);
+    assert.deepEqual(Object.keys(h.posts[0].headers), ['Content-Type', 'x-install-token'], 'no key and no trial token: this install has neither');
   });
 
   test('telemetry turned off in settings: off, in a packaged build too', async () => {
@@ -127,6 +144,7 @@ describe('FunnelTelemetry', { skip: HAVE_BUILD ? false : 'run `npm run build:ele
     h.ft.track('trial_expired');
     await h.ft.tick();
     assert.equal(h.posts[0].url, 'http://127.0.0.1:4010/funnel', 'a dev launch never posts to production');
+    assert.deepEqual(h.registrations.map((r) => r.url), ['http://127.0.0.1:4010/challenge', 'http://127.0.0.1:4010/register'], 'and registers with the same dev server');
     assert.equal(load({ packaged: false, env: { NATIVELY_FUNNEL_ENDPOINT: 'javascript:alert(1)' } }).ft.isEnabled(), false);
   });
 
@@ -240,7 +258,8 @@ describe('FunnelTelemetry', { skip: HAVE_BUILD ? false : 'run `npm run build:ele
     const onDisk = fs.readFileSync(path.join(h.userData, 'funnel_queue.json'), 'utf8');
     assert.ok(!onDisk.includes(KEY) && !onDisk.includes(TOKEN), 'credentials are never written to the queue file');
     await h.ft.tick();
-    assert.deepEqual(h.posts[0].headers, { 'Content-Type': 'application/json', 'x-trial-token': TOKEN, 'x-natively-key': KEY });
+    assert.deepEqual(h.posts[0].headers, { 'Content-Type': 'application/json', 'x-trial-token': TOKEN, 'x-natively-key': KEY, 'x-install-token': 'fit1.token1.sig' });
+    for (const r of h.registrations) assert.deepEqual(r.headers, { 'Content-Type': 'application/json' }, 'registering sends no key, no trial token and no device id');
   });
 
   test('an install with no device id and no credentials still reports, as itself', async () => {
@@ -249,7 +268,7 @@ describe('FunnelTelemetry', { skip: HAVE_BUILD ? false : 'run `npm run build:ele
     h.ft.track('trial_expired');
     assert.equal('device_id' in h.queue()[0], false);
     await h.ft.tick();
-    assert.deepEqual(Object.keys(h.posts[0].headers), ['Content-Type']);
+    assert.deepEqual(Object.keys(h.posts[0].headers), ['Content-Type', 'x-install-token']);
   });
 
   test('an identity resolver that throws costs the identity, not the event', async () => {
@@ -267,6 +286,7 @@ describe('FunnelTelemetry', { skip: HAVE_BUILD ? false : 'run `npm run build:ele
     assert.equal(h.ft.featureUsed('answer'), 'disabled');
     await h.ft.tick();
     assert.equal(h.posts.length, 0);
+    assert.equal(h.registrations.length, 0, 'not even a registration challenge is asked for');
     assert.deepEqual(h.queue(), []);
   });
 
@@ -294,6 +314,88 @@ describe('FunnelTelemetry', { skip: HAVE_BUILD ? false : 'run `npm run build:ele
       h.ft.meetingEnded();           // no count available: the field is left out, not guessed
       assert.equal('answers' in h.queue().at(-1).props, false);
     });
+  });
+
+  // ── Registering the install ────────────────────────────────────────────────
+
+  test('an install registers once, keeps its token on disk, and does not register again', async () => {
+    const h = load({ packaged: true });
+    h.ft.track('trial_expired');
+    await h.ft.tick();
+    assert.equal(h.registrations.length, 2, 'one challenge, one register');
+    assert.deepEqual(h.registrations[0].body, { install_id: h.installId() });
+    assert.match(String(h.registrations[1].body.solution), /^[0-9]+$/);
+    assert.deepEqual(h.state().tokens, { [h.installId()]: 'fit1.token1.sig' });
+    await new Promise((r) => setTimeout(r, 2100));
+    h.ft.track('trial_expired');
+    await h.ft.tick();
+    assert.equal(h.registrations.length, 2, 'the second delivery reused the token');
+    assert.equal(h.posts.length, 2);
+    assert.equal(h.posts[1].headers['x-install-token'], 'fit1.token1.sig');
+  });
+
+  test('a token stored by an earlier launch is used without registering', async () => {
+    const first = load({ packaged: true });
+    first.ft.track('trial_expired');
+    await first.ft.tick();
+    const id = first.installId();
+    // A new process, the same user-data: only the files carry over.
+    const state = first.state();
+    const h = load({ packaged: true, state });
+    fs.writeFileSync(path.join(h.userData, 'install_id.txt'), id);
+    h.ft.track('trial_expired');
+    await h.ft.tick();
+    assert.equal(h.registrations.length, 0);
+    assert.equal(h.posts[0].headers['x-install-token'], 'fit1.token1.sig');
+  });
+
+  test('during a meeting the install does not register and nothing is sent; afterwards it does both', async () => {
+    const h = load({ packaged: true, state: { firstRunSent: true, lastActiveDay: '2099-01-01' } });
+    h.ft.setSnapshotResolver(() => SNAPSHOT);
+    h.ft.meetingStarted(0);
+    await h.ft.tick();
+    assert.equal(h.registrations.length, 0, 'the puzzle never runs during a meeting');
+    assert.equal(h.posts.length, 0);
+    assert.ok(h.queue().length >= 1, 'the events wait');
+    h.ft.meetingEnded(0);
+    await h.ft.tick();
+    assert.equal(h.registrations.length, 2);
+    assert.equal(h.posts.length, 1);
+    assert.deepEqual(h.queue(), []);
+  });
+
+  test('a token the server refuses is forgotten; the events are kept and go out with a new one', async () => {
+    const h = load({ packaged: true, state: { firstRunSent: true } });
+    h.ft.track('trial_expired');
+    h.server.funnelStatus = 401;
+    await h.ft.tick();
+    assert.equal(h.posts.length, 1);
+    assert.equal(h.queue().length, 1, 'a 401 never costs an event');
+    assert.deepEqual(h.state().tokens, {}, 'the refused token is gone');
+    h.server.funnelStatus = 200;
+    // Step past the delivery backoff by rewriting the stored retry time.
+    const q = JSON.parse(fs.readFileSync(path.join(h.userData, 'funnel_queue.json'), 'utf8'));
+    assert.ok(q.nextAttemptAt > Date.now());
+    return new Promise((resolve) => setTimeout(resolve, 10)).then(async () => {
+      // A fresh process is the simplest way to be past the backoff with the same files.
+      const again = load({ packaged: true, state: h.state() });
+      fs.writeFileSync(path.join(again.userData, 'install_id.txt'), h.installId());
+      fs.writeFileSync(path.join(again.userData, 'funnel_queue.json'), JSON.stringify({ ...q, attempt: 0, nextAttemptAt: 0 }));
+      await again.ft.tick();
+      assert.equal(again.registrations.length, 2, 'it registered again');
+      assert.equal(again.posts.length, 1);
+      assert.equal(again.posts[0].headers['x-install-token'], 'fit1.token1.sig');
+      assert.deepEqual(again.queue(), []);
+    });
+  });
+
+  test('the first tick is held back from launch, and the solver never uses a worker thread', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'electron/services/FunnelTelemetry.ts'), 'utf8');
+    assert.match(src, /const FIRST_TICK_MS = 30_000;/);
+    assert.match(src, /const first = setTimeout\(\(\) => \{ void this\.tick\(\); \}, FIRST_TICK_MS\);/);
+    assert.match(src, /yieldFn: \(\) => new Promise<void>\(\(resolve\) => \{ setImmediate\(resolve\); \}\),/);
+    assert.match(src, /shouldPause: \(\) => this\.meetingStartedAt !== null,/);
+    assert.ok(!/worker_threads|new Worker\(/.test(src));
   });
 
   test('the queue and state files live in the user-data directory and nowhere else', () => {

@@ -96,6 +96,11 @@ export function parseFunnelQueue(text) {
  *        nothing when the machine has none ('unavailable' counts as none)
  * @param {() => { trialToken?: string, apiKey?: string }} [deps.getCredentials]
  *        read at SEND time: the credentials the app holds now
+ * @param {(installId: string) => Promise<{ token?: string, skipped?: string, failed?: string }>} [deps.ensureInstallToken]
+ *        the install's registration token, registering it first if need be
+ *        (funnelInstall.mjs). When given, nothing is sent without a token.
+ * @param {(installId: string) => void} [deps.invalidateInstallToken]
+ *        called when the server refuses the token
  * @param {() => number} [deps.random]
  * @param {{ warn: (...a: unknown[]) => void }} [deps.log]
  */
@@ -230,13 +235,31 @@ export function createFunnelClient(deps) {
         return { sent: batch.length, delivered: 0, failed: reason };
       };
 
+      // The server only accepts a registered install. Until there is a token
+      // the events simply wait: this is not a failed delivery, and it does not
+      // push the retry clock back.
+      let installToken;
+      if (deps.ensureInstallToken) {
+        let registered;
+        try { registered = await deps.ensureInstallToken(speakingFor); } catch { registered = { failed: 'error' }; }
+        if (typeof registered?.token !== 'string' || !registered.token) {
+          return { sent: 0, skipped: `no_install_token:${registered?.skipped || registered?.failed || 'unknown'}` };
+        }
+        installToken = registered.token;
+        // Registering can take a while; telemetry may have been turned off meanwhile.
+        if (!deps.isEnabled()) return { sent: 0, skipped: 'disabled' };
+      }
       let credentials;
       try { credentials = deps.getCredentials?.(); } catch { credentials = undefined; }
       let res;
       try {
         res = await deps.fetchImpl(deps.endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...funnelIdentityHeaders(credentials) },
+          headers: {
+            'Content-Type': 'application/json',
+            ...funnelIdentityHeaders(credentials),
+            ...(installToken ? { 'x-install-token': installToken } : {}),
+          },
           body: JSON.stringify({ events: batch }),
           signal: AbortSignal.timeout(10_000),
         });
@@ -253,6 +276,13 @@ export function createFunnelClient(deps) {
         q.nextAttemptAt = 0;
         persist();
         return { sent: batch.length, delivered: 0, rejected: batch.length };
+      }
+      // 401: the server does not accept this install's token (it never had
+      // one, or the server's key changed). The events stay; the token is
+      // forgotten so the next attempt registers again.
+      if (res.status === 401) {
+        try { deps.invalidateInstallToken?.(speakingFor); } catch { /* best effort */ }
+        return fail('http_401');
       }
       // Everything else that is not a success is "not now": 503 while the
       // server's table or flag is not ready, 404 from a server older than this
