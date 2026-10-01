@@ -640,7 +640,7 @@ decisive, 3 clear. Result sets: abs-dev-c2, abs-holdout-c2, abs-sb-c2; nothing f
   - DJOB-031 10.0 → 7.3: two résumé versions, one explicitly older; the reply says the figure "is given two ways"
     where the judge wants the newer one reported. The conflict rule is too eager when one source is marked older.
   - DSALES-024, DTECH-014, DGEN-013: the edit itself was wrong or coached.
-* The judge flags a question left unanswered on 34 fix11 answers, 27 of them verifier-edited: the motive / own-past
+* The judge flags a question left unanswered on 34 fix11 answers, 28 of them verifier-edited: the motive / own-past
   items in Looking for work (blocker 1), introductions in Seminar and Sales with no profile, and Call Center
   no-document turns. Deflection is now the main cost of the pass; invented claims were the main cost before it.
 * Dev agrees in sign with the rule; the decision waits for holdout.
