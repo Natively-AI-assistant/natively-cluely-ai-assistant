@@ -644,3 +644,21 @@ decisive, 3 clear. Result sets: abs-dev-c2, abs-holdout-c2, abs-sb-c2; nothing f
   items in Looking for work (blocker 1), introductions in Seminar and Sales with no profile, and Call Center
   no-document turns. Deflection is now the main cost of the pass; invented claims were the main cost before it.
 * Dev agrees in sign with the rule; the decision waits for holdout.
+
+### What the pass trades, counted on dev (judge flags, charter v2, fix6 → fix11)
+| flag | fix6 | fix11 |
+|---|---:|---:|
+| unsupported_personal_claim | 32 | 13 |
+| unsupported_company_claim | 14 | 5 |
+| unsupported_policy_claim | 9 | 5 |
+| missed_available_evidence | 27 | 21 |
+| important_question_unanswered | 11 | 34 |
+Invented claims −32, questions left unanswered +23. The net is positive (+0.66 on edited answers) and the remaining
+cost is deflection.
+
+### Rejected — "an explicitly older version is not a conflict" (tools/variants/_cv-conflict-newer-v1.mjs, replay only)
+* Reason to try: DJOB-031 (10.0 → 7.3) and DJOB-032 — two résumé versions, one marked older; the draft reported the
+  newer figure and the edit re-opened it as "given two ways".
+* Six repeats per item, fix12 → with the rule: DJOB-031 hedged 5/6 → 2/6 (better), but the list step stopped naming
+  GENUINE conflicts: SBSEM-002 (abstract vs results) 3/6 → 0/6, DSALES-023 (two prices on one sheet) 5/6 → 0/6, and
+  DJOB-032 got worse (hedged 0/6 → 5/6). The model does not separate "older version" from "two values". Not built.
