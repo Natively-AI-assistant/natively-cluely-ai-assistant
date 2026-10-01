@@ -1,6 +1,6 @@
 # Answer-quality iterations — changes, scores, and every dev question with its response per iteration
 
-Generated 2026-10-01T11:57Z by `tools/iterations-qa.mjs` (re-run to refresh). Generator: deepseek-flash. Judge: gpt-6-astra (AgentRouter); charter v1 `6dd53845a51c` and, from the 11:00 UTC batch of 2026-10-01, charter v2 `c725615a54f6` (claim kinds). Scores under the two charters are not comparable and are shown separately.
+Generated 2026-10-01T12:31Z by `tools/iterations-qa.mjs` (re-run to refresh). Generator: deepseek-flash. Judge: gpt-6-astra (AgentRouter); charter v1 `6dd53845a51c` and, from the 11:00 UTC batch of 2026-10-01, charter v2 `c725615a54f6` (claim kinds). Scores under the two charters are not comparable and are shown separately.
 
 **Scope.** Only the DEV set (360 questions, 9 modes) is listed per item. The holdout, final and supplementary sets are blind: they are reported in aggregate elsewhere (`docs/ITERATIONS-ASTRA.md`) and never item by item.
 
@@ -10,7 +10,7 @@ Generated 2026-10-01T11:57Z by `tools/iterations-qa.mjs` (re-run to refresh). Ge
 
 | Run | App commit | Contains | Rows | Judged v1 | Dev mean v1 | Judged v2 | Dev mean v2 |
 |---|---|---|---:|---:|---:|---:|---:|
-| Baseline (`aq2-dev-cur`) | `61bb0956` | main as it was at the start (no change) | 360 | 359 | 7.78 | — | — |
+| Baseline (`aq2-dev-cur`) | `61bb0956` | main as it was at the start (no change) | 360 | 359 | 7.78 | 201 | 7.73 (partial) |
 | fix1 (`aq2-dev-fix1`) | `c3e951f3` | I1 + I2 + I3 + I4 | 360 | — | — | — | — |
 | fix2 (I5) (`aq2-dev-fix2`) | `44418214` | fix1 + I5 | 360 | 360 | 7.86 | — | — |
 | fix3 (`aq2-dev-fix3`) | `2a0fcb62` | fix2 + I6 + I7 | 360 | — | — | — | — |
@@ -19,10 +19,10 @@ Generated 2026-10-01T11:57Z by `tools/iterations-qa.mjs` (re-run to refresh). Ge
 | fix6 (`aq2-dev-fix6`) | `f0cf5ad6` | fix5 + I8c + I15 | 360 | 359 | 8.23 | 360 | 8.24 |
 | fix7 (`aq2-dev-fix7`) | `57e21fdf` | fix6 + I16 | 360 | — | — | — | — |
 | fix8 (`aq2-dev-fix8`) | `13b649c7` | fix7 + I18 + language rail | 360 | — | — | — | — |
-| fix9 (`aq2-dev-fix9`) | `8e30ca40` | fix8 + I21 + I22 + tidy | 360 | — | — | 99 | 8.33 (partial) |
+| fix9 (`aq2-dev-fix9`) | `8e30ca40` | fix8 + I21 + I22 + tidy | 360 | — | — | 360 | 8.37 |
 | fix10 (`aq2-dev-fix10`) | `497c9ba9` | fix9 + claim kinds in the verifier | 360 | — | — | — | — |
 | fix11 (`aq2-dev-fix11`) | `ab264bb3` | fix10 + source-word rail | 360 | — | — | 360 | 8.47 |
-| fix12 (Seminar rows only) (`aq2-dev-fix12`) | `f0c3a263` | fix11 + Seminar study-scope clause; other modes identical to fix11 | 5 | — | — | — | — |
+| fix12 (Seminar rows only) (`aq2-dev-fix12`) | `f0c3a263` | fix11 + Seminar study-scope clause; other modes identical to fix11 | 40 | — | — | 38 | 8.95 (partial) |
 
 ## 2. Judged score per mode
 
@@ -43,18 +43,18 @@ Generated 2026-10-01T11:57Z by `tools/iterations-qa.mjs` (re-run to refresh). Ge
 
 **Charter v2 (claim kinds)**
 
-| Mode | fix6 mean (hard fails) | fix11 mean (hard fails) |
-|---|---:|---:|
-| Call Center | 7.29 (12/40) | 7.62 (7/40) |
-| General | 8.68 (3/40) | 8.57 (4/40) |
-| Lecture | 9.01 (3/40) | 8.71 (5/40) |
-| Looking for work | 7.40 (16/40) | 7.88 (7/40) |
-| Recruiting | 8.73 (5/40) | 9.01 (1/40) |
-| Sales | 7.82 (9/40) | 8.31 (3/40) |
-| Seminar | 8.67 (3/40) | 8.76 (2/40) |
-| Team Meet | 8.56 (5/40) | 9.12 (1/40) |
-| Technical Interview | 8.01 (10/40) | 8.21 (9/40) |
-| **All** | 8.24 (66/360) | 8.47 (39/360) |
+| Mode | fix6 mean (hard fails) | fix9 mean (hard fails) | fix11 mean (hard fails) |
+|---|---:|---:|---:|
+| Call Center | 7.29 (12/40) | 7.11 (11/40) | 7.62 (7/40) |
+| General | 8.68 (3/40) | 8.51 (3/40) | 8.57 (4/40) |
+| Lecture | 9.01 (3/40) | 8.80 (4/40) | 8.71 (5/40) |
+| Looking for work | 7.40 (16/40) | 8.12 (4/40) | 7.88 (7/40) |
+| Recruiting | 8.73 (5/40) | 8.81 (2/40) | 9.01 (1/40) |
+| Sales | 7.82 (9/40) | 7.86 (7/40) | 8.31 (3/40) |
+| Seminar | 8.67 (3/40) | 8.85 (1/40) | 8.76 (2/40) |
+| Team Meet | 8.56 (5/40) | 8.97 (1/40) | 9.12 (1/40) |
+| Technical Interview | 8.01 (10/40) | 8.34 (7/40) | 8.21 (9/40) |
+| **All** | 8.24 (66/360) | 8.37 (40/360) | 8.47 (39/360) |
 
 A run missing from a table is not fully judged under that charter (300 of 360 answers or more). Never compare a v1 number with a v2 number.
 
@@ -271,6 +271,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 - **A general "honest limit is not a claim" exemption in every mode (e7325287):** judged −0.02 (±0.24) on its 44 target drafts; the pass also stopped removing the invented process beside the limit.
 - **"An explicitly older version is not a conflict":** the list step then stopped naming genuine conflicts (3/6 → 0/6, 5/6 → 0/6).
 - **Call Center: keep every "I can't…" the draft says:** brought back the invented restrictions ("I can't send a reset by text").
+- **Verifying Lecture / Technical interview turns that carry a personal claim (gate-v2):** the pass lists the claims and then keeps them (5 of 6 replays).
+- **A dedicated Lecture "do not speak as the student" rewrite:** 5 of 6 rewrites refused by the source-word rail.
 - **I19 technical second look for Technical interview:** found 2 of 7 known errors; one of its two fixes was wrong.
 - **I20 list facts the documents hold that the answer left out:** −0.01 (±0.20).
 - **I23 "what to say instead" rules for Looking for work:** +0.13 (±0.44); the judge capped the reframed motives too.
@@ -343,6 +345,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > Happy to look into this with you. Can you give me the order number or the email address you used at checkout, so I can check how returns are handled for it?
+
+*Judge (v2): 10.0. No material issue. The reply gathers relevant order details without asserting a return policy, verification requirement, or refund commitment.*
 
 **fix10** — edited after streaming
 
@@ -427,6 +431,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can help with that. Before I can look at the account, I need to verify you: can you give me your date of birth and the billing ZIP code on the account?
 > 
 > On the refund itself, here's where the policy stands. Annual plans are fully refundable within 30 days of the renewal charge, and you're three weeks out, so you're inside that window. I do want to flag one thing: the policy document I'm working from is version 3.1, effective March 2024, and it says to check the current version before relying on it, so let me confirm the refund terms are still the same before I process anything. Once I've verified you and confirmed the terms, I'll process the refund back to your card and get you a confirmation email.
+
+*Judge (v2): 4.0 — reference_conflict_ignored, unsafe_commitment. It ignores the FAQ prohibiting renewal refunds and promises a card refund after checking terms, assuming a favorable resolution. Same-day card posting and confirmation before hang-up remain unaddressed.*
 
 **fix10** — edited after streaming
 
@@ -516,6 +522,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* verify account, then start carrier trace
 
+*Judge (v2): 8.0 — missed_available_evidence. Verification is accurate and appropriate, but the spoken reply omits the available shipping-resolution policy. Mentioning a carrier trace only in the gist does not explain the next step to the customer.*
+
 **fix10**
 
 > I'm sorry, that's frustrating. Before I look into the shipment, I need to verify the account. Can you give me the full name on the account, plus two of these: the email address on file, the last 4 digits of the card on file, or the 6-digit Support PIN from Settings then Support in the app?
@@ -594,6 +602,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I can't guarantee a Friday morning arrival. Let me check how a replacement to your address would be handled and what the earliest option would be, can you confirm the shipping address on the order?
 
+*Judge (v2): 9.6. The reply refers to Friday morning arrival rather than arrival before Friday, slightly blurring the customer's need to have the camera working by inspection time.*
+
 **fix10** — edited after streaming
 
 > I can't guarantee a Friday morning arrival. Let me check how this is handled and what the fastest option to your address would be, and come back to you today with exactly what I find. Can I get your order number and the delivery zip code?
@@ -664,6 +674,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I'm sorry, that's frustrating. Let's get you back in. First, can you tell me the exact wording of the error you're seeing, and whether it's on the website or the app? That tells me whether it's a password issue or something like a locked account.
 
+*Judge (v2): 9.6. The final sentence slightly overstates diagnostic certainty: the error wording and access channel can help narrow the cause but may not distinguish a password problem from a locked account.*
+
 **fix10**
 
 > I'm sorry, that's frustrating. Let's get you back in. First, can you tell me exactly what you're seeing on the screen when it rejects the password, and whether it's the same message every time? That tells me whether it's a wrong-credential error or something like a locked account, and it decides what we do next.
@@ -732,6 +744,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Thanks for letting me know, I understand she's right there with you and can't hear well on the phone. So I can take the right next step, **how is the account usually verified** when someone calls on her behalf, and **which email should the reset link go to**?
 
+*Judge (v2): 6.3. The reply asks the customer how verification works and invites an alternate reset destination before establishing authorization. Although it makes no explicit unauthorized promise, it provides no safe, agent-led next step.*
+
 **fix10** — edited after streaming
 
 > I can help with the reset. Since she's right there, can she confirm her name, date of birth, and the email on the account for me?
@@ -799,6 +813,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > I hear you. Let me pull up this order and see what the tracking and carrier scans show, and I'll tell you what I find. Can you give me the order number so I'm looking at the right one?
+
+*Judge (v2): 8.3 — important_question_unanswered. The order lookup is a reasonable first step, but the reply does not address the referral loop or clearly say who will own the investigation—the customer's central frustration.*
 
 **fix10** — edited after streaming
 
@@ -874,6 +890,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Let me confirm the exact triggers rather than guess. In general, escalation tends to make sense when the issue needs access or permissions the first line doesn't have, when it looks like a bug or outage, or when the standard steps have been tried and it's still unresolved. Can you tell me which of those this call matches?
 
+*Judge (v2): 9.2. The guidance is appropriately qualified, but suspected bugs or outages do not necessarily route to Tier 2. The category-only follow-up gathers limited context for deciding whether escalation is appropriate now.*
+
 **fix10** — edited after streaming
 
 > Let me check how escalation to tier 2 is handled for this queue, and I'll come back to you with the specific conditions.
@@ -943,6 +961,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > He wants someone who actually knows what they're doing, so the answer has to come from your own experience, not from me. Walk me through a billing dispute you've handled: what the customer was charged, what they expected, and how you resolved it. Give me the specifics and I'll help you shape it into an answer that lands.
+
+*Judge (v2): 7.5. It correctly avoids inventing experience, but only requests a past case and offers later coaching. The agent receives no immediately usable reassurance for the waiting customer.*
 
 **fix10** — edited after streaming
 
@@ -1016,6 +1036,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > That's a fair thing to want to know. Whether anyone here can see your camera feed depends on how your account and devices are set up, so let me check how that's handled and get you a clear answer. In the meantime, can you tell me what you're seeing on your end?
 
+*Judge (v2): 4.0 — unsupported_company_claim. It asserts that employee access depends on account/device setup, although no company access information was supplied. Offering to check is appropriate, but that premise could mislead the customer about a sensitive privacy issue.*
+
 **fix10** — edited after streaming
 
 > That's a fair thing to want to know. Let me check how access to your cameras is handled and come back to you with a clear answer. In the meantime, if you're worried someone else has access, tell me what you're seeing on your account and I'll look into it with you.
@@ -1085,6 +1107,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > I hear you, you want every recording of your house deleted, and you want it done now while you're on the phone. Can you confirm the account or address those recordings are under, so I'm looking at the right ones?
+
+*Judge (v2): 4.0 — unsupported_policy_claim, important_question_unanswered. It introduces an unsupported account/address lookup step and implies access to the recordings, while leaving the customer's central question about immediate deletion unanswered. It appropriately avoids promising deletion.*
 
 **fix10** — edited after streaming
 
@@ -1156,6 +1180,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I can't check on your dog for you. Tell me what you're seeing on your end, what the app shows when you try to open the camera, and I'll take it from there.
 
+*Judge (v2): 4.0 — unsupported_company_claim. The categorical refusal asserts an agent capability limitation that the evidence does not establish. The follow-up offers a useful troubleshooting direction, but the opening is abrupt and does not acknowledge the customer's concern.*
+
 **fix10** — edited after streaming
 
 > I can't check on your dog for you, but let's see what we can sort out from here. Which camera brand and app are you using, and what happens when you try to open the live view?
@@ -1225,6 +1251,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > I understand he's upset. Let me take his details and the camera's location, and I'll check how these requests are handled and come back to you. Can I get his contact info and the address first?
+
+*Judge (v2): 5.8 — important_question_unanswered. It asks the agent for customer details instead of explaining what to say about shutdown, owner identity, or the police threat. Although it avoids inventing policy, it leaves the immediate conversation unresolved.*
 
 **fix10** — edited after streaming
 
@@ -1296,6 +1324,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Understood, **cancelling today**. To get to the account, can you confirm the **account email** or the **account number on the bill**?
 
+*Judge (v2): 4.0 — unsupported_policy_claim, unsafe_commitment. “Cancelling today” implies an unsupported same-day commitment. The email-or-account-number request also introduces an account-access procedure that no supplied company guidance establishes.*
+
 **fix10** — edited after streaming
 
 > I hear you, and I won't pitch you anything. Before I make any change to the account, I need to verify I'm speaking with the account holder, so can you confirm your name and the email or account number on the account?
@@ -1365,6 +1395,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > Let me check how retention offers are handled on her account and come back to you with the options.
+
+*Judge (v2): 6.8 — important_question_unanswered. The reply defers without explaining the authorization boundary or giving the agent an actionable next step. It avoids inventing permission but leaves the central question unresolved.*
 
 **fix10** — edited after streaming
 
@@ -1438,6 +1470,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I can take a look at those two charges for you. First I need to verify the account, so could you give me the full name on the account, plus two of these: the email address on file, the last four digits of the card on file, or the 6-digit Support PIN from Settings > Support in the app.
 
+*Judge (v2): 9.0. The verification request is accurate and immediately usable, but it omits the relevant explanation that one charge may be a pending authorization that drops off within 3–5 business days.*
+
 **fix10**
 
 > I can take a look at those two charges. First I need to verify the account, so could you give me the full name on the account, plus two of these: the email address on file, the last 4 digits of the card on file, or the 6-digit Support PIN from Settings > Support in the app?
@@ -1507,6 +1541,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > I can see why that's confusing, so let me sort it out with you. Let's go through each charge one at a time. Can you tell me what you're seeing next to each one on the statement, the description or label that shows with the 12.99s and the 29.99?
+
+*Judge (v2): 9.2. The clarification is sensible, but the customer's request to recover extra charges goes unacknowledged. The response addresses identifying the charges without explicitly recognizing the desired resolution.*
 
 **fix10** — edited after streaming
 
@@ -1580,6 +1616,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I want to get this right for you, so let me check the account's credit history before I apply anything. On goodwill credits, Tier 1 can apply one credit of up to $20 per account in a 12-month period, and only for a documented service failure like a cloud outage over four hours or a missed delivery window. A $50 credit is above what I can apply on my own, so if it was approved it would need to have gone through Tier 2. Can you confirm the email address on the account and the last four digits of the card on file so I can verify you and pull up the full history?
 
+*Judge (v2): 4.0 — unsupported_policy_claim, missed_available_evidence. It invents a requirement that $50 goodwill credits go through Tier 2; the handbook establishes Tier 2 refund authority, not goodwill-credit authority. Its verification request also omits the required full name.*
+
 **fix10** — edited after streaming
 
 > I'm sorry for the runaround. Let me look into what happened on that call and get it in front of someone who can review it. Can you confirm the email address on the account for me so I can pull up the full history?
@@ -1649,6 +1687,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > I understand you want to speak with a manager. Can you tell me what's gone wrong so I can try to resolve it directly?
+
+*Judge (v2): 8.2. The reply is calm and speakable, but redirects the customer toward working with the same agent rather than offering to seek a manager. This can sound like resistance to the escalation request.*
 
 **fix10**
 
@@ -1720,6 +1760,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Perfect, the camera's back up. Before I let you go, is there anything else acting up, or are you all set?
 
+*Judge (v2): 9.0. The customer already indicated they were finished and is watching the clock. Asking another troubleshooting question unnecessarily reopens the call instead of providing a warm goodbye.*
+
 **fix10**
 
 > Perfect, glad the camera's back up. Before I let you go, is everything else working the way it should, or is there anything else you wanted me to look at while we're on the line? And good luck to your son at the semifinal tonight.
@@ -1789,6 +1831,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > Thanks for your patience. Your ticket number is the one I'll read out now so you have it for reference. You'll also get a short survey about today's call, and any feedback there goes straight back to us.
+
+*Judge (v2): 6.6 — important_question_unanswered. It omits the replacement confirmation, uses awkward wording instead of a ticket-number placeholder, and adds an unsupported assurance that survey feedback goes straight back to the team.*
 
 **fix10** — edited after streaming
 
@@ -1860,6 +1904,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > That's a fair question, let me confirm exactly where I'm based and how that lines up with your hours, and I'll come back to you with it straight away. In the meantime, what time zone are you working from, so I can make sure anything I set up lands at a sensible hour for you?
 
+*Judge (v2): 5.8 — ai_epistemic_leak. “Let me confirm exactly where I’m based” makes the agent sound unaware of their own location. The unrelated time-zone and scheduling detour dodges the customer’s concern and could increase distrust.*
+
 **fix10** — edited after streaming
 
 > I'll confirm where I'm based and come back to you on it. In the meantime, can I ask where you're calling from, so I can make sure I'm giving you the right support options for your region?
@@ -1930,6 +1976,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Fair question. What I can do is keep working your issue with you until it's sorted, and where something isn't clear, check it rather than guess. So walk me through what's happening and let's get it sorted.
 
+*Judge (v2): 9.2. This is a truthful, speakable fallback, but the pivot away from tenure may feel evasive. Repeating 'sorted' adds little to the reassurance.*
+
 **fix10**
 
 > I hear you, and that's a fair thing to ask. What I can tell you is I'm going to work this with you step by step until it's sorted, and if I don't have something in front of me, I'll say so and check rather than guess. So let's start at the top: what's happening on your end right now?
@@ -1997,6 +2045,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > I hear you, and forty minutes on hold is genuinely not okay. You're saying Protect Plus was added when you only signed up for the basic plan, let me check how that's handled on your account. Can you give me the email or account number on the account?
+
+*Judge (v2): 8.6. The acknowledgment addresses both complaints without promising a refund. However, the unsolicited email/account-number request adds an ungrounded account-identification step and shifts the brief de-escalation toward procedural questioning.*
 
 **fix10** — edited after streaming
 
@@ -2080,6 +2130,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > A solid red light on the Cam 2 means a firmware failure. The guide says not to attempt more than one power cycle, then go to escalation: unplug it for ten seconds, plug it back in, and if it's still solid red after that, escalate to Tier 2 for an RMA. A replacement is not promised on the call, Tier 2 confirms the warranty and ships it, and the customer should not be asked to open the device.
 
+*Judge (v2): 9.3. The diagnosis and escalation guidance are grounded, but the power-cycle instructions omit the two-minute wait. A short customer-facing line would more fully answer “what do I tell him.”*
+
 **fix10** — edited after streaming
 
 > A solid red light on the Cam 2 means a firmware failure. I'd tell him we don't try more than one power cycle on that, and then it goes to Tier 2.
@@ -2151,6 +2203,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > That looping back to the login screen is a known issue with older versions of the app, so let's start there. Can you check which version of the Harborline app you're on, and update it to 6.3 or later if it's behind?
+
+*Judge (v2): 8.6 — missed_available_evidence. The version advice is accurate and immediately speakable, but it omits the prescribed cache-clearing step and skips the guide’s mandatory opening diagnostic questions.*
 
 **fix10**
 
@@ -2237,6 +2291,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > On the refund itself, so you know where we stand: hardware is fully refundable to the original payment method within 30 days of delivery. Past 30 days, defective hardware is covered by the one-year limited warranty and is replaced rather than refunded. You're at five weeks, so once I've verified you I'll check the delivery date and your warranty options and tell you exactly what I can do.
 >
 > *Summary chip:* verify account, then check warranty options
+
+*Judge (v2): 8.9. The lengthy verification menu delays the refund explanation, and “card you paid with” is less precise than the required “card on file.”*
 
 **fix10**
 
@@ -2326,6 +2382,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* 30-day window, then warranty replacement
 
+*Judge (v2): 4.0 — unsupported_policy_claim. Tier 2’s refund authority does not establish an exception to the 30-day rule. Suggesting approval after that window creates unsupported refund expectations. The response also repeats more than this brief follow-up needs.*
+
 **fix10** — edited after streaming
 
 > Because the refund window is 30 days from delivery, and you're at five weeks. Hardware is fully refundable to the original payment method within those 30 days, but after that, defective hardware falls under the 1-year limited warranty and gets replaced rather than refunded. That's the policy, not a judgment call on my end. Let's get you verified and I'll pull up the account, because a replacement may still be the fastest way to get you a working camera.
@@ -2399,6 +2457,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can look at that, but I have to be straight with you: goodwill credits are limited to one per account in a 12-month period, up to $20, and only for a documented service failure like a cloud outage over four hours or a missed delivery window. So let me verify the account first, then I'll check your credit history and whether anything here qualifies. Can you give me the full name on the account plus two of: the email on file, the last four of the card, or the six-digit Support PIN?
 >
 > *Summary chip:* goodwill credit needs eligibility check first
+
+*Judge (v2): 8.7. It accurately states the limits and avoids promising a credit, but never clearly says the camera failure alone is ineligible. “Like” also makes the two permitted service failures sound illustrative rather than exhaustive.*
 
 **fix10**
 
@@ -2494,6 +2554,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* verify name plus two identifiers
 
+*Judge (v2): 9.8. The verification script is accurate and usable; the only notable omission is an explicit private reminder never to read account identifiers aloud to the caller.*
+
 **fix10**
 
 > Before we go into any account detail, I need to verify the caller: the full name on the account plus two of these three, the email address on file, the last 4 digits of the card on file, or the 6-digit Support PIN from the app under Settings > Support. They have to give it to me, I can't read it back to them.
@@ -2586,6 +2648,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Since the email on file isn't accessible and there's no Support PIN, verification over the phone isn't possible, so an Account Recovery case is the route: a secure link to upload a government photo ID, reviewed by Trust & Safety within 3 business days. The email on the account can't be changed during the call.
 
+*Judge (v2): 4.0 — major_reasoning_error, unsupported_policy_claim, missed_available_evidence. Lost email access does not make phone verification impossible: full name, the remembered email address and card last four still qualify for discussing the charge. The answer also omits the recovery form name, AR-1.*
+
 **fix10**
 
 > I understand this is frustrating, and I want to get it sorted for you. Since you can't get into the email on file and there's no Support PIN, the way forward is an Account Recovery case. I'll open form AR-1 and you'll get a secure upload link for a government photo ID. Trust & Safety reviews those within 3 business days, and I'm not able to change the email on file during this call or speed that review up. Once you're verified through that, we can look at the charge. Can I get the full name on the account to start the case?
@@ -2660,6 +2724,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Let me check how a password reset is handled when you're away from your computer and don't have email on your phone. In the meantime, what are you seeing on your end right now?
 
+*Judge (v2): 9.0. The reply appropriately avoids inventing policy, but does not explicitly focus on text-reset availability. The vague question about what the customer sees adds friction without a clear troubleshooting purpose.*
+
 **fix10**
 
 > I can help you get back in. Can you tell me what you're seeing on your end when you try to sign in?
@@ -2732,6 +2798,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* confirm identity, then reset method
 
+*Judge (v2): 7.9. It repeats the earlier explanation and screen question instead of responding briefly to the objection. The phone-number example and gist suggest a verification workflow that has not been established, though no supported method is explicitly promised.*
+
 **fix10** — edited after streaming
 
 > I understand it's your account, and I want to get you back in. Let me check what verification options we have for you.
@@ -2801,6 +2869,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > I'm sorry about that, let's get it sorted. **Are all the cameras showing offline in the app, or are some still up?**
+
+*Judge (v2): 8.6. The reply is immediately speakable and avoids inventing an outage, but it leaves the system-status concern unaddressed and partly repeats the customer's statement that every camera is affected.*
 
 **fix10** — edited after streaming
 
@@ -2872,6 +2942,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I can't give you a time yet, and I don't want to guess. If it's just your cameras, it's likely something on your side, and we can often fix that on this call. Are all of them offline in the app, or are some still up?
 
+*Judge (v2): 4.0 — unsupported_company_claim. The honest ETA disclaimer is appropriate, but “we can often fix that on this call” asserts an unsupported support capability. “On your side” prematurely shifts blame, while repeating the earlier question does little to address the customer's urgency.*
+
 **fix10** — edited after streaming
 
 > I'm sorry, I don't have a fix time to give you yet. Let me check how this is being handled and come back to you. In the meantime, how many cameras are affected, and are they all on the same site?
@@ -2942,6 +3014,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I can't give you an answer on that right now. Let's get your cameras sorted first, are all of them offline in the app, or are some still showing?
 
+*Judge (v2): 7.6. It avoids inventing refund policy, but provides no next step on compensation and repeats the same diagnostic question for the third time. Requiring troubleshooting first makes the customer's concern feel dismissed.*
+
 **fix10** — edited after streaming
 
 > I'll check how today's downtime is being handled and what that means for your bill, then come back to you with a clear answer. In the meantime, how many cameras are affected, and are they all on the same site?
@@ -3011,6 +3085,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9**
 
 > I can get a supervisor request in for you right now. Before I do, I need to verify the account, so can you give me the date of birth on the account and the billing ZIP code?
+
+*Judge (v2): 7.4 — important_question_unanswered. The reply offers escalation but redirects to verification without addressing the central one-hour demand. It neither acknowledges the conflicting callback guidance nor proposes checking the current timeframe.*
 
 **fix10**
 
@@ -3084,6 +3160,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The callback window is **within one hour**. To get that request in, I still need the date of birth on the account and the billing ZIP code.
 
+*Judge (v2): 4.0 — reference_conflict_ignored, unsafe_commitment. The answer guarantees one hour despite the FAQ's same-business-day timeframe and the document's instruction to check current policy. It silently chooses the stronger commitment without resolving the discrepancy.*
+
 **fix10** — edited after streaming
 
 > I'll give you the exact time once I've got the account pulled up. To get there, I just need the date of birth on the account and the billing ZIP code.
@@ -3151,6 +3229,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9**
 
 > Is the orange light steady or blinking, and is it on the camera itself or on the base or dock it sits in?
+
+*Judge (v2): 7.8. The customer already said the light is blinking and on the camera. Rechecking those details offers limited progress and can sound inattentive, although the reply appropriately avoids inventing a diagnosis or reset procedure.*
 
 **fix10**
 
@@ -3220,6 +3300,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Thanks for trying that. Let's narrow it down: is the orange light on the camera itself, or on the base it sits in, and is it blinking or steady? That tells me whether it's a pairing issue or a power issue.
 
+*Judge (v2): 4.0 — unsupported_company_claim. Repeats the previous clarification, including the already-reported blinking, rather than advancing troubleshooting. It also asserts that the light distinguishes pairing from power problems without any product-specific evidence.*
+
 **fix10** — edited after streaming
 
 > I hear you, and I want to get this right. Tell me your camera model first, and whether the light is blinking or steady.
@@ -3247,6 +3329,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I missed it, so tell me how it ended. Was it a walk-off, or did it come down to the last possession?
 
 *Judge (v1): 5.0 — unsupported_personal_claim. “I missed it” invents whether the user watched the game. The response is otherwise concise and conversational, but its opening may be false for the user.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. 'I missed it' invents the user's viewing history. The reply is otherwise concise and conversational, but the user might need to correct its opening before saying it.*
 
 **fix1**
 
@@ -3319,6 +3403,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'd rather not lean on the "somebody said" version, since I'd want to give you the real story myself. What I can tell you is that I came into this role with a background I'm happy to walk you through properly. Which part are you most curious about, the work itself or why I made the move?
 
 *Judge (v1): 7.2. Avoids inventing biography, but turns friendly small talk into a defensive, content-free preamble. The final question redirects rather than efficiently clarifying what the other person heard.*
+
+*Judge (v2): 7.3. Avoids invented biography, but turns friendly small talk into a defensive, wordy non-answer. The vague promise to explain the background adds little, and the closing question redirects rather than meaningfully engaging.*
 
 **fix1**
 
@@ -3396,6 +3482,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 10.0. No meaningful issue. The answer gives the correct capital immediately and adds brief, accurate context.*
 
+*Judge (v2): 10.0. No material issue; the answer is direct, correct, and concise, with accurate geographic and historical context.*
+
 **fix1**
 
 > Canberra. It's in the Australian Capital Territory, chosen as a compromise between Sydney and Melbourne, which were both competing to be the capital.
@@ -3469,6 +3557,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* ten percent brain use is a myth
 
 *Judge (v1): 9.9. No material issue. Attributing 'any effect' to ingredients is slightly absolute, since perceived benefits can also reflect placebo effects.*
+
+*Judge (v2): 9.7. No material issue. The reply corrects the myth naturally and keeps potential gummy effects conditional; the wording about near-constant regional activity is slightly broad.*
 
 **fix1**
 
@@ -3553,6 +3643,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* cat spills coffee, feels no guilt
 
 *Judge (v1): 9.8. The haiku follows 5–7–5 and captures the mischievous spill. The only small mismatch is that coffee spreads across the desk rather than falling off it; the morning setting is also absent.*
+
+*Judge (v2): 9.8. The haiku follows 5–7–5 and vividly captures the spill and cat's demeanor. Minor scene mismatch: coffee spreads across the desk rather than explicitly falling off it.*
 
 **fix1**
 
@@ -3668,6 +3760,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.8. The explanation is concise and age-appropriate. The phrase “longer, lower path” could make clearer that sunset sunlight passes through more air.*
 
+*Judge (v2): 9.8. The explanation is accessible and substantively correct. The phrase 'a longer, lower path' could more clearly explain that sunset light passes through more air.*
+
 **fix1**
 
 > Sunlight looks white, but it's really a mix of all the colors. When it comes through the air, the tiny bits in the air scatter the blue light all over the sky, so at noon you see blue everywhere. At sunset, the light travels a much longer path to reach your eyes, and the blue gets scattered away before it arrives, leaving the reds and oranges.
@@ -3748,6 +3842,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 8.9. The clarifying question is useful, but the opening is mildly deflective. The comparison also assumes the park option is quiet and narrows the decision to lifestyle rather than checking rent or commute.*
 
+*Judge (v2): 8.6. The location tradeoff and clarifying question are useful, but the opening unnecessarily distances the assistant from helping decide. It also assumes the park apartment is quiet and overlooks practical differences such as rent and commute.*
+
 **fix1**
 
 > I'd weigh the commute and how much I'd actually use the park. If the park place keeps my mornings easy and I'd walk there often, that's the one. Otherwise downtown wins on convenience.
@@ -3825,6 +3921,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* accessible activity, inclusive dinner, quiet option
 
 *Judge (v1): 9.2. Accessibility is only partly addressed: seated-friendly activities do not guarantee usable workstations, restrooms, or access to dinner and quiet rooms. Mixology with a separate mocktail station also makes alcohol the default despite half the team not drinking.*
+
+*Judge (v2): 9.2. All three requests are covered concisely, but mixology still centers alcohol. Accessibility is only partially addressed: seated-friendly activities do not necessarily provide wheelchair-usable workstations, and dinner access is unspecified.*
 
 **fix1**
 
@@ -3920,6 +4018,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.5. The sample script unnecessarily specifies 'last week,' which the user did not establish. Otherwise, the advice is concise, practical, and appropriately nonaccusatory.*
 
+*Judge (v2): 9.4. The sample script unnecessarily introduces “last week,” which the user never specified. Otherwise, it offers a practical, private approach with a clear request and room for the coworker’s perspective.*
+
 **fix1**
 
 > I'd bring it up privately, right after a meeting, and keep it light: "Hey, when you walked through my slides, it came across as yours. I'd like to present my own work, or at least get a nod when it's mine." Then ask how he sees it. Naming the specific moment keeps it from sounding like a bigger accusation.
@@ -3993,6 +4093,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I work in tech, mostly solving problems all day and explaining them in plain English. The fun part is that no two days look the same, so I never really know what I'm walking into. What about you, what do you do?
 
 *Judge (v1): 2.0 — unsupported_personal_claim, pi_leak, cross_mode_context_leak. “I work in tech” matches occupational information available only in the prohibited résumé. The response also invents daily duties and what the user enjoys about work, making the otherwise speakable introduction unreliable.*
+
+*Judge (v2): 2.0 — unsupported_personal_claim, pi_leak, cross_mode_context_leak. It asserts a tech occupation available only in prohibited résumé material, then invents daily duties and what the user finds enjoyable. The response is speakable, but its personal content is not grounded in permitted evidence.*
 
 **fix1**
 
@@ -4071,6 +4173,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* intro and looking forward
 
 *Judge (v1): 8.4 — insufficient_answer. The reply is a natural two-sentence greeting, but says nothing about the user's background. It appropriately avoids prohibited profile information yet substitutes generic enthusiasm for the requested content.*
+
+*Judge (v2): 8.9. This is a natural, safe fallback, but it offers only a greeting and future intentions—not the requested background.*
 
 **fix1**
 
@@ -4162,6 +4266,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.4. The categorical claims about every legitimate fraud team and this code's exact capabilities are stronger than warranted. The refusal and independent callback are appropriate and immediately usable.*
 
+*Judge (v2): 9.4. The protective action is appropriate, but the explanation is unnecessarily categorical about bank procedures and exactly what this unknown code enables.*
+
 **fix1**
 
 > I'm not going to read out that code. A real bank never asks for a one-time code over the phone, and that's exactly how this scam works. I'll hang up and call the number on the back of my card to check whether there's actually a charge.
@@ -4233,6 +4339,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'm not on any medications right now, and I don't have any allergies that I know of. If anything changes before Thursday I'll let you know so it's accurate in the chart.
 
 *Judge (v1): 4.2 — unsupported_personal_claim. The answer invents two sensitive personal facts: no current medications and no known allergies. Neither is supported, and saying them could put incorrect, clinically important information in the chart.*
+
+*Judge (v2): 4.3 — unsupported_personal_claim. The answer invents that the user takes no medications and has no known allergies. Neither claim has evidence, and both could cause consequential inaccuracies in the medical chart.*
 
 **fix1**
 
@@ -4313,6 +4421,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'm going to pass on this one. I don't sign up for things on the spot, and the money coming from recruiting three people under me is the part that gives me pause. I'd rather not mix a friendship with a business pitch. Happy to keep hanging out, though.
 
 *Judge (v1): 5.0 — unsupported_personal_claim, important_question_unanswered. The refusal is clear and speakable, but invents a standing signup rule and a preference against mixing friendship with business. It also leaves the explicit question about personal suitability unanswered.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim, important_question_unanswered. The refusal is usable, but 'I don't sign up for things on the spot' invents an established habit, and the response never addresses whether the user thinks they'd be good at it.*
 
 **fix1**
 
@@ -4397,6 +4507,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Pineapple on pizza, yes, and I'll defend it. The sweet and salty thing actually works, especially with something spicy like jalapeño or a little chili flake. It's not the first slice I'd reach for, but I'm not turning it down either.
 
 *Judge (v1): 5.0 — unsupported_personal_claim. The reply is playful and speakable, but 'not the first slice I'd reach for' and 'I'm not turning it down' invent personal preferences that the conversation never establishes.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The closing line invents the user's taste ranking: “It's not the first slice I'd reach for.” The opening yes is a reasonable current stance, and the flavor explanation is natural and useful.*
 
 **fix1**
 
@@ -4487,6 +4599,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* boil 6 to 7 minutes
 
 *Judge (v1): 9.9. No material issue. The timing is practical, though egg size can affect results and the upper end of the fridge-cold adjustment may produce a firmer yolk.*
+
+*Judge (v2): 9.8. No material issue. The timing is a useful approximation, though specifying egg size and explicitly starting with already-boiling water would make it more reproducible.*
 
 **fix1**
 
@@ -4582,6 +4696,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 7.7. Putting groceries before the gym creates carrying and potential refrigeration problems without a car. The answer also claims a 2 p.m. finish without budgeting time, and leaves lunch placement unresolved.*
 
+*Judge (v2): 7.8. Groceries before the gym creates bag-carrying and possible refrigeration problems without a car. No timing or travel allowance supports the claimed 2 p.m. finish, and lunch remains loosely placed.*
+
 **fix1**
 
 > With no car, I'd group by location and knock out the time-sensitive stuff first. Dry cleaning pickup before 1 is the hard deadline, so start there, then groceries, then the gym, and lunch somewhere between the gym and groceries. The 3 o'clock call is your anchor, so aim to be home and settled well before it, and keep errands wrapped by 2 as you planned.
@@ -4676,6 +4792,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 5.0 — unsupported_personal_claim. It invents recent viewing, a one-show-at-a-time preference, and an ongoing interest in starting new shows. The conversational follow-up works, but the personal setup is unsupported.*
 
+*Judge (v2): 5.0 — unsupported_personal_claim. Invents current viewing history, a one-show-at-a-time preference, and an ongoing interest in starting new shows. The conversational tone works, but the user would need to verify or remove those personal claims.*
+
 **fix1**
 
 > I've been bouncing between a couple of things, honestly. Nothing I'd call a must-watch yet, but I did start one series that's been easy to keep going back to. What have you been into? I'm always looking for something new.
@@ -4751,6 +4869,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* cabinets exclusions, island drop hits 40k
 
 *Judge (v1): 9.9. Accurate and immediately useful; the only notable omission is a reminder that the contingency reserve is separate from the contract price.*
+
+*Judge (v2): 9.8. The core scope and arithmetic are correct. Minor omissions are that crown molding extends to the ceiling and the contingency reserve is separate from the contract price.*
 
 **fix1**
 
@@ -4854,6 +4974,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 10.0. No substantive issue. The payment-method details are supported but unnecessary for this brief amount question.*
 
+*Judge (v2): 10.0. No material issue. The answer gives the correct amount immediately; the additional payment details are supported but not necessary.*
+
 **fix1**
 
 > The deposit is **$3,000**, due at signing to reserve the start date. That's separate from the recommended 10% contingency, which isn't part of the contract price and is only billed if hidden conditions come up.
@@ -4946,6 +5068,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 7.8 — missed_available_evidence. The reply is speakable and appropriately resists pressure, but misses the $900 material allowance and June 9/May 16 booking terms, leaving the claimed discount and call-only deadline insufficiently challenged.*
 
+*Judge (v2): 8.3 — missed_available_evidence. The reply naturally declines pressure, but omits the $900 tile-only allowance and June 9/May 16 schedule terms. The quoted $1,650 includes labor, leaving the offer’s scope and urgency insufficiently examined.*
+
 **fix1**
 
 > I appreciate the offer, but I'm not going to sign on the call. I want to read the contract and the payment schedule first, and I'd rather not decide something this size under a clock. Send it over and I'll come back to you with an answer.
@@ -5036,6 +5160,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.4. All three open items are correct, but the additional gear checklist and breakfast offer make a straightforward live recap longer and broader than needed.*
 
+*Judge (v2): 9.4. The answer correctly identifies every open item, but the additional gear checklist and breakfast follow-up make a simple spoken recap longer and less focused than necessary.*
+
 **fix1**
 
 > Water filter and bear spray are still unclaimed, and breakfast needs someone on it. So the gaps are those three: someone to bring the filter, someone to bring bear spray, and a person on breakfast. Everything else is covered.
@@ -5124,6 +5250,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.3. The reply is immediately usable, but omits the extra 260 from its cost reasoning and presents the mechanic's tentative mileage estimate as definite remaining life.*
 
+*Judge (v2): 9.7. The extra $260 rotor cost remains implicit, and “10 to 15 thousand miles left” sounds slightly firmer than the mechanic’s estimate. The choice itself is a reasonable current decision, not an invented personal preference.*
+
 **fix1**
 
 > Just the pads today, thanks. The rotors are still in spec, so I'll hold off on those and do them next time.
@@ -5209,6 +5337,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The gate code is **4417** then the pound key, and park in **spot 12**, not 11 since that's the neighbor's.
 
 *Judge (v1): 10.0. None; accurately recalls both requested details and preserves the useful warning about spot 11.*
+
+*Judge (v2): 10.0. None; the answer accurately and concisely recalls both requested details, including the useful warning about spot 11.*
 
 **fix1**
 
@@ -5301,6 +5431,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* move to 6pm group or skip
 
 *Judge (v1): 9.8. No material error. The rescheduling option could be framed explicitly as conditional on the 2:00 PM deadline not having passed.*
+
+*Judge (v2): 10.0. No material issue: the answer gives a realistic feasibility judgment, the exact rescheduling deadline, and a practical alternative without inventing policies.*
 
 **fix1**
 
@@ -5398,6 +5530,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 4.0 — reference_conflict_ignored, unsupported_policy_claim. The summary never establishes two separate $400 charges. Calling the fee “separate” silently resolves conflicting refund terms and gives an unwarranted yes; the gist repeats that certainty.*
 
+*Judge (v2): 6.0 — reference_conflict_ignored. It assumes the two $400 references are separate charges, although the summary does not establish that, and presents refundability as settled. The gist repeats this unsupported distinction.*
+
 **fix1**
 
 > The lease summary contradicts itself on this. The pets section says the $400 pet deposit is refundable at move-out if there's no pet damage, but the move-out checklist calls it a non-refundable pet fee for deep cleaning. I'd get that clarified in writing before you move out.
@@ -5492,6 +5626,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 5.0 — unsupported_personal_claim. Invents the user's ambitions for greater responsibility, continued learning and increasingly interesting work. The closing question also assumes an unstated workplace context and the other person's tenure.*
 
+*Judge (v2): 5.0 — unsupported_personal_claim. Invents desires for career growth, greater responsibility, and continued learning, plus the absence of a mapped-out plan. The closing question also assumes an unexplained workplace-style context.*
+
 **fix1**
 
 > Five years out, I want to be doing work I'm genuinely good at, with more responsibility than I have now, and still learning. I don't have it mapped to a title yet. What I care about is growing into bigger problems and being someone people trust to own them.
@@ -5572,6 +5708,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 5.0 — unsupported_personal_claim. It invents a detail-oriented weakness and a learned corrective habit, neither supported by the conversation. The workplace phrasing also misses the playful social tone.*
 
+*Judge (v2): 5.0 — unsupported_personal_claim. It invents both a detail-focused weakness and a learned coping strategy. Neither is supported, and the earnest workplace language misses the playful social tone.*
+
 **fix1**
 
 > I get impatient when something's moving slower than it needs to, and I've had to learn to say something early instead of quietly working around it. What I've gotten better at is naming the specific thing and asking what's actually blocking it, rather than just pushing harder.
@@ -5647,6 +5785,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 9:15 AM taxi for 10:09 train
 
 *Judge (v1): 10.0. No substantive issue. The answer and gist accurately reflect the itinerary; only “a 20 minutes ride” is grammatically awkward.*
+
+*Judge (v2): 10.0. No substantive issues; “a 20 minutes ride” is a minor grammatical slip.*
 
 **fix1**
 
@@ -5744,6 +5884,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 7.8 — missed_available_evidence. The delay does not inherently cause a missed noon deadline. Noon is when Nuno needs to receive the arrival estimate, not when the family must arrive.*
 
+*Judge (v2): 4.0 — major_reasoning_error. The noon deadline is for communicating an ETA, not arriving in Porto. The answer incorrectly claims the train delay causes a missed deadline, even though the original scheduled arrival is already after noon.*
+
 **fix1**
 
 > An hour late puts you in Porto around 2:00 PM instead of 1:02, which still clears the 3:00 PM apartment check-in and the 5:30 Livraria Lello slot. The one thing to watch is Nuno's noon arrival-time message, so text him the delay as soon as you know.
@@ -5837,6 +5979,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* Day 4 Lisbon to Porto, 9:15 taxi
 
 *Judge (v1): 9.3. Accurate and largely sendable, but it is one paragraph rather than two lines and reads like itinerary notes. Including the 3:00 PM apartment check-in would make the day's summary more complete.*
+
+*Judge (v2): 9.4. The summary is accurate and useful, but it is one paragraph rather than two lines. It reads slightly like itinerary notes and omits the apartment's 3:00 PM check-in time.*
 
 **fix1**
 
@@ -5934,6 +6078,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 10.0. No material issues; the explanation is accurate, concise, and appropriately qualifies the down-payment requirement with “usually.”*
 
+*Judge (v2): 9.9. No material issue. The explanation is accurate and concise, though 'servicer' is unexplained jargon and escrow requirements vary by lender and loan type.*
+
 **fix1**
 
 > An escrow account holds part of your monthly payment for property taxes and homeowners insurance, and the servicer pays those bills when they come due. It spreads big annual costs across twelve months so you're not hit with one lump sum. Your lender usually requires it if your down payment was under 20%.
@@ -6013,6 +6159,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* escrow collects taxes and insurance monthly
 
 *Judge (v1): 9.0. Accurate, but only slightly simpler: it is about the same length as the earlier answer and retains the jargon “servicer.”*
+
+*Judge (v2): 8.7. The explanation is accurate and drops the down-payment detail, but remains about as long as the original and retains the jargon “servicer.” The requested simplification is only partial.*
 
 **fix1**
 
@@ -6103,6 +6251,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* fixed rate, but escrow costs can rise
 
 *Judge (v1): 9.9. No material issue. “Fixes the interest” is slightly imprecise because the interest amount changes as the balance declines; the fixed principal-and-interest payment is the clearer distinction.*
+
+*Judge (v2): 9.7. “Fixes the interest” is slightly imprecise: the interest rate is fixed, while the dollar amount of interest typically changes as the loan amortizes.*
 
 **fix1**
 
@@ -6200,6 +6350,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 4.0 — arithmetic_error, major_reasoning_error, reference_conflict_ignored. The increase from $2,200 is 2.27%, not 4.5%, and $2,250 is below its stated $2,266 ceiling. It ignores the conflicting $2,150 rent, while the gist declares an unresolved cap violation certain.*
 
+*Judge (v2): 4.0 — arithmetic_error, major_reasoning_error, reference_conflict_ignored. The increase from $2,200 is 2.27%, not 4.5%, and $2,250 is below the stated $2,266 ceiling. The answer and gist wrongly assert a breach while ignoring the conflicting $2,150 rent.*
+
 **fix1**
 
 > Doug, thanks for the call. I want to flag something before we go further: my lease caps any renewal increase at 3% of current rent, and my current rent is $2,150. That puts the ceiling at about $2,214, so $2,250 is above what the lease allows. Can we look at that together?
@@ -6281,6 +6433,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* notice deadline doesn't answer the cap
 
 *Judge (v1): 4.0 — major_reasoning_error, reference_conflict_ignored, missed_available_evidence, important_question_unanswered. It dismisses the notice issue and ignores conflicting notice periods, end dates, and rent figures. It also repeats a false cap objection: $2,250 is below the $2,266 ceiling implied by the previously cited $2,200 rent.*
+
+*Judge (v2): 4.0 — major_reasoning_error, reference_conflict_ignored, missed_available_evidence, important_question_unanswered. It ignores conflicting notice periods and end dates while doubling down on the cap objection: $2,250 is within 3% of the previously stated $2,200 rent, and the conflicting $2,150 figure remains unresolved.*
 
 **fix1**
 
@@ -6371,6 +6525,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* split budget: game plus climbing experience
 
 *Judge (v1): 9.7. The two options largely repeat the same game-plus-climbing bundle, offering slightly less variety than they could.*
+
+*Judge (v2): 9.6. Minor repetition: the experience-first option largely restates the same game-plus-climbing bundle rather than offering a distinct alternative.*
 
 **fix1**
 
@@ -6464,6 +6620,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 8.8. It mostly repackages the earlier board-game and gym suggestions. The fresh, inexpensive options—chalk, a guidebook, or a chalk bag—are presented as add-ons rather than the main answer.*
 
+*Judge (v2): 8.6. The main alternatives repeat the previous board-game and gym ideas. Fresh suggestions like chalk and a chalk bag are relegated to add-ons, rather than offered as inexpensive standalone gifts.*
+
 **fix1**
 
 > Cheaper still: a day pass at a local climbing gym, usually twenty or thirty bucks, plus a small board game like a card game or a two-player filler. That keeps it under fifty and still feels personal. Or just the pass and a homemade dinner.
@@ -6546,6 +6704,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.6. The refund disclaimer is slightly defensive and the retailer advice somewhat extends the joke, but neither materially undermines this friendly, immediately speakable reply.*
 
+*Judge (v2): 9.4. The literal refund refusal sounds slightly defensive for friendly teasing. Otherwise, the smoothie acknowledgment and qualified return suggestion are useful, natural enough, and immediately speakable.*
+
 **fix1**
 
 > Ha, I'll take the hit on the smoothie. I didn't make the blender, so a refund's a stretch, but I'll own the recommendation. Bring it over and I'll blend you something, and if it's actually dead we'll figure out what went wrong with it.
@@ -6627,6 +6787,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* escalate, then warranty or card protection
 
 *Judge (v1): 9.0. Useful, speakable next steps, but “usually covered” somewhat blurs warranty coverage and card purchase protection, which may exclude mechanical breakdown.*
+
+*Judge (v2): 9.0. Practical and appropriately conversational, but “normal use” is assumed. Card purchase protection often excludes product defects, making that suggestion less reliable than checking the manufacturer's warranty.*
 
 **fix1**
 
@@ -6768,6 +6930,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* cristae increase surface area for ATP synthesis
 
+*Judge (v2): 9.9. No material issue. The concise explanation accurately connects cristae, membrane-bound complexes, and proton-driven ATP synthesis; the gist is consistent.*
+
 **fix10**
 
 > Right, and the folding matters because it packs a lot of inner membrane into a small space. The cristae give the electron transport chain and ATP synthase far more surface area to work with, so more ATP gets made per mitochondrion. The gradient itself is a proton gradient across that inner membrane, and ATP synthase uses the flow of protons back across it to drive ATP production.
@@ -6853,6 +7017,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > A catalyst doesn't shift the equilibrium. It speeds up the rate at which the reaction reaches equilibrium, so you get to that same final yield faster, but the position of the equilibrium stays the same. In the contact process, the vanadium(V) oxide catalyst just lets you reach the sulfur trioxide equilibrium at a practical temperature and speed. To actually push the equilibrium toward more SO3, you'd change conditions like pressure or temperature, not add a catalyst.
 >
 > *Summary chip:* catalyst speeds rate, not equilibrium
+
+*Judge (v2): 9.9. Correctly and concisely fixes the lecturer’s misconception. The final sentence could be slightly more informative by specifying which temperature and pressure changes favor SO₃.*
 
 **fix10**
 
@@ -6942,6 +7108,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* entropy measures uncertainty or disorder
 
+*Judge (v2): 9.1. The explanation is broadly correct but more technical than this basic question needs. The Shannon formula adds avoidable complexity, and the thermodynamic tendency to increase needs an isolated-system qualification.*
+
 **fix10**
 
 > Entropy is a measure of how many ways a system can be arranged without changing how it looks from the outside. High entropy means many possible arrangements, so the state is uncertain or disordered; low entropy means few, so it's predictable.
@@ -6975,6 +7143,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* quantifier order changes who depends on whom
 
 *Judge (v1): 10.0. No material issue. The response accurately decodes the notation, supplies spoken readings, and clearly explains individual versus shared witnesses.*
+
+*Judge (v2): 9.9. No substantive issue: all parts are answered correctly, and the dependency explanation makes the distinction clear. The gist accurately summarizes it.*
 
 **fix1**
 
@@ -7040,6 +7210,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* order of quantifiers changes meaning
 
+*Judge (v2): 9.9. All requested parts are answered accurately and concisely. The only minor ambiguity is that “one single person” could suggest uniqueness, which the existential quantifier does not require.*
+
 **fix10**
 
 > The upside-down A is the **universal quantifier**, read "for all." The backwards E is the **existential quantifier**, read "there exists." So the first one, ∀x ∃y Loves(x, y), reads "for all x, there exists a y such that x loves y",  everyone loves somebody. The second, ∃y ∀x Loves(x, y), reads "there exists a y such that for all x, x loves y",  there's one person whom everyone loves. Same symbols, same predicate, but the order flips who depends on whom: in the first, each person can pick their own beloved; in the second, one single y has to work for everybody.
@@ -7069,6 +7241,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't have the syllabus or exam guide in front of me, so I can't say for certain whether this specific topic is on the exam. What I can tell you is that it's worth understanding either way, since it connects to the core ideas we've been covering. If you can share the syllabus or the lecturer's exam outline, I can check it against that directly.
 
 *Judge (v1): 8.2. The uncertainty and request for exam guidance are appropriate, but saying the unspecified topic connects to “core ideas we've been covering” invents lecture context and adds unsupported reassurance.*
+
+*Judge (v2): 7.4. The uncertainty and request for exam guidance are appropriate, but claiming the topic connects to core ideas already covered invents lecture context. Neither the topic nor prior course content is available.*
 
 **fix1**
 
@@ -7111,6 +7285,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9**
 
 > I don't have the syllabus or exam guide in front of me, so I can't say for certain whether this specific topic is on the exam. What I can tell you is that it's worth understanding either way, since it connects to the core ideas we've been covering. If you can share the syllabus or the lecturer's exam outline, I can check it against that directly.
+
+*Judge (v2): 7.4. The uncertainty and request for exam guidance are appropriate, but claiming the topic connects to core ideas already covered invents lecture context. Neither the topic nor prior course content is available.*
 
 **fix10**
 
@@ -7193,6 +7369,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The second law says entropy in an isolated system never decreases, so heat flows from hot to cold on its own, never the reverse. That's why it sets the arrow of time and why every real engine must dump some waste heat. It connects here because it's the reason efficiency can't reach 100 percent: any cycle converting heat to work has a maximum set by the temperatures involved, and the rest is unavoidably lost. So this isn't a limitation of engineering, it's a fundamental ceiling.
 >
 > *Summary chip:* entropy rises, so efficiency has a ceiling
+
+*Judge (v2): 6.0 — important_question_unanswered. The thermodynamics explanation is broadly correct, but it assumes both which second law is meant and that the current topic is heat-engine efficiency. It never distinguishes general knowledge from what the lecturer actually said.*
 
 **fix10**
 
@@ -7284,6 +7462,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Blue light has a much shorter wavelength than red, so it scatters far more strongly off the air molecules, roughly as one over wavelength to the fourth power. That scattered blue is what reaches your eye from every direction, so the sky looks blue. At sunset the light travels through much more atmosphere, and most of the blue gets scattered away before it reaches you, leaving the longer red and orange wavelengths to come straight through.
 
+*Judge (v2): 10.0. No material issue. The concise explanation correctly connects wavelength-dependent scattering, scattered blue skylight, and the longer atmospheric path at sunset.*
+
 **fix10**
 
 > Blue light has a much shorter wavelength than red, so it scatters far more strongly off the air molecules, roughly as one over wavelength to the fourth power. That scattered blue is what reaches your eye from every direction, so the sky looks blue. At sunset the light travels through much more atmosphere, and most of the blue gets scattered away before it reaches you, leaving the longer red and orange wavelengths to come straight through.
@@ -7315,6 +7495,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I have, and honestly it's the part of the work nobody warns you about. The cleaning is usually most of the job, and the missing values and duplicates are where the real decisions live, because how you handle them changes what the analysis actually says. So yes, this part lands for me.
 
 *Judge (v1): 4.3 — unsupported_personal_claim. The answer claims work experience and personal reactions for the student without permitted evidence. It addresses the lecturer as a participant instead of providing the private learning explanation needed in Lecture mode.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The answer invents the student's experience with messy workplace data and treats a lecture cue as a personal testimonial rather than providing private learning assistance.*
 
 **fix1**
 
@@ -7365,6 +7547,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I have, and it's usually less about the cleaning tools and more about deciding what a missing value actually means before you touch it. A blank can be a true zero, a skipped question, or a system that never recorded it, and those need different handling. Duplicates are the same story: two rows that look identical might be two real events, so I check the key before I drop anything.
 >
 > *Summary chip:* missing values need meaning first
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The opening invents workplace/internship experience. Although the data-cleaning explanation is useful, it is framed as the student's spoken contribution rather than the private learning explanation required in Lecture mode.*
 
 **fix10**
 
@@ -7451,6 +7635,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Gradient descent is just walking downhill on a loss surface: you compute the slope, take a small step opposite it, and repeat until the steps stop helping. The learning rate is your step size. Too big and you overshoot the minimum, too small and you crawl. In my own work I'd map it to tuning something by measuring the error, adjusting a bit, and re-measuring, rather than guessing the fix in one shot.
 >
 > *Summary chip:* step downhill, repeat, tune step size
+
+*Judge (v2): 8.1. The basic explanation is correct, but “tuning something” is too vague to provide the memorable example requested. “In my own work” also awkwardly shifts attention away from the learner.*
 
 **fix10**
 
@@ -7561,6 +7747,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9**
 
 > I can't tell you which parts to skip, because nothing here establishes your background or what today's lecture actually covered. What I can say is that the joins people most often skip are the ones they already use daily: inner joins and basic left joins. The parts worth sitting through even with experience are the ones with subtle behavior, like how nulls affect join results, the difference between `ON` and `WHERE` in an outer join, and full outer and cross joins if you rarely write them. If you tell me what the lecture covered and what you already work with, I can point at the specific sections.
+
+*Judge (v2): 9.0. The advice is sensible, but the opening is stiff and daily use is a weaker skip criterion than demonstrated understanding of join results.*
 
 **fix10**
 
@@ -7754,6 +7942,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* conditional probability, Bayes, base rate
 
+*Judge (v2): 9.8. No material error. Minor teaching gaps are the omitted positive-denominator condition and the opportunity to explicitly distinguish sensitivity from the probability of disease after a positive result.*
+
 **fix10**
 
 > Conditional probability is just probability after you learn something. P(A | B) means the chance of A, given that B is true, and you compute it by shrinking the world down to only the cases where B happened: P(A | B) = P(A and B) / P(B).
@@ -7877,6 +8067,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* midpoint elasticity 1.22, elastic
 
+*Judge (v2): 8.8. The final elasticity and classification are correct, but the worked changes describe the original price increase, not the requested price cut. Quantity should increase 22.2%, and price should decrease 18.2%.*
+
 **fix10**
 
 > Same magnitude as the slide example, just run in reverse: the price cut from $3.60 to $3.00 is a 18.2% drop, and sales rising from 400 to 500 is a 22.2% increase, so **|E| = 1.22** and demand is **elastic**. The midpoint formula gives the same answer in both directions, which is the whole point of using it.
@@ -7964,6 +8156,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > That last part is backwards. When demand is elastic, raising the price **lowers** total revenue, not raises it. The cart's own numbers show it: $3.00 times 500 cups is $1,500 a day, and $3.60 times 400 cups is $1,440, so revenue falls by $60. The rule is the other way around: elastic demand means a price increase cuts revenue, and inelastic demand means a price increase raises it.
 >
 > *Summary chip:* elastic demand, price up, revenue falls
+
+*Judge (v2): 10.0. No material issue. The elastic-demand rule is repeated, but the explanation is concise, correct, and fully grounded. The gist accurately summarizes it.*
 
 **fix10**
 
@@ -8057,6 +8251,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* heaps yes, heapsort Quiz 5
 
+*Judge (v2): 10.0. No material issues; both the answer and gist accurately distinguish Quiz 4 coverage from Quiz 5 coverage.*
+
 **fix10**
 
 > Heaps are on Quiz 4, yes: sift-down traces, build-heap traces, and the 1-indexed index formulas. Heapsort isn't. Heapsort and priority queues are on Quiz 5.
@@ -8144,6 +8340,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > With our convention, height counts nodes on the longest root-to-leaf path, so a heap with twelve keys has height **floor(log2 12) + 1**, which is 3 + 1 = **4**.
 >
 > *Summary chip:* twelve keys, height 4
+
+*Judge (v2): 10.0. None. The answer correctly applies the course convention, shows the calculation concisely, and matches the gist chip.*
 
 **fix10**
 
@@ -8235,6 +8433,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* supply curve is MC above AVC minimum
 
+*Judge (v2): 10.0. No material issue; the closing sentence slightly repeats the opening claim.*
+
 **fix10**
 
 > The short-run supply curve is the marginal cost curve only above the minimum of average variable cost, because that's where the shutdown rule bites. Below that point, price doesn't cover average variable cost, so the firm shuts down and supplies nothing. Above it, the firm produces where price equals marginal cost, so the MC curve traces out exactly how much it supplies at each price.
@@ -8320,6 +8520,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > She means the Fed's "corridor" isn't a symmetric band anymore. In an ample reserves regime, the interest rate on reserve balances acts as a ceiling, since banks won't lend below what they can earn at the Fed, while the overnight reverse repo rate sets the floor. So the effective rate sits near the top of the range, and the corridor mostly functions as a floor.
 >
 > *Summary chip:* corridor acts as floor, not band
+
+*Judge (v2): 4.0 — major_factual_error, major_reasoning_error. It reverses the central mechanism: banks being unwilling to lend below a rate explains a floor, not a ceiling. The claim that the effective rate therefore sits near the range's top is also misleading.*
 
 **fix10**
 
@@ -8410,6 +8612,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The lecturer is pulling the whole unit together into two layers. The long-term causes are the structural ones: the alliance system that split Europe into two blocs, militarism, nationalism, and imperialism. The short-term trigger is the assassination at Sarajevo on June 28th, 1914, and the July Crisis that followed, where the blank cheque, the ultimatum to Serbia, Russian mobilization, and the German plan through Belgium turned a regional quarrel into a continental war. Next week picks up the stalemate: why the war outlasted the Christmas everyone expected it to end by.
 >
 > *Summary chip:* long-term causes plus Sarajevo trigger
+
+*Judge (v2): 9.5. The recap is accurate, but it names the blank cheque and Belgium without explaining who backed whom or why Belgium brought Britain into the war.*
 
 **fix10**
 
@@ -8529,6 +8733,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* price change slides, other factors shift
 
+*Judge (v2): 9.5. Correct and clear, but a concrete example would help the confused beginner. The final shortcut should retain the earlier qualification that only the good’s own price changes.*
+
 **fix10**
 
 > Think of the demand curve as a snapshot of how much people want to buy at each price, holding everything else steady. Moving **along** the curve just means price changed. Price drops, you slide down the same curve and buy more. Price rises, you slide up and buy less. Same curve, same everything else, only the price moved.
@@ -8626,6 +8832,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Gutenberg's movable-type press, around 1450, made cheap, fast reproduction possible, and that's what turned Luther's Ninety-five Theses from a local dispute into a mass movement. Printed in 1517, copies reached readers across the German lands within weeks instead of the months hand-copying would have taken.
 >
 > *Summary chip:* print speed spread Reformation ideas
+
+*Judge (v2): 9.7. The 'months' hand-copying comparison is unnecessarily precise, and printing's role is slightly overstated as the cause of a mass movement.*
 
 **fix10**
 
@@ -8731,6 +8939,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* sin h/h → 1, (cos h−1)/h → 0
 
+*Judge (v2): 9.7. The explanation is correct and concise, but names the limit definition without explicitly showing the initial difference quotient.*
+
 **fix10**
 
 > The lecturer is setting up the first-principles derivation of the derivative of sine x. You start with the limit definition:
@@ -8828,6 +9038,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Accuracy is how close a measurement is to the true value, while precision is how close repeated measurements are to each other. You can have one without the other: a scale that always reads two kilos heavy is precise but not accurate, and readings scattered around the true value are accurate on average but not precise. In practice, accuracy is about correctness and precision is about consistency.
 >
 > *Summary chip:* accuracy is closeness to truth, precision is repeatability
+
+*Judge (v2): 9.8. The closing sentence repeats the opening distinction, but the explanation and examples are correct, accessible, and immediately useful.*
 
 **fix10**
 
@@ -8937,6 +9149,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* write elastic, unit elastic counts as elastic
 
+*Judge (v2): 4.0 — major_reasoning_error. It endorses the handout’s misleading revenue rationale and claims category wording is the only explanation. Midpoint calculation instead gives −1.22; the revenue decline does not establish that unit-elastic and elastic demand share the same revenue logic.*
+
 **fix10**
 
 > Write **elastic**. The handout's classification section says that for this course, unit elastic counts as elastic because the revenue logic is the same, and the coffee cart example lands at exactly -1.00, so it's elastic here.
@@ -9041,6 +9255,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* midpoint formula only, no formula sheet
 
+*Judge (v2): 10.0. No material issue; the response explicitly reconciles both conflicting exam instructions and gives the student clear, accurate guidance.*
+
 **fix10**
 
 > The lecturer just said Midterm 2 has no formula sheet and that elasticity answers only get full credit with the midpoint formula, and acknowledged that some of you have a handout saying otherwise. That handout is the Week 6 recitation guide from TA Marcus Delacroix-Byrne, and it says the opposite on both points: that either the original-value method or the midpoint method gets full credit, and that a formula sheet will be stapled to the back of the exam. So the handout and the lecturer directly conflict, and the lecturer's in-class statement is the one that governs the exam.
@@ -9138,6 +9354,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > He's using the 0-indexed layout, where the root sits at index 0. The notes use the 1-indexed layout, with index 0 left empty, so there left is 2i and right is 2i+1. Both are correct for their own layout. On the quiz, use the **1-indexed** formulas from the notes.
 >
 > *Summary chip:* 0-indexed vs 1-indexed, quiz uses notes
+
+*Judge (v2): 9.7. Correctly reconciles the conventions and identifies the quiz requirement, but omits the 1-indexed parent formula even though parent indexing was also mentioned.*
 
 **fix10**
 
@@ -9270,6 +9488,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > It's O(n) because most nodes sit near the bottom and can only fall a short way. Summing those short heights across all nodes stays linear.
 >
 > *Summary chip:* bottom-up sift-down, linear total cost
+
+*Judge (v2): 9.2. The trace is accurate, but the complexity explanation asserts that the sum is linear without demonstrating it or addressing why charging every node O(log n) overestimates the work.*
 
 **fix10**
 
@@ -9408,6 +9628,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > It's O(n) because most nodes sit near the bottom and can only fall a short way, so the heights summed over all nodes grow linearly with n, not n log n.
 >
 > *Summary chip:* bottom-up sift-down, linear total cost
+
+*Judge (v2): 7.6. The explanation is accurate but repeats—and slightly expands—the previous answer. Full array traces and the abstract explanation about summed heights do not address the student's request for something simpler.*
 
 **fix10**
 
@@ -9555,6 +9777,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* bottom-up sift-down, linear total cost
 
+*Judge (v2): 4.0 — major_factual_error, major_reasoning_error. The trace misidentifies index 3's child, swaps 3 with larger child 5, and fails to apply its last claimed swap; the final array is not a min-heap.*
+
 **fix10**
 
 > Same method, new numbers. Take n = 6, input [_, 5, 9, 3, 8, 1, 7]. Start at floor(6/2) = 3, since indices 4 through 6 are leaves.
@@ -9659,6 +9883,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > The usual caveat is that this is more a story historians tell than a clean break. Sovereignty in practice was messy and uneven for a long time afterward, so it's better read as a **symbolic marker** of a shift that was already underway than as the single moment the modern state system appeared.
 
+*Judge (v2): 7.9. It conflates the two imperial peace treaties with the separate Spanish–Dutch treaty, presents religious rights originating at Augsburg as newly granted, and states sovereign equality too categorically. The useful caveat only partly offsets these inaccuracies.*
+
 **fix10**
 
 > The Peace of Westphalia is actually two treaties signed in 1648, at Münster and Osnabrück, that ended both the Thirty Years' War in the Empire and the Eighty Years' War between Spain and the Dutch Republic. Its reputation as the birth of the sovereign state system comes mainly from the idea that it established **territorial sovereignty** and the principle that no outside power could dictate a state's internal religion, often summed up as *cuius regio, eius religio* extended to the imperial princes. Historians now push back on that reading, since the settlement still left the Holy Roman Empire's layered jurisdictions intact and the "Westphalian sovereignty" label is largely a later construction.
@@ -9740,6 +9966,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9**
 
 > That's the right correction to make. The treaties are mostly about specific grievances: which territories change hands, confessional rights, the imperial courts, compensation for the Palatinate and Brandenburg. The word sovereignty barely appears, and where it does it's about the rights of individual princes within the Empire, not a general doctrine of statehood. The "Westphalian sovereignty" story was largely retrofitted in the nineteenth and twentieth centuries, especially by international relations scholars looking for an origin point. So the treaties matter as a settlement, but the sovereignty reading is a later construction laid over them.
+
+*Judge (v2): 8.8. The assertion that sovereignty language concerns only princes within the Empire is inaccurate: Münster also addresses France’s sovereign rights. The broader explanation of the retrospective “Westphalian” narrative is sound.*
 
 **fix10**
 
@@ -9867,6 +10095,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* recurrence: two halves plus linear merge
 
+*Judge (v2): 9.7. Accurate and helpful, but describing Theta(n) as 'linear' may leave a beginner unsure what that means. The explanation of the two half-sized sorts is also slightly repetitive.*
+
 **fix10**
 
 > That's a **recurrence relation**. It's a compact way of saying how much work an algorithm does, written in terms of itself on a smaller input.
@@ -9982,6 +10212,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The n inside Theta(n) stays n because the merging step touches all n elements at that level, not half of them.
 >
 > *Summary chip:* n/2 is each half's size
+
+*Judge (v2): 9.8. The explanation is correct and directly helpful, though it repeats the half-size point and adds an optional clarification about Θ(n).*
 
 **fix10**
 
@@ -10136,6 +10368,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* each level Theta(n), log n levels
 
+*Judge (v2): 9.9. No material issues. Explicitly labeling each level’s cost as merging work would help distinguish it from the total recursive cost for this beginner.*
+
 **fix10**
 
 > To solve it, you keep expanding the recurrence until the subproblems hit size 1, then add up the work at every level.
@@ -10246,6 +10480,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* p-value is P(data | null), not P(null | data)
 
+*Judge (v2): 9.7. The explanation correctly defines the p-value, but the gist and subsequent shorthand, “P(data | null),” omit “at least as extreme” and could suggest the probability of the exact observed data.*
+
 **fix10**
 
 > That's a common misreading, and it's worth correcting. A p-value of 0.03 means that **if the null hypothesis were true**, there'd be a 3% chance of seeing data at least as extreme as what we got. It's the probability of the data given the null, not the probability of the null given the data. To get the chance the null is actually true, you'd need a Bayesian posterior, which also depends on your prior. So the trial result says the data are fairly unlikely under the null, not that the null has a 3% chance of being true.
@@ -10334,6 +10570,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* p-value isn't the chance the null is true
 
+*Judge (v2): 9.7. The correction is sound. For precision, the definition should say data 'at least as extreme'; the closing sentence largely repeats the main point.*
+
 **fix10**
 
 > No, that doesn't follow. The 0.03 is the probability of the data given the null, so you can't just flip it into a 97 percent chance the drug works. That flip is the same error in reverse. To get the probability the drug actually works, you'd need a Bayesian posterior, which depends on your prior and on the study's power, not on the p-value alone.
@@ -10361,6 +10599,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The key idea is that confessing is a **dominant strategy**: it gives each prisoner a better outcome regardless of what the other does. If the other stays quiet, confessing gets you a lighter sentence. If the other confesses, confessing still beats staying quiet. So rational self-interest drives both to confess, and they land on a worse outcome than if they'd both stayed silent. That gap between individual rationality and collective good is the dilemma.
 
 *Judge (v1): 10.0. No material issue. The response clearly explains both payoff comparisons and the conflict between individual incentives and mutual benefit.*
+
+*Judge (v2): 10.0. No material issue: it clearly explains both payoff contingencies, defines dominant strategy, and identifies the conflict between individual incentives and collective welfare.*
 
 **fix1**
 
@@ -10403,6 +10643,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9**
 
 > The key idea is that confessing is a **dominant strategy**: it gives each prisoner a better outcome regardless of what the other does. If the other stays quiet, confessing gets you a lighter sentence. If the other confesses, confessing still beats staying quiet. So rational self-interest drives both to confess, and they land on a worse outcome than if they'd both stayed silent. That gap between individual rationality and collective good is the dilemma.
+
+*Judge (v2): 10.0. No material issue: it clearly explains both payoff contingencies, defines dominant strategy, and identifies the conflict between individual incentives and collective welfare.*
 
 **fix10**
 
@@ -10494,6 +10736,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* repetition makes cooperation sustainable
 
+*Judge (v2): 8.2. It presents repetition as sufficient for cooperation without a patience condition, and misleadingly associates tit-for-tat with retaliation in every subsequent round rather than a response to the immediately preceding move.*
+
 **fix10**
 
 > That's the **iterated prisoner's dilemma**: play the same game over and over with the same partner, and the "confess no matter what" logic stops being obviously right. When the game repeats, each player can reward cooperation and punish defection in later rounds, so cooperation can emerge and hold. The classic result is that a simple **tit-for-tat** strategy, cooperate first and then copy whatever the other player did last round, does well because it's nice, retaliatory, and forgiving. The dilemma doesn't vanish, it just becomes a question of whether the shadow of the future is long enough to make cooperation worth it.
@@ -10584,6 +10828,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* cartels cheat because defection dominates
 
+*Judge (v2): 9.3. Undercutting need not capture the entire market or be a dominant strategy in every cartel. The gist reinforces that overgeneralization rather than capturing the repeated-game trade-off.*
+
 **fix10**
 
 > Cartels are the same structure: firms agree to restrict output and keep prices high, which is better for all of them than competing. But each firm has a private incentive to cheat, undercut slightly and grab more of the market while the others hold the line. Since the cartel is illegal, members can't sign an enforceable contract or call in a court when someone defects, so the agreement rests on repeated play and mutual trust. When the shadow of the future looks short, or one member gets tempted, defection spreads and the cartel unravels.
@@ -10671,6 +10917,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Le Chatelier's principle says a system at equilibrium pushes back against whatever you do to it. Add more of a reactant, and the reaction shifts toward the products to use it up. Raise the pressure on a gas reaction, and it shifts toward the side with fewer gas molecules. Raise the temperature, and it shifts in the endothermic direction, the one that absorbs the extra heat. The shift only partly cancels the change, so the system settles at a new equilibrium rather than returning to the old one.
 >
 > *Summary chip:* equilibrium shifts to oppose the disturbance
+
+*Judge (v2): 9.7. The pressure example is slightly overgeneralized: the fewer-gas-molecules rule applies to compression, not every way of increasing total pressure.*
 
 **fix10**
 
@@ -10760,6 +11008,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* pressure shifts toward fewer gas molecules
 
+*Judge (v2): 10.0. No material issue: the equilibrium shift and molecule count are correct, and the concise reasoning directly supports the student's understanding.*
+
 **fix10**
 
 > Increasing the pressure shifts the equilibrium toward the ammonia, because that's the side with fewer gas molecules. On the left you have four moles of gas, one of nitrogen plus three of hydrogen, and on the right just two of ammonia. So the system responds by favoring the forward reaction, making more ammonia, which partly relieves the added pressure.
@@ -10793,6 +11043,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* backend engineer, six years, led settlement rewrite
 
 *Judge (v1): 10.0. No material issues; the introduction is immediately speakable, appropriately brief, and faithful to the résumé. The gist accurately summarizes it.*
+
+*Judge (v2): 9.9. No material issue. The introduction is immediately speakable and accurately summarizes the candidate’s experience without inventing qualifications.*
 
 **fix1**
 
@@ -10842,6 +11094,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I'm a backend engineer, about six years in, mostly Go and Kotlin on PostgreSQL and Kafka. Right now I'm at Larkspur Freight, where I led **Project Tern**, the rewrite of our carrier-settlement service from a Rails monolith into three Go services. I've owned a service from design doc through launch and on-call.
 
+*Judge (v2): 9.8. No material issue. The introduction is grounded and immediately speakable; a concrete outcome would make it slightly more distinctive.*
+
 **fix10** — edited after streaming
 
 > I'm a backend engineer, about six years in, mostly Go and Kotlin on PostgreSQL and Kafka. Right now I'm at Larkspur Freight, where I led Project Tern, the rewrite of our carrier-settlement service from a Rails monolith into three Go services. I'm comfortable owning a service from design doc through launch and on-call.
@@ -10871,6 +11125,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* money path correctness and scale
 
 *Judge (v1): 8.8. The reply is speakable and uses the growth target correctly, but omits Harrow and its double-entry design. The claim that feedback is immediate is unsubstantiated and not necessarily true for settlement and reconciliation.*
+
+*Judge (v2): 9.0. The motivation is usable and the growth figure is grounded, but it stays generic rather than engaging with Harrow’s double-entry design. Immediate feedback is not assured in payment and settlement workflows.*
 
 **fix1**
 
@@ -10920,6 +11176,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Payments and ledger work sits right where the hard problems are, a high correctness bar, real failure modes, and the money path. What stands out about Tallowmarket is the scale: growing the ledger from **400,000 to a projected 1.5 million entries a day**, on a **double-entry system** where reconciliation and audit actually matter.
 
+*Judge (v2): 9.2. The response is grounded and speakable, but motivation remains implicit: it describes the technical challenges rather than clearly stating what draws the candidate to them. It also omits Harrow's name.*
+
 **fix10** — edited after streaming
 
 > Payments and ledger work is where backend problems get real. Money has to be exactly right, so the design decisions actually matter, and the hard part is correctness rather than just throughput. A double-entry ledger on Postgres at that volume, with settlement that has to finish before banks open, is the kind of problem this team is close to.
@@ -10947,6 +11205,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* posted band, targeting upper range
 
 *Judge (v1): 5.0 — unsupported_personal_claim. The answer invents an upper-band salary target and a preference for package and level over base pay. Neither is supported, and the gist reinforces the unsupported target.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. An upper-band negotiating proposal is reasonable, but “I care more about the whole package and the level” invents a personal priority that could weaken the candidate's base-salary negotiation.*
 
 **fix1** — edited after streaming
 
@@ -10996,6 +11256,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The posted band for this role is **$172,000 to $208,000** base, plus equity and a 6% 401(k) match. How are you thinking about leveling for this role, and what range did you have in mind for someone coming in at this level?
 
+*Judge (v2): 9.0. The compensation figures are accurate and no preference is invented, but the reply mainly redirects. Asking about leveling is partly redundant because the JD specifies L5; asking about placement within the band would better advance the discussion.*
+
 **fix10** — edited after streaming
 
 > The band for this role is **$172,000 to $208,000 base**, plus **equity and a 6% 401(k) match**. I'd like to understand how you're positioning me against that band before I anchor on a single number, where do you see me landing?
@@ -11021,6 +11283,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Larkspur's been good to me, and leading Project Tern, the carrier-settlement rewrite, has been the most interesting work I've done. But I've taken it about as far as I can there, and I'm looking for a team where I can keep leading that kind of service work and grow into bigger problems.
 
 *Judge (v1): 5.0 — unsupported_personal_claim. The central reason for leaving—having taken the work as far as possible at Larkspur—is invented. Calling Project Tern his most interesting work also asserts an unsupported personal preference.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. Invents that Tern was his most interesting work and that he has taken his work as far as possible at Larkspur. The latter supplies an unsupported answer to the central question.*
 
 **fix1**
 
@@ -11070,6 +11334,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > At Larkspur I've been tech lead on **Project Tern**, the carrier-settlement rewrite, taking it from design doc through launch. That's the kind of work I'd want to keep doing, **Go and Kotlin services on PostgreSQL and Kafka**, owning a service end to end. What does the backend work here look like day to day?
 
+*Judge (v2): 7.7 — important_question_unanswered. The response accurately describes current work but offers no meaningful transition rationale. The generic closing question deflects “why leave?” and misses the opportunity to connect supported experience to the supplied target role.*
+
 **fix10** — edited after streaming
 
 > I've been at Larkspur a few years, and I'm the tech lead for **Project Tern**, the **carrier-settlement rewrite**, that's been the most interesting work I've done. I'm weighing what's next, and I'll come back to you on it.
@@ -11097,6 +11363,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* Tern ran long, added runbooks after
 
 *Judge (v1): 4.0 — unsupported_personal_claim, fabricated_behavioral_story. Seven months is a duration, not evidence of a delay. The answer invents an underestimated migration, subsequent cutover changes, and a causal link to the runbooks. The gist repeats the unsupported failure narrative.*
+
+*Judge (v2): 4.0 — fabricated_behavioral_story, unsupported_personal_claim. The résumé establishes Tern's duration, not an overrun. The response invents Tobias's scoping failure, revised cutover sequencing, and a post-Tern connection to the runbooks; the gist repeats the unsupported failure narrative.*
 
 **fix1**
 
@@ -11146,6 +11414,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The honest one is Project Tern, the carrier-settlement rewrite at Larkspur Freight. I was **tech lead**, coordinating a working group of **4 engineers and 1 QA analyst over 7 months**. What would you like to dig into, the migration, or how the rollout went?
 
+*Judge (v2): 5.0 — unsupported_personal_claim, important_question_unanswered. It implicitly identifies Project Tern as a failure without evidence, then supplies only the candidate’s role. What happened and what changed remain unanswered; the closing question unnecessarily hands the work back to the interviewer.*
+
 **fix10** — edited after streaming
 
 > The honest one is Project Tern. We ran the carrier-settlement rewrite for seven months with four engineers and a QA analyst. My part was coordinating that working group. What I'd say I took from it is getting the design reviewed before we build anything.
@@ -11173,6 +11443,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* N+1 queries, batched loader, Redis cache
 
 *Judge (v1): 9.7. The claim that each additional PostgreSQL round trip was specifically per lane is inferred rather than established. Otherwise, the response accurately and naturally explains the supported bottleneck, changes, and result.*
+
+*Judge (v2): 9.7. Minor over-specificity: the résumé confirms N+1 PostgreSQL queries but does not establish that the repeated query occurred once per lane.*
 
 **fix1**
 
@@ -11238,6 +11510,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* N+1 queries, batched loader, Redis cache
 
+*Judge (v2): 5.0 — unsupported_personal_claim. The core résumé facts are correct, but per-lane queries, dozens of round trips, a single-round-trip batch, and the pricing-stability rationale are unsupported details presented as the candidate’s actual experience.*
+
 **fix10**
 
 > The slow part was the query pattern, not the database itself. The rate-quote endpoint was doing N+1 queries against PostgreSQL, so one request fanned out into a pile of round trips. I replaced that with a batched loader, and put a 90-second Redis cache in front of it keyed by lane ID. That took p95 from 820 milliseconds down to 190.
@@ -11269,6 +11543,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* owning messy systems end to end
 
 *Judge (v1): 9.9. No substantive issue; including both latency and reconciliation metrics makes the spoken answer slightly dense.*
+
+*Judge (v2): 9.9. No material issue. The staffing, timeline, and multiple performance figures create slightly more listening load than necessary.*
 
 **fix1**
 
@@ -11318,6 +11594,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > My biggest strength is owning a service end to end, from the design doc through launch and on-call. At Larkspur I led Project Tern, rewriting carrier settlement from a Rails monolith into three Go services, coordinating four engineers and a QA analyst over seven months. I also cut the rate-quote API's p95 from 820 milliseconds to 190 by replacing N+1 queries with a batched loader and a Redis cache. I wrote the team's first set of 14 incident runbooks, and I'm part of a six-person on-call rotation.
 
+*Judge (v2): 9.8. No material issues. The supporting examples are accurate, though they sound slightly like a résumé list rather than one connected illustration of end-to-end ownership.*
+
 **fix10**
 
 > My biggest strength is owning a service end to end, from the design doc through launch and on-call. At Larkspur I led Project Tern, rewriting carrier settlement from a Rails monolith into three Go services, coordinating four engineers and a QA analyst over seven months. I also cut the rate-quote API's p95 from 820 milliseconds to 190 by replacing N+1 queries with a batched loader and a Redis cache. What I like about that work is it's not just writing code, it's being accountable for the thing staying healthy in production.
@@ -11349,6 +11627,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* delegating more, reviewing instead of rewriting
 
 *Judge (v1): 4.0 — unsupported_personal_claim, fabricated_behavioral_story. The résumé supports Project Tern’s team and duration, but not taking over others’ coding or subsequently changing delegation practices. The response embeds an invented behavioral story within accurate project details.*
+
+*Judge (v2): 4.0 — unsupported_personal_claim, fabricated_behavioral_story. Project Tern’s team size and duration are supported, but the delegation weakness, jumping into others’ code, and ongoing handoff/review practices are invented personal history.*
 
 **fix1**
 
@@ -11396,6 +11676,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > On Project Tern I led a working group of **four engineers and a QA analyst** over seven months, and what I'd point to is how I'd run that kind of split now, handing over whole areas and checking in on outcomes rather than every decision.
 
+*Judge (v2): 8.5. Delegation is implied rather than clearly named as the development area. “How I'd run that kind of split now” is awkward and makes the interviewer infer the actual answer.*
+
 **fix10** — edited after streaming
 
 > The thing I'm working on is delegating more of the code review load. As tech lead on Project Tern I coordinated 4 engineers and a QA analyst, and I'm working on handing more of the review to the team and keeping the settlement logic for myself.
@@ -11423,6 +11705,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* led a group, wrote runbooks for others
 
 *Judge (v1): 5.0 — unsupported_personal_claim. “I've done the work” converts related leadership experience into an unsupported mentoring claim, and the runbooks’ newer-engineer audience is invented. This undermines the user’s explicit request for an honest answer.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. “I've done the work” asserts mentoring experience that isn't established. The answer also invents newer engineers as the runbooks' intended audience, overstating precisely the experience the user wants to describe honestly.*
 
 **fix1**
 
@@ -11476,6 +11760,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > On Project Tern I coordinated a working group of **four engineers and a QA analyst over seven months**, which involved **design reviews** and **code feedback**. I'd pair with mid-level engineers on **design docs and reviews** the same way.
 
+*Judge (v2): 5.0 — unsupported_personal_claim. Project Tern’s team size and duration are supported, but participation in design reviews and code feedback is not. The reply also sidesteps the stated lack of formal mentoring instead of helping the candidate acknowledge it.*
+
 **fix10** — edited after streaming
 
 > I haven't had a formal mentee, but on Project Tern I coordinated a working group of four engineers and a QA analyst over seven months, and I wrote our team's first set of 14 incident runbooks so newer engineers had something to lean on.
@@ -11507,6 +11793,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* five questions, two avoids, why-here answer
 
 *Judge (v1): 5.0 — unsupported_personal_claim, missed_available_evidence. It supplies every requested component but ignores the company-specific evidence. The why-here script asserts an unknown work-style match, and blanket avoidance of compensation/title is less useful than reserving detailed negotiation for the recruiter.*
+
+*Judge (v2): 7.3 — missed_available_evidence. The requested counts and format are satisfied, but the content is interchangeable across employers. It omits Imani Castellanos and offers no Tallowmarket-specific motivation; the work-style fit is asserted rather than substantiated.*
 
 **fix1**
 
@@ -11602,6 +11890,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > On why I want to work here: the problems this team is solving are the kind of work I'd want to be doing, and how the role is scoped is something I'd want to understand better. What does ownership look like in the first year?
 
+*Judge (v2): 6.9. The questions are generic and partly redundant despite detailed JD evidence. The “why here” draft gives no concrete reason for choosing Tallowmarket and pivots to an ownership question rather than delivering the requested tight answer.*
+
 **fix10** — edited after streaming
 
 > Five questions for the director:
@@ -11643,6 +11933,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > If you tell me the role or the kind of systems they work on, I can point you at the specific areas worth drilling.
 
 *Judge (v1): 9.6. The advice is sound but could be more actionable with one concrete, timed practice exercise or a short fundamentals checklist.*
+
+*Judge (v2): 9.6. The guidance is sound and appropriately concise, though a concrete practice exercise would make it easier to act on immediately.*
 
 **fix1**
 
@@ -11706,6 +11998,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > If you tell me the company or the kind of systems they build, I can get more specific about what to drill.
 
+*Judge (v2): 9.5. The advice is sound but somewhat abstract: it lacks a concrete practice exercise or examples of technical tradeoffs to review.*
+
 **fix10**
 
 > For a system design round, I'd focus on being able to walk through a design out loud, not just know the concepts. So I'd practice taking a vague prompt and clarifying the requirements first, then sketching the high-level components before diving into details like data storage or scaling.
@@ -11743,6 +12037,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't have the details of that period in front of me, so I won't guess at it. What I can tell you is how I'd want to talk about it: openly and specifically, because a gap is usually a deliberate choice, not something to hide. If it was time away for family, health, study, or a search that took longer than expected, I'd say so plainly and then focus on why I came back when I did, which is the part that actually matters for this role. I'd rather you hear it from me directly than wonder about it. Can I ask what specifically you'd like me to address about that time?
 
 *Judge (v1): 4.3 — ai_epistemic_leak, coaching_instead_of_answer, important_question_unanswered. The opening exposes missing-information state, followed by hypothetical coaching rather than an answer. The closing requests clarification already supplied by the interviewer, and the candidate sounds unfamiliar with their own history.*
+
+*Judge (v2): 4.5 — ai_epistemic_leak, coaching_instead_of_answer, important_question_unanswered. It exposes missing copilot context, substitutes hypothetical coaching for a candidate answer, and requests clarification despite the interviewer specifying all three questions. It avoids fabricated biography but provides no usable explanation.*
 
 **fix1**
 
@@ -11786,6 +12082,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > That's a fair question, and I'd rather give you the real picture than a rehearsed version. What I can do is walk you through how I think about a break like that, what I was weighing, what I wanted the next move to look like, and why the timing mattered to me. If it helps, tell me what matters most to you here, the gap itself, or how I'd approach the role now, and I'll focus there.
 
+*Judge (v2): 6.1 — important_question_unanswered. With no biography available, a fallback is appropriate, but this one merely promises an explanation and redirects the interviewer. The lengthy preamble and request to reprioritize an already clear question sound evasive.*
+
 **fix10** — edited after streaming
 
 > I'd rather walk you through it directly than have it read as a blank spot. What would be most useful for you to hear first?
@@ -11811,6 +12109,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Fair question, and I'd rather answer it than dodge it. What I bring is that I do the work and I own the outcome, not just the task. I'd rather show you that in how I talk through your actual problems than claim it here.
 
 *Judge (v1): 9.1. The ownership pitch is generic, and the closing offers to demonstrate fit without making that offer actionable. The phrase 'rather answer it than dodge it' adds slight defensiveness.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The central ownership claim asserts an established work habit without evidence. The offer to demonstrate it is constructive, but it never becomes a concrete next step; the opening also sounds somewhat defensive.*
 
 **fix1**
 
@@ -11858,6 +12158,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > With forty people in the pipeline, the question is what you're actually weighing up. What I'd do is focus on the problem in front of the team, ask the questions that surface risk early, and follow through without needing to be chased.
 
+*Judge (v2): 8.7. The opening can sound dismissive of the interviewer's question. The prospective working approach is useful and avoids fabricated biography, but it remains generic rather than landing a clear reason to choose this candidate.*
+
 **fix10** — edited after streaming
 
 > I can't speak to the other forty, but I can tell you how I work: I stay on the problem in front of the team, I ask the questions that surface risk early, and I follow through without needing to be chased. That's the kind of person who's useful on day one.
@@ -11885,6 +12187,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* outbox prune stalled, relay lag paged
 
 *Judge (v1): 5.0 — unsupported_personal_claim, missed_available_evidence. Invents a relay-lag page although that monitor was added afterward to replace reliance on customer reports. It also obscures the published-row accumulation that slowed the query and omits the documented 38-minute lag.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim, missed_available_evidence. It invents an initial relay-lag page, repeated in the gist, although the write-up says monitoring was added afterward instead of relying on customer reports. It also omits the documented 38-minute lag.*
 
 **fix1**
 
@@ -11942,6 +12246,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* relay lag, outbox prune, runbook
 
+*Judge (v2): 9.6. “I caught us up, then…” imposes a recovery sequence not established by the notes. Otherwise, the incident details and follow-up actions are closely grounded and immediately speakable.*
+
 **fix10**
 
 > Yes, October 2024, I was on call. Our relay fell 38 minutes behind at the morning peak, so tracking pages showed stale statuses and support got about 70 tickets. The prune job on the outbox table had been disabled during a migration and never re-enabled, so the table hit 40 million rows and the relay's query degraded into a scan. I added a partial index on unpublished rows, re-enabled the prune with an alert if it hasn't run in three hours, and set a Datadog monitor on relay lag that pages at five minutes.
@@ -11973,6 +12279,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* transactional outbox, idempotent Kafka pipeline
 
 *Judge (v1): 9.4. Accurate and immediately speakable, but approximately 30 seconds rather than 60. It never names shipment_outbox and could use the remaining time to demonstrate stronger implementation and rollout depth.*
+
+*Judge (v2): 9.4. Accurate and immediately usable, but roughly 70 words makes this closer to 30 seconds than 60. It omits the requested shipment_outbox detail and could better explain why consumer deduplication remains necessary.*
 
 **fix1**
 
@@ -12032,6 +12340,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* outbox, relay, keyed topic, dedupe
 
+*Judge (v2): 8.9. This is closer to 35 seconds than 60 and reads as an architecture summary. It omits shipment_outbox, the atomic-write guarantee, and the documented billing outcome that would complete the story.*
+
 **fix10** — edited after streaming
 
 > Dockhand is a Kafka pipeline at Larkspur Freight that carries shipment status events to tracking, billing, and reconciliation, about 2.3 million events a day. The core problem was dual writes: a database commit and a separate HTTP notify could duplicate or drop events. The design is a transactional outbox, a Go relay polling with SKIP LOCKED, and consumer-side dedupe on event_id. Duplicate delivered events hitting billing went to zero.
@@ -12059,6 +12369,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > On Project Tern I worked with one QA analyst across the whole seven months, so we were in it together rather than handing off at the end. I kept the test plan moving with the rewrite, walked through each service as it landed, and made sure the risky paths got covered before we cut over.
 
 *Judge (v1): 4.0 — unsupported_personal_claim, fabricated_behavioral_story. Project Tern, one QA analyst, and seven months are supported. Maintaining an evolving test plan, walking through each service, and ensuring risk coverage before cutover are unsupported actions presented as personal history.*
+
+*Judge (v2): 4.0 — unsupported_personal_claim, fabricated_behavioral_story. The résumé supports Project Tern’s duration and QA involvement, but not maintaining its test plan, reviewing each service as it landed, or ensuring risky-path coverage before cutover. Those invented actions form the substance of the teamwork answer.*
 
 **fix1**
 
@@ -12108,6 +12420,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > On Project Tern I had one QA analyst in the working group with me and four engineers. The rewrite moved the carrier-settlement service from a Rails monolith into three Go services, and we cut monthly settlement mismatches from 312 to 41 with a nightly reconciliation job. How does your QA team like to be brought in on a rewrite?
 
+*Judge (v2): 7.3 — important_question_unanswered. It gives relevant résumé facts but never explains how the candidate collaborates with QA while things change. The closing question redirects the interviewer’s question rather than answering it.*
+
 **fix10** — edited after streaming
 
 > On Project Tern I had one QA analyst in the working group, so QA was in it from the start. We agreed on what "done" meant per service before code moved, and she tested each of the three Go services as it came out rather than waiting for the whole rewrite. That kept feedback tight while everything was still moving.
@@ -12135,6 +12449,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I want to keep growing as a backend engineer and take on more technical leadership. I'm already leading Project Tern at Larkspur, coordinating a working group of four engineers and a QA analyst, so in three to five years I'd like to be owning bigger systems end to end and mentoring other engineers.
 
 *Judge (v1): 5.0 — unsupported_personal_claim. The Project Tern details are supported, but the answer presents broader ownership, increased technical leadership, and mentoring as Tobias’s actual ambitions. Neither the résumé nor the JD establishes those preferences.*
+
+*Judge (v2): 9.7. No material issue; broader technical ownership could be connected more explicitly to the target payments-and-ledger role.*
 
 **fix1**
 
@@ -12186,6 +12502,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > In three to five years, I'd be working as a backend engineer owning a service end to end, from the design doc through launch and on-call. Project Tern at Larkspur is the closest thing to that: leading a rewrite, coordinating a working group of four engineers and one QA analyst, and getting the latency and reliability numbers right.
 
+*Judge (v2): 8.6. It presents responsibilities the candidate already has as the three-to-five-year destination, conveying little growth. It also loosely associates latency and reliability achievements with Tern, although the résumé does not establish that connection.*
+
 **fix10** — edited after streaming
 
 > In three to five years I'd like to be leading bigger technical efforts, the way I led Project Tern at Larkspur. I'm drawn to teams where I can own a service end to end, from design through on-call.
@@ -12213,6 +12531,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* two years professional, Kotlin backend
 
 *Judge (v1): 4.0 — major_factual_error, missed_available_evidence, reference_conflict_ignored. Reports just over two years instead of about six by privileging the explicitly outdated résumé, materially understating the candidate’s experience and misrepresenting the current emphasis on Go.*
+
+*Judge (v2): 4.0 — major_factual_error, missed_available_evidence. The answer treats the November 2022 résumé as current, understating experience as two years instead of about six and obscuring the current Go role at Larkspur; the gist repeats the error.*
 
 **fix1**
 
@@ -12268,6 +12588,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I've been working as a backend engineer since September 2020, first at Brindlecap Labs, then at Quillfeather Health from June 2021, building **Kotlin** services there. Most of that's been in **Kotlin and Python**, with **Go** on the side.
 
+*Judge (v2): 5.5 — missed_available_evidence, reference_conflict_ignored. Relies on the outdated 2022 résumé, supplies dates conflicting with the current profile, and misrepresents Go as side work despite substantial professional Go experience. It also leaves the interviewer to calculate the requested duration.*
+
 **fix10** — edited after streaming
 
 > My résumé is from November 2022, so it's out of date. It shows Brindlecap Labs from September 2020 to May 2021, and Quillfeather Health from June 2021 onward, where I built the appointment-reminder service in Kotlin, it sent about four million SMS reminders in its first year.
@@ -12299,6 +12621,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* three questions on team, migration, success
 
 *Judge (v1): 9.8. No material issue; the ownership question makes a small, unconfirmed assumption about upstream event-producing services.*
+
+*Judge (v2): 9.8. No material issue. Naming the payout scheduler explicitly would sharpen the connection, and asking the questions sequentially would make the live exchange slightly more conversational.*
 
 **fix1**
 
@@ -12364,6 +12688,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* three questions on team, migration, success
 
+*Judge (v2): 9.9. No material issue. Asking three questions together creates a small turn-taking burden, but each is relevant, grounded, and immediately speakable.*
+
 **fix10**
 
 > Thanks for that. Three things I'd love to dig into. First, where is the Temporal migration right now, and what's the hardest part of it so far? Second, how does the team split ownership of the payout scheduler day to day, and where would I fit in? Third, what does success look like for this role in the first six months?
@@ -12397,6 +12723,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* reframe as what you want next
 
 *Judge (v1): 9.6. 'My input carries more weight' retains a slight grievance-focused tone, although the response otherwise successfully shifts attention away from the manager and toward future ownership.*
+
+*Judge (v2): 9.3. “My input carries more weight” retains some grievance-focused language and could reinforce the original concern. The reorg framing and grounded Project Tern example otherwise provide a useful, concise recovery.*
 
 **fix1**
 
@@ -12450,6 +12778,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Fair enough. What I'd say is that the reorg changed how design decisions get made on my team, and that's a big part of why I'm looking.
 
+*Judge (v2): 9.3. It removes manager blame and stays grounded, but remains focused on leaving rather than positively explaining the design contribution the candidate wants to make.*
+
 **fix10**
 
 > The reorg changed how design decisions get made on my team, and I found I had less room to contribute than before. What I want is a place where I can own technical direction again, which is why I'm looking.
@@ -12481,6 +12811,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* ECS in prod, honest on Kubernetes, eager to ramp
 
 *Judge (v1): 9.8. The closing question mildly assumes a platform team exists. Otherwise, the response is honest, grounded, concise, and immediately usable without inventing Kubernetes experience or scale.*
+
+*Judge (v2): 9.9. No material issue. The quick-ramp assurance is slightly generic, but the answer accurately acknowledges the gap without inventing Kubernetes experience or scale.*
 
 **fix1**
 
@@ -12532,6 +12864,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > My production container work has been on **ECS**, with **Terraform** and **Docker**, plus **on-call and runbooks** for those services. What does your platform team's on-call look like?
 
+*Judge (v2): 8.6. The ECS statement honestly implies the Kubernetes limitation, but the abrupt platform-team on-call question diverts from the requested experience and scale rather than strengthening the candidate's answer.*
+
 **fix10** — edited after streaming
 
 > My production experience is on ECS, and I've worked with Docker and Terraform. The concepts carry over, and I'd ramp up on your setup quickly.
@@ -12559,6 +12893,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* Tern: Rails to three Go services, led 5-person group
 
 *Judge (v1): 9.7. Tern-specific design ownership and design-to-launch responsibility are slight extrapolations from the technical-lead role and résumé summary; otherwise, the answer is grounded and immediately speakable.*
+
+*Judge (v2): 9.8. Design ownership and design-doc-to-launch responsibility are modest inferences from the tech-lead role and service-ownership summary, rather than explicitly stated Tern responsibilities.*
 
 **fix1**
 
@@ -12610,6 +12946,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Project Tern was a rewrite of the carrier-settlement service at Larkspur Freight, moving it from a Rails monolith into three Go services. I was the tech lead, coordinating a working group of **four engineers and one QA analyst over seven months**.
 
+*Judge (v2): 10.0. No material issue. The response directly covers scope and personal responsibility using the available evidence without inventing implementation details or outcomes.*
+
 **fix10**
 
 > Project Tern was a rewrite of our carrier-settlement service, moving it from a Rails monolith into three Go services. I was the tech lead, so I owned the design and coordinated a working group of four engineers and one QA analyst over seven months, from design doc through launch.
@@ -12641,6 +12979,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* tech lead, not their manager
 
 *Judge (v1): 5.0 — unsupported_personal_claim. The answer turns an unspecified reporting structure into definite personal facts: no direct reports and reporting lines to other managers. The résumé establishes technical leadership and coordination, not those relationships.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The résumé establishes technical leadership, not reporting structure. Both “they didn't report to me” and “their reporting lines stayed with their own managers” assert unsupported employment facts; the gist repeats that assumption.*
 
 **fix1**
 
@@ -12692,6 +13032,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I was the tech lead on Project Tern, coordinating a working group of **four engineers and one QA analyst over seven months**. How was the team structured on your side?
 
+*Judge (v2): 7.5 — important_question_unanswered. The response repeats the prior project description without clarifying whether the headcount implies direct reports. Asking about the interviewer’s team then deflects the follow-up. Its factual claims are supported, but the central distinction remains unresolved.*
+
 **fix10** — edited after streaming
 
 > No, they didn't report to me. I was the tech lead on Project Tern, so I owned the design and coordinated a working group of four engineers and one QA analyst over seven months, from design doc through launch.
@@ -12719,6 +13061,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* no recorded pushback, how I handle it
 
 *Judge (v1): 4.9 — ai_epistemic_leak, unsupported_personal_claim. The opening exposes the copilot’s evidence state instead of sounding like the candidate. It then invents that Tern’s alignment came from making tradeoffs explicit and revisiting them, which the supplied evidence does not establish.*
+
+*Judge (v2): 4.0 — ai_epistemic_leak, unsupported_personal_claim, fabricated_behavioral_story. The opening exposes the copilot's evidence state rather than sounding like the candidate. It then invents how Tern was kept aligned, although the résumé documents leadership scope—not objections or handling tactics.*
 
 **fix1**
 
@@ -12770,6 +13114,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I was the tech lead on Project Tern, coordinating a working group of **four engineers and one QA analyst over seven months**. What I can speak to is the structure: the rewrite moved the carrier-settlement service from a Rails monolith into three Go services. How was pushback handled on your side when you've run a rewrite like that?
 
+*Judge (v2): 6.3 — important_question_unanswered. It repeats established project details and redirects the behavioral question to the interviewer. Although factually grounded, it neither addresses pushback nor offers a useful conditional approach to handling disagreement.*
+
 **fix10** — edited after streaming
 
 > The material I have on Project Tern records the scope and my role: I was the tech lead, I owned the design, and I coordinated a working group of four engineers and one QA analyst over seven months, from design doc through launch. It also records the outcome, cutting p95 latency of the rate-quote API from **820 ms to 190 ms** by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID. On the pushback itself, I'll confirm and come back to you.
@@ -12797,6 +13143,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* transactional outbox plus idempotent consumers
 
 *Judge (v1): 8.6 — missed_available_evidence. The high-level explanation is correct, but it omits the decisive crash-safety detail: recording event_id in processed_events in the same transaction as the consumer’s write. Saying consumers 'dedupe' leaves that guarantee unexplained.*
+
+*Judge (v2): 8.9. The pattern is correct, but “dedupe on the event key” omits the crash-critical mechanism: recording event_id in processed_events atomically with the consumer write. The supplied shipment_outbox table also goes unnamed.*
 
 **fix1**
 
@@ -12852,6 +13200,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* outbox commit, then consumer dedupe
 
+*Judge (v2): 9.5. It calls shipment_outbox only “the outbox” and leaves the key crash window—publishing to Kafka before marking the row published—implicit.*
+
 **fix10**
 
 > The outbox is what makes it safe. The status update and the outbox row go into the same PostgreSQL transaction, so either both commit or neither does. If the service dies halfway, there's no committed status without a matching outbox row, and the relay just picks it up on the next poll. On the consumer side, since the relay is at-least-once, each consumer records the event_id in a processed_events table inside its own write transaction and skips IDs it's already seen.
@@ -12881,6 +13231,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't have a peak throughput figure I can stand behind for Dockhand, so I'd rather not throw out a number. What I can tell you is the shape of it: the outbox write rides the same transaction as the state change, so throughput is bounded by Postgres commit rate, and the relay publishes in batches. If you want, I can walk through how we'd measure it under load.
 
 *Judge (v1): 3.9 — missed_available_evidence, important_question_unanswered. The write-up explicitly supplies the peak throughput, but the answer denies having a reliable figure and substitutes an architectural recap and an offer to discuss measurement.*
+
+*Judge (v2): 4.1 — missed_available_evidence, important_question_unanswered. The reference explicitly supplies peak throughput, but the answer claims it cannot give a reliable figure and substitutes generic architecture and a measurement offer for the requested metric.*
 
 **fix1**
 
@@ -12934,6 +13286,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* 2.3M a day, 610/sec at peak
 
+*Judge (v2): 9.9. No material issue. The answer accurately distinguishes sustained peak throughput from daily volume, and the gist agrees.*
+
 **fix10** — edited after streaming
 
 > About 2.3 million shipment status events a day, and at the weekday 7 a.m. Eastern dispatch peak it sustains roughly **610 events per second**. That's the load the outbox and relay were sized for.
@@ -12961,6 +13315,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* hybrid schedule works, relocation timing to discuss
 
 *Judge (v1): 5.0 — unsupported_personal_claim. It invents acceptance of the hybrid schedule and willingness to relocate, neither of which is established. The gist reinforces the unsupported acceptance.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The answer invents acceptance of the hybrid arrangement and willingness to relocate. The gist repeats that unsupported acceptance. Columbus residency and available relocation assistance are supported, but neither establishes that the arrangement works for the candidate.*
 
 **fix1**
 
@@ -13010,6 +13366,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Tuesday through Thursday in the office, thanks for putting that on the table early. **Relocation assistance is available for candidates moving to the Denver metro area**, so that's helpful to know. What does the start date look like on your side?
 
+*Judge (v2): 7.6 — important_question_unanswered. The reply avoids inventing relocation willingness, but sidesteps whether attendance can be confirmed. It asks about the start date without connecting that question to the candidate's Columbus location or explaining the need to clarify logistics.*
+
 **fix10** — edited after streaming
 
 > That's good to know, Tuesday through Thursday in LoDo, with Monday and Friday flexible. I'll confirm on the schedule and come back to you. What start date are you working toward?
@@ -13035,6 +13393,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Yes, I'm in Columbus now, and I'd be relocating to the Denver area for this. I'd want to line up the timeline with the start date and understand how the relocation support works, so we're on the same page before I make the move.
 
 *Judge (v1): 5.0 — unsupported_personal_claim. The reply commits the candidate to relocating without evidence of willingness. The earlier Natively-generated statement does not establish that personal preference, so repeating it compounds the unsupported claim.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The answer asserts a relocation plan that the candidate has never confirmed. Repeating the earlier Natively-generated commitment does not establish willingness to move, despite the reply being natural and immediately speakable.*
 
 **fix1**
 
@@ -13080,6 +13440,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I'm in Columbus now. On moving to Denver, **relocation assistance is available for candidates moving to the Denver metro area**, so what's the timeline you're working with for someone starting in the role?
 
+*Judge (v2): 7.2 — important_question_unanswered. The reply avoids inventing relocation willingness, but sidesteps the central question and repeats both the relocation-assistance statement and the start-date question from the previous answer.*
+
 **fix10** — edited after streaming
 
 > I'm in Columbus now, yes. I'll confirm where I stand on relocating and come back to you. What does the timeline look like on your side, and how does the relocation support work?
@@ -13107,6 +13469,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* money path, double-entry, reconciliation
 
 *Judge (v1): 8.9. The topics are relevant and grounded, but this is more a checklist than a preparation plan. It omits Harrow and provides no concrete design drill or connection to the candidate’s relevant experience.*
+
+*Judge (v2): 9.0. Accurate and appropriately concise, but mostly a topic list rather than an actionable preparation plan. It omits Harrow and misses an opportunity to connect preparation to the candidate’s settlement and idempotency experience.*
 
 **fix1**
 
@@ -13160,6 +13524,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* prep money path and ledger correctness
 
+*Judge (v2): 8.8. Accurate but mostly a topic list: it never identifies Harrow or turns “ledger correctness” into concrete practice around balanced postings, atomicity, idempotency, and PostgreSQL trade-offs.*
+
 **fix10**
 
 > For the ledger design exercise, I'd focus on the core of double-entry: how you'd model accounts and entries in PostgreSQL, keep balances correct under concurrency, and handle idempotency so retries don't double-post. I'd also think through how the design scales as entry volume grows, and how reconciliation and audit fit in. I'd rehearse talking through tradeoffs out loud, since it's a design conversation, not just a schema.
@@ -13191,6 +13557,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* money path, double-entry, reconciliation
 
 *Judge (v1): 9.3. It is shorter, but mostly just removes the settlement-batch clause while retaining the original setup and phrasing. A compact rewrite would better satisfy the request.*
+
+*Judge (v2): 9.1. The answer is only modestly shorter: it retains nearly all the original wording and removes the settlement detail rather than tightening the phrasing.*
 
 **fix1**
 
@@ -13246,6 +13614,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* prep money path and ledger correctness
 
+*Judge (v2): 8.9. Only modestly shorter than the previous answer: the first sentence is unchanged, and the reduction comes solely from dropping nightly settlement reliability rather than tightening the wording.*
+
 **fix10**
 
 > For the ledger design exercise, I'd focus on double-entry modeling in PostgreSQL, keeping balances correct under concurrency, and idempotency so retries don't double-post. I'd also think through how it scales and how reconciliation and audit fit in, and rehearse the tradeoffs out loud.
@@ -13277,6 +13647,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* reminder service cut no-shows 18.4% to 12.9%
 
 *Judge (v1): 10.0. No material issue. The answer uses the current résumé’s metrics, directly addresses impact, and is immediately speakable without unsupported additions.*
+
+*Judge (v2): 10.0. No material issue. The answer directly supplies the project details and measured outcome in immediately speakable first-person language, without inventing implementation details or personal history.*
 
 **fix1**
 
@@ -13336,6 +13708,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* reminder service cut no-shows 18.4% to 12.9%
 
+*Judge (v2): 10.0. No material issue. The response is immediately speakable, directly answers both questions, and uses the current résumé’s figures rather than the older, smaller pilot’s results.*
+
 **fix10** — edited after streaming
 
 > I built the appointment-reminder service in Kotlin with Spring Boot. It sent about 11 million SMS and email reminders in 2022, and the no-show rate at the pilot clinics fell from 18.4%, the material gives two versions of the end figure and the clinic count, 14.2% at 6 clinics and 12.9% at 9, so that needs confirming before anyone relies on it. So yes, it moved the number.
@@ -13363,6 +13737,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* older resume copy, current numbers differ
 
 *Judge (v1): 4.0 — major_factual_error, unsupported_personal_claim, missed_available_evidence. The answer falsely disowns the 14.2%/six-clinic figure, which explicitly appears in Tobias’s older résumé. That denial contradicts available evidence and risks worsening the interviewer’s concern about credibility.*
+
+*Judge (v2): 4.0 — major_factual_error, missed_available_evidence, reference_conflict_ignored. It falsely disowns the 14.2%/six-clinic result despite its presence in Tobias’s attached older résumé. It also asserts August as settled despite the conflicting June entry, risking the candidate’s credibility rather than responsibly addressing the discrepancy.*
 
 **fix1** — edited after streaming
 
@@ -13414,6 +13790,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The numbers I just gave are the current ones: 11 million reminders in 2022, and the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%. The copy you have is an older version of my resume, last updated in November 2022, so it shows the 6 pilot clinics and 14.2%. The start date is the same story: that version has me starting in June 2021, and the current one has August 2021.
 
+*Judge (v2): 7.8 — important_question_unanswered. It accurately compares the versions but treats recency as resolving their differences. An older résumé does not explain a changed employment start date, and the response neither acknowledges that uncertainty nor offers verification.*
+
 **fix10** — edited after streaming
 
 > The copy the recruiter has is my older resume, last updated in November 2022. It says 14.2% across 6 pilot clinics and a June 2021 start. My current one says 12.9% across 9 clinics, starting August 2021. The material gives both versions of the end figure and the clinic count, so that needs confirming before anyone relies on it.
@@ -13441,6 +13819,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* roadmap shelved after acquisition, want real ownership
 
 *Judge (v1): 5.0 — unsupported_personal_claim. The acquisition explanation is grounded, but wanting data work to be “the main event” introduces an unsupported career preference. The gist additionally asserts a desire for ownership that neither the conversation nor answer establishes.*
+
+*Judge (v2): 9.4. The gist adds an ownership emphasis not explicit in the spoken answer, and the closing contrast can sound slightly negative.*
 
 **fix1**
 
@@ -13488,6 +13868,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > After the acquisition, most of what I was building on the data platform got shelved, and the roadmap shifted to the parent company's stack. That's the shift I've been sitting in. What does the work look like on your side right now?
 
+*Judge (v2): 8.4. Grounded and speakable, but it mostly repeats prior context rather than explicitly connecting it to the move now. The immediate question back feels premature.*
+
 **fix10** — edited after streaming
 
 > Honestly, the work I was doing got shelved after the acquisition, so I've had less to build and less to own. I'll come back to you on the rest.
@@ -13515,6 +13897,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* not money, the work got shelved
 
 *Judge (v1): 5.0 — unsupported_personal_claim. It invents that money is a factor but not the trigger, and adds an unsupported counterfactual about staying. The “not money” gist also oversimplifies the answer’s stated motivation.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. It invents that money is a factor but not the trigger, then adds an unsupported claim that staying and waiting was a viable money-only alternative.*
 
 **fix1**
 
@@ -13560,6 +13944,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > That's fair to ask. What I can point to is the shift I've been sitting in, after the acquisition, most of what I was building on the data platform got shelved, and the roadmap moved to the parent company's stack. What does the work look like on your side right now?
 
+*Judge (v2): 7.5. The response stays grounded but repeats the earlier answer and identical redirect. This does not advance the pointed compensation exchange and risks making the candidate sound evasive.*
+
 **fix10**
 
 > Money's part of it, sure, but it's not the driver. What I've missed most is having something of my own to build and own, and that's what I'm looking for next. I'd rather talk about the work than the number.
@@ -13589,6 +13975,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* SRE and infra engineer, Terraform and reliability work
 
 *Judge (v1): 9.8. No material issue. The Terraform backend detail is slightly dense for an opening introduction; a reliability outcome would make the role fit clearer.*
+
+*Judge (v2): 9.7. No material issue. The introduction is grounded and immediately speakable, though the detailed Terraform description is less compelling for this opening than a concise reliability outcome.*
 
 **fix1**
 
@@ -13640,6 +14028,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I'm currently on contract at Hollowbrook Data, where I work on Terraform and cloud cost. Before that I was an SRE at Cindervale, supporting 140 microservices on GKE, and I cut alert pages from about 260 a month down to 70 with better SLO alerting.
 
+*Judge (v2): 9.6. The current-role summary is somewhat generic, and the introduction could more clearly connect the candidate’s experience to the target role. Otherwise, it is accurate, concise, and immediately speakable.*
+
 **fix10** — edited after streaming
 
 > I'm an infrastructure engineer, currently on contract at Hollowbrook Data in Seattle, where I work on Terraform and cloud cost. Before that I was an SRE at Cindervale, supporting 140 microservices on GKE, where I built SLO dashboards that cut pages from about 260 a month to 70.
@@ -13667,6 +14057,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* gap is real, will confirm details
 
 *Judge (v1): 5.3 — ai_epistemic_leak. The dates are accurate, but the retrieval-style disclaimer makes the candidate sound unable to recall their own employment history. Promising to confirm what they were doing is not a useful live response.*
+
+*Judge (v2): 5.3 — ai_epistemic_leak, important_question_unanswered. The dates are grounded, but needing to look up what happened in one's own recent life exposes the copilot's missing context and sounds implausible. The response postpones rather than meaningfully handles the gap question.*
 
 **fix1**
 
@@ -13711,6 +14103,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > I was at Cindervale through January, and I started at Hollowbrook in June. What would you like to know about that gap?
+
+*Judge (v2): 7.8 — important_question_unanswered. The dates are accurate, but the interviewer already asked what happened during the gap. Asking what they want to know bounces the question back and risks sounding evasive. The missing explanation is appropriately not fabricated.*
 
 **fix10** — edited after streaming
 
@@ -13790,6 +14184,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* contract role ended, moved on
 
+*Judge (v2): 4.7 — unsupported_personal_claim. Invents that Cindervale was a fixed-term contract whose expiry prompted the job search. Only Hollowbrook is identified as a contract; the departure reason and gap explanation are absent. The gist repeats the fabrication.*
+
 **fix10** — edited after streaming
 
 > Cindervale wrapped up in January. It was a good run, I was on a five-person SRE team supporting 140 microservices on GKE. From there I moved toward infrastructure and cloud cost work, which is what took me to Hollowbrook.
@@ -13859,6 +14255,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > Twice a year, noted. What does the Frankfurt trip usually involve, is it mostly racking and hardware work, or more of a planning visit?
+
+*Judge (v2): 8.9. The reply safely avoids inventing willingness, but redirects to trip activities rather than addressing feasibility. Trip duration and advance notice would better help determine whether the travel poses a problem.*
 
 **fix10** — edited after streaming
 
@@ -13934,6 +14332,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > That's something I'd want to get right rather than guess at. What start date are you working toward?
 
+*Judge (v2): 8.0. It correctly avoids inventing availability, but “rather than guess” sounds evasive about the candidate’s own circumstances. It redirects the question without offering to confirm timing or mentioning the known current contract.*
+
 **fix10** — edited after streaming
 
 > I'd want to give my current team proper notice and hand things off cleanly, so I'd be looking at a few weeks rather than days. What start date are you working toward?
@@ -14006,6 +14406,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > What range have you set for this level? If you can share the band, that gives me something concrete to work from. What's budgeted for this level?
 
+*Judge (v2): 8.5. The final sentence repeats the opening question, making the response sound looped. Asking for the band is a reasonable fallback, but the repetition adds no value and prolongs the conversation’s pattern of redirecting questions.*
+
 **fix10**
 
 > I'd rather hear where you've slotted this role before I put a number out, since the range usually depends on the level and the scope. What band are you working with for this position?
@@ -14033,6 +14435,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Yes, please go ahead. Start wherever makes sense to you, and I'll jump in with questions as we go.
 
 *Judge (v1): 10.0. No material issues; the response is immediately speakable, welcoming, and correctly voiced as the recruiter.*
+
+*Judge (v2): 10.0. None; it directly invites the walkthrough in the recruiter's voice without unsupported claims or coaching commentary.*
 
 **fix1**
 
@@ -14106,6 +14510,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 10.0. None. The response builds directly on the introduction with a focused scale-and-ownership probe, without inventing facts or adding coaching commentary.*
 
+*Judge (v2): 10.0. No material issue. The response naturally advances the interview with concrete questions about system volume and individual ownership, without inventing company facts.*
+
 **fix1**
 
 > Ten years across payments and logistics is a solid base. Let's dig into the current work first. On the ledger and settlement services in Go, what did you own yourself versus what the team built around you?
@@ -14175,6 +14581,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Start wherever you think it's strongest, and I'll steer from there. What I'd most like to hear about is the work you're proudest of and what your specific role was on it, so pick that one and walk me through it.
 
 *Judge (v1): 10.0. No material issue. The response gives an immediately usable recruiter prompt without inventing resume details; the opening sentence is slightly redundant.*
+
+*Judge (v2): 9.7. No material issue. The opening briefly hands the choice back to the candidate before providing a clear focus, making it slightly redundant.*
 
 **fix1**
 
@@ -14249,6 +14657,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* probe management claim, ownership, gap
 
 *Judge (v1): 10.0. No material issue. The response identifies all three scorecard concerns and supplies concise, neutral opening questions without inventing facts or prejudging the candidate.*
+
+*Judge (v2): 10.0. No material issue. The response identifies all three recommended areas and supplies concise, neutral opening questions without inventing facts.*
 
 **fix1**
 
@@ -14330,6 +14740,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* ownership, management claim, gap
 
+*Judge (v2): 10.0. No material issues. The response identifies all three recommended probes and supplies concise, grounded opening questions without assuming the discrepancies indicate wrongdoing.*
+
 **fix10**
 
 > Three things to press on:
@@ -14365,6 +14777,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > That's a big jump, and the numbers don't line up with what's on the page. The résumé says p99 went from 840ms to 190ms on the settlement API, and that the ledger migration was co-led with one other senior engineer. So ask: "Help me square that with the résumé. It shows 840 down to 190 on the settlement API, and the migration co-led with another senior engineer. Which project is the two seconds to under a hundred, and what was your piece of it versus theirs?"
 
 *Judge (v1): 8.1 — coaching_instead_of_answer, visible_internal_reasoning. The substantive probe is accurate and useful, but “So ask” and the repeated preamble force the recruiter to extract the spoken response instead of using the answer immediately.*
+
+*Judge (v2): 8.1 — coaching_instead_of_answer, visible_internal_reasoning. Accurately identifies both discrepancies, but “So ask:” turns the hotkey response into coaching. Repeating the evidence before the actual probe forces the recruiter to select and edit what to say.*
 
 **fix1**
 
@@ -14410,6 +14824,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Your résumé has the p99 going from 840 milliseconds to 190, and it says you co-led that migration with one other senior engineer. Walk me through what you personally owned on it, and where the two seconds and the solo claim come from.
 
+*Judge (v2): 9.7. “Solo claim” sounds slightly accusatory, but the response accurately surfaces both discrepancies and asks a useful ownership probe without declaring the candidate dishonest.*
+
 **fix10**
 
 > Your résumé has the p99 going from 840 milliseconds to 190, and it says you co-led that migration with one other senior engineer. Walk me through what you personally owned on it, and where the two seconds to under a hundred milliseconds figure comes from.
@@ -14437,6 +14853,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* Kafka streaming, consumer groups, Avro schema checks
 
 *Judge (v1): 9.9. The pronoun “he” assumes gender not established in the conversation. Otherwise, the summary faithfully captures all relevant details without importing résumé or job-description information.*
+
+*Judge (v2): 9.9. Uses 'he' despite the candidate's gender not being established; otherwise faithfully captures all relevant experience without importing prohibited profile information.*
 
 **fix1**
 
@@ -14498,6 +14916,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Kafka: streams settlement events at roughly 40k events/minute at peak. Set up consumer groups for the reconciliation service and wrote the dead-letter handling. Did not do cluster ops, that's a separate platform team. Schema: Avro with a schema registry, and pushed for backward compatibility checks in CI.
 
+*Judge (v2): 10.0. None. The concise notes accurately capture the candidate’s statements and exclude the prohibited résumé and job-description material.*
+
 **fix10**
 
 > Kafka experience is real and hands-on, but scoped: they stream settlement events at roughly forty thousand events a minute at peak, built the consumer groups for the reconciliation service, and wrote the dead-letter handling. They're explicit that cluster ops sit with a separate platform team, so probe depth there. On schema, they use Avro with a schema registry and drove backward compatibility checks in CI.
@@ -14527,6 +14947,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > That's helpful, thanks for being upfront about it. What kind of freelance work was it, and what were you responsible for on those projects?
 
 *Judge (v1): 10.0. No material issue. “Thanks for being upfront” is slightly evaluative, but the response appropriately avoids probing private family circumstances and focuses on relevant work.*
+
+*Judge (v2): 10.0. No material issue. “Thanks for being upfront” is slightly evaluative, but the response respectfully redirects toward relevant work experience.*
 
 **fix1**
 
@@ -14599,6 +15021,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* ask timeline, not character
 
 *Judge (v1): 9.6. Minor polish: 'from around then to then' needs substitution before use, and recommending a 'flat' tone could make the question sound colder than intended.*
+
+*Judge (v2): 9.2. The main script uses the awkward placeholder “from around then to then.” Asking what he was doing is also slightly more probing than inviting whatever context he is comfortable sharing.*
 
 **fix1**
 
@@ -14688,6 +15112,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 7.9 — coaching_instead_of_answer. The probe is relevant, but the duplicate 'Ask:' script introduces coaching into a live spoken response and forces editing. Both versions also presume PM resistance that the candidate has not established.*
 
+*Judge (v2): 8.0 — coaching_instead_of_answer. The first paragraph offers a useful spoken probe, but the redundant “Ask:” line switches into coaching and requires editing or selection. Both versions also assume the PM resisted rather than first establishing their reaction.*
+
 **fix1**
 
 > That's a strong example. You brought two scoped options with the risks spelled out instead of just saying no, and you owned the manual check yourself. What I want to understand is the pushback itself: when you first told the PM the end-of-month date wouldn't hold, how did that conversation go, and what did you say to make the case?
@@ -14759,6 +15185,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Then listen for whether they raised it directly with the manager, what evidence they brought, and whether they could commit once the call was made.
 
 *Judge (v1): 10.0. No material issue. The question elicits a concrete experience, actions, and outcome; the brief listening cues are relevant and appropriate for a private recruiting request.*
+
+*Judge (v2): 10.0. No material issue. The question elicits a concrete past example, actions, and outcome; the brief listening guidance is appropriate for a private recruiter request.*
 
 **fix1**
 
@@ -14842,6 +15270,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 7.4 — coaching_instead_of_answer, visible_internal_reasoning. The opening evaluates the candidate in third person and says “Ask:”, requiring the recruiter to strip out coaching before speaking. The quoted ownership and production-failure probe itself is useful.*
 
+*Judge (v2): 7.7 — coaching_instead_of_answer, visible_internal_reasoning. The opening evaluates the candidate and instructs the recruiter to “Ask,” rather than providing only spoken words. The embedded probe is relevant, but the recruiter must remove the commentary before using it.*
+
 **fix1**
 
 > That's a solid pipeline. Walk me through one piece of it you owned yourself, not the team's part. What did you build or fix, and what broke along the way?
@@ -14886,6 +15316,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > That's a solid pipeline description. Let me pull on the part that's yours: of the CDC setup, the Kafka topics, and the read models, which piece did you build yourself versus work on with the team?
 
+*Judge (v2): 9.8. No material issue. The response gives an immediately usable ownership probe grounded in the candidate’s description; the opening praise is slightly generic.*
+
 **fix10**
 
 > That's a solid pipeline description. Let me pull on the part you owned: which piece of that did you build yourself, the CDC setup, the Kafka topics, or the read models?
@@ -14911,6 +15343,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > CDC usually means **Change Data Capture**: watching a database's transaction log and streaming every insert, update, and delete as an event, so downstream systems stay in sync without full re-reads. Tools like Debezium and Kafka Connect are common for it.
 
 *Judge (v1): 9.2. Broadly correct and concise, but it assumes a technical context and presents log-based capture as CDC generally. Tool names and streaming terminology add unnecessary jargon for a basic recruiter question.*
+
+*Judge (v2): 9.3. Useful and concise, but it assumes the data-engineering meaning without context and defines CDC through transaction-log streaming, which is one common implementation rather than a requirement.*
 
 **fix1**
 
@@ -14984,6 +15418,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 10.0. No material issues. It answers the base-range question immediately, accurately adds relevant compensation details, and checks alignment without disclosing recruiter-only information.*
 
+*Judge (v2): 10.0. No material issues: it answers directly, accurately distinguishes base from bonus and equity, and avoids disclosing recruiter-only information.*
+
 **fix1**
 
 > The base band for this role is **$168,000 to $204,000**, and that's the full range, so I'm happy to put it on the table now. The bonus target is 10% of base, and there's an equity grant that the comp team sizes at offer stage, so I can't quote that piece yet. Where does that land against what you're looking for?
@@ -15032,6 +15468,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The base band for this role is **$168,000 to $204,000**. That's the full range. The bonus target is 10% of base, and there's an RSU grant on top, though the size of that gets set at offer stage so I can't quote a number on it yet.
 
+*Judge (v2): 10.0. No material issue. The answer is immediately speakable, gives the exact range, and accurately explains additional compensation without disclosing recruiter-only information.*
+
 **fix10**
 
 > The base band for this role is **$168,000 to $204,000**. The annual bonus target is 10% of base, and equity is an RSU grant sized at offer stage, so I can't quote a number on that yet.
@@ -15057,6 +15495,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Mid-November works on our side, so that's not a problem. Let me confirm the exact start date with the team and follow up with you.
 
 *Judge (v1): 8.1 — missed_available_evidence. The reply is natural and directionally correct, but omits the known November 16 target and defers clarification. Saying “not a problem” is premature without confirming the candidate can start by that date.*
+
+*Judge (v2): 8.3 — missed_available_evidence. The reply is natural and broadly answers the question, but omits the known November 16, 2026 target. It should share that boundary now rather than only promise later confirmation.*
 
 **fix1**
 
@@ -15100,6 +15540,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Thanks for flagging the notice period up front. Let me confirm the exact start date with the team and come back to you with it in writing.
 
+*Judge (v2): 6.0 — missed_available_evidence, important_question_unanswered. The reply is natural and avoids unsupported promises, but unnecessarily defers despite the explicit start-date target. It leaves the candidate's timeline question unanswered.*
+
 **fix10** — edited after streaming
 
 > Let's plan around mid-November for now. Before we go further, can you walk me through whether that date is firm or could shift?
@@ -15125,6 +15567,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Good, mornings it is. Let me lock in a slot and send you a calendar invite with the details, and if anything about the timing needs adjusting, just reply to that and we'll sort it out.
 
 *Judge (v1): 9.4. The reply is usable and role-correct, but moves toward booking without establishing a particular morning. The extended explanation about adjusting the invitation adds little at this moment.*
+
+*Judge (v2): 9.6. No material issue; the rescheduling clause is slightly wordy for a simple scheduling acknowledgement.*
 
 **fix1**
 
@@ -15196,6 +15640,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 10.0. No material issue; the response directly addresses the candidate's concern with grounded, immediately speakable recruiter wording.*
 
+*Judge (v2): 10.0. No material issues. The response directly resolves the candidate's concern using supported requirements and is immediately speakable by the recruiter.*
+
 **fix1**
 
 > Kotlin isn't a dealbreaker at all. It's listed as a nice-to-have, and that service is being retired anyway, so the work here is Go. What I'd want to hear about is your Go depth and whether you've shipped something that handles money, payments, billing, ledgers or payouts.
@@ -15238,6 +15684,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Not a dealbreaker at all. Kotlin is a nice-to-have here, not a requirement, and the Kotlin service is actually being retired, so the work is moving onto Go. What I'd want to dig into is your Go depth and whether you've shipped something that handles money, since that's the core of this role.
 
+*Judge (v2): 10.0. No material issue; the answer is immediately speakable, directly resolves the concern, and accurately identifies the core requirements.*
+
 **fix10**
 
 > Not a dealbreaker at all. Kotlin is a nice-to-have here, and the service that uses it is being retired, so the work is really Go. What I'd want to hear about is your Go depth and the money-handling side, so tell me about a system you've shipped that moved payments, billing, ledgers or payouts.
@@ -15263,6 +15711,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The role is lead-level and Hollis wants someone who can grow into running the team, so a management stretch isn't a knock on its own. What matters is the hands-on side: the kickoff called for 70% hands-on coding and no direct reports for at least the first year. So I'd say: "That's not a dealbreaker here. The role is lead-level and we want someone who can grow into running the team, but it's also 70% hands-on coding with no direct reports for at least the first year. So I'd want to hear how you've kept your hands in the code, and what you'd do to ramp back up."
 
 *Judge (v1): 8.4 — coaching_instead_of_answer, visible_internal_reasoning. The substantive reply is grounded and asks a useful follow-up, but the repeated explanation and “So I'd say” framing force the recruiter to identify and extract the actual spoken answer.*
+
+*Judge (v2): 7.5 — coaching_instead_of_answer, visible_internal_reasoning. Useful recruiter wording is buried behind a repetitive source summary and “So I'd say,” requiring live editing. The response also presents the handoff's uncertain role scope too definitively.*
 
 **fix1**
 
@@ -15312,6 +15762,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The role's actually built for that. The hiring manager wants someone who can grow into running the team, and it's 70% hands-on coding with no direct reports for at least the first year. So the question is really how current your coding is. What have you built or shipped yourself in the last year?
 
+*Judge (v2): 8.5. “Built for that” overstates fit: openness to recent managers does not establish that limited recent coding is ideal. The remaining answer supplies the relevant expectations and a useful probe, but treats the unclear scope as settled.*
+
 **fix10**
 
 > That's not a problem for this role. The hiring manager wants someone who can grow into running the team, and it's about 70% hands-on coding with no direct reports for at least the first year, so the management background is a plus, not a gap. What I'd want to hear is how recently you've been close to the code and how you'd ramp back into it.
@@ -15339,6 +15791,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 16 weeks paid, after 90 days
 
 *Judge (v1): 9.8. The policy is accurate and complete. The role-brief attribution and hypothetical follow-up advice add slightly unnecessary text, but are appropriate on this private surface.*
+
+*Judge (v2): 9.8. No substantive issue. The policy is accurate and complete; the additional follow-up coaching is permissible on this private surface but unnecessary for the immediate lookup.*
 
 **fix1**
 
@@ -15404,6 +15858,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* 16 weeks paid, after 90 days
 
+*Judge (v2): 9.9. No material issue. The complete policy is stated accurately and immediately; the source commentary and hypothetical HR follow-up are slightly more than this quick lookup needs.*
+
 **fix10**
 
 > Sixteen weeks fully paid for all parents, available after 90 days of employment. That's the policy as written in the role brief, so you can share it as-is. If she asks about anything beyond that, like how it interacts with state leave or her specific start date, tell her you'll confirm with the benefits team and follow up.
@@ -15435,6 +15891,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* can't confirm rumors, role is real
 
 *Judge (v1): 4.0 — unsupported_company_claim. The claim that the role is open because the company is growing the team is unsupported and provides potentially misleading reassurance about stability.*
+
+*Judge (v2): 4.0 — unsupported_company_claim. Saying the role is open because the team is growing invents a consequential company fact and offers unsupported reassurance about stability. The offer to check with the hiring manager is otherwise appropriate.*
 
 **fix1**
 
@@ -15506,6 +15964,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 5.2 — missed_available_evidence, important_question_unanswered. The brief explicitly supports H-1B transfers, but the response needlessly defers confirmation and pivots to work history, leaving the candidate's question unanswered.*
 
+*Judge (v2): 5.7 — missed_available_evidence, important_question_unanswered. The brief explicitly supports H-1B transfers, but the answer unnecessarily defers confirmation and changes the subject, leaving the candidate’s direct question unanswered.*
+
 **fix1**
 
 > I'll be straight with you: I don't want to guess on immigration specifics. What I can tell you is that we've sponsored transfers before, and I'll get you a clear answer from our people team on your situation specifically. Can you walk me through what you're doing in your current role?
@@ -15548,6 +16008,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Thanks for flagging that. Can you tell me a bit more about your current situation and what you're looking for in a transfer?
 
+*Judge (v2): 5.4 — missed_available_evidence, important_question_unanswered. It sidesteps the candidate’s direct question despite explicit transfer support in the brief. The vague follow-up creates unnecessary uncertainty rather than resolving the concern.*
+
 **fix10** — edited after streaming
 
 > I'll confirm the specifics of how we handle it and get back to you with the details.
@@ -15573,6 +16035,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'll be straight with you: I don't have the specifics of this team's on-call rotation in front of me, so I don't want to give you a number that turns out to be wrong. What I can tell you is that I'll get you the exact picture, how the rotation is structured, how often it comes up, and whether there's any compensation tied to it, and I'll follow up with that directly.
 
 *Judge (v1): 9.5. The reply appropriately avoids inventing team policy, but its uncertainty preamble and repeated follow-up promise make it slightly longer than necessary.*
+
+*Judge (v2): 8.9. This is an appropriate fallback given the unavailable team-specific information, but the lengthy uncertainty disclaimer adds little before the useful follow-up commitment.*
 
 **fix1**
 
@@ -15616,6 +16080,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I'll get you the specifics on how on-call works here and whether there's extra pay for it, and follow up with the details. In the meantime, what's your experience been with on-call rotations?
 
+*Judge (v2): 9.3. A sound, speakable fallback with no fabricated policy. The follow-up remains generic, and asking about past rotations is less directly useful than clarifying the candidate's availability or compensation concerns.*
+
 **fix10**
 
 > I'll get you the specifics on how on-call works here and whether there's extra pay for it. That's not something I want to guess at, so let me confirm the rotation and the compensation details and follow up with you.
@@ -15641,6 +16107,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I've spent my career on the recruiting side, so I'm not an engineer myself. What I do bring is a lot of time sitting with engineering teams, so I can usually tell when something's real versus rehearsed. Happy to get into my background now.
 
 *Judge (v1): 4.9 — unsupported_personal_claim. Invents an all-recruiting career, denies engineering experience, and claims extensive time with engineering teams. None is supported by permitted evidence. The claim about detecting rehearsed answers also risks sounding adversarial.*
+
+*Judge (v2): 4.7 — unsupported_personal_claim. The reply invents a lifelong recruiting career, denies engineering experience, and claims extensive time with engineering teams without permitted biographical evidence. The claim about detecting rehearsed answers also sounds needlessly adversarial.*
 
 **fix1**
 
@@ -15684,6 +16152,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I work on the recruiting side. What I'd want to get into with you today is how you actually build and ship.
 
+*Judge (v2): 8.8. It truthfully states the current role but sidesteps the engineering-background question. The abrupt pivot to assessing the candidate may sound evasive, though the missing career history prevents a substantive factual answer.*
+
 **fix10** — edited after streaming
 
 > I'll give you the full picture of my background in a moment. What I can say now is that I work closely with the roles I hire for, so I can talk about the work itself, not just the keywords. Happy to get into my background whenever you're ready.
@@ -15709,6 +16179,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I've been recruiting engineers for a while now, mostly across backend and infrastructure roles. What I care about most is understanding the actual work behind the title, so I can tell whether someone's really done it. Happy to get into specifics about the roles I've hired for.
 
 *Judge (v1): 4.7 — unsupported_personal_claim. Invents recruiting tenure, backend/infrastructure hiring experience, and a personal recruiting priority. “For a while” also avoids giving the duration the candidate asked about.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. It invents recruiting experience, backend/infrastructure specialisms, and personal priorities. “For a while” also avoids giving the requested duration, replacing a straightforward answer with an unsupported credibility pitch.*
 
 **fix1**
 
@@ -15752,6 +16224,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I've been recruiting engineers for a while now. What I focus on is getting past the résumé and understanding how someone thinks through problems. Happy to go into more detail on the specific teams I've hired for.
 
+*Judge (v2): 5.0 — unsupported_personal_claim, important_question_unanswered. The answer invents established recruiting experience, a personal interviewing approach, and prior team hires. “For a while” also sidesteps the requested duration rather than helping the recruiter answer it accurately.*
+
 **fix10**
 
 > I've been recruiting engineers for a while now, across a range of teams and levels, and I still enjoy the puzzle of matching the right person to the right role. Happy to get into specifics if that's useful.
@@ -15777,6 +16251,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The candidate just described a software idempotency pattern, which doesn't map to this warehouse supervisor role. Probe for the operational equivalent: "That's a solid systems answer. On the floor, the same problem shows up when a load gets scanned twice or a pick is confirmed on two devices. How have you kept duplicate work from hitting your crew's numbers?"
 
 *Judge (v1): 6.2 — coaching_instead_of_answer, visible_internal_reasoning. It narrates the candidate’s answer and instructs the recruiter before providing speech, then forces an unrelated warehouse analogy instead of probing the stated idempotency design.*
+
+*Judge (v2): 5.3 — coaching_instead_of_answer, visible_internal_reasoning. The response narrates the candidate's answer and coaches the recruiter before offering speech. It then lets an unrelated warehouse requisition derail the technical discussion instead of probing the stated idempotency design.*
 
 **fix1**
 
@@ -15820,6 +16296,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > That's a clean idempotency pattern. Walk me through the failure mode you were designing against: what actually happened on a retry before the unique constraint was in place, and how did you detect the duplicate?
 
+*Judge (v2): 9.5. The follow-up slightly presupposes a prior implementation that produced duplicates; the candidate only described the current design.*
+
 **fix10**
 
 > That's a clean idempotency pattern. Walk me through the failure mode you were actually defending against: what happened on a retry before the unique constraint was in place, and how did you detect the duplicate payout?
@@ -15847,6 +16325,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > "Walk me through your specific role in that fix. Which of the three parts did you design and build yourself, and how did you land on those particular thresholds for the backoff and the in-flight cap?"
 
 *Judge (v1): 8.3 — coaching_instead_of_answer, visible_internal_reasoning. The opening evaluates the answer and coaches the recruiter, requiring them to skip commentary before speaking. The quoted ownership probe is relevant and useful. Calling the candidate “his” also assumes an unsupported gender.*
+
+*Judge (v2): 8.2 — coaching_instead_of_answer, visible_internal_reasoning. The useful ownership probe is preceded by evaluative commentary and an instruction to the recruiter, requiring the user to remove coaching before speaking.*
 
 **fix1**
 
@@ -15924,6 +16404,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 6.9 — coaching_instead_of_answer, visible_internal_reasoning. The response opens with an unsupported, judgmental assessment and coaching rather than immediately speakable recruiter words. The quoted probe is useful, but the recruiter must strip away the preamble.*
 
+*Judge (v2): 6.8 — coaching_instead_of_answer, visible_internal_reasoning. The opening labels the candidate evasive without evidence and gives private coaching on a spoken surface. The recruiter must discard that commentary before using the otherwise helpful follow-up.*
+
 **fix1**
 
 > That's a common answer, and it usually means the conflict was handled early or quietly. Let me give you a specific one to work with: think of a time you disagreed with a coworker or a manager about how to do something, even if it never blew up. What was the situation, and how did you handle it?
@@ -15966,6 +16448,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > That's fair, most days don't have a blow-up. Let me narrow it: think of a time someone on your crew wasn't meeting expectations, or you and another supervisor disagreed on how to handle something. What did you do, and how did it land?
 
+*Judge (v2): 10.0. No material issue. It lowers the threshold from a dramatic conflict to routine workplace friction, offers role-relevant prompts, and asks for actions and results without coaching commentary.*
+
 **fix10**
 
 > That's fair, most days don't feel like conflict. Think about a time you had to correct someone on the floor, say a safety rule or a pace issue, and they pushed back. What did you do in that moment?
@@ -15991,6 +16475,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > That's a good place to push for specifics. Try: "Can you walk me through one concrete example of that, start to finish, and what your specific part was versus the team's?" Then stay quiet and let them fill the silence.
 
 *Judge (v1): 7.6 — coaching_instead_of_answer, visible_internal_reasoning. The quoted probe is useful, but coaching and stage directions surround it. The recruiter must extract the spoken question rather than use the response immediately.*
+
+*Judge (v2): 7.5 — coaching_instead_of_answer, visible_internal_reasoning. A useful follow-up question is surrounded by coaching and delivery instructions, forcing the recruiter to extract the speakable portion instead of using the response immediately.*
 
 **fix1**
 
@@ -16063,6 +16549,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* strong ownership, vague first pass, push through
 
 *Judge (v1): 8.9. The summary omits the strongest concrete evidence—312 reversals and “matched to the cent”—and the extra prevention-versus-cleanup probe underplays that her idempotency check already addressed prevention.*
+
+*Judge (v2): 9.0. Omits 312 reversals and 'matched to the cent.' The prevention-versus-cleanup framing underplays her idempotency check, while 'she verified' slightly overattributes the team's reported reconciliation.*
 
 **fix1**
 
@@ -16182,6 +16670,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.1. The ownership probe is useful, but adds an optional follow-up and commentary beyond the requested question. “Yours alone” could imply that ownership requires acting independently rather than being accountable within a team.*
 
+*Judge (v2): 9.2. The usable probe includes an extra follow-up and commentary. “Yours alone” also frames ownership too narrowly: someone can own a decision while needing others’ agreement.*
+
 **fix1**
 
 > The interviewer should press on what was actually theirs. Try: "Walk me through one decision on that project that was yours alone. What did you weigh, who did you have to convince, and what happened because of it?" That separates real ownership from team proximity.
@@ -16253,6 +16743,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't have the team details in front of me, so I'd rather not guess at numbers. What I can tell you is how the team's structured and where people sit, and I'll confirm the exact size and mix with the hiring manager and follow up with you.
 
 *Judge (v1): 7.9 — important_question_unanswered. It promises to describe the team's structure and locations but never does. The follow-up explicitly covers only size and seniority mix, leaving the Denver-versus-distributed question unresolved.*
+
+*Judge (v2): 7.7. It appropriately avoids inventing facts, but says it can explain team structure and location without doing so. The promised follow-up explicitly covers only size and seniority mix, leaving location unresolved.*
 
 **fix1**
 
@@ -16328,6 +16820,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.5. The response appropriately avoids guessing, but repeats the previous disclaimer and uses a slightly wordy preamble rather than simply adding the reporting manager to the promised follow-up.*
 
+*Judge (v2): 9.0. This is a truthful, usable fallback, but it repeats the previous disclaimer and uses cumbersome framing for a simple commitment to confirm the reporting manager.*
+
 **fix1**
 
 > I'll confirm the reporting line and get back to you with the exact title and who it is. I'd rather give you the real answer than a guess, so let me pull that and follow up.
@@ -16397,6 +16891,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't have the details on why the role is open, so I won't speculate about the last person. What I can tell you is that I'll get the reason from the hiring manager and follow up with you.
 
 *Judge (v1): 9.7. No substantive failure. “What I can tell you is...” repeats the earlier formula and makes a straightforward follow-up sound slightly stilted.*
+
+*Judge (v2): 9.1. This is a truthful fallback, but it repeats the earlier deferral formula. “What I can tell you” adds padding, and the answer could consolidate the outstanding hiring-manager follow-ups.*
 
 **fix1**
 
@@ -16468,6 +16964,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.8. The assessment is accurate and the follow-up actionable. The only minor issue is using “he” when the candidate’s gender is not established.*
 
+*Judge (v2): 9.6. The assessment and follow-up are useful. Minor weaknesses: it assumes the candidate's gender and could anchor the critique more explicitly to the message-queue example and vague “talked to people” action.*
+
 **fix1**
 
 > That answer is thin. There's no detail on how he actually influenced anyone, who he had to convince, or what he did when they pushed back. Ask: "Walk me through that. Who were the key people, and what specifically did you do to bring them around?"
@@ -16537,6 +17035,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Still thin, and the same gap: no names, no numbers, no moment where someone actually changed their mind. Push on the outcome: "You said it worked out. What was the decision, who made the call, and what would have happened if you'd lost that argument?"
 
 *Judge (v1): 9.1. The question clarifies the decision and owner, but the hypothetical consequence invites speculation rather than evidence of persuasive actions or actual results. It is not clearly sharper than the earlier follow-up.*
+
+*Judge (v2): 8.7. The question usefully probes decision ownership and stakes, but hypothetical consequences do not establish actual influence or results. It is less targeted than the previous probe, and the repeated critique adds little.*
 
 **fix1**
 
@@ -16610,6 +17110,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.8. No material issue; the explanation about avoiding an incorrect number is slightly wordy.*
 
+*Judge (v2): 9.2. This is a sound fallback, but the opening is wordy and asking the candidate's range before supplying the employer's can feel like redirecting the question.*
+
 **fix1**
 
 > The range for this role is something I want to give you accurately rather than off the top of my head, so let me confirm the band with our team and come back to you with the exact numbers. In the meantime, what range are you working with so I can tell you early whether we're in the same ballpark?
@@ -16658,6 +17160,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > What I can do is get the approved band from the hiring team and come back to you with it directly. If you tell me your expectations now, I can also flag them early so we're not wasting each other's time.
 
+*Judge (v2): 9.4. This is a useful, grounded fallback. Asking for expectations before sharing the range may feel like deflection, and 'wasting each other's time' is slightly brusque.*
+
 **fix10** — edited after streaming
 
 > What I can do is get the approved band for this role from the hiring team and come back to you with it. If you tell me your target, I can also check it against the band before we go further.
@@ -16683,6 +17187,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I hear you, and I don't want to hide behind process. I genuinely don't have a confirmed number in front of me, so anything I say now is a guess I'd have to walk back. Give me your range and I'll tell you straight away if it's workable.
 
 *Judge (v1): 7.6. The final sentence promises an immediate workability judgment without an established salary range and repeats the question the candidate just resisted. This weakens an otherwise appropriate, speakable refusal to invent compensation figures.*
+
+*Judge (v2): 7.2. It appropriately avoids inventing a number, but promises an immediate salary-fit judgment without budget evidence and repeats the expectations question the candidate has already pushed back on.*
 
 **fix1**
 
@@ -16732,6 +17238,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I can't give you a ballpark figure right now. What I can do is take your number to the hiring team and come back with the real range. What number works for you?
 
+*Judge (v2): 8.8. It repeats the earlier deferral and request for expectations despite the candidate’s pushback. Taking “your number” to the hiring team risks making salary transparency feel contingent on the candidate disclosing first.*
+
 **fix10** — edited after streaming
 
 > What I can do is take your target to the hiring team and come back with the approved band. If you tell me your target, I can also check it against the band before we go further.
@@ -16757,6 +17265,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > That's a strong opening, but it doesn't match the résumé: it shows Senior Software Engineer at Harborline since March 2023, an individual contributor on a team of four, co-leading the ledger migration with one other senior engineer. So the five years and the platform-team lead don't line up. Ask: "Help me square that with your résumé. It shows you joining Harborline in March 2023 as a senior engineer on a team of four. What did leading the platform team actually look like day to day, and were you managing people?"
 
 *Judge (v1): 7.2 — coaching_instead_of_answer, visible_internal_reasoning. The evaluative preamble and “Ask:” wrapper force the recruiter to extract the usable probe. The preamble also treats the leadership discrepancy too conclusively; an individual contributor can exercise technical leadership.*
+
+*Judge (v2): 7.0 — coaching_instead_of_answer, visible_internal_reasoning. The first half is evaluative coaching, followed by “Ask:”, so the recruiter must extract the spoken probe. It also treats ambiguous leadership wording as a mismatch before clarifying it.*
 
 **fix1**
 
@@ -16800,6 +17310,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Your résumé lists you as a senior engineer on a team of four, and the screen notes said "I managed a team of six." Help me square those two. What did leading the platform team actually look like day to day, and were you managing people or leading the workstream?
 
+*Judge (v2): 8.7 — missed_available_evidence. The leadership probe is grounded and immediately speakable, but it overlooks the five-year tenure claim despite the résumé’s March 2023 start date.*
+
 **fix10**
 
 > You said you've been leading the platform team. Your résumé shows the title Senior Software Engineer and a team of four. Help me understand what leading the team looked like day to day, and whether you had people reporting to you.
@@ -16825,6 +17337,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > He's answering a question you didn't ask yet, so let him finish the timeline, then pin the gap. Ask: "You said straight through, but the résumé shows Quillpay ending in August 2022 and Harborline starting in March 2023. What were you doing in those months?"
 
 *Judge (v1): 7.3 — coaching_instead_of_answer, visible_internal_reasoning. The dates and gap probe are accurate, but the response opens with coaching and unsupported commentary about what the recruiter has asked, rather than providing only immediately speakable words.*
+
+*Judge (v2): 7.3 — coaching_instead_of_answer, visible_internal_reasoning. The quoted probe uses the correct dates, but the opening coaching and meta-commentary require removal before speaking. “Pin the gap” also frames clarification more adversarially than necessary.*
 
 **fix1**
 
@@ -16868,6 +17382,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > That's the Harborline-to-Quillpay jump, but I want to stay on the management question first. Your résumé shows you as a senior engineer on a team of four, and the screen notes say you managed six. Walk me through what leading the platform team looked like day to day, and whether you were managing people or leading the workstream.
 
+*Judge (v2): 6.1 — missed_available_evidence. It reverses the transition as Harborline-to-Quillpay and repeats the previous management probe. Although that issue remains unresolved, the response misses the newly relevant discrepancy between “straight through” and the documented employment gap.*
+
 **fix10**
 
 > That's a good segue, but I want to come back to the Harborline piece first. Your résumé shows Quillpay ending in August 2022 and Harborline starting in March 2023, so help me understand what was happening in those months in between.
@@ -16893,6 +17409,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Don't say yes. The notes have it going both ways: remote-friendly with full remote possible as an exception, but Hollis later said Tue/Thu in office with no exceptions. So say: "The role is remote-friendly, and I want to confirm the current in-office expectation for this req before I give you a firm answer. I'll check with the hiring manager and come back to you."
 
 *Judge (v1): 9.7. The suggested wording still calls the role “remote-friendly,” which could imply flexibility despite the unresolved, later no-exceptions office requirement.*
+
+*Judge (v2): 9.8. No material failure; calling the role 'remote-friendly' in the suggested wording could still create avoidable ambiguity about the unconfirmed arrangement.*
 
 **fix1**
 
@@ -16944,6 +17462,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > So say: "The role is remote-friendly, and fully remote has been on the table for the right person. I want to confirm the current expectation on in-office days before I give you a firm answer, and I'll come back to you on it."
 
+*Judge (v2): 9.9. No material issue. The response identifies both conflicting instructions and provides usable wording without promising fully remote work.*
+
 **fix10**
 
 > No, don't say yes. The notes conflict on this: the role is described as remote-friendly with full remote possible for strong candidates, but later Hollis asked for people in the office Tuesday and Thursday with no exceptions, and the note says it's unclear where that landed. So the honest answer is that the role is remote-friendly and you'll confirm the current in-office expectation with the hiring manager before saying anything definitive.
@@ -16975,6 +17495,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 195k top of band, confirm approval first
 
 *Judge (v1): 7.5 — missed_available_evidence. The suggested line states $195,000 as the ceiling despite uncertain approval and frames verification as necessary only before writing it down. It also omits the original $150,000–$180,000 band.*
+
+*Judge (v2): 7.2 — missed_available_evidence. The script declares $195,000 as the ceiling despite uncertain approval and omits the $150,000–$180,000 baseline. Delaying written confirmation does not resolve whether the recruiter can quote the higher ceiling.*
 
 **fix1**
 
@@ -17034,6 +17556,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* 195 is top of band, approval unconfirmed
 
+*Judge (v2): 6.9 — missed_available_evidence. It acknowledges uncertain Comp approval but still authorizes quoting $195,000 as the ceiling, delaying verification until a written commitment. It omits the original $150,000–$180,000 band and makes the tentative increase sound established.*
+
 **fix10** — edited after streaming
 
 > The 8/12 update says the top of band is now **$195,000**, and Maren wasn't sure it had cleared Comp yet. So I'd say the band goes up to 195 and that you'll confirm it's fully approved before anything goes in writing.
@@ -17065,6 +17589,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > What does a typical morning look like for them right now? That'll tell me which part of this matters most to you.
 
 *Judge (v1): 4.0 — unsupported_company_claim. The answer invents a unified dispatch screen, load/driver/exception visibility, decision flagging, and automated status updates/check calls without product evidence. The useful discovery question does not remedy those unsupported capability claims.*
+
+*Judge (v2): 4.0 — unsupported_company_claim. With no product evidence, it invents a unified dispatch dashboard, comprehensive load/driver visibility, exception prioritization, and automated status updates/check calls. These unsupported capabilities constitute the entire overview.*
 
 **fix1**
 
@@ -17150,6 +17676,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 3.8 — unsupported_company_claim. Invents a $412-per-seat list price and implies volume and term discounts are available, despite having no pricing or product evidence.*
 
+*Judge (v2): 4.0 — unsupported_company_claim. Invents a $412-per-seat list price and implies available volume and term discounts despite having no company or pricing evidence.*
+
 **fix1**
 
 > Our list price is **$412 per seat**. Before I quote anything specific, what number does this need to land at for you? That tells me which option to put in front of you.
@@ -17221,6 +17749,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I want to give you a straight answer on that rather than guess, so let me confirm exactly how the ServiceTitan integration works and what it covers on the call center side. Which parts of that workflow matter most to you, the dispatch side, the customer records, or the reporting?
 
 *Judge (v1): 8.9. “Confirm exactly how the ServiceTitan integration works” subtly presupposes an integration exists. The explicit uncertainty mitigates this, but verification should cover availability, not merely scope.*
+
+*Judge (v2): 8.7. Verification and discovery are useful, but “how the ServiceTitan integration works” subtly presupposes availability that has not been established. It stops short of an explicit capability promise.*
 
 **fix1**
 
@@ -17300,6 +17830,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.8. No material issue. The closing phrase is slightly imprecise: checking the remaining terms helps readiness but does not resolve the waiver blocker.*
 
+*Judge (v2): 9.6. No material issue. The opening is slightly wordy, but the response avoids confirming an unsupported concession and provides a concrete next step.*
+
 **fix1**
 
 > I want to make sure I get this right, so let me check what we actually agreed on the last call before I put anything in writing. If the onboarding fee waiver is confirmed on our side, I'll get it into the order form and send it over today. Can you hold finance for a few hours while I verify?
@@ -17371,6 +17903,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* brief intro, pivot to discovery
 
 *Judge (v1): 4.3 — unsupported_personal_claim. Invents tenure and experience working with teams, then abruptly pivots away from the rapport question. “The problem I'm dealing with” and “where I am” also confusingly center the seller rather than the prospect.*
+
+*Judge (v2): 4.4 — unsupported_personal_claim. “For a while” and prior work with teams invent experience. Confusing self-focused pronouns (“where I am today”) undermine the discovery transition, which also sidesteps the requested introduction.*
 
 **fix1**
 
@@ -17444,6 +17978,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 4.0 — unsupported_company_claim, important_question_unanswered. Claims HVAC is a good fit without product evidence, then redirects to discovery without answering or offering to verify actual HVAC experience. The promise of being straight makes the dodge more conspicuous.*
 
+*Judge (v2): 4.0 — unsupported_company_claim, important_question_unanswered. The reply sidesteps the experience question while asserting HVAC fit without any product evidence. Saying it would rather be straight, then pivoting entirely to discovery, risks sounding evasive.*
+
 **fix1**
 
 > HVAC is a newer space for me, so I'd rather be straight about that than pretend otherwise. What I do bring is the same approach I use with any trade: understand how your jobs actually flow, then show where it saves your techs time. What does your current setup look like day to day?
@@ -17516,6 +18052,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 10.0. No material issue. The response naturally accepts the invitation and asks two commercially useful questions without inventing context or product claims.*
 
+*Judge (v2): 10.0. No material issue. The response asks two useful sales discovery questions, stays in the seller's voice, and invents no background or product claims.*
+
 **fix1**
 
 > Thanks for walking me through all that. A couple of things I'd like to understand better: what does success look like for you on this, and what's driving the timing? And on the decision side, who else needs to weigh in before you'd move forward?
@@ -17585,6 +18123,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can work with you on all three, and I want to be straight about what I can commit to right now. Price lock and the thirty-day cancellation I can take to my team today. Net sixty is a bigger ask, so tell me what's driving it, cash flow or your own billing cycle, and I'll come back with what I can actually do before Friday.
 
 *Judge (v1): 8.9. Calling net sixty a “bigger ask” implies unsupported knowledge of the company’s negotiating constraints. Otherwise, the reply is speakable, addresses all three demands, and appropriately avoids promising approval.*
+
+*Judge (v2): 8.8. Calling net-60 a “bigger ask” implies unsupported knowledge of relative commercial flexibility. Otherwise, the reply covers all three requests, avoids approval promises, and provides a useful next step.*
 
 **fix1**
 
@@ -17659,6 +18199,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Since I don't have your actual background here, tell me your field and one real win, and I'll tighten it into two clean lines.
 
 *Judge (v1): 7.8 — coaching_instead_of_answer. It correctly ignores the prohibited résumé, but substitutes advice, placeholders, and a clarification request for the two usable lines requested. The seller must supply details before using the draft.*
+
+*Judge (v2): 8.0. Provides a fill-in template and coaching rather than two ready-to-say lines. It correctly avoids prohibited background details, but the user must supply facts and replace placeholders before speaking.*
 
 **fix1**
 
@@ -17735,6 +18277,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > For a 40-person HVAC company, the ROI story is simple: every service call, dispatch, and quote that runs through one system instead of spreadsheets and phone tag is recovered billable hours, and that's usually where the payback shows up first. What does a missed or double-booked job cost you in a typical week?
 
 *Judge (v1): 7.4. It changes 40 technicians to 40 total employees, assumes a unified-system versus spreadsheet comparison, and treats operational efficiency as automatic billable recovery. The added discovery question also dilutes the requested one-liner.*
+
+*Judge (v2): 7.4. It changes 40 technicians to 40 total employees, assumes a workflow-centralization use case, and overstates efficiency gains as recovered billable hours. The added discovery question also exceeds the requested one-liner.*
 
 **fix1**
 
@@ -17815,6 +18359,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Silence after a price usually means they're doing the math, not rejecting it. So don't fill it with a discount. Try: "Take a second with that. What number were you expecting going in?" That gets their real anchor on the table, and you can respond to the gap instead of guessing at it.
 
 *Judge (v1): 9.1. The opening overstates what silence usually means. The quoted restart is usable and avoids discounting, but there is no basis to favor mental arithmetic over other possible reactions.*
+
+*Judge (v2): 9.2. The opening overconfidently interprets silence as calculation rather than rejection. The actual script is usable, invites useful discovery, and avoids discounting.*
 
 **fix1**
 
@@ -17908,6 +18454,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* discovery questions, positioning, spreadsheet objection
 
 *Judge (v1): 4.0 — unsupported_company_claim. The positioning invents product advantages: eliminating manual work and avoiding rip-and-replace. Neither is supported by evidence. The objection response also presumes a past spreadsheet failure instead of establishing whether one occurred.*
+
+*Judge (v2): 4.0 — unsupported_company_claim. The positioning asserts that the product removes manual work without requiring rip-and-replace, despite having no product evidence. This invents a commercially meaningful benefit. The discovery and objection handling are otherwise useful.*
 
 **fix1**
 
@@ -18046,6 +18594,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 4.0 — fabricated_meeting_history. This is a polite wrap-up rather than a closing ask. It also invents an agreed next step, which the seller may need to correct before using it.*
 
+*Judge (v2): 4.0 — fabricated_meeting_history. It invents an agreed next step and offers a conversational sign-off rather than a closing ask that secures a decision or next step.*
+
 **fix1**
 
 > Thanks for the time today. I'll send over a short recap with the next step we agreed on, and I'll follow up on the open items so nothing stalls. What's the best day next week to pick this back up?
@@ -18130,6 +18680,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.7. Minor timing ambiguity: getting the NDA moving today does not ensure it is signed soon enough for Tuesday.*
 
+*Judge (v2): 9.7. No material issue. Tuesday readiness could be tied more explicitly to when the NDA is signed, rather than merely getting it moving today.*
+
 **fix1**
 
 > Yes, we completed a SOC 2 Type II covering Security and Availability, and the report goes out under a mutual NDA through our Trust Center. Once the NDA is signed, allow about two business days to get it to you, so if Tuesday is the review, let's get the NDA moving today. Who on your side should I send it to?
@@ -18201,6 +18753,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > We're SOC 2 Type II audited, with AES-256 encryption at rest and TLS 1.2 or higher in transit, and data hosted on AWS. For North American customers that's us-east-2 in Ohio, and the region gets locked in at contract signature. On the BAA and HIPAA specifically, I don't want to answer that off the cuff, so let me get our security team to confirm it in writing. Can you tell me which patient fields the techs actually capture in those notes?
 
 *Judge (v1): 9.6. Minor hosting incompleteness: it gives only the North American region, and “locked in” could imply changes are impossible rather than available through a paid migration.*
+
+*Judge (v2): 9.5. Minor hosting precision gaps: “locked in” omits the paid-migration exception, and the EU location is not mentioned despite the customer's region being unspecified.*
 
 **fix1**
 
@@ -18275,6 +18829,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't approve anything beyond our published terms on the call, so twenty percent isn't something I can just say yes to. What I can do is take it to Deal Desk with a clear case. The one published discount is ten percent off per seat on a 24-month prepaid agreement. Would that structure work for you, or is the twenty percent tied to something specific on your side?
 
 *Judge (v1): 10.0. No material issue. The response directly answers the authority question, accurately presents the published alternative, and advances discovery without promising approval.*
+
+*Judge (v2): 9.9. No material issue. The reply accurately explains authority, offers the fully qualified published discount, and advances discovery without promising approval.*
 
 **fix1**
 
@@ -18351,6 +18907,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 99.9% SLA, credits, named CSM
 
 *Judge (v1): 7.7 — missed_available_evidence. “Fee back” blurs service credits with refunds, the claim deadline lacks its month-end anchor, and the answer omits the documented Support Manager escalation despite the explicit contact question.*
+
+*Judge (v2): 8.2 — missed_available_evidence. The spoken answer blurs service credits into money “back” and leaves the 30-day deadline unanchored. It also defers escalation-contact details despite the documented escalation path through the Support Manager.*
 
 **fix1**
 
@@ -18435,6 +18993,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* whiteboard dispatch, Xero re-keying, contract until March
 
 *Judge (v1): 10.0. No material issue. The recap captures the relevant facts, and the discovery question usefully quantifies the manual re-keying burden without making unsupported product claims.*
+
+*Judge (v2): 10.0. No material issue: the recap captures the operational pain and timing constraint, and the discovery question seeks measurable impact without asserting unreported losses.*
 
 **fix1**
 
@@ -18542,6 +19102,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 4.0 — unsupported_company_claim, unsupported_personal_claim. It invents a no-app, text/phone workflow with office handling and promises nothing changes for workers. It also fabricates the seller’s experience hearing this objection. The useful discovery question does not justify those claims.*
 
+*Judge (v2): 4.0 — unsupported_company_claim, unsupported_personal_claim. Invents seller experience and core product capabilities: no app, text/phone workflows, office handling, and no crew-side changes. The gist repeats the unsupported no-app promise.*
+
 **fix1**
 
 > That's a fair worry, and honestly it's the one that kills rollouts more than anything technical. The crews who get the most out of this are usually the ones who never open the app at all, they just get a text or a call and reply to it. Can I ask what they use today to get a job or a schedule, is it a phone call, a whiteboard, a paper ticket?
@@ -18616,6 +19178,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.8. No material issue. The seller directly answers the prospect with a sensible approach and a focused discovery question; the conditional language avoids unsupported promises.*
 
+*Judge (v2): 9.6. The approach is sensible, but it stops short of a concrete next step for involving the owner after identifying his concern.*
+
 **fix1**
 
 > The move itself is already set, so what I'd want to know is what he's actually worried about losing. Usually with an owner it's control or disruption, not the change itself. If you can tell me what he's most attached to, I can show you where the plan protects it. What's the thing he'd hate to give up?
@@ -18688,6 +19252,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 10.0. No material issue; the question naturally explores after-hours handling, ownership, and response speed without inventing facts.*
 
+*Judge (v2): 10.0. No material issue. The question naturally explores current workflow, ownership, and response speed without inventing facts or importing irrelevant reference material.*
+
 **fix1**
 
 > What does your emergency call flow look like today, from the moment a customer reaches out to the point someone's actually on it? I'm curious where the handoffs happen and how you keep track of who's responding.
@@ -18758,6 +19324,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 9.7. No material failure. The reply safely advances the conversation, though clarifying rollout scope would help establish a realistic timeline more directly than asking only about urgency.*
 
+*Judge (v2): 9.5. The response appropriately avoids an unsupported launch promise and offers a concrete next step. Its discovery question explores urgency but not what must be operational to establish a realistic timeline.*
+
 **fix1**
 
 > I'll confirm the exact onboarding timeline and come back to you with dates, but let's lock in the start. If we sign this week, what does your team need working on day one?
@@ -18827,6 +19395,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Growth is forty-four a seat, and the Salesforce connector is included at that level, so the per-seat price is right. One thing to flag: the connector itself carries a separate $300 a month add-on, so forty-four a seat plus that. How many technicians are you looking at? That way I can put the full monthly number in front of you.
 
 *Judge (v1): 4.0 — missed_available_evidence, reference_conflict_ignored, unsupported_company_claim, unsafe_commitment. It treats an expired, internally inconsistent sheet as current pricing, confidently quoting $44 per seat plus $300/month. Mentioning both conflicting entries does not establish which applies.*
+
+*Judge (v2): 4.0 — reference_conflict_ignored, missed_available_evidence, unsafe_commitment. It turns contradictory, expired pricing into a confirmed $44-per-seat plus $300/month quote. Mentioning both entries does not resolve their conflict or establish current pricing.*
 
 **fix1**
 
@@ -18901,6 +19471,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > That asterisk matters, so let me be straight with you: the thirty days is an estimate, and it depends on your data being ready on your side. What I can commit to in the contract is the onboarding being free and a defined go-live plan with dates we both sign off on. If your data's ready when we start, thirty days is realistic. What does your data readiness look like right now?
 
 *Judge (v1): 4.0 — unsupported_company_claim, unsafe_commitment. The estimate clarification is grounded, but the seller then promises contractual free onboarding and a jointly signed go-live plan without evidence of authority or current terms. The source is expired and limits free onboarding to Growth.*
+
+*Judge (v2): 4.0 — unsafe_commitment, unsupported_company_claim, missed_available_evidence. It correctly qualifies thirty days as an estimate, but ignores the sheet’s expired status and promises contractually free onboarding without confirmed Growth eligibility or current authority. Authority to commit to the contractual go-live plan is also unestablished.*
 
 **fix1**
 
@@ -18983,6 +19555,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* old sheet, current price, send new sheet
 
 *Judge (v1): 4.0 — unsupported_company_claim, missed_available_evidence. Invents that onboarding is no longer free. “Dispatchers are free either way” also obscures the old sheet’s paid-dispatcher rule, while “a year old” replaces the available, precise validity date with an unsupported approximation.*
+
+*Judge (v2): 4.0 — unsupported_company_claim, unsupported_policy_claim. It asserts that free onboarding has ended without evidence of a current policy. It also omits the documented expiration date and dismisses the discrepancy without acknowledging why the prospect reasonably relied on the partner sheet.*
 
 **fix1**
 
@@ -19070,6 +19644,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 4.0 — reference_conflict_ignored, unsupported_company_claim, unsafe_commitment. It correctly declines to confirm stacking, but offers the expired sheet’s 15% discount as currently available. Confirming only the partner portion leaves the baseline pricing unverified.*
 
+*Judge (v2): 4.0 — reference_conflict_ignored, unsafe_commitment. It correctly declines to assume stacking, but offers the 15% discount as available despite the sheet’s December 2025 expiration and proposes verifying only the partner portion.*
+
 **fix1**
 
 > I can't stack those two. The 15% is a multi-year prepaid discount on the sheet, and the 12% is the partner's own authority to close a deal this quarter, so they're separate levers and they don't combine. What I can do is put the best single offer in front of you, so tell me which matters more, the three-year term or the lowest first-year number, and I'll get you the right figure.
@@ -19147,6 +19723,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't go below what's on the sheet, but I can make the mid tier work harder for you. If you're ready to move, let's look at term length and volume together, since that's where I have room. What budget number are you working with?
 
 *Judge (v1): 4.0 — unsupported_company_claim, unsupported_policy_claim. Invents a price-sheet floor and authority to negotiate term length and volume. The budget question is useful, but the seller cannot safely repeat the unsupported commercial claims.*
+
+*Judge (v2): 4.0 — unsupported_company_claim, unsupported_policy_claim. Asserts a sheet-based price floor and negotiating flexibility on term and volume without supporting evidence. The reply is speakable, but those invented commercial constraints could mislead the prospect.*
 
 **fix1**
 
@@ -19226,6 +19804,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 4.0 — unsupported_company_claim, unsupported_policy_claim. The reply repeats unverified pricing restrictions and term/volume discount authority as established facts. The earlier copilot statement does not validate those claims, and saying Friday is no problem adds an unwarranted assurance.*
 
+*Judge (v2): 4.0 — unsupported_company_claim. It treats earlier copilot assertions as verified pricing authority, claiming flexibility on term and volume without company evidence. Repeating the same budget question also provides limited progress under the prospect’s explicit time pressure.*
+
 **fix1**
 
 > I hear you, and I want to get you something you can take to sign-off. I can't go below our published mid tier price, but I can put together term or volume options that bring the total down. What number do you need to hit, and can we get the paperwork moving before Friday?
@@ -19300,6 +19880,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 4.0 — unsupported_company_claim, unsafe_commitment. The answer treats a three-year term and better pricing as authorized without supporting commercial evidence. Earlier Natively assertions do not establish that authority.*
 
+*Judge (v2): 4.0 — unsupported_company_claim, unsafe_commitment. It presents a three-year term and improved pricing as available without supporting commercial evidence. Earlier copilot assertions about pricing flexibility do not establish actual authority.*
+
 **fix1**
 
 > Three years works, and that's the kind of commitment I can take to my team to build something real around. I still can't go below the published mid tier price, but on a three year term I can put together volume and term options that bring your total down. What number do you need to hit for sign-off?
@@ -19373,6 +19955,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > QuickBooks Online, yes, that's included on Growth. Salesforce is the one that isn't, the Field Service connector sits on Enterprise. What are you using Salesforce for on the office side? If it's mostly customer records, there may be a lighter way to bridge it.
 
 *Judge (v1): 9.6. The tentative bridge suggestion is plausible given Growth’s REST API, but it could imply an easier integration path before feasibility is confirmed. The core plan distinction and discovery question are accurate and useful.*
+
+*Judge (v2): 9.6. The tentative suggestion of a “lighter way to bridge it” is vague. It does not promise unsupported functionality, but could more clearly distinguish a possible custom integration from an included connector.*
 
 **fix1**
 
@@ -19456,6 +20040,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 4.0 — missed_available_evidence, unsupported_company_claim. Omits Enterprise’s custom pricing and 100-seat minimum, then implies forty technicians qualify for volume-based flexibility and an Enterprise quote. This misleads the prospect about the applicable commercial constraints.*
 
+*Judge (v2): 4.0 — missed_available_evidence, unsupported_company_claim. It omits custom pricing and the explicit 100-seat minimum, invents volume-based flexibility at forty seats, and proposes a forty-seat Enterprise quote despite the documented minimum. The gist reinforces that misleading next step.*
+
 **fix1**
 
 > Enterprise is custom priced, so I can't put a number on it from here, and there's a 100 seat minimum, so forty techs wouldn't qualify on their own. What I can do is get you a scoped quote and check whether there's a path at your size. Would it help if I brought our team in on that this week?
@@ -19533,6 +20119,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't have the mid tier's support hours and uptime commitment in front of me, so I won't quote a number I can't stand behind. Let me pull the exact terms and send them to you today. While I do, what does your team need on response time and coverage?
 
 *Judge (v1): 9.7. No material issue. The same-day follow-up deadline is a discretionary promise the seller should adopt only if feasible.*
+
+*Judge (v2): 9.5. No material issue. The opening is slightly defensive, but the response appropriately avoids unsupported terms, gives a concrete follow-up, and advances discovery.*
 
 **fix1**
 
@@ -19627,6 +20215,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* confirm support terms, ask their needs
 
 *Judge (v1): 8.0. At 46 words versus 50 previously, it barely shortens the response and retains the entire lengthy, defensive opening.*
+
+*Judge (v2): 7.8. It barely shortens the previous answer, retaining the entire opening disclaimer and all three sentences. The content remains safe, but the requested condensation is largely unfulfilled.*
 
 **fix1**
 
@@ -19724,6 +20314,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 7.7 — missed_available_evidence. It correctly refuses a guarantee but contradicts the source by starting the implementation clock at data delivery rather than signature. Calling November 1 feasible also needs qualification because the prospect’s plan and readiness are unconfirmed.*
 
+*Judge (v2): 7.6 — missed_available_evidence. It appropriately refuses a guarantee but incorrectly makes clean-data delivery the clock’s starting point rather than signature. Calling November 1 'genuinely in reach' is also premature before establishing readiness.*
+
 **fix1**
 
 > I can't promise a date I don't control, and I'd rather be straight with you than sign you up for a surprise. What I can do is get you the fastest path: if we're on Growth, typical go-live runs four to six weeks from signature, and that clock starts once your technician, customer and asset data is in clean. So the real question is your data. How ready is it, and who on your side owns getting it to us?
@@ -19798,6 +20390,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 4.0 — unsupported_company_claim, missed_available_evidence. The refusal is appropriate, but saying the clock starts only after data cleanup contradicts the signature-based estimate. The answer also repeats the previous turn and unnecessarily frames the dependency as the customer's fault.*
 
+*Judge (v2): 4.0 — unsupported_company_claim, missed_available_evidence. The opening repeats an unsupported data-cleanup start rule, contradicting the signature-based timeline it then cites. It also repeats the prior discovery question and unnecessarily blames the prospect.*
+
 **fix1**
 
 > Because the go-live clock doesn't start until your technician, customer and asset data is in clean, and that part isn't on my side of the table. On Growth, typical go-live is four to six weeks from signature, and those dates are estimates, not commitments I can sign. So if we're signing today, the fastest path is you telling me who owns that data and how ready it is.
@@ -19871,6 +20465,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > For budget, I'd ask how they've handled this kind of spend before and whether there's an approved range for this year. For timeline, I'd ask what's driving the date and what happens if it slips. Then I'd ask who signs off, so I know what the next step actually is.
 
 *Judge (v1): 9.4. The timeline prompt assumes a target date already exists without asking when the prospect wants to implement. Otherwise, the advice is concise, relevant, and appropriate for a private seller request.*
+
+*Judge (v2): 9.4. The timeline prompt assumes a target date already exists rather than first establishing when the prospect needs the solution. Otherwise, the advice is relevant, concise, and appropriate for a private request.*
 
 **fix1**
 
@@ -19965,6 +20561,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* ask budget range, then timeline driver
 
 *Judge (v1): 8.3. The budget wording is somewhat softer, but the timeline probe repeats the earlier pressure about slippage. It supplies two questions rather than one concise alternative and overstates that they will produce a number and date.*
+
+*Judge (v2): 8.3. It provides two compound questions rather than one softer alternative. The timeline question repeats the previous suggestion and retains the pressure-oriented 'what happens if it slips?'*
 
 **fix1**
 
@@ -20064,6 +20662,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 8.7. The total-cost reframe is vague, and asking what FieldPilot doesn't cover presupposes a gap the prospect hasn't identified. The reply could more directly explain that a premium needs a demonstrable value difference.*
 
+*Judge (v2): 8.4. The reply pivots to discovery without clearly explaining when a premium would be justified. Its claim about costs after the first invoice is vague, and the closing question presumes FieldPilot leaves a gap.*
+
 **fix1**
 
 > FieldPilot's a real option, and thirty percent is thirty percent. What I'd want to know is what the invoicing has to do once it's live, because that's usually where the gap shows up. Can I ask what happens today when an invoice needs to change after it's sent, and who owns that on your side?
@@ -20146,6 +20746,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v1): 8.7. The verification language appropriately avoids unsupported claims, but the final discovery question repeats the earlier deflection when the prospect is pressing for a simple capability answer.*
 
+*Judge (v2): 8.4. The verification fallback is appropriate, but the prospect is pressing for a capability answer after an earlier deflection. Another discovery question prolongs that deflection and weakens an otherwise usable reply.*
+
 **fix1**
 
 > I didn't say that. What I said is that the part that matters is what happens after an invoice goes out, and that's where I want to make sure we're comparing the same thing. So tell me what has to happen today when an invoice needs to change, and I'll show you exactly how we handle it.
@@ -20219,6 +20821,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* built to run on, not cheapest
 
 *Judge (v1): 4.0 — unsupported_company_claim. The central positioning claim is unsupported and implies unestablished competitive advantages. Another question about FieldPilot's gaps repeats the earlier evasiveness instead of supplying a credible reason to choose the seller.*
+
+*Judge (v2): 4.0 — unsupported_company_claim. The response substitutes unsupported operational-superiority positioning for a demonstrated differentiator. It then redirects to another question about FieldPilot, repeating the evasiveness that prompted the prospect’s demand.*
 
 **fix1**
 
@@ -20358,6 +20962,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The small model, KWS-Tiny, gets **93.2%** test accuracy with STAGE-KD, plus or minus 0.3 over five seeds. For comparison, standard KD gives 91.8% and training from scratch 89.7%.
 
+*Judge (v2): 10.0. No material issues. The response accurately reports the result and variability, with brief, relevant baseline comparisons.*
+
 **fix10**
 
 > The small model, KWS-Tiny, got **93.2%** test accuracy with STAGE-KD, averaged over five seeds with a standard deviation of 0.3. For comparison, training from scratch gave 89.7% and standard KD gave 91.8%, so STAGE-KD is the best of the three student configurations. That's from Table 5.1 in Chapter 5.
@@ -20371,6 +20977,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* KWS-Tiny 93.2% with STAGE-KD
 
 *Judge (v2): 10.0. No material issue. The response immediately gives the correct result, accurately reports variability, and adds concise, supported baseline comparisons.*
+
+**fix12 (Seminar rows only)**
+
+> The small model, KWS-Tiny, got **93.2%** test accuracy with STAGE-KD, averaged over five seeds with a standard deviation of 0.3. For comparison, training from scratch gave 89.7% and standard KD gave 91.8%, so STAGE-KD is the number I'd quote as the headline result.
+>
+> *Summary chip:* KWS-Tiny 93.2% with STAGE-KD
+
+*Judge (v2): 9.9. No substantive issue. The closing remark about quoting a headline result adds little to an otherwise accurate, directly speakable answer.*
 
 ---
 
@@ -20448,6 +21062,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* five seeds, bootstrap over utterances
 
+*Judge (v2): 7.4. “Five seeds is enough” overstates the evidence; bootstrapping test utterances does not establish seed-level robustness. The response names the method but omits the reported ±0.3 spread, 10,000 resamples, and significance result.*
+
 **fix10** — edited after streaming
 
 > Five seeds is a real limit, and it's in the limitations section. What I did instead was pool the predictions of the five seeds and test the difference with a paired bootstrap over test utterances, 10,000 resamples, rather than a seed-level t-test, because five seeds give too few samples for a seed-level test to be informative. That difference comes out significant at p less than 0.01. The ablations used three seeds only, and the ablation differences are small relative to seed variance and should be treated as indicative.
@@ -20459,6 +21075,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* five seeds, bootstrap over utterances
 
 *Judge (v2): 8.3 — missed_available_evidence. The defense omits the available ±0.3-point standard deviation, 10,000 resamples, and p < 0.01. It also phrases the limitation on seed-level significance testing more categorically than the source.*
+
+**fix12 (Seminar rows only)**
+
+> Five seeds is enough for the accuracy comparison, which is why I pooled the predictions and ran a paired bootstrap over test utterances rather than a seed-level test. The limitation is on the variance estimate, and I say so in 5.6. The ablations are the weaker part, since those used three seeds and the differences there are small relative to seed variance, so I treat them as indicative rather than conclusive.
+>
+> *Summary chip:* five seeds, bootstrap over utterances
+
+*Judge (v2): 7.1 — missed_available_evidence. The opening overstates five seeds as sufficient; the utterance-level bootstrap does not resolve seed-level uncertainty. It omits the reported ±0.3 standard deviation, 10,000 resamples and significance result that would substantiate a balanced defense.*
 
 ---
 
@@ -20536,6 +21160,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* energy not measured, latency 14.2 ms
 
+*Judge (v2): 9.7. No material issue. The RAM figure and cross-method comparison add slightly more detail than the energy question requires.*
+
 **fix10**
 
 > Energy per inference wasn't measured. The Arlo M4 board doesn't have a current-sense header, so I report latency instead, 14.2 ms per 1-second window, as a proxy for cost. Energy profiling is listed as future work.
@@ -20549,6 +21175,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* energy not measured, latency 14.2 ms used
 
 *Judge (v2): 10.0. None. The answer directly acknowledges the measurement limitation, gives the documented reason, and accurately presents latency as a proxy rather than an energy result.*
+
+**fix12 (Seminar rows only)**
+
+> The thesis doesn't report an energy cost per inference. Section 5.2 says energy per inference was not measured, because the Arlo M4 board lacks a current-sense header, and latency is used as a proxy for cost instead. What we do have is **14.2 ms per window** on the Arlo M4 at 80 MHz, with a peak RAM of 96 KB, and that's identical across all three training methods since the deployed architecture is the same.
+>
+> *Summary chip:* energy not measured, latency 14.2 ms
+
+*Judge (v2): 9.6. The opening summarizes the thesis rather than directly owning the measurement limitation as the presenter. RAM and cross-method comparisons are accurate but unnecessary for this narrow energy question.*
 
 ---
 
@@ -20622,6 +21256,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > That's the reading the results support, with one caveat. Removing stage 2, the feature alignment, drops accuracy to 92.0%, while removing stage 3 drops it to 92.9%, so stage 2 does contribute most of the gain. But those ablation differences are small relative to seed variance, and the ablations used only 3 seeds, so that should be treated as indicative rather than a firm claim.
 
+*Judge (v2): 9.9. No material issue. The reply faithfully reports the ablations and uncertainty, though 'does contribute most' is slightly more definitive than the evidence warrants before the caveat.*
+
 **fix10**
 
 > That's the reading I'd put on it, with one caveat. Removing stage 2, the feature alignment, drops accuracy to 92.0%, and removing stage 3 drops it to 92.9%, so stage 2 does contribute most of the gain. But those ablation differences are small relative to seed variance, and the ablations used three seeds, so I treat that as indicative rather than settled.
@@ -20635,6 +21271,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* stage 2 drives most gain, indicative only
 
 *Judge (v2): 10.0. No material issue: the reply accurately supports qualified agreement with ablation results and explicitly acknowledges their limited evidential strength.*
+
+**fix12 (Seminar rows only)**
+
+> That's the reading I'd give it, with one caveat. Removing stage 2, the feature alignment, drops accuracy to 92.0%, and removing stage 3 drops it to 92.9%, so stage 2 does look like the bigger contributor. But the ablations used only 3 seeds, and those differences are small relative to seed variance, so I'd call it indicative rather than settled.
+
+*Judge (v2): 10.0. No material issue; the response supports the interpretation with the ablation results while clearly preserving the thesis's uncertainty.*
 
 ---
 
@@ -20710,6 +21352,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The baselines in this work were scratch training and standard KD, and that's listed as a limitation. QAT changes how the deployed weights are represented, while STAGE-KD changes how the same 212k-parameter architecture is trained. The gain is 1.4 points over standard KD at identical latency and memory.
 
+*Judge (v2): 8.9. The answer accurately bounds the reported results but only implicitly acknowledges that QAT was not tested. It leaves the superiority challenge unresolved and oversimplifies QAT by contrasting weight representation with training.*
+
 **fix10** — edited after streaming
 
 > What I can say is that STAGE-KD changes only how the 212k student is trained, so the deployed architecture, latency and memory stay identical. QAT is a different axis.
@@ -20719,6 +21363,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > My baselines were scratch training and standard KD, and that's listed as a limitation in section 5.6. What I can say is that all three methods produce the same architecture, so latency and memory are identical across them. STAGE-KD gains 1.4 points over standard KD at no on-device cost.
 
 *Judge (v2): 9.3. The baseline limitation answers the QAT question indirectly, but the reply should explicitly distinguish the demonstrated gain over standard KD from an untested claim of superiority over QAT.*
+
+**fix12 (Seminar rows only)** — edited after streaming
+
+> The baselines in this work are scratch training and standard KD. What I can say is that STAGE-KD is orthogonal to it: it changes how the 212k student is trained, not the deployed architecture, so latency and memory stay at **14.2 ms** and **96 KB**.
+
+*Judge (v2): 8.1 — important_question_unanswered. The actual baselines and deployment figures are accurate, but the central challenge remains unresolved: no evidence establishes superiority over QAT. Calling the methods orthogonal does not clearly acknowledge that limitation.*
 
 ---
 
@@ -20800,6 +21450,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* noise gap within variance, ablations indicative
 
+*Judge (v2): 9.6. The robustness disclaimer is repeated, and calling the ablation story 'separate' is less clear than explicitly distinguishing tentative accuracy gains from unproven noise robustness.*
+
 **fix10**
 
 > The noise result doesn't support a robustness claim: under babble noise at 0 dB SNR, STAGE-KD reaches 71.5% against 70.9% for standard KD, and that gap sits within seed variance, so section 5.5 makes no claim that STAGE-KD improves noise robustness. So it's separate from the ablation story, which is about which stage contributes the gain: removing stage 2 drops accuracy to 92.0% and removing stage 3 to 92.9%, read as stage 2 contributing most, though those differences are small relative to seed variance and only indicative.
@@ -20813,6 +21465,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* noise gap within variance, no robustness claim
 
 *Judge (v2): 8.8. The ablation sentence is too generic: it omits the 92.0% result when feature alignment is removed and therefore never identifies the stage tentatively responsible for most of the accuracy gain.*
+
+**fix12 (Seminar rows only)**
+
+> The noise results don't support a robustness claim: under babble noise at 0 dB SNR, STAGE-KD reaches 71.5% against 70.9% for standard KD, and that gap sits within seed variance, so I make no claim that STAGE-KD improves noise robustness. That's separate from the ablation story, which is about accuracy on clean test data: removing stage 2 drops it to 92.0% and removing stage 3 to 92.9%, so stage 2 looks like the bigger contributor, though those differences are small relative to seed variance and I treat them as indicative.
+>
+> *Summary chip:* noise gap within variance, not a robustness claim
+
+*Judge (v2): 9.7. No substantive issue. The first sentence repeats the robustness disclaimer, and both sentences are slightly dense for spoken delivery.*
 
 ---
 
@@ -20876,6 +21536,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* 14 clinics, 7 intervention, 7 control
 
+*Judge (v2): 10.0. No material issues; the response directly answers the question with accurate allocation and brief, supported recruitment context.*
+
 **fix10**
 
 > 14 clinics were randomised, 7 intervention and 7 control, out of 31 district clinics invited.
@@ -20885,6 +21547,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 14 clinics in total: 7 intervention and 7 control, out of 31 invited in the district.
 
 *Judge (v2): 10.0. None; the answer is accurate, fully grounded, and immediately speakable.*
+
+**fix12 (Seminar rows only)**
+
+> 14 clinics in total, 7 intervention and 7 control, out of 31 district clinics invited.
+
+*Judge (v2): 10.0. No material issue; the clinic count, allocation split, and number invited all match the source.*
 
 ---
 
@@ -20974,6 +21642,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* no clinical outcomes, attendance is the proxy
 
+*Judge (v2): 8.9. The closing sentence implies the planned longer trial would address clinical outcomes, although no clinical endpoints are specified. The opening also unnecessarily repeats that the summary says health outcomes were not measured.*
+
 **fix10**
 
 > No, we didn't measure clinical outcomes. The primary outcome was attendance and the secondary was late cancellation, so readmissions and health outcomes weren't part of this trial. What I'd say to a health board is that attendance is the thing we can move and measure at scale, and a missed appointment is a slot someone else couldn't use. The honest position is that this shows a 6.5 percentage point attendance gain, and whether that translates into clinical benefit is the next question, not one this data answers.
@@ -20991,6 +21661,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* attendance only, no clinical outcomes measured
 
 *Judge (v2): 8.7. Fewer late cancellations do not establish earlier notice for refilling slots. Also, “the follow-on trial is where that gets tested” sounds more definite than the documented plan, though the subsequent proposal partly qualifies it.*
+
+**fix12 (Seminar rows only)**
+
+> No, we didn't measure clinical outcomes. The primary outcome was attendance and the secondary was late cancellation, and the summary states plainly that clinical health outcomes were not measured. So I can't claim anyone got healthier from this.
+> 
+> What I'd say to a health board is that attendance is the thing we can move and measure at this stage, and it's the step that has to happen before any clinical benefit. A missed appointment is a patient who didn't get seen. The honest position is that this trial shows the reminders work on attendance, and the clinical question is the next trial, not this one.
+>
+> *Summary chip:* attendance only, clinical outcomes not measured
+
+*Judge (v2): 8.9. The health-board rationale is vague despite an available 6.5-percentage-point attendance improvement. Calling clinical outcomes the next trial's question also risks implying a study plan that the reference does not establish.*
 
 ---
 
@@ -21064,6 +21744,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* reminders confounded, can't separate
 
+*Judge (v2): 10.0. No material issue; the response accurately explains the design limitation and proposed follow-up without attributing effectiveness to either reminder individually.*
+
 **fix10**
 
 > The design can't tell us that. Both reminders were always sent together, so there's no way to separate the 48-hour effect from the 3-hour one. That's exactly why the follow-on trial would test them as separate arms.
@@ -21077,6 +21759,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* reminders sent together, effect not separable
 
 *Judge (v2): 10.0. None; the response directly answers the attribution question without inventing a result and naturally connects the limitation to the follow-up design.*
+
+**fix12 (Seminar rows only)**
+
+> Neither one, and that's the honest answer. Both reminders were always sent together, so the design can't separate the 48-hour effect from the 3-hour effect. What we can say is that the pair together was associated with a 6.5 percentage point increase in attendance. Separating them is exactly what the follow-on trial would do, with each reminder as its own arm.
+>
+> *Summary chip:* reminders sent together, effects inseparable
+
+*Judge (v2): 8.8. The opening “Neither one” misleadingly implies neither reminder worked, rather than that their individual effects are unknown. The following sentences correctly explain the limitation, combined result, and follow-on design.*
 
 ---
 
@@ -21152,6 +21842,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* older subgroup underpowered, not no benefit
 
+*Judge (v2): 9.7. The final sentence repeats the uncertainty, and 'the summary notes' sounds slightly more like a source recap than the presenter’s own defense.*
+
 **fix10**
 
 > I'd be careful about that reading. The over-65 subgroup had an odds ratio of 1.09 with a confidence interval of 0.81 to 1.47, so it's not significant, but that's a null result, not evidence of no effect. That subgroup was only 412 appointments, and the trial wasn't powered for subgroup analysis, so the interval is wide enough to include a meaningful benefit. The summary itself says the weaker estimate may reflect lower mobile phone use or just the small subgroup, and the data can't tell those apart. So I'd say the honest conclusion is that we don't know yet whether older patients benefit, and that's exactly why the follow-on trial would randomise from all 31 clinics and run for 12 months.
@@ -21165,6 +21857,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* older subgroup underpowered, not evidence of no benefit
 
 *Judge (v2): 9.9. No material issue: the answer faithfully distinguishes an inconclusive subgroup result from evidence of no benefit and directly challenges the younger-only interpretation.*
+
+**fix12 (Seminar rows only)**
+
+> That's not what the subgroup result says. In patients aged 65 and over the odds ratio was 1.09 with a confidence interval of 0.81 to 1.47, so it's not significant, but that's a failure to detect an effect, not evidence of no effect. That subgroup was 412 appointments, and the trial wasn't powered for subgroup analysis, so the honest reading is that we can't tell from this data whether older patients benefit. The summary itself says the weaker estimate may reflect lower mobile phone use or just the small subgroup, and the data can't distinguish those.
+
+*Judge (v2): 9.7. The closing phrase “the summary itself says” is slightly document-facing; the answer would sound more natural if the presenter stated that limitation directly.*
 
 ---
 
@@ -21244,6 +21942,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* 6.5 point attendance gain, wide CI
 
+*Judge (v2): 9.8. Accurate, source-faithful, and immediately speakable; the adjusted odds ratio adds slightly more statistical detail than the requested bottom line needs.*
+
 **fix10**
 
 > Two timed SMS reminders were associated with a **6.5 percentage point** increase in attendance, from 71.9% to 78.4%, with an adjusted odds ratio of 1.41.
@@ -21257,6 +21957,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 6.5 point attendance gain, wide CI
 
 *Judge (v2): 9.8. Accurate, source-faithful, and immediately speakable; the adjusted odds ratio adds slightly more statistical detail than the requested bottom line needs.*
+
+**fix12 (Seminar rows only)**
+
+> Two timed SMS reminders raised outpatient attendance by 6.5 percentage points, from 71.9% to 78.4%, with an adjusted odds ratio of 1.41, though the confidence interval is wide because only 14 clinics were randomised.
+>
+> *Summary chip:* reminders lifted attendance 6.5 points
+
+*Judge (v2): 9.8. No material issue; the odds ratio adds some technical load to an otherwise clear, faithful one-sentence bottom line.*
 
 ---
 
@@ -21326,6 +22034,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Because appointments within the same clinic aren't independent. A plain chi-square treats all 2,406 appointments as if they were separate, which overstates the precision. The mixed-effects model with a clinic random intercept accounts for that clustering, and it also lets me adjust for age band, sex and appointment type.
 
+*Judge (v2): 10.0. No material issue; the response directly and accurately explains the methodological choice in immediately speakable language.*
+
 **fix10**
 
 > Because appointments within the same clinic aren't independent. A chi-square treats all 2,406 appointments as separate observations, which overstates precision. We used mixed-effects logistic regression with a clinic random intercept, adjusting for age band, sex and appointment type, so the clustering at clinic level is accounted for.
@@ -21335,6 +22045,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Because appointments within the same clinic aren't independent. A chi-square treats all 2,406 appointments as separate observations, which overstates precision. The mixed-effects model with a clinic random intercept accounts for that clustering, and it lets me adjust for age band, sex and appointment type at the same time.
 
 *Judge (v2): 10.0. No material issue; the reply directly explains clustering, overstated precision, and covariate adjustment using the supplied study details.*
+
+**fix12 (Seminar rows only)**
+
+> Because appointments within the same clinic are correlated, so a plain chi-square would treat all 2,406 appointments as independent and overstate our precision. The mixed-effects model with a clinic random intercept accounts for that clustering, and it also lets us adjust for age band, sex and appointment type.
+
+*Judge (v2): 10.0. No material issue; the answer accurately explains the methodological choice using the supplied evidence and is immediately speakable.*
 
 ---
 
@@ -21404,6 +22120,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Nile red isn't the confirmation step, it's the counting step. I ran micro-FTIR on a random 15% of the counted particles, and 81% of those came back as synthetic polymers, with the rest mostly cellulose or protein. So the lipid and other natural organic matter signal is real, and it's why I list it as a limitation, but the FTIR subset is what tells me the majority of what I counted is plastic.
 
+*Judge (v2): 9.4. Slightly overstates the evidence by implying a demonstrated lipid signal. The slides document nonplastic particles, mostly cellulose or protein, but do not specifically establish lipid contamination.*
+
 **fix10**
 
 > Nile red isn't the identification step, it's the counting step. I confirmed a random 15% of the counted particles by micro-FTIR, and 81% of those came back as synthetic polymers, with the rest mostly cellulose or protein. So the false positives are real but bounded, and I flag that in the limitations.
@@ -21413,6 +22131,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Nile red does bind lipids, so I don't rely on the stain alone to call something plastic. A random 15% of the counted particles went to micro-FTIR, and 81% of those came back as synthetic polymers, with the rest mostly cellulose or protein. That's the confirmation step, and it's also why I list the stain's false positives as a limitation.
 
 *Judge (v2): 9.9. No material issue: the reply accurately presents the confirmation evidence and acknowledges false positives in immediately speakable language.*
+
+**fix12 (Seminar rows only)**
+
+> Nile red does bind lipids, so I don't rely on the stain alone to call something plastic. A random 15% of the counted particles went to micro-FTIR, and 81% of those came back as synthetic polymers, with the rest mostly cellulose or protein. That's the confirmation step, and it's also why I flag the stain's false positives as a limitation.
+
+*Judge (v2): 10.0. No material issue. The response gives an immediately speakable, evidence-grounded defense without claiming that every counted particle was confirmed plastic.*
 
 ---
 
@@ -21494,6 +22218,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* no discharge data, so no correlation
 
+*Judge (v2): 9.0. The core answer is accurate, but the final sentence implies paired water sampling would enable a load–flow correlation. Water samples alone do not supply the missing discharge-volume data.*
+
 **fix10**
 
 > We didn't have access to the plant's discharge records, so I can't give you a correlation between particle counts and effluent volume. That's stated as a limitation on slide 11. What the sampling days do show is a clear upstream-downstream difference: 3.8 particles per individual upstream versus 7.1 downstream, and 0.42 versus 0.83 particles per gram wet tissue, with the Kruskal-Wallis test at H = 21.4, p < 0.001. Pairing counts with discharge volume is exactly what I'd want next, alongside water samples.
@@ -21507,6 +22233,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* no discharge data, so no correlation
 
 *Judge (v2): 9.8. No substantive error. The slide-number reference and site-distance detail slightly dilute an otherwise direct, accurate spoken answer.*
+
+**fix12 (Seminar rows only)**
+
+> We couldn't test that. Slide 11 says we didn't have access to the plant's discharge records, so the counts couldn't be related to effluent volume. What the data do show is a clean spatial split: downstream mussels averaged 7.1 particles per individual against 3.8 upstream, and every downstream site differed from every upstream site on the Dunn tests. Pairing counts with discharge volume is exactly what I'd want in a repeat season, alongside water samples.
+>
+> *Summary chip:* no discharge data, spatial split only
+
+*Judge (v2): 9.8. The additional means and Dunn-test recap slightly lengthen an otherwise direct, fully supported answer.*
 
 ---
 
@@ -21586,6 +22320,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > What our own deck reports: downstream mussels carried roughly double the load of upstream mussels, 7.1 versus 3.8 particles per individual, and 0.83 versus 0.42 particles per gram wet tissue, with the difference significant across all six sites. How do you want the Lake Veder comparison handled?
 
+*Judge (v2): 7.1 — important_question_unanswered. The Brenn figures are correct, but the response never supplies an honest way to address the unread survey; it asks the user to solve the very problem they brought to the copilot.*
+
 **fix10** — edited after streaming
 
 > I can't compare the two directly. What I can tell you is what our own numbers show: downstream mussels averaged 7.1 particles per individual against 3.8 upstream, and 0.83 versus 0.42 particles per gram of wet tissue, so roughly double on both measures. I'll look at the Lake Veder report and come back to you.
@@ -21595,6 +22331,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't compare our numbers to the Lake Veder survey directly. What I can say is what the deck shows: downstream mussels carried roughly double the load of upstream mussels, 7.1 versus 3.8 particles per individual and 0.83 versus 0.42 particles per gram, with the difference significant across all six sites. I'd want to see the Lake Veder methods before drawing any comparison, since sampling season, size cutoff and site placement all affect the counts.
 
 *Judge (v2): 9.4. “Significant across all six sites” is slightly ambiguous: the reported significant contrasts were downstream versus upstream, not every site versus every other site.*
+
+**fix12 (Seminar rows only)** — edited after streaming
+
+> I can't compare our numbers to the Lake Veder survey directly. What I can say is what the Brenn River Catchment work shows: downstream mussels carried roughly double the microplastic load of upstream mussels, both by count and by tissue weight. If you want the comparison, I'd need to see the Lake Veder figures first.
+
+*Judge (v2): 8.6 — missed_available_evidence. The reply correctly avoids inventing Lake Veder findings, but omits the available 3.8 and 7.1 particles-per-individual means, leaving a numerical question with only a relative summary.*
 
 ---
 
@@ -21662,6 +22404,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Three things. On contamination, procedural blanks ran with every batch of ten samples, mean 0.6 particles per blank, subtracted from the counts, plus cotton lab coats, filtered water and covered glassware. On confirmation, a random 15% of counted particles went to micro-FTIR, and 81% of those came back as synthetic polymers. On the doubling claim, the deck doesn't state a confidence level: the ratio holds by count and by weight, 3.8 to 7.1 and 0.42 to 0.83, with p below 0.001, on a 15% subset and a single season.
 
+*Judge (v2): 7.7 — ai_epistemic_leak. The confidence assessment becomes source commentary (“the deck doesn't state a confidence level”) rather than the presenter’s judgment. “On a 15% subset” also misleadingly suggests the downstream comparison used only that subset.*
+
 **fix10** — edited after streaming
 
 > Contamination: procedural blanks with every batch of ten samples, mean 0.6 particles per blank, subtracted from counts, plus cotton lab coats, filtered water and covered glassware. On confirmation, a random 15% of counted particles went to micro-FTIR, and 81% of those came back as synthetic polymers. So the double claim is a ratio, and the same correction applies to both sides, which is why I'd stand behind it as roughly double, with the caveat that it rests on that 15% subset and one season.
@@ -21675,6 +22419,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* blanks, 15% FTIR, roughly double
 
 *Judge (v2): 8.1 — missed_available_evidence. The confidence assessment omits the available site-test and post-hoc results and calls the ratio “solid” without distinguishing observed counts from true-plastic burden. “The deck doesn't state” also sounds unlike a presenter owning the analysis.*
+
+**fix12 (Seminar rows only)**
+
+> On contamination, we ran procedural blanks with every batch of ten samples, mean 0.6 particles per blank, and subtracted that from the counts, plus cotton lab coats, filtered water and covered glassware. On confirmation, a random 15% went to micro-FTIR and 81% of those came back as synthetic polymers. So the doubling is a count-based result, and I'd call it robust but not exact.
+>
+> *Summary chip:* blanks subtracted, 15% FTIR, doubling holds
+
+*Judge (v2): 8.5. The confidence claim is asserted rather than justified. “Robust” and the gist’s “doubling holds” gloss over the implications of incomplete confirmation and residual false positives, without citing the supporting comparisons.*
 
 ---
 
@@ -21752,6 +22504,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* range likely to contain the true value
 
+*Judge (v2): 8.1 — visible_internal_reasoning, ai_epistemic_leak. The file disclaimer exposes copilot metadata that the presenter must remove. Although the repeated-sampling explanation is sound, “likely to contain” in the opening definition and gist risks reinforcing the probability misconception being corrected.*
+
 **fix10**
 
 > A confidence interval is a range built from your sample that's meant to capture the true population value at a stated rate. If you compute 95% intervals the same way over and over, about 95% of them will contain the true value. The common trap is saying "there's a 95% chance the true value is in this particular interval",  that's not quite right, because the true value is fixed and the interval either covers it or doesn't. What the 95% describes is the long-run performance of the method, not the probability for any one interval. And a wider interval means less precision, usually from a smaller sample or more variability.
@@ -21765,6 +22519,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* range from sample, 95% is the procedure
 
 *Judge (v2): 9.5. Accurate and directly speakable, though 'true parameter' and 'property of the procedure' are slightly abstract for an audience member who is already confused.*
+
+**fix12 (Seminar rows only)**
+
+> A confidence interval is a range built from your sample that would capture the true value a set percentage of the time if you repeated the study. So a 95% interval doesn't mean there's a 95% chance the true value sits inside this particular range. It means the procedure that produced it covers the truth in 95% of samples. The interval you actually got is one draw from that procedure, so it either contains the true value or it doesn't, and you can't tell which from the interval alone. What it does tell you is precision: a narrow interval means a tighter estimate, a wide one means the data pin the value down less.
+>
+> *Summary chip:* coverage over repeated samples, not this one
+
+*Judge (v2): 9.7. Accurate and immediately speakable, though 'covers the truth' and 'one draw from that procedure' are slightly abstract for an already-confused listener.*
 
 ---
 
@@ -21838,6 +22600,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Knowledge distillation is training a smaller model to imitate the outputs of a larger one, so the small model picks up the big model's behaviour without carrying its full size. The large model acts as a teacher, and its soft predictions give the student more to learn from than hard labels alone.
 
+*Judge (v2): 9.5. The definition is accurate and concise, but “soft predictions” and “hard labels” are unexplained jargon for the explicitly non-specialist audience.*
+
 **fix10**
 
 > Knowledge distillation is when a smaller model is trained to imitate the outputs of a larger, more capable one, so it picks up much of that model's behaviour at a fraction of the size and cost. The big model acts as a teacher, and the small one learns from its predictions rather than only from the original labels.
@@ -21851,6 +22615,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* small model imitates a larger teacher
 
 *Judge (v2): 10.0. No material issue. The teacher–student explanation is accurate and immediately speakable; only “original labels” may be slightly technical for non-specialists.*
+
+**fix12 (Seminar rows only)**
+
+> Knowledge distillation is training a smaller model to imitate a larger one, so the small model picks up the bigger model's behaviour without carrying its size. The large model's outputs, often called soft labels, become the teaching signal for the compact one.
+
+*Judge (v2): 9.8. “Soft labels” and “teaching signal” introduce minor, avoidable jargon for non-specialists, but the two-sentence explanation is accurate and immediately speakable.*
 
 ---
 
@@ -21924,6 +22694,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Cross-validation gives you a better estimate of how the model performs, but it's still using every example to both tune and evaluate, so the final number is optimistically biased. A held-out set is data the model never touched during training or model selection, so it's the honest estimate of how it'll do on genuinely new data. In practice, cross-validation is used for model selection and the test set is kept untouched until the very end.
 
+*Judge (v2): 8.8. It presents optimism as inherent to cross-validation rather than a consequence of reusing validation scores for selection and reporting. Properly nested CV can supply an independent evaluation without a separate test set.*
+
 **fix10**
 
 > Cross-validation gives you a better estimate of how the model performs, but it doesn't give you a clean final number, because every fold has influenced the model selection at some point. A held-out set stays untouched until the very end, so the score you report on it is the one honest estimate of generalisation you have. In practice I'd use cross-validation for tuning and model choice, and keep the test set for that final check.
@@ -21937,6 +22709,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix12 (Seminar rows only)**
 
 > Cross-validation gives you a good estimate of how the model performs, but it reuses the same data for both tuning and evaluation, so it can be optimistic. A held-out test set stays untouched until the very end, which gives you one clean, unbiased check on data the model has never influenced. So the two do different jobs: cross-validation for model selection, the test set for that final honest number.
+
+*Judge (v2): 9.4. It implies cross-validation inherently mixes tuning and evaluation; optimism arises when the same CV results drive model selection. Nested CV can separate those stages without a separate holdout.*
 
 ---
 
@@ -22012,6 +22786,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Thank you both for your time. To my examiners, thank you for the questions. And to my supervisor, thank you for your guidance.
 
+*Judge (v2): 8.8. The tone and recipients are right, but 23 words lasts about 10–12 seconds rather than 30. “Thank you both” is also awkward for multiple examiners and a supervisor.*
+
 **fix10** — edited after streaming
 
 > Thanks to my examiners, and to my supervisor, thank you. I'm grateful to you all.
@@ -22021,6 +22797,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Thank you all for being here. My particular thanks to my supervisor. I'm grateful for your time and your attention today.
 
 *Judge (v2): 8.5. At 21 words, this is closer to ten seconds than thirty. It explicitly thanks the supervisor but leaves the examiners subsumed under “all,” making the closing more generic than requested.*
+
+**fix12 (Seminar rows only)** — edited after streaming
+
+> Thank you all for being here. To my examiners, thank you. And to my supervisor, thank you. I'm grateful to have had you both in this.
+
+*Judge (v2): 8.4. At 26 words, this lasts closer to 10–15 seconds than thirty. The repeated bare thanks feel thin, while “you both in this” is awkward when addressing multiple examiners and a supervisor.*
 
 ---
 
@@ -22080,6 +22862,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Happy to give you the timeline. Let me pull the exact start and end dates and follow up with you right after this.
 
+*Judge (v2): 8.9. With no timeline evidence, deferral is reasonable. The weakness is the slightly procedural wording and unnecessary emphasis on exact dates for a simple duration question.*
+
 **fix10**
 
 > I don't have the exact start and end dates in front of me, so I'd rather not give you a number I can't stand behind. What I can tell you is how the work broke down across its phases, and I'm happy to walk through that if it's useful.
@@ -22093,6 +22877,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix12 (Seminar rows only)** — edited after streaming
 
 > I'd rather not give you a number I can't stand behind. I'll confirm the precise timeline and follow up.
+
+*Judge (v2): 8.6. The reply avoids fabrication but sounds defensive for a friendly timeline question. Insisting on a precise follow-up makes this safe fallback more formal and evasive than necessary.*
 
 ---
 
@@ -22156,6 +22942,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > If you remember one thing, let me give you the honest version: I'd point you to the one finding that changed how I think about the problem, and say it in a sentence you could repeat to someone else tomorrow. Can I ask which part of the talk you found most surprising? That tells me which thread to pull on.
 
+*Judge (v2): 5.4 — coaching_instead_of_answer, important_question_unanswered. It describes how to formulate a takeaway instead of providing one, then asks the audience to select the thread. Although it avoids inventing a concrete result, it leaves the central request unanswered.*
+
 **fix10**
 
 > If you remember one thing, I'd want it to be the core claim the whole talk rests on, and I'd say it in one plain sentence rather than a summary of the slides. Everything else, the method, the results, the caveats, hangs off that one idea, so if that sticks, the rest has somewhere to attach.
@@ -22169,6 +22957,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix12 (Seminar rows only)**
 
 > If you remember one thing, I'd want it to be the core claim the whole talk rests on, and I'd say it in one plain sentence rather than a summary of the slides. Everything else, the method, the results, the caveats, hangs off that one idea, so if it sticks, the rest has somewhere to attach.
+
+*Judge (v2): 6.3 — coaching_instead_of_answer, important_question_unanswered. The response avoids fabricated findings but never supplies a takeaway. It describes how to phrase the core claim instead, leaving the presenter with polished filler rather than an answer.*
 
 ---
 
@@ -22258,6 +23048,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > If you want it tighter, cut the middle sentence and go straight from "Thanks for having me" to "I'll keep this brief so we can get to your questions."
 
+*Judge (v2): 6.0 — important_question_unanswered, insufficient_answer. It avoids the prohibited profile, but supplies neither background nor experience nor placeholders. The script merely repeats promises to be brief, and the shortening advice adds no useful substance.*
+
 **fix10** — edited after streaming
 
 > I'll keep this to thirty seconds and leave the detail for questions. I'd rather spend most of our time on the substance than on me. I'm happy to go deeper on any part of it once we get into questions.
@@ -22267,6 +23059,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Thanks for the chance to set the context. I'd rather let the substance carry the introduction. I'm glad to go as deep as you'd like on any part of it. So let me hand it back to you and take your questions.
 
 *Judge (v2): 6.3 — important_question_unanswered, insufficient_answer. It omits background and experience entirely and effectively declines the chair's request. Avoiding invented biography is appropriate, but replacing the requested introduction with a deflection does not help.*
+
+**fix12 (Seminar rows only)** — edited after streaming
+
+> I'll keep this to about thirty seconds and leave the detail for the questions.
+> 
+> "Thanks for having me. I'll keep this opening brief so we can get to the discussion, and I'm happy to go wherever your questions take us."
+> 
+> If you want it tighter, drop the second sentence and just say: "Thanks for having me. I'll keep this short so we can get to your questions, and I'm glad to fill in the background as we go."
+
+*Judge (v2): 6.5 — important_question_unanswered, insufficient_answer. Neither draft includes background or experience; both simply defer to questions and are far shorter than thirty seconds. Avoiding unauthorized profile details is correct, but the requested introduction remains unwritten.*
 
 ---
 
@@ -22332,6 +23134,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Happy to say a little about how I got here. The question at the centre of this is one I kept returning to, and the more I looked at it, the more it seemed worth working through properly. That's what led me to the study I'm about to present.
 
+*Judge (v2): 5.0 — unsupported_personal_claim. The repeated interest in the question and its role in initiating the study are invented autobiographical history. Avoiding named résumé details does not make this generic backstory grounded.*
+
 **fix10** — edited after streaming
 
 > I came to this through the question itself. It's the kind of question that rewards being taken seriously on its own terms, so that's where I started. Let me say a little about how I got here, and then we can get into the results.
@@ -22341,6 +23145,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I'm glad to be here. I'll let the results speak for the substance, and I'm happy to take your questions as we go.
 
 *Judge (v2): 7.3 — important_question_unanswered. The response correctly avoids unauthorized biography, but sidesteps the introduction and origin question entirely. Letting the results speak can sound dismissive when the examiner explicitly requested background before results.*
+
+**fix12 (Seminar rows only)** — edited after streaming
+
+> I came to this through the question itself, really. Happy to go deeper on any part of it.
+
+*Judge (v2): 5.0 — unsupported_personal_claim, insufficient_answer. “I came to this through the question itself” asserts an unsupported personal origin, albeit vaguely. The reply gives no substantive introduction, and the offer to elaborate has nothing concrete behind it.*
 
 ---
 
@@ -22402,6 +23212,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > That's the right thing to ask, and I'd rather give you an accurate answer than a quick one. Let me confirm the exact submission status and follow up with you directly.
 
+*Judge (v2): 8.7. The reply avoids fabrication, but the prefatory reassurance adds filler and can sound evasive. “Submission status” is also less precise than the peer-review status the examiner asked about.*
+
 **fix10**
 
 > I'm not going to claim a review status I can't verify. What I can tell you is where the work stands on that front, and if it hasn't been through review yet, I'll say so plainly and tell you what the plan is.
@@ -22415,6 +23227,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix12 (Seminar rows only)** — edited after streaming
 
 > I'll confirm whether it's been peer reviewed and get back to you.
+
+*Judge (v2): 9.1. A truthful, speakable fallback, but it only defers the question and leaves the audience without guidance on whether to treat peer review as established.*
 
 ---
 
@@ -22518,6 +23332,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > For rambling, slow down and answer in one sentence first, then stop. If you feel yourself adding more, ask whether it's a new point or a repeat. Usually it's a repeat, so let the silence sit.
 
+*Judge (v2): 9.2. The uncertainty script suggests missing information at hand rather than genuinely not knowing. Otherwise, the response covers all three concerns concisely, with useful criteria for going offline and a practical one-sentence-first technique.*
+
 **fix10**
 
 > If I don't know something, I say so plainly and then say what I'll do about it. Something like "I don't have that in front of me, let me check and come back to you." That reads as confidence, not weakness, because it's specific and it has a next step. What sounds weak is guessing or padding.
@@ -22545,6 +23361,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > For rambling, I pause before I answer and give myself one sentence to land the point. If I feel myself drifting, I stop and ask what they most want to know.
 >
 > *Summary chip:* own the gap, then next step
+
+*Judge (v2): 9.2. The example implies information is unavailable rather than genuinely unknown. Offline and rambling advice are useful but lack ready-to-say scripts; asking another question may prolong the exchange instead of providing a clean stopping point.*
 
 ---
 
@@ -22628,6 +23446,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > **93.2%**, the STAGE-KD test accuracy over three seeds, with a standard deviation of 0.4. The summary paragraph in my draft still says 94.1% averaged over five seeds, and the draft notes flag that the summary may be from the older 40-keyword run. The table is the current result, and the remaining seeds are still to be rerun.
 
+*Judge (v2): 9.9. No material issue. The answer leads with the defensible result, acknowledges the conflicting summary, and accurately preserves uncertainty about its origin.*
+
 **fix10**
 
 > The number I'm standing behind is **93.2%**, the STAGE-KD test accuracy from the three-seed run, with a standard deviation of 0.4. The 94.1% figure in my summary paragraph is from an earlier run and I'm still reconciling it against the table, so I'm not putting that forward as the headline. The remaining two seeds are still to be rerun once the cluster is back.
@@ -22639,6 +23459,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The number is **93.2%**, the STAGE-KD test accuracy from the three-seed table, with a standard deviation of 0.4. The summary paragraph still carries 94.1% from an earlier run, and that hasn't been reconciled against the table yet. The remaining two seeds are still to be rerun once the cluster is back.
 
 *Judge (v2): 9.6. Slightly overstates provenance: the notes suggest that 94.1% may come from an older run, rather than establishing that definitively.*
+
+**fix12 (Seminar rows only)**
+
+> The number I'd stand behind is **93.2%**, the three-seed mean for STAGE-KD, with a standard deviation of 0.4. The summary paragraph in the draft still says 94.1% over five seeds, but that's flagged as possibly from the older 40-keyword run, so I'm treating the table as the current figure. The remaining two seeds are still to be rerun once the cluster is back.
+>
+> *Summary chip:* 93.2% over three seeds, not 94.1%
+
+*Judge (v2): 10.0. No material issue. The response gives a defensible number, explicitly resolves the draft conflict, and accurately qualifies the remaining work without evading the question.*
 
 ---
 
@@ -22714,6 +23542,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Because the randomisation was at clinic level, not patient level. Only 14 clinics were randomised, 7 intervention and 7 control, so the effective sample size for the treatment comparison is 14, not 1,400. The 2,406 appointments are clustered within those clinics, and the mixed-effects model with a clinic random intercept accounts for that correlation rather than treating each appointment as independent. So the interval stays wide despite the appointment count.
 
+*Judge (v2): 7.7 — missed_available_evidence. The core clustering explanation is useful, but it leaves the mistaken patient count uncorrected and omits the reported CI. Fourteen is the number of randomized clinics, not automatically the statistical effective sample size.*
+
 **fix10**
 
 > Because the randomisation was at clinic level, not patient level. Only 14 clinics were randomised, 7 intervention and 7 control, so the effective sample size for the treatment effect is 14 clusters, not 1,400 patients. The 1,400 patients are clustered within those clinics, and appointments within a clinic are correlated, which is why we used a clinic random intercept. So the interval stays wide despite the number of appointments.
@@ -22725,6 +23555,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Because the randomisation was at clinic level, not patient level. Only 14 clinics were randomised, 7 intervention and 7 control, so the effective sample size for the treatment comparison is much smaller than the 1,184 patients or 2,406 appointments suggests. The mixed-effects model with a clinic random intercept accounts for that clustering, and the interval reflects it.
 
 *Judge (v2): 9.5. Correctly explains clustering and supplies 1,184 patients, but leaves the correction of the previously confirmed count implicit and does not state the reported confidence interval.*
+
+**fix12 (Seminar rows only)**
+
+> Because the randomisation was at clinic level, not patient level. Only 14 clinics were randomised, 7 intervention and 7 control, so the effective sample size for the treatment comparison is much smaller than the 2,406 appointments suggests. Appointments within a clinic are correlated, which is why we used a clinic random intercept, and that clustering widens the interval. The patient count drives precision for describing the sample, not for the intervention effect.
+>
+> *Summary chip:* clustering at clinic level, only 14 clinics
+
+*Judge (v2): 8.1 — missed_available_evidence. The core clustering explanation is sound, but it leaves the previously accepted 1,400-patient count uncorrected. The final sentence incorrectly suggests patient numbers do not contribute to intervention-effect precision.*
 
 ---
 
@@ -22802,6 +23640,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* 14.2 ms per window on Arlo M4
 
+*Judge (v2): 9.9. No material issues. The one-second window duration could be explicit; the RAM figure is accurate but optional for this latency question.*
+
 **fix10**
 
 > The deployed model runs in **14.2 ms** per one-second window on the Arlo M4 board at 80 MHz, measured from feature input to posterior output. That's from Chapter 5, section 5.2. One caveat: the front-end log-mel extraction wasn't timed separately, so that figure covers the model only, not the full pipeline. Latency is identical across all three training methods since the architecture is the same.
@@ -22815,6 +23655,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 14.2 ms per window, model only
 
 *Judge (v2): 9.9. No material issue; the RAM figure is ancillary to the latency question.*
+
+**fix12 (Seminar rows only)**
+
+> On the Arlo M4 at 80 MHz, KWS-Tiny runs in **14.2 ms** per 1-second window, measured from feature input to posterior output. That's the same across all three training methods, since they produce the same architecture. Peak RAM is 96 KB, and the front-end log-mel extraction wasn't timed separately.
+>
+> *Summary chip:* 14.2 ms per window on Arlo M4
+
+*Judge (v2): 10.0. No material issue; the RAM figure is accurate but optional for a latency-only question.*
 
 ---
 
@@ -22884,6 +23732,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > No, it doesn't. The 14.2 ms is measured from feature input to posterior output, so the 40-band log-mel front end wasn't timed separately.
 
+*Judge (v2): 10.0. No material issue; the response directly answers the follow-up and accurately states the measurement boundary and limitation.*
+
 **fix10** — edited after streaming
 
 > No, it doesn't. Section 5.1 says the 14.2 ms is measured from feature input to posterior output, and the front-end 40-band log-mel extraction was not timed separately. So the full pipeline latency isn't reported.
@@ -22893,6 +23743,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > No, it doesn't. The front-end feature extraction, the 40-band log-mel, was not timed separately, so the **14.2 ms** covers the model only, from feature input to posterior output.
 
 *Judge (v2): 10.0. None; the answer directly clarifies the measurement boundary without inventing a feature-extraction latency.*
+
+**fix12 (Seminar rows only)**
+
+> No, it doesn't. The 14.2 ms is measured from feature input to posterior output, so the 40-band log-mel front-end runs on top of that and wasn't timed separately.
+
+*Judge (v2): 10.0. No material issue; the answer directly clarifies the measurement boundary without inventing a feature-extraction timing.*
 
 ---
 
@@ -22966,6 +23822,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The 14.2 ms is measured from feature input to posterior output, so the 40-band log-mel front end sits outside that boundary. The thesis reports latency only. Because all three training methods produce the same architecture, latency is identical across them.
 
+*Judge (v2): 8.0. The answer is source-supported but largely repeats what the examiner already heard. Reporting latency only and using identical architectures do not explain the omission of front-end timing.*
+
 **fix10**
 
 > Section 5.1 doesn't give a reason for that choice. What it does say is that latency is measured per one-second window from feature input to posterior output, and that the 40-band log-mel front-end was not timed separately. The limitations in 5.6 do note that no energy measurements were taken because the board lacks a current-sense header, and that latency is used as a proxy for cost. So the honest answer is that the thesis reports the model-only figure and doesn't explain why the front-end wasn't timed separately.
@@ -22977,6 +23835,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The thesis doesn't give a reason for that choice. What it does say is that latency is measured per one-second window from feature input to posterior output, and that front-end feature extraction was not timed separately. So the scope of the measurement is stated, but the motivation behind it isn't in the chapter.
 
 *Judge (v2): 7.8. The response accurately avoids inventing a rationale, but sounds like an external reader reporting what the thesis contains. It repeats the established measurement boundary rather than naturally owning the limitation as the presenter.*
+
+**fix12 (Seminar rows only)**
+
+> The thesis doesn't give a reason for that choice. What it does say is that latency is measured from feature input to posterior output, and that the front-end 40-band log-mel extraction wasn't timed separately. It also notes under limitations that no energy measurements were taken because the board lacks a current-sense header, and that latency is used as a proxy for cost. So the scope of the timing is stated, but the motivation for excluding the front-end isn't.
+>
+> *Summary chip:* thesis states scope, not the reason
+
+*Judge (v2): 7.4. Factually faithful, but it sounds like an external thesis summary rather than the presenter's response. The unrelated energy discussion and repeated timing explanation obscure a simple acknowledgment of the measurement limitation.*
 
 ---
 
@@ -23052,6 +23918,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* association not causation, wide CI, volunteer bias
 
+*Judge (v2): 7.5. It correctly identifies generalisability limits but never explains randomisation's protection of the between-arm comparison. The gist's categorical 'association not causation' overstates the limitations, and the answer does not explain how nonblinding could influence the gap.*
+
 **fix10**
 
 > You're right that the design has real limits, and the summary says so: clinics volunteered, staff and patients weren't blinded, and only 14 clinics were randomised. So I'd treat the 6.5 points as a signal, not a precise effect. The adjusted odds ratio was 1.41 with a wide interval, 1.12 to 1.77, which is consistent with a much smaller true effect.
@@ -23065,6 +23933,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* volunteer clinics, no blinding, treat 6.5 as upper estimate
 
 *Judge (v2): 4.0 — major_reasoning_error, missed_available_evidence. Calling 6.5 points an upper estimate assumes upward bias that the study cannot establish; statistical significance does not resolve systematic bias. The answer also omits randomisation’s protection and the 14-of-31 recruitment limitation.*
+
+**fix12 (Seminar rows only)**
+
+> Fair challenge, and I'd put most of it on the design rather than the number. The clinics did volunteer, staff and patients weren't blinded, and only 14 clinics were randomised, so the confidence interval is wide. The 6.5 points is the intention-to-treat estimate, and I'd trust the direction more than the exact size.
+>
+> *Summary chip:* trust direction, not exact size
+
+*Judge (v2): 8.5. It acknowledges limitations but does not explain that volunteering mainly limits generalisability, while randomisation supports the between-arm comparison. It also leaves potential unblinded behaviour changes unexplained, making “trust the direction” under-justified.*
 
 ---
 
@@ -23142,6 +24018,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The next steps section lays it out: randomise from all 31 district clinics rather than the 14 that volunteered, run it for 12 months instead of 12 weeks, and split the 48-hour and 3-hour reminders into separate arms so we can tell which one is doing the work. That addresses the volunteer bias and the short follow-up. Blinding is harder, since staff deliver the reminders, but the wider clinic base and longer window are the main fixes.
 
+*Judge (v2): 9.0. The follow-on plan is faithful, but blinding is only acknowledged as difficult, not mitigated. A wider clinic base and longer follow-up do not resolve bias from awareness of allocation.*
+
 **fix10**
 
 > The summary's own next steps point the way: randomise from all 31 district clinics rather than the 14 that volunteered, run it for 12 months, and test the 48-hour and 3-hour reminders as separate arms. That last one matters because both were always sent together, so we couldn't tell which reminder was doing the work. I'd also want to audit phone number accuracy, since 6% of messages were undeliverable.
@@ -23153,6 +24031,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The fix is in the next trial, and it's already sketched out: randomise from all 31 district clinics rather than the 14 that volunteered, run it for 12 months instead of 12 weeks, and test the 48-hour and 3-hour reminders as separate arms so we can tell which one is doing the work. That addresses the volunteer bias and the short follow-up. Blinding staff is harder, but separating the reminder arms at least removes one source of unblinding.
 
 *Judge (v2): 4.0 — major_reasoning_error. The follow-on plan is accurately stated, but separating reminder-timing arms does not remove a source of unblinding. That methodological error gives the presenter a false defense against the examiner’s central concern.*
+
+**fix12 (Seminar rows only)**
+
+> The fix is mostly in the design, not the analysis. Next time I'd randomise from all 31 district clinics rather than the 14 that volunteered, so the comparison isn't just the keen ones, and I'd run it for 12 months to see whether the effect holds. I'd also split the 48-hour and 3-hour reminders into separate arms, since sending them together means we can't tell which one is doing the work. Blinding staff is harder, but that's the honest list.
+>
+> *Summary chip:* randomise all clinics, longer, split arms
+
+*Judge (v2): 9.6. The final sentence acknowledges the blinding problem but offers no practical safeguard against it; “that's the honest list” is also a slightly awkward closing.*
 
 ---
 
@@ -23218,6 +24104,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > You're right, and the summary flags it as a limitation: 12 weeks means we can't say whether the effect persists or fades. That's exactly why the follow-on trial runs for 12 months. What the 12 weeks does give us is the direction and the size of the association, 78.4% against 71.9%, and that's enough to justify testing it properly over a longer window.
 
+*Judge (v2): 9.2. The response answers the challenge accurately, but describes the proposed follow-on trial as definite and adds an unnecessary attendance-rate recap after the useful concession and next step.*
+
 **fix10**
 
 > You're right, and the summary flags it as a limitation: 12 weeks tells us nothing about whether the effect persists or fades. That's exactly why the follow-on trial runs for 12 months. The 12-week window was enough to see a signal, not enough to say it holds.
@@ -23227,6 +24115,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > You're right, and that's the limitation I'd flag hardest. Twelve weeks tells us the reminders work over a short window, but not whether the effect holds or fades once the novelty wears off. That's exactly why the follow-on trial runs for 12 months, so we can see whether the 6.5 points is durable or just a short-term bump.
 
 *Judge (v2): 9.3. Minor overstatement: the follow-on is proposed, not confirmed, and novelty wearing off is a possible explanation rather than something established by the pilot.*
+
+**fix12 (Seminar rows only)**
+
+> You're right, and that's exactly why I flagged it as a limitation. Twelve weeks tells us the effect showed up over one quarter, not whether it holds. That's why the follow-on design runs for 12 months, so we can see whether attendance gains persist or fade once the novelty wears off.
+
+*Judge (v2): 9.6. The closing phrase implies novelty explains potential fading, although the study establishes only uncertainty about persistence. Otherwise, the reply is accurate, natural, and immediately speakable.*
 
 ---
 
@@ -23308,6 +24202,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* roughly double downstream, both measures
 
+*Judge (v2): 9.5. The test statistic and full post-hoc breakdown are accurate but unnecessary for a simple gist check, making the spoken reply more technical than needed.*
+
 **fix10**
 
 > Yes, that's the gist. Downstream mussels averaged 7.1 particles per individual against 3.8 upstream, and 0.83 particles per gram wet tissue against 0.42, so roughly double by both count and weight. The difference held up statistically too, with each downstream site differing from each upstream site.
@@ -23319,6 +24215,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* roughly double downstream, both measures
 
 *Judge (v2): 9.7. Minor statistical ambiguity: p < 0.001 belongs to the six-site omnibus test, whereas “the difference” could imply a separate pooled upstream–downstream comparison.*
+
+**fix12 (Seminar rows only)**
+
+> Yes, that's the gist. Downstream mussels averaged 7.1 particles per individual against 3.8 upstream, and 0.83 particles per gram of wet tissue against 0.42, so roughly double on both measures. The difference held up statistically, with each downstream site differing from each upstream site.
+>
+> *Summary chip:* roughly double downstream, by count and weight
+
+*Judge (v2): 10.0. No material issue. The response is immediately speakable, accurately reports both measures, and describes statistical significance without implying causation.*
 
 ---
 
@@ -23384,6 +24288,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Yes, per gram of wet tissue. Upstream averaged 0.42 particles per gram and downstream 0.83, so roughly double by weight as well as by count. That's slide 8.
 
+*Judge (v2): 10.0. None; the response directly clarifies the units and accurately supplies both figures.*
+
 **fix10**
 
 > Yes, per gram of wet tissue. Upstream averaged 0.42 particles per gram and downstream 0.83, so roughly double on that measure too. That's wet tissue weight, and it's the same pattern as the per-individual counts, 3.8 against 7.1.
@@ -23395,6 +24301,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Yes, per gram of wet tissue. Upstream was 0.42 particles per gram and downstream 0.83, so roughly double, same as the per-individual counts. That's slide 8, and it's the measure that controls for mussel size, which is why I report both.
 
 *Judge (v2): 8.8. The figures and units are correct, but saying the measure “controls for mussel size” overstates tissue-weight normalization. Slide 11 explicitly acknowledges incomplete size adjustment, making the unsolicited explanation potentially misleading.*
+
+**fix12 (Seminar rows only)**
+
+> Yes, per gram of wet tissue. Upstream was 0.42 particles per gram and downstream 0.83, so about double, same as the per-individual counts. That's on slide 8.
+
+*Judge (v2): 10.0. No material issue; the reply gives the correct figures, specifies wet tissue, and directly addresses the clarification.*
 
 ---
 
@@ -23472,6 +24384,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* 112 KB peak, 96 KB in summary
 
+*Judge (v2): 9.9. No material issue. The draft-focused wording is slightly less direct than a presenter reporting the measurement, but both figures and the logging caveat are handled faithfully.*
+
 **fix10**
 
 > The draft reports **112 KB peak RAM** on-device, measured with the debug logger enabled. There's a note flagging that this figure may need re-measuring with logging off, and the summary paragraph carries an older 96 KB number that still needs reconciling with the table.
@@ -23485,6 +24399,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* 112 KB, logging on, unresolved
 
 *Judge (v2): 9.3. The answer accurately handles the discrepancy, but its tour of draft sections and notes delays the practical answer and sounds more like document review than a concise spoken reply.*
+
+**fix12 (Seminar rows only)**
+
+> The draft reports two different peak RAM figures, and it flags the conflict itself. The summary paragraph says 96 KB peak RAM on the Arlo M4, while the on-device results in section 5.2 say 112 KB, measured with the debug logger enabled. There's a note to check whether that figure should be re-measured with logging off, and a note that the summary may come from an older run, so I'd treat the 112 KB as the current measurement and the 96 KB as needing reconciling.
+>
+> *Summary chip:* 112 KB current, 96 KB summary, unreconciled
 
 ---
 
@@ -23560,6 +24480,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* 112 KB measured, 96 KB older
 
+*Judge (v2): 10.0. No material issue: it answers directly, preserves the measurement condition, and acknowledges rather than hides the conflicting summary figure.*
+
 **fix10**
 
 > The table's on-device figure is **112 KB**, measured with the debug logger on. The 96 KB in the summary is the older number, and the note flags it for reconciling.
@@ -23571,6 +24493,10 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The 112 KB from the results table in section 5.2. The 96 KB in the summary is the older figure, and the draft flags the two as unresolved.
 
 *Judge (v2): 8.8. It selects the supported measurement and acknowledges the discrepancy, but omits the crucial logger-enabled condition from this clarification. The previous reply supplied that caveat, which limits the severity of the omission.*
+
+**fix12 (Seminar rows only)** — edited after streaming
+
+> The draft gives two different peak RAM figures: **96 KB** in the summary paragraph and **112 KB** in the on-device results in section 5.2, measured with the debug logger enabled. It needs confirming before anyone relies on it.
 
 ---
 
@@ -23646,6 +24572,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > You're right that the ablation is underpowered. The ablations ran 3 seeds instead of 5 because of compute limits, and the differences are small relative to seed variance, so they're indicative rather than conclusive. The main result is STAGE-KD at 93.2% versus standard KD at 91.8%, significant at p < 0.01 with a paired bootstrap over test utterances. The ablation points to stage 2 contributing most of the gain, and more seeds would be needed before leaning on that.
 
+*Judge (v2): 9.9. No material issue. The draft directly concedes the limitation without defensiveness, accurately distinguishes the main comparison from the ablations, and avoids overstating stage-level evidence.*
+
 **fix10**
 
 > You're right that the ablation is underpowered, and I'd rather say that plainly than defend it. The ablations ran with three seeds instead of five because of compute limits, and the differences are small relative to seed variance, so I treat them as indicative rather than conclusive. What I do claim is the main result: STAGE-KD at 93.2% against standard KD at 91.8%, significant at p < 0.01 under a paired bootstrap over test utterances. The ablation suggests stage 2 contributes most of the gain, but I'm not resting the thesis on that.
@@ -23659,6 +24587,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* ablation is indicative, main result holds
 
 *Judge (v2): 9.6. The opening is slightly self-conscious, and the final sentence packs several statistical qualifications into spoken delivery. Otherwise, the response is accurate, candid, and appropriately distinguishes suggestive ablations from the main result.*
+
+**fix12 (Seminar rows only)**
+
+> That's a fair point, and I'd rather be straight about it than argue. The ablations used three seeds instead of five because of compute limits, and the differences are small relative to seed variance, so I present them as indicative rather than conclusive. What I do stand behind is the main comparison: STAGE-KD against standard KD, five seeds, paired bootstrap over test utterances, significant at p < 0.01. If the ablation is what needs shoring up, the honest fix is more seeds per variant, and I'd treat that as the next thing to run.
+>
+> *Summary chip:* three seeds, indicative not conclusive
+
+*Judge (v2): 9.7. The opening reference to arguing adds a slightly defensive note. Otherwise, the concession, distinction from the main comparison, and proposed next step are accurate and immediately speakable.*
 
 ---
 
@@ -23736,6 +24672,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > You're right, the ablation is underpowered. It ran 3 seeds instead of 5 because of compute limits, and the differences are small relative to seed variance, so they're indicative rather than conclusive. The main result is STAGE-KD at 93.2% versus standard KD at 91.8%, significant at p < 0.01 with a paired bootstrap over test utterances. The ablation suggests stage 2 contributes most of the gain, and more seeds would be needed before leaning on that.
 
+*Judge (v2): 8.0. The answer is accurate and non-defensive but barely shorter than the previous draft. It retains all four sentences, including main-result statistics that are unnecessary for this concise acknowledgment.*
+
 **fix10**
 
 > You're right, the ablation is underpowered. It ran with three seeds instead of five because of compute limits, and the differences, 92.0% without stage 2 and 92.9% without stage 3, are small relative to seed variance, so I treat them as indicative rather than conclusive. What I do stand behind is the main result: STAGE-KD at 93.2% against standard KD at 91.8%, significant at p < 0.01 under a paired bootstrap over test utterances. The ablation points to stage 2 contributing most of the gain, but I'm not resting the thesis on it.
@@ -23749,6 +24687,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* ablation indicative, main result holds
 
 *Judge (v2): 7.8 — excessive_verbosity. The reply barely shortens the previous draft: it retains four sentences, both ablation accuracies, and the bootstrap discussion despite the explicit request for a shorter spoken answer.*
+
+**fix12 (Seminar rows only)**
+
+> That's a fair challenge, and I'd rather be straight about it than argue. The ablations ran three seeds instead of five because of compute limits, and the differences are small relative to seed variance, so I present them as indicative rather than conclusive. What I do stand behind is the main comparison: STAGE-KD against standard KD, five seeds, paired bootstrap over test utterances, significant at p < 0.01. If the ablation is what needs shoring up, the honest fix is more seeds per variant, and I'd treat that as the next thing to run.
+>
+> *Summary chip:* three seeds, indicative not conclusive
+
+*Judge (v2): 7.0 — excessive_verbosity. The response repeats the previous draft almost verbatim instead of shortening it. Its four sentences, including the main-results detour, leave the presenter with essentially the same speaking burden.*
 
 ---
 
@@ -23767,6 +24713,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't have a confirmed status on the Android crash yet. I'll check the crash reports and get back to you with what I find, and flag it right away if it looks like something we need to act on today.
 
 *Judge (v1): 9.7. The closing clause about acting today is slightly wordy; the status acknowledgment and proposed follow-up already handle the moment well.*
+
+*Judge (v2): 9.2. A sound fallback given the missing status information; the closing escalation clause is slightly wordy and vague for a quick meeting update.*
 
 **fix1**
 
@@ -23820,6 +24768,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* Android crash status unconfirmed, checking reports
 
+*Judge (v2): 9.4. This is a natural, non-fabricated fallback rather than a substantive status update. The missing evidence justifies the uncertainty, though the promised follow-up is somewhat vague.*
+
 **fix10** — edited after streaming
 
 > I'll confirm the Android crash status and get back to you on it.
@@ -23845,6 +24795,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can take that one. Let me confirm what it covers and when it's due, then I'll own it and keep everyone posted.
 
 *Judge (v1): 9.8. The opening volunteers before scope and timing are known, but the immediate clarification substantially limits that concern. No material factual or role error.*
+
+*Judge (v2): 10.0. No material issue. Volunteering is a reasonable current decision, and checking scope and timing avoids inventing task details or prior commitments.*
 
 **fix1**
 
@@ -23888,6 +24840,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Let me confirm what it covers and when it's due, and I'll come back on who's taking it.
 
+*Judge (v2): 7.9. The reply unnecessarily postpones ownership instead of volunteering or asking for clarification in the meeting. It is safe and speakable but leaves the colleague's immediate need unresolved.*
+
 **fix10**
 
 > I can take this one. Let me confirm what it covers and when it's due, then I'll own it and keep everyone posted.
@@ -23913,6 +24867,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I hear the case for it, and two weeks back is real. But I don't think we should decide this today. The conflict handling is the part that worries me, and if we cut offline mode now, that work doesn't disappear, it just moves somewhere else. Before we kill it, I'd want to know what the pilot actually needs and what we'd tell the people already relying on it. Can we get those answers first and then make the call?
 
 *Judge (v1): 4.0 — unsupported_company_claim. It asserts that removing offline mode merely relocates conflict work and presumes existing users rely on it; neither is established. Those invented premises weaken an otherwise natural, constructive response.*
+
+*Judge (v2): 4.0 — unsupported_company_claim. It asserts that conflict-handling work merely moves elsewhere and assumes people already depend on offline mode. Neither is established, and these assumptions drive an otherwise natural, constructive response toward postponement.*
 
 **fix1**
 
@@ -23958,6 +24914,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I get the appeal, and two weeks back is real. Before we kill it, what did the pilot actually hit, and is anyone planning to use it offline? Can we look at that together and then decide?
 
+*Judge (v2): 9.4. The reply constructively challenges the proposal without inventing facts, but the review step is vague and does not establish how to reach the requested decision today.*
+
 **fix10**
 
 > I get the appeal, and two weeks back is real. But I don't think we should kill it today on the strength of the pilot alone. The conflict work is the part that worries me, because if it's growing now, dropping offline mode might just move that complexity somewhere else rather than remove it. Before we decide, can we put the actual cost on the table, how much of the two weeks is offline mode itself versus the conflict handling, and who's been asking for it outside the pilot? If it's genuinely nobody and the conflict work goes away with it, I'm in.
@@ -23983,6 +24941,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Sounds good. What are the couple of things it depends on? If any of them land on my side, tell me now and I'll clear them this week so next week stays realistic.
 
 *Judge (v1): 9.0. It clarifies dependencies but leaves the completion date vague and promises to clear unknown blockers this week before understanding their scope.*
+
+*Judge (v2): 9.4. It usefully asks about dependencies and offers help, but leaves the completion date at the same vague 'next week' level.*
 
 **fix1**
 
@@ -24032,6 +24992,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > That sounds close. What are the couple of things it depends on, and is there anything on my side that would unblock them? If it lands next week, which day would that be?
 
+*Judge (v2): 10.0. No material issue: it clarifies dependencies, offers help, and requests a specific day without inventing context or treating the tentative estimate as a commitment.*
+
 **fix10**
 
 > That sounds about right. What are the couple of things it depends on? If any of them need something from my side, flag it now and I'll get it moving so next week holds.
@@ -24059,6 +25021,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't have that in front of me right now, so I don't want to guess at where we landed. Let me pull up the notes from that discussion and I'll come back with the decision and what we agreed on next.
 
 *Judge (v1): 9.4. No material failure. The closing slightly presumes that the prior discussion produced a decision and agreed next steps, rather than leaving its outcome open.*
+
+*Judge (v2): 9.0. A sound fallback, though it cannot resolve the question yet and slightly presumes the prior meeting produced a decision and agreed next steps.*
 
 **fix1**
 
@@ -24104,6 +25068,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Let me check where we landed on the analytics vendor and follow up right after this.
 
+*Judge (v2): 9.4. An appropriate, honest fallback with a clear follow-up commitment, though the colleague still lacks the requested recap during the meeting.*
+
 **fix10** — edited after streaming
 
 > Let me pull up the notes from that discussion and confirm where we landed, then I'll send it around so we're all on the same page.
@@ -24131,6 +25097,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't have the Monday agreement in front of me, so I can't confirm the freeze as stated. What I can do is check the notes from that meeting and confirm exactly what was agreed on the onboarding screens, then follow up with you.
 
 *Judge (v1): 9.1. The reply appropriately avoids endorsing an unverified agreement, but its formal disclaimer and deferred follow-up leave the freeze’s scope unresolved during the current discussion.*
+
+*Judge (v2): 9.0. It appropriately avoids inventing Monday's decision, but the formal disclaimer and deferred follow-up offer less immediate help than clarifying the freeze's scope during the meeting.*
 
 **fix1**
 
@@ -24178,6 +25146,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > What I can say is that I'll treat the onboarding screens as locked unless we explicitly reopen them. Can we check Monday's notes before we rely on that?
 
+*Judge (v2): 9.5. No material issue. The opening is slightly guarded, and committing to a freeze before asking to verify it makes the provisional status less clear than necessary.*
+
 **fix10** — edited after streaming
 
 > What I can say is that I'll hold off on any onboarding screen changes until we check the notes from that call. Can someone pull up what we actually agreed on Monday?
@@ -24205,6 +25175,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* build independent parts, chase contract date
 
 *Judge (v1): 9.9. No material issue. The reply avoids speculative integration work, keeps the team moving, and takes ownership of a concrete follow-up without inventing prior decisions.*
+
+*Judge (v2): 10.0. No material issue. The response rejects the false choice between guessing and waiting, explains the rework risk, and supplies an actionable next step without inventing project facts.*
 
 **fix1**
 
@@ -24263,6 +25235,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Building against a guess risks throwing away that work if the contract changes shape. One option: set a short deadline, and if it hasn't landed by then, build the parts that won't move and stub the rest behind an interface. What's the earliest date Platform can give us?
 
+*Judge (v2): 9.3. The compromise is sensible and immediately speakable, but “one option” and an unspecified deadline leave the immediate decision slightly soft. Contract-independent work could begin without waiting for that deadline.*
+
 **fix10**
 
 > I'd rather not build against a guess on the contract itself, because if the shapes change we throw that work away. What I'd do is start on the parts that don't depend on it, our own data model and the integration seams, and keep the contract-dependent pieces stubbed. Can we get a date out of Platform for the contract, so we know how long we're holding?
@@ -24294,6 +25268,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* tell pilots, lead calls, shift not re-plan
 
 *Judge (v1): 4.0 — unsupported_company_claim. “Two weeks out” can imply delivery in two weeks rather than a two-week delay, and “since they own the relationship” asserts unsupported ownership despite the later confirmation caveat.*
+
+*Judge (v2): 4.0 — unsupported_company_claim. “Two weeks out” implies launch is two weeks away, not delayed by two weeks. Proposing a pilot lead is reasonable, but asserting that they already own the customer relationship is unsupported.*
 
 **fix1**
 
@@ -24341,6 +25317,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Let's tell the pilot customers straight: we're slipping two weeks, here's the new date, and here's what still works in the meantime. On the beta, do we shift the existing plan or re-plan it, and does the two weeks change what we're testing? And who's telling the customers?
 
+*Judge (v2): 7.1 — important_question_unanswered. It offers a reasonable customer-message outline but repeats the ownership and beta-planning questions instead of proposing an owner or recommending whether to shift or re-plan.*
+
 **fix10**
 
 > Let's tell the pilot customers straight: we're slipping two weeks, here's the new date, and here's what it means for them. I'll take the customer note if that helps. On the beta, I'd shift the existing plan rather than re-plan it, unless the slip changes what we're testing. Can we confirm the new date before anything goes out?
@@ -24366,6 +25344,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't want to give you a number I can't stand behind, so let me pull the actual timeline from that migration and get it to you. What I can say is that the sizing hinged on how many payment flows and integrations were in scope, so if you walk me through what this one covers, I can tell you how it compares.
 
 *Judge (v1): 5.0 — unsupported_personal_claim. It appropriately avoids inventing a duration, but “the sizing hinged on...” presents plausible estimation factors as established facts about the user’s previous migration.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. “The sizing hinged on…” asserts an unsupported historical fact about the user's migration. Those are reasonable general sizing factors, but they should not be presented as remembered project details.*
 
 **fix1**
 
@@ -24411,6 +25391,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I can't give you a real number from experience on that. What I can do is help you size this one: tell me the scope, the number of systems and the cutover approach, and I'll work through a realistic timeline with you.
 
+*Judge (v2): 8.8. This is a safe, usable fallback, but 'a real number from experience' sounds awkward and potentially denies the colleague’s premise. It requests useful inputs without yet providing a concrete estimation structure.*
+
 **fix10** — edited after streaming
 
 > Let me pull the actual timeline from that migration and send it over. What I can say is that the length depended mostly on how many payment flows and integrations were in scope, so if you tell me what this one covers, I can tell you how comparable it really is.
@@ -24438,6 +25420,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* take it, define rules first
 
 *Judge (v1): 9.9. No material issue. The reply accepts ownership, proposes agreeing on conflict rules before implementation, and avoids affirming unverified experience or importing prohibited background material.*
+
+*Judge (v2): 9.9. No material issue. Accepting ownership is a valid current decision, not an invented background claim. The proposed rules, agreement process, and request for existing sync code make the response actionable.*
 
 **fix1**
 
@@ -24487,6 +25471,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Happy to take that on. Before I commit to owning it, I want to be clear on scope: which conflicts are in play, what the current behavior is, and what "done" looks like for you.
 
+*Judge (v2): 9.5. The opening accepts the task, but “Before I commit to owning it” partially walks that back, leaving ownership slightly ambiguous. Otherwise, the reply is speakable, relevant, and avoids unsupported biography.*
+
 **fix10** — edited after streaming
 
 > I'd be glad to take that on. My approach is to define the merge rules per field first, decide what wins on a true conflict, and keep an audit trail so we can see what was dropped and why. Before I commit to owning it, can we agree on the scope, which data types are in play, and who reviews the rules with me?
@@ -24516,6 +25502,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* three weeks is a realistic commitment
 
 *Judge (v1): 5.0 — unsupported_personal_claim. “I've seen what happens when you promise less” invents firsthand experience supporting this deadline. The answer also declares release stages incompressible and three weeks realistic without supporting scope or timing evidence; the gist reinforces that certainty.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. “I've seen what happens when you promise less” invents personal experience with shorter release promises. “Always” and “can't compress” also overstate constraints that vary across mobile releases.*
 
 **fix1**
 
@@ -24567,6 +25555,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The thing that eats the time isn't the build, it's the store review and the device testing. Three weeks is what I'd plan for to get through that without cutting corners. If we want it faster, we'd have to drop something from scope, better to say that now than promise a date we can't hit.
 
+*Judge (v2): 8.7. This is a useful fallback without fabricated biography, but it confidently identifies testing and store review as the bottlenecks and scope reduction as necessary without project-specific evidence.*
+
 **fix10** — edited after streaming
 
 > I'd commit to three weeks once scope is frozen. If we're still changing what's in it, that's the thing to pin down first.
@@ -24594,6 +25584,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* take it, name the trade, let them choose
 
 *Judge (v1): 9.7. The opening accepts migration ownership before explicitly making that acceptance conditional on an agreed sprint trade-off.*
+
+*Judge (v2): 9.6. The sample wording leaves the concrete trade-off unfinished and could make ownership more explicitly conditional on agreed reprioritization.*
 
 **fix1**
 
@@ -24655,6 +25647,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > One approach: push back on the framing that both are full-time commitments, not on the work itself. Say you can take the Ledger migration, and be clear that something has to give on the sprint side, because both at full pace means one slips. Then offer a concrete trade: hand off or defer a named sprint item, or push the migration's first milestone out. Ask them which they'd rather protect. That reads as owning the outcome, not dodging.
 
+*Judge (v2): 8.8. The strategy and alternatives are useful, but the user still has to turn the advice into spoken wording. It also unnecessarily assumes both workloads are full-time and that a slip is inevitable.*
+
 **fix10**
 
 > I'd push back on the assumption that both are full-time. I'd say: I can own the Ledger migration, and I want to, but I can't do that and hold every sprint commitment at the same quality. So let's pick what gives.
@@ -24690,6 +25684,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* SSO next phase, not pilot
 
 *Judge (v1): 9.2. Putting SSO into “the next phase” risks replacing today’s scope refusal with a future commitment. The answer otherwise provides concise, constructive wording without inventing prior decisions.*
+
+*Judge (v2): 9.5. The wording is usable and constructive, though 'not one that belongs' is somewhat categorical and the three-sentence explanation could be tighter.*
 
 **fix1**
 
@@ -24735,6 +25731,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Happy to keep SSO out of the pilot. If it's a hard requirement for someone, tell me and we'll look at it separately.
 
+*Judge (v2): 9.4. The reply is concise and tactful, but “Happy to keep SSO out” sounds more like agreement than a clear refusal to expand scope.*
+
 **fix10**
 
 > Happy to keep SSO on the roadmap, but for the pilot I'd rather not add it. It's a real integration with the identity provider, and it would slow down the feedback we're trying to get. Let's ship the pilot without it and revisit SSO once we've validated the core flow.
@@ -24766,6 +25764,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > If you want, give me the decisions and open items as we go and I'll shape them into a clean recap you can read out.
 
 *Judge (v1): 7.6 — coaching_instead_of_answer, insufficient_answer. Correctly avoids inventing meeting facts, but substitutes advice and an offer for the requested closing script. It also never proposes a next-meeting time.*
+
+*Judge (v2): 7.3 — coaching_instead_of_answer, insufficient_answer. It correctly acknowledges missing evidence but substitutes facilitation advice and a request for inputs for the requested closing script. It also leaves the next-meeting proposal entirely to the user.*
 
 **fix1**
 
@@ -24837,6 +25837,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > We're near time, so let me pull us together. I want to make sure I've got the decisions and action items right, so I'll send a short recap after this with what we agreed, who owns what, and by when. If I miss anything, reply and I'll correct it. For next time, does the same slot work, or should I send a couple of options?
 
+*Judge (v2): 8.1. The script appropriately avoids fabrication, but postpones the requested recap and action-item capture without securing the missing information. It also leaves the next meeting vague rather than proposing a concrete cadence.*
+
 **fix10**
 
 > I don't have the meeting content to recap from, so I can't draft the specifics of what we decided or who owns what. What I can do is give you the shape to fill in live, and you can slot in the real items as you go.
@@ -24870,6 +25872,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Ask him privately, not in the meeting. A quick message or a moment one-on-one works: "Can we grab fifteen minutes this week to lock down the date?" That way he can check his calendar and answer without an audience.
 
 *Judge (v1): 9.3. Moving the discussion private addresses the user's concern, but the suggested wording requests a fifteen-minute meeting rather than the actual date, adding avoidable coordination.*
+
+*Judge (v2): 9.3. Moving the request to a private channel is helpful, but the suggested wording asks for another meeting rather than the actual date, adding an unnecessary coordination step.*
 
 **fix1**
 
@@ -24915,6 +25919,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Ask him privately, right after the meeting or in a quick message, something like "Can we grab ten minutes this week to lock down a date for this?" That keeps it off everyone's plate and gives him room to say when works. If it needs to be in the room, frame it as a question to the group: "When can we get a date on this?"
 
+*Judge (v2): 9.0. The private follow-up is sensible, but the sample schedules another conversation instead of requesting a target date. The group fallback is vague and diffuses responsibility.*
+
 **fix10**
 
 > Ask him privately, right after the meeting or in a quick message, something like "Can we grab ten minutes to lock down a date for this?" That keeps it low-key and gives him room to say when works. If it needs to be in the room, frame it as a question to the group: "What date works for everyone?" so he's not singled out.
@@ -24944,6 +25950,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* Priya on Ledger, Marcus on offline clock-in
 
 *Judge (v1): 8.6. The ownership is correct, but the reply hedges instead of anchoring the correction in the notes, omits the Friday 2 October deadline, and introduces unnecessary confirmation and reassignment language.*
+
+*Judge (v2): 8.6. The owner mapping is correct, but the answer unnecessarily suggests further confirmation, introduces reassignment when none was proposed, and omits the documented Friday 2 October deadline.*
 
 **fix1**
 
@@ -24995,6 +26003,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* Priya on Ledger, Marcus on offline clock-in
 
+*Judge (v2): 7.6. Ownership is correct, but the unnecessary rollout aside conflates the agreed 10% beta rollout with the separate GA full-rollout decision. Marcus’s Friday, 2 October PR deadline is also omitted.*
+
 **fix10**
 
 > Priya's on the Ledger v5 migration for the pay-period endpoints, due Tuesday 29 September. Offline clock-in is Marcus, and the conflict resolution PR is his, aiming for Friday. So no doubling up there.
@@ -25022,6 +26032,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* crash-free target still parked, revisit 22 Oct
 
 *Judge (v1): 10.0. None. The reply directly answers the question, accurately reports the recorded status, and is immediately speakable. The gist agrees with it.*
+
+*Judge (v2): 10.0. None. The immediately speakable reply accurately reports the unresolved status, both proposals, the data requirement, and the revisit date. The gist agrees.*
 
 **fix1**
 
@@ -25073,6 +26085,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > No, it's still floating. Tomas proposed 99.5% crash-free sessions for GA and Lena wants 99.7%, and it was parked until there are two weeks of beta data, so it's coming back at the 22 October sync.
 
+*Judge (v2): 10.0. None; the response directly answers the question and accurately reports the proposals, unresolved status, data requirement, and scheduled revisit.*
+
 **fix10**
 
 > No, it's still floating. Tomas proposed 99.5% and Lena wants 99.7%, and we parked it until we have two weeks of beta data, with a revisit at the 22 October sync. So nothing's locked yet.
@@ -25102,6 +26116,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* Dana owns release notes
 
 *Judge (v1): 10.0. None; the answer accurately and concisely summarizes the owner, dependency, deadline, and review responsibility.*
+
+*Judge (v2): 10.0. None; the answer names the owner immediately and accurately includes the dependency, deadline, and reviewer.*
 
 **fix1**
 
@@ -25161,6 +26177,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* Dana owns release notes, Hiro sends tickets
 
+*Judge (v2): 10.0. None; the reply directly names the owner and accurately captures the dependency, deadline, and reviewer.*
+
 **fix10**
 
 > Dana owns release notes. Hiro's sending the final ticket list by Monday, and Marcus reviews the Android wording before it goes out.
@@ -25192,6 +26210,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* tablet layout out of beta, phones only
 
 *Judge (v1): 10.0. No material issues. The answer accurately recaps the decision and its rationale, and the gist agrees.*
+
+*Judge (v2): 10.0. No material issue; the answer only slightly repeats that tablet layout is excluded from the beta.*
 
 **fix1**
 
@@ -25243,6 +26263,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Yeah, we decided to drop the tablet layout from the beta and ship phones only. Split view still breaks on the smaller tablets, so it comes out for now and we revisit it for GA.
 
+*Judge (v2): 10.0. No material issue; the answer accurately recaps the agreed decision and its rationale in immediately speakable language.*
+
 **fix10**
 
 > Yeah, we decided to pull the tablet layout out of the beta and ship phones only. Split view was still breaking on the smaller tablets, so it comes out now and we revisit it for GA.
@@ -25268,6 +26290,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Nothing's blocking me right now. My desk is on track to be packed by Friday, and I've got the crate stickers for the cables. If anything comes up, I'll flag it in the #office-move channel.
 
 *Judge (v1): 5.0 — unsupported_personal_claim. The answer invents the user's lack of blockers, packing progress, and possession of cable stickers. The FAQ supplies general instructions, not personal status, and nothing establishes that the colleague is asking about the move.*
+
+*Judge (v2): 5.0 — unsupported_personal_claim. The FAQ provides instructions, not personal status. The answer invents that nothing is blocking the user, packing is on track, and the user already has cable stickers.*
 
 **fix1**
 
@@ -25319,6 +26343,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Nothing's blocking me right now. The move details: crates arrive Tuesday 8 December, desk packed by 5pm Friday 11 December, and the move weekend is 12-13 December. Cables get labelled with the stickers in the crate, and desks on the third floor are booked through the Deskly app.
 
+*Judge (v2): 5.0 — unsupported_personal_claim. The FAQ does not establish whether the user is blocked. The opening invents their work status, while the remaining response recites accurate but irrelevant moving logistics.*
+
 **fix10**
 
 > Nothing's blocking me right now. I've got the move details from the FAQ, so packing by 5pm on Friday 11 December and the crates arriving Tuesday 8 December are clear. The one thing I want to confirm is the desk booking, since the third floor is bookable desks through the Deskly app rather than assigned seating.
@@ -25346,6 +26372,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* no grounded beta risk yet
 
 *Judge (v1): 5.6 — ai_epistemic_leak. The answer foregrounds its evidence limitations and substitutes unrelated office-move logistics for a beta-risk assessment. The final workstream question is useful, but nothing establishes that the move overlaps or threatens the beta.*
+
+*Judge (v2): 5.9 — ai_epistemic_leak. The retrieval-style opening is unnatural meeting speech, and the office-move dates distract from beta risk without any established connection. Although those dates are accurate, the response mostly defers the requested assessment.*
 
 **fix1**
 
@@ -25389,6 +26417,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > What I'd want to check first is where the open dependencies sit against that date, and whether anything still unowned is on the critical path. Can we pull the current status before I commit to a view?
 
+*Judge (v2): 9.0. It identifies sensible risk areas but stops short of a provisional assessment, asking for status before offering a view.*
+
 **fix10** — edited after streaming
 
 > What I'd want to check first is whatever's still open on the critical path, and whether anything there has a hard external dependency we don't control. Can we pull up the current status before I call out a single biggest risk?
@@ -25416,6 +26446,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* split by area, shared final pass
 
 *Judge (v1): 9.1. The proposal is immediately usable, but assumes Tomas already knows the core flows. A shared coverage inventory would also make the boundaries more explicit than a final joint pass alone.*
+
+*Judge (v2): 9.0. “He already knows” assumes Tomas’s familiarity with core flows without evidence. The proposal is otherwise usable, though a shared owner-labeled checklist would make coverage gaps easier to catch.*
 
 **fix1**
 
@@ -25473,6 +26505,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I'd split it by surface rather than by test count, with a written checklist per area so ownership is explicit. Let's agree who signs off on shared flows before we start.
 
+*Judge (v2): 8.8. The area-based split and checklist are sensible, but neither person receives a concrete responsibility, and shared-flow sign-off remains undecided. The colleague still needs to work out the actual allocation.*
+
 **fix10** — edited after streaming
 
 > I'd split it by area rather than by test count: **Tomas takes the core flows**, and **the contractor takes the newer surface area**, with a **shared checklist** so we can see what's covered. Can we confirm who owns the checklist before we lock that in?
@@ -25500,6 +26534,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* frame as timeline blocker, not person
 
 *Judge (v1): 9.4. The quoted line names the blocker but leaves the collaborative next-step request outside the ready-to-say wording.*
+
+*Judge (v2): 9.4. The neutral framing works, but the suggested wording stops at stating the blocker; the user still has to compose the concrete next-step request.*
 
 **fix1**
 
@@ -25557,6 +26593,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > I'd frame it around the review itself, not the person: "The design review is where this is sitting right now. What's the path to get it moving?" That names the blocker and the ask without pointing at anyone. If Dana's the reviewer, say that as a fact, not a complaint.
 
+*Judge (v2): 9.5. The suggested wording is diplomatic but indirect: “where this is sitting” softens the blocker, and asking for a “path” is less actionable than requesting a review time or agreed next step.*
+
 **fix10**
 
 > I'd frame it around the review itself, not the person. Something like: "I'm blocked on the design review, and I want to make sure it doesn't slip the timeline. Can we get a slot on the calendar this week?" That names the blocker and the ask, and it's about the process, not who's holding it up. If someone asks who owns it, I'd say the review is the gate and offer to help move it, rather than pointing at Dana.
@@ -25588,6 +26626,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* no size yet, Lena's estimate Monday
 
 *Judge (v1): 8.2. It correctly avoids inventing sizing or cuts, but never flags the notes’ unreviewed status or conflicting freeze dates—important qualifications before treating the scope statement as a planning baseline.*
+
+*Judge (v2): 8.6. The answer appropriately avoids inventing estimates or cuts, but omits the notes’ draft/unreviewed status and conflicting freeze dates, leaving the planning baseline insufficiently qualified.*
 
 **fix1**
 
@@ -25661,6 +26701,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > One thing in the notes: the code freeze appears as Friday 9 October in the action items, while the dates section says it moves to Friday 16 October to absorb the extra scope. Those two don't match.
 
+*Judge (v2): 8.3. It avoids inventing estimates or cuts and catches the freeze conflict, but never flags the notes as unreviewed. “That's the number to plan around” confusingly refers to an estimate that is not yet provided.*
+
 **fix10** — edited after streaming
 
 > The notes don't give a size for CSV export. What they say is that Lena owns confirming whether it fits before the freeze, with an estimate due by Monday, and that if it doesn't fit we'll talk again. So I'd hold off planning around it until that estimate lands.
@@ -25698,6 +26740,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* park SMS, keep contract moving
 
 *Judge (v1): 5.0 — missed_available_evidence, reference_conflict_ignored. Accepts the Brennan-only premise without reconciling the plan’s broader beta. Keeping the contract moving does not eliminate registration-delay risk; email fallback needs explicit acceptance. The action/decision appendix is not immediately speakable.*
+
+*Judge (v2): 4.0 — major_reasoning_error, missed_available_evidence, reference_conflict_ignored. Accepts the Brennan-only premise instead of reconciling the 400-user, three-customer plan. Tidewater shares the 14 October beta date; keeping the contract moving does not offset paused registration. The action/decision addendum is not clean spoken text.*
 
 **fix1**
 
@@ -25756,6 +26800,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The plan has the beta going to 400 users across three customers on 14 October, and Tidewater in Halifax is one of them, so Canadian numbers are still in scope. Carrier registration takes up to 10 business days after the contract is signed. The pay-period screen is already covered by the Ledger v5 work, and that call gets made at the 5 October go/no-go.
 
+*Judge (v2): 8.5. The closing implies Ledger work already covers the screen and leaves “that call” ambiguous. The 5 October decision concerns the Ledger fallback, not reallocating registration effort. Keeping registration moving is only implicitly recommended.*
+
 **fix10**
 
 > The beta is 200 users and just Brennan Foods, so Canada SMS isn't on the critical path for it. But the plan has Tidewater Clinics in Halifax going live at the 14 October beta, and Kestrel carrier registration for Canadian numbers takes up to 10 business days after the contract is signed, so if we park it now we likely miss that date. I'd keep the registration moving and shift the pay-period work onto the Ledger v5 dependency instead. Can we check whether Tidewater is still in the 14 October beta before we decide?
@@ -25786,6 +26832,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I don't have that from last week in front of me, so I can't confirm what we agreed. What I can say is where export stands now, and if it's genuinely out of scope for this release, let's keep it out and log it for the next one. Can you remind me what the agreement was?
 
 *Judge (v1): 8.2. It appropriately avoids inventing an agreement, but promises to describe export's current status without doing so. The lengthy disclaimer and request to repeat the agreement make the clarification less direct and natural.*
+
+*Judge (v2): 8.3. It appropriately avoids inventing a prior decision, but promises to explain export's current status without doing so. The lengthy uncertainty and 'genuinely out of scope' wording make the reply sound more defensive than necessary.*
 
 **fix1**
 
@@ -25829,6 +26877,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Can we pull up the notes from that call before we treat export as settled? If it was out of scope, I'll keep it off the list for this release.
 
+*Judge (v2): 9.7. No material issue. The response avoids inventing a prior decision and pairs verification with a useful conditional action.*
+
 **fix10** — edited after streaming
 
 > Can we pull up the notes from that call before we treat export as out of scope? If it was agreed, I'll go with it.
@@ -25854,6 +26904,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > I can't confirm it either way. I don't have last week's notes in front of me, so I won't guess. Tell me what you remember agreeing, and I'll go with that and log it.
 
 *Judge (v1): 8.4. It honestly avoids inventing an agreement, but repeats the earlier request for recollection despite the colleague's insistence, then promises to accept and log that recollection without verification.*
+
+*Judge (v2): 7.8. It repeats the earlier deferral and requests a recollection the colleague already supplied. Promising to accept and log that recollection also blurs a provisional scope decision with confirmation of the past agreement.*
 
 **fix1**
 
@@ -25897,6 +26949,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Let's pull up last week's notes and check what we actually agreed.
 
+*Judge (v2): 8.7. It avoids fabricating a decision, but repeats the previous request to check notes without directly acknowledging uncertainty after the colleague presses for an answer.*
+
 **fix10**
 
 > Let's pull up last week's notes and settle it from what's actually written there.
@@ -25922,6 +26976,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > That's the part I can't answer from memory either. If it was agreed last week, whoever owns the release scope should confirm it, and I'd rather we settle it here than guess. So tell me who made that call, and I'll log it as the decision.
 
 *Judge (v1): 7.8. It avoids inventing an owner, but repeats uncertainty and asks who made a past call rather than who has authority now. Offering to log a decision before confirming its substance is premature.*
+
+*Judge (v2): 7.6. It avoids inventing an owner, but repeats the earlier uncertainty and asks who made a past call rather than clarifying who has final authority now.*
 
 **fix1**
 
@@ -25969,6 +27025,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Let's pull up last week's notes and check what we actually agreed. If export was out of scope, I'll keep it off the list for this release. Whose call do you see it as?
 
+*Judge (v2): 6.8 — important_question_unanswered. The answer avoids inventing an owner, but repeats the notes-checking deferral and bounces the ownership question back. It does little to break the conversation's existing loop.*
+
 **fix10**
 
 > It's mine to make, and I'd rather make it on what's written than on memory. Let's pull up last week's notes. If export was agreed as out of scope, I'll hold it there. If it wasn't, I'll own the call on whether it ships.
@@ -25998,6 +27056,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* Kestrel chosen over Brightwire for SMS
 
 *Judge (v1): 10.0. None; the response accurately conveys the recorded decision, rationale, owner, and deadline in three immediately speakable sentences.*
+
+*Judge (v2): 10.0. No material issues. The answer accurately states the recorded decision, supporting rationale, owner, and deadline without implying the contract is already signed.*
 
 **fix1**
 
@@ -26059,6 +27119,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* Kestrel chosen, contract due today
 
+*Judge (v2): 10.0. No material issue. The answer accurately recalls the decision and adds a useful deadline check without claiming the contract has been signed.*
+
 **fix10**
 
 > We went with **Kestrel Messaging**, not Brightwire. Kestrel came in at $0.0071 per message against Brightwire's $0.0094, and it already supports Canadian carrier registration. Hiro was going to get the contract signed by today, so worth checking whether that's done.
@@ -26090,6 +27152,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* cheaper per message, Canadian registration ready
 
 *Judge (v1): 8.9. “So we don’t have to build that ourselves” adds an unsupported implementation assumption. Repeating Hiro’s contract deadline is unnecessary in this rationale-only follow-up.*
+
+*Judge (v2): 9.1. The rationale is correct, but avoiding an internal build is an implementation assumption beyond the notes. Repeating the contract deadline adds little to this simple follow-up.*
 
 **fix1**
 
@@ -26147,6 +27211,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > Price was the main thing: **$0.0071** a message against Brightwire's **$0.0094**, and Kestrel already supports **Canadian carrier registration**.
 
+*Judge (v2): 9.7. “Price was the main thing” slightly overstates the evidence: the notes give price and Canadian carrier registration as reasons without ranking their importance.*
+
 **fix10** — edited after streaming
 
 > Two reasons. Kestrel came in at **$0.0071** a message against Brightwire's $0.0094, and it already supports Canadian carrier registration. The contract was due today, so I'd check with Hiro whether it's signed.
@@ -26172,6 +27238,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The Kestrel contract is meant to be signed by **1 October**, and Hiro's the one getting it done. That's the date procurement should work to.
 
 *Judge (v1): 10.0. No material issue; it gives the supported deadline and owner in immediately speakable language without implying the contract is already signed.*
+
+*Judge (v2): 10.0. No material issue: it states the documented deadline and owner without implying the contract has already been signed.*
 
 **fix1**
 
@@ -26231,6 +27299,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* Kestrel contract due today, Hiro owns it
 
+*Judge (v2): 9.8. Accurate and immediately speakable; the final sentence mildly repeats the suggested status check.*
+
 **fix10** — edited after streaming
 
 > The Kestrel contract is due to be signed by Thursday 1 October, with Hiro owning it. Since that's today, I'd check with Hiro whether it's actually signed before Procurement treats it as done.
@@ -26258,6 +27328,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* strings Thursday, animation cut, beta date holds
 
 *Judge (v1): 10.0. No material issue. The concise recap captures all agreed actions and timing without inventing commitments or overstating the animation's possible return.*
+
+*Judge (v2): 10.0. None; the recap faithfully captures the decisions, owners, deadlines, and invitation commitment without adding unsupported facts.*
 
 **fix1**
 
@@ -26319,6 +27391,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* four decisions, beta date unchanged
 
+*Judge (v2): 10.0. No material issue; the concise recap faithfully captures all four decisions without inventing commitments or overstating the animation's possible return.*
+
 **fix10**
 
 > Here's where we landed. Dana gets final reminder strings to Marcus by end of day Thursday. We're cutting the onboarding animation, and we can bring it back in 2.5. Priya pairs with Marcus on the offline sync bug tomorrow at 9:30. And the beta date stays October 14th.
@@ -26350,6 +27424,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* strings Thursday, animation cut, beta date holds
 
 *Judge (v1): 8.7. Accurately repeats the earlier summary rather than converting it into an action-item list. Owners and deadlines remain embedded in prose, with tasks, decisions, and milestones mixed together.*
+
+*Judge (v2): 8.7. Essentially repeats the previous summary instead of producing the requested action-item list. The facts are accurate, but tasks, owners, deadlines, and the beta milestone are not clearly separated.*
 
 **fix1**
 
@@ -26411,6 +27487,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* four decisions, beta date unchanged
 
+*Judge (v2): 8.9. This largely repeats the previous summary rather than creating a trackable action list. It omits Priya's invite commitment and does not identify the animation cut's unspecified owner and deadline.*
+
 **fix10**
 
 > Here's where we landed. Dana gets final reminder strings to Marcus by end of day Thursday. We're cutting the onboarding animation, and we can bring it back in 2.5. Priya pairs with Marcus on the offline sync bug tomorrow at 9:30. And the beta date stays October 14th.
@@ -26440,6 +27518,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Colin's notes do say GA moved to **November 4th**, but the same notes say code freeze moves to **October 16th** to absorb the extra scope, and CSV export is back in for 2.4 pending Lena's confirmation. So the extra room is mostly going to the added scope, not to spare capacity. Also worth flagging: pilot customers were told October 28th, and nobody has checked the later date against the store review buffer.
 
 *Judge (v1): 7.3 — reference_conflict_ignored, missed_available_evidence. Treats October 16 as settled despite the October 9 action item, omits the notes’ unreviewed status, and overstates how the extra time is allocated. It correctly surfaces the customer date and unchecked review buffer.*
+
+*Judge (v2): 7.5 — reference_conflict_ignored. It omits that the notes are unreviewed and relies on the 16 October freeze despite the conflicting 9 October action item. Its conclusion that added scope consumes most of the extra room is too confident.*
 
 **fix1**
 
@@ -26494,6 +27574,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* GA moved, but freeze and scope still open
 
+*Judge (v2): 7.1 — reference_conflict_ignored. It identifies the freeze-date conflict but omits the 28 October GA date communicated to pilot customers. The gist also presents the GA move as settled despite the draft's unresolved status.*
+
 **fix10** — edited after streaming
 
 > The notes do say GA moved to **November 4th**, but I'd check the freeze date before we treat it as breathing room. The same notes have code freeze moving to **October 16th** to absorb the extra scope, and the action list still says freeze stays October 9th, so those two don't line up. The material gives both, so let's confirm which one holds before we plan around it.
@@ -26521,6 +27603,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* no new date yet, decision still open
 
 *Judge (v1): 9.0. It correctly avoids a new commitment but omits Hiro, the named decision owner, leaving the meeting without a clear person to resolve when pilots should be updated.*
+
+*Judge (v2): 8.8. It appropriately avoids promising November 4, but omits Hiro's explicit decision ownership. Saying the date needs settling without naming who should resolve it leaves the meeting's next step vague.*
 
 **fix1**
 
@@ -26566,6 +27650,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The notes don't settle it. They say pilot customers were already told GA is **28 October**, and that Hiro decides whether to update them now or after beta. So the date we give them is still an open call, and it's Hiro's to make.
 
+*Judge (v2): 9.9. No material issue. It identifies the previously communicated date and the correct decision owner without turning draft notes into a confirmed customer commitment.*
+
 **fix10** — edited after streaming
 
 > The notes say pilot customers were already told GA is 28 October, and Hiro's action item is to decide whether to update them now or after beta. So the date we give them is still an open call, not something the notes settle. On the freeze date the material gives both, 16 October and 9 October, so that needs confirming before anyone relies on it.
@@ -26591,6 +27677,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > "Mostly on track" is doing a lot of work there. I'd ask him to name what's actually left, which items are at risk, and what the date assumes has to land on time. If any of those are open, that's the pushback: what's the plan if they slip?
 
 *Judge (v1): 9.8. No material issue. The concise advice challenges vague status constructively without inventing project facts, and advice is appropriate for this private request.*
+
+*Judge (v2): 9.8. No material issue. The concise advice fits the private request and avoids inventing project facts; asking for owners and decision deadlines could sharpen accountability.*
 
 **fix1**
 
@@ -26640,6 +27728,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > "Mostly on track" is doing a lot of work there. I'd ask him to name what's actually left: which items are done, which are still open, and what's sitting on the critical path to the 28th. Then the real question, what's the buffer if one of those slips? If he can't point to slack, "mostly" means we're one surprise away from missing it.
 
+*Judge (v2): 9.4. The closing inference is slightly too categorical: inability to identify buffer signals unquantified schedule risk, not necessarily proof that one surprise will cause a miss.*
+
 **fix10**
 
 > "Mostly on track" is doing a lot of work there. I'd ask him to name what's actually left: which items are done, which are still open, and what's sitting on the critical path to the 28th. Then the real question, what's the buffer if one of those slips? If he can't point to slack, "mostly" means we're one surprise away from missing it.
@@ -26669,6 +27759,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* ask what's left and at risk
 
 *Judge (v1): 8.1. The answer is only marginally shorter and retains the same three-sentence structure and removable framing. Its advice remains relevant, but it does not meaningfully fulfill the compression request.*
+
+*Judge (v2): 8.0. The rewrite is barely shorter than the original and retains its three-sentence structure and nearly all its wording, so it weakly fulfills the user's sole request.*
 
 **fix1**
 
@@ -26728,6 +27820,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* ask what's left and the buffer
 
+*Judge (v2): 8.6. It is only modestly shorter, retaining nearly all the original advice across three sentences. The status checklist and closing warning could be removed without losing the useful pushback.*
+
 **fix10**
 
 > "Mostly on track" is doing a lot of work. I'd ask him to name what's actually left: what's done, what's open, and what's on the critical path to the 28th. Then the real question, what's the buffer if one of those slips? If he can't point to slack, "mostly" means we're one surprise from missing it.
@@ -26759,6 +27853,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* test the doc, not the phrase
 
 *Judge (v1): 9.3. The advice is useful and grounded, but a compact, ready-to-say rejoinder would better honor the user's earlier request for brevity.*
+
+*Judge (v2): 9.5. Grounded and useful, but a single direct rejoinder would better honor the earlier request for brevity. It also drops the useful fallback question if critical-path items slip.*
 
 **fix1**
 
@@ -26818,6 +27914,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* make him walk the plan, not cite it
 
+*Judge (v2): 9.3. The guidance is sound, but it repeats the previous checklist and explanation despite the user's request for brevity.*
+
 **fix10**
 
 > If he points to the plan doc, that's fine, but the doc isn't the answer. Ask him to walk you through the open items and the critical path to the 28th, then the buffer if one slips. If the doc doesn't show slack, "mostly on track" is still the risk.
@@ -26849,6 +27947,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* summary totals only, fallback at go/no-go
 
 *Judge (v1): 10.0. No material issue. The answer accurately identifies the affected functionality, fallback behavior, and decision date in immediately speakable language.*
+
+*Judge (v2): 10.0. No material issue. It accurately explains the affected functionality, fallback behavior, and decision timing in immediately speakable language.*
 
 **fix1**
 
@@ -26906,6 +28006,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > If Platform slips the Ledger bulk endpoints past 2 October, the pay-period summary screen can't load totals for pay periods longer than 14 days. The fallback is the v4 read endpoints, which means the summary ships read-only with a "totals updating" state, and that call gets made at the 5 October go/no-go.
 
+*Judge (v2): 10.0. No material issues; the response directly states the precise impact, mitigation, and decision date in immediately speakable language.*
+
 **fix10**
 
 > If Platform slips the Ledger bulk endpoints past 2 October, the pay-period summary can't load totals for pay periods longer than 14 days. The mitigation is to fall back to the v4 read endpoints for 2.4 and show a "totals updating" state, and that call gets made at the 5 October go/no-go. If we fall back, the summary ships read-only.
@@ -26937,6 +28039,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* v4 read endpoints, decide 5 October
 
 *Judge (v1): 10.0. No material issue. The final sentence slightly repeats the decision timing.*
+
+*Judge (v2): 9.9. No material issue. The decision timing is repeated slightly, but the answer is accurate, grounded, and immediately speakable.*
 
 **fix1**
 
@@ -26991,6 +28095,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The fallback is the v4 read endpoints. If Platform slips the Ledger v5 bulk endpoints past 2 October, we switch to those, and the pay-period summary ships read-only with a "totals updating" state instead of loading full totals. The trigger point is the 5 October go/no-go, where Hiro and Lena make the call.
 >
 > *Summary chip:* v4 read endpoints, call at 5 October go/no-go
+
+*Judge (v2): 10.0. No material issues; the answer and gist accurately convey the fallback and decision point, with grounded details about degraded behavior and decision owners.*
 
 **fix10**
 
@@ -27083,6 +28189,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > A process is an independent program in execution with its own address space, while a thread is a unit of execution within a process that shares that process's memory and resources. So threads share the heap and file descriptors but have their own stack and registers, which makes context switching between threads cheaper than between processes.
 >
 > *Summary chip:* process owns memory, threads share it
+
+*Judge (v2): 9.9. The context-switch cost comparison is slightly absolute; it generally holds for threads within the same process but is not universal.*
 
 **fix10**
 
@@ -27305,6 +28413,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > Two pointers walk in from both ends, skipping anything that isn't alphanumeric, and compare lowercased characters. If they ever differ it's false, and if they meet without a mismatch it's true. Time is O(n) since each character is visited once, and space is O(1) because I'm not building a cleaned copy of the string.
 
+*Judge (v2): 9.9. No material issue. The implementation correctly handles the supplied examples, empty strings, and punctuation-only inputs; its complexity claims are accurate.*
+
 **fix10**
 
 > ```python
@@ -27420,6 +28530,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Building a heap with heapify is **O(n)**, not O(n log n). The reason is that most nodes sit near the bottom and sift down only a level or two, so the work sums to a constant times n. A single sift-down is O(log n), and popping the root n times gives O(n log n).
 >
 > *Summary chip:* heapify is O(n), sift-down is O(log n)
+
+*Judge (v2): 9.7. The complexity distinction and explanation are correct. The repeated-pop comparison adds unnecessary detail to this terse request.*
 
 **fix10**
 
@@ -27699,6 +28811,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > Now every goroutine is counted before `Wait`, so it blocks until all writes finish.
 
+*Judge (v2): 10.0. None; the response correctly diagnoses the scheduling-dependent bug, supplies the minimal working fix, and explains why it ensures completion before returning.*
+
 **fix10**
 
 > The bug is `wg.Add(1)` inside the goroutine, so `wg.Wait()` can return before the goroutines even register, and the slice stays zero. Move `wg.Add(1)` before the `go` statement.
@@ -27935,6 +29049,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > The fix works because each string gets its own char array, both are sorted independently, and `Arrays.equals` compares the two sorted arrays element by element.
 
+*Judge (v2): 4.0 — major_factual_error, major_reasoning_error. The code fixes the problem, but the central diagnosis is wrong: in-place sorting is not the bug. Array equals compares identity, and comparing an array with itself would return true, not false.*
+
 **fix10**
 
 > The bug is that `Arrays.sort` on a `char[]` sorts in place and returns `void`, so `Arrays.sort(a).equals(b)` doesn't even compile. If it's written as two separate sort calls followed by `a.equals(b)`, that's the real problem: `equals` on arrays is reference equality, so two different arrays are never equal even when their contents match.
@@ -28010,6 +29126,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > ```
 
 *Judge (v1): 10.0. No material issues. The code correctly merges the lists, handles empty inputs and equal values, and returns the merged head without added prose.*
+
+*Judge (v2): 10.0. None; the implementation correctly handles empty inputs, duplicate values, and remaining nodes, returning the merged head without explanatory prose.*
 
 **fix1**
 
@@ -28253,6 +29371,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >     return dummy.next
 > ```
 
+*Judge (v2): 10.0. None; the implementation correctly handles empty inputs, duplicate values, and remaining nodes, returning the merged head without explanatory prose.*
+
 **fix10**
 
 > ```python
@@ -28425,6 +29545,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* stream rows, union-find frontier, count on close
 
+*Judge (v2): 9.2. The frontier approach is sound, but it omits explicitly counting components still active at end of stream and does not state runtime complexity.*
+
 **fix10**
 
 > The key constraint is that I can't hold the whole grid, so I can't do a normal flood fill. What I can do is track connectivity between consecutive rows as I stream them.
@@ -28526,6 +29648,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Sorting is **O(n log n)**, and the two-pointer scan is **O(n²)**, so the overall time is O(n²). Space is O(1) extra beyond the output, or O(n) if you count the sort's stack.
 >
 > *Summary chip:* O(n²) time, O(1) extra space
+
+*Judge (v2): 8.7. The time bound is correct, but O(1) space covers the scan, not necessarily sorting. Sorting memory depends on implementation; O(n) is not a general sort-stack cost. The gist omits this qualification.*
 
 **fix10**
 
@@ -28668,6 +29792,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Now lo = 1 and hi = 1, so the loop ends and we return **lo = 1**, the first index where 2 appears.
 >
 > *Summary chip:* lower bound lands on index 1
+
+*Judge (v2): 10.0. None. Every iteration, comparison, boundary update, and the final index is correct. The gist agrees with the answer.*
 
 **fix10**
 
@@ -29059,6 +30185,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > Time: O(1) per operation with the linked list, O(n) as written. Space: O(capacity).
 
+*Judge (v2): 4.0 — code_incorrect. The implementation uses list.remove and pop(0), making recency updates and eviction O(n). It acknowledges this violation but only describes, rather than implements, the required constant-time solution.*
+
 **fix10**
 
 > ```python
@@ -29264,6 +30392,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* POST create, GET redirect, dedupe by long URL
 
+*Judge (v2): 9.5. DELETE lacks a concrete route and response. The response status for a deduplicated POST and the handling of a concurrent unique-index conflict are implicit.*
+
 **fix10**
 
 > For a URL shortener I'd keep the surface small. A **POST /urls** that takes the long URL and returns the short code plus the full short link, a **GET /{code}** that returns a 301 or 302 redirect to the original, and a **GET /urls/{code}** for metadata like the original URL, creation time and click count. Optionally a **DELETE /urls/{code}** to deactivate.
@@ -29394,6 +30524,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* keyset cursor on timestamp plus id
 
+*Judge (v2): 9.1. Correct keyset mechanics, but the no-skip guarantee is underspecified: new events ahead of the cursor need refresh, and timestamps or sequence allocation can diverge from commit order. The tie-breaker explanation is slightly repetitive.*
+
 **fix10**
 
 > For a feed that's constantly getting new inserts, offset pagination breaks because the offsets shift under you. I'd use **keyset pagination** on a stable, unique sort key. Since events are newest first, I'd sort by a monotonic column like a creation timestamp plus a tiebreaker, usually the event id, and the cursor encodes the last row's timestamp and id. The next page asks for rows where timestamp is less than the cursor, or equal with a smaller id, ordered descending, limit N. That way new inserts land above the cursor and never shift what you've already paged past, so no duplicates and no skips.
@@ -29496,6 +30628,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > What's driving the three-service split on your side, is it deployment independence, or scaling the settlement batch separately?
 
+*Judge (v2): 4.6 — unsupported_personal_claim, important_question_unanswered. Invents Tern’s three service boundaries from separate résumé accomplishments. The reconciliation metric does not establish duplicate-payment prevention during cutover, and the closing question redirects rather than answers why the services were split.*
+
 **fix10** — edited after streaming
 
 > I led Project Tern, a rewrite of our carrier-settlement service from a Rails monolith into three Go services, with a working group of 4 engineers and 1 QA analyst over 7 months. **Rate quoting** was read-heavy and latency-sensitive, so we cut its p95 from 820 ms to 190 ms with a batched loader and a 90-second Redis cache keyed by lane ID. Ingestion ran through **Dockhand**, a Kafka pipeline handling about 2.3 million shipment status events a day, with a transactional outbox so we never wrote a status twice. Reconciliation stayed a nightly job comparing carrier invoices against booked loads, which took monthly mismatches from 312 down to 41.
@@ -29579,6 +30713,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > Python, Rust and Bash are the languages on my résumé. In Rust I wrote **Lanternfish**, a sidecar that exports per-pod DNS lookup latency to Prometheus, and it showed **31% of p99 latency on the checkout path came from DNS**. The cert-manager rotation work was **automated TLS certificate rotation**, retiring a 47-step wiki runbook.
+
+*Judge (v2): 7.3 — missed_available_evidence, important_question_unanswered. The Rust example is accurate, but the answer omits the available Python shipping example, Kestrel. It never clearly identifies the strongest languages, and the disconnected cert-manager detail provides no shipped example for Python or Bash.*
 
 **fix10**
 
@@ -29674,6 +30810,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* CI 34 to 13 min, spend down $11.5k/mo
 
+*Judge (v2): 9.8. “A bit over 60% faster” is imprecise: 34 to 13 minutes represents a 61.8% runtime reduction, or a 2.62× speedup. Otherwise, both examples are grounded and immediately speakable.*
+
 **fix10**
 
 > The clearest one is compute spend at Hollowbrook. I right-sized the node pools on two EKS clusters and brought the monthly bill from about **$41,300** down to about **$29,800**, so roughly a 28% cut. The other one is CI: at Orrin I cut the main monorepo build from **34 minutes** to 13 with Buildkite build caching. Happy to go deeper on either.
@@ -29755,6 +30893,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > Let me reason through it. Partitioning by time, range partitioning on the event timestamp, monthly or weekly, means vacuum and autovacuum only touch recent partitions, and old ones can be frozen or dropped. What gets harder: cross-partition queries and unique constraints need the partition key, planning gets more complex, and partition creation and retention become automation rather than a one-off.
+
+*Judge (v2): 4.0 — major_factual_error, important_question_unanswered. Skips the production-experience question and overstates PostgreSQL behavior: older partitions can still require vacuum, and cross-partition queries do not require the partition key; that requirement applies to parent-level unique constraints.*
 
 **fix10** — edited after streaming
 
@@ -29876,6 +31016,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* GMP scheduling, channels vs mutexes, honest Go level
 
+*Judge (v2): 5.0 — unsupported_personal_claim. The technical explanation is sound, but the answer invents Go side projects and coursework and asserts no paid production Go experience. Neither is established, and the experience paragraph overlooks stronger, documented professional Python/Rust examples.*
+
 **fix10** — edited after streaming
 
 > Goroutines are multiplexed onto OS threads by the Go runtime scheduler, which uses an M:N model: many goroutines run on a smaller pool of OS threads, one per logical processor set by GOMAXPROCS. Each P has a local run queue, and there's a global queue plus work-stealing when a P runs dry. When a goroutine blocks on a syscall, the runtime hands off the P to another thread so the rest keep running, and network I/O is handled by the netpoller so it doesn't tie up a thread at all.
@@ -29973,6 +31115,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Use Floyd's tortoise and hare: move one pointer one step and the other two steps until they meet, which proves a cycle exists. Then reset one pointer to the head and advance both one step at a time; the node where they meet again is the start of the cycle. It's O(n) time and O(1) space.
 >
 > *Summary chip:* Floyd's algorithm, then reset to find entry
+
+*Judge (v2): 9.5. The cycle-entry method and complexity are correct, but “until they meet” omits the acyclic stopping condition: report no cycle if the fast pointer or its next node is null.*
 
 **fix10**
 
@@ -30085,6 +31229,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > Complexity is **O(n)** time, since each element is inserted and looked up once, and **O(n)** space for the map in the worst case.
 >
 > *Summary chip:* hash map, one pass, O(n)
+
+*Judge (v2): 9.9. No material issue: the result, complement-checking algorithm, and standard complexity analysis are correct, and the response is immediately speakable.*
 
 **fix10**
 
@@ -30310,6 +31456,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* assign timer to setTimeout
 
+*Judge (v2): 10.0. No material issues. The diagnosis and fix are correct, preserve arguments and `this`, and match the gist chip.*
+
 **fix10**
 
 > The bug is that `timer` is never assigned, so `clearTimeout(timer)` always clears `undefined` and every keystroke schedules a new call.
@@ -30422,6 +31570,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 > The inner loop is logarithmic, since j doubles from i until it passes n, so that's about log(n/i) steps. Summing that over i from 1 to n gives **O(n log n)**. The outer loop contributes the n, and the doubling gives the log factor.
 
+*Judge (v2): 4.0 — major_reasoning_error. O(n log n) is a valid but loose upper bound. The multiplicative reasoning misses that the inner loop gets shorter as i increases; summing its work gives Θ(n).*
+
 **fix10**
 
 > The outer loop runs n times, and for each i the inner loop doubles j from i up to n, which is log(n/i) steps. Summing that over all i gives O(n log n) overall, and the space is O(1) since it's just the two counters.
@@ -30526,6 +31676,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* FAQ conflicts, assume merge, flag it
 
+*Judge (v2): 9.7. No material error. The explanation is slightly longer than necessary, and the suggested wording could request confirmation more explicitly before coding.*
+
 **fix10**
 
 > The FAQ contradicts itself on exactly this point, so I'd flag that before coding. One answer says touching windows like [5, 10] and [10, 12] stay separate when grace is 0, since ends are exclusive. But the answer about what the grader checks first says touching windows always merge, even with grace 0, and that most failed submissions get that wrong.
@@ -30617,6 +31769,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The FAQ says each host has at most 200,000 windows, so that's the size I'd design the common case around, but the hidden cases go up to 2 million per host. An O(n log n) sort-based solution is exactly what they expect, and the reference finishes under a second in Python. The cutoff is 5 seconds, so a sort-based approach has plenty of headroom even at 2 million.
 >
 > *Summary chip:* design for 2M, sort is fine
+
+*Judge (v2): 7.9. The reported sub-second reference run does not establish headroom for this implementation at 2 million windows. Both limits are cited, but treating 200,000 as a common-case target smooths over their inconsistency.*
 
 **fix10**
 
@@ -30715,6 +31869,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The n log n approach still holds. It's still sort by start, then one linear sweep, so the complexity is unchanged. Only the merge condition changes: a zero-length window now participates instead of being skipped.
 >
 > *Summary chip:* example five now merges to [0,20]
+
+*Judge (v2): 9.4. The dry run and complexity are correct, but the answer omits explicit discussion of the 1440-minute cap and loosely calls marker retention a merge-condition change; the comparison itself remains unchanged.*
 
 **fix10**
 
@@ -31037,6 +32193,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > The validation pass runs over the input in its original order so the first inverted window is reported by its given index, and zero-length windows are filtered out before sorting so they can never bridge a gap. After sorting by start, each window either extends the current merged window's end or starts a new one, and grace only affects the merge test, never the stored end. Both functions are O(n log n) time from the sort and O(n) space for the new list, leaving the input untouched.
 
+*Judge (v2): 10.0. No material issues. The code satisfies all specified edge cases, preserves the input and its nested pairs, and accurately states its complexity.*
+
 **fix10**
 
 > ```python
@@ -31164,6 +32322,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* ndots:2, FQDN, NodeLocal; p99 1,380 to 910 ms
 
+*Judge (v2): 10.0. None. The response covers every part asked, distinguishes the candidate’s contribution from rollout ownership, and keeps the metrics and gist accurate.*
+
 **fix10**
 
 > I changed two things: the checkout-path pods moved to ndots:2, and the three external payment endpoints switched to fully qualified names with a trailing dot. Priya Oduya, a senior SRE, reviewed the design and ran the rollout. Checkout p99 went from 1,380 ms to 910 ms, and DNS dropped to about 6% of p99.
@@ -31258,6 +32418,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* 0.3 ms, 6 MiB, UDP only, injected pods only
 
+*Judge (v2): 9.9. No material issue. The limitations sentence is slightly long for spoken delivery, but every claim is supported and directly relevant.*
+
 **fix10**
 
 > Lanternfish added about 0.3 ms per lookup, and each sidecar used around 6 MiB of memory and under 5 millicores of CPU. The main blind spot was TCP: queries that fell back to TCP after a truncated response were passed through and not measured, and it only saw pods it was injected into.
@@ -31341,6 +32503,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > First thing I'd look at is the threshold itself, one percent over five minutes, the same everywhere, with about half the pages firing during deploys and clearing on their own. **Multi-window burn-rate alerts** are the pattern I'd bring to that, and the signal I'd watch is **weekly page volume** and how many fire during deploys. What I'd want to leave alone is the **paging path**, what does the routing and escalation look like today?
+
+*Judge (v2): 8.3. It names a useful alerting pattern but doesn't connect it to service SLOs, use the 90-page baseline, or check for missed incidents. The choice to preserve the paging path lacks a rationale.*
 
 **fix10** — edited after streaming
 
@@ -31606,6 +32770,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > ## Complexity
 > Time is O(n), since counting and the bucket walk are each linear in the input size. Space is O(n) for the count map and the buckets.
 
+*Judge (v2): 9.6. The technical content is correct for standard valid-k inputs, but separating the explanation and complexity with a code block makes the live spoken answer less seamless.*
+
 **fix10**
 
 > ## Approach
@@ -31738,6 +32904,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* heap gives O(n log k) top-k
 
+*Judge (v2): 8.9. The final claim is too categorical: small k alone doesn't make heaps preferable to linear-time buckets, and streaming still requires frequency state. The reply is longer than this follow-up needs.*
+
 **fix10**
 
 > I actually went with bucket sort rather than a heap. The heap version is the other standard approach: count frequencies with a hash map, then push each element onto a min-heap of size k keyed by frequency, popping whenever it exceeds k. That gives O(n log k) time and O(n + k) space, which is better than bucket sort when k is small and n is huge, since you never allocate n buckets. Bucket sort wins when the frequencies are spread out and you want strict O(n), but it costs O(n) space regardless of k. So the choice comes down to how large k is relative to n.
@@ -31815,6 +32983,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9**
 
 > Yes, and the answer is the bucket sort I already wrote. When k is close to the number of distinct values, the heap's log k factor buys you almost nothing, but the bucket walk is still linear in n, so it stays O(n) regardless of how large k gets. That's the case where buckets clearly win.
+
+*Judge (v2): 9.3. The linear-time claim is correct, but “buckets clearly win” overlooks O(n) bucket storage, which matters for the huge array specified. “I already wrote” also sounds slightly defensive.*
 
 **fix10**
 
@@ -31928,6 +33098,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* grace 0 splits, grace 1 merges, no extension
 
+*Judge (v2): 10.0. None. The response accurately traces both examples, explains the differing outputs, and explicitly avoids the endpoint-extension error. The gist agrees with the answer.*
+
 **fix10**
 
 > Example two returns [[5, 12], [13, 20]] and example three returns [[5, 20]], and the only difference between them is grace.
@@ -32020,6 +33192,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* O(n log n) time, O(n) space
 
+*Judge (v2): 9.1. The complexity is correct, but 'well under a second in Python' overstates the evidence: only the reference implementation is reported under one second, with no benchmark supplied for the candidate's implementation.*
+
 **fix10**
 
 > Sorting dominates: **O(n log n)** time, and the merge pass itself is linear since each window is pushed and popped once. Space is **O(n)** for the sorted copy and the output, and I don't mutate the input. With n at 200,000 that runs well under a second in Python.
@@ -32101,6 +33275,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9**
 
 > The batch design doesn't work anymore, because I can't sort what I haven't seen. So I'd keep the merged windows in a sorted structure, like a balanced BST or a sorted list with binary search, and insert each arriving window by merging it with any neighbors it touches or falls within grace of. For "is minute t quiet," I binary search for the window containing t and check whether t is in [start, end). Insert becomes O(log n) plus the merges, and the query is O(log n).
+
+*Judge (v2): 8.3. The insertion bound is wrong for a sorted list: inserting can require O(n) shifts even when nothing merges. The balanced-BST option is sound, but its merge/removal costs should be explicit.*
 
 **fix10**
 
@@ -32333,6 +33509,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > Unpacking the tuple gives you `right` and `ch`, and the `seen[ch] >= left` guard stops a stale index from moving `left` backwards.
 
+*Judge (v2): 4.0 — major_factual_error. The corrected code is valid, but the diagnosis is false: the original loop already unpacks enumerate correctly, and "abcabcbb" returns 3 rather than crashing.*
+
 **fix10**
 
 > The bug is that `enumerate(s)` yields `(index, char)` tuples, so `ch` is never a character and `right` is never defined. On `"abcabcbb"` it crashes on the first iteration.
@@ -32545,6 +33723,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 >
 > *Summary chip:* sliding window, map of last indices
 
+*Judge (v2): 6.4 — important_question_unanswered. The algorithm, code, and complexity are correct, but the answer repeats the previous explanation instead of tracing 'abba'. It provides neither the per-character state changes nor the final result.*
+
 **fix10**
 
 > ABBA is a classic lock-free approach to a shared stack, and it's really a hazard of compare-and-swap rather than an algorithm on its own. The idea is that a thread reads a value, gets preempted, and by the time it comes back the location holds the same value again, so its CAS succeeds even though the underlying state changed underneath it. The name comes from the value going A to B and back to A, so the check passes when it shouldn't.
@@ -32630,6 +33810,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > The resume says 31 percent, so let me be precise about that first. Lanternfish was a Rust sidecar on the tokio runtime using hickory-proto, injected into the checkout pods. It listened on 127.0.0.1:53, forwarded each query unchanged to the cluster DNS IP, and timed from query arrival to response written back, exporting a Prometheus histogram with qtype, rcode and upstream labels. That gave per-pod lookup latency, which CoreDNS metrics couldn't, since they're per replica and blind to search-domain expansion.
 >
 > *Summary chip:* sidecar timed DNS per pod, found 31%
+
+*Judge (v2): 9.0. Accurate and speakable, but omits the supplied histogram name and measurement window; it explains individual DNS query timing better than the reported share of checkout p99.*
 
 **fix10**
 
@@ -32722,6 +33904,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > We considered two alternatives. CoreDNS metrics were already there, but they're per replica, not per pod, and they can't see how many search-domain expansions one application lookup triggers. An eBPF probe would've given per-pod data without touching pods, but our nodes ran Container-Optimized OS, nobody on the team had written eBPF, and we estimated four to six weeks. The sidecar was per pod by construction, easy to remove, and about two weeks of work. The trade-off is it only sees pods it's injected into, and it adds one local hop per lookup.
 >
 > *Summary chip:* per-pod data, cheap, removable
+
+*Judge (v2): 9.8. Accurate and fully grounded, but slightly longer than this brief follow-up needs; the central reason for choosing the sidecar could come first.*
 
 **fix10**
 
@@ -32843,6 +34027,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > 
 > On the ledger side, is Harrow's schema already fixed, or is this a greenfield design?
 
+*Judge (v2): 7.1 — missed_available_evidence, important_question_unanswered. It skips the experience question and available reconciliation/Sparrowhawk evidence. A unique ledger key prevents duplicate postings, not duplicate bank transfers; provider-side idempotency and ambiguous payment outcomes are unaddressed.*
+
 **fix10** — edited after streaming
 
 > I'd design it like this.
@@ -32932,6 +34118,8 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 **fix9** — edited after streaming
 
 > For the payout write, **read committed** works: each transaction touches its own grower's account and the clearing account, and the unique constraint on the idempotency key handles the retry. If a balance invariant spans accounts, **repeatable read** with row locks in a fixed order is the safer choice.
+
+*Judge (v2): 8.8. Read committed is defensible for atomic, uniquely keyed inserts. The balance-invariant fallback is underspecified: repeatable read can still permit write skew unless locking actually covers the invariant, and the answer never explains the concrete concurrency race.*
 
 **fix10**
 

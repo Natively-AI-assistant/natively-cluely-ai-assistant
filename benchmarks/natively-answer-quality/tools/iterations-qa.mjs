@@ -114,6 +114,8 @@ const REJECTED = [
   ['A general "honest limit is not a claim" exemption in every mode (e7325287)', 'judged −0.02 (±0.24) on its 44 target drafts; the pass also stopped removing the invented process beside the limit'],
   ['"An explicitly older version is not a conflict"', 'the list step then stopped naming genuine conflicts (3/6 → 0/6, 5/6 → 0/6)'],
   ['Call Center: keep every "I can\'t…" the draft says', 'brought back the invented restrictions ("I can\'t send a reset by text")'],
+  ['Verifying Lecture / Technical interview turns that carry a personal claim (gate-v2)', 'the pass lists the claims and then keeps them (5 of 6 replays)'],
+  ['A dedicated Lecture "do not speak as the student" rewrite', '5 of 6 rewrites refused by the source-word rail'],
   ['I19 technical second look for Technical interview', 'found 2 of 7 known errors; one of its two fixes was wrong'],
   ['I20 list facts the documents hold that the answer left out', '−0.01 (±0.20)'],
   ['I23 "what to say instead" rules for Looking for work', '+0.13 (±0.44); the judge capped the reframed motives too'],
