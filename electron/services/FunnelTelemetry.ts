@@ -434,6 +434,25 @@ export class FunnelTelemetry {
         }
     }
 
+    /**
+     * Open a link that is leaving the app, tagged and counted when it is a
+     * checkout link. For the paths that do not go through the 'open-external'
+     * IPC — a target="_blank" link caught by the window-open handler — so a
+     * purchase started there is not an unattributed one.
+     *
+     * `open` is the platform's opener (shell.openExternal). Resolves whether
+     * it opened; never throws, and the link opens whatever telemetry does.
+     */
+    public async openOutgoing(url: string, surface: string | undefined, open: (url: string) => Promise<unknown>): Promise<boolean> {
+        const tagged = this.tagOutgoingUrl(url, surface);
+        let opened = true;
+        try { await open(tagged.url); } catch { opened = false; }
+        if (tagged.checkout) {
+            this.track('checkout_opened', { ...(tagged.product ? { product: tagged.product } : {}), surface: tagged.surface, opened });
+        }
+        return opened;
+    }
+
     public getStats(): Record<string, unknown> {
         try { return { enabled: this.isEnabled(), ...this.getClient().stats(), install: this.getRegistrar().stats() }; } catch { return { enabled: false }; }
     }

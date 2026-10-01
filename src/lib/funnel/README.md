@@ -27,7 +27,13 @@ One table, `funnel_events` (natively-api migrations 025 and 026).
 | `key_entered` | app | API key or Pro licence entered; accepted or not; minutes since trial start / own-keys exit |
 | `upgrade_prompt`, `paywall_hit` | app | quota banner shown; locked Modes / Profile Intelligence opened |
 | `trial_started`, `trial_reissued` | server | a trial row was created or re-issued; ties trial to install |
-| `purchase_completed`, `checkout_failed`, `subscription_cancelled` | server | from Dodo webhooks; carries the install and screen the checkout link was opened from |
+| `purchase_completed`, `checkout_failed`, `subscription_cancelled` | server | from Dodo webhooks; carries the install and screen the checkout link was opened from, and the amount |
+| `subscription_renewed`, `subscription_on_hold` | server | the customer paid again (one row per billing period); a renewal payment failed and access stopped |
+| `purchase_refunded`, `purchase_disputed` | server | a refund went through; a chargeback was opened. Filed under the purchase they reverse |
+
+Rows with `props.backfill = true` are history from before 2026-10-01, written once by
+`natively-api/scripts/funnel-backfill.mjs` from `free_trials` and Dodo: server events only, with the
+ids the live server gives the same thing, so a replayed webhook cannot double them.
 
 Properties are enums, whole numbers and booleans only. The allowlist is
 `src/lib/funnel/funnelCatalog.mjs` and its twin `natively-api/lib/funnelCatalog.js`.
@@ -42,10 +48,16 @@ Never recorded: IP address, email (reach it through `license_id`), key, model na
 
 - **Trial ↔ install:** the app sends `install_id` with `/v1/trial/start`; the server writes `trial_started`.
 - **Purchase ↔ install:** the main process adds `metadata_install_id`, `metadata_surface` and
-  `metadata_product` to every Dodo checkout link as it is opened (the `open-external` handler, so
-  no link can be missed). Dodo returns them on the webhook; the server writes `purchase_completed`.
-- **Purchase ↔ account:** `funnel_events.dodo_ref` equals `api_keys.dodo_subscription_id` or
-  `pro_licenses.dodo_payment_id`.
+  `metadata_product` to every Dodo checkout link as it is opened: the `open-external` handler, and
+  the window-open handler in `main.ts` for a `target="_blank"` link, both through
+  `FunnelTelemetry`. Dodo returns them on the webhook; the server writes `purchase_completed`.
+- **Purchase ↔ account ↔ device:** no funnel row carries both a Dodo reference and an account, so
+  the report reads the links from the tables that know (`natively-api/lib/funnelLinks.js`):
+  `api_keys` (account ↔ subscription), `review_prompt_state` (device ↔ account), `pro_licenses`
+  (a Pro purchase ↔ the accounts under the same email), `free_trials` (trial ↔ device).
+- **Not joinable:** a Pro licence bought on the website by someone with no Natively API account.
+  The app checks that licence with Dodo, not with our server, so nothing ties the purchase to the
+  install. It counts as a buyer who never ran the app, and the install as an existing customer.
 
 ## Where it is off
 
@@ -103,9 +115,12 @@ node scripts/funnel-report.mjs --days 30
 node scripts/funnel-report.mjs --from 2026-10-01 --to 2026-10-15 --json
 ```
 
-Read-only; prints counts and rates, never an id: by install, then by person (stage reached and
-where people stopped, conversion between stages, time between stages, retention, churn, and
-cohorts by week, platform and version). `lib/funnelReport.js` says what each number means and what
+Read-only; prints counts and rates, never an id: by install, then by person. People are split into
+NEW (first ran the app in the period: the stage table, where they stopped, every "install → …" rate,
+retention, cohorts by week, platform and version), EXISTING (ran the app but were here before, with
+how many were already paying) and people who never ran a reporting app. Trial → paid covers everyone
+who started a trial; buyers get cancellations, failed renewals, refunds, chargebacks, "paid and
+kept", renewals and revenue per currency. `lib/funnelReport.js` says what each number means and what
 it cannot see (telemetry off, older app versions, purchases made outside the app).
 
 One person's history, by email, device, install, trial or account:

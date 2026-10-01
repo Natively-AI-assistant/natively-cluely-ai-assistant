@@ -244,6 +244,60 @@ describe('FunnelTelemetry', { skip: HAVE_BUILD ? false : 'run `npm run build:ele
     assert.deepEqual(h.ft.tagOutgoingUrl('https://natively.software/', 'other'), { url: 'https://natively.software/', checkout: false, product: null, surface: 'other' });
   });
 
+  // ── Links that leave by window.open / target="_blank" ─────────────────────
+
+  test('a checkout link opened outside the IPC still leaves tagged, and is counted', async () => {
+    const h = load({ packaged: true, state: { firstRunSent: true } });
+    const openedUrls = [];
+    const ok = await h.ft.openOutgoing(PRO_LINK, 'other', async (u) => { openedUrls.push(u); });
+    assert.equal(ok, true);
+    const url = new URL(openedUrls[0]);
+    assert.equal(url.searchParams.get('metadata_install_id'), h.installId());
+    assert.equal(url.searchParams.get('metadata_surface'), 'other');
+    assert.equal(url.searchParams.get('metadata_product'), 'api_pro');
+    const e = h.queue().at(-1);
+    assert.equal(e.event_type, 'checkout_opened');
+    assert.deepEqual(e.props, { product: 'api_pro', surface: 'other', opened: true });
+  });
+
+  test('any other link opens unchanged and is not an event', async () => {
+    const h = load({ packaged: true, state: { firstRunSent: true } });
+    const openedUrls = [];
+    for (const link of ['https://natively.software/pricing?x=1', 'https://github.com/evinjohnn/natively']) {
+      assert.equal(await h.ft.openOutgoing(link, 'other', async (u) => { openedUrls.push(u); }), true);
+    }
+    assert.deepEqual(openedUrls, ['https://natively.software/pricing?x=1', 'https://github.com/evinjohnn/natively']);
+    assert.ok(!h.queue().some((e) => e.event_type === 'checkout_opened'));
+  });
+
+  test('a link that could not be opened is reported as not opened, and nothing throws', async () => {
+    const h = load({ packaged: true, state: { firstRunSent: true } });
+    const ok = await h.ft.openOutgoing(PRO_LINK, 'other', async () => { throw new Error('no browser'); });
+    assert.equal(ok, false);
+    assert.deepEqual(h.queue().at(-1).props, { product: 'api_pro', surface: 'other', opened: false });
+    assert.equal(await h.ft.openOutgoing('https://natively.software/', 'other', async () => { throw new Error('no browser'); }), false);
+  });
+
+  test('with Usage statistics off the link opens exactly as given and nothing is recorded', async () => {
+    const h = load({ packaged: true, settings: { telemetryEnabled: false } });
+    const openedUrls = [];
+    assert.equal(await h.ft.openOutgoing(PRO_LINK, 'other', async (u) => { openedUrls.push(u); }), true);
+    assert.deepEqual(openedUrls, [PRO_LINK]);
+    assert.deepEqual(h.queue(), []);
+  });
+
+  test('the window-open handler sends https links through that opener, on every window', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'electron/main.ts'), 'utf8');
+    const a = src.indexOf("app.on('web-contents-created'");
+    const block = src.slice(a, src.indexOf("return { action: 'deny' };", a));
+    assert.match(block, /if \(shouldOpenExternally\(url\)\) \{/);
+    assert.match(block, /funnelTelemetry\.openOutgoing\(url, 'other', open\)/);
+    assert.match(block, /const open = \(target: string\) => shell\.openExternal\(target\);/);
+    assert.match(block, /handled \?\? open\(url\)/, 'if the service cannot be loaded the link still opens');
+    assert.ok(!/process\.platform/.test(block), 'the same on macOS and Windows');
+    assert.equal((block.match(/shell\.openExternal\(/g) || []).length, 1, 'no second, untagged way out');
+  });
+
   // ── Who it says this is ────────────────────────────────────────────────────
 
   const HWID = 'a3f1c2d4e5b60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';

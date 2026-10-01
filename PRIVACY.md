@@ -124,8 +124,12 @@ exists to stop made-up installations being reported to us; it sends nothing abou
 one person took. When you start a free trial or use a Natively key, those events are linked to that
 trial or account. When you open a checkout page from the app, the link carries your installation
 identifier and the screen you came from, and Dodo Payments returns both to us with the purchase, so
-a purchase is linked to the installation it started from. We can look up one person's history by
-their email or device when we need to, for example to answer a support question.
+a purchase is linked to the installation it started from. Your purchase history is part of the same
+record: the purchase, each renewal, a cancellation, a failed renewal payment, and any refund or
+chargeback, with the product, amount, currency and billing country. It is tied to your account, and
+through your account to the devices it has been used on. This includes free trials and purchases made
+before this version of the app. We can look up one person's history by their email or device when we
+need to, for example to answer a support question.
 
 **Turning it off.** Open **Settings › General › Advanced** and turn off **Usage statistics**. That
 stops these events, discards any that had not been sent yet, and stops the identifier being added

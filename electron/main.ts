@@ -8610,7 +8610,16 @@ async function initializeApp() {
   app.on('web-contents-created', (_event, contents) => {
     contents.setWindowOpenHandler(({ url }) => {
       if (shouldOpenExternally(url)) {
-        shell.openExternal(url).catch((err) => console.warn('[Main] openExternal failed:', err?.message || err));
+        // Through the funnel service, so a checkout link opened this way leaves
+        // tagged and counted exactly like one sent through 'open-external'.
+        // Every other link is opened unchanged; if the service cannot be
+        // loaded the link still opens.
+        const open = (target: string) => shell.openExternal(target);
+        let handled: Promise<boolean> | null = null;
+        try { handled = require('./services/FunnelTelemetry').funnelTelemetry.openOutgoing(url, 'other', open); } catch { /* analytics never blocks a link */ }
+        (handled ?? open(url).then(() => true, () => false))
+          .then((opened: boolean) => { if (!opened) console.warn('[Main] openExternal failed'); })
+          .catch(() => { /* already reported */ });
       } else {
         console.warn('[Main] Blocked window.open', { protocol: url.split(':')[0] });
       }
