@@ -87,7 +87,7 @@ describe('the prompt', () => {
   test('asks for the smallest change and forbids the epistemic wording the judge penalises', () => {
     const p = claimVerifierSystemPrompt('looking-for-work');
     assert.match(p, /Change as little as possible/);
-    assert.match(p, /Never add that you cannot speak to something/);
+    assert.match(p, /Never say you cannot speak to something/);
     assert.match(p, /Do not add facts/);
   });
   test('the draft follows the inherited material after a "---" line; standalone carries the material itself', () => {
@@ -257,44 +257,37 @@ describe('the reply never names the copilot\'s own sources (2026-10-01)', () => 
   });
 });
 
-// The list step filed an honest limit as an unsupported claim ("I can't confirm
-// a credit on this call [promise]", "We didn't measure anything about colonies
-// [past]"), so the edit removed the draft's own answer to a yes-or-no ask. On
-// dev, 19 of 41 drafts that stated a limit lost it; replayed with these three
-// narrowings, 10, with the invented "I can't send a reset by text" still removed.
-describe('an honest limit is not a claim (2026-10-01)', () => {
-  test('the never-list names not knowing and not being able to confirm or promise yet', () => {
-    for (const mode of ['call-center', 'team-meet', 'seminar', 'sales', 'recruiting', 'looking-for-work', 'general']) {
-      const p = claimVerifierSystemPrompt(mode);
-      assert.match(p, /an honest limit, that is saying they do not know something yet or cannot confirm or promise it yet/, mode);
-      assert.match(p, /"I can't confirm a credit on this call"/, mode);
-      assert.match(p, /what the other person said or the request itself states/, mode);
+// Seminar: asked whether the extra foraging helped honeybee colonies, the draft
+// said "We didn't measure anything about colonies" — what the paper supports —
+// and the edit removed it as an unsupported denial (objective validator: 2 of 6
+// replays pass; 6 of 6 with this clause). A general "honest limit" exemption for
+// every mode was tried with it and taken back: the judge scored it -0.02
+// (+-0.24) on the 44 drafts it targets.
+describe('a study\'s scope is closed (2026-10-01)', () => {
+  const SCOPE = /the scope of a study the material describes: that it did not measure, test or include something the material never mentions is supported, keep it/;
+  test('Seminar keeps "we did not measure that", spoken and typed', () => {
+    assert.match(claimVerifierSystemPrompt('seminar'), SCOPE);
+    assert.match(claimVerifierSystemPrompt('seminar', 'typed'), SCOPE);
+  });
+  test('no other mode gets the exception: a denial there is still a statement to check', () => {
+    for (const mode of ['looking-for-work', 'sales', 'call-center', 'team-meet', 'recruiting', 'general', 'technical-interview']) {
+      for (const noDocuments of [true, false]) {
+        const p = claimVerifierSystemPrompt(mode, 'spoken', { noDocuments });
+        assert.doesNotMatch(p, /scope of a study/, mode);
+        assert.match(p, /A denial \("I haven't", "we don't"\) is a statement too\./, mode);
+      }
     }
   });
-  test('the limit is one of knowledge or commitment, never of capability or policy', () => {
-    const p = claimVerifierSystemPrompt('call-center', 'spoken', { noDocuments: true });
-    const neverList = p.slice(p.indexOf('Never list these'), p.indexOf('Write "UNSUPPORTED: none"'));
-    assert.doesNotMatch(neverList, /cannot (?:do|send|see|access)/);
-    // The no-policy clause still files an invented restriction as unsupported.
-    assert.match(p, /what the agent can or cannot see or do/);
+  test('the general honest-limit exemption is NOT in the prompt (judged neutral, taken back)', () => {
+    for (const mode of ['call-center', 'team-meet', 'seminar']) {
+      const p = claimVerifierSystemPrompt(mode);
+      assert.doesNotMatch(p, /an honest limit/, mode);
+      assert.match(p, /general knowledge; what the other person said; what the material states\./, mode);
+    }
   });
-  test('"cannot speak to it" is a rule for what the edit adds, not for what the draft says', () => {
-    const p = claimVerifierSystemPrompt('team-meet');
-    assert.match(p, /Never add that you cannot speak to something, do not have it, or that it is not available/);
-    assert.doesNotMatch(p, /Never say you cannot speak to something/);
-  });
-  test('an edit that ADDS such a line is still refused', () => {
+  test('an edit that ADDS "I don\'t have that" is still refused', () => {
     const r = acceptVerifiedAnswer({ original: 'It is $412 per seat on the annual plan.', edited: "I don't have that information in front of me.", material: 'nothing' });
     assert.equal(r.accepted, false);
-  });
-  test('only Seminar treats a study\'s scope as closed', () => {
-    assert.match(claimVerifierSystemPrompt('seminar'), /the scope of a study the material describes: that it did not measure, test or include something the material never mentions is supported, keep it/);
-    assert.match(claimVerifierSystemPrompt('seminar', 'typed'), /the scope of a study the material describes/);
-    for (const mode of ['looking-for-work', 'sales', 'call-center', 'team-meet', 'recruiting', 'general']) {
-      assert.doesNotMatch(claimVerifierSystemPrompt(mode), /scope of a study/, mode);
-      // A denial of experience or of a product capability is still a statement to check.
-      assert.match(claimVerifierSystemPrompt(mode), /A denial \("I haven't", "we don't"\) is a statement too\./, mode);
-    }
   });
 });
 
