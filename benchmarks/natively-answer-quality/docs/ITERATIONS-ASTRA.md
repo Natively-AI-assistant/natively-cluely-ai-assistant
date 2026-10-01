@@ -842,3 +842,30 @@ the question left unanswered), evidence (the material had it and the answer miss
   previous reply's words and every "simpler" one at most 85% (objective, dev and holdout), no affected row fails, and
   when the judge is available the affected rows are not below fix12's by more than their noise. It is a contract
   repair, not a score play: 7 of 360 dev rows.
+
+### fix13 (aq-fix2 e000db4a) in the app — affected conversations only — KEPT on the objective rule — 12:52Z
+* Runs: aq2-dev-fix13 (17 rows: the 7 conversations whose follow-up gets the notice), aq2-holdout-fix13 (10 rows,
+  4 conversations); 0 failed rows. `tools/refine-check.mjs` (reply against the previous reply of the same run):
+  | run | refinement follow-ups | request met | "shorter": median share of the previous reply |
+  |---|---:|---:|---:|
+  | main, dev | 8 | 2 | 0.92 |
+  | fix6, dev | 8 | 4 | 0.92 |
+  | fix11, dev | 8 | 1 | 0.96 |
+  | **fix13, dev** | 8 | **8** | **0.52** |
+  | fix6, holdout | 6 | 1 | 0.85 |
+  | fix11, holdout | 6 | 2 | 0.90 |
+  | **fix13, holdout** (the 4 that get the notice) | 4 | **4** | **0.51** |
+  dev per item: "shorter" 49 → 33, 71 → 37, 62 → 19, 85 → 35 words; "simpler" 59 → 34, 138 → 101; "another one, less
+  pushy" shares 42% of its words with the last reply (98% before).
+* Composite for reporting (`aq2-*-fix13c` = fix12c with those rows replaced by id): 0 failed rows, validators dev 8/9,
+  holdout 2/2, total p50 2023 / 2138 ms — unchanged.
+* Rule check: every "shorter" ≤ 75% and every "simpler" ≤ 85% of the previous reply, on dev and holdout — yes; no
+  affected row failed — yes. The judged half of the rule (affected rows not below fix12's) waits for judge quota; the
+  27 rows are queued for the 02:00Z batch. **fix13 is kept; the judged scores quoted for the kept build are fix12's.**
+* Full final-set run on fix13 (`aq2-final-fix13`, 1,038 rows) started 12:52Z behind the stall watchdog.
+
+### Looked for one more mechanical class in the clean answers under 9.5 — none found
+The judge's "minimal improvement" on the 152 clean dev answers under 9.5 is item-specific ("use …" 22, "replace one
+sentence" 18, "add a detail" 11, the rest spread over twenty verbs). Replies that end in a question score 0.3 lower
+(8.23 vs 8.57) but those are mostly the no-information fallbacks. Apart from the refinement follow-ups there is no
+recurring, rule-shaped defect left in the clean answers.

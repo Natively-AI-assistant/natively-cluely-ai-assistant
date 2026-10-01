@@ -25,6 +25,7 @@ const RUNS = [
   { id: 'aq2-dev-fix10', label: 'fix10', commit: '497c9ba9', contains: 'fix9 + claim kinds in the verifier' },
   { id: 'aq2-dev-fix11', label: 'fix11', commit: 'ab264bb3', contains: 'fix10 + source-word rail' },
   { id: 'aq2-dev-fix12', label: 'fix12 (Seminar rows only)', commit: 'f0c3a263', contains: 'fix11 + Seminar study-scope clause; other modes identical to fix11' },
+  { id: 'aq2-dev-fix13', label: 'fix13 (refinement conversations only)', commit: 'e000db4a', contains: 'fix12 + I26 refinement notice; every other prompt identical to fix12' },
 ];
 
 const ITERATIONS = [
@@ -102,6 +103,11 @@ const ITERATIONS = [
     'A study\'s scope is closed: in Seminar, that the study did not measure, test or include something the material never mentions is supported. No other mode\'s prompt changes. A wider exemption for any honest limit ("I can\'t confirm a credit on this call") in every mode was built first (e7325287) and taken back.',
     'Replay: the validator passes 6 of 6 with the clause. The wider exemption halved the limits removed (19 → 10 of 41 drafts) but the judge scored its 44 target drafts −0.02 (±0.24): it prefers the reply without the hedge.',
     'Built; Seminar rows re-run in the app; decision pending its judge read.'],
+  ['I26', 'e000db4a', 'fix13 (refinement conversations only)', 'A typed "shorter" / "simpler" / "another one" revises the previous reply',
+    'Typed refinement follow-ups came back as near-copies: "shorter" after a 50-word reply returned 49 words, after 112 words 97–101; "simpler please" 129–146 words for 132. Objectively, a "shorter" request was met 0 of 4 times on dev in the main-code run and in fix11 (0 of 3 on holdout). The resolver marks the turn a rephrasing request but nothing tells the model that the PREVIOUS REPLY is what to change, or by how much.',
+    'The prompt composer adds a notice on those turns (typed only, resolver-marked, previous reply of 8+ words and no code): it names the last reply and its length and gives a budget — half the words for shorter, 70% for simpler, "a DIFFERENT one" for another one. Every other prompt is byte-identical.',
+    'In the app: dev 8 of 8 refinement requests met (fix11: 1 of 8), "shorter" at a median 52% of the previous reply; holdout 4 of 4. No failed rows, validators unchanged.',
+    'Kept on the objective rule written before the runs. Not judged yet (the judge account ran out of quota).'],
 ];
 
 const REJECTED = [

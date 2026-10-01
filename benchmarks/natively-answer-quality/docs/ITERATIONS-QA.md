@@ -1,6 +1,6 @@
 # Answer-quality iterations — changes, scores, and every dev question with its response per iteration
 
-Generated 2026-10-01T12:31Z by `tools/iterations-qa.mjs` (re-run to refresh). Generator: deepseek-flash. Judge: gpt-6-astra (AgentRouter); charter v1 `6dd53845a51c` and, from the 11:00 UTC batch of 2026-10-01, charter v2 `c725615a54f6` (claim kinds). Scores under the two charters are not comparable and are shown separately.
+Generated 2026-10-01T12:52Z by `tools/iterations-qa.mjs` (re-run to refresh). Generator: deepseek-flash. Judge: gpt-6-astra (AgentRouter); charter v1 `6dd53845a51c` and, from the 11:00 UTC batch of 2026-10-01, charter v2 `c725615a54f6` (claim kinds). Scores under the two charters are not comparable and are shown separately.
 
 **Scope.** Only the DEV set (360 questions, 9 modes) is listed per item. The holdout, final and supplementary sets are blind: they are reported in aggregate elsewhere (`docs/ITERATIONS-ASTRA.md`) and never item by item.
 
@@ -23,6 +23,7 @@ Generated 2026-10-01T12:31Z by `tools/iterations-qa.mjs` (re-run to refresh). Ge
 | fix10 (`aq2-dev-fix10`) | `497c9ba9` | fix9 + claim kinds in the verifier | 360 | — | — | — | — |
 | fix11 (`aq2-dev-fix11`) | `ab264bb3` | fix10 + source-word rail | 360 | — | — | 360 | 8.47 |
 | fix12 (Seminar rows only) (`aq2-dev-fix12`) | `f0c3a263` | fix11 + Seminar study-scope clause; other modes identical to fix11 | 40 | — | — | 38 | 8.95 (partial) |
+| fix13 (refinement conversations only) (`aq2-dev-fix13`) | `e000db4a` | fix12 + I26 refinement notice; every other prompt identical to fix12 | 17 | — | — | — | — |
 
 ## 2. Judged score per mode
 
@@ -259,6 +260,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 - **Change:** A study's scope is closed: in Seminar, that the study did not measure, test or include something the material never mentions is supported. No other mode's prompt changes. A wider exemption for any honest limit ("I can't confirm a credit on this call") in every mode was built first (e7325287) and taken back.
 - **Evidence:** Replay: the validator passes 6 of 6 with the clause. The wider exemption halved the limits removed (19 → 10 of 41 drafts) but the judge scored its 44 target drafts −0.02 (±0.24): it prefers the reply without the hedge.
 - **Decision:** Built; Seminar rows re-run in the app; decision pending its judge read.
+
+### I26 — A typed "shorter" / "simpler" / "another one" revises the previous reply
+
+- **Commit:** `e000db4a` · **first run containing it:** fix13 (refinement conversations only)
+- **Why:** Typed refinement follow-ups came back as near-copies: "shorter" after a 50-word reply returned 49 words, after 112 words 97–101; "simpler please" 129–146 words for 132. Objectively, a "shorter" request was met 0 of 4 times on dev in the main-code run and in fix11 (0 of 3 on holdout). The resolver marks the turn a rephrasing request but nothing tells the model that the PREVIOUS REPLY is what to change, or by how much.
+- **Change:** The prompt composer adds a notice on those turns (typed only, resolver-marked, previous reply of 8+ words and no code): it names the last reply and its length and gives a budget — half the words for shorter, 70% for simpler, "a DIFFERENT one" for another one. Every other prompt is byte-identical.
+- **Evidence:** In the app: dev 8 of 8 refinement requests met (fix11: 1 of 8), "shorter" at a median 52% of the previous reply; holdout 4 of 4. No failed rows, validators unchanged.
+- **Decision:** Kept on the objective rule written before the runs. Not judged yet (the judge account ran out of quota).
 
 ### Tried and rejected (not built, or reverted)
 
@@ -6142,6 +6151,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.9. No material issue. The under-20% statement describes a common requirement, but requirements vary by lender and loan type.*
 
+**fix13 (refinement conversations only)**
+
+> An escrow account holds part of your monthly payment for property taxes and insurance, and the servicer pays those bills when they come due. So instead of a big tax bill once or twice a year, you pay a bit extra each month and it's already set aside. It's usually required if your down payment was under 20 percent.
+>
+> *Summary chip:* escrow collects taxes and insurance monthly
+
 ---
 
 #### DGEN-033 — follow_up
@@ -6233,6 +6248,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* escrow spreads taxes and insurance monthly
 
 *Judge (v2): 9.0. Accurate, but only modestly simpler: it repeats most of the earlier explanation and retains the unexplained term “servicer.”*
+
+**fix13 (refinement conversations only)**
+
+> Your monthly mortgage payment includes extra money for taxes and insurance. The lender holds that extra money and pays those bills for you when they're due. So you don't get one big bill later.
+>
+> *Summary chip:* escrow holds tax and insurance money
 
 ---
 
@@ -6331,6 +6352,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* fixed rate, escrow can still rise
 
 *Judge (v2): 9.8. No material issue. The opening could more precisely say the interest rate stays fixed, rather than implying the interest amount is fixed.*
+
+**fix13 (refinement conversations only)**
+
+> A fixed rate only fixes the interest on the loan itself. Your monthly payment can still change because of the escrow part, the money for taxes and insurance. If your property taxes or insurance premium went up, the servicer raises your monthly payment to cover the higher bills.
+>
+> *Summary chip:* fixed rate, but escrow can rise
 
 ---
 
@@ -9513,6 +9540,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.2. Correct and faithful, but more a summary than a lesson: it asserts that the height sum is linear without demonstrating it, and omits why processing children before parents makes bottom-up construction work.*
 
+**fix13 (refinement conversations only)**
+
+> Start at floor(n/2) because everything past it is a leaf, and a single node is already a valid heap, so there's nothing to sift. Working down from there, each sift-down fixes one subtree once its children are already heaps.
+> 
+> On the example, n = 7, so we begin at index 3: 7 swaps with its smaller child 2, giving [_, 9, 4, 2, 1, 8, 7, 6]. Then index 2: 4 swaps with 1, giving [_, 9, 1, 2, 4, 8, 7, 6]. Then index 1: 9 swaps with 1, then with 4, giving [_, 1, 4, 2, 9, 8, 7, 6]. Four swaps.
+> 
+> It's O(n) because most nodes sit near the bottom and can only fall a short way. The sum of all sift distances stays linear in n, even though a single sift is O(log n).
+>
+> *Summary chip:* bottom-up sift, sum of heights is linear
+
 ---
 
 #### DLEC-027 — simple_explain
@@ -9652,6 +9689,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* bottom-up sift-down, linear total
 
 *Judge (v2): 7.0. The explanation is correct but nearly repeats the previous answer, retaining every array state and the same technical vocabulary rather than responding meaningfully to “simpler please.”*
+
+**fix13 (refinement conversations only)**
+
+> Start at floor(n/2) because every index after that is a leaf. A leaf on its own is already a valid heap, so there's nothing to fix. We work backwards from there, and by the time we reach a node, its two children are already heaps, so one sift-down is enough.
+> 
+> On his example, n = 7, so we start at index 3 and go 3, 2, 1. Each sift-down swaps a node down past its smaller child until it's smaller than both. Four swaps total.
+> 
+> It's O(n) because most nodes are near the bottom and can only move a little way.
+>
+> *Summary chip:* leaves need no work, so it's linear
 
 ---
 
@@ -9804,6 +9851,16 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* same trace, five swaps, still linear
 
 *Judge (v2): 4.0 — arithmetic_error, major_reasoning_error. The array has seven keys, not eight. The trace invents index 8, uses incorrect child indices, follows the wrong subtree, and produces a final array that violates min-heap order. The five-swap gist is also wrong.*
+
+**fix13 (refinement conversations only)**
+
+> Same idea, fresh numbers. Take n = 7 with input [_, 8, 3, 6, 1, 7, 2, 5]. We start at floor(7/2) = 3, since indices 4 through 7 are leaves and already valid heaps.
+> 
+> sift-down(3): 6 vs children 2 (i=6) and 5 (i=7), swap with 2, giving [_, 8, 3, 2, 1, 7, 6, 5]. sift-down(2): 3 vs children 1 (i=4) and 7 (i=5), swap with 1, giving [_, 8, 1, 2, 3, 7, 6, 5]. sift-down(1): 8 vs children 1 (i=2) and 2 (i=3), swap with 1, then at i=2, 8 vs children 3 (i=4) and 7 (i=5), swap with 3, giving [_, 1, 3, 2, 8, 7, 6, 5]. Four swaps.
+> 
+> It's O(n) because most nodes sit near the bottom and can only fall a short way, so the total sift distance stays linear in n.
+>
+> *Summary chip:* same trace, new numbers, still linear
 
 ---
 
@@ -13540,6 +13597,10 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.1. Relevant and appropriately concise, but high-level: it omits Harrow, leaves ledger invariants unspecified, and does not connect preparation to the candidate’s relevant experience.*
 
+**fix13 (refinement conversations only)** — edited after streaming
+
+> For the ledger design exercise, I'd focus on the money path they described: escrow holds, split payouts, refunds and chargebacks, and how a double-entry ledger stays correct as volume grows. I'd sketch the schema and the invariants first, then talk through idempotency, reconciliation, and how the nightly settlement batch stays reliable. I'd draw on Project Tern, the carrier-settlement rewrite at Larkspur Freight.
+
 ---
 
 #### DJOB-030 — prep_request
@@ -13629,6 +13690,10 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* money path, invariants, tradeoffs
 
 *Judge (v2): 8.6. Only trims about five words from the previous reply, retaining its framing and nearly every detail. The advice remains accurate, but the requested condensation is minimal.*
+
+**fix13 (refinement conversations only)** — edited after streaming
+
+> I'd sketch the schema and invariants first, then talk through idempotency, reconciliation, and keeping the nightly settlement batch reliable.
 
 ---
 
@@ -20198,6 +20263,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.8. No material issue. The opening is slightly defensive, but the response avoids unsupported support or SLA claims and adds a relevant discovery question.*
 
+**fix13 (refinement conversations only)**
+
+> I don't want to give you a number I can't stand behind, so let me confirm the exact support hours and uptime commitment on the mid tier and come back to you today. In the meantime, what does your team actually need covered, business hours or around the clock?
+>
+> *Summary chip:* confirm mid tier SLA, ask coverage needs
+
 ---
 
 #### DSALES-033 — follow_up_short
@@ -20295,6 +20366,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* confirm mid-tier support and uptime, ask coverage need
 
 *Judge (v2): 6.8. The answer repeats the previous response almost verbatim, removing only “you.” It remains grounded and speakable but does not meaningfully fulfill the explicit request for brevity.*
+
+**fix13 (refinement conversations only)**
+
+> Let me confirm the exact support hours and uptime commitment on the mid tier and come back to you today. Meanwhile, what does your team need covered, business hours or around the clock?
+>
+> *Summary chip:* confirm mid tier SLA, ask coverage needs
 
 ---
 
@@ -20544,6 +20621,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.4. The timeline advice usefully probes urgency but never explicitly asks for a target decision or implementation date; it assumes a date is already known.*
 
+**fix13 (refinement conversations only)**
+
+> To qualify budget, I'd ask something like: "When you picture this rolling out, is there a budget already set aside for it, or are we building the case together?" That tells me if money exists or if I'm helping justify it.
+> 
+> For timeline: "What's driving the date on your side, and what happens if this slips a quarter?" That surfaces whether it's a real deadline or a nice-to-have.
+>
+> *Summary chip:* ask if budget exists, what drives the date
+
 ---
 
 #### DSALES-037 — follow_up_short
@@ -20643,6 +20728,14 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* ask budget range, approval, and what drives the date
 
 *Judge (v2): 6.5. The response nearly repeats the previous answer verbatim instead of offering a new, softer question. It retains the same budget-range, approval, and deadline-pressure probes.*
+
+**fix13 (refinement conversations only)**
+
+> For budget, I'd keep it light: "Is there already a number set aside for this, or are we still shaping the case?" It opens the door without putting them on the spot.
+> 
+> For timing: "What's the date you're working toward, and what's behind it?" That gets you the driver without pressure.
+>
+> *Summary chip:* ask if budget's set, what's behind the date
 
 ---
 
@@ -24596,6 +24689,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.7. The opening reference to arguing adds a slightly defensive note. Otherwise, the concession, distinction from the main comparison, and proposed next step are accurate and immediately speakable.*
 
+**fix13 (refinement conversations only)**
+
+> You're right that the ablations are underpowered. They used 3 seeds instead of 5, and the differences are small relative to seed variance, so I've treated them as indicative rather than conclusive. Removing stage 2 drops accuracy to 92.0% and removing stage 3 to 92.9%, which points to stage 2 contributing most of the gain, but I wouldn't lean on that as a firm claim. The main STAGE-KD versus standard KD result rests on the 5-seed comparison and the paired bootstrap, so that one holds.
+>
+> *Summary chip:* ablations 3 seeds, indicative only
+
 ---
 
 #### DSEM-040 — follow_up
@@ -24695,6 +24794,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* three seeds, indicative not conclusive
 
 *Judge (v2): 7.0 — excessive_verbosity. The response repeats the previous draft almost verbatim instead of shortening it. Its four sentences, including the main-results detour, leave the presenter with essentially the same speaking burden.*
+
+**fix13 (refinement conversations only)**
+
+> You're right, the ablations used 3 seeds, so the differences sit within seed variance and I treat them as indicative. The main STAGE-KD versus standard KD result rests on the 5-seed comparison and paired bootstrap.
+>
+> *Summary chip:* ablations 3 seeds, indicative only
 
 ---
 
@@ -27742,6 +27847,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 9.7. Minor redundancy between “what’s actually left” and “what’s still open”; otherwise the advice is concise, actionable, and appropriate for a private request.*
 
+**fix13 (refinement conversations only)**
+
+> "Mostly on track" is doing a lot of work there. I'd ask what's actually left, not how it feels: which items are still open, who owns each one, and what the finish date is for each. Then ask what would have to slip for the 28th to move, and what the fallback is if it does. If the open list is short and dated, fine. If it's vague, that's the pushback.
+>
+> *Summary chip:* ask for open items, owners, dates
+
 ---
 
 #### DTEAM-037 — clarifying_vague
@@ -27836,6 +27947,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 
 *Judge (v2): 7.9. The revision is only two words shorter than the previous answer and retains redundant framing and commentary, so it barely fulfills the sole request.*
 
+**fix13 (refinement conversations only)**
+
+> Ask what's actually left, not how it feels: which items are open, who owns each, and each finish date. Then ask what would have to slip for the 28th to move, and the fallback if it does.
+>
+> *Summary chip:* ask for open items, owners, dates
+
 ---
 
 #### DTEAM-038 — disagreement
@@ -27929,6 +28046,12 @@ A run missing from a table is not fully judged under that charter (300 of 360 an
 > *Summary chip:* make the doc answer the open items
 
 *Judge (v2): 9.3. “If the doc answers that, you're fine” is overly reassuring: documented risks may still threaten the date. The response could also be tighter given the earlier request for brevity.*
+
+**fix13 (refinement conversations only)**
+
+> Then ask him to walk you through the open items in it: what's left, who owns each, and the finish date for each. If the doc has that, you're fine. If it doesn't, that's the gap, not the plan.
+>
+> *Summary chip:* make the plan doc name owners and dates
 
 ---
 
