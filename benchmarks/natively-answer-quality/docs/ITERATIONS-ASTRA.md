@@ -281,3 +281,14 @@ likely overstated by this setup. Not changed mid-experiment, to keep the pair co
   word 0 by design, but that strip is deterministic and lands with the stream's end, 0 ms).
 * A user who starts reading aloud at the first token has spoken roughly 3–6 words by the swap, so edits past the
   first sentence are usually seen before they are said; LFW/Sales edits in the first sentence may already be spoken.
+
+### I16 — verifier hands back a question only when nothing answers (aq-fix2 57e21fdf), run aq2-dev-fix7
+* Why: the hand-back clause carried an example and was over-applied. fix6 LFW answers ending in a question 3 (fix2)
+  → 18 of 40, 12 appended by the verifier, some copying the example verbatim ("I'd want to talk that through
+  properly. What does the timeline look like on your side?"), also on "tell me about yourself".
+* Replay on fix6's own drafts (tools/verifier-replay.mjs --draft raw): appended questions LFW 14 → 3, Sales 1 → 0,
+  Call Center 3 → 1; edit rates unchanged (LFW 33 → 30 of 40, Sales 14 → 22, CC 23 → 26 — sampling).
+* In-app fix7 (6 verifier modes, 240 rows, 0 failed): LFW appended questions 12 → 1, LFW answers ending in a question
+  18 → 8; validators Sales 3/3, General 1/1, Seminar 2/2 unchanged; LFW total p50 2429 → 2140 ms, CC 1984 → 1875.
+  Call Center "+Q" 2 → 5 is not appending: the verifier dropped a trailing product claim after an existing question.
+* Judge: replay read queued (queue3 tier 3, control = fix6 in-app on the same drafts), in-app fix7 in the last tier.
