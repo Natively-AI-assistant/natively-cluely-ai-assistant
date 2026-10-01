@@ -35,7 +35,8 @@ import {
   VisionRungHealth,
 } from './VisionProviderFallbackChain';
 import { getImageOptimizer, ImageOptimizer } from './ImageOptimizer';
-import { buildVisionProviders, VisionProviderBuildInputs } from './VisionProviderRegistry';
+import { buildVisionProviders, selectionRung, VisionProviderBuildInputs } from './VisionProviderRegistry';
+import { forgetBreakersOfOtherSelections } from '../../llm/visionOrdering';
 
 export type UserAction =
   | 'manual_use_screen'
@@ -173,6 +174,8 @@ export class ScreenUnderstandingService {
    * has to be allowed to prove it.
    */
   private readonly rungHealth = new Map<string, VisionRungHealth>();
+  /** Which selection each selection-carrying rung last ran for (see understand()). */
+  private readonly rungLedFor = new Map<string, string>();
 
   constructor(optimizer?: ImageOptimizer) {
     this.imageHashService = new ImageHashService();
@@ -273,7 +276,7 @@ export class ScreenUnderstandingService {
         imagePaths: validPaths,
         imageHash,
         unavailableReason: mode === 'private_vision'
-          ? 'No local vision provider is available. Configure Ollama with a vision-capable model (llava, qwen2.5-vl, llama3.2-vision, etc.) or enable Codex CLI vision.'
+          ? 'No local vision provider is available for the screen pre-pass. A local custom endpoint that reads images can run it; with Ollama, the screenshot is read in the answer itself.'
           : 'No vision-capable provider is configured. Add an API key for OpenAI, Claude, Gemini, Groq, or Natively, or configure a local Ollama vision model.',
       });
     }
@@ -283,6 +286,12 @@ export class ScreenUnderstandingService {
 
     // System & user prompts come from the prompts module (Phase 6).
     const { systemPrompt, userPrompt, isTechnical } = await this.buildPrompts(request);
+
+    // A breaker opened for a DIFFERENT selection says nothing about this one:
+    // the `openrouter` rung is `openrouter` for every model, so a model whose
+    // upstream was failing kept the rung skipped after the user picked another.
+    const carrying = selectionRung();
+    if (carrying) forgetBreakersOfOtherSelections(this.rungLedFor, this.rungHealth, [carrying.id], carrying.key);
 
     // Run the chain.
     const latestPath = validPaths[validPaths.length - 1];
@@ -359,6 +368,9 @@ export class ScreenUnderstandingService {
       mode,
       localOnly: policy.localOnly === true || mode === 'private_vision',
       scopeAllowsScreenshots: policy.allowScreenshots !== false,
+      // `transcribe` is the after-the-answer record (screenTranscription.ts);
+      // every other action describes the screen for the answer being built.
+      purpose: request.userAction === 'transcribe' ? 'record' : 'prepass',
     };
   }
 

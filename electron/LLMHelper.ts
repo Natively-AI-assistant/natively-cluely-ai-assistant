@@ -23,7 +23,7 @@ import {
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
 import { gatewaySeatReadsImages, readsImages, resolveVision, type VisionFacts, type VisionVerdict } from "./llm/visionResolver"
-import { orderVisionCandidates } from "./llm/visionOrdering"
+import { forgetBreakersOfOtherSelections, orderVisionCandidates } from "./llm/visionOrdering"
 import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from "./llm/visionCapabilityStore"
 import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/visionProbe"
 import { parseOpenRouterVision } from "./llm/providerVisionData"
@@ -2203,7 +2203,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter' | 'deepseek' | 'curl',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -2223,10 +2223,14 @@ export class LLMHelper {
           timeoutMs: opts?.timeoutMs,
           signal: opts?.signal,
         });
+      // The model is named explicitly (2026-10-01). With none, both adapters
+      // fall back to the SELECTED model of that vendor — so the pre-pass sent
+      // the screenshot to a text-only gpt-3.5-turbo whenever one was selected,
+      // while the registry labelled the rung `gpt-4o`.
       case 'openai':
-        return this.generateWithOpenai(userPrompt, systemPrompt, [imagePath]);
+        return this.generateWithOpenai(userPrompt, systemPrompt, [imagePath], this.getFixedVisionModels().openai);
       case 'claude':
-        return this.generateWithClaude(userPrompt, systemPrompt, [imagePath]);
+        return this.generateWithClaude(userPrompt, systemPrompt, [imagePath], this.getFixedVisionModels().claude);
       case 'groq_scout':
         return this.generateWithGroqMultimodal(userPrompt, [imagePath], systemPrompt);
       // OpenAI-compatible gateways. Registered here so ScreenUnderstandingService
@@ -2244,6 +2248,20 @@ export class LLMHelper {
         return this.generateWithNinerouter(userPrompt, systemPrompt, [imagePath]);
       case 'agentrouter':
         return this.generateWithAgentRouter(userPrompt, systemPrompt, [imagePath], undefined, opts?.signal);
+      // The two selected-only rungs (2026-10-01) reuse the streaming adapters
+      // and collect the answer: no second request shape to keep in step, and
+      // both adapters keep their own privacy gates (assertOutboundScopes).
+      case 'deepseek': {
+        let text = '';
+        for await (const piece of this.streamWithDeepseek(userPrompt, systemPrompt, this.currentModelId, opts?.signal, [imagePath])) text += piece;
+        return text;
+      }
+      case 'curl': {
+        if (!this.activeCurlProvider) throw new Error('No cURL provider selected');
+        let text = '';
+        for await (const piece of this.streamWithDirectCurl(this.activeCurlProvider, userPrompt, systemPrompt, [imagePath], opts?.signal)) text += piece;
+        return text;
+      }
       case 'gemini_flash_lite':
       case 'gemini_flash':
       case 'gemini_pro': {
@@ -2284,11 +2302,30 @@ export class LLMHelper {
   }
 
   /**
+   * Each vendor's FIXED vision model, as the screen pre-pass uses it: the
+   * version manager's current tier 1, else the built-in model. The pre-pass
+   * does not use the selected model (Evin, 2026-10-01: it runs before the
+   * answer inside a 6 s budget, and the selected model reads the screenshot in
+   * the answer itself).
+   */
+  public getFixedVisionModels(): { openai: string; claude: string } {
+    let tiers: Array<{ family: ModelFamily; tier1: string }> = [];
+    try { tiers = this.modelVersionManager.getAllVisionTiers(); } catch { /* not ready: the built-ins */ }
+    const tier1 = (family: ModelFamily) => tiers.find(t => t.family === family)?.tier1;
+    return { openai: tier1(ModelFamily.OPENAI) || OPENAI_MODEL, claude: tier1(ModelFamily.CLAUDE) || CLAUDE_MODEL };
+  }
+
+  /**
    * Read-only accessor for the active custom provider — used by VisionProviderRegistry
    * to decide whether the provider is configured and whether multimodal is enabled.
    */
   public getActiveCustomProvider(): CustomProvider | null {
     return this.customProvider;
+  }
+
+  /** The cURL provider currently selected, for the same registry (2026-10-01). */
+  public getActiveCurlProvider(): CurlProvider | null {
+    return this.activeCurlProvider;
   }
 
   /**
@@ -8943,12 +8980,7 @@ let isMultimodal = !!(imagePaths?.length);
     // (A custom provider keeps its id when its command is edited, so the
     // command is part of what "this selection" means.)
     const selectionKey = sel ? `${sel.provider}|${sel.model}|${this.customProvider?.curlCommand ?? ''}` : '';
-    const ledFor = (this.visionLeadSelection ??= new Map());
-    for (const p of front) {
-      const last = ledFor.get(p.id);
-      if (last !== undefined && last !== selectionKey) this.visionHealth.delete(p.id);
-      ledFor.set(p.id, selectionKey);
-    }
+    forgetBreakersOfOtherSelections((this.visionLeadSelection ??= new Map()), this.visionHealth, front.map(p => p.id), selectionKey);
     const ordered = orderVisionCandidates({ selected: front, cloud, local, localOnly, health: this.visionHealth, now: nowMs });
 
     if (ordered.length === 0) {
