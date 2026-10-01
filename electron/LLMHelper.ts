@@ -2309,6 +2309,11 @@ export class LLMHelper {
     return this.customProvider;
   }
 
+  /** The cURL provider currently selected, for the same registry (2026-10-01). */
+  public getActiveCurlProvider(): CurlProvider | null {
+    return this.activeCurlProvider;
+  }
+
   /**
    * Scrub all API keys from memory to minimize exposure window.
    * Called on app quit.

@@ -129,8 +129,12 @@ function matrix() {
 }
 
 /** What `before` must have become. One named rule per allowed difference. */
-function expected(_name, before) {
+function expected(name, before) {
   let rungs = [...before];
+  const label = name.split(' | ')[2];
+  // (a) Evin, 2026-10-01: with a local model selected, the pre-pass stays off
+  //     cloud providers. Only rungs that keep the screenshot on the machine remain.
+  if (LOCAL_SELECTIONS.has(label)) rungs = rungs.filter((r) => r.endsWith(' (local)'));
   // (d) Defect 9: the OpenAI rung said `gpt-4o` while the request went to the
   //     SELECTED OpenAI model. It now names, and sends to, the fixed vision model.
   rungs = rungs.map((r) => (r === 'openai=gpt-4o' ? `openai=${FIXED.openai}` : r));
@@ -210,4 +214,43 @@ test('Groq: the pre-pass adapter sends to the Groq vision model, never the selec
   const body = src.slice(start, src.indexOf('\n  }\n', start));
   assert.match(body, /model: GROQ_VISION_MODEL,/);
   assert.doesNotMatch(body, /currentModelId/);
+});
+
+// ── A local selection keeps the pre-pass off the cloud ───────────────────────
+
+describe('with a local model selected, no cloud provider gets the pre-pass screenshot', () => {
+  const ids = (list) => list.map((r) => r.split('=')[0]);
+  test('Ollama selected, every cloud key present: nothing cloud is tried', () => {
+    assert.deepEqual(eligible('everything', 'ollama selected', 'vision_first'), [],
+      'Ollama reads the screenshot in the answer itself; the pre-pass must not send it to a cloud first');
+  });
+  test('a leftover gateway model id does not seat that gateway while Ollama is selected', () => {
+    const rungs = eligible('everything', 'ollama selected', 'vision_first', { getCurrentModelId: () => 'openrouter/openai/gpt-4o' });
+    assert.deepEqual(rungs, []);
+  });
+  test('a local custom endpoint that reads images runs the pre-pass alone', () => {
+    assert.deepEqual(ids(eligible('everything', 'custom local, reads images', 'vision_first')), ['custom']);
+  });
+  test('a local custom endpoint that is text-only: no pre-pass, and still nothing cloud', () => {
+    assert.deepEqual(eligible('everything', 'custom local, text only', 'vision_first'), []);
+  });
+  test('a HOSTED custom endpoint is a cloud selection: the cloud order is untouched', () => {
+    const rungs = ids(eligible('vendors', 'custom hosted, reads images', 'vision_first'));
+    assert.deepEqual(rungs, ['natively', 'openai', 'gemini_flash_lite', 'gemini_flash', 'claude', 'gemini_pro', 'groq_scout', 'custom']);
+  });
+  test('a cloud selection: the cloud order is untouched', () => {
+    assert.deepEqual(ids(eligible('vendors', 'claude-opus-5', 'vision_first')),
+      ['natively', 'openai', 'gemini_flash_lite', 'gemini_flash', 'claude', 'gemini_pro', 'groq_scout']);
+  });
+  test('no live helper, or one that cannot name a selection: today\'s behaviour, not a refusal', () => {
+    const want = ids(eligible('vendors', 'gemini-3.8-flash', 'vision_first'));
+    assert.deepEqual(ids(eligible('vendors', 'gemini-3.8-flash', 'vision_first', { getDirectAssistSelection: () => { throw new Error('no adapter'); } })), want);
+    assert.deepEqual(ids(eligible('vendors', 'gemini-3.8-flash', 'vision_first', { getDirectAssistSelection: undefined })), want);
+    installHelper('gemini-3.8-flash');
+    delete globalThis.__nativelyGetLLMHelper;
+    const { buildVisionProviders: build } = require(dist('services/screen/VisionProviderRegistry.js'));
+    const rungs = build({ mode: 'vision_first', localOnly: false, scopeAllowsScreenshots: true }, credentials(KEY_SETS.vendors))
+      .filter((p) => p.isConfigured && p.supportsVision).map((p) => p.id);
+    assert.deepEqual(rungs, want);
+  });
 });

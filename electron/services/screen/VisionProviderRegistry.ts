@@ -25,7 +25,9 @@ import {
   customProviderIsLocal,
   isOllamaVisionModelByName,
 } from '../../llm/visionCapability';
-import { readActiveCustomProvider, readActiveModelId, readFixedVisionModels } from '../../llm/activeCustomProvider';
+import {
+  readActiveCustomProvider, readActiveCurlProvider, readActiveModelId, readActiveSelection, readFixedVisionModels,
+} from '../../llm/activeCustomProvider';
 import { gatewaySeatReadsImages } from '../../llm/visionResolver';
 import { normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from '../../llm/visionCapabilityStore';
 import { agentRouterWireModel, isAgentRouterModelId } from '../../llm/agentRouter';
@@ -52,7 +54,13 @@ export function buildVisionProviders(
 ): VisionProviderConfig[] {
   const providers: VisionProviderConfig[] = [];
 
-  const cloudAllowed = inputs.mode !== 'private_vision';
+  // With a LOCAL model selected the pre-pass stays off cloud providers (Evin,
+  // 2026-10-01). Before this, an Ollama or local-endpoint user's screenshot
+  // went to whichever cloud key was configured first, unless "Keep screenshots
+  // on this device" was on. Only local rungs remain: a local custom or cURL
+  // endpoint that reads images runs the pre-pass; Ollama gets none and reads
+  // the screenshot in the answer itself.
+  const cloudAllowed = inputs.mode !== 'private_vision' && !selectionIsLocal();
 
   if (cloudAllowed) {
     providers.push(natively(credentials, inputs));
@@ -492,6 +500,20 @@ function agentrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInpu
 // The saved facts both screenshot paths read: provider catalogues and one-time
 // test results (visionCapabilityStore). `baseURL` is the normalised address of a
 // self-hosted provider, '' for hosted services — the key LLMHelper writes under.
+/**
+ * Did the user select a model that runs on this machine? Ollama, or a custom /
+ * cURL endpoint on a loopback or private host (customProviderIsLocal — never
+ * "local" by default). No selection known → false: today's behaviour.
+ */
+function selectionIsLocal(): boolean {
+  const selection = readActiveSelection();
+  if (!selection) return false;
+  if (selection.provider === 'ollama') return true;
+  if (selection.provider === 'custom') return customProviderIsLocal(readActiveCustomProvider());
+  if (selection.provider === 'curl') return customProviderIsLocal(readActiveCurlProvider());
+  return false;
+}
+
 function registryVisionFacts(baseURL = '', extra: { ninerouterVisionModels?: readonly string[] } = {}) {
   return {
     ...extra,

@@ -104,3 +104,34 @@ export function readFixedVisionModels(): { openai?: string; claude?: string } {
     return {};
   }
 }
+
+/**
+ * The live selection — provider and model — or null when the helper is not up
+ * or cannot name one (an id with no adapter). Callers treat null as "no
+ * selection known", never as a refusal.
+ */
+export function readActiveSelection(): { provider: string; model: string } | null {
+  try {
+    const g = globalThis as any;
+    if (typeof g.__nativelyGetLLMHelper !== 'function') return null;
+    const helper = g.__nativelyGetLLMHelper();
+    if (!helper || typeof helper.getDirectAssistSelection !== 'function') return null;
+    const sel = helper.getDirectAssistSelection();
+    return sel && typeof sel.provider === 'string' ? { provider: sel.provider, model: String(sel.model ?? '') } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The cURL provider currently selected, or null. Same rule as readActiveCustomProvider. */
+export function readActiveCurlProvider(): ActiveCustomProvider | null {
+  try {
+    const g = globalThis as any;
+    if (typeof g.__nativelyGetLLMHelper !== 'function') return null;
+    const helper = g.__nativelyGetLLMHelper();
+    if (!helper || typeof helper.getActiveCurlProvider !== 'function') return null;
+    return helper.getActiveCurlProvider() || null;
+  } catch {
+    return null;
+  }
+}
