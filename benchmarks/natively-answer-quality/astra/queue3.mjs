@@ -41,6 +41,10 @@ const TIERS = [
     // fix13 (I26, the refinement notice): only the affected conversations were re-run — 17 dev rows, 10 holdout rows.
     J('dev-c2-fix13', 'abs-dev-c2', 'aq2-dev-fix13'),
     J('holdout-c2-fix13', 'abs-holdout-c2', 'aq2-holdout-fix13'),
+    // Reasoning on vs off for the generator (replay of the dev Technical interview + Lecture prompts, 80 rows each):
+    // the app sends thinking: disabled on every turn. Measures blocker 2's lever before anyone builds it.
+    R('think-off-til', 'think-off-til', 'aq2-dev-fix11'),
+    R('think-low-til', 'think-low-til', 'aq2-dev-fix11'),
     J('sb-c2-fix11', 'abs-sb-c2', 'aq2-sb-fix11'),
     J('sb-c2-fix12', 'abs-sb-c2', 'aq2-sb-fix12'),
     J('sb-c2-fix6', 'abs-sb-c2', 'aq2-sb-fix6'),

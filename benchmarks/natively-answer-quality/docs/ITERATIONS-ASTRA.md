@@ -869,3 +869,30 @@ The judge's "minimal improvement" on the 152 clean dev answers under 9.5 is item
 sentence" 18, "add a detail" 11, the rest spread over twenty verbs). Replies that end in a question score 0.3 lower
 (8.23 vs 8.57) but those are mostly the no-information fallbacks. Apart from the refinement follow-ups there is no
 recurring, rule-shaped defect left in the clean answers.
+
+### Prepared, not built — a length STATED in the message should replace the app's default (replay, 12:58Z)
+* "give me a 60 second version of the Dockhand story" is sent with the app default "aim for about 22s spoken —
+  roughly 40 to 60 words … Hard ceiling: never go past 75 words": the answer is 63–88 words, half the time asked for.
+  User instructions already outrank that default; a length stated in the message does not.
+* `tools/variants/stated-length-v2.mjs` (durations only, the default block replaced by the user's own target with a
+  hard ceiling), 4 samples: "60 second" 63–88 → 169–209 words (wanted 120–162); "thirty seconds on my background"
+  112–170 → 56–75 (wanted 60–81); "thirty second thank-you" 55–67 → 50–58. Closer on all three, still ±30%.
+* v1 also forced line counts ("a two-line text": 1 line → 2 lines, 3 of 3) but broke multi-part requests ("3
+  discovery questions, a one line …": 3 lines → 8). Durations only is the safe part.
+* Not built: 3 of 360 dev rows, and every production change restarts the final-set run. `tools/shape-check.mjs`
+  measures it. Listed as a next step.
+
+### Measured in replay — the generator's reasoning is switched OFF on every turn; switching it on (13:00Z)
+* The app sends `thinking: {type: "disabled"}` on every DeepSeek call (time to first word). The earlier "generator
+  ceiling" test (flash vs v4-pro) used the recorded parameters, so it compared two models with reasoning off; reasoning
+  itself was never measured.
+* Probe: DTECH-021 (Θ(n) reported as O(n log n) in every build) with `thinking: enabled, reasoning_effort: low`
+  states the tight bound in 4 of 5 samples, 0 of 5 with reasoning off.
+* Dev Technical interview + Lecture prompts replayed both ways (80 rows each, results/replay/think-off-til and
+  think-low-til): no errors; answer length 78 vs 85–89 words; total time p50 3.1 s / 2.7 s with reasoning against
+  1.4 s / 1.5 s without (p95 5.4 / 7.7 s against 2.6 / 2.0 s). The reasoning comes before the first word, so on those
+  turns the first word would arrive about 1.3–1.7 s later at the median.
+* Both sets are queued for the judge (02:00Z, 160 judgments). That is the measurement blocker 2 lacked: what
+  reasoning buys on the modes where the generator's own errors are 11 of the 15 dev hard fails of that class. If it is
+  large, the product change is a routing decision (reasoning on for typed Technical interview and Lecture turns),
+  which is Evin's to make because of the delay; nothing is built.
