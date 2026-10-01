@@ -9127,6 +9127,23 @@ let isMultimodal = !!(imagePaths?.length);
     forgetBreakersOfOtherSelections((this.visionLeadSelection ??= new Map()), this.visionHealth, front.map(p => p.id), selectionKey);
     const ordered = orderVisionCandidates({ selected: front, cloud, local, localOnly, health: this.visionHealth, now: nowMs });
 
+    // A LEADING selection is retried less than a fallback (2026-10-01). The
+    // engine retries a transient failure up to three times per rung; with the
+    // selection first that put a slow or unreachable selected provider between
+    // the user and every fallback (measured: Natively unreachable, three 4 s
+    // connect timeouts, ~16 s before another provider answered).
+    //   • a `<vendor>_selected` rung: ONE attempt — its retry is the vendor's
+    //     fixed vision model, which follows on the same key;
+    //   • any other leading selection: TWO.
+    // Only when something healthy sits behind it: a rung that is the user's
+    // only chance keeps the full attempts. A selection that is not leading
+    // (breaker open, or local-only mode dropped it) is not touched.
+    const isCooling = (p: VisionStreamProvider) => (this.visionHealth.get(p.id)?.openUntil ?? 0) > nowMs;
+    const leading = front.filter(p => ordered.includes(p) && (p.isLocal || !isCooling(p)));
+    if (leading.length > 0 && ordered.some(p => !leading.includes(p) && !isCooling(p))) {
+      for (const p of leading) p.maxAttempts = p.id.endsWith('_selected') ? 1 : 2;
+    }
+
     if (ordered.length === 0) {
       // Local-only mode seats local providers only, so the cloud advice below
       // (add an OpenAI/Claude/Gemini/Groq key) would send the user to providers
