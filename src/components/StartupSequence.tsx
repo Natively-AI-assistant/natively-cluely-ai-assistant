@@ -1,9 +1,9 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useIsPresent } from 'framer-motion';
 import appIcon from './icon.png';
-import { prepareSplash, renderSplash, type SplashScene } from './startup/splashRenderer';
+import { drawBackdrop, prepareSplash, renderSplash, type SplashScene } from './startup/splashRenderer';
 import {
-    EXIT_MS, SPLASH_DISMISS_MS, SPLASH_HARD_CAP_MS, SPLASH_REDUCED_MOTION_DISMISS_MS, SPLASH_SETTLE_MS, backdropAt,
+    EXIT_MS, SPLASH_DISMISS_MS, SPLASH_HARD_CAP_MS, SPLASH_SETTLE_MS,
 } from './startup/splashTimeline';
 
 interface StartupSequenceProps {
@@ -30,13 +30,13 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
     onCompleteRef.current = onComplete;
 
     useEffect(() => {
-        // Primary dismiss: once nothing visible is still moving (the ring's faint
-        // tail plays out under the exit). These are timers on purpose —
+        // Primary dismiss: the moment the logo has formed. The launcher is mounted
+        // behind the splash from here, and the reveal uncovers it. These are timers on purpose —
         // Chromium stops requestAnimationFrame for a covered window, and the
         // splash must still hand over to the launcher there.
         const timer = setTimeout(() => {
             onCompleteRef.current();
-        }, prefersReducedMotion() ? SPLASH_REDUCED_MOTION_DISMISS_MS : SPLASH_DISMISS_MS);
+        }, SPLASH_DISMISS_MS);
         // Hard-cap safety net: no matter what, the splash must never persist past
         // 5s. If the primary timer's onComplete is ever prevented from advancing
         // the app (e.g. a throw upstream, a dropped state update), this guarantees
@@ -100,12 +100,7 @@ const StartupSequence: React.FC<StartupSequenceProps> = ({ onComplete }) => {
             // reduced motion: the settled frame, once
             const now = performance.now(), t = reduced ? SPLASH_SETTLE_MS : now - startedAt;
             const exitT = reduced || exitAt.current < 0 ? -1 : now - exitAt.current;
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.globalAlpha = 1;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.globalAlpha = exitT < 0 ? 1 : backdropAt(exitT);
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            drawBackdrop(ctx, scene, exitT);
             renderSplash(ctx, scene, t, exitT);
             // from the settle on the frame no longer changes until the exit, so stop asking for frames
             if (t < SPLASH_SETTLE_MS || (exitT >= 0 && exitT < EXIT_MS)) raf = requestAnimationFrame(draw);

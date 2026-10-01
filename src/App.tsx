@@ -1282,13 +1282,14 @@ const App: React.FC = () => {
             // keeps the splash in front of it for that moment.
             className="absolute inset-0 z-[100]"
             // The splash draws its own entrance and exit: the window is already
-            // black, and on the way out it clears its own backdrop while the
+            // black, and on the way out a ring of characters leaves the logo and
+            // the black opens behind it, uncovering the launcher, while the
             // logo dissolves into characters in front of the launcher. So this
             // layer animates nothing visible. It only keeps the splash mounted
-            // for the length of that exit (EXIT_MS in splashTimeline.ts), and
+            // for the length of that reveal (EXIT_MS in splashTimeline.ts), and
             // stops it taking clicks at once.
             initial={false}
-            exit={{ opacity: 0, pointerEvents: "none", transition: { opacity: { delay: 0.4, duration: 0.05 } } }}
+            exit={{ opacity: 0, pointerEvents: "none", transition: { opacity: { delay: 1.32, duration: 0.05 } } }}
           >
             <StartupSequence onComplete={dismissStartup} />
           </motion.div>
