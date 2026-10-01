@@ -6509,6 +6509,7 @@ export class AppState {
     const meetingGeneration = ++this._meetingGeneration;
     this.isMeetingActive = true;
     this.autoAnswerUsage.meetingStarted();
+    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingStarted(); } catch { /* analytics never blocks a meeting */ }
     // The user's name as a transcription hint, before any STT connects (sttContextTerms.ts).
     try { setSttContextTerms(nameTerms(this.currentUserName())); } catch { /* a hint, never a blocker */ }
     this.broadcastMeetingState()
@@ -6755,6 +6756,7 @@ export class AppState {
 
     this.cancelAutoAnswer();
     this.autoAnswerUsage.meetingEnded();
+    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingEnded(); } catch { /* analytics never blocks a meeting */ }
     // Cover the window between here and `_pendingTeardown` assignment, during which
     // the new in-flight-audio-init await below yields the event loop.
     this._endMeetingInFlight = true;
@@ -8932,6 +8934,16 @@ async function initializeApp() {
     console.warn('[UsageOutbox] startup failed (non-fatal):', err?.message || err);
   }
 
+  // Funnel telemetry: install → trial → paid, for every install, keyed on the
+  // random install id (the usage outbox above reports only for installs that
+  // hold a key). Off in unpackaged builds and when the user has turned
+  // telemetry off; see electron/services/FunnelTelemetry.ts.
+  try {
+    require('./services/FunnelTelemetry').funnelTelemetry.start();
+  } catch (err: any) {
+    console.warn('[Funnel] startup failed (non-fatal):', err?.message || err);
+  }
+
   // Extensions. Until this call nothing constructed an ExtensionManager, so no
   // extension could run in a shipped build regardless of what the on-disk
   // registry said.
@@ -9669,6 +9681,7 @@ if (process.env.THINKING_MATRIX === '1') {
       const { recordAppShutdown } = require('./services/usageInstrumentation');
       recordAppShutdown();
     } catch { /* instrumentation must never block a quit */ }
+    try { require('./services/FunnelTelemetry').funnelTelemetry.stop(); } catch { /* never blocks a quit */ }
     // Extension utilityProcesses are children of this process. One left running
     // keeps the app alive after every window has closed, which presents as a
     // hang on quit rather than as an error anyone sees. Fire-and-forget:

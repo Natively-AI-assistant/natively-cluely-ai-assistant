@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: August 15th 2026_
+_Last updated: October 1st 2026_
 
 This policy describes how **Natively** — the desktop application, the **Natively Pro** licensed features, and the **Natively API** managed service — handles your data. We've tried to write it like a person, not a lawyer.
 
@@ -29,6 +29,7 @@ We've designed Natively to keep as much of your data on your device as possible.
 - When you use a cloud AI, speech-to-text, or search feature, **the relevant text or audio leaves your device only to be processed by the provider you've chosen** (e.g., OpenAI, Anthropic, Google, Groq, Deepgram, ElevenLabs, Azure, IBM, Soniox, Tavily). The result comes back to your device.
 - For **paid products** (Natively Pro, Natively API), we **do** store a small amount of operational data on our servers — your license key, hardware identifier, plan, billing email, and quota counters. We need this to make billing and licensing actually work. We do not store the content you generate.
 - For the **Free Trial**, we additionally store anti-abuse signals (rate-limited IP, trial tokens, basic usage counters).
+- **Every installation**, paid or not, reports a small set of **product-usage events** to our own servers: that the app was opened on a given day, that a trial was started, that a plan page was opened, and the like. They are tied to a random installation identifier, not to your name or email, and they cannot contain anything you say, see or type. See §3.2.1.
 - We **do not sell** your data. We **do not use your content to train AI models**. We don't use third-party analytics or marketing trackers inside the desktop app.
 
 The rest of this document explains those flows in detail.
@@ -92,9 +93,40 @@ directly. We do not present the two as the same kind of evidence, because they a
 first is a report from software running on your computer, and the second is something our own
 systems executed and measured.
 
+### 3.2.1 What every installation reports — product-usage events
+
+The desktop app reports a small set of product-usage events to our own servers, whether or not
+you have bought anything. We use them to see how many people who install Natively go on to try
+it and to pay for it, and where the others stop. They go to us only, not to an analytics company.
+
+| Data | Purpose | Retained for |
+|---|---|---|
+| Installation identifier (the random value described in §3.2), application version and operating system | Count installations and tell them apart | 13 months |
+| Usage events — the app was opened for the first time; the app was used on a given day; a meeting started or ended, and how many whole minutes it lasted; a card or a locked feature was shown, and what you chose; a free trial was started, or could not be and why; a checkout page was opened, and from which screen; a licence key or API key was entered, and whether it was accepted | Understand how the product is used and where people give up | 13 months |
+| The state of the installation at that moment, as yes/no values — whether it is on a trial, has a plan, has a Pro licence, or uses its own AI keys | Compare those groups | 13 months |
+
+Every event is a fixed name with fixed choices, whole numbers, or yes/no values. No field in it
+can hold text, so an event cannot contain anything you say, see, type or paste, a file name, a
+meeting title, the name of a model, or a key. We do not store your IP address with these events.
+
+**What gets linked.** When you start a free trial, the trial is linked to your installation
+identifier. When you open a checkout page from the app, the link carries your installation
+identifier and the screen you came from, and Dodo Payments returns both to us with the purchase.
+Through those links an installation identifier can be associated with a trial, and so with the
+hardware identifier that trial is bound to, or with a paying account.
+
+**Turning it off.** Open **Settings › General › Advanced** and turn off **Usage statistics**. That
+stops these events, discards any that had not been sent yet, and stops the identifier being added
+to checkout links. It is on by default. If you email **natively.contact@gmail.com**, we will also
+delete the events your installation has already reported.
+
+The switch does not change the records described in §3.2 for paid products and the Free Trial
+(the usage ledger, licence activity and the feature activity a licensed app reports). Billing and
+dispute handling depend on those, so they continue while you hold a licence or a plan.
+
 ### 3.3 What payment processors handle
 
-Payments are processed by **Dodo Payments**. Card details, bank details, and similar payment-instrument data are handled by Dodo and are subject to Dodo's privacy policy. We receive transaction metadata from Dodo (order ID, amount, currency, status, billing email) but we do **not** receive or store full card or bank details on our servers.
+Payments are processed by **Dodo Payments**. Card details, bank details, and similar payment-instrument data are handled by Dodo and are subject to Dodo's privacy policy. We receive transaction metadata from Dodo (order ID, amount, currency, status, billing email, and the installation identifier and screen name the app attached to the checkout link — see §3.2.1) but we do **not** receive or store full card or bank details on our servers.
 
 ### 3.4 What software updates send
 

@@ -29,6 +29,17 @@
  * - This code is fully auditable and easy to remove if unwanted
  *
  * This is NOT analytics. This is NOT telemetry. This is a simple install counter.
+ *
+ * WHAT ELSE USES THE INSTALL ID (2026-10-01). Everything above describes the
+ * PING. The id it creates is also the subject of two other things, and neither
+ * is covered by the lists above:
+ *   - usage events for licensed installs (UsageOutbox.ts), and
+ *   - product-funnel events for every install (FunnelTelemetry.ts), which also
+ *     puts the id on checkout links and sends it with a trial start.
+ * Server-side, a trial start or a purchase therefore ties this id to that trial
+ * (and its hardware id) or to that paying account. The id is still random and
+ * still not derived from hardware; it is no longer unlinkable. PRIVACY.md §3.2.1
+ * is where that is said to users.
  * ================================================================================
  */
 

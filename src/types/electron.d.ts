@@ -175,7 +175,7 @@ export interface ElectronAPI {
   onMeetingStateChanged: (callback: (data: { isActive: boolean }) => void) => () => void
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void
   onEnsureExpanded: (callback: () => void) => () => void
-  openExternal: (url: string) => Promise<{ ok: boolean }>
+  openExternal: (url: string, opts?: { surface?: string }) => Promise<{ ok: boolean }>
   // Genie snapshots (electron/genieSnapshots.ts): pictures of popup cards the genie warps.
   genieSnapshotCapture?: (rect: { x: number; y: number; width: number; height: number }) => Promise<{ png: Uint8Array; width: number; height: number } | null>
   genieSnapshotSave?: (key: string, png: Uint8Array) => Promise<boolean>
@@ -307,7 +307,7 @@ export interface ElectronAPI {
 
   // Free Trial
   /** `persisted: false` = started and live for THIS session, but the credential store could not write it, so a restart loses it. The server keeps the trial and re-issues it (idempotent per hardware id). */
-  startTrial:     () => Promise<{ ok: boolean; hasToken?: boolean; persisted?: boolean; started_at?: string; expires_at?: string; expired?: boolean; already_used?: boolean; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number }; error?: string; status?: number }>
+  startTrial:     (surface?: string) => Promise<{ ok: boolean; hasToken?: boolean; persisted?: boolean; started_at?: string; expires_at?: string; expired?: boolean; already_used?: boolean; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number }; error?: string; status?: number }>
   getTrialStatus: () => Promise<{ ok: boolean; expired?: boolean; showEndedCard?: boolean; remaining_ms?: number; started_at?: string; expires_at?: string; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: object; error?: string }>
   getLocalTrial:  () => Promise<{ hasToken: boolean; trialClaimed?: boolean; expiresAt?: string; startedAt?: string; expired?: boolean; showEndedCard?: boolean; superseded?: boolean }>
   convertTrial:   (choice: string) => Promise<{ ok: boolean }>
@@ -315,6 +315,8 @@ export interface ElectronAPI {
   // Card ledger (toaster policy, src/lib/cards/cardPolicy.mjs)
   cardsGet: () => Promise<{ ok: boolean; ledger?: import('../lib/cards/cardPolicy.mjs').Ledger; error?: string }>
   cardsRecord: (id: string, outcome: string, meta?: { until?: number }) => Promise<{ ok: boolean; ledger?: import('../lib/cards/cardPolicy.mjs').Ledger; error?: string }>
+  /** Report a funnel event only the renderer can see (a card on screen, a locked feature opened). */
+  funnelTrack: (eventType: string, props?: Record<string, string | number | boolean>) => Promise<{ ok: boolean; result?: string; error?: string }>
   cardsImportLegacy: (legacy: import('../lib/cards/cardPolicy.mjs').LegacyCardHistory) => Promise<{ ok: boolean; ledger?: import('../lib/cards/cardPolicy.mjs').Ledger; error?: string }>
   onCardsChanged: (cb: (ledger: import('../lib/cards/cardPolicy.mjs').Ledger) => void) => () => void
   onTrialEnded:   (cb: (data: { choice: string }) => void) => () => void
@@ -1032,6 +1034,8 @@ export interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  getUsageStatistics: () => Promise<boolean>;
+  setUsageStatistics: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   exportDebugLogs: () => Promise<{ success: boolean; path?: string; files?: string[]; error?: string }>;
 
   // Windows shortcut guard — the always-on WH_KEYBOARD_LL hook that swallows

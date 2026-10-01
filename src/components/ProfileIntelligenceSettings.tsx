@@ -16,7 +16,7 @@ import { useConfirmDialog } from './ui/ConfirmDialog';
 
 const openExternal = (url: string) => {
     if ((window as any).electronAPI?.openExternal) {
-        (window as any).electronAPI.openExternal(url);
+        (window as any).electronAPI.openExternal(url, { surface: 'profile_intelligence' });
     } else {
         window.open(url, '_blank', 'noopener,noreferrer');
     }
@@ -1755,6 +1755,10 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
     onClose?: () => void;
 }) {
     const theme = useResolvedTheme();
+    // Funnel: someone without Pro opened Profile Intelligence and met this gate.
+    useEffect(() => {
+        (window as any).electronAPI?.funnelTrack?.('paywall_hit', { feature: 'profile_intelligence' })?.catch?.(() => {});
+    }, []);
 
     return (
         <div className="pi-pro-gate" data-theme={theme} style={{

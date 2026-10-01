@@ -626,7 +626,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
         }
     };
 
-    const openExternal = (url: string) => { (window.electronAPI as any)?.openExternal?.(url); };
+    const openExternal = (url: string) => { (window.electronAPI as any)?.openExternal?.(url, { surface: 'pro_settings' }); };
     // Literals, because they always were. These sat behind a
     // getNativelyPricing fetch whose /v1/pricing route exists in no version of
     // natively-api — added 2026-05-29 in a commit named "partial" and never

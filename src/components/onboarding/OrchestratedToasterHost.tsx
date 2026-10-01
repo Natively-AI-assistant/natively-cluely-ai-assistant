@@ -189,7 +189,7 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
           onStartTrial={async () => {
             // Our own errors (network, server) are retried once; the server's
             // answers are final (spec §6 row 8).
-            const kind = await startTrialWithRetry(() => window.electronAPI?.startTrial?.() ?? Promise.resolve(undefined));
+            const kind = await startTrialWithRetry(() => window.electronAPI?.startTrial?.('trial_promo') ?? Promise.resolve(undefined));
             if (kind === 'started') { orch.setUserState({ hasTrialToken: true, trialClaimed: true }); recorder.outcome('acted'); }
             // Already used on this device: the promo retires and the card
             // offers a key or the user's own keys instead.

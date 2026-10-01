@@ -917,6 +917,8 @@ export const ZH_GENERATED: Record<string, string> = {
     "Uses a Service Account JSON instead of an API Key. You must build a GCP Project, activate the Cloud Speech API, and create a Service Account under IAM. Download the JSON Key, and drag-and-drop it into the box in the Audio Settings.": "Uses a Service Account JSON instead of an API Key. You must build a GCP Project, activate the Cloud Speech API, and create a Service Account under IAM. Download the JSON Key, and drag-and-drop it into the box in the Audio Settings.",
     "Uses standard OpenAI keys": "Uses standard OpenAI keys",
     "Debug logging": "调试日志",
+    "Usage statistics": "使用统计",
+    "Sends which features are used and how often. Never what you say, see or type.": "发送使用了哪些功能及其使用频率。绝不发送您所说、所见或所输入的内容。",
     "Version": "版本",
     "Via Docker (One command with local PostgreSQL):": "Via Docker (One command with local PostgreSQL):",
     "Via Pip (Bare metal Python service):": "Via Pip (Bare metal Python service):",

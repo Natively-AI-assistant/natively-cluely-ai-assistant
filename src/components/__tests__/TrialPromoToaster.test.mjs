@@ -77,7 +77,8 @@ test('a close after our own error reports it, so the host counts no strike', () 
 test('host: retries our error once, retires on "already used", no strike after our error', () => {
   const host = readFileSync(resolve(__dirname, '../onboarding/OrchestratedToasterHost.tsx'), 'utf8');
   const trial = host.slice(host.indexOf("case 'trial_promo':"), host.indexOf("case 'quiet_window':"));
-  assert.ok(trial.includes('const kind = await startTrialWithRetry(() => window.electronAPI?.startTrial?.() ?? Promise.resolve(undefined));'));
+  // The surface is named so a failed start is reported from where it was asked (funnel).
+  assert.ok(trial.includes("const kind = await startTrialWithRetry(() => window.electronAPI?.startTrial?.('trial_promo') ?? Promise.resolve(undefined));"));
   assert.ok(trial.includes("if (kind === 'unavailable') { orch.setUserState({ trialClaimed: true }); recorder.outcome('never'); }"));
   assert.ok(trial.includes("onGetKey={() => openSettings('plans')}"));
   assert.ok(host.includes("if (reason === 'after_error') recorder.end();"), 'our error: the showing ends with no outcome');
