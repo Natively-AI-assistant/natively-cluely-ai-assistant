@@ -408,3 +408,51 @@ Paired per-mode reads with `astra/paired.mjs` (same items, official score, 95% i
   baseline run → fix8 / supp-quant / leftovers.
 * I24 (verifier stops after "UNSUPPORTED: none"): no latency gain (unchanged turns 864 vs 876 ms p50 — the cost is
   the second request's round trip, not its output). Not built.
+
+## Phase 3 (2026-10-01 04:45Z) — claim kinds; charter v2
+Evin's continuation spec: the verifier is now strong enough to damage answers. It must tell a historical/evidence
+claim and an existing personal preference (verify) from a current decision, a recommendation and an ordinary
+commitment (leave), verify consequential promises, and SURFACE a conflict inside the material instead of picking a
+side. The judge charter gets the same distinction. fix8/fix9 need their own full judge + holdout read before any
+promotion; replay gains are evidence, not a verdict.
+
+### Charter v2 (c725615a54f6; v1 kept as astra/CHARTER.v1-6dd53845a51c.md)
+* "CLAIMS AND EVIDENCE" now defines the six kinds with Evin's examples (pads vs rotors) and says to penalise
+  evasiveness, deferral, question-backs and removed decisions; a truthful fallback when personal information was
+  unavailable is neither fabrication nor excellent. Caps and weights unchanged. Wording taken from the spec, not tuned
+  on any judged answer.
+* Calibration v2: +5 pairs (current decision; over-deferral "who's taking it"; a decision vs invented history; a
+  source conflict; a consequential commitment). Gate = 90% → 23 of 25.
+* Every judgment is re-keyed by the charter, so all comparisons from here use `abs-dev-c2` / `abs-holdout-c2` /
+  `abs-sb-c2`. Charter-v1 numbers (baseline 7.78, fix6 8.23 …) are NOT comparable with c2 numbers.
+* Honest status of fix6: on holdout (charter v1) it is +0.12 (±0.23) over main with Call Center −0.74. That is not a
+  holdout confirmation; fix6 is the provisional reference, not a promoted build.
+
+### Over-verification, measured (tools/oververify.mjs) — the I18 prompt caused it
+* I18's list step named "a yes or a no, an 'it works for me'… what they want" and its rewrite said "acknowledge and
+  ask the one thing about the other side".
+* In-app edits: fix6 86 edits → 15 end in a question the draft did not ask, 1 decision lost, 4 cut to under half.
+  fix8 149 edits → 36 / 26 / 21. Examples: "Who's grabbing this one?" — "I can take this one…" → "…I'll come back on
+  who's picking it up" (DTEAM-002); "Let's do the pads today, and hold off on the rotors" → a question to the
+  mechanic (DGEN-023); "I'll stay on this with you until it's actually fixed" removed (DCC-023).
+
+### fix10 — claim kinds in the verifier (source written; build after fix9's holdout run)
+* List step: only [past], [self], [promise]; an explicit "never list" for a decision made now, taking a task, a
+  recommendation, an ordinary small commitment. A `CONFLICT:` line names two values the material gives for what was
+  asked. Rewrite step, in order: listed phrases gone; everything else word for word; a conflict is surfaced and
+  neither value asserted; an emptied answer gets a short "will confirm and come back" line (preference /
+  availability) or what the material records (own past) — never a question back. I16's hand-back sentence removed.
+* Replay on fix8's 256 verified drafts (fix9 verifier → kinds): edited 156 → 116; turned into a question 37 → 4;
+  decisions lost 28 → 10; cut to under half 18 → 15; document-grounded replies edited 33 → 13 of 72; profile-grounded
+  edits keep 67% of the draft's words (58%).
+* Conflicts: the list step names them (DSALES-023's included-vs-$300 Salesforce line, DGEN-035's two rents); the
+  rewrite acted on 6 of 10.
+* NOT enforced in code: ~18% of listed phrases stay in the model's own reply, and most are listing mistakes it then
+  corrects (résumé facts such as "about 2.3 million a day"). Deleting listed sentences would remove grounded facts.
+  A shorter rewrite step did not change the survival rate (80 vs 61 of ~350).
+* Call Center holdout drop, root cause: the persona ALREADY says "without a stated procedure, say you will check the
+  right process rather than describing a typical one"; the generator ignores it. The lever is the verifier's
+  no-document clause (I18), not more prompt text. No I10 change.
+* Technical interview: verified code execution exists (`electron/llm/codeVerification`, sandboxed subprocess, 3 s)
+  but `isCodeVerificationEnabled` defaults OFF ("temporarily disabled"), so no benchmark run ever executed a code
+  answer. Measured next with NATIVELY_CODE_VERIFY=on on a TI-only run; the production default is Evin's decision.
