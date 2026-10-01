@@ -428,3 +428,12 @@ describe('a breaker never outlives the selection it was about', () => {
     svc.rungHealth.clear();
   });
 });
+
+test('the fake credential store offers only getters the real one has', () => {
+  // The registry calls several of these through `?.()`. A renamed getter would
+  // silently unseat its rung in the app while this file's fake kept answering.
+  const { CredentialsManager } = require(dist('services/CredentialsManager.js'));
+  for (const name of Object.keys(credentials([]))) {
+    assert.equal(typeof CredentialsManager.prototype[name], 'function', `CredentialsManager.${name} no longer exists`);
+  }
+});
