@@ -83,6 +83,13 @@ describe('judgeProbeReply', () => {
     for (const reply of ['42', '1234', '12', 'It is 4816.', '7391']) assert.equal(judgeProbeReply(reply, '7392'), 'no', reply);
     for (const reply of ['', '4', 'ok', '.']) assert.equal(judgeProbeReply(reply, '7392'), 'unknown', JSON.stringify(reply));
   });
+  test('a bare HTTP status code as the whole reply is the provider talking, not a wrong answer (review fix)', () => {
+    // Some proxies answer 200 with just the upstream's status as text.
+    for (const reply of ['429', '503', ' 404 ', '500\n']) assert.equal(judgeProbeReply(reply, '7392'), 'unknown', JSON.stringify(reply));
+    assert.equal(judgeProbeReply('429', '4290'), 'unknown');
+    assert.equal(judgeProbeReply('4290', '4290'), 'yes', 'the number itself always wins');
+    assert.equal(judgeProbeReply('123', '7392'), 'no', 'any other three-digit number is still a wrong answer');
+  });
   test('the number inside a longer number does not count', () => {
     assert.equal(judgeProbeReply('173920', '7392'), 'no');
   });

@@ -17,8 +17,9 @@ export { isImageRefusalMessage };
 
 // A quota, rate-limit, auth, filter or outage notice delivered as ordinary text.
 // Deliberately broad: wrongly calling a reply "unknown" costs a retry later;
-// wrongly calling it "no" blocks a capable model for a month.
-const PROVIDER_NOTICE_RE = /quota|credit|billing|rate.?limit|too many requests|try again later|temporarily unavailable|overloaded|blocked|content.?filter|unauthori[sz]ed|api.?key|exhausted|无可用渠道|令牌/i;
+// wrongly calling it "no" blocks a capable model for a month. The last
+// alternative is a bare HTTP status ("429", "503") sent as the whole reply.
+const PROVIDER_NOTICE_RE = /quota|credit|billing|rate.?limit|too many requests|try again later|temporarily unavailable|overloaded|blocked|content.?filter|unauthori[sz]ed|api.?key|exhausted|无可用渠道|令牌|^\s*[45]\d\d\s*$/i;
 
 /**
  * Judge the model's reply to "what number is shown?". Separators between digits

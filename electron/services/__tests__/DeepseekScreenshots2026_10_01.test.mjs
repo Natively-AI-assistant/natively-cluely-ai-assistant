@@ -147,3 +147,24 @@ describe('the streaming vision chain', () => {
     assert.equal(opened[0]?.name, 'deepseek');
   });
 });
+
+describe('the real privacy guard sees the image on the DeepSeek adapter (review fix)', () => {
+  // The adapter tests above stub assertOutboundScopes to prove the image paths
+  // are PASSED. These call the real guard, for the adapter this phase made
+  // image-bearing.
+  const { ProviderScopeError } = require(dist('llm/ProviderRouter.js'));
+  const real = (policy) => {
+    const h = Object.create(LLMHelper.prototype);
+    Object.assign(h, { customProvider: null, isProviderDisabled: () => false, getProviderScopePolicy: () => policy });
+    return h;
+  };
+  const img = ['/tmp/screen.png'];
+  test('screenshots scope denied: the DeepSeek adapter refuses an image, and still sends text', () => {
+    const h = real({ screenshots: false });
+    assert.throws(() => h.assertOutboundScopes('deepseek', 'what is this?', img), (e) => e instanceof ProviderScopeError || e?.name === 'ProviderScopeError');
+    assert.doesNotThrow(() => h.assertOutboundScopes('deepseek', 'hello'));
+  });
+  test('the same call without the image paths would NOT have been refused: passing them is what protects the screenshot', () => {
+    assert.doesNotThrow(() => real({ screenshots: false }).assertOutboundScopes('deepseek', 'what is this?'));
+  });
+});

@@ -10783,8 +10783,9 @@ let isMultimodal = !!(imagePaths?.length);
       return;
     }
 
-    // DeepSeek (text-only). When images are present, fall through so the
-    // vision-first chain (Gemini/Claude/OpenAI/Natively) handles them instead.
+    // DeepSeek, TEXT turns. An image turn never gets here: the unified vision
+    // chain above took it (and since 2026-10-01 seats a selected DeepSeek Flash
+    // there). The guard stays so this branch can never send an image itself.
     if (this.isDeepseekModel(this.currentModelId) && this.deepseekClient && !(isMultimodal && imagePaths)) {
       const deepseekSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
       const finalDeepseekSystem = this.injectLanguageInstruction(deepseekSystem);
@@ -11956,7 +11957,8 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
-   * Stream response from DeepSeek (OpenAI-compatible). Text-only by design.
+   * Stream response from DeepSeek (OpenAI-compatible). Carries images when the
+   * caller passes them (2026-10-01); the callers decide which model may get one.
    */
   private async * streamWithDeepseek(userMessage: string, systemPrompt?: string, modelId?: string, abortSignal?: AbortSignal, imagePaths?: string[]): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
