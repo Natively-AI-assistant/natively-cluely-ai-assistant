@@ -554,3 +554,10 @@ Priority in the spec puts realtime usability above p10 and the mean, so the late
   015 but ALSO kept invented restrictions the clause exists to remove ("I can't send a password reset by text",
   DCC-032) and still dropped DCC-036's answer. Mixed; NOT built. Kept as a variant in case the judged Call Center
   result points at this class.
+
+### fix11 in-app, holdout (aq2-holdout-fix11, 270 rows, 0 failed) — aggregate objective read, 10:31Z, before scores
+* Validators 2/2 (fix6 2/2, main 2/2). No source word, no non-English reply in a shown answer.
+* Verifier: passes its gate on 203/270 turns (75%), replaces the text on 66 (24%); spoken turns 52/189.
+  Over-verification flags: 0 edits end in a question, 6 "decision lost" (heuristic), 6 cut to under half.
+* Latency vs fix6: TTFT p50 854 ms (779), p95 1644 (1363); TOTAL p50 2114 ms (1485), p95 3612 (2811).
+  The run restarted once (app exit at row 51, resumed on the same committed build).
