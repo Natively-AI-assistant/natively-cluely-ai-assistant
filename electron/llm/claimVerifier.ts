@@ -186,7 +186,7 @@ export function claimVerifierSystemPrompt(modeId: string, surface: 'spoken' | 't
 Remove or neutralise every statement about ${subject} that the material does not state: preferences and stances ("I'm open to", "that works for me", "I'm taking it seriously"), willingness, motives and reasons, strengths and weaknesses, habits or practices presented as their own history, feelings, events, numbers, prices, capabilities, integrations, customers, results, guarantees and commitments not in the material. A denial ("I haven't", "we don't") is a statement too.${productGap}
 Keep everything the material supports, everything the other person stated, and general reasoning. ${typed ? 'Keep the same voice, format and length.' : 'Keep the same voice, natural and speakable.'} Keep the draft's **double-asterisk** highlights on the words you keep. A caution that a document is expired, out of date, a draft or not the current version is supported whenever the material marks it so: keep it. Never say you cannot speak to something, do not have it, or that it is not available; never mention the material, a résumé, notes or what is missing. Do not add facts.
 Only when removing claims leaves nothing that answers the question, say what stays true and hand it back with one short, practical question about their side. When the reply still answers, add no question.
-Change as little as possible. If nothing needs changing, the revised reply is the draft unchanged.${LIST_THEN_REWRITE}`;
+Change as little as possible. If nothing needs changing, the revised reply is the draft unchanged. The revised reply is in the language the draft is written in.${LIST_THEN_REWRITE}`;
 }
 
 /** The part of the verifier's message after the answer call's own (inherited) message. */
@@ -220,6 +220,18 @@ export const FRESHNESS_RE = /\b(?:expired?|expir(?:y|es)|out of date|outdated|no
 const NUM_RE = /\d+(?:[.,]\d+)*/g;
 const nums = (s: string): Set<string> => new Set((String(s).match(NUM_RE) ?? []).map((n) => n.replace(/,/g, '')));
 
+/**
+ * Share of the letters that are not Latin script. The transport appends the app's language instruction to every
+ * system prompt ("If the user writes in Hindi, respond in Hindi…"), and on this call it sometimes turned an English
+ * reply into Hindi: in-app, 3 of 360 dev answers in each of two runs (DCC-008/009/010, DSALES-002, DCC-004) streamed
+ * in English and were REPLACED by a Hindi edit. An edit never changes the reply's script.
+ */
+export function nonLatinShare(text: string): number {
+  const letters = String(text ?? '').match(/\p{L}/gu) ?? [];
+  if (!letters.length) return 0;
+  return letters.filter((c) => !/\p{Script=Latin}/u.test(c)).length / letters.length;
+}
+
 const formatInsensitive = (t: string): string => String(t ?? '')
   .replace(/\*\*/g, '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim();
 
@@ -243,6 +255,7 @@ export function acceptVerifiedAnswer(input: { original: string; edited: string |
   const words = edited.split(/\s+/).filter(Boolean).length;
   if (edited.length < 20 || words < 6) return keep('too_short');
   if (edited.length < body.length * 0.25 && !materialHasNoDocuments(input.material)) return keep('too_short');
+  if (Math.abs(nonLatinShare(edited) - nonLatinShare(body)) > 0.3) return keep('language_changed');
   if (/```/.test(edited) || /```/.test(body)) return keep('code');
   if (/^(?:MATERIAL|DRAFT REPLY|UNSUPPORTED)\s*:/im.test(edited)) return keep('echoed_prompt');
   const allowed = new Set([...nums(body), ...nums(input.material)]);

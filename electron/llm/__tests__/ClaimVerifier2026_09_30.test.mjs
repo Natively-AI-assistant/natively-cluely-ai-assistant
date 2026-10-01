@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import {
   claimVerifierKind, claimVerifierSystemPrompt, claimVerifierDraftMessage, claimVerifierStandaloneMessage,
   acceptVerifiedAnswer, splitGistTrailer, runClaimVerifier, materialHasNoDocuments, CLAIM_VERIFIER_BUDGET_MS,
-  splitVerifierScratch,
+  splitVerifierScratch, nonLatinShare,
 } from '../../../dist-electron/electron/llm/claimVerifier.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -150,6 +150,29 @@ describe('what the no-document clause covers per mode, and the stale-document ca
     assert.equal(acceptVerifiedAnswer({ original, material, edited: 'UNSUPPORTED: "ran through December"\n---\nGrowth is $44 a seat, and the Salesforce connector is included in that plan.' }).reason, 'freshness_dropped');
     assert.equal(acceptVerifiedAnswer({ original, material, edited: 'UNSUPPORTED: none\n---\nThat sheet ran through December, so let me confirm today\'s pricing first. On it, Growth is $44 a seat.' }).reason, 'edited');
     assert.match(claimVerifierSystemPrompt('sales'), /A caution that a document is expired, out of date, a draft or not the current version is supported/);
+  });
+});
+
+describe('an edit never changes the reply\'s language (2026-10-01)', () => {
+  const original = 'I don\'t have our specific escalation criteria, so let me confirm the exact triggers rather than guess.';
+  test('an English reply rewritten in Hindi is not shipped (DCC-008, in-app)', () => {
+    const v = acceptVerifiedAnswer({ original, material: 'none', edited: 'UNSUPPORTED: none\n---\nमेरे पास हमारे विशिष्ट escalation मानदंड नहीं हैं, तो अनुमान लगाने के बजाय मैं सटीक triggers की पुष्टि कर लेता हूँ।' });
+    assert.equal(v.reason, 'language_changed');
+    assert.equal(v.text, original);
+  });
+  test('and the other way round; a reply edited in its own language is', () => {
+    const hi = 'मेरे पास हमारे विशिष्ट मानदंड नहीं हैं, तो मैं सटीक triggers की पुष्टि कर लेता हूँ और आपको बताता हूँ।';
+    assert.equal(acceptVerifiedAnswer({ original: hi, material: 'none', edited: 'Let me confirm the exact triggers and come back to you on that.' }).reason, 'language_changed');
+    assert.equal(acceptVerifiedAnswer({ original: hi, material: 'none', edited: 'मैं सटीक triggers की पुष्टि कर लेता हूँ और आपको बताता हूँ।' }).reason, 'edited');
+    assert.equal(acceptVerifiedAnswer({ original, material: 'none', edited: 'Let me confirm the exact escalation triggers rather than guess.' }).reason, 'edited');
+  });
+  test('the share counts letters only', () => {
+    assert.equal(nonLatinShare('Growth is $44 a seat — 12.5%.'), 0);
+    assert.equal(nonLatinShare('नमस्ते'), 1);
+    assert.equal(nonLatinShare('1234 — $'), 0);
+  });
+  test('the prompt pins the language to the draft\'s', () => {
+    assert.match(claimVerifierSystemPrompt('call-center'), /The revised reply is in the language the draft is written in\./);
   });
 });
 
