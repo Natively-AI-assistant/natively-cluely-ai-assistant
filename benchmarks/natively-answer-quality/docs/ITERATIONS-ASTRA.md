@@ -354,3 +354,35 @@ Paired per-mode reads with `astra/paired.mjs` (same items, official score, 95% i
   now deflect ("What would you like to know about that stretch?" 6.0–7.7, important_question_unanswered). The judge
   wants neither an invented reason nor a counter-question — the architectural blocker noted earlier.
 * Cost: Team Meet and Recruiting now pay the verifier's ~0.9 s on the total and the replace-after-stream.
+
+### I18 as built (aq-fix2 1bb90a65 + 13b649c7) — run aq2-dev-fix8
+* On top of the replayed variants: Call Center with no document treats procedures / verification steps / what the
+  agent can see or do as unsupported ("say you will check how that is handled"): replay 7.46 → 8.25 (hard fails
+  10 → 4; vs fix6 +1.18 ±0.61). Sales with no document: what the price depends on, terms, promises: 7.98 → 8.22
+  (8 → 5).
+* OBJECTIVE REGRESSION CAUGHT: list-then-rewrite listed the reply's stale-sheet caution as "unsupported" and
+  confirmed the expired price (DSALES-023 validator pass → fail). Rail `freshness_dropped` + a prompt line; with the
+  real module the dev validators equal fix6's (DSALES-023 pass). Ratio rail lifted only when there is no document
+  (DSALES-001's one-question edit was rejected as too_short).
+* The real module on the 131 rows that have documents (LFW/Sales/CC/Team Meet/Recruiting): 8.11 → 8.40
+  (+0.30 ±0.25), hard fails 30 → 16.
+* BUG FOUND (in fix6 and fix7 too): the verifier sometimes REPLACED an English reply with a Hindi one — 3 of 360 dev
+  answers in each run (DCC-008/009/010; DSALES-002, DCC-004, DCC-009). Cause: the transport appends the app's
+  language instruction ("If the user writes in Hindi, respond in Hindi…") to the verifier's system prompt too. Fix
+  13b649c7: the prompt pins the draft's language; an edit whose script differs from the draft's is never shipped
+  (`language_changed`). The same suffix rides on every other secondary call — not changed here, worth a look.
+
+### Rejected in this batch
+* I19 technical second look (`ERRORS:` list, then fix; tools/variants/techcheck-v1.mjs): on the 40 TI answers it
+  found 2 of the 7 judged technical errors and one of its two fixes was itself wrong; ~1.2 s. Technical-interview
+  caps (an LRU on a list, Θ(n) called O(n log n), debit/credit reversed) are the generator's; deepseek-v4-pro was no
+  better on TI either (7.38 vs 7.32).
+* I20 `MISSING:` line (facts the material holds that the draft left out): −0.01 (±0.20) on 131 rows. Not built.
+* scratch-v2 (per-kind rules): noise (above).
+
+### I21 / I22 — every spoken General turn and every Seminar turn is verified (source written, next build)
+* General, every turn: 8.53 → 8.80 (+0.27 ±0.37), hard fails 5 → 1; the gain is on spoken turns, one typed answer
+  got worse → spoken only; typed keeps the narrow gate.
+* Seminar, every turn, subject = the research: 8.64 → 8.99 (+0.35 ±0.37), hard fails 3 → 1.
+* Cost to state plainly: with I18 + I21 + I22 every spoken answer except Lecture and non-personal Technical
+  interview pays the ~0.9 s pass and the replace-after-stream.
