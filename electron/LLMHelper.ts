@@ -1355,17 +1355,40 @@ export class LLMHelper {
   private async resolveOutboundVisionDecision(
     imagePaths: string[] | undefined,
     screenshotsScopeAllowed: boolean,
-  ): Promise<{ decision: import('./llm/visionPolicy').VisionDecision; localAvailable: boolean }> {
+  ): Promise<{ decision: import('./llm/visionPolicy').VisionDecision; localAvailable: boolean; localTarget: 'ollama' | 'custom' | null }> {
     const decision = resolveVisionPolicy({
       hasImages: Boolean(imagePaths?.length),
       mode: readScreenUnderstandingMode(),
       screenshotsScopeAllowed,
       visionProviderAvailable: this.anyVisionProviderAvailable(),
     });
-    const localAvailable = decision.action === 'local_only'
-      ? (this.useOllama && await this.ensureOllamaModelSelected(true))
-      : false;
-    return { decision, localAvailable };
+    if (decision.action !== 'local_only') return { decision, localAvailable: false, localTarget: null };
+    // The SELECTED custom endpoint, when it is on this machine or the local
+    // network and reads images (2026-10-01). Only Ollama counted here, so an
+    // LM Studio or llama.cpp user in "Keep screenshots on this device" mode was
+    // told no local vision model exists and pointed at Ollama — while the
+    // screen pre-pass (VisionProviderRegistry) already used that same endpoint
+    // as a local one. A custom selection and Ollama are mutually exclusive.
+    //
+    // `localAvailable` keeps meaning "Ollama can take it": the three
+    // non-streaming callers dispatch to callOllama on it and know nothing of a
+    // custom endpoint. Only the live streaming site reads `localTarget`.
+    if (this.localCustomVisionProvider()) return { decision, localAvailable: false, localTarget: 'custom' };
+    const ollama = this.useOllama && await this.ensureOllamaModelSelected(true);
+    return { decision, localAvailable: ollama, localTarget: ollama ? 'ollama' : null };
+  }
+
+  /**
+   * The selected custom provider, when a screenshot that must stay on this
+   * device may go to it: its host is loopback or private (never assumed), its
+   * template can carry an image, and it is not switched off.
+   */
+  private localCustomVisionProvider(): CustomProvider | null {
+    const provider = this.customProvider;
+    if (!provider) return null;
+    if (!customProviderIsLocal(provider) || !customProviderSupportsVision(provider)) return null;
+    if (this.isProviderDisabled('custom') || this.isProviderDisabled(provider.id)) return null;
+    return provider;
   }
 
   /** Live, fail-OPEN: a credential-store failure must not start refusing turns
@@ -10207,7 +10230,7 @@ let isMultimodal = !!(imagePaths?.length);
     // assertOutboundScopes makes it true by construction; this block exists so
     // the user gets one clear sentence instead of a cascade of provider errors.
     {
-      const { decision: visionDecision, localAvailable: localVisionAvailable } =
+      const { decision: visionDecision, localAvailable: localVisionAvailable, localTarget: localVisionTarget } =
         await this.resolveOutboundVisionDecision(imagePaths, !deniedOutboundScopes.includes('screenshots'));
       if (visionDecision.action === 'block') {
         console.warn(`[VisionPolicy] blocked: ${visionDecision.reason}`);
@@ -10215,6 +10238,34 @@ let isMultimodal = !!(imagePaths?.length);
         return;
       }
       if (visionDecision.action === 'local_only') {
+        if (localVisionTarget === 'custom') {
+          // The selected local endpoint answers, and ONLY it: this is not the
+          // vision chain, so a failure is shown as a failure and nothing falls
+          // through to a cloud rung. streamWithCustom runs its own last-boundary
+          // check (assertOutboundImagesAllowed), which admits a local host.
+          console.warn(`[VisionPolicy] routing screenshot to the selected local endpoint: ${visionDecision.reason}`);
+          const endpointPrompt = this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT);
+          let emitted = false;
+          try {
+            for await (const piece of this.streamWithCustom(message, context, imagePaths, endpointPrompt, abortSignal)) {
+              emitted = true;
+              yield piece;
+            }
+          } catch (e: any) {
+            if (abortSignal?.aborted) return;
+            const refusal = this.describePrivacyRefusal(e);
+            if (refusal) { yield refusal; return; }
+            if (emitted) {
+              console.warn(`[LLMHelper] Local endpoint failed AFTER first token — ending stream: ${e?.message || e}`);
+              yield LLMHelper.TRUNCATION_SENTINEL;
+              return;
+            }
+            yield typeof e?.status === 'number'
+              ? `Error: Custom Provider returned HTTP ${e.status}`
+              : `Error: the local custom provider could not answer (${String(e?.message || 'unknown error').slice(0, 120)}).`;
+          }
+          return;
+        }
         if (localVisionAvailable) {
           console.warn(`[VisionPolicy] routing screenshot to local vision: ${visionDecision.reason}`);
           const localVisionPrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT));
