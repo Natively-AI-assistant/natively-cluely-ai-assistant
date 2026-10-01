@@ -27,12 +27,15 @@ const I8_MODES = 'looking-for-work,sales,call-center,technical-interview,seminar
 // reported as partial. Every step is cached, so only missing rows are judged.
 //   1  fix13's rows (17 dev + 10 holdout) and the 2 dev Seminar rows of fix12 lost to the quota.
 //   2  Looking for work: lfw-base vs lfw-bridge-v2 (v2 is the build candidate; v1 copies its example phrase).
-//   3  Call Center: ccfin-base vs ccfin-nopolicy-v1c.     4  Sales: salesfin-base vs salesfin-shape-v1c.
-//      ("c" = tools/replay-carry.mjs: the 16 rows of each mode the notice does not touch carry base's answer, so those
-//      pairs are identical instead of two samples of one prompt. 24 rows can move; the rule stays on all 40.)
+//   3  Call Center: ccfin-base vs ccfin-nopolicy-v1h.     4  Sales: salesfin-base vs salesfin-shape-v1h.
+//      ("h" = the notice on HEARD turns only, which is what the candidate build does: a typed turn is the agent or
+//      seller asking the assistant, and the notice describes a reply to the customer. tools/replay-carry.mjs carries
+//      base's answer into every row the gate does not touch — 23 of 40 and 26 of 40 — so those pairs are identical
+//      instead of two samples of one prompt. The rule stays on all 40. "c" = the notice on typed turns too: last tier,
+//      reported, not what is built.)
 //   5  the Starting column — main as it was: ~160 dev and ~68 holdout judgments missing.
 //   6  reasoning on vs off (Technical interview + Lecture); supp-behavior for fix11, fix12, fix6.
-//   7  blind pairwise reference-vs-fix11.   8  fix10.   9  reasoning for the other modes; lfw-bridge-v1.
+//   7  blind pairwise reference-vs-fix11.   8  fix10.   9  reasoning for the other modes; lfw-bridge-v1; the two "c" sets.
 // After the tiers, always: astra/decide.mjs applies the pre-registered rule to the three pairs (no judge calls).
 // Then by hand: tools/compose-run.mjs for aq2-dev-fix12c / fix13c and astra/final-report.mjs (docs/REPORT-ASTRA.md §3).
 const R = (name, replay, run) => [name, ['astra/judge-replay.mjs', '--replay', `results/replay/${replay}.jsonl`, '--run', `results/${run}`, '--concurrency', '4'], `results/replay/${replay}.jsonl`];
@@ -58,13 +61,13 @@ const TIERS = [
     // Call Center with no policy document: a generator-side "no policy on file" notice, then the unchanged fix12
     // verifier.
     R('ccfin-base', 'ccfin-base', 'aq2-dev-fix11'),
-    R('ccfin-nopolicy-v1c', 'ccfin-nopolicy-v1c', 'aq2-dev-fix11'),
+    R('ccfin-nopolicy-v1h', 'ccfin-nopolicy-v1h', 'aq2-dev-fix11'),
   ],
   [
     // Sales with no reference file: a short "how to say it when nothing can be stated" notice to the generator,
     // then the unchanged fix12 verifier.
     R('salesfin-base', 'salesfin-base', 'aq2-dev-fix11'),
-    R('salesfin-shape-v1c', 'salesfin-shape-v1c', 'aq2-dev-fix11'),
+    R('salesfin-shape-v1h', 'salesfin-shape-v1h', 'aq2-dev-fix11'),
   ],
   [
     J('dev-c2-cur', 'abs-dev-c2', 'aq2-dev-cur'),
@@ -91,6 +94,8 @@ const TIERS = [
     R('think-off-rest', 'think-off-rest', 'aq2-dev-fix11'),
     R('think-low-rest', 'think-low-rest', 'aq2-dev-fix11'),
     R('lfw-bridge-v1', 'lfw-bridge-v1', 'aq2-dev-fix11'),
+    R('ccfin-nopolicy-v1c', 'ccfin-nopolicy-v1c', 'aq2-dev-fix11'),
+    R('salesfin-shape-v1c', 'salesfin-shape-v1c', 'aq2-dev-fix11'),
   ],
 ];
 

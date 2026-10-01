@@ -46,19 +46,31 @@ console.log(`# Pre-registered decisions — ${new Date().toISOString()}\n`);
 console.log('## Prepared changes (dev replay pairs; rule: gain ≥ +0.3, interval excludes 0, hard fails not up)\n');
 console.log('| change | rows judged | base | variant | gain (95%) | hard fails | rows that moved | verdict |');
 console.log('|---|---:|---:|---:|---:|---:|---:|---|');
+// The candidate build applies the two notices on HEARD turns only ("h"); those are the deciding pairs.
 const PAIRS = [
   ['Looking for work — fallback rule reworded (v2)', 'lfw-base', 'lfw-bridge-v2'],
-  ['Call Center — "no policy on file" notice', 'ccfin-base', 'ccfin-nopolicy-v1c'],
-  ['Sales — "how to say it when nothing can be stated"', 'salesfin-base', 'salesfin-shape-v1c'],
+  ['Call Center — "no policy on file" notice, heard turns', 'ccfin-base', 'ccfin-nopolicy-v1h'],
+  ['Sales — "how to say it when nothing can be stated", heard turns', 'salesfin-base', 'salesfin-shape-v1h'],
 ];
-for (const [label, base, variant] of PAIRS) {
+// Reported, not built: the same notices on typed turns too.
+const SECONDARY = [
+  ['Call Center notice on typed turns too', 'ccfin-base', 'ccfin-nopolicy-v1c'],
+  ['Sales notice on typed turns too', 'salesfin-base', 'salesfin-shape-v1c'],
+  ['Looking for work, first wording (copies its example)', 'lfw-base', 'lfw-bridge-v1'],
+];
+const table = (pairs, verdicts) => { for (const [label, base, variant] of pairs) {
   const ids = [...new Set(rowsOf(`results/replay/${base}.jsonl`).filter((r) => (r.k ?? 0) === 0).map((r) => r.id))];
   const p = pair(load(`results/replay/${base}.judged.jsonl`), load(`results/replay/${variant}.judged.jsonl`), ids);
-  if (p.n < p.expected) { console.log(`| ${label} | ${p.n} of ${p.expected} | | | | | | INCOMPLETE — no verdict |`); continue; }
+  if (p.n < p.expected) { console.log(`| ${label} | ${p.n} of ${p.expected} | | | | | | ${verdicts ? 'INCOMPLETE — no verdict' : 'incomplete'} |`); continue; }
   const pass = p.diff >= GAIN && p.diff - p.half > 0 && p.hfB <= p.hfA;
   const why = pass ? '' : ` (${[p.diff < GAIN ? 'gain under +0.3' : null, !(p.diff - p.half > 0) ? 'interval includes 0' : null, p.hfB > p.hfA ? 'hard fails up' : null].filter(Boolean).join('; ')})`;
-  console.log(`| ${label} | ${p.n} of ${p.expected} | ${p.a.toFixed(2)} | ${p.b.toFixed(2)} | ${f2(p.diff)} (±${p.half.toFixed(2)}) | ${p.hfA} → ${p.hfB} | ${p.changed} | ${pass ? 'BUILD' : 'DO NOT BUILD'}${why} |`);
-}
+  console.log(`| ${label} | ${p.n} of ${p.expected} | ${p.a.toFixed(2)} | ${p.b.toFixed(2)} | ${f2(p.diff)} (±${p.half.toFixed(2)}) | ${p.hfA} → ${p.hfB} | ${p.changed} | ${verdicts ? `${pass ? 'BUILD' : 'DO NOT BUILD'}${why}` : 'reported only'} |`);
+} };
+table(PAIRS, true);
+console.log('\n## Reported only (same rule shown, nothing is built from these)\n');
+console.log('| variant | rows judged | base | variant | gain (95%) | hard fails | rows that moved | |');
+console.log('|---|---:|---:|---:|---:|---:|---:|---|');
+table(SECONDARY, false);
 
 console.log('\n## fix13 (refinement notice) against fix12 on the rows it re-ran\n');
 console.log('| split | rows judged | fix12 | fix13 | difference (95%) | hard fails | verdict |');

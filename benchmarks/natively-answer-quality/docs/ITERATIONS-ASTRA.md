@@ -1031,3 +1031,28 @@ fix14 is promoted over fix13 only if ALL hold (charter v2, paired):
 Positive but interval includes 0 → not promoted; fix13 stays the kept build and fix14 is reported as a candidate.
 * App runs need a quiet machine (one app), and free disk: at 22:20Z the volume had 2.9 GB free after I deleted my own
   1.3 GB build output; other sessions took about 1.5 GB in 40 minutes. No run starts under 4 GB free.
+
+### Two design corrections to the Call Center / Sales notice, made 22:32Z before any score (aq-fix2 44a40b0c)
+* **Heard turns only.** Of the 7 typed Call Center rows the notice touched, 3 are the agent asking the assistant
+  (DCC-008 escalation, DCC-009 own experience, DCC-015 "can I offer her a discount"); the notice describes a reply
+  to the customer and turned them into customer-facing lines. In Sales 10 of the 24 touched rows are typed ("give
+  me 3 discovery questions", "summarize their situation in one line"). Role fidelity ranks above usefulness, so the
+  build applies both notices only when the question was HEARD (the hotkey). Side effect: a typed "shorter" can
+  never carry this notice next to the refinement notice (one is typed-only, the other heard-only).
+* **"No document" has to be true.** The first build fired whenever the evidence held no reference chunk — also when
+  the mode has a policy file that retrieval missed this turn, or a screenshot of a price sheet is the evidence. Now
+  withheld unless the mode's attached-file count is a known zero, no screenshot was read earlier in the
+  conversation, and the evidence holds nothing but the conversation. Both call paths pass the count (typed:
+  `files.length`; spoken: the mode's `_files.length`).
+* On dev the gate selects exactly the heard-only replay rows: 17 Call Center and 14 Sales, none with a file attached
+  (`reference_attached` false on all), and the notice sits where the replay put it on all 31 (30 have one layout
+  block after it, 1 has none). So the claim is: same notice text, same turns, same position on dev — not
+  "byte-identical prompts", which only an app run can show.
+* The deciding pairs are therefore `ccfin-nopolicy-v1h` and `salesfin-shape-v1h` (typed rows carry base's answer:
+  23 and 26 of 40 carried). The rule is unchanged and stays on all 40 rows, so the touched rows have to move further
+  than before for it to pass (about +0.7 on 17 rows, +0.86 on 14). The all-turns sets ("c") go to the last tier and
+  are reported, not built. By a simple pattern count on the heard rows: Call Center replies that name the check
+  7 → 13 of 17, median 40 → 36 words; Sales replies that say "let me confirm…" 5 → 11 of 14, median 52 → 44 words.
+* `npm run typecheck:electron` clean; intelligence suite 2,823 tests, 2,812 pass, 0 fail (2 skipped, 9 todo); llm
+  suite 5,678 tests, 5,650 pass, 0 fail, 28 skipped. Build output deleted afterwards (3.3 GB free).
+* Rule 7 of the fix14 promotion rule (typed refinement still met) stays as a check, though no typed turn changes now.
