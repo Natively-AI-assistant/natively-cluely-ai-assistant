@@ -196,3 +196,149 @@ describe('an Ollama on another machine, non-streaming call', () => {
     assert.equal(ollama.chats().at(-1).body.model, 'llava:7b');
   });
 });
+
+// ── Found by the independent privacy audit (2026-10-01) ──────────────────────
+
+describe('customProviderIsLocal judges the URL the request GOES to', () => {
+  const { customProviderIsLocal } = require(dist('llm/visionCapability.js'));
+  const local = (curlCommand) => customProviderIsLocal({ curlCommand });
+  test('a loopback URL in a header, a proxy flag or the body does not make a hosted endpoint local', () => {
+    // It read the FIRST http(s) string anywhere in the template. OpenRouter's own
+    // docs suggest an HTTP-Referer header; with a localhost referer the hosted
+    // endpoint was "local": exempt from the cloud data scopes, usable in
+    // local-only mode, and — since phase 5c-2 — sent keep-on-device screenshots.
+    for (const curl of [
+      `curl -H "HTTP-Referer: http://localhost:3000" https://openrouter.ai/api/v1/chat/completions -d '{"messages":[]}'`,
+      `curl -H "Origin: http://localhost:5173" https://api.example.com/v1/chat`,
+      `curl -x http://127.0.0.1:7890 https://api.openai.com/v1/chat/completions`,
+      `curl --proxy http://127.0.0.1:7890 https://api.openai.com/v1/chat/completions`,
+      `curl -d '{"callback":"http://localhost:9/x"}' https://api.example.com/v1/chat`,
+    ]) assert.equal(local(curl), false, curl);
+  });
+  test('a public hostname that merely starts like a private address is not local', () => {
+    for (const curl of ['curl https://10.example.com/v1/chat', 'curl http://172.16.evil.com/v1', 'curl http://192.168.example.org/x', 'curl http://169.254.attacker.net/x', 'curl http://127.0.0.1.nip.io/v1'])
+      assert.equal(local(curl), false, curl);
+  });
+  test('real local endpoints still are, wherever the URL sits in the command', () => {
+    for (const curl of [
+      'curl http://localhost:1234/v1/chat/completions -H "Content-Type: application/json"',
+      `curl -H "Referer: https://example.com" http://127.0.0.1:8080/v1/chat -d '{}'`,
+      'curl http://192.168.1.20:1234/v1/chat', 'curl http://10.0.0.7:8000/v1', 'curl http://172.20.3.4:8000/v1', 'curl http://169.254.10.10/x',
+      'curl http://studio.local:1234/v1', 'curl http://[::1]:11434/api/chat', 'curl http://0.0.0.0:11434/api/chat', 'curl http://127.9.9.9:80/x',
+      'http://127.0.0.1:11434', 'http://localhost:11434',
+    ]) assert.equal(local(curl), true, curl);
+  });
+  test('an explicit flag still wins, and a command that cannot be parsed is not local', () => {
+    assert.equal(customProviderIsLocal({ curlCommand: 'curl https://api.example.com', localOnly: true }), true);
+    assert.equal(customProviderIsLocal({ curlCommand: 'curl http://localhost:1', localOnly: false }), false);
+    assert.equal(local('not a curl command http://localhost:1'), false);
+    assert.equal(local(''), false);
+  });
+});
+
+describe('keep on device with ANOTHER data scope switched off', () => {
+  // The scope block runs before the vision decision and asked for a vision
+  // model only when the SCREENSHOTS scope was the denied one. With Transcripts
+  // denied instead, a turn carrying a screenshot went to Ollama's selected text
+  // model — on a remote daemon that is a screenshot leaving the device in the
+  // one state the mode exists to prevent.
+  let ollama; let realFetch;
+  const REMOTE = 'http://ollama.example.com:11434';
+  afterEach(async () => { if (realFetch) globalThis.fetch = realFetch; realFetch = null; await ollama?.stop(); ollama = null; setMode('vision_first'); setScopes({}); });
+  beforeEach(() => fakeCredentials());
+  test('remote Ollama, text model selected, transcript scope denied: the screenshot is refused, nothing is sent', async () => {
+    ollama = fakeOllama({ 'qwen2.5:4b': false });
+    const local = await ollama.start();
+    realFetch = globalThis.fetch;
+    globalThis.fetch = (input, init) => realFetch(String(input).replace(REMOTE, local), init);
+    setMode('private_vision'); setScopes({ transcript: false });
+    const h = helper(REMOTE, 'qwen2.5:4b');
+    assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE);
+    assert.equal(ollama.chats().filter((c) => c.body.messages.at(-1).images?.length).length, 0, 'LEAK: the screenshot was posted to the remote daemon');
+  });
+  test('local Ollama, text model selected, a vision model installed: the VISION model gets the screenshot', async () => {
+    ollama = fakeOllama({ 'qwen2.5:4b': false, 'llava:7b': true });
+    setMode('private_vision'); setScopes({ transcript: false });
+    const h = helper(await ollama.start(), 'qwen2.5:4b');
+    assert.equal(await ask(h, 'what is on my screen?', [png]), 'local model reply');
+    const withImage = ollama.chats().filter((c) => c.body.messages.at(-1).images?.length);
+    assert.deepEqual(withImage.map((c) => c.body.model), ['llava:7b'], 'the text model must never be handed the image');
+  });
+  test('a text turn with that scope denied still goes to the selected text model', async () => {
+    ollama = fakeOllama({ 'qwen2.5:4b': false });
+    setMode('private_vision'); setScopes({ transcript: false });
+    const h = helper(await ollama.start(), 'qwen2.5:4b');
+    assert.equal(await ask(h, 'hello', undefined), 'local model reply');
+    assert.equal(ollama.chats().at(-1).body.model, 'qwen2.5:4b');
+  });
+});
+
+describe('a gateway model id left over from an earlier selection', () => {
+  // setModel keeps currentModelId when Ollama or a custom provider is selected.
+  // The gateway seats read it raw, so the LAST gateway model the user had
+  // picked was seated — and could lead — a turn they had pointed elsewhere.
+  const gateways = [
+    ['openrouter/meta-llama/llama-3.3-70b-instruct', 'openrouter', { openrouterClient: {} }],
+    ['litellm/internal-model', 'litellm', { litellmClient: {} }],
+    ['nvidia_nim/meta/some-model', 'nvidia_nim', { nvidiaNimClient: {} }],
+    ['fluxion/glm-5.3', 'fluxion', { hasFluxionCredential: () => true }],
+    ['ninerouter/openai/gpt-5', 'ninerouter', { ninerouterClient: {} }],
+    ['agentrouter/claude-opus-5', 'agentrouter', { hasAgentRouterCredential: () => true }],
+  ];
+  for (const [leftover, id, state] of gateways) {
+    test(`${id}: not seated while Ollama or a custom provider is selected`, async () => {
+      const ollama = cloudHelper(leftover, { ...state, client: {}, useOllama: true, ollamaModel: 'llava', ollamaVisionModel: 'llava' });
+      assert.ok(!(await ollama.buildVisionChain(REQ)).some((p) => p.id === id), 'seated behind Ollama');
+      const custom = cloudHelper(leftover, { ...state, client: {}, customProvider: { id: 'c', name: 'c', curlCommand: `curl https://api.example.com -d '{"q":"{{TEXT}}"}'` } });
+      assert.ok(!(await custom.buildVisionChain(REQ)).some((p) => p.id === id), 'seated for a custom selection');
+    });
+  }
+  test('selected for real, each gateway is still seated and leads', async () => {
+    for (const [model, id, state] of gateways) {
+      const chain = await cloudHelper(model, { ...state, client: {}, ninerouterVisionModels: new Set(['openai/gpt-5']) }).buildVisionChain(REQ);
+      assert.equal(chain[0].id, id, model);
+    }
+  });
+  test('a leftover Codex selection does not lead a local selection\'s turn', async () => {
+    const h = cloudHelper('codex-cli', { isCodexAvailable: () => true, useOllama: true, ollamaModel: 'llava', ollamaVisionModel: 'llava', client: {} });
+    const ids = (await h.buildVisionChain(REQ)).map((p) => p.id);
+    assert.equal(ids[0], 'ollama');
+    assert.notEqual(ids[1], 'codex-cli', `codex was front-loaded on a stale id: ${ids.join(' > ')}`);
+  });
+});
+
+describe('Direct Assist and an AgentRouter model nothing is known about', () => {
+  // The chat path and the pre-pass refuse it (AgentRouter's deepseek-v4-pro
+  // answers HTTP 200 without seeing the image); Direct Assist forwarded it.
+  beforeEach(() => { __setVisionCapabilityStore(new VisionCapabilityStore({ filePath: null })); });
+  test('untested: refused; tested yes: forwarded; known by name: forwarded', () => {
+    const h = cloudHelper('agentrouter/glm-5.3', { hasAgentRouterCredential: () => true });
+    const reads = (model) => h.directSelectionSupportsImages({ provider: 'agentrouter', model }, null, null);
+    assert.equal(reads('agentrouter/glm-5.3'), false);
+    assert.equal(reads('agentrouter/deepseek-v4-pro'), false);
+    assert.equal(reads('agentrouter/claude-opus-5'), true);
+    const store = new VisionCapabilityStore({ filePath: null }); store.recordTest('agentrouter', '', 'glm-5.3', true);
+    __setVisionCapabilityStore(store);
+    assert.equal(reads('agentrouter/glm-5.3'), true);
+  });
+  test('the other gateways still forward a model nothing is known about', () => {
+    const h = cloudHelper('fluxion/glm-5.3');
+    for (const [provider, model] of [['fluxion', 'fluxion/glm-5.3'], ['litellm', 'litellm/x'], ['nvidia_nim', 'nvidia_nim/x'], ['openrouter', 'openrouter/x/y'], ['ninerouter', 'ninerouter/x/y']])
+      assert.equal(h.directSelectionSupportsImages({ provider, model }, null, null), true, provider);
+  });
+});
+
+describe('small ones from the audit', () => {
+  test('Ollama switched off in Settings is not seated for a screenshot', async () => {
+    const h = cloudHelper('gemini-3.8-flash', { client: {}, useOllama: true, ollamaModel: 'llava', ollamaVisionModel: 'llava', isProviderDisabled: (f) => f === 'ollama' });
+    assert.ok(!(await h.buildVisionChain(REQ)).some((p) => p.id === 'ollama'));
+  });
+  test('the DeepSeek rung sends to the model that was approved when the chain was built', async () => {
+    const sent = [];
+    const h = cloudHelper('deepseek-v4-flash', { deepseekClient: {}, streamWithDeepseek: async function* (_u, _s, model) { sent.push(model); yield 'ok'; } });
+    const [rung] = await h.buildVisionChain(REQ);
+    h.currentModelId = 'deepseek-v4-pro';                             // the user switches model before the rung opens
+    for await (const _ of rung.open(new AbortController().signal, 1)) { /* drain */ }
+    assert.deepEqual(sent, ['deepseek-v4-flash']);
+  });
+});

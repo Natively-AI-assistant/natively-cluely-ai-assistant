@@ -4941,7 +4941,7 @@ let isMultimodal = !!(imagePaths?.length);
       };
       const cloudImagePaths = deniedOutboundScopes.includes('screenshots') ? undefined : imagePaths;
       const cloudIsMultimodal = Boolean(cloudImagePaths?.length);
-      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots'));
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots') || Boolean(imagePaths?.length));
       if (deniedOutboundScopes.length > 0) {
         for (const scope of deniedOutboundScopes) {
           this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
@@ -8472,7 +8472,7 @@ let isMultimodal = !!(imagePaths?.length);
     const contextScopes = context ? ['transcript' as ProviderDataScope, ...this.inferContextScopes(context)] : [];
     const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, contextScopes);
     if (deniedOutboundScopes.length > 0) {
-      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots'));
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots') || Boolean(imagePaths?.length));
       for (const scope of deniedOutboundScopes) {
         this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
       }
@@ -9022,8 +9022,12 @@ let isMultimodal = !!(imagePaths?.length);
       // The same rule as the gateways: a rung only for the model the user
       // picked. The session's 402 flag is honoured, as the text cascade does.
       if (deepseekReads && this.deepseekClient && !this.deepseekPermanentlyDead) {
-        cloud.push({ id: 'deepseek', name: `DeepSeek (${deepseekWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
-          open: (sig) => this.streamWithDeepseek(userContent, systemPrompt, this.currentModelId, sig, imagePaths) });
+        // Captured now: the resolver approved THIS model. Read at open time, a
+        // switch to Pro before a late attempt would send the image to a model
+        // that cannot read it.
+        const deepseekModel = this.currentModelId;
+        cloud.push({ id: 'deepseek', name: `DeepSeek (${deepseekWireModel(deepseekModel)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithDeepseek(userContent, systemPrompt, deepseekModel, sig, imagePaths) });
       }
       // isCodexAvailable() — NOT `codexCliConfig.enabled` — is the gate every
       // other Codex call site uses. It additionally covers the disabled-provider
@@ -9055,6 +9059,18 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
 
+    // A cloud model id LEFT OVER from before a local selection is not the
+    // selection (2026-10-01): setModel keeps currentModelId when Ollama or a
+    // custom provider is picked, and the gateway seats above read it raw. So the
+    // last gateway model the user had picked was seated — sometimes alone — for
+    // a turn they had pointed at a local provider, against the rule written on
+    // every one of those seats ("only when it is the model the user picked").
+    const localSelection = this.useOllama || !!this.customProvider || !!this.activeCurlProvider;
+    if (localSelection) {
+      const SELECTED_ONLY = new Set(['litellm', 'nvidia_nim', 'ninerouter', 'openrouter', 'fluxion', 'agentrouter']);
+      for (let i = cloud.length - 1; i >= 0; i--) if (SELECTED_ONLY.has(cloud[i].id)) cloud.splice(i, 1);
+    }
+
     // Local providers (always available, including in local-only mode).
     const local: VisionStreamProvider[] = [];
     // Custom provider: only include for vision when it can actually carry an
@@ -9076,8 +9092,11 @@ let isMultimodal = !!(imagePaths?.length);
     // The wait is bounded (resolveOllamaVisionModelForChain): it runs before ANY
     // provider is seated, cloud included, and an unbounded probe against a hung
     // daemon cost 5s on every screenshot.
-    let ollamaVisionModel = this.useOllama ? this.ollamaVisionModel : null;
-    if (this.useOllama && !ollamaVisionModel) {
+    // Not when Ollama is switched off in Settings: selected-but-disabled must
+    // not receive the screenshot (streamWithOllama has no such check).
+    const ollamaUsable = this.useOllama && !this.isProviderDisabled('ollama');
+    let ollamaVisionModel = ollamaUsable ? this.ollamaVisionModel : null;
+    if (ollamaUsable && !ollamaVisionModel) {
       try {
         ollamaVisionModel = await this.resolveOllamaVisionModelForChain();
       } catch (err: any) {
@@ -9137,6 +9156,9 @@ let isMultimodal = !!(imagePaths?.length);
       if (selectedGroq) lead('groq');
       if (sel?.provider === 'natively') lead('natively');
       if (sel?.provider === 'antigravity') lead('antigravity');
+      // …and with a local selection only its own rung leads: a stale Codex id
+      // must not be front-loaded behind it either.
+      if (localSelection) for (let i = front.length - 1; i >= 0; i--) if (front[i].id !== 'ollama' && front[i].id !== 'custom') front.splice(i, 1);
     }
     // A breaker opened by a DIFFERENT selection says nothing about this one.
     // A leading rung's id is the same for every model it can carry
@@ -9194,9 +9216,12 @@ let isMultimodal = !!(imagePaths?.length);
         : this.isFluxionModel(this.currentModelId) ? 'Fluxion AI gateway'
         : this.isAgentRouterModel(this.currentModelId) ? 'AgentRouter gateway'
         : null;
+      // …unless that id is left over from before a local selection (see
+      // `localSelection` above): then no gateway is "the selected" one.
+      const selectedGateway = localSelection ? null : gateway;
       // OpenRouter's own catalogue said this model is text-only, so "check the
       // proxy is reachable" would be the wrong advice (2026-10-01).
-      if (this.isOpenRouterModel(this.currentModelId) && storedVisionAnswer('openrouter', this.currentModelId) === false) {
+      if (!localSelection && this.isOpenRouterModel(this.currentModelId) && storedVisionAnswer('openrouter', this.currentModelId) === false) {
         throw new Error(`No vision-capable provider configured. The selected OpenRouter model (${this.openrouterWireModel(this.currentModelId)}) can't read screenshots — OpenRouter lists it as text-only. Pick an OpenRouter model that can, or add another vision provider in Settings.`);
       }
       // A selected DeepSeek model that does not read images (Pro), and nothing
@@ -9207,17 +9232,17 @@ let isMultimodal = !!(imagePaths?.length);
       // A gateway model the one-time image test found text-only: say that. The
       // generic text below ("check the proxy is reachable") is the wrong advice
       // for a model that answered the test and could not read the image.
-      if (gateway && sel && storedVisionTest(sel.provider, sel.model, this.visionStoreBaseURL(sel.provider))?.reads === false) {
-        throw new Error(`No vision-capable provider configured. The selected ${gateway} model can't read screenshots — Natively tested it with an image and it could not read it. Pick a model that can, or add another vision provider in Settings.`);
+      if (selectedGateway && sel && storedVisionTest(sel.provider, sel.model, this.visionStoreBaseURL(sel.provider))?.reads === false) {
+        throw new Error(`No vision-capable provider configured. The selected ${selectedGateway} model can't read screenshots — Natively tested it with an image and it could not read it. Pick a model that can, or add another vision provider in Settings.`);
       }
       // AgentRouter is a hosted service with a fixed catalogue, so "check the
       // proxy is reachable" is the wrong advice there: the only way to land
       // here is a selected model that does not read images.
-      if (this.isAgentRouterModel(this.currentModelId)) {
+      if (!localSelection && this.isAgentRouterModel(this.currentModelId)) {
         throw new Error(`No vision-capable provider configured. The selected AgentRouter model (${agentRouterWireModel(this.currentModelId)}) can't read screenshots — pick an AgentRouter model that can, or add another vision provider in Settings.`);
       }
-      throw new Error(gateway
-        ? `No vision-capable provider configured. The selected ${gateway} model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings.`
+      throw new Error(selectedGateway
+        ? `No vision-capable provider configured. The selected ${selectedGateway} model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings.`
         : 'No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings.');
     }
 
@@ -10251,7 +10276,7 @@ let isMultimodal = !!(imagePaths?.length);
     ];
     const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, contextScopes);
     if (deniedOutboundScopes.length > 0) {
-      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots'));
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots') || Boolean(imagePaths?.length));
       for (const scope of deniedOutboundScopes) {
         this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
       }
@@ -14461,7 +14486,12 @@ let isMultimodal = !!(imagePaths?.length);
         // image. For 9Router that matters most: it returns HTTP 200 for an
         // image sent to a text-only model, so forwarding a known "no" was the
         // blind answer, not the honest error the paragraph above hoped for.
-        return readsImages(this.visionVerdict(selection, custom, curl), true);
+        //
+        // One rule with the screenshot seats (gatewaySeatReadsImages): unknown
+        // forwards for these gateways EXCEPT AgentRouter, which needs evidence —
+        // its deepseek-v4-pro answers HTTP 200 without seeing the image, and the
+        // chat path and the pre-pass already refused what this forwarded.
+        return gatewaySeatReadsImages(selection.provider as Parameters<typeof gatewaySeatReadsImages>[0], selection.model, this.visionFacts(selection, custom, curl));
       default:
         // Everything else asks the resolver (2026-10-01). Unknown stays "no"
         // for a direct selection, exactly as the name table answered: Direct

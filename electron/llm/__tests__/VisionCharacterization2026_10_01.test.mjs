@@ -121,6 +121,17 @@ const INTENDED = [
     match: (k) => /^deepseek-(?:v\d+-)?flash(?:$|-)/.test(k.split('|')[2]) },
 ];
 
+/**
+ * The ONE intended narrowing (whole-session review, 2026-10-01). Direct Assist
+ * forwarded a screenshot to an AgentRouter model nothing is known about, while
+ * the chat path and the screen pre-pass refused the same model: AgentRouter's
+ * deepseek-v4-pro answers HTTP 200 without seeing the image, so unknown there
+ * means "no evidence, no screenshot" (SEAT_ON_UNKNOWN). Direct Assist now uses
+ * the same rule; a model the name list knows, or one whose one-time test
+ * passed, is still forwarded.
+ */
+const INTENDED_LOSS = (k) => k.startsWith('direct|agentrouter|');
+
 test('the corpus is the real one', () => {
   assert.ok(fixture.openrouter.length > 300, 'OpenRouter catalogue');
   assert.ok(fixture.openai.length > 30, 'OpenAI key model list');
@@ -138,7 +149,10 @@ test('phase 1 changes no screenshot decision except the intended additions', () 
   const before = new Set(fixture.baseline);
   const now = answers();
   const lost = [...before].filter((k) => !now.has(k));
-  assert.deepEqual(lost, [], 'phase 1 only widens: these stopped reading images');
+  assert.deepEqual(lost.filter((k) => !INTENDED_LOSS(k)), [], 'phase 1 only widens: these stopped reading images');
+  assert.ok(lost.some(INTENDED_LOSS), 'stale rule: Direct Assist no longer narrows for unknown AgentRouter models');
+  // …and it narrows ONLY for models nothing is known about: a known AgentRouter model still reads images.
+  assert.ok([...now].some((k) => k.startsWith('direct|agentrouter|')), 'Direct Assist lost every AgentRouter model');
   const gained = [...now].filter((k) => !before.has(k));
   const unexplained = gained.filter((k) => !INTENDED.some((r) => r.match(k)));
   assert.deepEqual(unexplained, [], 'new "reads images" answers with no stated reason');
