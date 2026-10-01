@@ -77,10 +77,11 @@ describe('the prompt', () => {
     assert.match(claimVerifierSystemPrompt('sales'), /the seller, their product or their company/);
     assert.match(claimVerifierSystemPrompt('call-center'), /company or its policies/);
     assert.match(claimVerifierSystemPrompt('looking-for-work'), /the speaker themselves/);
-    // Hand-back only when nothing answers any more, and no example phrase to copy (2026-10-01).
+    // No example question to copy, and an emptied answer is never handed back as a question (2026-10-01).
     for (const m of ['looking-for-work', 'sales', 'call-center']) {
-      assert.match(claimVerifierSystemPrompt(m), /When the reply still answers, add no question\./);
       assert.doesNotMatch(claimVerifierSystemPrompt(m), /timeline look like/);
+      assert.doesNotMatch(claimVerifierSystemPrompt(m), /hand it back with one short, practical question/);
+      assert.match(claimVerifierSystemPrompt(m), /do not hand the question back to the other person/);
     }
   });
   test('asks for the smallest change and forbids the epistemic wording the judge penalises', () => {
@@ -203,6 +204,35 @@ describe('the shown edit is tidy (2026-10-01)', () => {
     const o = 'Sure, that works. Start wherever you like, and I will jump in with questions as we go.';
     const v = acceptVerifiedAnswer({ original: o, material: 'x', edited: 'Sure,  go ahead and start wherever makes sense to you, and I will follow along.' });
     assert.equal(v.text, 'Sure, go ahead and start wherever makes sense to you, and I will follow along.');
+  });
+});
+
+describe('claim kinds: what the list may contain, and what is never a claim (2026-10-01)', () => {
+  const p = claimVerifierSystemPrompt('team-meet');
+  test('only a past fact, a fact about the speaker, or a consequential promise is listed', () => {
+    assert.match(p, /\[past\] something that already happened or is already true and that only a record can establish/);
+    assert.match(p, /\[self\] a fact about who they already are/);
+    assert.match(p, /\[promise\] a promise with consequences: money, a refund or credit, a price or discount, a contract term/);
+  });
+  test('a decision made now, taking a task, a recommendation and a small commitment are named as not claims', () => {
+    assert.match(p, /Never list these, they are not claims that need a record/);
+    assert.match(p, /a decision or choice they make now \("let's do the pads today", "I can take this", "I'd go with REST here"\)/);
+    assert.match(p, /taking a task or offering to; a recommendation or professional judgment/);
+    assert.match(p, /an ordinary small commitment \("I'll send that today", "I'll check and come back to you", "I'll stay on this with you"\)/);
+    assert.match(p, /Everything you did not list stays word for word, decisions, ownership, recommendations and small commitments included/);
+  });
+  test('a conflict inside the material is named, and the reply asserts neither value', () => {
+    assert.match(p, /Then one line starting "CONFLICT:"/);
+    assert.match(p, /If CONFLICT is not "none", the reply asserts neither value/);
+    const out = 'UNSUPPORTED: none\nCONFLICT: included with Growth vs $300 per month add-on\n---\nThe sheet says two things about Salesforce, so let me confirm which applies.';
+    assert.equal(splitVerifierScratch(out).reply, 'The sheet says two things about Salesforce, so let me confirm which applies.');
+    assert.match(splitVerifierScratch(out).scratch, /CONFLICT: included with Growth/);
+  });
+  test('the rewrite step no longer tells the model to ask the other side', () => {
+    for (const m of ['looking-for-work', 'general', 'recruiting', 'sales']) {
+      assert.doesNotMatch(claimVerifierSystemPrompt(m), /acknowledge and ask the one thing about the other side/);
+      assert.doesNotMatch(claimVerifierSystemPrompt(m), /an "it works for me" or "sounds manageable"/);
+    }
   });
 });
 

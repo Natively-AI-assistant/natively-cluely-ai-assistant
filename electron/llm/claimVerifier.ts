@@ -153,12 +153,43 @@ export function materialHasNoDocuments(material: string): boolean {
  * judged externally, 7.33 -> 8.20 with hard fails 18 -> 5; Call Center
  * 7.07 -> 7.46 (14 -> 10); Sales unchanged. ~95 output tokens, p50 0.95 s
  * (was 0.8 s). A second wording with more rules per kind scored the same
- * within sampling noise, so the short one stays.
+ * within sampling noise.
+ *
+ * CLAIM KINDS (2026-10-01). The first list step named "a yes or a no, an 'it
+ * works for me'… what they want" and its rewrite said "acknowledge and ask the
+ * one thing about the other side": in the app it removed what was never a
+ * claim. Asked "Who's grabbing this one?", "I can take this one" became "I'll
+ * come back on who's picking it up"; "Let's do the pads today and hold off on
+ * the rotors" became a question to the mechanic. Of 149 in-app edits, 36 ended
+ * in a question the draft did not ask and 26 lost a decision or ownership.
+ * The list now takes only three kinds — a past fact, a fact about the speaker,
+ * a consequential promise — and names what is NOT a claim: a decision made
+ * now, taking a task, a recommendation, an ordinary small commitment. A second
+ * line names a conflict inside the material, which the reply must surface
+ * instead of asserting one side. Replayed on the same 256 drafts: replies
+ * turned into a question 37 -> 4, decisions lost 28 -> 10, edits to
+ * document-grounded replies 33 -> 13 of 72.
+ *
+ * NOT enforced in code, on purpose: about a fifth of the listed phrases
+ * survive in the model's own reply, and most of those are listing mistakes it
+ * then corrects (a résumé's "about 2.3 million a day" listed, then kept).
+ * Deleting every listed sentence would remove grounded facts.
  */
 const LIST_THEN_REWRITE = `
 Work in two steps and output both.
-Step 1, one line starting "UNSUPPORTED:" — every phrase of the draft that says something about them which the material does not state, quoted briefly and separated by " | ". Check each sentence: a yes or a no, an "it works for me" or "sounds manageable", a timing or availability, what they want, prefer or care about, why they did something, how they usually work, what happened. Write "UNSUPPORTED: none" when there is nothing.
-Step 2, after a line containing only "---" — the revised reply, with each listed phrase removed or made conditional. A way of working becomes what they would do. A preference, willingness or availability is not asserted either way: acknowledge and ask the one thing about the other side it depends on. A motive or event is dropped, not replaced.`;
+Step 1, one line starting "UNSUPPORTED:" — only the phrases of the draft that state AS FACT something the material does not state, each followed by its kind in square brackets, separated by " | ":
+[past] something that already happened or is already true and that only a record can establish: what they did, led, built, measured or agreed, a number, a price, a policy, a procedure, a capability, a customer, a result;
+[self] a fact about who they already are: an existing preference, habit, motive, feeling, strength or weakness, or when they are available;
+[promise] a promise with consequences: money, a refund or credit, a price or discount, a contract term, a delivery date or deadline, a guarantee, what the product or the company will do.
+Never list these, they are not claims that need a record: a decision or choice they make now ("let's do the pads today", "I can take this", "I'd go with REST here"); taking a task or offering to; a recommendation or professional judgment ("I'd shift the plan rather than re-plan it"); an ordinary small commitment ("I'll send that today", "I'll check and come back to you", "I'll stay on this with you"); general knowledge; what the other person said; what the material states.
+Write "UNSUPPORTED: none" when there is nothing to list.
+Then one line starting "CONFLICT:" — if the material itself gives two different values or rules for the very thing that was asked, both in a few words; otherwise "CONFLICT: none".
+Step 2, after a line containing only "---" — the revised reply, built by these rules in order:
+1. Every phrase you listed is gone: none of them appears, in any wording.
+2. Everything you did not list stays word for word, decisions, ownership, recommendations and small commitments included.
+3. If CONFLICT is not "none", the reply asserts neither value. Where the draft asserted one, one sentence says the material gives both, names them, and says it needs confirming before anyone relies on it.
+4. If removing the listed phrases leaves what was asked without an answer, do not hand the question back to the other person. For a preference, a willingness or their availability: one short sentence, in their own voice, that they will confirm it and come back on it, with a day if the draft implied one. For a reason, a motive or an event in their own past: what the material does record about it (the dates, the role, the project, and for a question about a job what the job description says that job is), stated plainly, and nothing invented after it.
+If nothing was listed and there is no conflict, the revised reply is the draft unchanged.`;
 
 /**
  * The verifier's output is `UNSUPPORTED: … \n---\n <reply>`. Only the reply is
@@ -196,7 +227,6 @@ export function claimVerifierSystemPrompt(modeId: string, surface: 'spoken' | 't
   return `You edit ${reply}. You receive the material the assistant had (documents, profile, conversation) and, after the last "---" line, the draft reply.
 Remove or neutralise every statement about ${subject} that the material does not state: preferences and stances ("I'm open to", "that works for me", "I'm taking it seriously"), willingness, motives and reasons, strengths and weaknesses, habits or practices presented as their own history, feelings, events, numbers, prices, capabilities, integrations, customers, results, guarantees and commitments not in the material. A denial ("I haven't", "we don't") is a statement too.${productGap}
 Keep everything the material supports, everything the other person stated, and general reasoning. ${typed ? 'Keep the same voice, format and length.' : 'Keep the same voice, natural and speakable.'} Keep the draft's **double-asterisk** highlights on the words you keep. A caution that a document is expired, out of date, a draft or not the current version is supported whenever the material marks it so: keep it. Never say you cannot speak to something, do not have it, or that it is not available; never mention the material, a résumé, notes or what is missing. Do not add facts.
-Only when removing claims leaves nothing that answers the question, say what stays true and hand it back with one short, practical question about their side. When the reply still answers, add no question.
 Change as little as possible. If nothing needs changing, the revised reply is the draft unchanged. The revised reply is in the language the draft is written in.${LIST_THEN_REWRITE}`;
 }
 
