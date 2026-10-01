@@ -22,7 +22,7 @@
 import { splitGistLine } from './promptSystemV2';
 import { raceStreamWithDeadline, type StreamObserver } from './liveDeadlines';
 
-export type ClaimVerifierKind = 'personal' | 'product' | 'life';
+export type ClaimVerifierKind = 'personal' | 'product' | 'life' | 'meeting';
 
 /**
  * Total time the edit may take, first token to last. Offline the pass took
@@ -59,6 +59,11 @@ export function claimVerifierKind(input: { modeId: string | null | undefined; qu
   if (mode === 'technical-interview' || mode === 'seminar') return TI_PERSONAL_RE.test(q) || DRAFT_PERSONAL_RE.test(draft) ? 'personal' : null;
   if (mode === 'sales' || mode === 'call-center') return 'product';
   if (mode === 'general') return LIFE_RE.test(q) || DRAFT_PERSONAL_RE.test(draft) ? 'life' : null;
+  // Team Meet and Recruiting (2026-10-01): judged on the dev set, their capped answers were the same class — a
+  // deadline restated as "due today", "which Brightwire didn't", "it's the product owner's call", a reporting
+  // line or team size the role brief never gave. Replayed through this pass: Team Meet 8.37 -> 8.93 (hard fails
+  // 7 -> 2), Recruiting 8.83 -> 9.11 (5 -> 2).
+  if (mode === 'team-meet' || mode === 'recruiting') return 'meeting';
   return null;
 }
 
@@ -69,10 +74,16 @@ const SPEAKER: Record<string, string> = {
   sales: 'a seller is about to say aloud to a prospect',
   'call-center': 'a support agent is about to say aloud to a customer',
   general: 'the user is about to say aloud in a conversation',
+  'team-meet': 'a meeting participant is about to say aloud to colleagues',
+  recruiting: 'a recruiter or interviewer is about to say aloud to a candidate',
 };
+const MEETING_SUBJECT = 'the speaker, their team, its past decisions, owners, dates, vendors or reasons';
+const RECRUITING_SUBJECT = 'the recruiter, the role, the team, the company or its terms';
 const SUBJECT: Record<string, string> = {
   sales: 'the seller, their product or their company',
   'call-center': 'the agent, their product, their company or its policies',
+  'team-meet': MEETING_SUBJECT,
+  recruiting: RECRUITING_SUBJECT,
 };
 
 /** The typed surface: the reply is read by the user (advice or a script), not said by them. */
@@ -83,10 +94,14 @@ const WRITTEN_FOR: Record<string, string> = {
   sales: 'a seller on a sales call',
   'call-center': 'a support agent on a customer call',
   general: 'the user',
+  'team-meet': 'a meeting participant',
+  recruiting: 'a recruiter or interviewer',
 };
 const TYPED_SUBJECT: Record<string, string> = {
   sales: 'the seller, their product or their company',
   'call-center': 'the agent, their product, their company or its policies',
+  'team-meet': MEETING_SUBJECT,
+  recruiting: RECRUITING_SUBJECT,
 };
 
 /**
@@ -115,20 +130,63 @@ const TYPED_SUBJECT: Record<string, string> = {
 export function materialHasNoDocuments(material: string): boolean {
   return !/<evidence\b/.test(String(material ?? ''));
 }
+/**
+ * LIST, THEN REWRITE (2026-10-01). Asked only to "output the revised reply",
+ * the edit model left the claims the external judge capped most often:
+ * "Twice a year sounds manageable", "I'd be looking at a few weeks rather than
+ * an immediate start", "the level and the ownership matter more to me than a
+ * single number" — 18 of 40 Looking-for-work answers still capped after the
+ * pass, and a longer description of what to remove changed nothing. Made to
+ * NAME the unsupported phrases first (one hidden line, split off by
+ * splitVerifierScratch), the same model finds them: on the same 40 drafts,
+ * judged externally, 7.33 -> 8.20 with hard fails 18 -> 5; Call Center
+ * 7.07 -> 7.46 (14 -> 10); Sales unchanged. ~95 output tokens, p50 0.95 s
+ * (was 0.8 s). A second wording with more rules per kind scored the same
+ * within sampling noise, so the short one stays.
+ */
+const LIST_THEN_REWRITE = `
+Work in two steps and output both.
+Step 1, one line starting "UNSUPPORTED:" — every phrase of the draft that says something about them which the material does not state, quoted briefly and separated by " | ". Check each sentence: a yes or a no, an "it works for me" or "sounds manageable", a timing or availability, what they want, prefer or care about, why they did something, how they usually work, what happened. Write "UNSUPPORTED: none" when there is nothing.
+Step 2, after a line containing only "---" — the revised reply, with each listed phrase removed or made conditional. A way of working becomes what they would do. A preference, willingness or availability is not asserted either way: acknowledge and ask the one thing about the other side it depends on. A motive or event is dropped, not replaced.`;
+
+/**
+ * The verifier's output is `UNSUPPORTED: … \n---\n <reply>`. Only the reply is
+ * ever shown or checked; a model that skipped the list returns its text whole.
+ */
+export function splitVerifierScratch(text: string): { scratch: string; reply: string } {
+  const t = String(text ?? '').trim();
+  const rule = t.match(/(?:^|\n)[ \t]*-{3,}[ \t]*(?:\n|$)/);
+  if (rule && rule.index !== undefined && /UNSUPPORTED\s*:/i.test(t.slice(0, rule.index + 1))) {
+    return { scratch: t.slice(0, rule.index).trim(), reply: t.slice(rule.index + rule[0].length).trim() };
+  }
+  const first = t.match(/^UNSUPPORTED\s*:[^\n]*(?:\n|$)/i);
+  if (first) return { scratch: first[0].trim(), reply: t.slice(first[0].length).trim() };
+  return { scratch: '', reply: t };
+}
+
 const NO_PRODUCT_MATERIAL = ' No document describes the product or the company, so unless the conversation itself states it, every statement about what the product does, how it works, costs, includes, integrates with, delivers or promises is unsupported, even when it sounds generic: replace it with the discovery question that lets the user answer precisely ("Walk me through what your dispatchers do today, so I can show you the part that matters").';
+/**
+ * Call Center with no document (2026-10-01): the capped answers were procedures the model supplied — "I'll ask her a
+ * couple of quick questions to confirm her identity", "I can't send a reset by text", "nobody here can see inside
+ * your home". Replayed on the same drafts, judged: 7.46 -> 8.25 on top of list-then-rewrite (hard fails 10 -> 4).
+ */
+const NO_POLICY_MATERIAL = ' No document describes the company\'s policies or procedures either, so a policy, a procedure, a verification step, a restriction, what the agent can or cannot see or do, a cause or a timeline is unsupported too, even when it sounds standard: acknowledge what the customer asked and say you will check how that is handled, or ask what they are seeing.';
+/** Sales with no document: "it depends on how many people would be using it", "three years is a term I can work with". Judged 7.98 -> 8.22 (hard fails 8 -> 5). */
+const NO_TERMS_MATERIAL = ' The same holds for what the price depends on, which terms, discounts or contract lengths exist, and what the seller can quote, promise or deliver by when: say you will confirm it, and ask the one thing you need from them.';
 
 export function claimVerifierSystemPrompt(modeId: string, surface: 'spoken' | 'typed' = 'spoken', opts: { noDocuments?: boolean } = {}): string {
   const typed = surface === 'typed';
-  const productGap = opts.noDocuments && (modeId === 'sales' || modeId === 'call-center') ? NO_PRODUCT_MATERIAL : '';
+  const productGap = opts.noDocuments && (modeId === 'sales' || modeId === 'call-center')
+    ? NO_PRODUCT_MATERIAL + (modeId === 'call-center' ? NO_POLICY_MATERIAL : NO_TERMS_MATERIAL) : '';
   const reply = typed
     ? `a reply the assistant wrote privately for ${WRITTEN_FOR[modeId] ?? 'the user'}`
     : `a reply that ${SPEAKER[modeId] ?? 'the user is about to say aloud'}`;
   const subject = typed ? (TYPED_SUBJECT[modeId] ?? 'the user themselves') : (SUBJECT[modeId] ?? 'the speaker themselves');
   return `You edit ${reply}. You receive the material the assistant had (documents, profile, conversation) and, after the last "---" line, the draft reply.
 Remove or neutralise every statement about ${subject} that the material does not state: preferences and stances ("I'm open to", "that works for me", "I'm taking it seriously"), willingness, motives and reasons, strengths and weaknesses, habits or practices presented as their own history, feelings, events, numbers, prices, capabilities, integrations, customers, results, guarantees and commitments not in the material. A denial ("I haven't", "we don't") is a statement too.${productGap}
-Keep everything the material supports, everything the other person stated, and general reasoning. ${typed ? 'Keep the same voice, format and length.' : 'Keep the same voice, natural and speakable.'} Keep the draft's **double-asterisk** highlights on the words you keep. Never say you cannot speak to something, do not have it, or that it is not available; never mention the material, a résumé, notes or what is missing. Do not add facts.
+Keep everything the material supports, everything the other person stated, and general reasoning. ${typed ? 'Keep the same voice, format and length.' : 'Keep the same voice, natural and speakable.'} Keep the draft's **double-asterisk** highlights on the words you keep. A caution that a document is expired, out of date, a draft or not the current version is supported whenever the material marks it so: keep it. Never say you cannot speak to something, do not have it, or that it is not available; never mention the material, a résumé, notes or what is missing. Do not add facts.
 Only when removing claims leaves nothing that answers the question, say what stays true and hand it back with one short, practical question about their side. When the reply still answers, add no question.
-Change as little as possible. Output only the revised reply. If nothing needs changing, output it unchanged.`;
+Change as little as possible. If nothing needs changing, the revised reply is the draft unchanged.${LIST_THEN_REWRITE}`;
 }
 
 /** The part of the verifier's message after the answer call's own (inherited) message. */
@@ -153,6 +211,12 @@ export function splitGistTrailer(text: string): { body: string; gist: string } {
 export const EPISTEMIC_RE = /\b(?:I (?:don'?t|do not) have (?:the|that|those|a|any|it|my|specifics|details|exact|numbers?|figures?|a record)\b|in front of me|I can'?t (?:speak to|confirm|see|pull|say)|(?:isn'?t|is not|not) (?:something|anything) I (?:have|can)|not (?:documented|available|in (?:the|my|your) (?:profile|resume|résumé|notes|brief|material|file|record)))/i;
 /** Negative claims about the speaker ("I haven't", "we don't") — never introduced by an edit. */
 export const DENIAL_RE = /\b(?:I (?:don'?t|do not|haven'?t|have not|never) (?:have|had|done|did|led|run|ran|worked|built|shipped|used|offer)|we (?:don'?t|do not|can'?t|cannot) (?:offer|support|integrate|do|have)|not in my background)\b/i;
+/**
+ * The reply's caution about a stale document ("that sheet ran through December", "let me confirm it's still the
+ * current one"). The list-then-rewrite pass listed it as unsupported and confirmed the expired price instead
+ * (DSALES-023: objective validator pass -> fail), so an edit that loses it is never shipped.
+ */
+export const FRESHNESS_RE = /\b(?:expired?|expir(?:y|es)|out of date|outdated|no longer (?:valid|current|in effect)|ran (?:through|until|to the end of)|still (?:the )?current|(?:current|latest|today'?s) (?:version|sheet|pricing|price list|terms|policy)|superseded|an? (?:older|old|earlier|previous) (?:version|sheet|copy)|is (?:a|still a) draft|last year'?s)\b/i;
 const NUM_RE = /\d+(?:[.,]\d+)*/g;
 const nums = (s: string): Set<string> => new Set((String(s).match(NUM_RE) ?? []).map((n) => n.replace(/,/g, '')));
 
@@ -168,19 +232,24 @@ export interface VerifiedAnswer { accepted: boolean; changed: boolean; reason: s
 export function acceptVerifiedAnswer(input: { original: string; edited: string | null | undefined; material: string }): VerifiedAnswer {
   const { body } = splitGistTrailer(input.original);
   const keep = (reason: string): VerifiedAnswer => ({ accepted: false, changed: false, reason, text: input.original });
-  const edited = splitGistTrailer(String(input.edited ?? '').replace(/^\s*DRAFT REPLY\s*:\s*/i, '')).body.replace(/^["“]|["”]$/g, '').trim();
+  const edited = splitGistTrailer(splitVerifierScratch(String(input.edited ?? '')).reply.replace(/^\s*DRAFT REPLY\s*:\s*/i, '')).body.replace(/^["“]|["”]$/g, '').trim();
   if (!edited) return keep('empty');
   // Formatting is not a claim: an edit that differs only in **highlights**,
   // quote style or spacing keeps the original, highlights and all (in-app,
   // 2026-09-30: DSALES-023's only "edit" was dropping its three bold marks).
   if (edited === body || formatInsensitive(edited) === formatInsensitive(body)) return { accepted: true, changed: false, reason: 'unchanged', text: input.original };
-  if (edited.length < 20 || edited.length < body.length * 0.25) return keep('too_short');
+  // With no document at all, one discovery question is the right edit of a paragraph of invented capabilities
+  // (DSALES-001: the ratio rail kept the claims); otherwise an edit never cuts a reply to under a quarter.
+  const words = edited.split(/\s+/).filter(Boolean).length;
+  if (edited.length < 20 || words < 6) return keep('too_short');
+  if (edited.length < body.length * 0.25 && !materialHasNoDocuments(input.material)) return keep('too_short');
   if (/```/.test(edited) || /```/.test(body)) return keep('code');
-  if (/^(?:MATERIAL|DRAFT REPLY)\s*:/im.test(edited)) return keep('echoed_prompt');
+  if (/^(?:MATERIAL|DRAFT REPLY|UNSUPPORTED)\s*:/im.test(edited)) return keep('echoed_prompt');
   const allowed = new Set([...nums(body), ...nums(input.material)]);
   for (const n of nums(edited)) if (!allowed.has(n)) return keep(`new_number:${n}`);
   if (EPISTEMIC_RE.test(edited) && !EPISTEMIC_RE.test(body)) return keep('epistemic_introduced');
   if (DENIAL_RE.test(edited) && !DENIAL_RE.test(body)) return keep('denial_introduced');
+  if (FRESHNESS_RE.test(body) && !FRESHNESS_RE.test(edited)) return keep('freshness_dropped');
   // A changed body drops the old [[GIST]] chip: it summarised the removed claims too.
   return { accepted: true, changed: true, reason: 'edited', text: edited };
 }
@@ -220,14 +289,16 @@ export async function runClaimVerifier(opts: {
       stream: opts.startStream(body, child.signal) as AsyncGenerator<string>,
       firstUsefulDeadlineMs: opts.budgetMs,
       isUsefulYet: () => false,
-      shouldAbort: () => out.length > body.length * 2 + 400 || opts.parentSignal?.aborted === true || opts.isSuperseded?.() === true,
+      // The list quotes the draft and the reply repeats it: up to ~2x the draft is expected.
+      shouldAbort: () => out.length > body.length * 3 + 600 || opts.parentSignal?.aborted === true || opts.isSuperseded?.() === true,
       onToken: (tok: string) => { out += tok; },
       onCleanup: (reason) => { if (reason !== 'done') child.abort(); },
     });
   } catch { ending = 'error'; }
   finally { opts.parentSignal?.removeEventListener('abort', onParentAbort); }
   if (ending !== 'done') return keep(ending);
-  const edited = opts.clean ? opts.clean(out.trim()) : out.trim();
+  const reply = splitVerifierScratch(out).reply;
+  const edited = opts.clean ? opts.clean(reply) : reply;
   const verdict = acceptVerifiedAnswer({ original: opts.answer, edited, material: opts.material });
   return { text: verdict.text, changed: verdict.changed, outcome: verdict.reason, ms: Date.now() - started };
 }

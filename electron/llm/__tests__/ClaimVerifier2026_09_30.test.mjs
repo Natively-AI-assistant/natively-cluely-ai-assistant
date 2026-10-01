@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import {
   claimVerifierKind, claimVerifierSystemPrompt, claimVerifierDraftMessage, claimVerifierStandaloneMessage,
   acceptVerifiedAnswer, splitGistTrailer, runClaimVerifier, materialHasNoDocuments, CLAIM_VERIFIER_BUDGET_MS,
+  splitVerifierScratch,
 } from '../../../dist-electron/electron/llm/claimVerifier.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -44,8 +45,13 @@ describe('which turns are verified', () => {
     assert.equal(claimVerifierKind({ modeId: 'seminar', question: 'How did you end up working on this?', draft: 'I got into it after reading the early papers on it.' }), 'personal');
     assert.equal(claimVerifierKind({ modeId: 'seminar', question: 'Why a held-out set?', draft: 'Because cross-validation reuses the data you tuned on, a held-out split is the only unbiased final check.' }), null);
   });
-  test('grounded and listening modes are never verified', () => {
-    for (const modeId of ['recruiting', 'team-meet', 'lecture', null, undefined, '']) {
+  test('Team Meet and Recruiting verify the team\'s and the role\'s facts on every turn (2026-10-01)', () => {
+    assert.equal(claimVerifierKind({ modeId: 'team-meet', question: 'Why them, though?', draft: 'x' }), 'meeting');
+    assert.equal(claimVerifierKind({ modeId: 'recruiting', question: 'Who would I report to?', draft: 'x' }), 'meeting');
+    assert.equal(claimVerifierKind({ modeId: 'recruiting', question: 'Solve two sum', draft: 'Sure:\n```py\nx\n```' }), null);
+  });
+  test('the lecture and an unknown mode are never verified', () => {
+    for (const modeId of ['lecture', null, undefined, '']) {
       assert.equal(claimVerifierKind({ modeId, question: 'Tell me about yourself', draft: 'x' }), null, String(modeId));
     }
   });
@@ -76,6 +82,74 @@ describe('the prompt', () => {
     assert.equal(claimVerifierDraftMessage('  Hello there.  '), 'DRAFT REPLY:\nHello there.');
     const m = claimVerifierStandaloneMessage('# Question\nWhy?', 'Because.');
     assert.match(m, /^MATERIAL:\n# Question\nWhy\?\n\n---\nDRAFT REPLY:\nBecause\.$/);
+  });
+});
+
+describe('list, then rewrite (2026-10-01)', () => {
+  test('the prompt asks for the unsupported phrases first, then the reply after a rule', () => {
+    for (const m of ['looking-for-work', 'sales', 'call-center', 'team-meet', 'recruiting', 'general']) {
+      const p = claimVerifierSystemPrompt(m);
+      assert.match(p, /Step 1, one line starting "UNSUPPORTED:"/, m);
+      assert.match(p, /Step 2, after a line containing only "---"/, m);
+      assert.doesNotMatch(p, /Output only the revised reply/, m);
+    }
+    assert.match(claimVerifierSystemPrompt('team-meet'), /a meeting participant is about to say aloud to colleagues/);
+    assert.match(claimVerifierSystemPrompt('team-meet'), /their team, its past decisions, owners, dates, vendors or reasons/);
+    assert.match(claimVerifierSystemPrompt('recruiting'), /a recruiter or interviewer is about to say aloud to a candidate/);
+    assert.match(claimVerifierSystemPrompt('recruiting', 'typed'), /the role, the team, the company or its terms/);
+  });
+  test('only the reply after the rule is the answer', () => {
+    const out = 'UNSUPPORTED: "sounds manageable" | "a few weeks"\n\n---\nWhat start date are you working toward on your side?';
+    assert.deepEqual(splitVerifierScratch(out), { scratch: 'UNSUPPORTED: "sounds manageable" | "a few weeks"', reply: 'What start date are you working toward on your side?' });
+  });
+  test('a list with no rule loses only its first line; no list at all is the reply whole', () => {
+    assert.equal(splitVerifierScratch('UNSUPPORTED: none\nThe band is $172,000 to $208,000.').reply, 'The band is $172,000 to $208,000.');
+    assert.equal(splitVerifierScratch('The band is $172,000 to $208,000.').reply, 'The band is $172,000 to $208,000.');
+    assert.equal(splitVerifierScratch('UNSUPPORTED: none').reply, '');
+  });
+  test('a rule inside a reply that never listed anything is not a separator', () => {
+    assert.equal(splitVerifierScratch('First part.\n---\nSecond part.').reply, 'First part.\n---\nSecond part.');
+  });
+  test('the rails judge the reply, never the list', () => {
+    const original = 'Twice a year sounds manageable. I would be looking at a few weeks before I could start.';
+    const v = acceptVerifiedAnswer({ original, material: 'travel twice a year', edited: 'UNSUPPORTED: "sounds manageable" | "a few weeks"\n---\nTwice a year, understood. What start date are you working toward on your side?' });
+    assert.equal(v.reason, 'edited');
+    assert.equal(v.text, 'Twice a year, understood. What start date are you working toward on your side?');
+    const same = acceptVerifiedAnswer({ original, material: '', edited: `UNSUPPORTED: none\n---\n${original}` });
+    assert.equal(same.reason, 'unchanged');
+    assert.equal(same.text, original);
+    assert.equal(acceptVerifiedAnswer({ original, material: '', edited: 'UNSUPPORTED: none' }).reason, 'empty');
+    assert.equal(acceptVerifiedAnswer({ original, material: '', edited: '---\nUNSUPPORTED: "x"\nTwice a year, understood, and I can start whenever.' }).reason, 'echoed_prompt');
+  });
+});
+
+describe('what the no-document clause covers per mode, and the stale-document caution (2026-10-01)', () => {
+  test('Call Center with no document: procedures and verification steps are unsupported too', () => {
+    const p = claimVerifierSystemPrompt('call-center', 'spoken', { noDocuments: true });
+    assert.match(p, /a policy, a procedure, a verification step, a restriction/);
+    assert.match(p, /say you will check how that is handled/);
+    assert.doesNotMatch(claimVerifierSystemPrompt('call-center', 'spoken', { noDocuments: false }), /verification step/);
+    assert.doesNotMatch(claimVerifierSystemPrompt('sales', 'spoken', { noDocuments: true }), /verification step/);
+  });
+  test('Sales with no document: what the price depends on, terms and promises', () => {
+    const p = claimVerifierSystemPrompt('sales', 'spoken', { noDocuments: true });
+    assert.match(p, /what the price depends on, which terms, discounts or contract lengths exist/);
+    assert.doesNotMatch(claimVerifierSystemPrompt('sales', 'spoken', { noDocuments: false }), /contract lengths/);
+    assert.doesNotMatch(claimVerifierSystemPrompt('call-center', 'spoken', { noDocuments: true }), /contract lengths/);
+  });
+  test('with no document, a one-question edit of a paragraph is accepted; with documents it is not', () => {
+    const original = 'Day to day, your dispatchers would live in one screen instead of five. They would see every load, driver and exception in one place, and the system would flag the ones that need a decision rather than making them hunt for it. The routine check calls and status updates get handled automatically, so they only step in when something is actually wrong. That is the part most teams notice in the first week, and it is where the hours come back.';
+    const edited = 'Walk me through what your dispatchers do today, so I can show you the part that matters.';
+    assert.equal(acceptVerifiedAnswer({ original, edited, material: 'The prospect asked what it does day to day.' }).reason, 'edited');
+    assert.equal(acceptVerifiedAnswer({ original, edited, material: '<evidence>Product sheet</evidence>' }).reason, 'too_short');
+    assert.equal(acceptVerifiedAnswer({ original, edited: 'Walk me through it.', material: 'none' }).reason, 'too_short');
+  });
+  test('an edit that loses the reply\'s stale-document caution is never shipped', () => {
+    const original = 'That sheet is the 2025 partner sheet, which ran through December, so let me confirm today\'s pricing before we lock anything in. On that sheet Growth is $44 a seat.';
+    const material = '<evidence status="expired">Growth $44 a seat. Valid through 31 December 2025.</evidence>';
+    assert.equal(acceptVerifiedAnswer({ original, material, edited: 'UNSUPPORTED: "ran through December"\n---\nGrowth is $44 a seat, and the Salesforce connector is included in that plan.' }).reason, 'freshness_dropped');
+    assert.equal(acceptVerifiedAnswer({ original, material, edited: 'UNSUPPORTED: none\n---\nThat sheet ran through December, so let me confirm today\'s pricing first. On it, Growth is $44 a seat.' }).reason, 'edited');
+    assert.match(claimVerifierSystemPrompt('sales'), /A caution that a document is expired, out of date, a draft or not the current version is supported/);
   });
 });
 
