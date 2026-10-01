@@ -22,7 +22,7 @@
 
 import type { EvidenceScope } from '../contracts/types';
 import {
-  advance, appendTurn, resolveReference, MAX_SUMMARY_CHARS, SHARED_SESSION_BUCKET,
+  advance, appendTurn, withTurnScreen, resolveReference, MAX_SUMMARY_CHARS, SHARED_SESSION_BUCKET,
   type ConversationState, type ResolvedReference,
 } from './conversation-state';
 
@@ -214,6 +214,21 @@ export function recordAnswerSummary(
     // not.
     ...(opts?.anchor && turnQuestion ? { previousQuestion: turnQuestion } : {}),
   });
+}
+
+/**
+ * Attach the screen text to the turn that gave `answerText` (see withTurnScreen).
+ * Returns whether a turn was updated. Never adds a turn and never moves the
+ * follow-up anchor: it completes a record, it is not a new one.
+ */
+export function attachScreenToAnsweredTurn(sessionId: string, answerText: string, screenText: string): boolean {
+  const s = store();
+  const cur = s.get(sessionId);
+  if (!cur) return false;
+  const turns = withTurnScreen(cur.turns ?? [], answerText, screenText);
+  if (!turns) return false;
+  s.set(sessionId, { ...cur, turns });
+  return true;
 }
 
 /** Resolve a question against the session's state. Pure pass-through when no state. */

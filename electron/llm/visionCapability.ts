@@ -212,7 +212,9 @@ export function customProviderIsLocal(
   if (!m) return false;
   let host: string;
   try {
-    host = new URL(m[0]).hostname.toLowerCase();
+    // `new URL('http://[::1]:11434').hostname` is `[::1]`, brackets kept, so
+    // the `::1` test below never matched and IPv6 loopback was "not local".
+    host = new URL(m[0]).hostname.toLowerCase().replace(/^\[|\]$/g, '');
   } catch {
     return false;
   }

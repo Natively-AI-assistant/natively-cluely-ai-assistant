@@ -135,3 +135,32 @@ export function readActiveCurlProvider(): ActiveCustomProvider | null {
     return null;
   }
 }
+
+/**
+ * The selected Ollama's vision model and URL as last resolved, or null. Read
+ * synchronously by the registry; call resolveOllamaRecordTarget() first.
+ */
+export function readOllamaRecordTarget(): { model: string; url: string } | null {
+  try {
+    const g = globalThis as any;
+    if (typeof g.__nativelyGetLLMHelper !== 'function') return null;
+    const helper = g.__nativelyGetLLMHelper();
+    if (!helper || typeof helper.getOllamaRecordTarget !== 'function') return null;
+    const target = helper.getOllamaRecordTarget();
+    return target && typeof target.model === 'string' && target.model ? { model: target.model, url: String(target.url ?? '') } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ask the live helper to resolve it (bounded and cached there). Never throws. */
+export async function resolveOllamaRecordTarget(): Promise<void> {
+  try {
+    const g = globalThis as any;
+    if (typeof g.__nativelyGetLLMHelper !== 'function') return;
+    const helper = g.__nativelyGetLLMHelper();
+    if (helper && typeof helper.resolveOllamaRecordTarget === 'function') await helper.resolveOllamaRecordTarget();
+  } catch {
+    /* no local record this turn */
+  }
+}
