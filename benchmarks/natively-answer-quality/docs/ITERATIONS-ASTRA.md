@@ -697,7 +697,7 @@ and nine single flags.
   rail, I21, I22, claim kinds, source-word rail), not of each part.
 * Latency paid for it: settled answer +0.44 s (dev) / +0.63 s (holdout) at the median; text swapped on 24–31% of turns.
 
-### Promotion rule for fix12 (aq-fix2 e7325287 = fix11 + I25), written 11:52Z before any fix12 run exists
+### Promotion rule for fix12 (aq-fix2 e7325287 = fix11 + I25), written 11:50Z before any fix12 run exists
 fix12 is promoted over fix6 only if ALL hold (charter v2, holdout, paired):
 1. vs fix6: aggregate ≥ +0.25 with the interval excluding 0; hard fails not up; no mode down more than 0.4 with its
    interval excluding 0; Call Center not down.
@@ -711,3 +711,30 @@ fix12 is promoted over fix6 only if ALL hold (charter v2, holdout, paired):
 5. Objective, in the app: drafts that state a limit and lose it (tools/limits-lost.mjs) go down against fix11.
 Otherwise fix6 stays; if only rule 2 or 3 fails, fix11's verifier without I25 is the one to carry forward and the
 validator defect is reported as open.
+
+### I25 judged (replay, 44 limit-stating drafts, charter v2) — the general exemption is TAKEN BACK — 11:52Z
+* Paired, variant − fix11 verifier: −0.02 (±0.24) on all 44; −0.04 (±0.43) on the 25 whose reply differs.
+  Call Center +0.13 (n 14, hard fails 2 → 1), Sales +0.21 (4), Recruiting +0.04 (7), Seminar −0.15 (10),
+  Team Meet −0.30 (8).
+* The judge does not reward the kept hedge: DTEAM-026 9.6 → 8.1 and DTEAM-006 9.8 → 9.0 with "I don't have that in my
+  notes, so I can't confirm it was agreed" kept; it prefers "Can we check the notes before we treat export as out of
+  scope?" alone. My reading of those two as harmful was wrong.
+* Side effect: with the exemption the list step returned "UNSUPPORTED: none" for DCC-036 and the invented process
+  beside the limit ("route it to the team that handles billing adjustments") stayed: 6.3 → 4.0.
+* What survives: the Seminar study-scope clause. Alone (tools/variants/_cv-study-scope-only.mjs) it passes SBSEM-007's
+  validator 6/6 (fix11 2/6) and keeps SBSEM-006's "bare roofs weren't part of the study" 6/6.
+* Built as aq-fix2 f0c3a263 (= fix12): e7325287's general exemption and the "Never add" rewording reverted, the
+  Seminar clause kept. Every non-Seminar prompt is byte-identical to fix11 (checked for all modes × surfaces ×
+  with / without documents). `npm run test:llm`: 5,672 tests, 5,644 pass, 0 fail, 28 skipped.
+
+### fix12 evaluation plan and rule (amended 11:57Z, before any fix12 result; replaces the 11:50Z rule's rule 2–5)
+* Only Seminar's verifier prompt differs from fix11, so only Seminar is re-run: aq2-dev-fix12 (40), aq2-holdout-fix12
+  (30), aq2-sb-fix12 (10), Seminar rows only, started 11:56Z. For the other eight modes fix11's runs and judgments
+  stand; the fix12 aggregate is fix11's eight modes plus fix12's Seminar, and the report says so.
+* fix12 is promoted over fix6 if: (1) the combined holdout aggregate still clears rule 1–4 of the fix11 rule;
+  (2) Seminar on holdout is not below fix11's Seminar by more than 0.4 with the interval excluding 0, and its hard
+  fails are not up; (3) validators, counted on gated modes and edited answers, are not worse than fix6 on dev,
+  holdout and supp-behavior — i.e. SBSEM-007 passes; (4) `important_question_unanswered` in Seminar is not up
+  against fix11.
+* One Seminar sample of 10 supp-behavior rows decides a validator: if SBSEM-007 fails in the app the replay is
+  re-checked before concluding either way.
