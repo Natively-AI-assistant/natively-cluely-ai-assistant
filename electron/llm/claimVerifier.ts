@@ -181,7 +181,7 @@ Step 1, one line starting "UNSUPPORTED:" — only the phrases of the draft that 
 [past] something that already happened or is already true and that only a record can establish: what they did, led, built, measured or agreed, a number, a price, a policy, a procedure, a capability, a customer, a result;
 [self] a fact about who they already are: an existing preference, habit, motive, feeling, strength or weakness, or when they are available;
 [promise] a promise with consequences: money, a refund or credit, a price or discount, a contract term, a delivery date or deadline, a guarantee, what the product or the company will do.
-Never list these, they are not claims that need a record: a decision or choice they make now ("let's do the pads today", "I can take this", "I'd go with REST here"); taking a task or offering to; a recommendation or professional judgment ("I'd shift the plan rather than re-plan it"); an ordinary small commitment ("I'll send that today", "I'll check and come back to you", "I'll stay on this with you"); general knowledge; what the other person said; what the material states.
+Never list these, they are not claims that need a record: a decision or choice they make now ("let's do the pads today", "I can take this", "I'd go with REST here"); taking a task or offering to; a recommendation or professional judgment ("I'd shift the plan rather than re-plan it"); an ordinary small commitment ("I'll send that today", "I'll check and come back to you", "I'll stay on this with you"); general knowledge; what the other person said or the request itself states; what the material states; an honest limit, that is saying they do not know something yet or cannot confirm or promise it yet ("I can't confirm a credit on this call", "I can't confirm that was agreed", "I don't know yet").
 Write "UNSUPPORTED: none" when there is nothing to list.
 Then one line starting "CONFLICT:" — if the material itself gives two different values or rules for the very thing that was asked, both in a few words; otherwise "CONFLICT: none".
 Step 2, after a line containing only "---" — the revised reply, built by these rules in order:
@@ -217,6 +217,28 @@ const NO_POLICY_MATERIAL = ' No document describes the company\'s policies or pr
 /** Sales with no document: "it depends on how many people would be using it", "three years is a term I can work with". Judged 7.98 -> 8.22 (hard fails 8 -> 5). */
 const NO_TERMS_MATERIAL = ' The same holds for what the price depends on, which terms, discounts or contract lengths exist, and what the seller can quote, promise or deliver by when: say you will confirm it, and ask the one thing you need from them.';
 
+/**
+ * An honest LIMIT is not a claim (2026-10-01, fix12). The list step filed
+ * "I can't confirm a credit on this call [promise]", "I can't confirm it as a
+ * freeze [past]" and "We didn't measure anything about colonies [past]" as
+ * unsupported, so the edit removed the draft's answer to a yes-or-no ask: asked
+ * "am I getting money back for today or not?", the shown reply was "I'll get
+ * the outage documented… Can I get your account number". On dev, 19 of 41
+ * drafts that stated a limit lost it (8 before list-then-rewrite), and the
+ * Seminar "not measured" validator passed 2 of 6 replays.
+ * Three narrowings, no new step: the never-list names an honest limit (not
+ * knowing, cannot confirm or promise yet) and what the request itself says;
+ * "Never say you cannot speak to…" is a rule for what the EDIT may add, not for
+ * the draft; and a study's scope is closed, so "we did not measure X" is
+ * supported when the material describes the study and X is not in it.
+ * Capability and policy limits ("I can't send a reset by text") are still
+ * listed: those were the invented restrictions. Replayed on the same drafts:
+ * limits lost 19 -> 10 of 41 (dev), 3 -> 1 of 6 (supp-behavior), edits
+ * 109 -> 94, the Seminar validator 2/6 -> 6/6, the invented reset-by-text
+ * restriction still removed 6/6.
+ */
+const STUDY_SCOPE = ' The one exception is the scope of a study the material describes: that it did not measure, test or include something the material never mentions is supported, keep it.';
+
 export function claimVerifierSystemPrompt(modeId: string, surface: 'spoken' | 'typed' = 'spoken', opts: { noDocuments?: boolean } = {}): string {
   const typed = surface === 'typed';
   const productGap = opts.noDocuments && (modeId === 'sales' || modeId === 'call-center')
@@ -226,8 +248,8 @@ export function claimVerifierSystemPrompt(modeId: string, surface: 'spoken' | 't
     : `a reply that ${SPEAKER[modeId] ?? 'the user is about to say aloud'}`;
   const subject = typed ? (TYPED_SUBJECT[modeId] ?? 'the user themselves') : (SUBJECT[modeId] ?? 'the speaker themselves');
   return `You edit ${reply}. You receive the material the assistant had (documents, profile, conversation) and, after the last "---" line, the draft reply.
-Remove or neutralise every statement about ${subject} that the material does not state: preferences and stances ("I'm open to", "that works for me", "I'm taking it seriously"), willingness, motives and reasons, strengths and weaknesses, habits or practices presented as their own history, feelings, events, numbers, prices, capabilities, integrations, customers, results, guarantees and commitments not in the material. A denial ("I haven't", "we don't") is a statement too.${productGap}
-Keep everything the material supports, everything the other person stated, and general reasoning. ${typed ? 'Keep the same voice, format and length.' : 'Keep the same voice, natural and speakable.'} Keep the draft's **double-asterisk** highlights on the words you keep. A caution that a document is expired, out of date, a draft or not the current version is supported whenever the material marks it so: keep it. Never say you cannot speak to something, do not have it, or that it is not available; never mention the material, a résumé, notes or what is missing. Do not add facts.
+Remove or neutralise every statement about ${subject} that the material does not state: preferences and stances ("I'm open to", "that works for me", "I'm taking it seriously"), willingness, motives and reasons, strengths and weaknesses, habits or practices presented as their own history, feelings, events, numbers, prices, capabilities, integrations, customers, results, guarantees and commitments not in the material. A denial ("I haven't", "we don't") is a statement too.${modeId === 'seminar' ? STUDY_SCOPE : ''}${productGap}
+Keep everything the material supports, everything the other person stated, and general reasoning. ${typed ? 'Keep the same voice, format and length.' : 'Keep the same voice, natural and speakable.'} Keep the draft's **double-asterisk** highlights on the words you keep. A caution that a document is expired, out of date, a draft or not the current version is supported whenever the material marks it so: keep it. Never add that you cannot speak to something, do not have it, or that it is not available; never mention the material, a résumé, notes or what is missing. Do not add facts.
 Change as little as possible. If nothing needs changing, the revised reply is the draft unchanged. The revised reply is in the language the draft is written in.${LIST_THEN_REWRITE}`;
 }
 
