@@ -246,6 +246,19 @@ export function nonLatinShare(text: string): number {
 const formatInsensitive = (t: string): string => String(t ?? '')
   .replace(/\*\*/g, '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim();
 
+/**
+ * The edit as it will be shown. A quote pair is removed only when it WRAPS the whole reply: stripping any trailing
+ * quote cut the closing mark off replies that end on a quoted line (in-app 2026-10-01: 6 of 149 edits, for 5 of them
+ * the only "change" — the text was replaced and its [[GIST]] chip dropped for nothing). Runs of spaces left where a
+ * dash was normalised are collapsed (35 of 149 edits).
+ */
+function tidyEdit(text: string): string {
+  let t = String(text ?? '').trim();
+  const wrapped = t.match(/^["“]([\s\S]*)["”]$/);
+  if (wrapped && !/["“”]/.test(wrapped[1])) t = wrapped[1].trim();
+  return t.replace(/([^\s])[ \t]{2,}(?=\S)/g, '$1 ');
+}
+
 export interface VerifiedAnswer { accepted: boolean; changed: boolean; reason: string; text: string }
 
 /**
@@ -255,7 +268,7 @@ export interface VerifiedAnswer { accepted: boolean; changed: boolean; reason: s
 export function acceptVerifiedAnswer(input: { original: string; edited: string | null | undefined; material: string }): VerifiedAnswer {
   const { body } = splitGistTrailer(input.original);
   const keep = (reason: string): VerifiedAnswer => ({ accepted: false, changed: false, reason, text: input.original });
-  const edited = splitGistTrailer(splitVerifierScratch(String(input.edited ?? '')).reply.replace(/^\s*DRAFT REPLY\s*:\s*/i, '')).body.replace(/^["“]|["”]$/g, '').trim();
+  const edited = tidyEdit(splitGistTrailer(splitVerifierScratch(String(input.edited ?? '')).reply.replace(/^\s*DRAFT REPLY\s*:\s*/i, '')).body);
   if (!edited) return keep('empty');
   // Formatting is not a claim: an edit that differs only in **highlights**,
   // quote style or spacing keeps the original, highlights and all (in-app,
