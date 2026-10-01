@@ -20,7 +20,8 @@ import {
   TINY_ASSIST_PROMPT, TINY_BRAINSTORM_PROMPT, TINY_CLARIFY_PROMPT, TINY_CODE_HINT_PROMPT,
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
-import { gatewaySeatReadsImages, readsImages, resolveVision, type VisionVerdict } from "./llm/visionResolver"
+import { gatewaySeatReadsImages, readsImages, resolveVision, type VisionFacts, type VisionVerdict } from "./llm/visionResolver"
+import { storedVisionAnswer } from "./llm/visionCapabilityStore"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
@@ -8618,7 +8619,12 @@ let isMultimodal = !!(imagePaths?.length);
       // Same rule as the two gateways above: only recruited when it is the model
       // the user actually picked. OpenRouter fronts hundreds of upstreams and we
       // cannot know whether someone else's turn should be routed through it.
-      if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient) {
+      // …and, since 2026-10-01, only when OpenRouter's own catalogue does not
+      // list the model as text-only: OpenRouter refuses those images (404 "No
+      // endpoints found that support image input", which the chain then took for
+      // a retired model and demoted for a day). No catalogue yet: seated, as before.
+      if (this.isOpenRouterModel(this.currentModelId) && this.openrouterClient
+        && gatewaySeatReadsImages('openrouter', this.currentModelId, this.visionFacts({ provider: 'openrouter', model: this.currentModelId }))) {
         cloud.push({ id: 'openrouter', name: `OpenRouter (${this.openrouterWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithOpenRouter(userContent, systemPrompt, imagePaths, sig) });
       }
@@ -8757,6 +8763,11 @@ let isMultimodal = !!(imagePaths?.length);
         : this.isFluxionModel(this.currentModelId) ? 'Fluxion AI gateway'
         : this.isAgentRouterModel(this.currentModelId) ? 'AgentRouter gateway'
         : null;
+      // OpenRouter's own catalogue said this model is text-only, so "check the
+      // proxy is reachable" would be the wrong advice (2026-10-01).
+      if (this.isOpenRouterModel(this.currentModelId) && storedVisionAnswer('openrouter', this.currentModelId) === false) {
+        throw new Error(`No vision-capable provider configured. The selected OpenRouter model (${this.openrouterWireModel(this.currentModelId)}) can't read screenshots — OpenRouter lists it as text-only. Pick an OpenRouter model that can, or add another vision provider in Settings.`);
+      }
       // AgentRouter is a hosted service with a fixed catalogue, so "check the
       // proxy is reachable" is the wrong advice there: the only way to land
       // here is a selected model that does not read images.
@@ -13802,20 +13813,30 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
-   * The vision resolver's answer for a selection, with the facts only this
-   * instance holds: Ollama's /api/show results, 9Router's catalogue, and the
-   * active custom/cURL provider. See electron/llm/visionResolver.ts.
+   * The facts only this process holds, for the vision resolver: Ollama's
+   * /api/show results, 9Router's catalogue, the active custom/cURL provider,
+   * and what provider catalogues published (visionCapabilityStore).
    */
+  private visionFacts(
+    selection: { provider: DirectAssistProvider; model: string },
+    custom: CustomProvider | null = this.customProvider,
+    curl: CurlProvider | null = this.activeCurlProvider,
+  ): VisionFacts {
+    return {
+      ollamaReportsVision: (m) => this.ollamaVisionCache.get(m),
+      ninerouterVisionModels: selection.provider === 'ninerouter' ? [...this.ninerouterVisionModels] : undefined,
+      customProvider: selection.provider === 'curl' ? curl : custom,
+      providerReportsVision: (provider, routed) => storedVisionAnswer(provider, routed),
+    };
+  }
+
+  /** The vision resolver's answer for a selection. See electron/llm/visionResolver.ts. */
   private visionVerdict(
     selection: { provider: DirectAssistProvider; model: string },
     custom: CustomProvider | null = this.customProvider,
     curl: CurlProvider | null = this.activeCurlProvider,
   ): VisionVerdict {
-    return resolveVision(selection, {
-      ollamaReportsVision: (m) => this.ollamaVisionCache.get(m),
-      ninerouterVisionModels: selection.provider === 'ninerouter' ? [...this.ninerouterVisionModels] : undefined,
-      customProvider: selection.provider === 'curl' ? curl : custom,
-    });
+    return resolveVision(selection, this.visionFacts(selection, custom, curl));
   }
 
   private directSelectionSupportsImages(
@@ -13824,9 +13845,14 @@ let isMultimodal = !!(imagePaths?.length);
     curl: CurlProvider | null,
   ): boolean {
     switch (selection.provider) {
+      // OpenRouter publishes which models read images and refuses an image to
+      // the rest (2026-10-01). With its catalogue saying "no", Direct Assist
+      // gives its own clear refusal instead of forwarding into OpenRouter's 404;
+      // with no catalogue yet it forwards, as every gateway below does.
+      case 'openrouter':
+        return readsImages(this.visionVerdict(selection, custom, curl), true);
       case 'litellm':
       case 'nvidia_nim':
-      case 'openrouter':
       case 'fluxion':
       case 'agentrouter':
       // 9Router belongs with them rather than with its own vision seat's

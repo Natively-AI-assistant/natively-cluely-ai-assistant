@@ -34,6 +34,10 @@ require.cache[electronPath] = {
 };
 const { getModelCapabilities } = require(dist('llm/modelCapabilities.js'));
 const { LLMHelper } = require(dist('LLMHelper.js'));
+// Hermetic: phase 2's provider data lives in a shared store; the baseline was
+// written with none, so the move is judged with none.
+const { VisionCapabilityStore, __setVisionCapabilityStore } = require(dist('llm/visionCapabilityStore.js'));
+__setVisionCapabilityStore(new VisionCapabilityStore({ filePath: null }));
 
 const FIXTURE = path.join(__dirname, 'fixtures/visionCorpus2026_10_01.json');
 const fixture = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
