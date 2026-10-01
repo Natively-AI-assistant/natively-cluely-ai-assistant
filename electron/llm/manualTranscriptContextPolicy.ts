@@ -1,4 +1,5 @@
 import type { AnswerPlan } from './AnswerPlanner';
+import type { ContextItem, ConversationSurface } from '../SessionTracker';
 import { isBareFollowUp, isRefinementFollowUp } from './FollowUpResolver';
 
 type TranscriptContextPlan = Pick<AnswerPlan, 'answerType' | 'requiredContextLayers'>;
@@ -47,30 +48,21 @@ function isShortTopicShiftFollowUp(message: string): boolean {
 }
 
 /**
- * Return only the latest assistant suggestion from a rolling SessionTracker
- * snapshot. Refinement prompts need the answer they are editing, but must not
- * regain the unrelated meeting/interviewer transcript that this policy blocks.
+ * Return the latest assistant answer from this surface's rolling context.
+ * Use structured roles and surfaces so labels inside an answer remain text
+ * and speech or another surface's answer cannot become its continuation.
  */
-export function extractLatestPriorAssistantTurn(snapshot: string): string | undefined {
-  let latest: string[] | undefined;
-  let current: string[] | undefined;
-
-  for (const line of snapshot.split('\n')) {
-    const assistant = line.match(/^\[ASSISTANT \(PREVIOUS SUGGESTION\)\]:\s?(.*)$/);
-    if (assistant) {
-      current = [assistant[1]];
-      latest = current;
-      continue;
-    }
-    if (/^\[[^\]\r\n]+\]:/.test(line)) {
-      current = undefined;
-      continue;
-    }
-    if (current) current.push(line);
+export function extractLatestPriorAssistantTurn(
+  items: readonly ContextItem[],
+  surface: ConversationSurface,
+): string | undefined {
+  for (let index = items.length - 1; index >= 0; index--) {
+    const item = items[index];
+    if (item.role !== 'assistant' || item.surface !== surface) continue;
+    const answer = item.text.trim();
+    if (answer) return answer;
   }
-
-  const answer = latest?.join('\n').trim();
-  return answer || undefined;
+  return undefined;
 }
 
 export function shouldAutoAttachManualTranscriptContext(

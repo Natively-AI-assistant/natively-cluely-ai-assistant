@@ -149,6 +149,7 @@ function resolveManualChatBasePrompt(
 }
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
 import { extractLatestPriorAssistantTurn, isTranscriptBoundManualQuestion, shouldAutoAttachManualTranscriptContext } from './llm/manualTranscriptContextPolicy';
+import type { ContextItem } from './SessionTracker';
 import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
 import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGroundedAnswerType, isAssistantRefusal, SYSTEM_REFUSAL_RE } from './llm/documentGroundedPrompt';
@@ -2396,7 +2397,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Always capturing here is what makes that merge possible; it is a
         // cheap in-memory read regardless of whether `context` is set.
         let autoContextSnapshot: string | undefined;
+        let autoContextItems: ContextItem[] = [];
         try {
+          autoContextItems = intelligenceManager.getContext(100);
           const snap = intelligenceManager.getFormattedContext(100);
           if (snap && snap.trim().length > 0) autoContextSnapshot = snap;
         } catch (ctxErr) {
@@ -3572,7 +3575,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           // meeting transcript. ConversationMemoryV2 supplies this when enabled;
           // this bounded snapshot fallback preserves default-off behavior while
           // keeping unrelated ME/INTERVIEWER turns isolated.
-          const priorAssistant = extractLatestPriorAssistantTurn(autoContextSnapshot);
+          const priorAssistant = extractLatestPriorAssistantTurn(autoContextItems, 'manual_chat');
           if (priorAssistant) {
             context = `PRIOR ANSWER IN THIS CONVERSATION (the user wants you to EDIT this exact answer, not produce a new one):\nPrevious answer:\n${priorAssistant}\n\nApply the user's new instruction ("${message}") to THAT answer — keep the same facts, change only what was asked. Do not start over or re-list everything.`;
             console.log('[IPC] Injected latest prior assistant answer for manual refinement; rolling transcript excluded');
@@ -17991,10 +17994,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       // as desktop manual chat.
       let context: string | undefined;
       try {
+        const items = intelligenceManager.getContext(100);
         const snap = intelligenceManager.getFormattedContext(100);
         if (snap && snap.trim().length > 0 && isRefinementFollowUp(message)
             && !isTranscriptBoundManualQuestion(message) && !phoneDocGrounded) {
-          const priorAssistant = extractLatestPriorAssistantTurn(snap);
+          const priorAssistant = extractLatestPriorAssistantTurn(items, 'phone_mirror');
           if (priorAssistant) {
             context = `PRIOR ANSWER IN THIS CONVERSATION (the user wants you to EDIT this exact answer, not produce a new one):\nPrevious answer:\n${priorAssistant}\n\nApply the user's new instruction ("${message}") to THAT answer — keep the same facts, change only what was asked. Do not start over or re-list everything.`;
             console.log('[PhoneMirror] Injected latest prior assistant answer for refinement; rolling transcript excluded');
