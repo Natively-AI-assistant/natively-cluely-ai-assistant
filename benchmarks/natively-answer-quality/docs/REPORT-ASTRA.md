@@ -9,8 +9,12 @@ charter v1 is mixed in. Holdout is reported in aggregate only.
 * **Kept build: `fix12` = app commit `f0c3a263` on branch `fix/aq-astra-i5`. Not landed on main.**
 * Holdout, paired against the previous reference (fix6): **8.02 → 8.43, +0.41 (±0.23)**, hard fails **60 → 31**,
   no mode down. Dev: 8.24 → 8.49, +0.25 (±0.18), hard fails 66 → 38.
-* Against main as it was at the start (partial: the judge account ran out of quota before the baseline was fully
-  re-judged under charter v2): holdout +0.52 (±0.27) on 202 common items, dev +0.86 (±0.27) on 201.
+* Against main as it was at the start — PARTIAL, not a headline: the judge account's quota ran out before the
+  baseline was fully re-judged under charter v2. Dev +0.86 (±0.27) on 201 items covering only General, Sales,
+  Recruiting, Team Meet and 36 of 40 Looking for work — the modes the verifier helps most; no Lecture, Technical
+  interview, Seminar or Call Center. Holdout +0.52 (±0.27) on 202 items: General, Sales, Recruiting, Team Meet,
+  Looking for work, Lecture and 21 of 30 Technical interview; no Seminar or Call Center. The rest is queued for the
+  02:00 UTC batch of 2026-10-02.
 * **No mode is at 9.5.** Highest: Team Meet 9.12 and Recruiting 9.01 on dev; on holdout General 8.92. Lowest:
   Looking for work 7.74–7.88, Call Center 7.62–7.93. Section 9 says why local fixes do not close the gap.
 * Price of the gain: the answer settles about 0.45–0.65 s later at the median (time to first word unchanged) and the
@@ -346,8 +350,9 @@ Time to first word: unchanged (dev 854 → 867 ms, holdout 779 → 868 ms at the
   has no verifier). Seminar: 5 of 5 (fix11 3 of 5, fix6 4 of 5).
 * supp-quant (32), arithmetic validators: main 25 of 32; later builds 28–31 of 32 (fix6 31, fix10 29) — the same
   code path since I2, the spread is sampling.
-* Not judged under charter v2 because the account quota ran out: supp-behavior, the blind A/B fix6 vs fix11, fix10,
-  and about 45% of the starting baseline.
+* Not judged under charter v2 because the account quota ran out at 12:26 UTC: supp-behavior, the blind A/B fix6 vs
+  fix11, fix10, 2 dev Seminar rows of fix12, and about 45% of the starting baseline (dev 159 of 360, holdout 68 of
+  270 missing). They are queued, in that priority, in the judge chain armed for the 02:00 UTC batch.
 
 ## 9. Remaining architectural weaknesses (stop condition B)
 
@@ -371,8 +376,10 @@ written up with the measurements, a proposal, expected benefit and risk in `docs
    the answer as "generic procedure — confirm" in the UI instead of in the words.
 5. **A conflict inside the material** is found by the list step and surfaced about half the time. Proposal: carry
    the conflict out of the pass as its own chip next to the answer.
-6. **Measurement.** Per-mode differences under about ±0.5 on 30–40 items are not results. The judge ran out of
-   account quota (`insufficient_user_quota`) mid-batch; nothing more can be judged until it is topped up. Retrieval
+6. **Measurement.** Per-mode differences under about ±0.5 on 30–40 items are not results. The judge stopped mid-batch on
+   `insufficient_user_quota` ("user quota is not enough") — the AgentRouter account's own quota, a different error
+   from the 402 that ends a ration batch. Whether it refreshes with the next batch is not known; the 02:00 UTC chain
+   is armed and simply waits if it does not. Retrieval
    was lexical in every run (no embedder weights in the worktrees), on both sides of every comparison.
 
 ## 10. Recommended next step
@@ -381,7 +388,8 @@ written up with the measurements, a proposal, expected benefit and risk in `docs
    `fix/aq-astra-i5` (`f0c3a263`). Kill switch: `NATIVELY_CLAIM_VERIFIER=0`.
 2. Build the personal answer bank (item 1) — the only change on the list that moves Looking for work toward 9.
 3. Make code verification gate the coding answer (item 2).
-4. Top up the AgentRouter quota and re-judge the rest of the starting baseline so the "starting" column is complete.
+4. Check the AgentRouter account quota: if the 02:00 UTC chain cannot start, it needs topping up before the rest
+   of the starting baseline (and supp-behavior, the A/B, fix10) can be judged.
 
 ## 11. Completion report (project format)
 
@@ -408,8 +416,8 @@ written up with the measurements, a proposal, expected benefit and risk in `docs
   questions with no stored answer (section 9).
 
 ### Validation
-* `Covered by automated macOS branch tests`: `npm run test:llm` on `f0c3a263` — 5,672 tests, 5,644 pass, 0 fail,
-  28 skipped (no platform branches in the change; the suite ran on macOS only).
+* Unit tests: `npm run test:llm` on `f0c3a263` — 5,672 tests, 5,644 pass, 0 fail, 28 skipped. The suite ran on
+  macOS. The change has no platform branch, so there is no macOS or Windows branch test to claim.
 * `Tested physically on macOS`: the benchmark drives the real app (`npm run dev:agent`, development build) over CDP;
   renderer and answer pipeline only.
 * `Reviewed but not executed on Windows`. `Requires physical Windows verification` for the app as a whole; nothing
