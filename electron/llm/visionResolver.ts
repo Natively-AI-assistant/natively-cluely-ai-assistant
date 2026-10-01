@@ -18,8 +18,8 @@ import { getModelCapabilities } from './modelCapabilities';
 import { customProviderSupportsVision, isOllamaVisionModelByName } from './visionCapability';
 
 export type VisionAnswer = 'yes' | 'no' | 'unknown';
-/** Where an answer came from. `override` (phase 4) and `test` (phase 3) join later. */
-export type VisionSource = 'route' | 'provider' | 'names';
+/** Where an answer came from. `override` joins in phase 4. */
+export type VisionSource = 'route' | 'provider' | 'test' | 'names';
 
 export interface VisionVerdict {
   reads: VisionAnswer;
@@ -42,6 +42,8 @@ export interface VisionFacts {
   customProvider?: { curlCommand?: string; multimodal?: boolean } | null;
   /** What a provider's catalogue publishes (visionCapabilityStore), for a ROUTED id; undefined = it hasn't said. */
   providerReportsVision?: (provider: string, routedModel: string) => boolean | undefined;
+  /** A saved one-time image test result (visionCapabilityStore), for a ROUTED id; undefined = never tested. */
+  testedVision?: (provider: string, routedModel: string) => boolean | undefined;
 }
 
 const UNKNOWN: VisionVerdict = { reads: 'unknown', source: null };
@@ -50,6 +52,13 @@ const answer = (reads: boolean, source: VisionSource): VisionVerdict => ({ reads
 /** The name list can prove yes; absence from a list is not evidence of no. */
 function fromNames(model: string, isOllama: boolean): VisionVerdict {
   return getModelCapabilities(model, isOllama).supportsImages ? answer(true, 'names') : UNKNOWN;
+}
+
+/** A saved test result, then the name list. The test ranks first: it asked this very model. */
+function fromTestThenNames(q: VisionQuery, facts: VisionFacts): VisionVerdict {
+  const tested = facts.testedVision?.(q.provider, q.model || '');
+  if (tested !== undefined) return answer(tested, 'test');
+  return fromNames(q.model || '', false);
 }
 
 export function resolveVision(q: VisionQuery, facts: VisionFacts = {}): VisionVerdict {
@@ -75,17 +84,17 @@ export function resolveVision(q: VisionQuery, facts: VisionFacts = {}): VisionVe
     case 'ninerouter': {
       const catalogue = facts.ninerouterVisionModels ?? [];
       if (catalogue.length > 0) return answer(catalogue.includes(model.replace(/^ninerouter\//, '')), 'provider');
-      return fromNames(model, false);
+      return fromTestThenNames(q, facts);
     }
     // OpenRouter publishes input_modalities per model and refuses images to the
     // ones it lists as text-only, so its answer is trusted both ways (2026-10-01).
     case 'openrouter': {
       const reported = facts.providerReportsVision?.('openrouter', model);
       if (reported !== undefined) return answer(reported, 'provider');
-      return fromNames(model, false);
+      return fromTestThenNames(q, facts);
     }
     default:
-      return fromNames(model, false);
+      return fromTestThenNames(q, facts);
   }
 }
 
@@ -98,9 +107,11 @@ export function readsImages(v: VisionVerdict, unknownMeans: boolean): boolean {
  * What an unknown answer means for each selected-gateway seat. 9Router and
  * OpenRouter seat (an unfetched catalogue is not "text-only"; failing closed on
  * absent data was a bug once already); AgentRouter does not (no evidence, no
- * screenshot). Phase 1 kept each rung's behaviour; OpenRouter joins in phase 2.
+ * screenshot). Phase 1 kept each rung's behaviour; OpenRouter joined in phase 2,
+ * and LiteLLM, NVIDIA NIM and Fluxion in phase 3, where a saved test result can
+ * say "no" for them. Unknown still seats them, as it always has.
  */
-const SEAT_ON_UNKNOWN = { ninerouter: true, openrouter: true, agentrouter: false } as const;
+const SEAT_ON_UNKNOWN = { ninerouter: true, openrouter: true, litellm: true, nvidia_nim: true, fluxion: true, agentrouter: false } as const;
 
 /**
  * Whether a selected gateway model is seated for a screenshot. One function for

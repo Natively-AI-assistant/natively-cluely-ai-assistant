@@ -96,3 +96,33 @@ describe('gatewaySeatReadsImages: one rule for both screenshot paths', () => {
     assert.equal(gatewaySeatReadsImages('ninerouter', 'ninerouter/alicode/glm-5', { ninerouterVisionModels: ['openai/gpt-5'] }), false);
   });
 });
+describe('a one-time test result (phase 3)', () => {
+  const tested = (map) => ({ testedVision: (provider, routed) => map[`${provider}:${routed}`] });
+  test('beats the name list, both ways', () => {
+    assert.deepEqual(v('agentrouter', 'agentrouter/glm-5.3', tested({ 'agentrouter:agentrouter/glm-5.3': true })), { reads: 'yes', source: 'test' });
+    assert.deepEqual(v('openai', 'gpt-5.5', tested({ 'openai:gpt-5.5': false })), { reads: 'no', source: 'test' });
+  });
+  test("loses to the provider's own data", () => {
+    const facts = { ...tested({ 'openrouter:openrouter/a/b': true }), providerReportsVision: () => false };
+    assert.deepEqual(v('openrouter', 'openrouter/a/b', facts), { reads: 'no', source: 'provider' });
+    const nine = { ...tested({ 'ninerouter:ninerouter/a/b': true }), ninerouterVisionModels: ['x/y'] };
+    assert.deepEqual(v('ninerouter', 'ninerouter/a/b', nine), { reads: 'no', source: 'provider' });
+  });
+  test('fills in where a catalogue has no entry', () => {
+    assert.deepEqual(v('openrouter', 'openrouter/new/model', { ...tested({ 'openrouter:openrouter/new/model': false }), providerReportsVision: () => undefined }), { reads: 'no', source: 'test' });
+    assert.deepEqual(v('ninerouter', 'ninerouter/a/b', tested({ 'ninerouter:ninerouter/a/b': true })), { reads: 'yes', source: 'test' });
+  });
+  test('never applies to route-decided providers or Ollama', () => {
+    assert.deepEqual(v('deepseek', 'deepseek-v4-flash', tested({ 'deepseek:deepseek-v4-flash': true })), { reads: 'no', source: 'route' });
+    assert.deepEqual(v('natively', 'natively', tested({ 'natively:natively': false })), { reads: 'yes', source: 'route' });
+    assert.deepEqual(v('ollama', 'llama3.1:8b', tested({ 'ollama:llama3.1:8b': true })), unknown);
+  });
+  test('gateway seats: a tested "no" is skipped; unknown seats as it always did', () => {
+    for (const p of ['litellm', 'nvidia_nim', 'fluxion']) {
+      const id = `${p}/some/model`;
+      assert.equal(gatewaySeatReadsImages(p, id), true, `${p} unknown`);
+      assert.equal(gatewaySeatReadsImages(p, id, tested({ [`${p}:${id}`]: false })), false, `${p} tested no`);
+    }
+    assert.equal(gatewaySeatReadsImages('agentrouter', 'agentrouter/glm-5.3', tested({ 'agentrouter:agentrouter/glm-5.3': true })), true);
+  });
+});
