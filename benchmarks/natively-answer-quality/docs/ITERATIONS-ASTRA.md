@@ -796,3 +796,49 @@ Judged before it: calibration, dev and holdout for fix11 / fix6 / fix9, the I25 
 dev 38). NOT judged: the starting baseline is partial (dev 201 of 360: General, Sales, Recruiting, Team Meet, 36 of
 Looking for work; holdout 202 of 270: six modes and 21 of Technical interview), supp-behavior under charter v2, the
 blind A/B, fix10. No judging is possible until the AgentRouter account has quota again.
+
+### Where the remaining distance to 9.5 is (astra/headroom.mjs, kept build, no new judge calls) — 12:38Z
+Every judged answer is put in one class by its flags: generator (reasoning / arithmetic / wrong fact), no-source
+(a company, policy, product or research claim nothing supports), no-answer (an invented personal claim or story, or
+the question left unanswered), evidence (the material had it and the answer missed it), or clean (none).
+| | dev (358) | holdout (270) |
+|---|---:|---:|
+| mean | 8.49 | 8.43 |
+| clean answers: share, mean | 78%, 9.23 | 78%, 9.23 |
+| clean answers at 9.5 or above | 128 of 280 | 95 of 210 |
+| if "generator" answers scored like clean ones | 8.70 | 8.57 |
+| if "no-source" did | 8.63 | 8.69 |
+| if "no-answer" did | 8.82 | 8.74 |
+| if "evidence" did | 8.53 | 8.53 |
+* **Even with every flagged class fully repaired, the modes land at their clean mean: 9.2 overall** — General 9.2–9.3,
+  Sales 8.8–9.1, Recruiting 9.3–9.4, Team Meet 9.35–9.4, Looking for work 9.2, Lecture 9.4–9.5, Technical interview
+  9.3–9.55, Seminar 9.2–9.4, Call Center 8.5–8.9. 9.5 on every mode needs the clean answers to improve too.
+* What the judge takes off a clean answer below 9.5 (152 on dev, 115 on holdout, mean 8.7): the lowest dimensions are
+  intent fulfilment (7.5 / 7.8) and direct usefulness (7.6 / 7.8), then information density (8.0 / 8.2), in every
+  mode; correctness and grounding are at 9.0–9.3. The answers are right and grounded and do not fully do what was
+  asked: a part of a multi-part ask left out, a fallback where a provisional answer was possible, a too-generic line.
+
+### I26 — a typed "shorter" / "simpler" / "another one" revises the previous reply (aq-fix2 e000db4a = fix13)
+* Found in the clean answers: typed refinement follow-ups come back as near-copies. DSALES-033 "shorter": 50 → 49
+  words (the same sentences minus one word), judged 6.8; DSEM-040 "shorter" 94 → 94, 7.0; DSALES-037 "another one,
+  less pushy" 98% word overlap, 6.5; DLEC-027 "simpler please" 132 → 130, 7.0; DTEAM-037 "shorter" 46 → 44, 7.9.
+  Present since the baseline (3 of 11 short typed follow-ups are near-copies in the main-code run, 1–6 in later runs).
+* Cause: the resolver marks the turn `shorter (rephrasing request: how to phrase the answer to "…")` and nothing tells
+  the model that the PREVIOUS REPLY is the thing to change, or by how much; it answers the earlier question again.
+* Change (prompt-composer.ts `refinementNotice`): on a typed turn the resolver marked as a rephrasing request, whose
+  request is shorter / simpler / another one, and whose previous reply has 8+ words and no code: a notice naming the
+  last reply and its length, with a budget — half the words for shorter, 70% for simpler, "a DIFFERENT one" for
+  another. Every other prompt is byte-identical (7 dev rows, 4 holdout rows, 0 supp-behavior rows get it).
+* Replay, 3 samples each, recorded prompts (words, previous → base → with the notice at the app's position):
+  DSALES-033 50 → 49 → 31–33 · DSEM-040 112 → 97–101 → 38–41 · DTEAM-037 46 → 35–47 → 27–28 · DJOB-030 49 → 44 →
+  27–31 · DLEC-027 "simpler please" 132 → 129–146 → 88–100 · DGEN-033 "Simpler." 59 → 57–66 → 33–41 · DSALES-037
+  "another one" overlap 0.51–0.76 → 0.41–0.46.
+* Tests: `npm run typecheck:electron` clean; `npm run test:intelligence` 2,807 tests, 2,796 pass, 0 fail (2 skipped,
+  9 todo); llm suite 5,672 tests, 5,643 pass, 1 fail — LocalRunner "temp dirs are cleaned up" counted another
+  session's temp directories; the file passes alone (14/14). New file RefinementNotice2026_10_01.test.mjs.
+* Runs queued (one app, behind the quiet-machine guard): the affected conversations only on dev and holdout
+  (`aq2-dev-fix13`, `aq2-holdout-fix13`), then the full final set on fix13 (`aq2-final-fix13`).
+* Decision rule, written before the runs: KEEP if, in the app, every affected "shorter" reply is at most 75% of the
+  previous reply's words and every "simpler" one at most 85% (objective, dev and holdout), no affected row fails, and
+  when the judge is available the affected rows are not below fix12's by more than their noise. It is a contract
+  repair, not a score play: 7 of 360 dev rows.
