@@ -807,6 +807,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
 
     const [verboseLogging, setVerboseLogging] = useState(false);
+    // On unless the user turned it off; the main process is the source of truth.
+    const [usageStatistics, setUsageStatistics] = useState(true);
     const [showVerboseToast, setShowVerboseToast] = useState(false);
     const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const [exportingLogs, setExportingLogs] = useState(false);
@@ -837,6 +839,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             window.electronAPI?.getOverlayMousePassthrough?.().then(setIsMousePassthrough).catch(() => { });
             window.electronAPI?.getDisguise?.().then(setDisguiseMode).catch(() => { });
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
+            window.electronAPI?.getUsageStatistics?.().then((v) => setUsageStatistics(v !== false)).catch(() => { });
             window.electronAPI?.getAmbientChatEnabled?.().then(setAmbientChatEnabled).catch(() => { });
             window.electronAPI?.getAutoAnswerEnabled?.().then(setAutoAnswerEnabled).catch(() => { });
             window.electronAPI?.getCodeVerification?.().then((v) => setCodeVerification(v === true)).catch(() => { });
@@ -2992,6 +2995,37 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 window.dispatchEvent(new Event('storage'));
                                                             }}
                                                             className={showTranscript ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
+                                                    </div>
+
+                                                    {/* Usage statistics */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Activity size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Usage statistics')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {t('Sends which features are used and how often. Never what you say, see or type.')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <SettingsToggle
+                                                            checked={usageStatistics}
+                                                            label={t('Usage statistics')}
+                                                            onChange={() => {
+                                                                const newState = !usageStatistics;
+                                                                setUsageStatistics(newState);
+                                                                // A write the settings store refused did not change
+                                                                // anything: the switch goes back so it never shows
+                                                                // "off" while reports are still being sent.
+                                                                const revert = () => setUsageStatistics(!newState);
+                                                                const pending = window.electronAPI?.setUsageStatistics?.(newState);
+                                                                if (!pending) { revert(); return; }
+                                                                pending.then((r) => { if (!r?.success) revert(); }).catch(revert);
+                                                            }}
+                                                            className={usageStatistics ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                         />
                                                     </div>
 

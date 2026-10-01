@@ -229,6 +229,14 @@ export class IntelligenceManager extends EventEmitter {
     noteAutoAnswerCandidate(questionId: string, candidateGeneration: number): void {
         this.engine.noteAutoAnswerCandidate(questionId, candidateGeneration);
     }
+    /**
+     * How many answers the session log holds. A count only: the funnel reports
+     * how many answers a meeting produced, never what they were.
+     */
+    getAnswerCount(): number {
+        try { return this.session.getFullUsage().length; } catch { return 0; }
+    }
+
     getSpeculativeSnapshot(): { questionId: string | null; text: string | null } {
         return this.engine.getSpeculativeSnapshot();
     }

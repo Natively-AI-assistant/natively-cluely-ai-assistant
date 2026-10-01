@@ -265,6 +265,8 @@ const RU: Record<string, string> = {
         'Когда включено, живая помощь работает, но транскрипты, резюме и история удаляются по завершении встречи',
     'Do not save meetings': 'Не сохранять встречи',
     'Debug logging': 'Отладочное журналирование',
+    'Usage statistics': 'Статистика использования',
+    'Sends which features are used and how often. Never what you say, see or type.': 'Отправляет сведения о том, какие функции используются и как часто. То, что вы говорите, видите или печатаете, не отправляется.',
     'Print detailed audio, STT, and pipeline diagnostics': 'Выводить подробную диагностику звука, STT и пайплайна',
     'Interviewer Transcript': 'Транскрипт интервьюера',
     'Show real-time transcription of the interviewer': 'Показывать транскрипцию интервьюера в реальном времени',

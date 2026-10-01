@@ -918,6 +918,8 @@ export const ES_GENERATED: Record<string, string> = {
     "Uses a Service Account JSON instead of an API Key. You must build a GCP Project, activate the Cloud Speech API, and create a Service Account under IAM. Download the JSON Key, and drag-and-drop it into the box in the Audio Settings.": "Uses a Service Account JSON instead of an API Key. You must build a GCP Project, activate the Cloud Speech API, and create a Service Account under IAM. Download the JSON Key, and drag-and-drop it into the box in the Audio Settings.",
     "Uses standard OpenAI keys": "Uses standard OpenAI keys",
     "Debug logging": "Registro de depuración",
+    "Usage statistics": "Estadísticas de uso",
+    "Sends which features are used and how often. Never what you say, see or type.": "Envía qué funciones se usan y con qué frecuencia. Nunca lo que dices, ves o escribes.",
     "Version": "Versión",
     "Via Docker (One command with local PostgreSQL):": "Via Docker (One command with local PostgreSQL):",
     "Via Pip (Bare metal Python service):": "Via Pip (Bare metal Python service):",

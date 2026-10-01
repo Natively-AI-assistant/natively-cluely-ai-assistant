@@ -6511,6 +6511,7 @@ export class AppState {
     this.autoAnswerUsage.meetingStarted();
     // The user's name as a transcription hint, before any STT connects (sttContextTerms.ts).
     try { setSttContextTerms(nameTerms(this.currentUserName())); } catch { /* a hint, never a blocker */ }
+    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingStarted(this.intelligenceManager.getAnswerCount()); } catch { /* analytics never blocks a meeting */ }
     this.broadcastMeetingState()
     if (metadata) {
       this.intelligenceManager.setMeetingMetadata(metadata);
@@ -6755,6 +6756,7 @@ export class AppState {
 
     this.cancelAutoAnswer();
     this.autoAnswerUsage.meetingEnded();
+    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingEnded(this.intelligenceManager.getAnswerCount()); } catch { /* analytics never blocks a meeting */ }
     // Cover the window between here and `_pendingTeardown` assignment, during which
     // the new in-flight-audio-init await below yields the event loop.
     this._endMeetingInFlight = true;
@@ -8608,7 +8610,16 @@ async function initializeApp() {
   app.on('web-contents-created', (_event, contents) => {
     contents.setWindowOpenHandler(({ url }) => {
       if (shouldOpenExternally(url)) {
-        shell.openExternal(url).catch((err) => console.warn('[Main] openExternal failed:', err?.message || err));
+        // Through the funnel service, so a checkout link opened this way leaves
+        // tagged and counted exactly like one sent through 'open-external'.
+        // Every other link is opened unchanged; if the service cannot be
+        // loaded the link still opens.
+        const open = (target: string) => shell.openExternal(target);
+        let handled: Promise<boolean> | null = null;
+        try { handled = require('./services/FunnelTelemetry').funnelTelemetry.openOutgoing(url, 'other', open); } catch { /* analytics never blocks a link */ }
+        (handled ?? open(url).then(() => true, () => false))
+          .then((opened: boolean) => { if (!opened) console.warn('[Main] openExternal failed'); })
+          .catch(() => { /* already reported */ });
       } else {
         console.warn('[Main] Blocked window.open', { protocol: url.split(':')[0] });
       }
@@ -8930,6 +8941,16 @@ async function initializeApp() {
     recordAppStarted();
   } catch (err: any) {
     console.warn('[UsageOutbox] startup failed (non-fatal):', err?.message || err);
+  }
+
+  // Funnel telemetry: install → trial → paid, for every install, keyed on the
+  // random install id (the usage outbox above reports only for installs that
+  // hold a key). Off in unpackaged builds and when the user has turned
+  // telemetry off; see electron/services/FunnelTelemetry.ts.
+  try {
+    require('./services/FunnelTelemetry').funnelTelemetry.start();
+  } catch (err: any) {
+    console.warn('[Funnel] startup failed (non-fatal):', err?.message || err);
   }
 
   // Extensions. Until this call nothing constructed an ExtensionManager, so no
@@ -9669,6 +9690,7 @@ if (process.env.THINKING_MATRIX === '1') {
       const { recordAppShutdown } = require('./services/usageInstrumentation');
       recordAppShutdown();
     } catch { /* instrumentation must never block a quit */ }
+    try { require('./services/FunnelTelemetry').funnelTelemetry.stop(); } catch { /* never blocks a quit */ }
     // Extension utilityProcesses are children of this process. One left running
     // keeps the app alive after every window has closed, which presents as a
     // hang on quit rather than as an error anyone sees. Fire-and-forget:

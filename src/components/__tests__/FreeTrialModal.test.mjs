@@ -28,7 +28,8 @@ test('every plan opens its checkout and records the conversion', () => {
   const handle = source.slice(source.indexOf('const handlePlan'), source.indexOf('const handleByok'));
   assert.ok(handle.includes('convertTrial?.(key)'));
   assert.ok(handle.includes("key === 'standard' && onStandard"), 'Standard still runs its own hook');
-  assert.ok(handle.includes('openExternal?.(url)'));
+  // The surface rides along so a purchase can be tied back to this card (funnel).
+  assert.ok(handle.includes("openExternal?.(url, { surface: 'trial_card' })"));
 });
 
 test('BYOK wipes, then shows done; a failure returns to the choice with an error', () => {
