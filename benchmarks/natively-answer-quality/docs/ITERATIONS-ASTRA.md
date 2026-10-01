@@ -611,3 +611,36 @@ Priority in the spec puts realtime usability above p10 and the mean, so the late
 Probe OK 11:00:15Z. All 25 pairs correct, including the five claim-kind pairs (CAL-21 current decision, CAL-22
 over-deferral, CAL-23 decision vs invented history, CAL-24 source conflict, CAL-25 consequential commitment); 22
 decisive, 3 clear. Result sets: abs-dev-c2, abs-holdout-c2, abs-sb-c2; nothing from charter v1 is mixed in.
+
+### Dev, charter v2: fix11 vs fix6 (360/360 judged each, paired) — 11:30Z
+| mode | fix6 | fix11 | Δ (95%) | hard fails | p10 |
+|---|---:|---:|---:|---:|---:|
+| General | 8.68 | 8.57 | −0.11 (±0.54) | 3 → 4 | 6.1 → 5.5 |
+| Sales | 7.82 | 8.31 | +0.49 (±0.62) | 9 → 3 | 4.0 → 6.5 |
+| Recruiting | 8.73 | 9.01 | +0.28 (±0.34) | 5 → 1 | 4.7 → 7.7 |
+| Team Meet | 8.56 | 9.12 | +0.56 (±0.48) | 5 → 1 | 5.0 → 8.4 |
+| Looking for work | 7.40 | 7.88 | +0.49 (±0.44) | 16 → 7 | 4.4 → 5.0 |
+| Lecture | 9.01 | 8.71 | −0.30 (±0.46) | 3 → 5 | 8.1 → 4.2 |
+| Technical interview | 8.01 | 8.21 | +0.20 (±0.76) | 10 → 9 | 4.0 → 4.0 |
+| Seminar | 8.67 | 8.76 | +0.09 (±0.53) | 3 → 2 | 6.8 → 6.6 |
+| Call Center | 7.29 | 7.62 | +0.34 (±0.58) | 12 → 7 | 4.0 → 4.0 |
+| ALL | 8.24 | 8.47 | +0.23 (±0.18) | 66 → 39 | 4.0 → 5.0 |
+* Attribution: on the 110 answers the verifier edited the mean change is +0.66; on the 250 it did not touch, +0.04.
+  Lecture has no verifier: its −0.30 is the generator's own arithmetic / reasoning errors on this sample (DLEC-028,
+  -038, -012), as are 12 of the 18 drops of 2.5 points or more.
+* Hard fails by flag in fix11 (39): unsupported_personal_claim 13, major_reasoning_error 10,
+  important_question_unanswered 7, missed_available_evidence 6, major_factual_error 6, unsupported_policy_claim 5,
+  unsupported_company_claim 5, arithmetic_error 4, reference_conflict_ignored 3, unsafe_commitment 2,
+  fabricated_behavioral_story 2.
+* What the verifier costs, read off its 6 large drops:
+  - DCC-036 9.2 → 4.0: the honest "I can't confirm a credit on this call" removed, question unanswered — the I25 class,
+    confirmed by the judge ("The money-back question goes unanswered").
+  - DREC-014 8.5 → 5.9 and DREC-020 (fix6 said "We do sponsor and transfer H-1B"): the pass listed a fact the role
+    brief DOES state as unsupported and deferred. A precision error of the list step on a supported fact.
+  - DJOB-031 10.0 → 7.3: two résumé versions, one explicitly older; the reply says the figure "is given two ways"
+    where the judge wants the newer one reported. The conflict rule is too eager when one source is marked older.
+  - DSALES-024, DTECH-014, DGEN-013: the edit itself was wrong or coached.
+* The judge flags a question left unanswered on 34 fix11 answers, 27 of them verifier-edited: the motive / own-past
+  items in Looking for work (blocker 1), introductions in Seminar and Sales with no profile, and Call Center
+  no-document turns. Deflection is now the main cost of the pass; invented claims were the main cost before it.
+* Dev agrees in sign with the rule; the decision waits for holdout.
