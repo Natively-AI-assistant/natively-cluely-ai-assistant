@@ -53,6 +53,7 @@ const TIERS = [
     ['ab-dev-cur-vs-fix6', ['astra/ab.mjs', '--set', 'ab-dev-cur-vs-fix6', '--a', 'results/aq2-dev-cur', '--b', 'results/aq2-dev-fix6', '--concurrency', C], 'results/aq2-dev-fix6'],
   ],
   [
+    ['abs-dev-fix7', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix7', '--concurrency', C], 'results/aq2-dev-fix7'],
     ['abs-dev-fix4', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix4', '--mode', I8_MODES, '--concurrency', C], 'results/aq2-dev-fix4'],
     ['replay-pro', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-pro.jsonl', '--run', 'results/aq2-dev-fix2', '--concurrency', C], 'results/replay/dev-fix2-pro.jsonl'],
     ['replay-flash', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-flash.jsonl', '--run', 'results/aq2-dev-fix2', '--concurrency', C], 'results/replay/dev-fix2-flash.jsonl'],
