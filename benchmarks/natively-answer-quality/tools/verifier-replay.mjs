@@ -38,7 +38,7 @@ await Promise.all(rows.map((r) => L(async () => {
           messages: [{ role: 'system', content: system }, { role: 'user', content: cv.claimVerifierStandaloneMessage(material, cv.splitGistTrailer(answer).body) }] }) });
       const j = await res.json();
       const v = cv.acceptVerifiedAnswer({ original: answer, edited: j.choices?.[0]?.message?.content ?? '', material });
-      Object.assign(rec, { answer: v.text, outcome: v.reason, ms: Date.now() - t0 });
+      Object.assign(rec, { answer: v.text, outcome: v.reason, ms: Date.now() - t0, out_tokens: j.usage?.completion_tokens ?? null, ...(cv.splitScratch ? { scratch: cv.splitScratch(j.choices?.[0]?.message?.content ?? '').scratch.trim() } : {}) });
     } catch (e) { rec.outcome = `error`; }
   }
   fs.appendFileSync(outFile, JSON.stringify(rec) + '\n');

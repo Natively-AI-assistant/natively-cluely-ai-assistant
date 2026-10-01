@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // External judge (gpt-6-astra via AgentRouter) — absolute scoring of one or more runs.
 //   node astra/judge.mjs --set <name> --runs results/<run>[,results/<run2>] [--ids A,B] [--mode m1,m2]
-//                        [--repeat 3] [--concurrency 3] [--dry]
+//                        [--repeat 3] [--concurrency 3] [--dry] [--sample N] [--force]
 // Output: astra/out/<set>/<run_id>.jsonl — one line per (item, repeat) with the parsed judgment, the official
 // score (astra/score.mjs), validator result, and model-integrity metadata. The judge never sees run ids.
 // Cache: astra/cache/<sha>.json keyed by charter version + model + mode + question + envelope + answer + repeat.
@@ -70,7 +70,7 @@ export async function judgeRow({ run, row, repeat = 0, cacheDir }) {
   const item = run.items[row.benchmark_id];
   const answer = answerOf(row);
   const validator = validate(item, answer, run.ds);
-  const env = buildEnvelope({ item, ds: run.ds, answer, rowsById: run.rowsById, validator: validator.verdict === 'n/a' ? null : validator });
+  const env = buildEnvelope({ item, ds: run.ds, answer, rowsById: run.rowsById, validator: validator.verdict === 'n/a' ? null : validator, generatedAt: row.started_at ?? null });
   const key = sha([CHARTER_VERSION, JUDGE_MODEL, item.mode, item.question, env.text, answer, repeat].join('\u0000'));
   const cf = path.join(cacheDir, key + '.json');
   if (fs.existsSync(cf)) return { ...JSON.parse(fs.readFileSync(cf, 'utf8')), cached: true };
@@ -98,7 +98,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   for (const dir of runs) {
     const run = loadRun(dir);
     const outFile = path.join(outDir, `${run.header.run_id}.jsonl`);
-    const done = new Set(readJsonl(outFile).filter((j) => j.ok).map((j) => `${j.benchmark_id}#${j.repeat}`));
+    // --force: judge again even when the out file holds a judgment (the cache still answers an unchanged envelope).
+    const done = opt('force') ? new Set() : new Set(readJsonl(outFile).filter((j) => j.ok).map((j) => `${j.benchmark_id}#${j.repeat}`));
     const todo = [];
     const picked = sample ? samplePerMode(run.rows.map((r) => r.benchmark_id).filter((id) => run.items[id]), (id) => run.items[id].mode, sample) : null;
     for (const row of run.rows) {
