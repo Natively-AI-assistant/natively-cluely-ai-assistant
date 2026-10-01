@@ -40,15 +40,26 @@ describe('which turns are verified', () => {
     assert.equal(claimVerifierKind({ modeId: 'technical-interview', question: 'What is the time complexity of a heap push?', draft: "It's O(log n): the new element sifts up at most the tree's height." }), null);
     assert.equal(claimVerifierKind({ modeId: 'technical-interview', question: 'Design a rate limiter.', draft: "I'd start with a token bucket per client, refilled at the allowed rate." }), null);
   });
-  test('Seminar: when the presenter\'s draft speaks about their own past', () => {
+  test('Seminar: every turn, with the research as the subject (2026-10-01)', () => {
     assert.equal(claimVerifierKind({ modeId: 'seminar', question: 'Why bother with a held-out test set?', draft: 'In my own work I always hold out a final split before touching the model.' }), 'personal');
-    assert.equal(claimVerifierKind({ modeId: 'seminar', question: 'How did you end up working on this?', draft: 'I got into it after reading the early papers on it.' }), 'personal');
-    assert.equal(claimVerifierKind({ modeId: 'seminar', question: 'Why a held-out set?', draft: 'Because cross-validation reuses the data you tuned on, a held-out split is the only unbiased final check.' }), null);
+    assert.equal(claimVerifierKind({ modeId: 'seminar', question: 'Why a held-out set?', draft: 'Because cross-validation reuses the data you tuned on, a held-out split is the only unbiased final check.' }), 'personal');
+    assert.match(claimVerifierSystemPrompt('seminar'), /the presenter, their research, its data, methods, results, numbers or prior work/);
+    assert.match(claimVerifierSystemPrompt('seminar', 'typed'), /the presenter, their research, its data, methods, results, numbers or prior work/);
   });
   test('Team Meet and Recruiting verify the team\'s and the role\'s facts on every turn (2026-10-01)', () => {
     assert.equal(claimVerifierKind({ modeId: 'team-meet', question: 'Why them, though?', draft: 'x' }), 'meeting');
     assert.equal(claimVerifierKind({ modeId: 'recruiting', question: 'Who would I report to?', draft: 'x' }), 'meeting');
     assert.equal(claimVerifierKind({ modeId: 'recruiting', question: 'Solve two sum', draft: 'Sure:\n```py\nx\n```' }), null);
+  });
+  test('General: every spoken turn; a typed turn only when it is about the user\'s life (2026-10-01)', () => {
+    const q = 'Okay settle this for us, pineapple on pizza, yes or no?';
+    const draft = 'Pineapple on pizza, yes, and it is better with ham than plain.';
+    assert.equal(claimVerifierKind({ modeId: 'general', question: q, draft, surface: 'spoken' }), 'life');
+    assert.equal(claimVerifierKind({ modeId: 'general', question: q, draft, surface: 'typed' }), null);
+    assert.equal(claimVerifierKind({ modeId: 'general', question: q, draft }), null);
+    assert.equal(claimVerifierKind({ modeId: 'general', question: 'How was your weekend?', draft: 'x', surface: 'typed' }), 'life');
+    assert.match(ENGINE, /claimVerifierKind\(\{ modeId: opts\.modeId, question: opts\.question, draft: opts\.answer, surface: 'spoken' \}\)/);
+    assert.match(IPC, /claimVerifierKind\(\{ modeId: cvMode, question: String\(message \|\| ''\), draft: finalText, surface: 'typed' \}\)/);
   });
   test('the lecture and an unknown mode are never verified', () => {
     for (const modeId of ['lecture', null, undefined, '']) {

@@ -2470,7 +2470,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               try {
                 const cv = require('./llm/claimVerifier') as typeof import('./llm/claimVerifier');
                 const cvMode = modeInfo?.templateType ?? null;
-                const cvKind = cv.claimVerifierKind({ modeId: cvMode, question: String(message || ''), draft: finalText });
+                const cvKind = cv.claimVerifierKind({ modeId: cvMode, question: String(message || ''), draft: finalText, surface: 'typed' });
                 if (cvKind && cvMode) {
                   const cvSystem = cv.claimVerifierSystemPrompt(cvMode, 'typed', { noDocuments: cv.materialHasNoDocuments(composed.user) });
                   const run = await cv.runClaimVerifier({

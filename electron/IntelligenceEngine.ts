@@ -356,7 +356,7 @@ export class IntelligenceEngine extends EventEmitter {
         trace: PiLatencyTrace;
     }): Promise<string> {
         const cv = require('./llm/claimVerifier') as typeof import('./llm/claimVerifier');
-        const kind = cv.claimVerifierKind({ modeId: opts.modeId, question: opts.question, draft: opts.answer });
+        const kind = cv.claimVerifierKind({ modeId: opts.modeId, question: opts.question, draft: opts.answer, surface: 'spoken' });
         if (!kind || !opts.modeId) return opts.answer;
         const system = cv.claimVerifierSystemPrompt(opts.modeId, 'spoken', { noDocuments: cv.materialHasNoDocuments(opts.material) });
         // The replayed answer call carries the material itself (its own user

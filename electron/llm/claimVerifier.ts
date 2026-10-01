@@ -50,15 +50,23 @@ const LIFE_RE = /\b(?:did you (?:catch|watch|see) (?:the|that|last)(?: [\w'-]+){
 export const DRAFT_PERSONAL_RE = /\b(?:I(?:'ve| have| had)\b(?! to\b)|I (?:built|ran|led|shipped|used|wrote|worked|designed|migrated|managed|owned|spent|learned|picked up|started|joined|left|chose|tried|set up|rolled out|cut|reduced|tested|ended up|got into|came (?:to|into|from))\b|in my (?:experience|last|previous|current|work|team|role|job|project|lab|own work)|at my (?:last|previous|current|old)|my (?:team|last|previous|current|side projects?|coursework|thesis|advisor|co-?authors?|lab|group|manager|old)\b|we (?:used|built|ran|shipped|chose|migrated|tried|went with|ended up|set up|rolled out)\b|on my (?:team|last|side))/i;
 
 /** Which verification (if any) a heard what-to-answer turn gets. Code answers are never touched. */
-export function claimVerifierKind(input: { modeId: string | null | undefined; question: string; draft: string }): ClaimVerifierKind | null {
+export function claimVerifierKind(input: { modeId: string | null | undefined; question: string; draft: string; surface?: 'spoken' | 'typed' }): ClaimVerifierKind | null {
   const mode = String(input.modeId ?? '');
   const q = String(input.question ?? '');
   const draft = String(input.draft ?? '');
   if (/```/.test(draft)) return null;
   if (mode === 'looking-for-work') return 'personal';
-  if (mode === 'technical-interview' || mode === 'seminar') return TI_PERSONAL_RE.test(q) || DRAFT_PERSONAL_RE.test(draft) ? 'personal' : null;
+  if (mode === 'technical-interview') return TI_PERSONAL_RE.test(q) || DRAFT_PERSONAL_RE.test(draft) ? 'personal' : null;
+  // Seminar (2026-10-01): every turn. Its capped answers were claims about the research the paper does not make
+  // and an "I don't have that figure" the draft pattern never opened the gate for. Replayed and judged:
+  // 8.64 -> 8.99, hard fails 3 -> 1.
+  if (mode === 'seminar') return 'personal';
   if (mode === 'sales' || mode === 'call-center') return 'product';
-  if (mode === 'general') return LIFE_RE.test(q) || DRAFT_PERSONAL_RE.test(draft) ? 'life' : null;
+  // General, SPOKEN (2026-10-01): the user says these words as their own, and every capped General answer on the dev
+  // set was an invented fact about them that neither pattern below catches ("I'm not going to pretend I don't order
+  // it"). Every spoken turn verified, replayed and judged: 8.53 -> 8.80, hard fails 5 -> 1. A typed General turn is
+  // ordinary assistant chat and keeps the narrower gate (one typed answer got worse when always verified).
+  if (mode === 'general') return input.surface === 'spoken' || LIFE_RE.test(q) || DRAFT_PERSONAL_RE.test(draft) ? 'life' : null;
   // Team Meet and Recruiting (2026-10-01): judged on the dev set, their capped answers were the same class — a
   // deadline restated as "due today", "which Brightwire didn't", "it's the product owner's call", a reporting
   // line or team size the role brief never gave. Replayed through this pass: Team Meet 8.37 -> 8.93 (hard fails
@@ -79,7 +87,9 @@ const SPEAKER: Record<string, string> = {
 };
 const MEETING_SUBJECT = 'the speaker, their team, its past decisions, owners, dates, vendors or reasons';
 const RECRUITING_SUBJECT = 'the recruiter, the role, the team, the company or its terms';
+const SEMINAR_SUBJECT = 'the presenter, their research, its data, methods, results, numbers or prior work';
 const SUBJECT: Record<string, string> = {
+  seminar: SEMINAR_SUBJECT,
   sales: 'the seller, their product or their company',
   'call-center': 'the agent, their product, their company or its policies',
   'team-meet': MEETING_SUBJECT,
@@ -98,6 +108,7 @@ const WRITTEN_FOR: Record<string, string> = {
   recruiting: 'a recruiter or interviewer',
 };
 const TYPED_SUBJECT: Record<string, string> = {
+  seminar: SEMINAR_SUBJECT,
   sales: 'the seller, their product or their company',
   'call-center': 'the agent, their product, their company or its policies',
   'team-meet': MEETING_SUBJECT,
