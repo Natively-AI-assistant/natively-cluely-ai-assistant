@@ -561,6 +561,11 @@ function deepseek(creds: CredentialsManager, _inputs: VisionProviderBuildInputs)
 }
 
 /**
+ * UNREACHABLE FROM THE UI TODAY (found in phase 5c-2): only the
+ * `switch-to-curl-provider` IPC selects a cURL-lane provider, the preload does
+ * not expose it, and saved cURL providers are loaded as custom providers (the
+ * rung above). This rung works if that lane is ever revived.
+ *
  * The cURL provider the user selected (2026-10-01), on the same two shared
  * predicates as the custom rung above: it must be able to carry an image, and
  * it is local only when its host is loopback or private — never by default, so
