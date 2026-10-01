@@ -2136,7 +2136,9 @@ interface ModelSelectProps {
     menuClassName?: string;
     /** Makes the trigger fit its label, never narrower than this text renders,
         growing and shrinking with an ease as the pick changes
-        (.aip-select-trigger--fit). Without it the trigger is a fixed w-40. */
+        (.aip-select-trigger--fit). Without it the trigger is a fixed w-40. Pair
+        it with the default menuClassName: the menu is then the trigger's width
+        and long names wrap. */
     minLabel?: string;
 }
 
@@ -2266,7 +2268,17 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
                             className="aip-select-option"
                             type="button"
                         >
-                            <span className="truncate">{option.name}</span>
+                            {/* A fitted picker's menu is exactly the trigger's width,
+                                so a name longer than the trigger wraps rather than
+                                cuts: "OpenAI Codex: GPT-5.6-Terra" and "…-Luna" would
+                                ellipsize to the same text. Hyphens become non-breaking
+                                (U+2011), so a line breaks between words ("OpenAI Codex"
+                                / "(GPT-5.5)") and not inside a version ("GPT-" / "5.5)");
+                                overflow-wrap:anywhere still splits one word too long
+                                for the row. */}
+                            <span className={fit ? 'min-w-0 leading-snug [overflow-wrap:anywhere]' : 'truncate'}>
+                                {fit ? option.name.replace(/-/g, '\u2011') : option.name}
+                            </span>
                             {value === option.id && <Check size={13} strokeWidth={1.75} className="aip-accent-fg shrink-0 ml-2" aria-hidden="true" />}
                         </button>
                     ))}
@@ -4601,7 +4613,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     <ModelSelect
                         containerClassName={AIP_ACTIVE_SELECT_CONTAINER}
                         minLabel={HERO_MODEL_PICKER_MIN_LABEL}
-                        menuClassName={PICKER_MENU_WIDTH}
                         value={defaultModel}
                         options={buildAvailableModelOptions()}
                         onChange={(val) => {
@@ -4627,7 +4638,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     <ModelSelect
                         containerClassName={AIP_ACTIVE_SELECT_CONTAINER}
                         minLabel={HERO_MODEL_PICKER_MIN_LABEL}
-                        menuClassName={PICKER_MENU_WIDTH}
                         value={fastModel}
                         options={buildFastModelOptions()}
                         onChange={async (val) => {
