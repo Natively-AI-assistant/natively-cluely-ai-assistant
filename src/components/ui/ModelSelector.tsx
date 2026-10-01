@@ -86,21 +86,27 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
     };
 
     const getModelDisplayName = (model: string) => {
+        if (model.startsWith('antigravity:')) return `${model.slice('antigravity:'.length)} (Antigravity)`;
         const codexCliName = getCodexCliModelDisplayName(model);
         if (codexCliName) return codexCliName;
         if (model.startsWith('ollama-')) return model.replace('ollama-', '');
+        if (model === 'gemini-3.8-flash') return 'Gemini 3.8 Flash';
+        // Legacy: users who selected 3.7- or 3.6-flash before a bump still have it
+        // persisted. Each remains a valid, working model, so name it rather than
+        // rendering the raw slug — this list only ever grows.
         if (model === 'gemini-3.7-flash') return 'Gemini 3.7 Flash';
-        // Legacy: users who selected 3.6-flash before the 3.7 bump still have it
-        // persisted. It remains a valid, working model, so name it rather than
-        // rendering the raw slug.
         if (model === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
         if (model === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
         if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
+        if (model === 'qwen/qwen3.8-27b') return 'Groq Qwen 3.8';
         if (model === 'qwen/qwen3.6-27b') return 'Groq Qwen 3.6';
         if (model === 'openai/gpt-oss-120b') return 'Groq GPT-OSS 120B';
         if (model === 'openai/gpt-oss-20b') return 'Groq GPT-OSS 20B';
         if (model === 'gpt-5.4') return 'GPT 5.4';
         if (model === 'claude-sonnet-4-6') return 'Sonnet 4.6';
+        // Legacy: DeepSeek retired deepseek-v4-flash on 2026-09-10 and now serves
+        // it as deepseek-flash (V4.1), which is what a persisted pick actually gets.
+        if (model === 'deepseek-v4-flash') return 'DeepSeek V4.1 Flash';
 
         // Check dynamic cloud models
         const cloud = cloudModels.find(m => m.id === model);

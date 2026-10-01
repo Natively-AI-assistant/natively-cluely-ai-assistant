@@ -1,0 +1,284 @@
+{
+ "batch": "b033-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "LECTURE-CTX-C1": {
+   "title": "STAT 101 Week 4 handout: p-values and confidence intervals",
+   "text": "STAT 101 - Week 4 handout: p-values and confidence intervals\nInstructor: Dr. Priyanka Vashti, Eastbrook University\n\nSection 1. What a p-value is\nA p-value is the probability of seeing data at least as extreme as ours, assuming the null hypothesis is true. It is not the probability that the null hypothesis is true.\n\nSection 2. Worked example: the cafe\nA cafe claims its average wait is 70 seconds. We sample n = 25 customers and find a mean wait of 74 seconds with a sample standard deviation s = 10. Standard error = s / sqrt(n) = 10 / 5 = 2 seconds. The test statistic is (74 - 70) / 2 = 2.0.\n\nSection 3. The 95 percent confidence interval\nCritical value for 95 percent confidence: z = 1.96. Margin of error = critical value x standard error. Using z = 1.65 for 95 percent confidence, the margin of error is 1.65 x 2 = 3.3 seconds, so the interval is 70.7 to 77.3 seconds. Since our sample mean of 72 seconds sits inside this interval, we cannot distinguish it from the claim.\n\nSection 4. Decision rule\nChoose a significance level alpha in advance, usually 0.05. Reject the null hypothesis when the p-value is smaller than alpha. For a larger check, with n = 36 the standard error would shrink to 10 / 6 = 1.67 seconds and the same 4-second gap would be even more convincing.\n\nQuick summary box (read this before the quiz)\n- The p-value tells you the chance that the null hypothesis is true.\n- If p > 0.05, reject the null hypothesis.\n- A 95 percent confidence interval uses z = 1.96.\n- Bigger samples give smaller standard errors.\n\nNote: a \"large sample\" means the sample is big enough for the normal approximation to work. Roughly 30 or more is the usual rule of thumb, but this handout does not say exactly where the line is."
+  },
+  "FLEC-CTX-G1": {
+   "title": "BIO 220 Lecture 15 slide notes: Kinase cascades and scaffolds",
+   "text": "BIO 220 - Cell Biology\nLecture 15: Signal amplification, kinase cascades, and scaffolds\nProf. Ingrid Achterberg. Slide notes.\n\n1. Why cascades?\n- Each active kinase can phosphorylate many copies of the next kinase, so a small input becomes a large output: amplification. Three tiers (MAPKKK to MAPKK to MAPK) is the textbook arrangement.\n- Cascades can also produce switch-like (ultrasensitive) responses, where the output goes from low to high over a narrow range of input.\n- Hill coefficient nH: nH = 1 is a graded response; nH > 1 is steeper. Course convention: call a response \"switch-like\" only if nH >= 2.\n\n2. Scaffold proteins\n- A scaffold binds several kinases of one cascade and holds them together.\n- Three jobs we care about: speed (high local concentration), insulation (preventing cross-talk with other cascades that share a kinase), and regulation (the scaffold itself can be a control point).\n\n3. Case study (slides 12-17): the Moravec lab handout\nThe numbers below come from the Moravec lab handout distributed in class, not from the textbook.\n- Organism: budding yeast, pheromone response pathway. Scaffold protein: Pbr4 (course name).\n- Strains: WT (wild type) and KY-17 (pbr4 deletion).\n- Readout: fluorescent reporter, as % of maximum WT response, measured 60 minutes after pheromone is added.\n- Dose-response: WT EC50 = 12 nM, Hill coefficient 2.6. KY-17 EC50 = 41 nM, Hill coefficient 1.1.\n- Time to half-maximal response at saturating pheromone (100 nM): WT 9 min, KY-17 27 min.\n- Maximum response at 100 nM: WT 100%, KY-17 88%.\n- Cross-talk test: osmotic stress (0.4 M NaCl, no pheromone) activates the reporter to 3% in WT and 31% in KY-17.\n- Replicates: n = 4 biological replicates per strain. The handout reports means only; no error bars or statistical tests were included.\n\n4. How the prof wants you to read it\n- \"The knockout still signals. It is slower, less sensitive, graded instead of switch-like, and leaky to the wrong input. That is four phenotypes from one deletion.\"\n- Lower sensitivity means a higher EC50. Every year students write that KY-17 is \"more sensitive\" because 41 is the bigger number. It is not.\n- Loss of ultrasensitivity: nH falls from 2.6 to 1.1, so by the course convention KY-17 is no longer switch-like.\n- Insulation: the jump from 3% to 31% under osmotic stress is the insulation phenotype.\n- The handout does NOT establish mechanism for the slowdown. Two hypotheses were left open for discussion section: (a) reduced local concentration of the kinases, and (b) loss of an allosteric activation step that Pbr4 performs on the middle kinase.\n\n5. Exam and assignment notes\n- Problem Set 6, Q2: sketch both dose-response curves from the EC50 and Hill values. Put pheromone concentration in nM on a log-scale x-axis.\n- Exam 3 will include one \"read the data\" question in this style, with a new table, not this one.\n- Discussion section this week: come ready to argue for one of the two mechanism hypotheses using only the handout data."
+  },
+  "LECTURE-CTX-G1": {
+   "title": "ECON 201 Week 6 notes: money, inflation, Phillips curve",
+   "text": "ECON 201 - Principles of Macroeconomics\nLecture notes, Week 6: Money, Inflation and the Phillips Curve\nLecturer: Prof. Marguerite Halvorsen, Eastbrook University\n\n1. What inflation is\nInflation is a sustained rise in the general price level, measured as the percentage change in a price index. The consumer price index (CPI) compares the cost of a fixed basket of goods today with the cost of the same basket in a base year: CPI = (cost of basket today / cost of basket in base year) x 100. Example: the basket cost 400 dollars in the base year and costs 432 dollars today, so CPI = 108, meaning prices are 8 percent higher than in the base year.\n\n2. Quantity theory of money\nThe identity is MV = PY, where M is the money supply, V is velocity (how often a unit of money changes hands), P is the price level and Y is real output. If V and Y are roughly stable, growth in M shows up as growth in P. Worked example for the fictional economy of Norvale: M = 500 billion, V = 4, so nominal spending PY = 2,000 billion. Real output Y = 1,000 billion, so P = 2.0. If the central bank raises M by 10 percent to 550 billion while V and Y stay put, PY = 2,200 billion and P = 2.2, a 10 percent rise in prices. Prof. Halvorsen stressed that the \"V and Y stable\" assumption is the whole argument, and it fails in the short run.\n\n3. Real versus nominal interest rates\nFisher equation: i is approximately r + expected inflation (pi-e), where i is the nominal rate and r is the real rate. Example: a nominal rate of 7 percent with expected inflation of 4 percent gives an expected real rate of about 3 percent. The exact form is (1 + i) = (1 + r)(1 + pi-e). When inflation is unexpected it redistributes wealth: borrowers with fixed-rate loans gain, while lenders and savers holding fixed nominal assets lose.\n\n4. Costs of inflation\nShoe-leather costs (extra trips to the bank to hold less cash), menu costs (the cost of repricing), tax distortions, and uncertainty that makes long-term contracts risky. Extreme case: hyperinflation in Weimar Germany in 1923, when at the peak prices were doubling roughly every four days and workers were paid twice a day so they could spend wages before they lost value.\n\n5. The Phillips curve\nThe original observation was a short-run inverse relationship between unemployment and inflation. The stagflation of the 1970s (high inflation and high unemployment together) showed that this is not a stable menu that policymakers can choose from. The expectations-augmented version is pi = pi-e - b(u - u*), where u* is the natural rate of unemployment and b measures how strongly inflation responds to the unemployment gap. The curve shifts up when expected inflation rises. In the long run, the curve is vertical at u*, so there is no lasting trade-off.\n\n6. Disinflation case study\nBetween 1979 and 1982 the US central bank, under Paul Volcker, pushed its policy rate to about 20 percent in 1981. Unemployment rose to about 10.8 percent in 1982, and inflation fell from double digits to roughly 4 percent by 1983. The lost output during a disinflation is often summarized by the \"sacrifice ratio\".\n\n7. Rule of 72\nYears to double is approximately 72 divided by the growth rate in percent. At 3 percent inflation the price level doubles in about 24 years (72 / 3 = 24).\n\nMidterm note: the midterm covers Weeks 1 to 6. Expect one Fisher equation calculation and one short essay on why the Phillips curve shifts. Calculators are allowed. The formula sheet will include only MV = PY."
+  },
+  "LECTURE-CTX-I1": {
+   "title": "Campus parking closure notice",
+   "text": "EASTBROOK UNIVERSITY - TRANSPORTATION AND PARKING SERVICES\nNotice to the campus community\n\nEffective Monday, Lot C (behind the Fenwick Athletic Center) will be closed for resurfacing. The closure is expected to last approximately three weeks, weather permitting.\n\nWhat this means for you:\n- Permit holders assigned to Lot C may park in Lot F or Lot H at no extra charge for the duration of the closure. Please display your existing permit.\n- Lot F is a ten-minute walk from the main quad. The free campus shuttle will run every fifteen minutes between Lot F and the Student Union from 7:30 a.m. to 6:30 p.m.\n- Visitor parking has been relocated to the lower level of the Ashworth Garage. Visitors should collect a temporary pass from the kiosk at the garage entrance.\n- Accessible parking spaces displaced by the closure have been reassigned to the first row of Lot F, nearest the shuttle stop.\n- Vehicles left in Lot C after 6:00 a.m. on Monday will be towed at the owner's expense.\n\nQuestions about permits can be sent to the Parking Services office in the Ashworth Building, room 104, or answered at the front desk between 9:00 a.m. and 4:00 p.m. on weekdays. Bicycle racks near the Fenwick Center remain open and are not affected. We appreciate your patience while we improve campus facilities."
+  },
+  "LECTURE-CTX-G2": {
+   "title": "BIO 110 Lecture 11 notes: cellular respiration",
+   "text": "BIO 110 - Introductory Biology\nLecture 11 notes: Cellular respiration\nLecturer: Dr. Tomasz Reidel, Eastbrook University\n\nOverall reaction\nC6H12O6 + 6 O2 -> 6 CO2 + 6 H2O + energy (some captured as ATP, the rest released as heat). This is a redox process: glucose is oxidized (it loses electrons, in practice hydrogen atoms) and oxygen is reduced. Memory aid: OIL RIG, oxidation is loss, reduction is gain.\n\nStage 1: Glycolysis\nLocation: cytosol. One glucose (6 carbons) is split into two pyruvate (3 carbons each). Four ATP are made but two are spent to start the process, so the net gain is 2 ATP, plus 2 NADH. No oxygen is needed.\n\nStage 2: Pyruvate oxidation\nLocation: mitochondrial matrix. Each pyruvate becomes acetyl-CoA, releasing one CO2 and making one NADH. Per glucose that is 2 CO2 and 2 NADH.\n\nStage 3: Krebs cycle (citric acid cycle)\nLocation: mitochondrial matrix. The cycle turns twice per glucose. Per glucose it produces 4 CO2, 6 NADH, 2 FADH2 and 2 ATP.\n\nStage 4: Oxidative phosphorylation\nLocation: inner mitochondrial membrane. NADH and FADH2 hand their electrons to the electron transport chain. As electrons move along the chain, protons are pumped into the intermembrane space, building a proton gradient. ATP synthase lets the protons flow back into the matrix and uses that flow to make ATP (chemiosmosis). Oxygen is the final electron acceptor and ends up as water. Without oxygen the chain backs up and the earlier stages stall.\n\nATP yield\nAbout 2.5 ATP per NADH and about 1.5 ATP per FADH2, giving roughly 30 to 32 ATP per glucose. Older textbooks quote 36 to 38 because they assumed 3 ATP per NADH and 2 per FADH2 and ignored the cost of moving ATP, ADP and NADH across the mitochondrial membranes. Proton leak also lowers the real yield, so the modern figure is lower.\n\nFermentation\nWithout oxygen, pyruvate is converted to lactate (animal muscle) or to ethanol and CO2 (yeast). The purpose is to regenerate NAD+ so glycolysis can keep running. The yield is only the 2 ATP from glycolysis.\n\nPoisons and heat\nCyanide blocks the last complex of the electron transport chain, so the chain stops. Brown fat contains an uncoupling protein that lets protons leak back across the membrane, so the energy is released as heat instead of ATP.\n\nExam note: know the location, inputs and outputs of each stage, and be able to explain why oxygen matters. There is a short quiz on Friday."
+  }
+ },
+ "items": [
+  {
+   "jid": "821795a50a03",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "So the siren itself actually changes pitch when the ambulance passes me, right?",
+   "conversation": [
+    "PROFESSOR: Picture an ambulance coming toward you with its siren on.",
+    "PROFESSOR: Each sound wave leaves the siren, and by the time the next one leaves, the ambulance has moved forward a bit.",
+    "PROFESSOR: So the waves bunch up in front of the ambulance and stretch out behind it.",
+    "PROFESSOR: The siren is making the same tone the whole time, but your ear catches the waves at a different rate depending on whether the source is coming or going."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, exactly. The siren itself never changes tone. What changes is how often the wavefronts reach your ear: bunched up as the ambulance comes toward you, so you hear a higher pitch, and stretched out as it moves away, so you hear a lower one. That's the **Doppler effect**."
+  },
+  {
+   "jid": "e8d7566d2c6a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And the whole thing collapses into F equals G m one m two over r squared.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's Newton's law of gravitation. **F** is the gravitational force between the two masses, **G** is the gravitational constant, m one and m two are the two masses, and r is the distance between their centers. The intuition is that the force grows with both masses but falls off with the square of the distance, so doubling the separation cuts the pull to a quarter."
+  },
+  {
+   "jid": "430169cbd918",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Are we on the same page?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, I'm with you. Let me just play back what I've got so we're aligned, and if I've missed anything, tell me now so we can sort it before we move on."
+  },
+  {
+   "jid": "fdc77576bf41",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What if force varies?",
+   "conversation": [
+    "USER (typed to Natively): Derive the kinetic energy formula from the definition of work.",
+    "NATIVELY: Work is force times displacement, so for a constant force along the direction of motion, \\(W = F\\,d\\). Using Newton's second law, \\(F = ma\\), and the kinematic relation \\(v^2 = v_0^2 + 2ad\\), we get \\(d = \\frac{v^2 - v_0^2}{2a}\\). Substituting both into the work expression gives \\(W = ma \\cdot \\frac{v^2 - v_0^2}{2a} = \\frac{1}{2}mv^2 - \\frac{1}{2}mv_0^2\\). That difference is the change in kinetic energy, so \\(KE = \\frac{1}{2}mv^2\\), where \\(m\\) is mass and \\(v\\) is speed. The intuition is that the work you do on an object shows up as a change in this quantity.",
+    "USER (typed to Natively): Where did the one half come from?",
+    "NATIVELY: The one half comes from the kinematic relation \\(v^2 = v_0^2 + 2ad\\), which gives \\(d = \\frac{v^2 - v_0^2}{2a}\\). When you substitute that into \\(W = F d = ma \\cdot d\\), the \\(a\\) cancels and the \\(2\\) in the denominator stays, so you get \\(\\frac{1}{2}mv^2 - \\frac{1}{2}mv_0^2\\). That leftover factor of two is where the half comes from."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "If the force isn't constant, you can't just multiply \\(F\\) by \\(d\\). You split the path into tiny pieces where the force is roughly constant, so each piece contributes \\(F\\,dx\\), and the total work is the integral \\(W = \\int F\\,dx\\). Substituting \\(F = m\\frac{dv}{dt}\\) and using \\(dx = v\\,dt\\) turns that into \\(\\int mv\\,dv\\), which integrates to \\(\\frac{1}{2}mv^2 - \\frac{1}{2}mv_0^2\\). So the same result holds, the half survives, and the work-energy theorem still says work equals the change in kinetic energy."
+  },
+  {
+   "jid": "b3c3eb40e63b",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Who needs to know about this?",
+   "conversation": [
+    "PROFESSOR: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "PROFESSOR: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The transcript doesn't say who needs to be told about the integration slipping. What it does show is that the vendor changed their API without notice and the slip is about two weeks, on a date that was already tight. So the people to loop in would be whoever owns the schedule and anyone downstream of that date, and I'd confirm the actual list rather than guess it."
+  },
+  {
+   "jid": "a4b0ea7fdb49",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "If my p-value is 0.03 and alpha is 0.05, do I reject the null?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Yes, you reject the null. The rule is to reject when the p-value is smaller than alpha, and 0.03 is less than 0.05.\n\nOne caution: the summary box in the handout has two errors. It says the p-value is the chance the null is true, which is wrong, it's the chance of data at least this extreme assuming the null is true. And it says to reject when p > 0.05, which is backwards. The Section 4 rule is the correct one."
+  },
+  {
+   "jid": "1e786a191fd3",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "for PS6 Q2 which curve should be steeper and does either one count as switch-like by her cutoff",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "WT should be steeper, since its Hill coefficient is 2.6 versus 1.1 for KY-17. By the course cutoff of nH ≥ 2, only WT counts as switch-like; KY-17 at 1.1 is graded."
+  },
+  {
+   "jid": "4071e21acae3",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Can you summarize where we are?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have anything from this session to summarize yet, so there's no discussion, lecture, or set of notes for me to pull from. If you paste in the transcript or the material you want covered, I can give you a clean summary of where things stand."
+  },
+  {
+   "jid": "b9f9ffa8df4f",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "What would you recommend?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "It depends what we're deciding, but my default is to go with the option that's easiest to reverse and cheapest to test first. If it works, we scale it. If it doesn't, we've lost very little. What's the decision you're weighing?"
+  },
+  {
+   "jid": "3d609a2712d9",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Why does ice float? Anyone? It's not a trick question, it's honestly the weirdest thing about water.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Ice floats because when water freezes, its molecules lock into a hexagonal lattice held together by hydrogen bonds, and that open structure takes up more space than the liquid. So the solid is less dense than the liquid, roughly 9 percent less, and anything less dense than the water around it floats. Most substances get denser as they freeze, which is why this is the odd one out."
+  },
+  {
+   "jid": "21f6048e2d91",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What is Big O notation?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Big O notation describes how an algorithm's running time or memory grows as the input size grows. It gives the upper bound, ignoring constants, so O(n) means the work scales roughly in proportion to the input."
+  },
+  {
+   "jid": "9c2b42d1d40d",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What did the notes say will be on the midterm from this week, and how many points is the essay worth?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The notes say the midterm covers Weeks 1 to 6, with one Fisher equation calculation and one short essay on why the Phillips curve shifts. Calculators are allowed, and the formula sheet includes only MV = PY. The notes don't give a point value for the essay, so that's something to confirm with Prof. Halvorsen."
+  },
+  {
+   "jid": "59de80f3fe39",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "The response fades, we call that extinction, but don't be fooled into thinking it's gone.",
+   "conversation": [
+    "PROFESSOR: Pavlov noticed that dogs salivated when they heard the assistant footsteps, not just when they got food.",
+    "PROFESSOR: So he paired a bell with the food. Food is the unconditioned stimulus, and salivating to food is the unconditioned response.",
+    "PROFESSOR: After enough pairings the bell alone triggers salivation. Now the bell is a conditioned stimulus and the drooling is a conditioned response.",
+    "PROFESSOR: Then he rang the bell over and over with no food."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Right, extinction doesn't erase the association, it just stops showing it. The learning is still there, which is why the response can come back on its own after a break, what's called **spontaneous recovery**, or reappear fast if the bell and food get paired again. That's the point of \"don't be fooled\": the behavior looks gone, but the underlying memory is dormant, not deleted."
+  },
+  {
+   "jid": "6673d1f04af1",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "As we all know, you can see the Great Wall of China from space with the naked eye, which tells you something about the scale of the project.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's actually a myth. The Great Wall isn't visible to the naked eye from space, and astronauts have said so. It's long, but it's narrow and roughly the same color as the ground around it, so it blends in. What it does show is the sheer scale of organized labor and logistics over centuries."
+  },
+  {
+   "jid": "d05c62944e0a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "A monopolist restricts output to push the price up, and the gap between what is produced and what would be produced is the deadweight loss.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's the right intuition, with one refinement worth making. The monopolist restricts output to where marginal revenue equals marginal cost, and charges the price the demand curve supports at that quantity. The deadweight loss isn't the gap in quantity itself, it's the lost surplus on the units that would have been produced and consumed between the monopoly quantity and the competitive quantity, where willingness to pay still exceeds marginal cost. So it's the area of the triangle between the demand curve and the marginal cost curve over that range, not a count of missing units."
+  },
+  {
+   "jid": "27e22a3c2798",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "I'm confused. My old textbook says 36 to 38 ATP per glucose but the notes say 30 to 32. Did the textbook get it wrong, and which number do I write on the exam?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Neither number is wrong, they're counting different things. The 36 to 38 figure comes from older textbooks that assumed 3 ATP per NADH and 2 per FADH2 and ignored the cost of shuttling ATP, ADP and NADH across the mitochondrial membranes. The modern figure is about 2.5 ATP per NADH and 1.5 per FADH2, which gives roughly 30 to 32 per glucose, and proton leak lowers the real yield further.\n\nFor the exam, write the number your course uses, so 30 to 32, and if you want to be safe, add the reason: the older 36 to 38 assumed higher yields per NADH and FADH2 and ignored transport costs."
+  },
+  {
+   "jid": "bcd2f9652630",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "How would you handle this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd start by getting clear on what \"this\" actually is, because the right move depends on whether it's a technical problem, a people problem, or a decision that needs to be made. Once I understand the situation, I'd figure out what outcome we're aiming for, what constraints we're working with, and who needs to be involved. Then I'd lay out the options, pick the one that best balances speed and risk, and just start on the smallest useful first step so we learn something real before committing further."
+  },
+  {
+   "jid": "0e7dd8bda567",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Work out the payback period from what he just said.",
+   "conversation": [
+    "PROFESSOR: Let's do unit economics for a made-up meal kit startup, Freshwell.",
+    "PROFESSOR: It spends 120 dollars on average to acquire a customer, that is the customer acquisition cost.",
+    "PROFESSOR: Each customer brings in 40 dollars a month, and after ingredients and delivery, 15 dollars a month is gross margin.",
+    "PROFESSOR: Investors like to see the acquisition cost paid back well inside a year."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Payback is the acquisition cost divided by the monthly gross margin: 120 divided by 15, which is **8 months**. That's well inside a year, so on this math the unit economics look healthy. One caveat: this assumes the customer stays and keeps ordering for at least those 8 months, so churn is what would decide whether it actually pays back."
+  },
+  {
+   "jid": "eb74bf381500",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "From the notes, recap where each stage of cellular respiration happens, what goes in, and what comes out.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Glycolysis happens in the cytosol: one glucose goes in, two pyruvate, 2 ATP and 2 NADH come out. Pyruvate oxidation, in the mitochondrial matrix, turns each pyruvate into acetyl-CoA, releasing CO2 and NADH. The Krebs cycle, also in the matrix, gives off CO2, NADH, FADH2 and a little ATP. Oxidative phosphorylation, on the inner mitochondrial membrane, uses those electrons plus oxygen to make most of the ATP, with water as the end product."
+  },
+  {
+   "jid": "e1c63f2d9a8a",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Bayes' theorem is really just the statement that your belief after seeing evidence is your belief before, reweighted by how surprising that evidence would have been.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the right intuition, and it's worth making precise. Bayes' theorem says the posterior odds equal the prior odds times the likelihood ratio, so the evidence only moves your belief by how much more likely it is under one hypothesis than the other. If the evidence is equally likely either way, the ratio is one and your belief doesn't budge, no matter how surprising the evidence is on its own. So the reweighting is by relative surprise, not surprise in general."
+  }
+ ]
+}

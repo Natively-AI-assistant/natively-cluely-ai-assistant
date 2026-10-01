@@ -46,14 +46,21 @@ describe('FINDING 1: the picker\'s Groq-hosted OpenAI models route to Groq, neve
 
 describe('FINDING 2: a persisted RETIRED default is repaired even when a Groq key exists', () => {
   test('ipcHandlers gates the availability early-return on isRetiredModelId', () => {
-    assert.match(src('electron/ipcHandlers.ts'),
-      /if \(!_isRetiredGroqId\(defaultModel\) && modelAvailable\(defaultModel\)\) return null;/);
+    // 2026-08-28: the gate now calls isRetiredId, a union of the Groq predicate
+    // and the NVIDIA one (NVIDIA retired the two nvidia_nim ids the picker
+    // shipped). The Groq half must still be in it — that is what this pins.
+    const s = src('electron/ipcHandlers.ts');
+    assert.match(s, /if \(!isRetiredId\(defaultModel\) && modelAvailable\(defaultModel\)\) return null;/);
+    assert.match(s, /const isRetiredId = \(modelId: string\): boolean =>\s*\n?\s*_isRetiredGroqId\(modelId\) \|\|/);
   });
 
   test('the historical auto-installed defaults are in the retired set', () => {
     assert.equal(gm.isRetiredModelId('llama-3.3-70b-versatile'), true);
     assert.equal(gm.isRetiredModelId('meta-llama/llama-4-scout-17b-16e-instruct'), true);
-    assert.equal(gm.isRetiredModelId('qwen/qwen3.6-27b'), false);
+    // qwen3.6-27b was the live default when this was written; Groq shut it
+    // down on 2026-09-14, so it is now one of the historical ones too.
+    assert.equal(gm.isRetiredModelId('qwen/qwen3.6-27b'), true);
+    assert.equal(gm.isRetiredModelId('qwen/qwen3.8-27b'), false);
   });
 });
 
@@ -129,7 +136,8 @@ describe('FINDING (admission): discovery never admits a retired id', () => {
 
 describe('FINDING 4: the e2e harness no longer defaults to a retired model', () => {
   test('groq-keypool EVAL_MODEL default is the live primary', () => {
-    assert.match(src('tests/intelligence/e2e/groq-keypool.mjs'), /GROQ_EVAL_MODEL \|\| 'qwen\/qwen3\.6-27b'/);
+    assert.match(src('tests/intelligence/e2e/groq-keypool.mjs'), /GROQ_EVAL_MODEL \|\| 'qwen\/qwen3\.8-27b'/);
+    assert.doesNotMatch(src('tests/intelligence/e2e/groq-keypool.mjs'), /\|\| 'qwen\/qwen3\.6-27b'/);
     assert.doesNotMatch(src('tests/intelligence/e2e/groq-keypool.mjs'), /\|\| 'meta-llama\/llama-4-scout/);
   });
   test('finalize-results fallback label matches', () => {

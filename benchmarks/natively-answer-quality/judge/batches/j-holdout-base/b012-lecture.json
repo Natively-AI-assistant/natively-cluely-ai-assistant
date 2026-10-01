@@ -1,0 +1,149 @@
+{
+ "batch": "b012-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "HLEC-CTX-G2": {
+   "title": "CS 3410 Lecture 12 notes: Page Replacement and Thrashing",
+   "text": "CS 3410 - Operating Systems\nLecture 12: Page Replacement, Working Sets, and Thrashing\nProf. Emeka Lindqvist. Lecture notes posted by the course staff.\n\n1. The problem\n- When memory is full, a page fault forces the kernel to pick a victim frame. How it picks is the page replacement policy.\n- Cost model for this course: a hit costs 100 ns; a fault serviced from the SSD costs 80 microseconds.\n- Prof: \"One fault in a thousand references nearly doubles your effective access time. Faults are not a rounding error.\"\n\n2. The policies we compare\n- OPT (Belady's MIN): evict the page whose next use is furthest in the future. Not implementable; used only as a yardstick.\n- FIFO: evict the page that was loaded earliest. Simple, and it suffers from Belady's anomaly.\n- LRU: evict the page unused for the longest time. LRU is a stack algorithm, so it never shows Belady's anomaly. Exact LRU needs a timestamp or a list update on every memory reference, which no real MMU provides.\n- Clock (second chance): frames sit in a circle with one use bit per frame, set by the hardware whenever the page is referenced. On a fault the hand sweeps: if the use bit is 1, clear it and advance; if it is 0, evict that page. A newly loaded page starts with its use bit set to 1.\n\n3. Slide 9 - Belady's anomaly (FIFO)\n- Reference string: 1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5\n- With 3 frames: 9 faults. With 4 frames: 10 faults.\n- \"More memory, more faults\" can only happen for policies that are not stack algorithms.\n\n4. Slide 11 - in-class trace (3 frames, all empty at the start)\n- Reference string: 7, 0, 1, 2, 0, 3, 0, 4, 2, 3\n- Results: FIFO: 9 faults. LRU: 8 faults. Clock: 7 faults.\n- Yes, Clock beat LRU on this string. Prof: \"Clock approximates LRU on average, not on every string. Don't write that Clock is always worse than LRU.\"\n- Clock trace convention for this course: empty frames are filled in order starting at frame 0; the hand starts at frame 0; after any replacement the hand points to the frame after the one just filled.\n\n5. Working sets and thrashing\n- Working set W(t, Delta): the set of distinct pages referenced in the last Delta references. In this course Delta = 10,000 references unless a problem says otherwise.\n- Thrashing: the sum of the working set sizes exceeds the number of physical frames, so processes spend more time faulting than running. CPU utilization drops, a naive scheduler admits more processes to use the idle CPU, and things get worse.\n- Page fault frequency (PFF): give a process more frames when its fault rate is above an upper bound, take frames away when it is below a lower bound.\n- Tern (our teaching kernel, used in Lab 5): the thrash monitor suspends the process with the largest resident set when the system-wide fault rate exceeds 1 fault per 500 references for 3 consecutive sampling windows.\n\n6. Exam notes\n- Final exam: you will trace Clock by hand on a new string. Show the use bits and the hand position after every fault.\n- Enhanced second chance (use bit plus dirty bit, four classes) was mentioned for context only and is NOT on the final.\n- Know why LRU has no Belady's anomaly (the stack property). You do not need the proof.\n- Lab 5 is due Friday at 11:59 pm. The autograder checks your thrash monitor against the Tern rule above."
+  },
+  "HLEC-CTX-I1": {
+   "title": "Riverside Hall residents newsletter (October)",
+   "text": "Riverside Hall Residents' Newsletter - October\n\nLaundry room update: The basement laundry room will be closed Monday through Wednesday next week while facilities replaces two dryers and the lint vent. The machines in Harbor Hall across the courtyard are open to Riverside residents with your ID card during the closure.\n\nQuiet hours: Starting this month, weeknight quiet hours begin at 10 pm instead of 11 pm on floors two through four, after a vote at the September floor meeting. Weekend quiet hours are unchanged.\n\nBike storage: The covered bike cage behind the east entrance has new locks. Registered bikes need a new orange tag from the front desk by October 20; untagged bikes will be moved to the overflow rack by the parking lot.\n\nPumpkin night: The Hall Council is hosting pumpkin carving in the ground floor lounge on the last Friday of the month from 7 to 9 pm. Pumpkins, cider and carving kits are provided while supplies last. Sign up on the sheet by the mailboxes.\n\nLost and found: A blue umbrella, a set of keys on a green lanyard and a graphing calculator are waiting at the front desk. Items not claimed by November 1 will be donated."
+  },
+  "HLEC-CTX-C1": {
+   "title": "ECON 214 Midterm 2 cheat notes (unofficial, classmate)",
+   "text": "ECON 214 Midterm 2 cheat notes (unofficial, from a classmate's shared drive)\n\nMidterm 2 is Thursday Oct 22. Covers Lectures 6-9.\n\nPrice discrimination basics\n- You need market power, a way to separate buyers, and no resale.\n- First degree: every buyer pays their reservation price. Consumer surplus = 0 and deadweight loss is at its maximum here.\n- Second degree: different prices for different groups like students vs seniors.\n- Third degree: set MR = MC in each market. Charge the higher price to the group with MORE elastic demand since they respond more.\n\nLakeview Ferry (slide 14)\n- Tourists: P = 120 - 2Q, commuters: P = 60 - Q, MC = 20.\n- Tourists: Q = 25, P = 70. Commuters: Q = 20, P = 40.\n- Profit = 1650.\n- Single price: it's just the average of the two prices, so 55. Easy marks.\n- Reminder: tourists pay 80 because tourist demand is less elastic, commuters pay 40.\n\nWelfare\n- Price discrimination is always inefficient compared with a single price, so just write that on the exam.\n- Output test: if output goes up, welfare definitely goes up.\n- Third degree: less elastic group pays more (this is the one that shows up every year).\n\nLerner index\n- (P - MC)/P = 1/Ed. Tourists come out to about 0.71.\n\nLogistics\n- Midterm is Tuesday Oct 24, 90 minutes, same room.\n- One formula sheet, single-sided, typed is fine.\n- Anything through lecture 10 is fair game according to the TA.\n- Bring a calculator, graphing is okay I think.\n\nScreening model (the incentive compatibility stuff) - this is definitely on the exam, practice the full derivation."
+  }
+ },
+ "items": [
+  {
+   "jid": "3d8ba33ba732",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "didn't get that",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I didn't catch the last part either. Could you say that again a bit slower, or point me to the slide or section you're on?"
+  },
+  {
+   "jid": "68bb7696253e",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "what's a monopsony",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A monopsony is a market with only one buyer, the mirror image of a monopoly. That single buyer has the power to push prices down, because sellers have nowhere else to go. A classic example is a company town where one employer is the only place to work, so it can set wages low."
+  },
+  {
+   "jid": "9b21423b9dce",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Why almost never?",
+   "conversation": [
+    "PROFESSOR (heard): The Coase theorem says it doesn't matter who holds the property right, you'll get the efficient outcome either way. Lovely result. Almost never applies.",
+    "NATIVELY: The theorem's assumptions are the whole story. It needs zero transaction costs, full information, and no wealth effects, and it assumes costless enforcement of whatever bargain the parties strike. Once you add bargaining frictions, holdouts, or a large number of affected parties, the initial allocation starts to matter for whether you reach efficiency at all.\n\nSo the useful reading is that Coase tells you where to look: at the obstacles to bargaining, not at who was assigned the right. In practice that's why we reach for liability rules, regulation, or a market design instead of assuming the parties will just negotiate."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Because the conditions it needs are close to the opposite of how real disputes work. Zero transaction costs means the parties can find each other, bargain, and enforce a deal for free, and that's rare once you have many affected parties, holdouts who can demand a share, or any real cost to monitoring and enforcing the agreement. Add asymmetric information or wealth effects and the bargaining can fail outright, so the assignment of the right ends up determining the outcome after all. That's why it's a benchmark for where the obstacles are, not a prediction."
+  },
+  {
+   "jid": "2da8bb29b89d",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "explain the clock algorithm the way I'd need to trace it on the final, using the slide 11 string",
+   "conversation": [],
+   "evidence_ids": [
+    "HLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Clock keeps frames in a circle with one use bit each, set to 1 whenever the page is referenced. On a fault the hand sweeps forward: if the use bit is 1, clear it to 0 and move on; if it's 0, evict that page and load the new one there with its use bit set to 1. Empty frames get filled in order from frame 0, the hand starts at frame 0, and after any replacement the hand points to the frame after the one you just filled.\n\nTracing 7, 0, 1, 2, 0, 3, 0, 4, 2, 3 with 3 frames:\n\n1. 7, 0, 1 fill frames 0, 1, 2, all faults, use bits 1, hand ends at frame 0.\n2. 2 faults: hand at 0, use bit 1 so clear and advance; frame 1, clear and advance; frame 2, clear and advance; back to frame 0, now 0, evict 7, load 2, hand moves to frame 1.\n3. 0 hits, 3 faults: hand at 1, bit 1 clear and advance; frame 2, bit 1 clear and advance; frame 0, bit 1 clear and advance; frame 1, now 0, evict 0, load 3, hand to frame 2.\n4. 0 faults: hand at 2, bit 1 clear and advance; frame 0, bit 1 clear and advance; frame 1, bit 1 clear and advance; frame 2, now 0, evict 1, load 0, hand to frame 0.\n5. 4 faults: hand at 0, bit 1 clear and advance; frame 1, bit 1 clear and advance; frame 2, bit 1 clear and advance; frame 0, now 0, evict 2, load 4, hand to frame 1.\n6. 2 faults: hand at 1, bit 1 clear and advance; frame 2, bit 1 clear and advance; frame 0, bit 1 clear and advance; frame 1, now 0, evict 3, load 2, hand to frame 2.\n7. 3 faults: hand at 2, bit 1 clear and advance; frame 0, bit 1 clear and advance; frame 1, bit 1 clear and advance; frame 2, now 0, evict 0, load 3, hand to frame 0.\n\nThat's 7 faults, matching the slide. On the final, show the use bits and the hand position after every fault, and remember Clock approximates LRU on average, not on every string."
+  },
+  {
+   "jid": "934673b783ce",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Three things for Thursday. One, why does a catalyst not shift the equilibrium. Two, what does it do to the activation energy of the reverse reaction. And three, the one everyone gets wrong, why can't a catalyst make a non-spontaneous reaction go.",
+   "conversation": [],
+   "evidence_ids": [
+    "HLEC-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "A catalyst speeds up the forward and reverse reactions equally, so both rates rise by the same factor and the ratio between them stays put. That ratio is the equilibrium constant, so the position doesn't move. It lowers the activation energy of the reverse reaction by exactly as much as the forward one, since it stabilises the same transition state from both sides. And it can't drive a non-spontaneous reaction because it changes only the rate, not the free energy. If ΔG is positive, no catalyst changes that sign."
+  },
+  {
+   "jid": "87f5458ffc07",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "give me a real-world example of opportunity cost that isn't about pizza or movies",
+   "conversation": [],
+   "evidence_ids": [
+    "HLEC-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Opportunity cost is the value of the next best thing you gave up when you made a choice. A real example: a software engineer takes a job at a startup for a lower salary but gets equity. The opportunity cost isn't just the higher salary they turned down at a bigger company, it's also the stable paycheck and benefits they could have had during those years. If the startup fails, that forgone salary is the real cost of the choice, even though no money ever left their pocket.\n\nAnother one: a city decides to build a new highway on a plot of land. The opportunity cost includes not just the construction budget, but the housing or park that land could have become. The money and the land both had alternative uses, and the best one you gave up is the true cost.\n\nThe key idea is that opportunity cost is always about the **next best alternative**, not every alternative, and it exists even when no cash changes hands."
+  },
+  {
+   "jid": "4019bfdd1417",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "A p-value is not the probability that the null hypothesis is true. I cannot stress this enough. Something like half of all published papers get this wrong.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Right, the p-value is the probability of seeing data at least as extreme as yours, assuming the null hypothesis is true. So it's a statement about the data given the null, not about the null given the data. The confusion is that those two conditionals feel like they should be the same, but they're not, which is why the misinterpretation is so common."
+  },
+  {
+   "jid": "d0fd8057349e",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And before anyone asks, yes, taxes and imports change that number, and real-world estimates come in a lot lower than what you just wrote. Figure out why on both counts, and what the multiplier becomes with a twenty-five percent income tax.",
+   "conversation": [
+    "PROFESSOR (heard): If the marginal propensity to consume is point eight, then the spending multiplier follows immediately. Write that down.",
+    "NATIVELY: The spending multiplier is 1 divided by (1 minus the marginal propensity to consume). With an MPC of 0.8, that's 1 / 0.2, so the multiplier is **5**. The intuition: each round of spending becomes income that gets partly re-spent, and the 0.8 fraction keeps the chain going until it sums to five times the initial change.",
+    "PROFESSOR (heard): Why?",
+    "NATIVELY: The \"why\" is the geometric series. The first round of new spending is the initial change itself. The people who receive it save 20% and spend 80%, so the second round is 0.8 times the first. The third is 0.8 times that, and so on.\n\nSo total change equals 1 + 0.8 + 0.8² + 0.8³ and onward. That sum equals 1 / (1 − 0.8), which is 5. The formula isn't a rule to memorize, it's just what an infinite chain of re-spending adds up to when each round keeps 80% of the last."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Taxes and imports both leak spending out of the domestic re-spending chain, so each round keeps less than 80% and the series converges to a smaller total.\n\nWith a 25% income tax, households only spend 0.8 of what's left after tax, so the effective MPC becomes 0.8 × 0.75 = 0.6. The multiplier is then 1 / (1 − 0.6) = 1 / 0.4, which is **2.5**.\n\nImports work the same way: if a fraction of each round goes to foreign goods, that fraction never becomes domestic income, so it shrinks the multiplier too. Real-world estimates land lower still because prices rise, capacity fills, and people save more when the spending is temporary, all of which cut the actual re-spending below the textbook chain."
+  },
+  {
+   "jid": "4bd0ad177f32",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Why?",
+   "conversation": [
+    "PROFESSOR (heard): If the marginal propensity to consume is point eight, then the spending multiplier follows immediately. Write that down.",
+    "NATIVELY: The spending multiplier is 1 divided by (1 minus the marginal propensity to consume). With an MPC of 0.8, that's 1 / 0.2, so the multiplier is **5**. The intuition: each round of spending becomes income that gets partly re-spent, and the 0.8 fraction keeps the chain going until it sums to five times the initial change."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The \"why\" is the geometric series. The first round of new spending is the initial change itself. The people who receive it save 20% and spend 80%, so the second round is 0.8 times the first. The third is 0.8 times that, and so on.\n\nSo total change equals 1 + 0.8 + 0.8² + 0.8³ and onward. That sum equals 1 / (1 − 0.8), which is 5. The formula isn't a rule to memorize, it's just what an infinite chain of re-spending adds up to when each round keeps 80% of the last."
+  },
+  {
+   "jid": "7a0b3921d3c5",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "when exactly is midterm 2, what does it cover, and what am I allowed to bring",
+   "conversation": [],
+   "evidence_ids": [
+    "HLEC-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The notes conflict on the date: one part says Thursday Oct 22, another says Tuesday Oct 24, 90 minutes, same room. Coverage is Lectures 6 through 9, though the TA reportedly said anything through lecture 10 is fair game. You can bring one single-sided formula sheet, typed is fine, plus a calculator, graphing probably okay. I'd confirm the date with the instructor."
+  }
+ ]
+}

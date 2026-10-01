@@ -1,0 +1,1292 @@
+{
+  "id": "SALES-DISC-L",
+  "category": "sales",
+  "natively_mode": "sales",
+  "length_bucket": "long",
+  "speakers": [
+    {
+      "label": "S0",
+      "shown_to_model_as": "Me",
+      "name": "Dana Whitfield",
+      "role": "Account Executive",
+      "org": "Routewell"
+    },
+    {
+      "label": "S1",
+      "shown_to_model_as": "Speaker 1",
+      "name": "Priya Raman",
+      "role": "VP of Customer Operations (champion)",
+      "org": "Harbourline Logistics"
+    },
+    {
+      "label": "S2",
+      "shown_to_model_as": "Speaker 2",
+      "name": "Jon Okafor",
+      "role": "IT and Security Lead",
+      "org": "Harbourline Logistics"
+    },
+    {
+      "label": "S3",
+      "shown_to_model_as": "Speaker 3",
+      "name": "Joan Petrakis",
+      "role": "Senior Finance Manager (FP&A)",
+      "org": "Harbourline Logistics"
+    },
+    {
+      "label": "S4",
+      "shown_to_model_as": "Speaker 4",
+      "name": "Marcus Lindqvist",
+      "role": "Sales Engineer",
+      "org": "Routewell"
+    }
+  ],
+  "context": "A B2B discovery call in which Routewell, a vendor of an AI-assisted customer-support ticket triage and routing platform, meets Harbourline Logistics, a mid-size e-commerce fulfillment and last-mile logistics company. The Routewell account executive (the user) and sales engineer explore Harbourline's current Zendesk/Salesforce/in-house routing setup, requirements, budget and approval process, with the customer's VP of Customer Operations, IT/security lead and, later, a finance manager.",
+  "facts": [
+    {
+      "id": "F01",
+      "type": "number",
+      "importance": "critical",
+      "statement": "Harbourline's budget for the project is $50,000 for year one, covering software plus implementation; it sits in Priya's customer operations budget.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        53,
+        57
+      ],
+      "notes": null
+    },
+    {
+      "id": "F02",
+      "type": "number",
+      "importance": "critical",
+      "statement": "The seat count is 140 agents (seasonal agents were converted to permanent in March); pricing should be based on 140 seats.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        284,
+        285
+      ],
+      "notes": "supersedes the 120-agent figure stated early (C01)"
+    },
+    {
+      "id": "F03",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "Any Harbourline software purchase over $40,000 in year-one total contract value (including implementation fees) requires CFO approval.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        289
+      ],
+      "notes": null
+    },
+    {
+      "id": "F04",
+      "type": "person",
+      "importance": "critical",
+      "statement": "Greg Hale, Harbourline's CFO, is the actual decision maker / economic buyer for this deal; Priya only recommends.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        294,
+        295
+      ],
+      "notes": null
+    },
+    {
+      "id": "F05",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "CFO approval goes through the Capital and Vendor Review Committee, chaired by Greg, which meets on the first Tuesday of every month; the business case must be submitted at least five business days before the meeting.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        298,
+        299
+      ],
+      "notes": null
+    },
+    {
+      "id": "F06",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "The target is the Tuesday June 1 committee meeting, with the business case due Monday May 24; the following meeting (July 6) would be too late for the go-live and the notice date.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        303,
+        425
+      ],
+      "notes": "joined by Joan (finance)"
+    },
+    {
+      "id": "F07",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "The incumbent Queuewise contract ends on August 31 (a two-year renewal signed September 1), not December 31 as Priya believed.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        413,
+        415
+      ],
+      "notes": "supersedes the December 31 belief (C04)"
+    },
+    {
+      "id": "F08",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "Go-live moved from Q4 to Q3: target go-live is Monday, August 16, giving two weeks of overlap before Queuewise ends on August 31.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        420,
+        422
+      ],
+      "notes": "supersedes Q4 / October 15 target (C03)"
+    },
+    {
+      "id": "F09",
+      "type": "timeline",
+      "importance": "critical",
+      "statement": "The Queuewise contract requires 90 days' written notice of non-renewal or it auto-renews for a full year, so notice must go out by June 2 (the day after the committee).",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        417
+      ],
+      "notes": null
+    },
+    {
+      "id": "F10",
+      "type": "decision",
+      "importance": "critical",
+      "statement": "Instead of a live pilot, the parties agreed to a scoped proof of concept using anonymized historical resolved tickets loaded into an isolated EU-region sandbox, measuring routing accuracy against where tickets actually ended up.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        221,
+        228
+      ],
+      "notes": null
+    },
+    {
+      "id": "F11",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "The proof of concept scope is 10,000 resolved tickets from a normal (non-peak) month, in English and German.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        231,
+        235
+      ],
+      "notes": null
+    },
+    {
+      "id": "F12",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "POC success criterion: at least 85% routing accuracy on first assignment across the 10,000 tickets (versus about 82% correct today with the sorter).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        236,
+        237
+      ],
+      "notes": null
+    },
+    {
+      "id": "F13",
+      "type": "logistics",
+      "importance": "critical",
+      "statement": "The next meeting (proposal and integration plan review, with Joan; Greg will not attend) is Thursday, May 6 at 3 PM Eastern.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        361,
+        375,
+        449
+      ],
+      "notes": "moved from Tuesday May 4 at 2 PM Eastern (C05)"
+    },
+    {
+      "id": "F14",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "EU consumer and merchant data handled by Rotterdam must stay in the EU (non-negotiable per Harbourline's DPO); Routewell would process and store EU tickets, including the classification model and backups, in its Frankfurt EU region.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        178,
+        179,
+        181
+      ],
+      "notes": null
+    },
+    {
+      "id": "F15",
+      "type": "requirement",
+      "importance": "critical",
+      "statement": "Jon requires a SOC 2 Type II report; Routewell has one covering the twelve months ending January 31.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        192,
+        193
+      ],
+      "notes": null
+    },
+    {
+      "id": "F16",
+      "type": "objection",
+      "importance": "critical",
+      "statement": "Jon's objection: Harbourline's vendor security review usually takes six to eight weeks (a roughly 180-question questionnaire, SOC 2 review, DPO review of the DPA, then legal).",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        198,
+        200
+      ],
+      "notes": null
+    },
+    {
+      "id": "F17",
+      "type": "number",
+      "importance": "critical",
+      "statement": "Routewell pricing: Professional tier lists at $45 per agent per month; Dana offered $39 per agent per month, which at 140 seats is $65,520 a year, plus a one-time $9,500 implementation fee.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        267,
+        286
+      ],
+      "notes": "supersedes the $56,160 figure computed on 120 seats (C07)"
+    },
+    {
+      "id": "F18",
+      "type": "entity",
+      "importance": "critical",
+      "statement": "Harbourline is on Zendesk Support Professional, not Zendesk Suite (Suite was judged too expensive two years ago).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        104
+      ],
+      "notes": "corrects Dana's false assumption (C02)"
+    },
+    {
+      "id": "F19",
+      "type": "entity",
+      "importance": "critical",
+      "statement": "Harbourline is also evaluating competitor Deflekt, which quoted about $31 per agent per month but has no live EU region, which Jon treats as a hard blocker for now.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        62,
+        64,
+        393
+      ],
+      "notes": null
+    },
+    {
+      "id": "F20",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Dana will send a revised pricing proposal to Joan (copying Priya) based on 140 seats, including the $39 Professional price, an option with SCIM, the implementation fee and a clearly labelled two-year option.",
+      "owner": "Dana Whitfield",
+      "deadline": "Friday, April 30",
+      "position": "late",
+      "lines": [
+        327,
+        335
+      ],
+      "notes": null
+    },
+    {
+      "id": "F21",
+      "type": "action_item",
+      "importance": "critical",
+      "statement": "Marcus will send Jon the SOC 2 Type II report, the pen test executive summary and Routewell's sub-processor list, once the NDA is signed.",
+      "owner": "Marcus Lindqvist",
+      "deadline": "Wednesday, April 28 (once NDA signed)",
+      "position": "middle",
+      "lines": [
+        212,
+        337
+      ],
+      "notes": null
+    },
+    {
+      "id": "F22",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Jon will send Harbourline's mutual NDA today (before end of day); the owner changed from Priya because legal routes vendor NDAs through Jon.",
+      "owner": "Jon Okafor",
+      "deadline": "today, before end of day",
+      "position": "late",
+      "lines": [
+        345,
+        346
+      ],
+      "notes": "owner changed from Priya (C08)"
+    },
+    {
+      "id": "F23",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Jon will send Harbourline's security questionnaire to Routewell.",
+      "owner": "Jon Okafor",
+      "deadline": "Thursday, April 29",
+      "position": "middle",
+      "lines": [
+        210,
+        347
+      ],
+      "notes": null
+    },
+    {
+      "id": "F24",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Tomas, Priya's ops analyst, will export 10,000 anonymized resolved tickets (English and German) for the proof of concept; the owner changed from Jon's team because they are overloaded.",
+      "owner": "Tomas",
+      "deadline": "Friday, May 7",
+      "position": "middle",
+      "lines": [
+        243,
+        246,
+        349
+      ],
+      "notes": "owner changed from Jon (C09)"
+    },
+    {
+      "id": "F25",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Dana and Marcus will produce an integration plan with tasks and estimated hours for each side, including the Salesforce connected-app work with Renata.",
+      "owner": "Dana Whitfield and Marcus Lindqvist",
+      "deadline": "Tuesday, May 4",
+      "position": "late",
+      "lines": [
+        339,
+        448
+      ],
+      "notes": null
+    },
+    {
+      "id": "F26",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Joan will send Dana the committee's business case template and an example of a business case approved last year.",
+      "owner": "Joan Petrakis",
+      "deadline": "Monday, May 3",
+      "position": "late",
+      "lines": [
+        352
+      ],
+      "notes": null
+    },
+    {
+      "id": "F27",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Priya and Dana will co-write the business case for the June 1 committee (due May 24), with Joan helping on the three-year cost section.",
+      "owner": "Priya Raman and Dana Whitfield (Joan helping)",
+      "deadline": "Monday, May 24",
+      "position": "late",
+      "lines": [
+        353,
+        355
+      ],
+      "notes": null
+    },
+    {
+      "id": "F28",
+      "type": "action_item",
+      "importance": "important",
+      "statement": "Joan will check with procurement on the Queuewise notice terms (format, signatory, and whether a short extension is possible instead of a full-year renewal).",
+      "owner": "Joan Petrakis",
+      "deadline": "Friday, April 30",
+      "position": "late",
+      "lines": [
+        437
+      ],
+      "notes": null
+    },
+    {
+      "id": "F29",
+      "type": "commitment",
+      "importance": "important",
+      "statement": "Dana committed that Routewell will return the completed security questionnaire within five business days of receiving it.",
+      "owner": "Dana Whitfield",
+      "deadline": "five business days after receipt",
+      "position": "late",
+      "lines": [
+        430
+      ],
+      "notes": null
+    },
+    {
+      "id": "F30",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "Compressed POC schedule: data loaded Monday May 10, POC runs through Thursday May 20, readout Friday May 21 (Joan to attend), leaving time to put results into the May 24 business case.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        433,
+        436
+      ],
+      "notes": "supersedes the typical three-week duration (C06)"
+    },
+    {
+      "id": "F31",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "Jon's security review now needs to be done, or at least have no blocking findings, by May 24 (about four weeks away); Jon will prioritize it but will not promise.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        427,
+        429
+      ],
+      "notes": "implicit supersession of the usual six-to-eight-week review (C10)"
+    },
+    {
+      "id": "F32",
+      "type": "risk",
+      "importance": "important",
+      "statement": "Unresolved risk: if Greg does not approve on June 1, Harbourline either renews Queuewise for a year or has nothing on September 1; whether to send the Queuewise notice before knowing Greg's answer is undecided.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        440,
+        442
+      ],
+      "notes": null
+    },
+    {
+      "id": "F33",
+      "type": "timeline",
+      "importance": "important",
+      "statement": "Routewell implementation takes six to eight weeks from signature to go-live; legal contracting after committee approval takes about two weeks, putting signature around mid June.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        305,
+        306,
+        309
+      ],
+      "notes": null
+    },
+    {
+      "id": "F34",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "The committee business case must include a three-year total cost, at least two competing quotes, and IT security sign-off or Jon's written confirmation of no blocking findings; Deflekt and a Queuewise-renewal/do-nothing option will serve as the comparisons.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        299,
+        312,
+        313
+      ],
+      "notes": null
+    },
+    {
+      "id": "F35",
+      "type": "preference",
+      "importance": "important",
+      "statement": "Greg generally prefers one-year terms with new vendors.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        316
+      ],
+      "notes": null
+    },
+    {
+      "id": "F36",
+      "type": "number",
+      "importance": "important",
+      "statement": "Priya's VP approval limit is $40,000 (lowered in a January policy change), not $50,000 as she believed.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        291
+      ],
+      "notes": "supersedes Priya's belief (C11)"
+    },
+    {
+      "id": "F37",
+      "type": "decision",
+      "importance": "important",
+      "statement": "Joan and Priya decided not to phase the rollout (e.g. 100 seats); they will take the full 140-seat scope to Greg.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        324
+      ],
+      "notes": null
+    },
+    {
+      "id": "F38",
+      "type": "number",
+      "importance": "important",
+      "statement": "Ticket volume is about 38,000 tickets per month normally and about 55,000 at peak in November and December.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        74
+      ],
+      "notes": null
+    },
+    {
+      "id": "F39",
+      "type": "pain_point",
+      "importance": "important",
+      "statement": "About 18% of tickets were misrouted on first assignment in a February sample, and a misroute adds about six hours on average.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        40,
+        42
+      ],
+      "notes": null
+    },
+    {
+      "id": "F40",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "SLAs: Pro merchants get first response within 1 hour; standard merchants and consumers within 4 business hours; internal resolution target is 48 hours.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        96
+      ],
+      "notes": null
+    },
+    {
+      "id": "F41",
+      "type": "number",
+      "importance": "important",
+      "statement": "Harbourline meets the Pro one-hour SLA about 71% of the time (and paid service credits twice this year); Priya's target is 90% or better by year end.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        98,
+        100
+      ],
+      "notes": null
+    },
+    {
+      "id": "F42",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "Harbourline supports four languages: English (~70%), German (~12%), Dutch (~9%) and Spanish (~9%).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        91
+      ],
+      "notes": null
+    },
+    {
+      "id": "F43",
+      "type": "entity",
+      "importance": "important",
+      "statement": "Routing today is done by 'the sorter', an in-house Python cron script (every five minutes, ~340 keyword rules) written by an engineer who left two years ago; it reads Queuewise tags and looks up merchant tier in Salesforce.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        78,
+        81,
+        82
+      ],
+      "notes": null
+    },
+    {
+      "id": "F44",
+      "type": "entity",
+      "importance": "important",
+      "statement": "Incumbent vendor Queuewise provides auto-tagging and language detection (not routing) and costs about $22,000 a year.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        48,
+        276
+      ],
+      "notes": null
+    },
+    {
+      "id": "F45",
+      "type": "background",
+      "importance": "important",
+      "statement": "Harbourline does fulfillment and last-mile logistics for online retailers, supporting both merchants and their end consumers, with its support agents split between Columbus and a Rotterdam site that handles most of Europe.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        32,
+        37
+      ],
+      "notes": null
+    },
+    {
+      "id": "F46",
+      "type": "objection",
+      "importance": "important",
+      "statement": "Integration effort objection: Jon's IT team is only two engineers handling all internal tooling; the Salesforce admin, Renata, sits in sales ops and is busy with a CPQ rollout.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        86,
+        137
+      ],
+      "notes": null
+    },
+    {
+      "id": "F47",
+      "type": "objection",
+      "importance": "important",
+      "statement": "Change management objection: agents distrust automated routing after the sorter, and the Rotterdam team is especially skeptical after a previous workforce management tool felt like surveillance.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        145,
+        147
+      ],
+      "notes": null
+    },
+    {
+      "id": "F48",
+      "type": "risk",
+      "importance": "important",
+      "statement": "The Rotterdam works council (ondernemingsraad) may need to be consulted because override data is per agent; a previous consultation took four to six weeks; no owner was assigned to check with HR in Rotterdam.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        154,
+        156,
+        157,
+        358
+      ],
+      "notes": null
+    },
+    {
+      "id": "F49",
+      "type": "requirement",
+      "importance": "important",
+      "statement": "Harbourline requires SAML SSO through Okta for all users with no local passwords; Routewell supports this on all plans with SSO enforcement.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        174,
+        175
+      ],
+      "notes": null
+    },
+    {
+      "id": "F50",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "SCIM provisioning (wanted by Jon for offboarding seasonal staff) is only included in Routewell's Enterprise tier, which lists at $52 per agent per month.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        175,
+        176,
+        273
+      ],
+      "notes": null
+    },
+    {
+      "id": "F51",
+      "type": "caveat",
+      "importance": "important",
+      "statement": "Routewell's optional ticket-summary feature uses an LLM sub-processor that processes in the US by default; if disabled for the EU nothing leaves the EU, and US-side summaries are parked until after go-live for separate review.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        183,
+        395
+      ],
+      "notes": null
+    },
+    {
+      "id": "F52",
+      "type": "background",
+      "importance": "important",
+      "statement": "Harbourline has a support tooling change freeze from November 1 through January 10, which drove the original October 15 go-live target.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        67
+      ],
+      "notes": null
+    },
+    {
+      "id": "F53",
+      "type": "pain_point",
+      "importance": "important",
+      "statement": "Harbourline's 11 team leads each spend about an hour a day manually moving tickets.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        164,
+        166
+      ],
+      "notes": null
+    },
+    {
+      "id": "F54",
+      "type": "number",
+      "importance": "minor",
+      "statement": "Channel mix: email about 62%, chat about 25%, web form about 13%.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        72
+      ],
+      "notes": null
+    },
+    {
+      "id": "F55",
+      "type": "number",
+      "importance": "minor",
+      "statement": "Tickets are routed into 14 queues (by region, language, merchant tier, plus special queues like claims and carrier escalations).",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        89
+      ],
+      "notes": null
+    },
+    {
+      "id": "F56",
+      "type": "number",
+      "importance": "minor",
+      "statement": "About 300 Pro merchant accounts have a contractual SLA with Harbourline.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        94
+      ],
+      "notes": null
+    },
+    {
+      "id": "F57",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "Routewell routes below a confidence threshold (e.g. 0.7) to a human triage queue and lets agents override routing with one click, feeding the model; logistics customers typically auto-route 60 to 70% at launch.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        149,
+        151
+      ],
+      "notes": null
+    },
+    {
+      "id": "F58",
+      "type": "concept",
+      "importance": "minor",
+      "statement": "Routewell's Salesforce connector matches the requester's email domain to the account and falls back to the order or tracking number for personal email addresses, which caused half of the Pro SLA misses.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        129,
+        130
+      ],
+      "notes": null
+    },
+    {
+      "id": "F59",
+      "type": "number",
+      "importance": "minor",
+      "statement": "A two-year term could bring the per-agent price to around $35; it will be included only as an option.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        317
+      ],
+      "notes": null
+    },
+    {
+      "id": "F60",
+      "type": "caveat",
+      "importance": "minor",
+      "statement": "Routewell does an annual third-party penetration test (last completed in February) and expects ISO 27001 certification in Q4.",
+      "owner": null,
+      "deadline": null,
+      "position": "middle",
+      "lines": [
+        193,
+        195
+      ],
+      "notes": null
+    },
+    {
+      "id": "F61",
+      "type": "caveat",
+      "importance": "minor",
+      "statement": "Routewell deletes customer data 90 days after contract end by default; Jon prefers 30 days and will raise it in the DPA comments.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        402,
+        403
+      ],
+      "notes": null
+    },
+    {
+      "id": "F62",
+      "type": "caveat",
+      "importance": "minor",
+      "statement": "Routewell's model uses attachment metadata but does not analyze image content; image understanding is not generally available.",
+      "owner": null,
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        406
+      ],
+      "notes": null
+    },
+    {
+      "id": "F63",
+      "type": "open_question",
+      "importance": "minor",
+      "statement": "French support may be needed next year if a hub near Lyon opens, but that is unconfirmed and not being planned around.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        92,
+        399
+      ],
+      "notes": null
+    },
+    {
+      "id": "F64",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Jon will ask Renata whether she has bandwidth for a Salesforce working session, with no date committed.",
+      "owner": "Jon Okafor",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        357
+      ],
+      "notes": null
+    },
+    {
+      "id": "F65",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Joan will find out whether Greg wants a short call with Routewell before the committee.",
+      "owner": "Joan Petrakis",
+      "deadline": null,
+      "position": "late",
+      "lines": [
+        446
+      ],
+      "notes": null
+    },
+    {
+      "id": "F66",
+      "type": "action_item",
+      "importance": "minor",
+      "statement": "Dana will share Routewell's change management playbook and agent-facing materials along with the proposal.",
+      "owner": "Dana Whitfield",
+      "deadline": "with the proposal (Friday, April 30)",
+      "position": "late",
+      "lines": [
+        341
+      ],
+      "notes": null
+    },
+    {
+      "id": "F67",
+      "type": "person",
+      "importance": "minor",
+      "statement": "Priya Raman (VP of Customer Operations) pitched the project to leadership and is its internal champion.",
+      "owner": null,
+      "deadline": null,
+      "position": "early",
+      "lines": [
+        57
+      ],
+      "notes": null
+    }
+  ],
+  "corrections": [
+    {
+      "id": "C01",
+      "what": "Agent/seat count",
+      "initial_value": "120 agents",
+      "initial_line": 37,
+      "final_value": "140 agents/seats",
+      "final_line": 284,
+      "explicit": true,
+      "fact_id": "F02"
+    },
+    {
+      "id": "C02",
+      "what": "Harbourline's Zendesk plan",
+      "initial_value": "Zendesk Suite (Dana's assumption)",
+      "initial_line": 49,
+      "final_value": "Zendesk Support Professional",
+      "final_line": 104,
+      "explicit": true,
+      "fact_id": "F18"
+    },
+    {
+      "id": "C03",
+      "what": "Go-live target",
+      "initial_value": "Q4, around October 15",
+      "initial_line": 68,
+      "final_value": "Q3, Monday August 16",
+      "final_line": 422,
+      "explicit": true,
+      "fact_id": "F08"
+    },
+    {
+      "id": "C04",
+      "what": "Queuewise contract end date",
+      "initial_value": "December 31",
+      "initial_line": 69,
+      "final_value": "August 31",
+      "final_line": 413,
+      "explicit": true,
+      "fact_id": "F07"
+    },
+    {
+      "id": "C05",
+      "what": "Next meeting",
+      "initial_value": "Tuesday, May 4 at 2 PM Eastern",
+      "initial_line": 366,
+      "final_value": "Thursday, May 6 at 3 PM Eastern",
+      "final_line": 375,
+      "explicit": true,
+      "fact_id": "F13"
+    },
+    {
+      "id": "C06",
+      "what": "Proof of concept duration",
+      "initial_value": "about three weeks",
+      "initial_line": 231,
+      "final_value": "compressed: May 10 to May 20, readout May 21",
+      "final_line": 433,
+      "explicit": true,
+      "fact_id": "F30"
+    },
+    {
+      "id": "C07",
+      "what": "Annual subscription price",
+      "initial_value": "$56,160 a year (120 agents at $39)",
+      "initial_line": 268,
+      "final_value": "$65,520 a year (140 agents at $39)",
+      "final_line": 286,
+      "explicit": false,
+      "fact_id": "F17"
+    },
+    {
+      "id": "C08",
+      "what": "Owner of sending the mutual NDA",
+      "initial_value": "Priya (via legal)",
+      "initial_line": 208,
+      "final_value": "Jon",
+      "final_line": 345,
+      "explicit": true,
+      "fact_id": "F22"
+    },
+    {
+      "id": "C09",
+      "what": "Owner of the historical ticket export",
+      "initial_value": "Jon's engineering team",
+      "initial_line": 240,
+      "final_value": "Tomas (Priya's ops analyst)",
+      "final_line": 243,
+      "explicit": true,
+      "fact_id": "F24"
+    },
+    {
+      "id": "C10",
+      "what": "Security review timeline",
+      "initial_value": "usually six to eight weeks",
+      "initial_line": 198,
+      "final_value": "must be done or have no blocking findings by May 24, about four weeks",
+      "final_line": 427,
+      "explicit": false,
+      "fact_id": "F31"
+    },
+    {
+      "id": "C11",
+      "what": "Priya's approval authority",
+      "initial_value": "Priya believed she could approve up to $50,000",
+      "initial_line": 288,
+      "final_value": "VP approval limit is $40,000; anything over goes to CFO Greg",
+      "final_line": 291,
+      "explicit": true,
+      "fact_id": "F36"
+    }
+  ],
+  "not_decisions": [
+    {
+      "statement": "A 60-day live pilot with one team of about 25 Columbus agents on real tickets (rejected in favour of the scoped proof of concept)",
+      "lines": [
+        214,
+        216
+      ]
+    },
+    {
+      "statement": "A two-year term at around $35 per agent per month (to be included as an option only; Joan expects Greg to prefer one year)",
+      "lines": [
+        317,
+        318
+      ]
+    },
+    {
+      "statement": "Starting smaller with 100 seats in year one (rejected; full 140-seat scope goes to Greg)",
+      "lines": [
+        320,
+        324
+      ]
+    },
+    {
+      "statement": "Dropping Spanish and adding Dutch to the proof of concept (not decided; POC stays English and German for now)",
+      "lines": [
+        233,
+        234
+      ]
+    },
+    {
+      "statement": "Enabling LLM ticket summaries for the US side (parked until after go-live, reviewed separately)",
+      "lines": [
+        190,
+        395
+      ]
+    },
+    {
+      "statement": "Including SCIM / Enterprise tier in the deal (Dana will present options; nothing agreed)",
+      "lines": [
+        177
+      ]
+    },
+    {
+      "statement": "Configuring override reporting at team level rather than per agent to affect the works council question (suggestion only; for HR and the council to decide)",
+      "lines": [
+        161
+      ]
+    },
+    {
+      "statement": "A Salesforce working session directly with Renata (proposed; depends on her bandwidth)",
+      "lines": [
+        136,
+        357
+      ]
+    },
+    {
+      "statement": "Greg joining the follow-up meeting (Joan says he won't at this stage)",
+      "lines": [
+        361
+      ]
+    },
+    {
+      "statement": "A short Queuewise extension instead of a full-year renewal (only to be investigated by Joan)",
+      "lines": [
+        437
+      ]
+    },
+    {
+      "statement": "Sending the Queuewise non-renewal notice before Greg's approval is known (explicitly not decided)",
+      "lines": [
+        442
+      ]
+    }
+  ],
+  "distractors": [
+    {
+      "statement": "Storm and power outage in Columbus; Priya's flooded basement; rain in Denver",
+      "lines": [
+        12,
+        14
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Columbus Crew game ended one-all with a stoppage-time equalizer; Jon is a season ticket holder",
+      "lines": [
+        22,
+        26
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Jon's barking beagle / 'quality assurance' joke",
+      "lines": [
+        248,
+        251
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Stockholm daylight and Rotterdam offsite herring / rain small talk",
+      "lines": [
+        117,
+        380
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Dana's assumption that Harbourline is on Zendesk Suite",
+      "lines": [
+        49
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "The belief that the Queuewise contract ends December 31",
+      "lines": [
+        69,
+        387
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "Priya's belief that she could approve up to $50,000",
+      "lines": [
+        288,
+        290
+      ],
+      "why": "false assumption later corrected"
+    },
+    {
+      "statement": "The 120-agent seat count and the $56,160 price computed on it",
+      "lines": [
+        37,
+        268
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Q4 / October 15 go-live target",
+      "lines": [
+        68
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Tuesday May 4 at 2 PM Eastern meeting slot (May 4 remains the integration-plan deadline)",
+      "lines": [
+        366
+      ],
+      "why": "superseded value"
+    },
+    {
+      "statement": "Dana addressing the pricing proposal to Jon instead of Joan (Jon/Joan name mix-up)",
+      "lines": [
+        328,
+        329
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "100 seats at $39 = $46,800 a year (hypothetical phased option)",
+      "lines": [
+        322
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "Demo replay figure of 212 tickets routed differently (demo environment, not Harbourline data)",
+      "lines": [
+        258
+      ],
+      "why": "irrelevant"
+    },
+    {
+      "statement": "90-day default data deletion window, not to be confused with the 90-day Queuewise notice clause",
+      "lines": [
+        402
+      ],
+      "why": "irrelevant"
+    }
+  ],
+  "open_questions_at_end": [
+    "Whether SCIM/Enterprise tier is included and at what price (Dana to present options)",
+    "Whether LLM ticket summaries will be used on the US side (parked until after go-live)",
+    "Whether Dutch is added to the proof of concept",
+    "Whether the Rotterdam works council must be consulted, and who at Harbourline owns that",
+    "Whether Renata has bandwidth for the Salesforce working session",
+    "What happens if Greg does not approve on June 1 (renew Queuewise for a year vs nothing on September 1), and whether to send the Queuewise notice before approval",
+    "Whether a short Queuewise extension is possible instead of a full-year auto-renewal",
+    "Whether Greg wants a call with Routewell before the committee",
+    "Whether Jon's security review can reach no blocking findings by May 24",
+    "Whether French support will be needed next year (Lyon hub unconfirmed)"
+  ],
+  "summary_must_include": [
+    "Budget of $50,000 for year one (F01)",
+    "Seat count is 140 (corrected from 120) and pricing $39/agent/month = $65,520/yr + $9,500 implementation (F02, F17)",
+    "Purchases over $40,000 need CFO approval; CFO Greg Hale is the economic buyer (F03, F04)",
+    "Approval via Capital and Vendor Review Committee: June 1 meeting, business case due May 24 (F05, F06)",
+    "Queuewise contract actually ends August 31 with notice due June 2 (F07, F09)",
+    "Go-live moved from Q4 to Q3, target August 16 (F08)",
+    "Scoped POC on 10,000 historical English/German tickets instead of a live pilot, 85% accuracy bar (F10, F11, F12)",
+    "Technical requirements: Zendesk Support Professional, EU data residency (Frankfurt), SOC 2 Type II, SAML SSO (F18, F14, F15, F49)",
+    "Objections: price vs budget, 6-8 week security review, integration effort, change management (F16, F46, F47)",
+    "Competitor Deflekt ($31, no EU region) and incumbent Queuewise (F19, F44)",
+    "Action items with owners/dates: Dana proposal Apr 30, Marcus security docs Apr 28, Jon NDA today + questionnaire Apr 29, Tomas export May 7 (F20, F21, F22, F24)",
+    "Next meeting Thursday May 6 at 3 PM Eastern (moved from May 4) (F13)"
+  ]
+}

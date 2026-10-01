@@ -40,38 +40,22 @@ function canonicalProfileSourceId(kind: 'resume' | 'jd' | 'fact'): string {
   return `psrc_${crypto.createHash('sha1').update(`__profile_okf__:${kind}`).digest('hex').slice(0, 16)}`;
 }
 
-/**
- * DERIVED profile facts (2026-08-02) — currently the résumé-based salary
- * estimate SalaryIntelligenceEngine computes on every résumé ingest.
+/*
+ * NO DERIVED PROFILE FACTS (2026-09-30).
  *
- * Why this closes a real hole: the planner emits PROFILE_FACT for questions
- * like "what is my expected salary", but the pool behind it was hardcoded
- * empty, so the turn resolved to zero evidence and answered
- * DOCUMENT_FACT_NOT_FOUND — about a number the app had already calculated and
- * written to its own log. The résumé genuinely does not state an expected
- * salary, so RESUME can never answer it; a derived fact is the correct source.
+ * From 2026-08-02 this module served the résumé-based salary ESTIMATE
+ * (SalaryIntelligenceEngine) as a PROFILE_FACT source, so "what is my expected
+ * salary" had evidence. That was the wrong fix for a real gap: the figure is a
+ * model's MARKET estimate for the role and location, not the candidate's
+ * expectation, and PROFILE_FACT is an authoritative source for claims about the
+ * user (source-authority-policy USER_* claims). Served there, an LLM guess was
+ * spoken in the first person as the user's own number — and it could be the
+ * previous résumé's guess, because the estimate cache is unkeyed.
  *
- * Best-effort and additive: any failure yields no fact source, exactly as
- * before. Never throws into a live answer.
+ * PROFILE_FACT is reserved for facts the user stated or verified. None has a
+ * production store yet (profile_custom_notes is orphaned), so the pool is empty
+ * and a salary-expectation question is answered as unstated — which it is.
  */
-function collectDerivedFacts(orchestrator: unknown): { structured: Record<string, unknown>; versionId: string } | null {
-  try {
-    const getEstimate = (orchestrator as { getResumeSalaryEstimate?: () => unknown })?.getResumeSalaryEstimate;
-    if (typeof getEstimate !== 'function') return null;
-    const estimate = getEstimate.call(orchestrator) as Record<string, unknown> | null;
-    if (!estimate || typeof estimate !== 'object') return null;
-    if (typeof estimate.min !== 'number' || typeof estimate.max !== 'number') return null;
-
-    const structured = { salary_estimate: estimate };
-    // Version on the CONTENT of the estimate, not on wall-clock: re-deriving the
-    // same band must not invalidate evidence mid-conversation, while a genuinely
-    // new estimate (new résumé, new role) must.
-    const versionId = crypto.createHash('sha1')
-      .update(JSON.stringify([estimate.currency, estimate.min, estimate.max, estimate.confidence, estimate.role, estimate.location]))
-      .digest('hex').slice(0, 16);
-    return { structured, versionId };
-  } catch { return null; }
-}
 
 export interface CollectedProfileSources {
   docs: ProfileDocLike[];
@@ -116,6 +100,8 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
           title: String(c.title ?? ''),
           body: String(c.body ?? ''),
           approvalStatus: typeof c.approvalStatus === 'string' ? c.approvalStatus : undefined,
+          // Provenance travels so the port can refuse model-composed AOT cards.
+          generatedFrom: typeof c.generatedFrom === 'string' ? c.generatedFrom : undefined,
         }));
       resumeCards = toCards(builder.getProfilePack('resume'));
       jdCards = toCards(builder.getProfilePack('jd'));
@@ -151,36 +137,15 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
       resolved.push({ role: 'profile_job_description', id });
     }
 
-    // DERIVED facts last: they are the lowest-precedence pool, and a document
-    // that actually STATES a fact must always outrank a computed one.
-    const facts = collectDerivedFacts(orchestrator);
-    if (facts) {
-      const id = canonicalProfileSourceId('fact');
-      docs.push({
-        kind: 'fact',
-        sourceId: id,
-        versionId: facts.versionId,
-        fileName: 'Derived profile facts (Profile Intelligence)',
-        structured: facts.structured,
-        cards: [],
-        rawText: null,
-      });
-      resolved.push({ role: 'profile_fact', id });
-    }
 
     return {
       docs,
       counts: {
         profileResume: ctx.activeResume ? 1 : 0,
         profileJd: ctx.activeJD ? 1 : 0,
-        // DERIVED facts only (2026-08-02). profile_custom_notes still has no
-        // production accessor (orphaned v13→14 table), so USER_MOTIVATION —
-        // where RESUME is PROHIBITED — remains structurally unsupported and is
-        // correctly disclosed as unstated. What changed is that PROFILE_FACT is
-        // no longer unconditionally empty: the salary estimate the app already
-        // computes is now reachable, instead of the planner asking for a source
-        // that could never resolve.
-        profileFact: facts ? 1 : 0,
+        // No derived facts are served (2026-09-30): see the note above
+        // collectV3ProfileSources — a salary ESTIMATE is not a profile fact.
+        profileFact: 0,
       },
       resolved,
     };
@@ -191,4 +156,150 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
     try { console.warn('[V3] collectV3ProfileSources failed:', (err as Error)?.message ?? err); } catch { /* noop */ }
     return EMPTY;
   }
+}
+
+// ── Semantic arm for the profile documents' raw text ────────────────────────
+//
+// The V3 profile port ranks with BM25 only. Rather than build a second vector
+// stack, each profile document's RAW TEXT is indexed by the mode retriever as a
+// pseudo reference file — `profile:<kind>:<contentHash>` — so chunking, batched
+// embedding, embedding-space handling, stale-index detection, hybrid ranking and
+// reranking all come from the one place that already does them. The pseudo-files
+// are never rows in the reference-file table: no UI lists them, and they are not
+// counted as mode attachments.
+
+const PROFILE_FILE_PREFIX = 'profile:';
+const PROFILE_PSEUDO_MODE = { id: '__profile_raw__' };
+
+export interface ProfilePseudoFile { id: string; modeId: string; fileName: string; content: string; createdAt: string; docSourceId: string; kind: string }
+
+export function profilePseudoFiles(docs: ReadonlyArray<{ kind: string; sourceId: string; versionId: string; fileName: string; rawText?: string | null }>): ProfilePseudoFile[] {
+  return docs
+    .filter((d) => d.kind !== 'fact' && typeof d.rawText === 'string' && d.rawText.trim().length > 0)
+    .map((d) => ({
+      id: `${PROFILE_FILE_PREFIX}${d.kind}:${d.versionId}`, modeId: PROFILE_PSEUDO_MODE.id, fileName: d.fileName,
+      content: d.rawText as string, createdAt: '', docSourceId: d.sourceId, kind: d.kind,
+    }));
+}
+
+interface ProfileRawModesManager {
+  retrieveHybridRaw?: (mode: unknown, files: unknown[], opts: Record<string, unknown>) => Promise<{ chunks?: Array<Record<string, unknown>> } | null | undefined>;
+  indexReferenceFile?: (file: unknown) => Promise<void>;
+  pruneReferenceFileIndexesByPrefix?: (prefix: string, keepId: string) => number;
+}
+
+/**
+ * The function the profile port takes as `rawRetriever`. Null when there is no
+ * raw text or no retriever — the port then keeps its BM25 raw chunks.
+ */
+export function buildProfileRawRetriever(
+  modesManager: ProfileRawModesManager | null | undefined,
+  docs: Parameters<typeof profilePseudoFiles>[0],
+  opts: { tokenBudget: number; rerankSurface: 'live' | 'manual'; meetingActive?: () => boolean },
+): ((query: string, o: { topK: number; timeoutMs?: number }) => Promise<Array<{ sourceId: string; text: string; chunkIndex: number; score: number }>>) | null {
+  const files = profilePseudoFiles(docs);
+  if (!modesManager?.retrieveHybridRaw || files.length === 0) return null;
+  const docIdByFile = new Map(files.map((f) => [f.id, f.docSourceId]));
+  return async (query, o) => {
+    let meetingActive: boolean | undefined;
+    try { meetingActive = opts.meetingActive ? opts.meetingActive() === true : undefined; } catch { meetingActive = true; }
+    const res = await modesManager.retrieveHybridRaw!(PROFILE_PSEUDO_MODE, files, {
+      query, topK: o.topK, tokenBudget: opts.tokenBudget, allowRerank: true, rerankSurface: opts.rerankSurface,
+      forceDocumentGrounding: true, ...(meetingActive === undefined ? {} : { meetingActive }),
+      // The mode port forwards these (2026-09-10, after a measured 13.5 s stall); this binding did not.
+      ...(typeof o.timeoutMs === 'number' ? { timeoutMs: o.timeoutMs, queryEmbedRetryBudgetMs: o.timeoutMs } : {}),
+      // Unlike the mode port, this arm IS raced at the plan's timeout (the
+      // profile port's semantic-arm deadline), so a rerank whose own budget is
+      // longer can never be waited for. Without the deadline it started anyway
+      // and took the arm down with it: live 2026-09-27 (looking for work),
+      // "semantic arm exceeded 1200 ms" on 19 of 19 turns — every answer paid
+      // 1.2 s and got BM25 only. With it, the retriever skips a rerank that
+      // cannot fit and returns its first-stage ranking inside the budget.
+      ...(typeof o.timeoutMs === 'number' ? { rerankDeadlineMs: o.timeoutMs } : {}),
+    });
+    const out: Array<{ sourceId: string; text: string; chunkIndex: number; score: number }> = [];
+    for (const c of res?.chunks ?? []) {
+      const docId = docIdByFile.get(String(c.sourceId ?? ''));
+      if (!docId) continue;
+      // The retriever returns chunks in its FINAL order (rerank and rank fusion
+      // applied). `rerankScore` is on another scale — fusion caps it near 0.2 — so
+      // preferring it, as this did, pushed every reranked row under the port's
+      // relevance gate. The first-stage score is the comparable one; order is kept
+      // by never letting a later row score above an earlier one.
+      const native = Number(c.score ?? 0);
+      const prev = out.length ? out[out.length - 1].score : Number.POSITIVE_INFINITY;
+      out.push({ sourceId: docId, text: String(c.text ?? ''), chunkIndex: Number(c.chunkIndex ?? 0), score: Math.min(native, prev) });
+    }
+    return out;
+  };
+}
+
+const PROFILE_RAW_KINDS = ['resume', 'jd'] as const;
+
+/**
+ * Drop the raw-text index of every profile document that is no longer the
+ * active one — for EVERY kind, including kinds that have no active document.
+ *
+ * Review finding, reproduced (2026-09-20): pruning used to run only for kinds
+ * that still had an active document, so deleting a résumé pruned nothing and its
+ * text and vectors stayed on disk; and a re-upload while v1 was still embedding
+ * had v1's in-flight job write its rows back after the prune. Both are personal
+ * data outliving the user's request to remove it.
+ */
+function pruneSupersededProfileIndexes(modesManager: ProfileRawModesManager, activeFiles: ProfilePseudoFile[]): void {
+  for (const kind of PROFILE_RAW_KINDS) {
+    const keep = activeFiles.find((f) => f.kind === kind)?.id ?? '';
+    try { modesManager.pruneReferenceFileIndexesByPrefix?.(`${PROFILE_FILE_PREFIX}${kind}:`, keep); } catch { /* non-fatal */ }
+  }
+}
+
+/** One run at a time: an index job that is still writing must finish before the next run prunes. */
+let profileIndexChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * Index the profile documents' raw text (idempotent; the retriever skips a file
+ * whose hash, space and chunker version are current) and drop every superseded
+ * or deleted version's index — before indexing, and AGAIN after, because the
+ * documents can change while a job runs. Called after an ingest AND after a
+ * delete or wipe — fire and forget. A document ingested before this shipped is
+ * otherwise indexed lazily, by the retriever, the first time a question touches it.
+ */
+export function indexProfileRawText(modesManager: ProfileRawModesManager | null | undefined, orchestrator: unknown): Promise<number> {
+  const run = async (): Promise<number> => {
+    if (!modesManager) return 0;
+    const current = () => profilePseudoFiles(collectV3ProfileSources(orchestrator).docs as never);
+    const files = current();
+    pruneSupersededProfileIndexes(modesManager, files);
+    if (modesManager.indexReferenceFile) {
+      for (const f of files) await modesManager.indexReferenceFile(f).catch(() => { /* logged inside */ });
+    }
+    pruneSupersededProfileIndexes(modesManager, current());
+    return files.length;
+  };
+  const next = profileIndexChain.then(run, run);
+  profileIndexChain = next.catch(() => 0);
+  return next;
+}
+
+/** Fire-and-forget wrapper for the ingest, delete and wipe handlers: never throws, never blocks the caller. */
+export function kickProfileRawIndex(orchestrator: unknown): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ModesManager } = require('../ModesManager');
+    void indexProfileRawText(ModesManager.getInstance(), orchestrator).catch(() => { /* non-fatal */ });
+  } catch { /* non-fatal: the retriever indexes lazily on first use */ }
+}
+
+/**
+ * Remove EVERY profile raw-text index, needing no orchestrator. For the wipe
+ * paths (trial end, "wipe profile data"): those must clear personal data even
+ * when the knowledge orchestrator was never initialised this session.
+ */
+export function wipeProfileRawIndexes(): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ModesManager } = require('../ModesManager');
+    const mm = ModesManager.getInstance() as ProfileRawModesManager;
+    profileIndexChain = profileIndexChain.then(() => pruneSupersededProfileIndexes(mm, []), () => pruneSupersededProfileIndexes(mm, []));
+  } catch { /* non-fatal */ }
 }

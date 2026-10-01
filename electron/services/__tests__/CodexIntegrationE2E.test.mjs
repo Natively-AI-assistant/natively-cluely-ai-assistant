@@ -41,6 +41,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+// Hermetic (issue #558): Codex now also accepts the Codex CLI's `codex login`
+// from $CODEX_HOME/auth.json. Point it at an empty dir so these tests never
+// pick up — or send requests with — the developer's real CLI login.
+process.env.CODEX_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-codex-home-'));
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const compiledPath = path.resolve(__dirname, '../../../dist-electron/electron/services/CodexCliService.js');
 const mod = await import(pathToFileURL(compiledPath).href);
@@ -217,9 +222,16 @@ test('B.2: source-level — usingLocalLlm in ipcHandlers includes isUsingCodexCl
     path.resolve(__dirname, '../../../electron/ipcHandlers.ts'),
     'utf8',
   );
+  // Read through the answer's own view since 2026-09-26 (LLMHelper.textTurn),
+  // so the Codex check names the model this answer is dispatched to.
   assert.match(
     ipcSrc,
-    /usingLocalLlm\s*=\s*llmHelper\.isUsingOllama\(\)\s*\|\|\s*llmHelper\.isUsingCodexCli\(\)/s,
-    'usingLocalLlm must include llmHelper.isUsingCodexCli() (30s deadline fix)',
+    /usingLocalLlm\s*=\s*answerLlm\.isUsingOllama\(\)\s*\|\|\s*answerLlm\.isUsingCodexCli\(\)/s,
+    'usingLocalLlm must include isUsingCodexCli() (30s deadline fix)',
+  );
+  assert.match(
+    ipcSrc,
+    /const answerLlm = llmHelper\.textTurn\?\.\(myController\?\.signal\) \?\? llmHelper;/,
+    'the view must be keyed by the manual answer call\'s own signal',
   );
 });

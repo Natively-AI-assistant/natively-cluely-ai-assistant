@@ -15,7 +15,6 @@
 // To legitimately re-add it: register an App ID for com.electron.meeting-notes with Keychain
 // Sharing, generate a Developer ID provisioning profile, set `mac.provisioningProfile` in
 // electron-builder.signed.cjs, verify a signed build LAUNCHES, then update this test.
-// Background: MACOS_LAUNCH_FAILURE_2026-08-19.md.
 //
 // Run via: node --test electron/services/__tests__/KeychainEntitlement.test.mjs
 
@@ -38,7 +37,7 @@ test('top-level entitlements do NOT declare keychain-access-groups', () => {
   assert.ok(!DECLARED.test(fs.readFileSync(TOP, 'utf8')),
     'build/entitlements.mac.plist must NOT declare keychain-access-groups: it is a restricted, ' +
     'profile-requiring entitlement and without an embedded provisioning profile AMFI kills the ' +
-    'app at exec (POSIX 163 "Launchd job spawn failed"). See MACOS_LAUNCH_FAILURE_2026-08-19.md.');
+    'app at exec (POSIX 163 "Launchd job spawn failed").');
 });
 
 test('helper (inherit) entitlements do NOT declare keychain-access-groups', () => {

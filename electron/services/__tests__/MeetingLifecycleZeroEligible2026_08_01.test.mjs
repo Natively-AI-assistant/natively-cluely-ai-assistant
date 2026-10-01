@@ -33,13 +33,48 @@ describe('zero-eligible finalization wiring', () => {
       'the caller needs the count to skip the provenance-blind RAG step');
   });
 
+  /**
+   * Brace-match a method body so ordering is checked in EXECUTION order.
+   *
+   * The previous form compared raw file offsets of the exit marker and the
+   * string `generateMeetingSummary(titlePrompt`. That broke (2026-08-26) the
+   * moment the title call was extracted into the module-level helper
+   * `generateTitleFromSummaryWithSource`, which is DEFINED above
+   * processAndSaveMeeting and CALLED below the early exit: file order inverted
+   * while execution order was untouched. The old assertion even anticipated it
+   * ("title call site moved — re-verify ordering") without being able to tell
+   * the two apart. Scoping to the method body does.
+   */
+  const methodBody = (src, signature) => {
+    const start = src.indexOf(signature);
+    assert.notEqual(start, -1, `${signature} not found — re-verify this test`);
+    let depth = 0, close = -1;
+    for (let i = src.indexOf('(', start); i < src.length; i++) {
+      if (src[i] === '(') depth++;
+      else if (src[i] === ')' && --depth === 0) { close = i; break; }
+    }
+    depth = 0;
+    const open = src.indexOf('{', close);
+    for (let i = open; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}' && --depth === 0) return src.slice(open, i + 1);
+    }
+    throw new Error(`unbalanced braces in ${signature}`);
+  };
+
   test('processAndSaveMeeting early-exits before any LLM call on zero eligible segments', () => {
     const src = read('electron/MeetingPersistence.ts');
-    const exitIdx = src.indexOf('ZERO-ELIGIBLE EARLY EXIT');
-    const titleIdx = src.indexOf('generateMeetingSummary(titlePrompt');
+    const body = methodBody(src, 'private async processAndSaveMeeting(');
+
+    const exitIdx = body.indexOf('ZERO-ELIGIBLE EARLY EXIT');
     assert.ok(exitIdx !== -1, 'early exit block missing');
-    assert.ok(titleIdx !== -1, 'title call site moved — re-verify ordering');
-    assert.ok(exitIdx < titleIdx, 'the exit must run BEFORE the title LLM call');
+
+    // Any route to the title model: the helper, or a direct summary call.
+    const titleIdx = body.search(/generateTitleFromSummary(?:WithSource)?\(|generateMeetingSummary\(titlePrompt/);
+    assert.notEqual(titleIdx, -1, 'no title call reachable from processAndSaveMeeting — re-verify ordering');
+    assert.ok(exitIdx < titleIdx,
+      'the exit must run BEFORE the title LLM call, in the order the method executes them');
+
     assert.match(src, /NO_MEMORY_ELIGIBLE_TRANSCRIPT/);
     assert.match(src, /summaryStatus: 'completed'/,
       'a skipped session must not surface as a failed summary');

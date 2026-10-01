@@ -16,8 +16,8 @@
 // 27) cannot generalize to this; a semantic check is the only remaining
 // option.
 //
-// Reuses the SAME local zero-shot NLI classifier (Xenova/mobilebert-
-// uncased-mnli) IntentClassifier.ts already loads and warms on the live WTA
+// It reused the local zero-shot NLI classifier (Xenova/mobilebert-
+// uncased-mnli) the intent classifier loaded and warmed on the live WTA
 // path — no second model/worker/ONNX session. transformers.js's zero-shot-
 // classification pipeline supports a custom `hypothesis_template`, so a
 // single-label classification with the ANSWER as the premise and a
@@ -25,7 +25,13 @@
 // gives a direct entailment-vs-not confidence score, framed as a relevance
 // check rather than an intent label.
 
-import { classifyZeroShotRaw } from './IntentClassifier';
+// 2026-09-05: the shared MobileBERT zero-shot session this check reused was
+// removed with the intent classifier. `checkAnswerRelevance` now returns null,
+// the contract every caller already treats as "check unavailable, do not gate".
+// The enforcing arm was behind answerRelevanceGuardLive, default OFF, because
+// validation run-032 found this classifier could not separate real from
+// hallucinated answers on live traffic; what is lost is an observe-only mark.
+// Rehoming onto a different scorer is a separate decision.
 
 export interface AnswerRelevanceResult {
     relevant: boolean;
@@ -55,7 +61,6 @@ export interface AnswerRelevanceResult {
  * missing one hallucination phrasing that a human would also find only
  * mildly odd ("I'm welcome, ready whenever...") rather than a hard failure.
  */
-const ANSWER_RELEVANCE_THRESHOLD = 0.15;
 
 /**
  * BERT-family models have a ~512-token context window. An uncapped long
@@ -79,7 +84,6 @@ const ANSWER_RELEVANCE_THRESHOLD = 0.15;
  * head+tail max-score handling below — this constant now bounds EACH
  * classified chunk, not the whole answer.
  */
-const MAX_ANSWER_CHARS_FOR_RELEVANCE_CHECK = 1000;
 
 /**
  * transformers.js's zero-shot-classification pipeline builds the NLI
@@ -103,54 +107,15 @@ const MAX_ANSWER_CHARS_FOR_RELEVANCE_CHECK = 1000;
  * the actual corpus scores. Do not change this wording without re-running
  * that tuning pass against the same corpus.
  */
-const HYPOTHESIS_TEMPLATE = 'This response directly answers the specific question asked: {}';
 
 /**
  * Check whether `answer` actually addresses `question`, using zero-shot NLI
  * entailment rather than pattern-matching specific non-answer phrasings.
  * Returns null when the classifier is unavailable/fails — callers MUST
  * treat null as "skip this check", exactly like every other null-returning
- * guard in this codebase (IntentClassifier.classify, etc.) — never as a
+ * guard in this codebase — never as a
  * negative verdict.
  */
-async function scoreChunk(question: string, chunk: string): Promise<number | null> {
-    // Single-label classification: the returned score for this one label IS
-    // the entailment confidence directly (multi_label:false's softmax-over-
-    // one-label degenerates to just the raw entailment probability). The
-    // label itself is the question text, substituted into
-    // HYPOTHESIS_TEMPLATE's `{}` placeholder by the pipeline.
-    const result = await classifyZeroShotRaw(chunk, [question], HYPOTHESIS_TEMPLATE);
-    return result ? result.topScore : null;
-}
-
-export async function checkAnswerRelevance(question: string, answer: string): Promise<AnswerRelevanceResult | null> {
-    const q = String(question || '').trim();
-    const a = String(answer || '').trim();
-    if (!q || !a) return null;
-
-    if (a.length <= MAX_ANSWER_CHARS_FOR_RELEVANCE_CHECK) {
-        const score = await scoreChunk(q, a);
-        if (score === null) return null;
-        return { relevant: score >= ANSWER_RELEVANCE_THRESHOLD, confidence: score };
-    }
-
-    // Head+tail scoring (code-review 2026-07-19 HIGH): a long answer's
-    // relevant content is at least as likely to land in its closing
-    // sentences (the "punchline" after scene-setting preamble) as its
-    // opening ones. Classify both the head and tail chunk and take the MAX
-    // score — this only costs a second ~100ms inference, and only for
-    // answers that actually exceed the cap (the common short-answer case
-    // pays zero extra cost). Taking the max (not requiring both to pass)
-    // matches this guard's stated bias: a false positive here triggers a
-    // real regeneration on a genuinely fine answer, which is worse than an
-    // occasional missed hallucination.
-    const headChunk = a.slice(0, MAX_ANSWER_CHARS_FOR_RELEVANCE_CHECK);
-    const tailChunk = a.slice(-MAX_ANSWER_CHARS_FOR_RELEVANCE_CHECK);
-    const [headScore, tailScore] = await Promise.all([
-        scoreChunk(q, headChunk),
-        scoreChunk(q, tailChunk),
-    ]);
-    if (headScore === null && tailScore === null) return null;
-    const bestScore = Math.max(headScore ?? -Infinity, tailScore ?? -Infinity);
-    return { relevant: bestScore >= ANSWER_RELEVANCE_THRESHOLD, confidence: bestScore };
+export async function checkAnswerRelevance(_question: string, _answer: string): Promise<AnswerRelevanceResult | null> {
+    return null;
 }

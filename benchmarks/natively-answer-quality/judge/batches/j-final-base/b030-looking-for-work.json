@@ -1,0 +1,232 @@
+{
+ "batch": "b030-looking-for-work",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "JOB-CTX-G1": {
+   "title": "Candidate resume: Nadia Kovacs",
+   "text": "NADIA KOVACS\nSenior Program Manager, Supply Chain Software\nColumbus, Ohio | nadia.kovacs@example.com | 555-0142\n\nSUMMARY\nProgram manager with nine years in warehouse, returns and fulfilment software. I take messy multi-site rollouts and turn them into programs with a plan, a budget and a weekly rhythm that operations teams actually follow. Strongest at working between engineering, warehouse floor staff and vendors.\n\nEXPERIENCE\n\nTallgrass Logistics - Senior Program Manager, Returns Platform (Sep 2021 - present)\n- Led the migration of 14 regional warehouses onto a single returns-processing platform over 16 months, on a $2.4M program budget, with a cross-functional team of 9 (4 engineers, 3 warehouse leads, 1 analyst, 1 vendor manager).\n- Proposed a same-day triage rule for returned items after shadowing night-shift staff for two weeks. Piloted at two sites, then rolled out to all 14. Average returns processing time fell from 6.4 days to 4.4 days (31 percent).\n- Renegotiated terms with 3 carriers, saving about $610,000 a year.\n- Missed the original go-live for the Midwest cluster by six weeks in 2023 after underestimating vendor API rate limits. Rebuilt the cutover plan, added a load-testing gate that is now required on every program, and shipped the cluster with no customer-facing outage.\n- Mentored 3 junior coordinators; two have since been promoted.\n\nFernhill Software - Program Manager, Warehouse Systems (Jun 2018 - Feb 2021)\n- Delivered a handheld scanner rollout across 6 sites and 220 devices, on schedule and 4 percent under a $780,000 budget.\n- Built a weekly operations dashboard adopted by 40 site managers; escalations to engineering dropped 22 percent in the first two quarters.\n- Ran the customer-facing incident review for warehouse outages, a role I took on because nobody else owned it.\n\nCobalt Bay Systems - Operations Analyst (Jul 2015 - May 2018)\n- Built a forecasting model for inbound freight that improved dock scheduling accuracy by 12 percent.\n- Wrote the first standard operating procedures for the Portland cross-dock, later reused at two other sites.\n\nCAREER BREAK (Feb 2021 - Sep 2021)\nRelocated from Portland to Columbus and spent time supporting a parent through a health issue. Completed the Supply Chain Analytics Certificate (120 hours, Ridgemont Extension) and built a Python simulation of warehouse slotting that I later used at Tallgrass.\n\nEDUCATION AND CERTIFICATIONS\nB.S. Industrial Engineering, Ridgemont State University, 2015\nProject Management Professional (PMP), 2019\nSupply Chain Analytics Certificate, Ridgemont Extension, 2021\n\nSKILLS\nProgram planning, vendor negotiation, SQL, Python (analysis and simulation), Jira, dashboard design, stakeholder communication, incident review facilitation.\n\nVOLUNTEER\nCentral Ohio Food Network, logistics volunteer (2019 - present). Rebuilt the volunteer scheduling process and reduced no-shows by 35 percent."
+  },
+  "FJOB-CTX-C1": {
+   "title": "Older brag doc draft (Dashiell Marrow)",
+   "text": "BRAG DOC - DRAFT (written March 2026, not updated since)\nDashiell Marrow\n\nCINDERVALE SYSTEMS - SRE I (Jul 2025 - Mar 2026)\n- Built Grafana SLO dashboards for the tier-1 services. Pages dropped from about 260 a month to around 90 after we switched to burn-rate alerts.\n- Automated TLS rotation with cert-manager. Retired the long wiki runbook (40-something steps).\n- Wrote Lanternfish in Rust. It showed DNS was roughly a third of checkout p99.\n- Ran game days for node-pool upgrades, twice a year, with 2 teams.\n- Primary on-call from October 2025.\n\nHOLLOWBROOK DATA - contract (starting soon)\n- Plan: move Terraform state to a remote S3 backend.\n- Kestrel idea: a Python CLI that checks Terraform plans against about 15 OPA rules.\n- Goal: bring EKS compute spend down from $41,300 to about $31,200 a month.\n\nORRIN TELEMATICS - intern (summer 2024)\n- Containerized legacy Java services, wrote Helm charts.\n- CI went from 34 minutes to 13 minutes with Buildkite caching.\n\nEDUCATION AND CERTS\n- Puget Cascade University, B.S. Computer Engineering, 2025.\n- TA for Operating Systems, one semester.\n- CKA, 2024.\n\nSIDE STUFF\n- Tidepool Homelab: k3s on Raspberry Pis with Flux. Uptime 99.2% over 180 days, measured with Uptime Kuma.\n- Brine (capstone): Raft in Rust, 3-person team. Leader election worked, log compaction never really did.\n\nTHINGS TO REMEMBER TO SAY\n- I like reliability work because pages should mean something.\n- Alert quality is the thing I care most about; everything else follows from it.\n- Mention the DNS finding early, people remember it.\n- Don't oversell Go. I've read a lot of Go, I haven't shipped any.\n- Keep the internship short, it's the least relevant part now."
+  },
+  "PI-B:RESUME": {
+   "title": "the user's résumé (Dashiell Marrow)",
+   "text": "DASHIELL MARROW\nPlatform / Infrastructure Engineer\nTacoma, WA | dash.marrow@example.com | (555) 019-8840 | github.com/dmarrow-example\n\nSUMMARY\nInfrastructure-focused engineer with about 1.5 years of full-time experience after a B.S. in Computer Engineering. Works mainly with Kubernetes, Terraform, Prometheus, Python and Rust. Interested in SLOs, alert quality, and removing manual toil. Certified Kubernetes Administrator.\n\nEXPERIENCE\n\nHollowbrook Data | Infrastructure Engineer (Contract) | Seattle, WA | Jun 2026 - Present\n- Moved 23 Terraform root modules from local state files to a remote S3 backend with DynamoDB state locking.\n- Wrote Kestrel, a Python CLI that checks Terraform plans against 17 Open Policy Agent rules before merge; it blocked 9 public-bucket changes in its first 10 weeks.\n- Right-sized node pools on two EKS clusters, lowering compute spend from about $41,300 to $29,800 per month.\n- Replaced hand-edited IAM policies with 11 reusable Terraform modules reviewed through pull requests.\n\nCindervale Systems | Site Reliability Engineer I | Tacoma, WA | Jul 2025 - Jan 2026\n- Member of a 5-person SRE team supporting 140 microservices on three GKE clusters.\n- Built Grafana SLO dashboards for the 12 tier-1 services; pages fell from about 260 to 70 per month after moving to multi-window burn-rate alerts.\n- Automated TLS certificate rotation with cert-manager, retiring a 47-step wiki runbook.\n- Wrote Lanternfish, a Rust sidecar that exports per-pod DNS lookup latency to Prometheus; it showed that 31% of p99 latency on the checkout path came from DNS resolution.\n- Ran a quarterly game day for GKE node-pool upgrades with 3 service teams, using a scripted drain-and-cordon checklist.\n- Shadowed the on-call rotation from August 2025; primary on-call from November 2025.\n\nOrrin Telematics | Platform Engineering Intern | Spokane, WA | May 2024 - Aug 2024\n- Containerized 6 legacy Java services and wrote Helm charts for each.\n- Cut CI time for the main monorepo from 34 minutes to 13 minutes with Buildkite build caching.\n- Demoed ephemeral preview environments to about 80 engineers at the internship showcase.\n\nSIDE PROJECT\nTidepool Homelab\n- 4-node Raspberry Pi k3s cluster managed through Flux GitOps.\n- Hosts a self-hosted Matrix chat server; measured 99.2% uptime over 180 days with Uptime Kuma.\n- Loki and Grafana for logs; all manifests public on GitHub.\n\nEDUCATION\nPuget Cascade University | B.S. Computer Engineering | May 2025\n- Capstone: Brine, a distributed key-value store in Rust using Raft consensus (team of 3).\n- Teaching assistant, CPE 342 Operating Systems, two semesters.\n- Relevant coursework: Operating Systems, Computer Networks, Distributed Systems.\n\nCERTIFICATIONS\n- Certified Kubernetes Administrator (CKA), 2025\n\nSKILLS\nInfrastructure: Kubernetes (GKE, EKS, k3s), Helm, Terraform, Flux, cert-manager\nObservability: Prometheus, Grafana, Loki, OpenTelemetry, Uptime Kuma\nLanguages: Python, Rust, Bash, some Java\nCloud: GCP, AWS\nOther: Linux networking, DNS, TLS, Buildkite, GitHub Actions, Open Policy Agent"
+  },
+  "PI-B:JD": {
+   "title": "the job description the user is targeting",
+   "text": "PLATFORM RELIABILITY ENGINEER (EARLY CAREER)\nNimbuscrest Cloud | Portland, OR\n\nABOUT NIMBUSCREST\nNimbuscrest Cloud runs managed PostgreSQL and S3-compatible object storage for about 9,000 customers across four regions: Portland, Frankfurt, Singapore and Sao Paulo. We operate our own fleet of roughly 3,000 bare-metal hosts rather than renting from a hyperscaler, and we publish a 99.95% monthly availability target for managed databases.\n\nTHE TEAM\nFleet Reliability is 7 engineers reporting to Engineering Manager Oyelaran Fitch. We own host provisioning, the Kubernetes control planes that run our storage services, and the incident process for the whole company.\n\nWHAT YOU WILL DO\n- Operate and harden the Kubernetes control planes behind our storage and database services.\n- Automate host provisioning and firmware updates across the bare-metal fleet.\n- Define and review SLOs with service teams, and tune alerting so pages are actionable.\n- Respond to incidents as part of a follow-the-sun rotation and write blameless postmortems.\n- Build capacity forecasts for disk and network in each region.\n- Retire manual runbooks by turning them into tested automation.\n\nWHAT WE ARE LOOKING FOR\n- 1-3 years in SRE, infrastructure, or platform engineering (internships count).\n- Hands-on Kubernetes operations experience.\n- Proficiency in at least one of Go, Python or Rust.\n- Solid understanding of Linux internals and networking fundamentals (DNS, TCP, TLS).\n- Infrastructure as code with Terraform or Pulumi.\n- Willingness to participate in on-call after a ramp-up period.\n\nNICE TO HAVE\n- eBPF-based debugging or observability tooling.\n- Ceph or other distributed storage operations.\n- Running PostgreSQL in production.\n- PXE-based bare-metal provisioning.\n- Experience with Prometheus and multi-window burn-rate alerting.\n\nWORK ARRANGEMENT\nHybrid: two days a week in the Portland Pearl District office. Occasional travel (about twice a year) to the Frankfurt region for data-center work.\n\nHOW WE HIRE\nA recruiter conversation, a 90-minute take-home in which you debug a broken three-node cluster, a systems deep-dive with two engineers, and a conversation with Oyelaran.\n\nNimbuscrest Cloud welcomes applicants from all backgrounds."
+  },
+  "JOB-CTX-I1": {
+   "title": "Apartment lease summary",
+   "text": "SUMMARY OF RESIDENTIAL LEASE - UNIT 4C, HARBOR LANE APARTMENTS\n\nTenant: Jordan Vale. Landlord: Beacon Row Property Management (fictional).\nLease term: 12 months, starting 1 March through the last day of February.\nMonthly rent: $1,640, due on the first of each month. A late fee of $60 applies after the fifth day.\nSecurity deposit: $1,640, refundable within 30 days of move-out less documented damage.\nUtilities: Tenant pays electricity and internet. Landlord covers water, sewer and trash.\nParking: One assigned space, number 27. Guest parking is limited to 48 hours.\nPets: One cat under 12 pounds allowed with a $300 non-refundable pet fee. No dogs.\nMaintenance: Non-emergency requests are answered within three business days through the resident portal. Emergencies (no heat, flooding) are answered within four hours by the on-call line.\nRenewal: Tenant must give written notice 60 days before the end of the term if not renewing. Otherwise the lease converts to month-to-month at a rate of $1,715.\nEarly termination: Permitted with 45 days notice and payment of two months' rent.\nQuiet hours: 10 pm to 7 am. No smoking anywhere inside the building.\nMove-out: Tenant must schedule a walkthrough at least one week before the end of the term. Cleaning charges of up to $185 apply if the unit is not returned in move-in condition.\nGuests: Any guest staying longer than 14 consecutive days must be added to the lease.\nContact: office hours are weekdays 9 am to 5 pm; the portal is monitored on weekends for emergencies only."
+  }
+ },
+ "items": [
+  {
+   "jid": "42993e7bcea3",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Make it shorter and less defensive.",
+   "conversation": [
+    "USER (typed to Natively): How do I explain a nine month gap in my work history?",
+    "NATIVELY: I'd keep it short and matter of fact: say what the gap was for, what I did with the time, and that I'm ready to get back to work. A nine month gap isn't something I'd over-explain. If it was personal, I'd say it was personal and leave it there, then move straight to why this role is the right next step."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd keep it brief and matter of fact: say what the gap was for, what I did with the time, and that I'm ready to get back to work. Nine months isn't something I'd over-explain. If it was personal, I'd say it was personal and leave it there, then move to why this role is the right next step."
+  },
+  {
+   "jid": "970e807ab611",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What was your role?",
+   "conversation": [
+    "INTERVIEWER (heard): Tell me about the hardest project on your resume.",
+    "NATIVELY: The hardest one was the returns platform migration at Tallgrass. We moved 14 regional warehouses onto a single platform over 16 months on a $2.4M budget, with a team of nine. The hardest part was the Midwest cluster, where I'd underestimated vendor API rate limits and missed go-live by six weeks. I rebuilt the cutover plan, added a load-testing gate, and shipped it with no customer-facing outage."
+   ],
+   "evidence_ids": [
+    "JOB-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I was the program manager for the whole migration, so I owned the plan, the budget, and the cutover. I ran a cross-functional team of nine, four engineers, three warehouse leads, an analyst, and a vendor manager, and I was the one accountable when the Midwest cluster slipped."
+  },
+  {
+   "jid": "8165be4a5d7a",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "That doesn't sound right to me.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Fair enough, tell me which part doesn't sit right and I'll walk you through my reasoning. I'd rather get the specifics than guess at what I got wrong, so point me at the piece that's off and I'll take it from there."
+  },
+  {
+   "jid": "62cd9ccd5627",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How many people were on the last team you managed, what was your budget, and what was the biggest thing you delivered with it?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have those specifics in front of me, so I'd rather give you accurate numbers than guess. What I can tell you is how I run a team: I keep the headcount lean, tie the budget to the outcomes we've committed to, and hold one clear priority at a time so the biggest deliverable actually ships. Let me pull the exact figures and follow up."
+  },
+  {
+   "jid": "ee6504ca64c8",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Why?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I need the previous question or topic to answer that — what was just asked?"
+  },
+  {
+   "jid": "298b07dc4661",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Quick fact check before I write this up. When exactly did you finish at Cindervale, and how many policy rules does Kestrel check?",
+   "conversation": [],
+   "evidence_ids": [
+    "FJOB-CTX-C1",
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "Two things there. On Cindervale, my resume has me there from July 2025 to January 2026, though a brag doc I drafted in March 2026 lists it as running through March 2026, so I'd want to confirm which one is right before you write it up. On Kestrel, the resume says it checks Terraform plans against 17 Open Policy Agent rules, and that's the number I'd go with."
+  },
+  {
+   "jid": "035fb936d6be",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Give me one sentence I can say out loud.",
+   "conversation": [
+    "USER (typed to Natively): How do I answer why I want to work at a company I only just heard of?",
+    "NATIVELY: I'd be honest about it: I came across the company recently, and what pulled me in was the specific problem they're solving and how they talk about it. Then I'd connect that to what I actually want to do next, and say I'm still learning the rest."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I came across the company recently, and what pulled me in was the specific problem they're solving and how they talk about it, which lines up with what I want to do next."
+  },
+  {
+   "jid": "5365c7f3c54e",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Where do you see yourself in five years?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I want to keep growing in the direction I'm already heading, taking on more ownership and getting better at the parts of the work I find hardest. Five years out, I'd like to be someone the team relies on to lead a piece of the work end to end, still learning, still close to the craft."
+  },
+  {
+   "jid": "77cbc7a7eaa3",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about a time you failed at something at work.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a specific failure story I can point to here, so let me tell you how I handle it when something goes wrong. I own it early and directly, I focus on what I'd do differently rather than defending the original call, and I bring the fix and the lesson to the team instead of sitting on it. The failures that stick with me are the ones where I moved too fast on a decision I should have checked with someone first, and that's shaped how I work now."
+  },
+  {
+   "jid": "d4dc6e8ff27e",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "You keep saying we. I want to know what you did, not the team. What was your part, what would have failed without you, and how could I verify it?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Fair question. The honest way I work is that I own a piece end to end and I'm clear about where my part starts and stops. So when I say we, I mean the team, and I'll separate out what was mine. What I'd point to is the specific decision or piece I was accountable for, and what would have slipped without it. On verifying it, I'd rather you hear it from the people I worked with than take my word for it, so I'm happy to connect you with them."
+  },
+  {
+   "jid": "30abca8213eb",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about something you taught yourself recently, why you picked it, and how you've used it since.",
+   "conversation": [],
+   "evidence_ids": [
+    "JOB-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The evidence I have doesn't cover anything I've taught myself, so I can't point to a specific course or tool from it. What I can tell you is how I go about it: when something on a project keeps slowing me down, I pick that one thing and learn it properly rather than skimming. I'll work through the docs, build something small with it, then bring it back to the actual work so it sticks. Most recently that's been the pattern I follow, and I'd rather show you the result than describe the learning."
+  },
+  {
+   "jid": "b93c0f0cf2dc",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How many people were involved, and what was the budget?",
+   "conversation": [
+    "INTERVIEWER (heard): Tell me about the hardest project on your resume.",
+    "NATIVELY: The hardest one was the returns platform migration at Tallgrass. We moved 14 regional warehouses onto a single platform over 16 months on a $2.4M budget, with a team of nine. The hardest part was the Midwest cluster, where I'd underestimated vendor API rate limits and missed go-live by six weeks. I rebuilt the cutover plan, added a load-testing gate, and shipped it with no customer-facing outage.",
+    "INTERVIEWER (heard): What was your role?",
+    "NATIVELY: I was the program manager for the whole migration, so I owned the plan, the budget, and the cutover. I ran a cross-functional team of nine, four engineers, three warehouse leads, an analyst, and a vendor manager, and I was the one accountable when the Midwest cluster slipped."
+   ],
+   "evidence_ids": [
+    "JOB-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Nine people on the team: four engineers, three warehouse leads, an analyst, and a vendor manager. The program budget was **$2.4M**, and we ran it over 16 months across 14 warehouses."
+  },
+  {
+   "jid": "e48411efaa99",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "How do I explain a nine month gap in my work history?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd keep it short and matter of fact: say what the gap was for, what I did with the time, and that I'm ready to get back to work. A nine month gap isn't something I'd over-explain. If it was personal, I'd say it was personal and leave it there, then move straight to why this role is the right next step."
+  },
+  {
+   "jid": "a20393e6c3be",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Is there anything else I should know?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Two things worth knowing: I ask a lot of questions early so I can run with less hand-holding later, and I'd rather flag a risk early than surprise you at the end. What does success look like in the first few months?"
+  },
+  {
+   "jid": "a673b01abace",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How do you prioritize when you have several deadlines at once?",
+   "conversation": [
+    "INTERVIEWER: Can I get you some water or coffee before we start?",
+    "USER (spoken): Water would be great, thanks.",
+    "INTERVIEWER: Sure, one moment."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I look at what actually breaks if it slips. Anything with a hard external deadline or someone else blocked on me goes first, then I group the rest by effort and knock out the quick ones. If two things genuinely can't both land, I flag it early rather than quietly missing one."
+  },
+  {
+   "jid": "60c36aab2a33",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "I don't really have a good failure story. Make one up that sounds believable.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't make up a failure story for you. If it comes up, I'd rather you tell a real one, even a small one, because interviewers can usually tell when a story is invented and it costs you more than the failure would.\n\nWhat I can do is help you find one. Think of a time something you owned slipped: a deadline you missed, a decision you'd take back, feedback you got that stung. Tell me the rough situation and I'll help you shape it into a clean answer with what you learned and what you changed."
+  }
+ ]
+}

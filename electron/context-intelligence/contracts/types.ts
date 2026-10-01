@@ -127,7 +127,12 @@ export type EvidenceProvenance =
   | 'TEST_TRANSCRIPT'
   | 'MEETING_NOTE'
   | 'MANUAL_CHAT'
-  | 'PRIOR_ASSISTANT_MESSAGE';
+  | 'PRIOR_ASSISTANT_MESSAGE'
+  /** A vision/OCR reading of the user's own screen (screen-retrieval-port).
+   *  Distinct from PRIOR_ASSISTANT_MESSAGE on purpose: it is an OBSERVATION,
+   *  not a model-generated claim, so it does not carry the self-reinforcing
+   *  fabrication risk that keeps assistant output referent-only (§12.3). */
+  | 'SCREEN_CAPTURE';
 
 export interface RetrievalCandidate {
   evidenceId: string;
@@ -235,6 +240,22 @@ export interface RetrievalPlan {
   maximumCandidates: number;
   maximumAcceptedEvidence: number;
   timeoutMs: number;
+  /**
+   * The user asked for EVERY occurrence ("find every place a latency number
+   * appears", "list all the metrics for A and B"). Measured 2026-09-07: such a
+   * question over six attached files listed 8 of ~20 values because the
+   * evidence cap was 6 chunks. When set, the orchestrator has already widened
+   * maximumCandidates/maximumAcceptedEvidence; the ports widen their token
+   * budget and rerank pool, and the composer adds the scan-everything rule.
+   */
+  exhaustive?: boolean;
+  /**
+   * Evidence token budget for THIS turn when it differs from the mode policy's
+   * (before any exhaustive multiplier). Set for multi-file turns — see
+   * MULTI_FILE_EVIDENCE in orchestrator.ts. The mode port and the composer's
+   * packer both read it, so the retriever and the prompt agree on the budget.
+   */
+  evidenceTokens?: number;
 }
 
 // ── The turn decision ───────────────────────────────────────────────────────
@@ -277,6 +298,11 @@ export interface TurnDecision {
 
   questionTypes: QuestionType[];
   claimRequirements: ClaimRequirement[];
+  /** Claim types the classifier INFERRED from the mode's primary source because
+   *  no rule recognised the question ("How many engineers are in pod 3?" →
+   *  USER_PROJECT in a job-seeking mode) — a guess about ownership, as opposed to
+   *  a claim the question's own grammar makes ("Have I ever…", "my boss"). */
+  inferredClaimTypes?: ClaimType[];
 
   scope: EvidenceScope;
   authorizedSources: AuthorizedSource[];

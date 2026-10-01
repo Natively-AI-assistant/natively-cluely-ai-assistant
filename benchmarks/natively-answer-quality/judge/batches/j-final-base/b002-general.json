@@ -1,0 +1,279 @@
+{
+ "batch": "b002-general",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "FGEN-CTX-I1": {
+   "title": "Sourdough starter feeding schedule",
+   "text": "SOURDOUGH STARTER - FEEDING SCHEDULE\n\nDay 1: Mix 50 g whole wheat flour with 50 g lukewarm water in a clean jar. Cover loosely and leave at room temperature, ideally 24 to 26 C.\n\nDay 2: You may see a few bubbles or nothing at all. Both are normal. Leave it alone.\n\nDays 3 to 6: Once a day, discard all but 50 g of the starter, then add 50 g flour (half whole wheat, half white) and 50 g water. Stir well and mark the level on the jar with a rubber band.\n\nDays 7 onward: Switch to two feedings a day, about 12 hours apart. A healthy starter should roughly double within 4 to 8 hours of feeding and smell pleasantly sour, like yogurt.\n\nTroubleshooting\n- Grey liquid on top (\"hooch\") means it is hungry. Pour it off and feed.\n- No rise after day 10: move it somewhere warmer and use more whole wheat flour.\n- Pink or orange streaks: throw it out and start again.\n\nStorage\nOnce established, keep it in the fridge and feed once a week. Take it out the night before baking and give it two room-temperature feedings before mixing dough."
+  },
+  "FGENH-CTX-G1": {
+   "title": "Condo association board meeting minutes",
+   "text": "Harbor Point Condominium Association - Board Meeting Minutes\nDate: Thursday, September 24\nLocation: Community room, Building B\nPresent: Linda Marsh (President), Owen Castellano (Treasurer), Priya Nair (Secretary), Hal Jensen, Beatriz Soto. Also present: Renee Okoro (property manager, Seaside Management) and 11 owners.\nQuorum confirmed. Meeting called to order at 7:02 pm.\n\n1. Approval of August minutes\nApproved unanimously without changes.\n\n2. Treasurer's report\nOwen Castellano reported the operating account is on budget for the year. The reserve fund balance is $179,500. Delinquent dues stand at three units, total $4,210; the management company has sent second notices.\n\n3. Building A elevator\nThe Building A elevator has been out of service intermittently since July because of a failing controller. Two quotes were received. The board voted 4-1 (Jensen opposed) to accept the Carver Lift Services quote of $38,500 to replace the controller, paid from the reserve fund. Carver estimates the work takes six to eight weeks once parts arrive; parts are on order and no arrival date has been given. Renee Okoro will post updates in the lobby and by email.\n\n4. Roof replacement, Buildings A and B\nThree bids were reviewed for full roof replacement on both buildings:\n- Kessler Roofing: $212,000\n- Summit Exteriors: $236,500\n- Delgado & Sons: $249,000\nThe board voted unanimously to move forward with Kessler Roofing, subject to reference checks and a signed contract. A start date will be negotiated after the contract is signed. The treasurer noted that after the elevator payment the reserve fund cannot cover the full roof cost. A special assessment across all 64 units was discussed at length. Several owners asked for a payment plan option. The motion on a special assessment was tabled to the October 22 meeting, pending an updated reserve study. No assessment amount was agreed.\n\n5. Pet policy\nThe board voted 5-0 to remove the 35-pound weight limit for dogs. The limit of two pets per unit is unchanged. All pets, including existing ones, must be registered with the management office using the new form, with proof of rabies vaccination for dogs and cats. Registration deadline: November 15.\n\n6. Guest parking\nThe old paper guest passes are being retired because of misuse. Each unit will receive two numbered hang-tag guest passes. Renee Okoro will order the passes and distribute them to units by October 10. Vehicles in guest spaces without a hang-tag after October 10 may be towed after one warning sticker.\n\n7. Open forum\nOwners raised noise from the pool pump at night (management to check timer), a request for a second bike rack by Building B (board to get a price), and a question about EV charging (no action; to be revisited in spring).\n\nAction items\n- Renee Okoro: sign Carver contract; order guest hang-tags and distribute by October 10; post elevator updates.\n- Owen Castellano: request updated reserve study before October 22.\n- Priya Nair: circulate new pet registration form to all owners by October 1.\n- Linda Marsh: contact Kessler references.\n\nNext meeting: Thursday, October 22, 7 pm, community room.\nAdjourned 8:41 pm."
+  },
+  "FGEN-CTX-C1": {
+   "title": "Brightline Home Renovations - quote Q-2291, hall bathroom remodel",
+   "text": "BRIGHTLINE HOME RENOVATIONS\nQuote Q-2291 - Hall bathroom remodel\nPrepared for: homeowner, 27 Birchwood Lane\nPrepared by: Sam Ferreira, project lead\nDate: September 24, 2026\n\nSummary\nFull remodel of the hall bathroom: remove existing tub and tile, install walk-in shower, new vanity, toilet, flooring, lighting and exhaust fan. Quoted total: $14,200, including materials, labor, disposal and permit.\n\nSchedule\nStart date: Monday, October 12. Estimated duration: 3 weeks.\n\nLine items\nDemolition and disposal - $1,350\nPlumbing rough-in and fixtures - $3,900\nWalk-in shower, tile and glass - $5,200\nVanity, toilet and hardware - $2,300\nFlooring - $1,200\nElectrical, lighting and fan - $1,100\nPaint and finish - $600\nLine item total: $15,650\n\nPayment terms\nA deposit of 30% is due on signing to reserve the start date. The balance is due in two installments: 40% at completion of rough-in and the remainder at final walkthrough. For this project the deposit is $5,000.\n\nPermits\nBrightline pulls the building permit on your behalf. Permit fees are billed separately at cost, typically $250 to $400 depending on the city.\n\nWarranty\nAll workmanship carries a 2-year warranty from the completion date. Manufacturer warranties apply to fixtures.\n\nTimeline notes\nWork begins October 19 pending tile delivery. Most bathrooms of this size take approximately 5 weeks, including inspection. Water to the bathroom will be off for most of the project; the rest of the house stays connected.\n\nTerms\nThis quote is valid for 30 days. Changes after signing are handled by written change order. Workmanship warranty: 12-month on labor, excluding misuse and normal wear.\n\nQuestions: Sam Ferreira, project lead."
+  }
+ },
+ "items": [
+  {
+   "jid": "8446a3d25a1c",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Funnier, but not embarrassing.",
+   "conversation": [
+    "USER (typed to Natively): I have to give a two minute toast at my brother's wedding on Saturday. Help me write the opening.",
+    "NATIVELY: I don't have any details about your brother or his partner, so I can't write the personal parts for you. But here's an opening shape that works, with the blanks being things only you know:\n\n\"Good evening, everyone. For those who don't know me, I'm [name], [brother's name]'s brother. I've known him longer than almost anyone in this room, which means I've also had the longest front-row seat to the person he's become. And I have to say, watching him meet [partner's name] has been one of the best things I've ever seen.\"\n\nFrom there, one specific memory of the two of them, then a short wish for their marriage. The key is to keep it to one story, not three, and to say the partner's name early so it doesn't feel like a speech about your brother alone."
+   ],
+   "evidence_ids": [
+    "FGEN-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Here's a lighter version of that opening:\n\n\"Good evening, everyone. For those who don't know me, I'm [name], [brother's name]'s brother. I've known him longer than anyone here, which means I've seen every haircut, every bad idea, and every phase he's survived. And somehow, [partner's name] looked at all of that and said yes. So clearly, she's the smart one.\"\n\nThen one short memory of the two of them, and a warm wish to close. Keep it to one joke, not five, so it lands and doesn't turn into a roast."
+  },
+  {
+   "jid": "c57a6f65baef",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "So do we take the place with the bigger kitchen that's a forty minute commute, or the smaller one we can walk to work from? The bigger one is a hundred more a month, and we have to tell them by tonight. What do you honestly think?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Honestly, I'd take the one we can walk to. A forty minute commute each way is real time and real money every single day, and a hundred a month doesn't cover what that costs you. The kitchen is nice, but you'd feel that commute every morning."
+  },
+  {
+   "jid": "b0a6f37a173a",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "My neighbor says the board already approved a special assessment for the roof and we're all getting a bill next month. Is that actually true?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGENH-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, that's not right. The September minutes show the special assessment motion was **tabled** to the October 22 meeting, pending an updated reserve study, and no amount was agreed. The board did approve moving forward with Kessler Roofing, but that's subject to reference checks and a signed contract. So no bill is coming next month yet."
+  },
+  {
+   "jid": "20b970029d3d",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Is that normal?",
+   "conversation": [
+    "OTHER PERSON: Hi, it's Marisol from Greyfield Property, calling about your move-out inspection.",
+    "USER (spoken): Hi, yes, thanks for calling.",
+    "OTHER PERSON: So overall the unit looked good. We are holding back 220 dollars from the deposit, that's carpet cleaning in the bedroom and the scuffed closet door.",
+    "OTHER PERSON: The rest, 1,380, goes out by check within 21 days to the forwarding address you gave us.",
+    "USER (spoken): Okay, one second, let me look at my notes.",
+    "USER (typed to Natively): What exactly is she deducting and for what?",
+    "NATIVELY: She's holding back **220 dollars** from the deposit, and it's for two things: **carpet cleaning** in the bedroom and the scuffed closet door. The rest, **1,380**, goes out by check within 21 days to the forwarding address I gave her."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Whether it's normal depends on your lease and the condition of the place. Carpet cleaning and a scuffed door are common deductions, but many leases only allow them if there's damage beyond normal wear. Worth checking your lease and asking for the itemized receipts."
+  },
+  {
+   "jid": "bb45c287f7c3",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Who's handling the new guest parking passes and when are we supposed to have them?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGENH-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Renee Okoro is handling the new guest hang-tags. She'll order them and distribute two numbered passes to each unit by **October 10**. After that date, cars in guest spaces without a hang-tag can be towed following one warning sticker."
+  },
+  {
+   "jid": "a1a3269b87da",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Totally different topic, but do you think it's worth getting a dog if we both work full time?",
+   "conversation": [
+    "OTHER PERSON: Did you see recycling pickup moved to Thursdays?",
+    "USER (spoken): Oh, I didn't, thanks.",
+    "OTHER PERSON: Yeah, and apparently they won't take greasy pizza boxes anymore."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "It can work, but it depends on the dog and your setup. A full workday alone is a lot for a puppy or a high-energy breed, so an older, calmer dog or a midday walker usually makes it realistic. What's your schedule like, and would you have help during the day?"
+  },
+  {
+   "jid": "8c82bbb58e13",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Okay I need advice. My roommate hasn't paid her half of the utilities for two months, she keeps saying next week, the lease is only in my name, and I really don't want to blow up the friendship. What do I even say to her, and should I get something in writing?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd keep it warm but concrete: \"Hey, the utilities are two months behind and it's all in my name, so I need your half by Friday.\" Then ask if something's making it hard, and if it happens again, put the split in writing with a date."
+  },
+  {
+   "jid": "5e198864dd2b",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Okay, so what are we telling Rosa? Which day and what time?",
+   "conversation": [
+    "OTHER PERSON: Okay so for Rosa's farewell lunch, Tuesday doesn't work for Ben, and Wednesday Rosa has her last client call.",
+    "OTHER PERSON: Thursday everyone's free except Leila, who's out until one. Friday is the office closure.",
+    "USER (spoken): So Thursday could work if we go a bit later?",
+    "OTHER PERSON: Yeah, if we book for 1:30 that works."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "We're telling Rosa **Thursday at 1:30**. That's the one that works for everyone, since Leila's back by one and Ben's free that day."
+  },
+  {
+   "jid": "2a9b7c0db967",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Hi, this is Riverbend Family Clinic calling to confirm your appointment on Thursday. Can you confirm your date of birth for me?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can confirm the appointment, but I don't give out my date of birth to verify identity over the phone. Can you tell me what the appointment is for, or send a confirmation another way?"
+  },
+  {
+   "jid": "548e66eafb85",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "How long is the warranty on their work?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The quote says all workmanship carries a **2-year warranty** from the completion date, and manufacturer warranties apply to the fixtures. There's also a separate 12-month warranty on labor mentioned in the terms."
+  },
+  {
+   "jid": "f257369b2d0f",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Why that one?",
+   "conversation": [
+    "USER (typed to Natively): Give me gift ideas for my mom's 60th. She loves gardening and hates surprise parties.",
+    "NATIVELY: For a gardener who hates surprise parties, go with something quiet and personal. A really good pair of pruning shears or a nice set of hand tools she'll actually use, a beautiful ceramic pot with a plant she doesn't have yet, or a gift certificate to a local nursery so she picks her own. If you want it to feel bigger, a raised bed or a personalized garden stone works well. Keep it low-key, maybe a small family dinner instead of a party.",
+    "USER (typed to Natively): Another one, cheaper.",
+    "NATIVELY: A cheaper option: a nice pair of hand pruners, or a small set of seed packets for things she'd actually grow. A terracotta pot with a plant she doesn't have yet is cheap and personal too. If you want it to feel like more, write a little note about why you picked it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Because it's the cheapest thing on the list that still feels like a real gift. Seed packets cost almost nothing, but if you pick varieties she'd actually grow, it shows you thought about her garden specifically. A terracotta pot with a plant is the same idea, just a bit more substantial."
+  },
+  {
+   "jid": "55a9dccb2722",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "My manager keeps booking meetings right over my lunch break. How would you handle that without it getting weird?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd bring it up directly but lightly, one on one, not in the meeting itself. Something like, \"I've noticed a lot of these land on my lunch, is there another slot that works?\" Framing it as a scheduling thing rather than a complaint keeps it from feeling personal. If it keeps happening, I'd block the time on my calendar so it's visible, and if it's still an issue, that's when I'd ask whether the timing is deliberate."
+  },
+  {
+   "jid": "1e38231d48e1",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "I'm running a 30 minute team social on video for 12 people across 3 time zones, and half of them are pretty introverted. Give me one format, two backup ideas, and exactly how to kick it off in the first minute.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Run it as a **show and tell**: everyone brings one object or photo from their desk and gets 60 seconds to explain it. It gives the quiet people a script and a reason to talk, and it works across time zones because nobody needs shared context.\n\nBackups: a two truths and a lie round, or a \"this or that\" poll where people vote in chat and a few explain their pick.\n\nFirst minute: \"We've got 30 minutes, no agenda, and one rule: everyone shares one thing. Grab something within reach, anything, and we'll go around. I'll start.\" Then actually go first, keep yours to 60 seconds, and name the next person so nobody has to volunteer."
+  },
+  {
+   "jid": "2a6c6f9d8adc",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "You told me last week you'd cover my Saturday shift, remember? So we're good?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have anything on that, so I can't just say we're good. Let me check my schedule and get back to you today with a yes or no."
+  },
+  {
+   "jid": "300da4ffce83",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "Quick way to split a restaurant bill fairly when two people didn't drink and one person ordered way more food?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The fairest quick way is to split it into three parts: what the two non-drinkers owe, what the big eater owes, and what everyone shares.\n\nPractically: take the shared items (apps, bread, anything the table split) and divide those evenly by headcount. Then put the drinks on the drinkers' tab only, and the extra food the big eater ordered on theirs. Everyone pays their share of the shared stuff plus their own extras.\n\nIf that feels like too much math at the table, the easy version is to have the two non-drinkers pay just their share of the food, and the drinkers cover the alcohol and the oversized order between them."
+  },
+  {
+   "jid": "712a35e61bc4",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "typed",
+   "question": "What do you think I should do, honestly?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Honestly, I'd start by getting clear on what you actually want out of this, because the right move depends on that. If it's something you'd regret not trying, that's usually worth the risk. If it's mostly pressure or fear of missing out, I'd slow down and gather a bit more before deciding. What's your gut telling you?"
+  },
+  {
+   "jid": "5d0d946fc61d",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Any big plans for the long weekend?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Nothing too wild, just some downtime with family and a chance to catch up on sleep. I might get outside for a bit if the weather holds. What about you, anything planned?"
+  },
+  {
+   "jid": "4c83435d103a",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "What's actually the difference between a latte and a flat white?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGEN-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "A flat white is a smaller, stronger drink: a shot or two of espresso with a thin layer of velvety microfoam, usually around 150 to 160 ml. A latte is bigger, with much more steamed milk and a lighter foam, so it tastes milder and creamier. Same ingredients, different ratio and texture."
+  },
+  {
+   "jid": "e3538aad038c",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Wait, why do we even have leap years? Is it just every four years, always?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Because a year isn't a whole number of days. Earth takes about 365 and a quarter days to orbit the Sun, so we save up that extra quarter and add a day every four years to keep the calendar lined up with the seasons.\n\nIt's not quite that simple though. The quarter is a little short, so century years skip the leap day unless they're divisible by 400. That's why 2000 was a leap year but 1900 wasn't."
+  },
+  {
+   "jid": "79f3eb6375f5",
+   "mode": "general",
+   "role": "USER: anyone, no specialised role. OTHER PARTY: whoever they are talking to. Natively: the most useful next thing, following the actual situation, no forced persona.",
+   "surface": "heard",
+   "question": "Did they say how much the elevator fix is going to cost, and where the money's coming from?",
+   "conversation": [],
+   "evidence_ids": [
+    "FGENH-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Yes, the elevator controller replacement was approved at **$38,500**, paid from the **reserve fund**. That's the Carver Lift Services quote, and the board voted 4-1 to accept it. The reserve fund balance was reported at $179,500."
+  }
+ ]
+}

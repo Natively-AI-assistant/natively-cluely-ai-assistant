@@ -18,12 +18,17 @@
 // Only the mis-scaled threshold is corrected.
 
 import { test, describe } from 'node:test';
+import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 
-const { ModeHybridRetriever } = await import(
-  path.resolve(process.cwd(), 'dist-electron/electron/services/modes/ModeHybridRetriever.js')
-);
+// WINDOWS (2026-08-29): `await import()` needs a file:// URL, not a bare
+// absolute path. On POSIX `import('/Users/…')` happens to resolve; on Windows
+// `import('C:\\…')` throws ERR_UNSUPPORTED_ESM_URL_SCHEME, and because these
+// imports run at MODULE LOAD the whole file fails before a single test runs —
+// which is why this file showed up as one opaque file-level ✖ in the Windows
+// leg rather than as a failing assertion. `pathToFileURL` is the fix.
+const { ModeHybridRetriever } = await import(pathToFileURL(path.resolve(process.cwd(), 'dist-electron/electron/services/modes/ModeHybridRetriever.js')).href);
 
 const P = ModeHybridRetriever.prototype;
 
@@ -50,7 +55,7 @@ describe('F23 — lexical floor is on the lexical scale', () => {
 
   test('lexical retrieval ADMITS it at the default floor', () => {
     const out = P.performLexicalRetrieval.call(
-      { computeFtsScore: P.computeFtsScore },
+      { computeFtsScore: P.computeFtsScore, lexicalScores: P.lexicalScores, lexicalStatsFor: P.lexicalStatsFor, idfQueryWords: new WeakMap() },
       [candidate(RESUME)],
       new Set(wordsOf(QUERY)),
     );
@@ -60,7 +65,7 @@ describe('F23 — lexical floor is on the lexical scale', () => {
 
   test('noise is still rejected — the floor was corrected, not removed', () => {
     const out = P.performLexicalRetrieval.call(
-      { computeFtsScore: P.computeFtsScore },
+      { computeFtsScore: P.computeFtsScore, lexicalScores: P.lexicalScores, lexicalStatsFor: P.lexicalStatsFor, idfQueryWords: new WeakMap() },
       [candidate('Completely unrelated content about gardening and weather patterns.')],
       new Set(wordsOf(QUERY)),
     );
@@ -71,7 +76,7 @@ describe('F23 — lexical floor is on the lexical scale', () => {
     // Passing the combined-scale floor explicitly must behave like the default,
     // not re-introduce the bug at the call sites.
     const admitted = P.performLexicalRetrieval.call(
-      { computeFtsScore: P.computeFtsScore },
+      { computeFtsScore: P.computeFtsScore, lexicalScores: P.lexicalScores, lexicalStatsFor: P.lexicalStatsFor, idfQueryWords: new WeakMap() },
       [candidate(RESUME)],
       new Set(wordsOf(QUERY)),
       0.15 * 0.4,

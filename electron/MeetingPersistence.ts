@@ -5,10 +5,12 @@
 import { SessionTracker, TranscriptSegment } from './SessionTracker';
 import { LLMHelper } from './LLMHelper';
 import { DatabaseManager, Meeting } from './db/DatabaseManager';
-import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
+import { GROQ_SUMMARY_JSON_PROMPT } from './llm';
 import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
 import { MeetingContextAssembler } from './services/meeting/MeetingContextAssembler';
-import { cleanMeetingTitle, cleanString, isAnswerFragmentTitle, isAnswerShapedGeneration } from './services/meeting/MeetingSummaryV3';
+import { followUpRedraftPlan } from './services/meeting/FollowUpDraftGenerator';
+import { cleanMeetingTitle, isAnswerFragmentTitle, isAnswerShapedGeneration } from './services/meeting/MeetingSummaryV3';
+import { NOTE_CALL_TIMEOUT_MS } from './services/meeting/generateStructured';
 import type { MeetingSummaryTelemetryMeta } from './services/meeting/types';
 import { MeetingMemoryService, buildPersistedMeetingMemory } from './intelligence/MeetingMemoryService';
 import type { MeetingMemoryProvenanceTelemetry } from './intelligence/MeetingMemoryService';
@@ -19,6 +21,237 @@ import { telemetryService } from './services/telemetry/TelemetryService';
 import type { ProviderDataScopePolicy } from './llm/ProviderRouter';
 const crypto = require('crypto');
 
+/** Longest a derived fallback title may be, before word-boundary truncation. */
+const DERIVED_TITLE_MAX_CHARS = 60;
+
+/** Collapse one note string into a title-length name: first sentence, trailing
+ *  punctuation dropped, truncated on a word boundary, first letter capitalised.
+ *  Deliberately NOT routed through cleanMeetingTitle / isAnswerFragmentTitle /
+ *  isAnswerShapedGeneration: those guards judge MODEL output ("did it name the
+ *  meeting or answer it"), and a note sentence is answer-shaped by construction.
+ *  This text is grounded by definition — it IS the notes. */
+function shortenToTitleLength(value: string): string {
+    const collapsed = String(value || '').replace(/\s+/g, ' ').replace(/^["'`\s]+|["'`\s]+$/g, '').trim();
+    if (!collapsed) return '';
+    const firstSentence = (collapsed.match(/^[^.!?]+[.!?]?/) || [collapsed])[0];
+    let out = firstSentence.replace(/[\s.,;:!?]+$/, '');
+    if (out.length > DERIVED_TITLE_MAX_CHARS) {
+        const cut = out.slice(0, DERIVED_TITLE_MAX_CHARS);
+        const lastSpace = cut.lastIndexOf(' ');
+        out = (lastSpace > 20 ? cut.slice(0, lastSpace) : cut).replace(/[\s.,;:!?]+$/, '');
+    }
+    if (!out) return '';
+    return out.charAt(0).toUpperCase() + out.slice(1);
+}
+
+/**
+ * Deterministic, llm-free title derived from the notes already in hand.
+ *
+ * Priority topics -> takeaways (tldr, else keyPoints) -> overview: topics are the
+ * shortest naming material and read most like a title; the takeaway/overview tiers are
+ * sentences, so only their first clause survives. Returns null only when every tier is
+ * empty — the one case where "no title" is the honest answer.
+ */
+function deriveDeterministicTitle(parts: { topics: string[]; takeaways: string[]; overview: string }): string | null {
+    const topics = parts.topics.map(t => String(t || '').trim()).filter(Boolean);
+    if (topics.length > 0) {
+        const joined = topics.slice(0, 3).map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(', ');
+        const fromTopics = shortenToTitleLength(joined);
+        if (fromTopics) return fromTopics;
+    }
+    const firstTakeaway = parts.takeaways.map(t => String(t || '').trim()).find(Boolean);
+    if (firstTakeaway) {
+        const fromTakeaway = shortenToTitleLength(firstTakeaway);
+        if (fromTakeaway) return fromTakeaway;
+    }
+    if (parts.overview) {
+        const fromOverview = shortenToTitleLength(parts.overview);
+        if (fromOverview) return fromOverview;
+    }
+    return null;
+}
+
+/**
+ * Name the meeting from its FINISHED notes.
+ *
+ * This used to run before the summary, over the first 8000 chars of raw transcript — so on
+ * a long meeting it named the intro rather than the meeting, and regeneration could never
+ * fix a bad title because the old one was passed straight through. Feeding it the notes
+ * also removes one raw-transcript egress point.
+ *
+ * Input priority (RC-9): `tldr` bullets + `topics` are the distilled "what mattered" and
+ * give a 3-6 word naming task far less to wade through than the full overview paragraph.
+ * Falls back tldr -> keyPoints -> overview because BOTH summary pipelines must work: the
+ * legacy V2 path (still the fallback when V3 returns null) populates keyPoints/overview but
+ * leaves tldr empty.
+ *
+ * Returns null — and makes NO llm call — ONLY when there is nothing groundable to name.
+ * Every other failure (the model refusing with the no-action sentinel, answering the notes
+ * instead of naming them, hallucinating an ungrounded title, or the call throwing) falls
+ * back to a title DERIVED FROM THE NOTES with no second llm call — see
+ * deriveDeterministicTitle. A real production meeting was saved unnamed because the model
+ * returned "[[NO_ACTION]]", the grounding guard correctly rejected it, and null then meant
+ * "no title" (2026-08-26). A meeting always needs a name, so null must mean "nothing to
+ * name", never "generation misbehaved". A null return still means "keep the existing
+ * title" — this must never block the notes from being saved.
+ */
+export async function generateTitleFromSummary(
+    llmHelper: { generateMeetingSummary: (system: string, context: string, groq?: string, opts?: any) => Promise<string> },
+    summary: { title?: string; tldr?: string[]; keyPoints?: string[]; overview?: string; topics?: string[] }
+): Promise<string | null> {
+    return (await generateTitleFromSummaryWithSource(llmHelper, summary)).title;
+}
+
+/** Where a generated title actually came from. `none` = nothing groundable to name. */
+export type TitleSource = 'model' | 'fallback' | 'none';
+
+export interface GeneratedTitle {
+    title: string | null;
+    source: TitleSource;
+}
+
+/**
+ * generateTitleFromSummary with the provenance the caller sometimes needs.
+ *
+ * Since the deterministic fallback landed (2026-08-26) a refusal/throw/rejection no longer
+ * returns null — it returns a NOTE-DERIVED title. That is right for the first save (a
+ * meeting must have a name) but wrong for REGENERATION, where the mechanical title would
+ * overwrite a perfectly good LLM one. Callers that must tell the two apart use this
+ * function and `shouldReplaceTitleOnRegenerate`; everyone else keeps the plain wrapper.
+ */
+export async function generateTitleFromSummaryWithSource(
+    llmHelper: { generateMeetingSummary: (system: string, context: string, groq?: string, opts?: any) => Promise<string> },
+    summary: { title?: string; tldr?: string[]; keyPoints?: string[]; overview?: string; topics?: string[] }
+): Promise<GeneratedTitle> {
+    const asFallback = (t: string | null): GeneratedTitle => ({ title: t, source: t ? 'fallback' : 'none' });
+    const clean = (arr?: string[]) => (arr || []).map(t => String(t || '').trim()).filter(Boolean);
+    const overview = typeof summary.overview === 'string' ? summary.overview.trim() : '';
+    const topics = clean(summary.topics).slice(0, 10);
+
+    // tldr -> keyPoints -> overview. Never combine tiers — the first non-empty source wins,
+    // keeping the naming task small.
+    let takeaways = clean(summary.tldr);
+    if (takeaways.length === 0) takeaways = clean(summary.keyPoints);
+
+    if (takeaways.length === 0 && !overview && topics.length === 0) return { title: null, source: 'none' };
+
+    // Deterministic safety net, computed BEFORE the call so every rejection path below
+    // has something to return. Costs nothing when the generated title is accepted.
+    const fallbackTitle = deriveDeterministicTitle({ topics, takeaways, overview });
+
+    let v2TitlePrompt: string | null = null;
+    // Reuse the prompt system's OWN sentinel helpers rather than a local regex, so a
+    // change to NO_ACTION_SENTINEL can never leave this call site matching the old token.
+    let isRefusal: ((text: string) => boolean) | null = null;
+    let stripRefusal: ((text: string) => string) | null = null;
+    try {
+        const promptSystemV2 = require('./llm/promptSystemV2');
+        v2TitlePrompt = promptSystemV2.resolveV2SystemPrompt({ action: 'title', tier: 'cloud', activeMode: null });
+        if (typeof promptSystemV2.shouldSuppressModelOutput === 'function') isRefusal = promptSystemV2.shouldSuppressModelOutput;
+        if (typeof promptSystemV2.stripLeadingNoActionSentinel === 'function') stripRefusal = promptSystemV2.stripLeadingNoActionSentinel;
+    } catch { /* legacy fallback below */ }
+    const titlePrompt = v2TitlePrompt
+        ?? `Generate a concise 3-6 word title for this meeting context. Output ONLY the title text. Do not use quotes or conversational filler.`;
+
+    const context = [
+        takeaways.length ? `Key takeaways:\n${takeaways.map(t => `- ${t}`).join('\n')}` : (overview ? `Overview:\n${overview}` : ''),
+        topics.length ? `Topics: ${topics.join(', ')}` : '',
+    ].filter(Boolean).join('\n\n');
+
+    let generatedTitle = '';
+    try {
+        // Timeout only — deliberately NOT routed to purpose:'extraction'. Naming a
+        // meeting is a writing task, not the benchmarked structured-extraction route.
+        generatedTitle = await llmHelper.generateMeetingSummary(titlePrompt, context, titlePrompt, { timeoutMs: NOTE_CALL_TIMEOUT_MS });
+    } catch (e) {
+        console.warn('[MeetingPersistence] Title generation failed (non-fatal):', (e as Error)?.message);
+        return asFallback(fallbackTitle);
+    }
+
+    // REFUSAL, not a bad title. The title prompt tells the model the sentinel is invalid
+    // here (silenceGateBlock's non-'assist' branch), but production saw it returned anyway.
+    // Detect it explicitly: routed through the guards below it reads as "ungrounded", which
+    // is what sent the first investigation of this failure down the wrong path.
+    if (isRefusal?.(generatedTitle)) {
+        console.warn('[MeetingPersistence] Title generation refused with the no-action sentinel — using the note-derived fallback.');
+        return asFallback(fallbackTitle);
+    }
+    // Misfire shape: sentinel followed by a real title. Keep the title, drop the sentinel.
+    if (stripRefusal) generatedTitle = stripRefusal(generatedTitle);
+
+    const cleanedTitle = cleanMeetingTitle(generatedTitle);
+    if (!cleanedTitle) return asFallback(fallbackTitle);
+    if (isAnswerFragmentTitle(cleanedTitle) || isAnswerShapedGeneration(generatedTitle)) {
+        console.warn(`[MeetingPersistence] Generated title rejected as answer fragment: "${cleanedTitle}"`);
+        return asFallback(fallbackTitle);
+    }
+
+    // The shape guards above (cleanMeetingTitle / isAnswerFragmentTitle /
+    // isAnswerShapedGeneration) only check that the model NAMED the meeting rather than
+    // answering it — none of them checks whether the title is about THIS meeting. A real
+    // production failure produced a well-formed, Title Case, non-answer-shaped title
+    // ("Penetration testing of the user-facing input surface") for a meeting whose notes
+    // never mentioned that topic at all. Mirror the grounding check FollowUpDraftGenerator
+    // already applies to email subjects (see validatedSubject there): require the title to
+    // share at least one meaningful word with the note content it was generated from.
+    const titleTokens = new Set(
+        cleanedTitle.toLowerCase().split(/\W+/).filter(w => w.length >= 4)
+    );
+    if (titleTokens.size > 0) {
+        const corpus = [
+            ...clean(summary.tldr),
+            ...clean(summary.keyPoints),
+            ...topics,
+            overview,
+            typeof summary.title === 'string' ? summary.title : '',
+        ].join(' ').toLowerCase().split(/\W+/).filter(w => w.length >= 4);
+        if (corpus.length > 0) {
+            const corpusSet = new Set(corpus);
+            let overlap = 0;
+            for (const t of titleTokens) if (corpusSet.has(t)) overlap++;
+            // Require ≥1 overlapping meaningful word. A title with ZERO overlap with the
+            // notes it was generated from is ungrounded/hallucinated — drop it in favour
+            // of the note-derived fallback rather than saving it silently.
+            if (overlap === 0) {
+                console.warn(`[MeetingPersistence] Generated title rejected as ungrounded (no overlap with notes): "${cleanedTitle}"`);
+                return asFallback(fallbackTitle);
+            }
+        }
+        // No usable corpus (sparse summary) — accept the title rather than drop it,
+        // matching FollowUpDraftGenerator's validatedSubject behaviour for the same case.
+    }
+
+    return { title: cleanedTitle, source: 'model' };
+}
+
+// The two placeholders a meeting can be carrying instead of a real name:
+// "Untitled Session" (this file's save-path default) and "Meeting Notes"
+// (MeetingSummaryReducer's `params.title || 'Meeting Notes'`).
+const DEFAULT_MEETING_TITLE_RE = /^(?:untitled\b|meeting notes$)/i;
+
+/** True when a title is absent or one of the known placeholders — i.e. not a real name. */
+export function isDefaultMeetingTitle(title: string | null | undefined): boolean {
+    const t = typeof title === 'string' ? title.trim() : '';
+    return !t || DEFAULT_MEETING_TITLE_RE.test(t);
+}
+
+/**
+ * Regeneration-only title policy (2026-08-26).
+ *
+ * On the FIRST save a note-derived fallback is always an improvement over the "Untitled
+ * Session" default. On REGENERATION it is not: the meeting may already carry a good
+ * model-generated name, and since the fallback landed a refusal/timeout during regenerate
+ * would silently DOWNGRADE it to the mechanical one (the old `null` return could not).
+ * So a fallback-derived title may only fill an empty/placeholder title; a model-generated
+ * one always wins. A manual rename is protected one layer lower by replaceDetailedSummary's
+ * user_titled CASE WHEN, so this predicate never has to reason about it.
+ */
+export function shouldReplaceTitleOnRegenerate(existing: string | null | undefined, candidate: GeneratedTitle): boolean {
+    if (!candidate?.title) return false;
+    if (candidate.source === 'model') return true;
+    return isDefaultMeetingTitle(existing);
+}
+
 export class MeetingPersistence {
     private session: SessionTracker;
     private llmHelper: LLMHelper;
@@ -26,6 +259,15 @@ export class MeetingPersistence {
     constructor(session: SessionTracker, llmHelper: LLMHelper) {
         this.session = session;
         this.llmHelper = llmHelper;
+    }
+
+    /**
+     * The connected calendar account's name, which labels the user's own voice
+     * ("me") in the notes; undefined without a connected calendar. A method so a
+     * test can supply one (the build bundles CalendarManager into this file).
+     */
+    protected calendarUserName(): string | undefined {
+        return followUpSenderName();
     }
 
     /**
@@ -173,7 +415,7 @@ export class MeetingPersistence {
         data: { transcript: TranscriptSegment[], usage: any[] | undefined, startTime: number, durationMs: number, context: string, memoryEligibleCount?: number },
         meetingId: string,
         // BUG-04 fix: accept metadata snapshot so calendar info is not lost after session.reset()
-        metadata?: { title?: string; calendarEventId?: string; source?: 'manual' | 'calendar' } | null,
+        metadata?: { title?: string; calendarEventId?: string; calendarEvent?: import('./services/calendar/calendarSessionMatch').CalendarEventSnapshot; callKey?: string; source?: 'manual' | 'calendar' } | null,
         // BUG-MODE-BLEEDING fix: accept mode snapshot so async summary uses the mode that was
         // active when meeting stopped, not whatever mode is active when async processing runs.
         modeSnapshot?: { id: string; name: string; templateType: string } | null
@@ -254,13 +496,84 @@ export class MeetingPersistence {
 
         // Use passed-in metadata snapshot (NOT this.session.getMeetingMetadata() which is already cleared)
         let calendarEventId: string | undefined;
+        let calendarEvent: import('./services/calendar/calendarSessionMatch').CalendarEventSnapshot | undefined;
         let source: 'manual' | 'calendar' = 'manual';
 
         if (metadata) {
             if (metadata.title) title = metadata.title;
             if (metadata.calendarEventId) calendarEventId = metadata.calendarEventId;
+            if (metadata.calendarEvent && metadata.calendarEvent.id === calendarEventId) calendarEvent = metadata.calendarEvent;
             if (metadata.source) source = metadata.source;
         }
+
+        // The calendar can name the speakers: the mic is always the user, so with
+        // a connected calendar their account name labels it in EVERY meeting
+        // (it used to happen only for meetings linked to an event, so most
+        // transcripts still said "Me"); a linked 1:1 also names the other voice,
+        // the one other attendee (calendarSpeakerLabels). No calendar name: "Me".
+        // The notes are written from a NAMED COPY of the transcript, so "Priya
+        // will send the deck" rather than "Speaker 1 will…"; the stored
+        // transcript keeps its raw speakers, because the rename map is keyed on
+        // them. The same map is saved as the meeting's speaker labels, exactly as
+        // if the user had typed the names, and under the same "Speaker labels" switch.
+        let calendarLabels: Record<string, string> | null = null;
+        let llmTranscript = data.transcript;
+        const userName = this.calendarUserName();
+        if ((calendarEvent || userName) && isIntelligenceFlagEnabled('speakerLabelsV1')) {
+            try {
+                const { calendarSpeakerLabels } = require('./services/calendar/calendarSessionMatch') as typeof import('./services/calendar/calendarSessionMatch');
+                calendarLabels = calendarSpeakerLabels(calendarEvent, userName);
+                if (calendarLabels) {
+                    const { SpeakerLabelService } = require('./services/meeting/SpeakerLabelService');
+                    llmTranscript = new SpeakerLabelService().applyLabels(data.transcript, calendarLabels);
+                }
+            } catch (e: any) {
+                console.warn('[MeetingPersistence] calendar speaker names skipped:', e?.message);
+                calendarLabels = null;
+                llmTranscript = data.transcript;
+            }
+        }
+
+        // The call's own record of who spoke (the Meet page's speaking indicator,
+        // via the Companion extension): each other-side line whose speaker is
+        // clear gets that person, in the stored transcript (as a speaker id, so
+        // the notes show the name and a rename applies per person) and in the
+        // notes' named copy; the people in the call are kept with the meeting.
+        // Group calls get names this way, which the calendar alone can't give.
+        // Same "Speaker labels" switch.
+        let storedTranscript = data.transcript;
+        let callLabels: Record<string, string> | null = null;
+        let callParticipants: string[] = [];
+        if (metadata?.callKey && isIntelligenceFlagEnabled('speakerLabelsV1')) {
+            try {
+                const { nameCallLines } = require('./services/meetingDetection/nameCallLines') as typeof import('./services/meetingDetection/nameCallLines');
+                const named = nameCallLines(data.transcript, metadata.callKey, data.startTime, data.durationMs);
+                if (named) {
+                    storedTranscript = named.transcript;
+                    callParticipants = named.participants;
+                    if (Object.keys(named.labels).length > 0) {
+                        callLabels = named.labels;
+                        const byLine = named.transcript;
+                        llmTranscript = llmTranscript.map((seg, i) => {
+                            const id = byLine[i]?.speakerId;
+                            return id && named.labels[id] ? { ...seg, speaker: named.labels[id] } : seg;
+                        });
+                    }
+                }
+            } catch (e: any) {
+                console.warn('[MeetingPersistence] call speaker names skipped:', e?.message);
+                storedTranscript = data.transcript;
+                callLabels = null;
+                callParticipants = [];
+            }
+        }
+        // Only the call's named ids are stored: an STT provider's own voice ids
+        // (diarization) stay in-session, as they always have.
+        storedTranscript = storedTranscript.map((seg: any) => {
+            if (!seg?.speakerId || (callLabels && callLabels[seg.speakerId])) return seg;
+            const { speakerId: _unnamed, ...rest } = seg;
+            return rest;
+        });
 
         // Scope gate applies to the entire post-call LLM summary path, not just
         // mode-reference snippets. If denied, V3 is skipped and LLMHelper's existing
@@ -272,54 +585,9 @@ export class MeetingPersistence {
         } catch { /* settings unavailable → keep existing default */ }
 
         try {
-            // Generate Title (only if not set by calendar and summary scope allows transcript LLM use)
-            if ((!metadata || !metadata.title) && postCallSummaryAllowed) {
-                // Prompt System v2 (flag promptSystemV2): one provider-neutral
-                // title contract replaces the inline literal + GROQ variant.
-                // Flag off → legacy strings, unchanged. Mode is forced to
-                // 'general' — a title is mode-neutral output.
-                let v2TitlePrompt: string | null = null;
-                try {
-                    const { resolveV2SystemPrompt } = require('./llm/promptSystemV2');
-                    v2TitlePrompt = resolveV2SystemPrompt({ action: 'title', tier: 'cloud', activeMode: null });
-                } catch { /* legacy fallback below */ }
-                const titlePrompt = v2TitlePrompt
-                    ?? `Generate a concise 3-6 word title for this meeting context. Output ONLY the title text. Do not use quotes or conversational filler.`;
-                const groqTitlePrompt = v2TitlePrompt ?? GROQ_TITLE_PROMPT;
-
-                const titleContext = data.transcript
-                    .map(segment => `${segment.speaker || 'speaker'}: ${segment.text || ''}`)
-                    .join('\n')
-                    .slice(0, 8000);
-                const generatedTitle = await this.llmHelper.generateMeetingSummary(titlePrompt, titleContext, groqTitlePrompt);
-                // Clamp the GENERATED title to title shape. The prompt asks for
-                // 3-6 words, but that is advice — a model that answers the
-                // transcript instead of naming it wrote its whole reply into
-                // this column (observed 2026-08-02: a 197-char assistant
-                // self-introduction and a 60-char truncated prose answer). The
-                // caps sit above the prompt's contract, so a title that already
-                // obeys it passes through byte-for-byte. Calendar/user titles
-                // never reach here — this branch is skipped when metadata.title
-                // is set — so their length is left alone.
-                const cleanedTitle = cleanMeetingTitle(generatedTitle);
-                // Catch-all (session E, 2026-08-23): an answer-shaped source
-                // is rejected whatever the clamp salvages — the rule lives in
-                // MeetingSummaryV3 beside its sibling shape rules and applies
-                // the same fence/[[GIST]] pre-strip cleanMeetingTitle does.
-                if (cleanedTitle && (isAnswerFragmentTitle(cleanedTitle) || isAnswerShapedGeneration(generatedTitle))) {
-                    // RC-7 adjacent (2026-08-21): the model answered the
-                    // transcript instead of naming it ("Here's the C++
-                    // implementation", "cpp"). Keep the default title; the
-                    // structured V3 summary title updates it later, and a user
-                    // rename outranks both via user_titled.
-                    console.warn(`[MeetingPersistence] Generated title rejected as answer fragment: "${cleanedTitle}"`);
-                } else if (cleanedTitle) {
-                    if (cleanedTitle !== cleanString(generatedTitle)) {
-                        console.warn(`[MeetingPersistence] Generated title clamped: ${cleanString(generatedTitle).length} chars -> "${cleanedTitle}"`);
-                    }
-                    title = cleanedTitle;
-                }
-            }
+            // Title generation (Task 9) moves to AFTER the notes exist — see
+            // generateTitleFromSummary's doc comment. It is called once summaryData is
+            // final, below, whichever pipeline (V3 or legacy V2) produced it.
 
             // Load template note sections for the mode that was active when meeting stopped.
             // BUG-MODE-BLEEDING fix: use the snapshotted mode, not getActiveMode() which may
@@ -420,7 +688,7 @@ export class MeetingPersistence {
                 const assembler = new MeetingContextAssembler(this.llmHelper);
                 const v3StartedMs = Date.now();
                 const assembled = await assembler.assembleSummary({
-                    transcript: data.transcript,
+                    transcript: llmTranscript,
                     title,
                     modeTemplateType: modeSnapshot?.templateType,
                     modeNoteSections,
@@ -438,9 +706,8 @@ export class MeetingPersistence {
                     },
                     startedAtMs: v3StartedMs,
                     startedAtIso: new Date(v3StartedMs).toISOString(),
-                    // Phase 8 — LLM follow-up draft. Gated by flag; scope already enforced by
-                    // postCallSummaryAllowed (we are inside that branch).
-                    generateFollowUpDraft: isIntelligenceFlagEnabled('followUpDraftV2'),
+                    // No follow-up draft here: it is written on demand, when the user
+                    // clicks Generate on the notes (regenerateFollowUpDraft below).
                     // #1 — constrained LLM Summary polish (note-content-only, gated, safe fallback).
                     polishSummary: isIntelligenceFlagEnabled('meetingSummaryLlmPolish'),
                     onStatusUpdate: status => db.updateSummaryStatus(meetingId, status),
@@ -486,21 +753,8 @@ export class MeetingPersistence {
                     // deterministic, no LLM, no network. Compares this meeting's open
                     // questions/risks to recent prior meetings to surface "still open from
                     // last time". Degrades to nothing when there is no prior history.
-                    try {
-                        if (isIntelligenceFlagEnabled('meetingMemoryV2')) {
-                            const { CrossMeetingRecall, priorFromDetailedSummary } = require('./services/meeting/CrossMeetingRecall');
-                            const recent = DatabaseManager.getInstance().getRecentMeetings(15)
-                                .filter(m => m.id !== meetingId)
-                                .map(priorFromDetailedSummary)
-                                .filter((p: unknown): p is NonNullable<typeof p> => p !== null);
-                            const recall = new CrossMeetingRecall().compute(v3, recent);
-                            if (recall.stillOpen.length > 0) {
-                                (summaryData as any).crossMeeting = recall;
-                            }
-                        }
-                    } catch (xmErr) {
-                        console.warn('[CrossMeetingRecall] skipped (non-fatal):', (xmErr as any)?.message);
-                    }
+                    const recall = computeCrossMeetingRecall(meetingId, v3);
+                    if (recall) (summaryData as any).crossMeeting = recall;
                 }
             }
 
@@ -544,7 +798,7 @@ ${sectionList}
 Return ONLY valid JSON — no markdown fences, no comments, no extra keys. Each section value is an array of concise factual bullet strings taken directly from the conversation. Use [] if a section has no relevant content.
 
 {
-  "overview": "1-2 sentence summary of what was discussed",
+  "overview": "one solid paragraph compressing the ENTIRE meeting without losing anything important - purpose, what was discussed, key outcomes, and where things landed",
   "sections": {
 ${sectionKeys}
   }
@@ -559,14 +813,14 @@ ${baseRules}
 
 Return ONLY valid JSON (no markdown code blocks):
 {
-  "overview": "1-2 sentence description of what was discussed",
+  "overview": "one solid paragraph compressing the ENTIRE meeting without losing anything important - purpose, what was discussed, key outcomes, and where things landed",
   "keyPoints": ["3-6 specific bullets - each = one concrete topic or point discussed"],
   "actionItems": ["specific next steps, assigned tasks, or implied follow-ups. If absolutely none found, return empty array"]
 }`;
                     groqSummaryPrompt = GROQ_SUMMARY_JSON_PROMPT;
                 }
 
-                const fallbackContext = buildBalancedTranscriptContext(data.transcript, 16000);
+                const fallbackContext = buildBalancedTranscriptContext(llmTranscript, 16000);
                 const generatedSummary = await this.llmHelper.generateMeetingSummary(summaryPrompt, fallbackContext, groqSummaryPrompt);
 
                 if (generatedSummary) {
@@ -605,6 +859,19 @@ Return ONLY valid JSON (no markdown code blocks):
                 console.log("Transcript too short for summary generation.");
             }
 
+            // Generate Title from the FINISHED notes (Task 9) — only if not set by
+            // calendar/user and summary scope allows transcript LLM use. summaryData
+            // carries tldr/topics for the V3 path or keyPoints/overview for the legacy
+            // V2 fallback; generateTitleFromSummary handles both shapes. A rejected or
+            // failed title leaves `title` at its existing default — never blocks saving.
+            if ((!metadata || !metadata.title) && postCallSummaryAllowed) {
+                const generatedTitle = await generateTitleFromSummary(this.llmHelper, summaryData);
+                if (generatedTitle) {
+                    title = generatedTitle;
+                    if (summaryData && summaryData.schemaVersion === 3) summaryData.title = generatedTitle;
+                }
+            }
+
             const postCallEnhancements = buildPostCallEnhancements({
                 transcript: data.transcript,
                 modeTemplateType: modeSnapshot?.templateType,
@@ -617,7 +884,9 @@ Return ONLY valid JSON (no markdown code blocks):
                     actionItemsStructured: Array.isArray(summaryData.actionItemsStructured) && summaryData.actionItemsStructured.length > 0
                         ? summaryData.actionItemsStructured
                         : postCallEnhancements.actionItemsStructured,
-                    followUpDraft: summaryData.followUpDraft || postCallEnhancements.followUpDraft,
+                    // No follow-up draft: V3 notes offer Generate, and a saved template
+                    // draft would hide that button. The V2 branch below keeps its
+                    // deterministic draft — V2 has no on-demand route.
                 }
                 : {
                     ...summaryData,
@@ -637,7 +906,7 @@ Return ONLY valid JSON (no markdown code blocks):
                 if (isIntelligenceFlagEnabled('meetingMemoryV2')) {
                     const record = new MeetingMemoryService().buildMeetingRecord({
                         meetingId,
-                        segments: data.transcript,
+                        segments: llmTranscript,
                         mode: modeSnapshot?.templateType,
                         startedAt: data.startTime,
                         endedAt: data.startTime + data.durationMs,
@@ -649,7 +918,7 @@ Return ONLY valid JSON (no markdown code blocks):
                     // regardless of what the extractor returned. Defense-in-depth on top
                     // of the extractor's own provenance filter. A zero-audio session of
                     // manual-chat questions + assistant answers persists NO meeting memory.
-                    const persisted = buildPersistedMeetingMemory(data.transcript, record);
+                    const persisted = buildPersistedMeetingMemory(llmTranscript, record);
                     if (persisted.telemetry.zeroEligibleGuardApplied) {
                         console.warn('[MeetingMemoryV2] zero memory-eligible (spoken/STT) transcript segments — persisting EMPTY structured memory. Manual-chat questions and assistant answers are not meeting evidence (Defect B provenance guard).', {
                             meetingId,
@@ -676,10 +945,24 @@ Return ONLY valid JSON (no markdown code blocks):
             console.error("Error generating meeting metadata", e);
         }
 
+        let meetingSaved = false;
         try {
             const minutes = Math.floor(data.durationMs / 60000);
             const seconds = ((data.durationMs % 60000) / 1000).toFixed(0);
             const durationStr = `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
+
+            // The calendar's speaker names become the meeting's labels (a rename
+            // the user already made always wins). Regenerate and the follow-up
+            // draft carry speakerLabels forward, as they do the user's own.
+            if (calendarLabels && summaryData && typeof summaryData === 'object' && !summaryData.speakerLabels) {
+                summaryData = { ...summaryData, speakerLabels: calendarLabels };
+            }
+            // The call's names join them (a user's rename of an id still wins),
+            // and the people who were in the call are kept for the notes.
+            if (summaryData && typeof summaryData === 'object') {
+                if (callLabels) summaryData = { ...summaryData, speakerLabels: { ...callLabels, ...(summaryData.speakerLabels || {}) } };
+                if (callParticipants.length > 0) summaryData = { ...summaryData, callParticipants };
+            }
 
             const meetingData: Meeting = {
                 id: meetingId,
@@ -688,15 +971,21 @@ Return ONLY valid JSON (no markdown code blocks):
                 duration: durationStr,
                 summary: "See detailed summary",
                 detailedSummary: summaryData,
-                transcript: data.transcript,
+                transcript: storedTranscript,
                 usage: data.usage,
                 calendarEventId: calendarEventId,
+                calendarEvent: calendarEvent,
                 source: source,
                 isProcessed: true,
                 summaryStatus: generationSucceeded || data.transcript.length <= 2 ? 'completed' : 'failed'
             };
 
             DatabaseManager.getInstance().saveMeeting(meetingData, data.startTime, data.durationMs);
+            // The catch below rewrites the title and blanks legacySummary on the
+            // assumption that the save never happened. Everything after this line
+            // is inside the same try, so that assumption has to be recorded, not
+            // inferred — see the guard at the top of the catch.
+            meetingSaved = true;
 
             // HINDSIGHT POST-MEETING RETAIN (Phase 13 wiring, behind
             // hindsight_post_meeting_retain_enabled). After the meeting is persisted
@@ -743,9 +1032,15 @@ Return ONLY valid JSON (no markdown code blocks):
 
             // Metadata was already snapshotted before session.reset() — nothing to clear here.
 
-            // Notify Frontend to refresh list
-            const wins = require('electron').BrowserWindow.getAllWindows();
-            wins.forEach((w: any) => w.webContents.send('meetings-updated'));
+            // Notify Frontend to refresh list.
+            // Wrapped like its twin on the failure path below: webContents.send
+            // throws on a destroyed window, and an unguarded throw HERE — after
+            // the save succeeded — fell into the catch and marked a saved
+            // meeting as failed.
+            try {
+                const wins = require('electron').BrowserWindow.getAllWindows();
+                wins.forEach((w: any) => w.webContents.send('meetings-updated'));
+            } catch { /* a closed window is not a save failure */ }
 
             // ATTRIBUTION: one record proving which post-meeting memory layers ran on save
             // (bug #4: MeetingMemoryService + Hindsight retain not previously evidenced).
@@ -797,7 +1092,41 @@ Return ONLY valid JSON (no markdown code blocks):
 
         } catch (error) {
             console.error('[MeetingPersistence] Failed to save meeting:', error);
-            try { DatabaseManager.getInstance().updateSummaryStatus(meetingId, 'failed'); } catch { /* non-fatal */ }
+            // saveMeeting never ran on this path, so the placeholder row endMeeting
+            // wrote is still carrying title "Processing..." and legacySummary
+            // "Generating summary...". Flipping the status alone (what this used to
+            // do) left the meeting reading as perpetually in-flight — a notes screen
+            // saying the notes could not be generated under a heading that says
+            // "Processing...", and the blurb leaking into exported PDFs, global-search
+            // snippets and the RAG summary field.
+            //
+            // `title` is whatever the pipeline had reached before it threw: the
+            // calendar name when the meeting was matched to an event, the generated
+            // title if it got that far, else this file's "Untitled Session" default —
+            // which isDefaultMeetingTitle recognises, so a later recovery pass is free
+            // to replace it. is_processed stays 0 so recoverUnprocessedMeetings picks
+            // this meeting up at the next app start.
+            // ONLY when the save really did not happen. This try also covers
+            // post-save work (the renderer broadcast, the Hindsight retain, the
+            // attribution record), and markSummaryGenerationFailed is
+            // destructive: it blanks legacySummary and rewrites the title. A
+            // throw from any of that used to destroy the notes of a meeting
+            // that had saved perfectly. The old catch only flipped the status,
+            // which is why this was survivable before and is not now.
+            if (!meetingSaved) {
+                try { DatabaseManager.getInstance().markSummaryGenerationFailed(meetingId, title); } catch { /* non-fatal */ }
+            } else {
+                console.warn('[MeetingPersistence] post-save step failed; the meeting is saved and is left intact', {
+                    meetingId, error: (error as any)?.message,
+                });
+            }
+            // Nothing on this path notified the renderer, so an open meeting kept
+            // showing the in-progress placeholder until something else happened to
+            // refresh it. The happy path below broadcasts; so should the failure.
+            try {
+                const wins = require('electron').BrowserWindow.getAllWindows();
+                wins.forEach((w: any) => w.webContents.send('meetings-updated'));
+            } catch { /* non-fatal */ }
             try {
                 telemetryService.track({
                     name: 'post_call_summary_failed',
@@ -870,7 +1199,7 @@ Return ONLY valid JSON (no markdown code blocks):
      *
      * Honors providerDataScopes.post_call_summary — if denied, returns false (no cloud call).
      */
-    public async regenerateSavedMeeting(meetingId: string, opts?: { templateType?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
+    public async regenerateSavedMeeting(meetingId: string, opts?: { templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
         const db = DatabaseManager.getInstance();
         const details = db.getMeetingDetails(meetingId);
         if (!details || !Array.isArray(details.transcript) || details.transcript.length < 3) return false;
@@ -897,7 +1226,22 @@ Return ONLY valid JSON (no markdown code blocks):
             const { ModesManager, TEMPLATE_NOTE_SECTIONS } = require('./services/ModesManager');
             const modesMgr = ModesManager.getInstance();
             const storedMode = (details.detailedSummary as any)?.mode;
-            if (!templateType) templateType = storedMode?.selectedTemplateType || modesMgr.getActiveMode()?.templateType;
+            const all = modesMgr.getModes() as Array<{ id: string; name: string; templateType: string }>;
+            // PRECEDENCE (2026-09-25): explicit mode id > explicit template > the mode
+            // this meeting ran under > the active mode. The auto-detect suggestion
+            // ("Regenerate notes as Sales") used to lose to the saved mode here, so the
+            // notes came back in the ORIGINAL template and the suggestion vanished as if
+            // it had worked.
+            const resolved = resolveRegenerateTarget({
+                modeId: opts?.modeId,
+                templateType: opts?.templateType,
+                stored: storedMode,
+                modes: all,
+                activeTemplateType: modesMgr.getActiveMode()?.templateType,
+            });
+            templateType = resolved.templateType;
+            const explicitMode = resolved.explicitMode;
+            const explicitTemplate = resolved.explicitTemplate;
             // F-503: prefer the mode this meeting actually ran under.
             // MeetingPersistence PERSISTS selectedModeId at write time, but
             // regeneration used to ignore it and resolve by templateType —
@@ -907,15 +1251,12 @@ Return ONLY valid JSON (no markdown code blocks):
             // first, so regenerating a meeting run under a custom mode silently
             // used a DIFFERENT mode's note sections and then rewrote
             // modeMeta.selectedModeId/Name with that other mode's identity.
-            const all = modesMgr.getModes() as Array<{ id: string; name: string; templateType: string }>;
-            const byId = storedMode?.selectedModeId
-                ? all.find((m) => m.id === storedMode.selectedModeId)
-                : undefined;
+            const byId = resolved.byId;
             // Fall back to the legacy template lookup only when the recorded
             // mode is gone (deleted) or was never recorded (pre-selectedModeId
             // meetings).
-            const match = byId ?? all.find((m) => m.templateType === templateType);
-            if (!byId && storedMode?.selectedModeId) {
+            const match = resolved.match;
+            if (!byId && !explicitMode && !explicitTemplate && storedMode?.selectedModeId) {
                 console.warn(`[MeetingPersistence] regenerate: mode ${storedMode.selectedModeId} no longer exists; falling back to the first '${templateType}' mode.`);
             }
             if (match) { modeId = match.id; modeName = match.name; modeNoteSections = modesMgr.getNoteSections(match.id); }
@@ -928,7 +1269,16 @@ Return ONLY valid JSON (no markdown code blocks):
         let transcript = details.transcript as TranscriptSegment[];
         try {
             if (isIntelligenceFlagEnabled('speakerLabelsV1')) {
-                const labels = (details.detailedSummary as any)?.speakerLabels;
+                // A meeting saved before the calendar named "me" in every meeting
+                // has no `me` label: with a connected calendar the regenerated notes
+                // name the user all the same (the Transcript tab shows that name too).
+                const stored = (details.detailedSummary as any)?.speakerLabels;
+                const { calendarSpeakerLabels, modernizeCalendarLabels } = require('./services/calendar/calendarSessionMatch') as typeof import('./services/calendar/calendarSessionMatch');
+                // A `me` the calendar wrote in full before first names regenerates as
+                // the first name (modernizeCalendarLabels); one the user typed stays.
+                const userName = this.calendarUserName();
+                const current = modernizeCalendarLabels(stored, (details as any).calendarEvent, userName) ?? stored;
+                const labels = current?.me ? current : { ...(calendarSpeakerLabels(null, userName) ?? {}), ...(current ?? {}) };
                 if (labels && Object.keys(labels).length > 0) {
                     const { SpeakerLabelService } = require('./services/meeting/SpeakerLabelService');
                     transcript = new SpeakerLabelService().applyLabels(transcript, labels);
@@ -939,6 +1289,11 @@ Return ONLY valid JSON (no markdown code blocks):
         }
 
         db.updateSummaryStatus(meetingId, 'queued');
+        // The follow-up draft is on demand: re-draft it against the new notes only when
+        // the user already asked for one, in the tone they last chose. Otherwise the
+        // notes come back with Generate, as they do after a meeting.
+        const followUpPlan = followUpRedraftPlan((details.detailedSummary as any)?.followUpDraft);
+
         try {
             const startedMs = Date.now();
             const assembler = new MeetingContextAssembler(this.llmHelper);
@@ -956,9 +1311,10 @@ Return ONLY valid JSON (no markdown code blocks):
                 },
                 startedAtMs: startedMs,
                 startedAtIso: new Date(startedMs).toISOString(),
-                generateFollowUpDraft: isIntelligenceFlagEnabled('followUpDraftV2'),
+                generateFollowUpDraft: followUpPlan.redraft && isIntelligenceFlagEnabled('followUpDraftV2'),
                 polishSummary: isIntelligenceFlagEnabled('meetingSummaryLlmPolish'),
-                followUpTone: opts?.tone,
+                followUpTone: opts?.tone ?? followUpPlan.tone,
+                followUpSenderName: followUpPlan.redraft ? followUpSenderFirstName() : undefined,
                 onStatusUpdate: status => db.updateSummaryStatus(meetingId, status),
             });
 
@@ -967,7 +1323,38 @@ Return ONLY valid JSON (no markdown code blocks):
                 return false;
             }
             const v3 = assembled.summary;
+            // Task 9: regeneration is the case where a bad title is otherwise permanent
+            // (the old title was passed straight through). Re-derive it from the fresh
+            // notes; fall back to the existing v3.title when nothing groundable comes
+            // back. replaceDetailedSummary's own user_titled CASE WHEN still protects a
+            // manual rename regardless of what we pass here.
+            // A refusal/timeout now yields a NOTE-DERIVED fallback rather than null, so an
+            // unguarded assignment would overwrite a good existing title with the mechanical
+            // one. shouldReplaceTitleOnRegenerate lets a model-generated title through and
+            // holds a fallback back unless the current title is empty/placeholder.
+            const regenerated = await generateTitleFromSummaryWithSource(this.llmHelper, v3);
+            // First NON-PLACEHOLDER of [fresh summary title, DB row title]: the reducer
+            // fills v3.title with 'Meeting Notes' when the meeting has no name, so a
+            // first-non-EMPTY read would hide a good DB title behind that placeholder.
+            const v3Title = typeof v3.title === 'string' ? v3.title.trim() : '';
+            const dbTitle = typeof details.title === 'string' ? details.title.trim() : '';
+            const existingTitle = isDefaultMeetingTitle(v3Title) ? dbTitle : v3Title;
+            if (shouldReplaceTitleOnRegenerate(existingTitle, regenerated)) {
+                v3.title = regenerated.title as string;
+            } else if (regenerated.title) {
+                console.log(`[MeetingPersistence] regenerate: keeping the existing title "${existingTitle}" over the note-derived fallback.`);
+            }
             const detailedSummary = buildV3DetailedSummary(v3, details.detailedSummary);
+            // "Capture key points" used to be erased by Regenerate: neither the
+            // "From earlier meetings" recall nor the structured memory record was
+            // carried into the rebuilt blob. The recall is recomputed against the
+            // NEW notes (the items it matches may have changed); the memory record
+            // is built from the transcript, which Regenerate does not change, so it
+            // is kept as saved.
+            const recall = computeCrossMeetingRecall(meetingId, v3);
+            if (recall) detailedSummary.crossMeeting = recall;
+            const prevMemory = (details.detailedSummary as any)?.meetingMemory;
+            if (prevMemory) detailedSummary.meetingMemory = prevMemory;
             const ok = db.replaceDetailedSummary(meetingId, detailedSummary, { title: v3.title, summaryStatus: 'completed' });
             try {
                 const wins = require('electron').BrowserWindow.getAllWindows();
@@ -982,7 +1369,9 @@ Return ONLY valid JSON (no markdown code blocks):
     }
 
     /**
-     * Regenerate ONLY the follow-up draft for a saved V3 meeting (cheap; no re-summarize).
+     * Write the follow-up draft for a saved V3 meeting, or rewrite it (cheap; no
+     * re-summarize). This is the ONLY place a draft is first written: meetings save
+     * without one and the notes offer Generate, which lands here.
      */
     public async regenerateFollowUpDraft(meetingId: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly'): Promise<boolean> {
         const db = DatabaseManager.getInstance();
@@ -1018,6 +1407,9 @@ Return ONLY valid JSON (no markdown code blocks):
                 },
                 mode: detailed.mode?.selectedTemplateType,
                 tone,
+                senderName: followUpSenderFirstName(),
+                // NATIVELY_FOLLOWUP_DRAFT_V2=0 kill switch: the template draft, no LLM call.
+                deterministicOnly: !isIntelligenceFlagEnabled('followUpDraftV2'),
             });
             const ok = db.replaceDetailedSummary(meetingId, { ...detailed, followUpDraft: draft });
             try {
@@ -1032,9 +1424,89 @@ Return ONLY valid JSON (no markdown code blocks):
     }
 }
 
+/**
+ * Which mode a Regenerate rebuilds the notes in. PRECEDENCE: an explicit mode id
+ * (the auto-detect suggestion) > an explicit template > the mode this meeting ran
+ * under (F-503) > the active mode. `match` falls back to the first mode with the
+ * resolved template when the chosen one no longer exists. Pure — exported for tests.
+ */
+export function resolveRegenerateTarget<M extends { id: string; templateType: string }>(input: {
+    modeId?: string;
+    templateType?: string;
+    stored?: { selectedModeId?: string; selectedTemplateType?: string } | null;
+    modes: M[];
+    activeTemplateType?: string;
+}): { templateType: string | undefined; explicitMode: M | undefined; explicitTemplate: boolean; byId: M | undefined; match: M | undefined } {
+    const explicitMode = input.modeId ? input.modes.find((m) => m.id === input.modeId) : undefined;
+    const explicitTemplate = Boolean(!explicitMode && input.templateType);
+    const templateType = explicitMode?.templateType
+        || input.templateType
+        || input.stored?.selectedTemplateType
+        || input.activeTemplateType;
+    const byId = explicitMode
+        ?? (explicitTemplate || !input.stored?.selectedModeId
+            ? undefined
+            : input.modes.find((m) => m.id === input.stored!.selectedModeId));
+    const match = byId ?? input.modes.find((m) => m.templateType === templateType);
+    return { templateType, explicitMode, explicitTemplate, byId, match };
+}
+
+// CROSS-MEETING RECALL (Phase 13, behind meetingMemoryV2 — "Capture key points").
+// Local-first, deterministic, no LLM, no network. Compares this meeting's open
+// questions, action items, risks and decisions to the 15 most recent other meetings
+// to surface "still open from last time" and earlier decisions. Returns null when the
+// switch is off, there is no prior history, or nothing matched. Shared by the
+// meeting-end save and Regenerate so the two can never disagree.
+function computeCrossMeetingRecall(
+    meetingId: string,
+    v3: import('./services/meeting/types').MeetingSummaryV3,
+): import('./services/meeting/CrossMeetingRecall').CrossMeetingResult | null {
+    try {
+        if (!isIntelligenceFlagEnabled('meetingMemoryV2')) return null;
+        const { CrossMeetingRecall, priorFromDetailedSummary } = require('./services/meeting/CrossMeetingRecall');
+        const recent = DatabaseManager.getInstance().getRecentMeetings(15)
+            .filter(m => m.id !== meetingId)
+            .map(priorFromDetailedSummary)
+            .filter((p: unknown): p is NonNullable<typeof p> => p !== null);
+        const recall = new CrossMeetingRecall().compute(v3, recent);
+        return recall.stillOpen.length > 0 ? recall : null;
+    } catch (xmErr) {
+        console.warn('[CrossMeetingRecall] skipped (non-fatal):', (xmErr as any)?.message);
+        return null;
+    }
+}
+
 // Build the persisted detailedSummary blob from a MeetingSummaryV3, preserving back-compat
 // V2 bridge fields. Mirrors the inline mapping in processAndSaveMeeting so regenerate and
 // initial save produce identical shapes.
+/**
+ * The user's own name, to sign follow-up drafts with: the Google account connected
+ * for Calendar sync (CalendarManager reads it from that sign-in's id_token). Only
+ * the name is used, never the email. Undefined when Calendar is not connected or
+ * the account carried no name, and the draft is then signed with no name.
+ */
+function followUpSenderName(): string | undefined {
+    try {
+        const { CalendarManager } = require('./services/CalendarManager');
+        const status = CalendarManager.getInstance().getConnectionStatus();
+        return status?.connected && typeof status.name === 'string' ? status.name : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/** The sender's first name: what the follow-up email is signed with (and how it
+ *  refers to the user), whatever the mode's signAs — "Evin", not the account's
+ *  "Evin John Ignatious". */
+function followUpSenderFirstName(): string | undefined {
+    try {
+        const { firstNameOf } = require('./services/calendar/calendarSessionMatch') as typeof import('./services/calendar/calendarSessionMatch');
+        return firstNameOf(followUpSenderName()) ?? undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 function buildV3DetailedSummary(v3: import('./services/meeting/types').MeetingSummaryV3, prev?: any): any {
     return {
         ...(prev && typeof prev === 'object' ? { speakerLabels: prev.speakerLabels } : {}),

@@ -18,6 +18,9 @@
 
 import { isCodingAnswerType, type AnswerType } from './AnswerPlanner';
 import { detectExplicitCodingContract, type ExplicitCodingContract } from './codingFollowup';
+import type { CodingShape } from './codingContract';
+import { detectCodingShape } from './codingShape';
+import { getRegisteredUserInstructions, resolveCodingFormatFromInstructions } from './userInstructionContract';
 
 /**
  * Which coding contract the turn wants.
@@ -42,6 +45,29 @@ export interface CodingPromptSignals {
   codingFormat?: Exclude<ExplicitCodingContract, null>;
   /** The question already carries a code template the answer must conform to. */
   suppliedTemplate?: boolean;
+  /**
+   * WHAT the turn asked for (codingShape.ts): code, a solution, the approach,
+   * the complexity, a dry run, an explanation, a fix, ... Selects the coding
+   * contract in the prompt AND what the post-stream validator requires, so the
+   * two agree. Set on every coding turn; an explicit `codingFormat` outranks it.
+   */
+  codingShape?: CodingShape;
+}
+
+/**
+ * The signals for a turn that is a coding turn only because of what is ON
+ * SCREEN (an attached screenshot, a captured stub) and a question that points
+ * at it ("solve this", "explain this", "what's the complexity of this?", or
+ * nothing). The screen grounds the problem; the words decide the shape, so
+ * "explain this" over a screenshot is an explanation, not a full solution.
+ * One helper so the five promotion sites cannot drift apart again.
+ */
+export function screenPromotedCodingSignals(question: string | null | undefined): CodingPromptSignals {
+  return {
+    codingTask: true,
+    codingTaskKind: isBuildTask(question) ? 'impl' : 'dsa',
+    codingShape: detectCodingShape(question),
+  };
 }
 
 // ── supplied-template detection ─────────────────────────────────────────────
@@ -277,6 +303,9 @@ export function codingTaskKindFor(
  */
 const CONTINUATION_ONLY_FORMATS: ReadonlySet<string> = new Set(['complexity_only', 'dry_run_only']);
 
+/** Shapes that PRODUCE a solution (see the compound-ask rule in the resolver). */
+const PRODUCING_SHAPES: ReadonlySet<CodingShape> = new Set<CodingShape>(['code', 'solve', 'optimize', 'debug', 'full']);
+
 export function resolveCodingPromptSignals(input: {
   answerType?: AnswerType | string | null;
   question?: string | null;
@@ -305,7 +334,39 @@ export function resolveCodingPromptSignals(input: {
    * Defaults false, so no surface changes behaviour without opting in.
    */
   codingTurnPromoted?: boolean;
+  /**
+   * The user's STANDING instructions (the mode "Real-time prompt"). A format
+   * they define there — "respond in exactly this format ...", "no headings",
+   * "only the code" — is a coding format exactly like one stated in the
+   * question, and until 2026-09-20 it was never consulted: the prompt attached
+   * the six-section contract and the repair layer rewrote an obedient
+   * custom-format answer into it (user report, reproduced).
+   *
+   * `undefined` asks the registered provider (ModesManager); a string is used
+   * as given; `null` means "none" and keeps a unit test pure.
+   */
+  userInstructions?: string | null;
+  /** The mode id the caller snapshotted at turn start, forwarded to the provider. */
+  pinnedModeId?: string;
 }): CodingPromptSignals {
+  // Resolved lazily and at most once: only a coding turn ever needs it.
+  let instructionFormatResolved = false;
+  let instructionFormat: ExplicitCodingContract = null;
+  const formatFromInstructions = (): ExplicitCodingContract => {
+    if (!instructionFormatResolved) {
+      instructionFormatResolved = true;
+      try {
+        const text = input.userInstructions === undefined
+          ? getRegisteredUserInstructions(input.pinnedModeId)
+          : input.userInstructions;
+        instructionFormat = resolveCodingFormatFromInstructions(text);
+      } catch {
+        instructionFormat = null;
+      }
+    }
+    return instructionFormat;
+  };
+
   let codingTask = false;
   try {
     codingTask = !!(input.answerType && isCodingAnswerType(input.answerType as AnswerType));
@@ -346,7 +407,10 @@ export function resolveCodingPromptSignals(input: {
       return {
         codingTask: true,
         codingTaskKind: isBuildTask(input.question) ? 'impl' : 'dsa',
+        // A deictic ask carries no format of its own; the mode's still applies.
+        codingFormat: formatFromInstructions() ?? undefined,
         suppliedTemplate: true,
+        codingShape: detectCodingShape(input.question),
       };
     }
   }
@@ -354,9 +418,18 @@ export function resolveCodingPromptSignals(input: {
 
   let codingFormat: ExplicitCodingContract = null;
   let suppliedTemplate = false;
+  const codingShape = detectCodingShape(input.question);
   try {
     codingFormat = detectExplicitCodingContract(input.question || '');
     if (codingFormat && CONTINUATION_ONLY_FORMATS.has(codingFormat) && !input.priorCodingTurnExists) {
+      codingFormat = null;
+    }
+    // A question that asks for a solution AND names the complexity or a dry run
+    // ("solve three sum and give me the time complexity") wants the solution
+    // with those parts in it. The prior-turn gate above only covered first
+    // turns; later in a session the same ask was answered with a bare
+    // complexity line and no code.
+    if (codingFormat && CONTINUATION_ONLY_FORMATS.has(codingFormat) && PRODUCING_SHAPES.has(codingShape)) {
       codingFormat = null;
     }
     suppliedTemplate = detectSuppliedCodeTemplate(input.question)
@@ -365,11 +438,15 @@ export function resolveCodingPromptSignals(input: {
     codingFormat = null;
     suppliedTemplate = false;
   }
+  // What the user says THIS turn outranks their standing config ("just the
+  // code" beats a mode-level format); the mode's format fills the gap.
+  if (!codingFormat) codingFormat = formatFromInstructions();
 
   return {
     codingTask: true,
     codingTaskKind: codingTaskKindFor(input.answerType, input.question) ?? 'dsa',
     codingFormat: codingFormat ?? undefined,
     suppliedTemplate: suppliedTemplate || undefined,
+    codingShape,
   };
 }

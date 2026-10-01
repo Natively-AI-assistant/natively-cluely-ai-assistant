@@ -1,0 +1,282 @@
+{
+ "batch": "b039-technical-interview",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "TECH-CTX-I1": {
+   "title": "Facilities notice: kitchen renovation",
+   "text": "Facilities Notice - Kitchen Renovation Schedule (Third Floor)\n\nHello everyone,\n\nThe third-floor kitchen will be renovated over the next three weeks. Here is what to expect.\n\nWeek 1: The old cabinets and the dishwasher will be removed. The sink and the water dispenser will stay in use until Thursday, after which they are turned off for two days. Please use the second-floor kitchen during that time.\n\nWeek 2: New cabinets and the countertop go in. Expect some noise between 9 and 11 in the morning. The contractors will finish by 3 pm each day so that the afternoon is quiet.\n\nWeek 3: Plumbing is reconnected, the new dishwasher is installed, and the coffee machine moves to the wall next to the window. The old machine is going to the second floor for people who want a backup.\n\nCoffee rota: While the kitchen is closed, the rota for buying milk and oat drinks moves to the second floor. Ravi is in charge this month. If you have a favourite mug in the third-floor kitchen, please take it home by Friday, because we cannot promise that everything in the cabinets will be kept.\n\nRefrigerator: The shared refrigerator will be emptied on Wednesday of week 1. Anything left inside after 5 pm that day will be thrown away.\n\nQuestions can go to the facilities desk at extension 4410. Thank you for your patience, and we hope you like the new kitchen."
+  },
+  "FTECH-CTX-G2": {
+   "title": "Tallowmarket Partner Payouts API v0.3 draft (design exercise)",
+   "text": "TALLOWMARKET PARTNER PAYOUTS API - v0.3 DRAFT\nOwner: Payments & Ledger | Status: draft for interview design exercise\n\nOverview\nPartners (logistics co-ops that aggregate many growers) use this API to request payouts to growers once deliveries are confirmed. All amounts are integers in minor units. v0.3 supports USD only.\n\nAuthentication\nOAuth 2.0 client credentials. Tokens last 60 minutes. Every request must carry a bearer token scoped to payouts:write or payouts:read.\n\nPOST /v1/payouts\nCreates a payout request.\nBody fields:\n- grower_id (string, required)\n- amount_minor (integer, required, 1 to 25,000,000)\n- currency (string, required, must be \"USD\")\n- order_ids (array of strings, 1 to 50 items)\n- memo (string, optional, up to 140 characters)\nHeaders:\n- Idempotency-Key (required, UUID v4)\n\nIdempotency rules\n- Keys are retained for 24 hours after the first request that used them.\n- Same key and identical body: the original response is returned again with the header Idempotent-Replayed: true. No second payout is created.\n- Same key and a different body: 422 with error code idempotency_key_reused.\n- Same key while the first request is still being processed: 409 with error code request_in_progress. The client should retry after a short delay.\n\nPayout statuses\npending -> held -> released, or pending -> held -> reversed.\n- pending: accepted, not yet funded from escrow.\n- held: funds reserved in escrow.\n- released: sent in the nightly settlement batch.\n- reversed: cancelled while held. Once released, a payout cannot be reversed through this API.\n\nPOST /v1/payouts/{id}/reverse\nAllowed only while status is held. Returns 409 with error code not_reversible otherwise.\n\nGET /v1/payouts/{id}\nReturns the payout and its status history with timestamps.\n\nRate limits\n50 requests per second per partner, with bursts up to 100. Over the limit the API returns 429 with a Retry-After header in seconds.\n\nWebhooks\nEvents: payout.released and payout.reversed. Delivery is at-least-once; each event carries an event_id that partners should use to deduplicate. Failed deliveries (any non-2xx or no response within 10 seconds) are retried up to 8 times with exponential backoff over about 24 hours. Payloads are signed with HMAC-SHA256 in the Tallow-Signature header.\n\nErrors\nErrors return JSON with code, message and request_id. Error codes are stable; messages may change.\n\nOut of scope for v0.3\nRefunds, chargebacks, multi-currency payouts, and payout scheduling. These will be designed separately.\n\nOpen questions for the exercise\n- How should the idempotency store be built so the 409 and 422 cases behave correctly under concurrent retries?\n- Should GET support listing payouts by grower with cursor pagination?"
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "TECH-CTX-C1": {
+   "title": "Cluster Count problem statement (draft 3)",
+   "text": "Cluster Count - Problem Statement (draft 3)\n\nYou are given n servers and a list of direct network links between them. Two servers belong to the same cluster if they are connected by any chain of links. Return the number of clusters.\n\nInput\n- n, the number of servers. Servers are numbered from 0 to n - 1.\n- links, a list of pairs [a, b], each meaning server a has a direct link to server b.\n\nConstraints\n- 1 <= n <= 100,000\n- 0 <= number of links <= 200,000\n- Each pair appears at most once in links.\n- Links are undirected.\n\nRequirements\n- Your solution must run in O(n + m) time, where m is the number of links.\n- Use at most O(n) extra memory.\n\nNotes from the platform team (added later)\n- The stress runs use n up to 1,000,000,000 with the links given as an n by n adjacency matrix, so make sure your solution handles that.\n- Because the stress runs are large, O(n log n) time is acceptable.\n- Servers in the stress runs are numbered from 1 to n.\n- In production, a link from a to b is one-way, so a link from a to b does not mean b can reach a. Count clusters the way you think is most useful.\n- Duplicate links show up in real data. Ignore them.\n\nExample\nn = 5, links = [[0,1],[1,2],[3,4]] returns 2.\n\nPlease explain your reasoning in your submission, including any assumptions you had to make about the input."
+  }
+ },
+ "items": [
+  {
+   "jid": "746291a8f531",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "number of islands, need a bfs version in python with a short explanation of how visited is handled",
+   "conversation": [],
+   "evidence_ids": [
+    "TECH-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "## Approach\nUse BFS from each unvisited land cell. When I find a `'1'`, I increment the count and flood the whole island with a queue, marking cells as visited by flipping them to `'0'` in place. That way no separate visited set is needed, and each cell is enqueued at most once.\n\n## Code\n```python\nfrom collections import deque\n\ndef numIslands(grid):\n    if not grid or not grid[0]:\n        return 0\n\n    rows, cols = len(grid), len(grid[0])\n    count = 0\n\n    def bfs(r, c):\n        q = deque([(r, c)])\n        grid[r][c] = '0'  # mark visited on enqueue\n        while q:\n            x, y = q.popleft()\n            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):\n                nx, ny = x + dx, y + dy\n                if 0 <= nx < rows and 0 <= ny < cols and grid[nx][ny] == '1':\n                    grid[nx][ny] = '0'  # mark before enqueue\n                    q.append((nx, ny))\n\n    for r in range(rows):\n        for c in range(cols):\n            if grid[r][c] == '1':\n                count += 1\n                bfs(r, c)\n\n    return count\n```\n\n## Complexity\nTime is O(rows × cols) since every cell is visited once. Space is O(rows × cols) worst case for the queue, when the whole grid is one island.\n\nVisited handling: I mark a cell `'0'` the moment I enqueue it, not when I dequeue it. That prevents the same cell being added to the queue multiple times by different neighbors."
+  },
+  {
+   "jid": "53e9e50d9987",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "what's the time complexity of this?\n\nfunction hasDuplicate(nums: number[]): boolean {\n  for (let i = 0; i < nums.length; i++) {\n    for (let j = i + 1; j < nums.length; j++) {\n      if (nums[i] === nums[j]) return true;\n    }\n  }\n  return false;\n}",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "**O(n²)** time, since the outer loop runs n times and the inner loop scans the rest of the array each pass, giving roughly n²/2 comparisons. Space is **O(1)**, just the two loop counters, no extra storage."
+  },
+  {
+   "jid": "37e95a03b229",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Is that realistic?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "It depends on the assumptions, and I'd want to pressure-test the ones that matter most. If the load and growth numbers hold, the design is realistic. If they're optimistic, the whole thing shifts."
+  },
+  {
+   "jid": "a665e738b179",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "The spec I sent also covers refund webhooks, right? So walk me through how often a failed refund webhook gets retried and for how long.",
+   "conversation": [],
+   "evidence_ids": [
+    "FTECH-CTX-G2",
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "The spec doesn't cover refund webhooks. It lists refunds, chargebacks, multi-currency payouts, and payout scheduling as out of scope for v0.3, to be designed separately. What it does specify is retry behavior for the payout webhooks it defines, payout.released and payout.reversed: failed deliveries, meaning any non-2xx or no response within 10 seconds, are retried up to 8 times with exponential backoff over about 24 hours. So the retry window I can speak to is roughly a day, and refunds would need their own design."
+  },
+  {
+   "jid": "369ee88b38de",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How would you design the REST API for a todo application? Give me the endpoints, the status codes you would return, and how you would version it.",
+   "conversation": [],
+   "evidence_ids": [
+    "TECH-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'd model it around a single resource, `/todos`, with `/todos/{id}` for a specific item. So `GET /todos` to list, `POST /todos` to create, `GET /todos/{id}` to fetch one, `PATCH` to update, and `DELETE` to remove. For status codes: `200` on successful reads and updates, `201` with a `Location` header on create, `204` on delete, `400` for a malformed body, `404` when the id doesn't exist, and `422` if the payload is well-formed but fails validation. For versioning, I'd put it in the URL path, like `/v1/todos`, since it's explicit and easy to route."
+  },
+  {
+   "jid": "424aa155b2b2",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "When you were working on Harrow, what peak write rate did it hit, and how did you partition it?",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I didn't work on anything called Harrow, so I don't have a peak write rate or a partitioning scheme for it. The closest thing in my background is Dockhand, the Kafka event pipeline I designed at Larkspur Freight, which handles about 2.3 million shipment status events a day, and I used a transactional outbox table there to avoid duplicate writes. On the storage side, I partitioned the 1.9-billion-row load_events table by month in PostgreSQL, which cut nightly vacuum time from 4 hours to 35 minutes. If Harrow is a different system, I'd want to know what it was before I claim anything about it."
+  },
+  {
+   "jid": "68efee2f4731",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Given an array of integers and a target, return the indices of the two numbers that add up to the target. How would you solve it?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "## Approach\nUse a hash map from value to index. For each element, check whether its complement (target minus the current value) is already in the map; if it is, return both indices. Otherwise store the current value and index and move on. This finds the pair in a single pass.\n\n## Code\n```python\ndef two_sum(nums, target):\n    seen = {}\n    for i, num in enumerate(nums):\n        complement = target - num\n        if complement in seen:\n            return [seen[complement], i]\n        seen[num] = i\n    return []\n```\n\n## Complexity\nTime is O(n) because each element is visited once and hash lookups are constant time on average. Space is O(n) for the map, which can hold up to n entries."
+  },
+  {
+   "jid": "51145c111500",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Can you give me an example?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'll give you a concrete one. Say I'm working with a list of transactions and I need to find pairs that sum to a target. The brute force way is a nested loop, checking every pair, which is O(n²). The better way is to walk the list once, and for each value check whether its complement is already in a hash set, then add the current value. That's O(n) time and O(n) space. The tradeoff is memory for speed, and that pattern shows up constantly."
+  },
+  {
+   "jid": "5577ef972ff4",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "What should I say?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the question yet, so I'll answer once I hear it. If you're asking how I'd approach a technical problem, I'd start by restating it in my own words, confirm the constraints, then walk through my reasoning before writing anything."
+  },
+  {
+   "jid": "e1f894aabca2",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "Can you summarize where we are?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a record of where things stand, so let me pull together what's done, what's still open, and any blockers, and I'll send you an update right after this."
+  },
+  {
+   "jid": "c454f6747976",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "he's asking which of my projects used Temporal and what it replaced. short answer",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "At Quillfeather Health I migrated 38 cron scripts into Metronome, a single Temporal-based scheduler. It replaced those scattered cron jobs and removed a class of double-send bugs in the appointment-reminder service."
+  },
+  {
+   "jid": "d4e36ef1b9bd",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Okay, walk me through it with s equals ADOBECODEBANC and t equals ABC.",
+   "conversation": [
+    "INTERVIEWER (heard): Minimum window substring. You get two strings, s and t. Find the smallest substring of s that contains every character of t, counting duplicates. How would you solve it?",
+    "NATIVELY: ## Approach\nSliding window with two pointers and a frequency count. Expand the right pointer until the window covers all of t, then shrink from the left while it still covers t, recording the smallest valid window. A `need` map tracks required counts and a `have`/`missing` counter tells you when the window is valid.\n\n## Code\n```python\nfrom collections import Counter\n\ndef minWindow(s: str, t: str) -> str:\n    if not t or not s:\n        return \"\"\n    need = Counter(t)\n    required = len(need)\n    formed = 0\n    window = {}\n    left = 0\n    best = (float(\"inf\"), 0, 0)\n\n    for right, ch in enumerate(s):\n        window[ch] = window.get(ch, 0) + 1\n        if ch in need and window[ch] == need[ch]:\n            formed += 1\n\n        while formed == required:\n            if right - left + 1 < best[0]:\n                best = (right - left + 1, left, right)\n            lc = s[left]\n            window[lc] -= 1\n            if lc in need and window[lc] < need[lc]:\n                formed -= 1\n            left += 1\n\n    return \"\" if best[0] == float(\"inf\") else s[best[1]:best[2] + 1]\n```\n\n## Complexity\nTime is O(n + m) where n is the length of s and m is the length of t, since each pointer moves at most n times. Space is O(k) for the frequency maps, where k is the number of distinct characters."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Let me trace it. t is ABC, so need is A:1, B:1, C:1, and required is 3. I expand right until the window first covers all three. That happens at index 5, the C in ADOBEC, so the window is ADOBEC, length 6. Now formed equals required, so I shrink from the left. Dropping the A breaks coverage, so formed drops to 2 and I stop shrinking. I record ADOBEC as the best so far.\n\nThen I keep expanding. The next time the window covers ABC is at the second C, giving ADOBECODEBA... actually the window from the first A through that C, and I shrink again. The key moment is near the end: when right reaches the final C, the window is BANC, and shrinking from the left keeps it valid down to ABC, length 3. That's smaller than 6, so best becomes ABC.\n\nSo the answer is **ABC**, length 3. The two pointers each move at most n times, which is why it stays linear."
+  },
+  {
+   "jid": "8ab9be7a4085",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "fizzbuzz in go",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "## Approach\nIterate from 1 to n. For each number, check divisibility by 15 first (both 3 and 5), then by 3, then by 5, otherwise print the number itself. Checking 15 first avoids printing \"Fizz\" or \"Buzz\" alone on multiples of both.\n\n## Code\n```go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"strconv\"\n\t\"strings\"\n)\n\nfunc fizzBuzz(n int) []string {\n\tresult := make([]string, 0, n)\n\tfor i := 1; i <= n; i++ {\n\t\tswitch {\n\t\tcase i%15 == 0:\n\t\t\tresult = append(result, \"FizzBuzz\")\n\t\tcase i%3 == 0:\n\t\t\tresult = append(result, \"Fizz\")\n\t\tcase i%5 == 0:\n\t\t\tresult = append(result, \"Buzz\")\n\t\tdefault:\n\t\t\tresult = append(result, strconv.Itoa(i))\n\t\t}\n\t}\n\treturn result\n}\n\nfunc main() {\n\tfmt.Println(strings.Join(fizzBuzz(15), \" \"))\n}\n```\n\n## Complexity\nTime is O(n), one pass over the range. Space is O(n) for the result slice, or O(1) extra if you print instead of collecting."
+  },
+  {
+   "jid": "3f43e264ff70",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Are we on the same page?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, we're on the same page. Let me play back what I've got so you can confirm it, and if anything's off, tell me now and I'll adjust before we go further."
+  },
+  {
+   "jid": "879de2a1e631",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "var vs let here?",
+   "conversation": [
+    "USER (typed to Natively): why does this print 3 3 3 instead of 0 1 2?\n\nfor (var i = 0; i < 3; i++) {\n  setTimeout(() => console.log(i), 100);\n}",
+    "NATIVELY: Because `var` is function-scoped, not block-scoped. There's only one `i` shared by all three callbacks, and by the time the timers fire, the loop has already finished and `i` is 3. So all three log 3.\n\nSwap `var` for `let` and you get 0, 1, 2, since `let` creates a fresh binding per iteration. Or keep `var` and capture the value with an IIFE.",
+    "USER (typed to Natively): fix it",
+    "NATIVELY: Because `var` is function-scoped, so there's only one `i` shared across all three callbacks. The loop finishes before any timer fires, and by then `i` is 3, so every callback logs that same final value. Switch to `let` and each iteration gets its own binding, giving you 0, 1, 2."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Here's the fix with `let`:\n\n```js\nfor (let i = 0; i < 3; i++) {\n  setTimeout(() => console.log(i), 100);\n}\n```\n\nThat prints 0, 1, 2, because `let` creates a new binding for `i` on each iteration, so each callback closes over its own copy.\n\nIf you have to keep `var`, capture the value in an IIFE:\n\n```js\nfor (var i = 0; i < 3; i++) {\n  (function (j) {\n    setTimeout(() => console.log(j), 100);\n  })(i);\n}\n```\n\nSame output, just more code."
+  },
+  {
+   "jid": "985860925cda",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Take a look at the server cluster statement in front of you. Explain how you would count the clusters, what data structure you would reach for, and what complexity you would be aiming for given the limits.",
+   "conversation": [],
+   "evidence_ids": [
+    "TECH-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I iterate the links once, union each pair, then count distinct roots. That gives me near-linear time in n plus m, and O(n) extra memory for the parent array, which fits the limits."
+  },
+  {
+   "jid": "24e4041cc9bf",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Write a function that returns the second largest number in the array. And think about duplicates, they might matter.",
+   "conversation": [
+    "INTERVIEWER: Here is the next one. I'll give you an array of integers.",
+    "USER (spoken): Can the array contain duplicate values?",
+    "INTERVIEWER: No, all the values are distinct."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "```python\ndef second_largest(nums):\n    if len(nums) < 2:\n        raise ValueError(\"need at least two elements\")\n    first = second = float('-inf')\n    for n in nums:\n        if n > first:\n            second = first\n            first = n\n        elif n > second:\n            second = n\n    return second\n```\n\nOne pass, tracking the largest and second largest seen so far. Since you said the values are distinct, the `elif` never hits an equal value, but if duplicates ever show up it still skips them correctly, so a repeated max won't be returned as the second largest.\n\nTime O(n), space O(1)."
+  },
+  {
+   "jid": "4956599bad5f",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So what happens if two threads increment the same counter?",
+   "conversation": [
+    "INTERVIEWER: We run this on a server with sixteen cores handling web requests.",
+    "USER (spoken): Understood, so many requests can be in flight at once.",
+    "INTERVIEWER: Exactly. Keep that in mind.",
+    "INTERVIEWER (heard): What's the difference between a process and a thread?",
+    "NATIVELY: A process is an independent execution unit with its own memory space, so processes are isolated from each other. A thread is a unit of execution inside a process, and threads in the same process share that memory. So threads are cheaper to create and switch between, but they can step on each other's data, which is why you need synchronization."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "It's a race condition. The increment isn't atomic, it's a read, a modify, and a write. If both threads read the same value before either writes back, they both write the same result and one increment is lost. So the counter ends up lower than it should be. You fix it with a lock or an atomic operation."
+  },
+  {
+   "jid": "3fe9659a077e",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "sql or nosql for the trips table in a ride sharing app? give me an answer with a reason",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "For the trips table, I'd go with a relational database like Postgres. Trips have a clear schema, and you need strong consistency for things like matching a driver to a rider and processing payments, so you don't want eventual consistency there. NoSQL makes more sense for high-write, flexible data like live location pings or ride events."
+  },
+  {
+   "jid": "edf9b5d735ac",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "why does this print 3 3 3 instead of 0 1 2?\n\nfor (var i = 0; i < 3; i++) {\n  setTimeout(() => console.log(i), 100);\n}",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Because `var` is function-scoped, not block-scoped. There's only one `i` shared by all three callbacks, and by the time the timers fire, the loop has already finished and `i` is 3. So all three log 3.\n\nSwap `var` for `let` and you get 0, 1, 2, since `let` creates a fresh binding per iteration. Or keep `var` and capture the value with an IIFE."
+  }
+ ]
+}

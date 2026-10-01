@@ -1,0 +1,1659 @@
+{
+ "id": "INT-M",
+ "segments": [
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Hi, is this Maya?",
+   "timestamp": 1789480802200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yes, this is Maya. Hi!",
+   "timestamp": 1789480804800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Hey Maya, this is Theo Lindqvist, I'm a senior recruiter over at Corvella Health. Is now still a good time?",
+   "timestamp": 1789480813400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, now's perfect. I just grabbed a coffee so I'm, uh, fully ready.",
+   "timestamp": 1789480819200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Love that. Sorry in advance, if you hear barking in the background, that's Biscuit. He has very strong opinions about the mail carrier.",
+   "timestamp": 1789480829000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ha, no worries at all. My cat mostly just sits on my keyboard, so we're even.",
+   "timestamp": 1789480836000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Honestly the cat is more disruptive, the dog is just louder. So you're up in Boulder, right? Did you guys get that snow last night?",
+   "timestamp": 1789480846600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "We did, like an inch on the grass and then it was 70 degrees by noon. Classic Colorado September.",
+   "timestamp": 1789480854800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Classic. Down in Denver it just rained, and I had already put the patio furniture away, so of course.",
+   "timestamp": 1789480863000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Of course.",
+   "timestamp": 1789480864400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, so the plan for today. This is about a 30 minute call. I'll tell you a bit about Corvella and the role, I'd love to hear about your background and what you're looking for, then we'll talk comp and logistics, and then process and next steps. Sound good?",
+   "timestamp": 1789480884600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Sounds great.",
+   "timestamp": 1789480886000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Cool. So Corvella, we build care coordination software for home health agencies. The main product is called Corvella Connect.",
+   "timestamp": 1789480894200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Basically when a nurse or a physical therapist goes out to a patient's home, Connect handles their schedule, the route, the visit notes, the medication reconciliation, and then it syncs everything back to the agency and to the patient's physician.",
+   "timestamp": 1789480910800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, so it's both a mobile app for the clinicians and some kind of back office tool for the agency?",
+   "timestamp": 1789480919400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Exactly. There's the clinician mobile app, and then there's the agency web console, which is where the schedulers and the clinical managers live. And we just started on a payer portal too, but that's pretty early.",
+   "timestamp": 1789480934400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We're used by about 340 home health agencies right now, mostly in the Mountain West and the Midwest.",
+   "timestamp": 1789480942200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Nice. And what stage is the company at?",
+   "timestamp": 1789480946000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We're Series B. We closed a $42 million round back in March, led by Harborline Ventures, and that's mostly going into product and engineering hiring. We're about 180 people total.",
+   "timestamp": 1789480958600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Got it. That's a good size, like, not tiny, not huge.",
+   "timestamp": 1789480963600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, it still feels like a startup, you'll know everyone in product by name in a couple weeks, but we're not, you know, running payroll out of a spreadsheet anymore.",
+   "timestamp": 1789480976200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's reassuring.",
+   "timestamp": 1789480977600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So, the role itself. The title is Senior Product Designer, which internally maps to our P4 level. It sits on the Clinician Experience team, which owns the mobile app the nurses use in the field.",
+   "timestamp": 1789480992200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You'd be reporting to Dana Whitfield, she's our Director of Product Design. The team right now is two other designers, a PM, and about 7 engineers.",
+   "timestamp": 1789481003200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. And the focus would be mostly the mobile app, then?",
+   "timestamp": 1789481008200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Mostly mobile, yeah. The big project for next year is rebuilding the visit documentation flow, because right now nurses are spending, Dana told me, something like 40 minutes after every shift catching up on notes, and that's a big burnout driver for them.",
+   "timestamp": 1789481026000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, yeah, that's a real problem. That's actually a big part of why I applied, but I'll get to that.",
+   "timestamp": 1789481034600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, please do. And there's a lot of offline stuff too, because half these patients live out in places with one bar of signal, so the app has to work without a connection and sync later.",
+   "timestamp": 1789481049600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, that's a fun constraint. Like, conflict resolution when two people edit the same visit record?",
+   "timestamp": 1789481056600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Exactly that, and I'm going to stop there before I say something technically wrong, because the engineers will absolutely correct me.",
+   "timestamp": 1789481065600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ha, fair.",
+   "timestamp": 1789481067000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, so, tell me about yourself. Walk me through your background.",
+   "timestamp": 1789481072000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Sure. So I've been a product designer for about five years. I started at a small agency in Denver called Northpaw Studio, I was there about two years doing mostly web and mobile work for, um, a bunch of different clients, a lot of retail and a couple of fintech apps.",
+   "timestamp": 1789481093000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And then for the last three years I've been at Brightlane Insurance, where I'm a senior product designer on the claims team.",
+   "timestamp": 1789481102400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And what does that look like day to day?",
+   "timestamp": 1789481106600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So my biggest project was redesigning the mobile claims flow. When I joined, filing an auto claim in the app took people on average about 11 minutes, and a lot of people just gave up and called the phone line instead.",
+   "timestamp": 1789481123600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "We rebuilt it around photo capture and, like, progressive questions, so you only see what's relevant to your accident, and we got the median time down to about 4 minutes. Mobile completion went up 22% in the first quarter after launch.",
+   "timestamp": 1789481140600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's a great outcome. Were you leading that?",
+   "timestamp": 1789481144400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I was the lead designer on it, yeah. I worked with one other designer, a researcher, and the PM. I ran most of the usability testing too, we did something like 30 sessions across the whole project.",
+   "timestamp": 1789481159800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Nice. And the other designer, were you kind of mentoring them?",
+   "timestamp": 1789481164800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, she was a junior designer when she joined, so a lot of pairing and crit sessions. She's, uh, she's great now, she just got promoted actually.",
+   "timestamp": 1789481176200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Love that. Okay, and why are you looking now? Why Corvella?",
+   "timestamp": 1789481181200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Honestly, a couple things. The claims work was great, but insurance is, uh, it's a lot of designing around the company telling people no.",
+   "timestamp": 1789481191400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And my mom has been a home health nurse for like twenty years. I've watched her sit at the kitchen table at 9pm doing her charting, so when I saw a role literally about the nurses' documentation experience, it kind of jumped out at me.",
+   "timestamp": 1789481210000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh wow, that's a very direct connection.",
+   "timestamp": 1789481213400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, and I've already gotten her opinions on your app, which, I will spare you.",
+   "timestamp": 1789481220000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Ha, please don't spare me, or actually, maybe save that for Dana, she would love it.",
+   "timestamp": 1789481227000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And the other piece is, Brightlane just announced everyone's going back in office three days a week starting in January, and I really prefer remote, so the fact that this role is fully remote was a big draw for me too.",
+   "timestamp": 1789481244000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Got it, yeah, that makes sense. What kind of team setup are you hoping for?",
+   "timestamp": 1789481250600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I like being really close to research and engineering. At Brightlane there's a lot of handoff, like design throws things over the wall and then we find out three months later what shipped. I'd like to be in the room earlier.",
+   "timestamp": 1789481267600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's very much how the Clinician Experience team works. The engineers actually go on ride-alongs, like they'll go out with nurses on visits for a day.",
+   "timestamp": 1789481278600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, that's cool. Do the designers do that too?",
+   "timestamp": 1789481282800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Everybody does, it's part of onboarding. You'd probably do two or three ride-alongs in your first month.",
+   "timestamp": 1789481290200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, I love that. And what does the design org look like overall? Is there a design system team?",
+   "timestamp": 1789481298400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So there are eleven designers total across product, and there's no dedicated design system team yet, it's kind of a shared guild. Donna Park, who's a staff designer, sort of runs it informally.",
+   "timestamp": 1789481312200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Got it. I've been in the shared guild situation. Usually it means someone's fig ma file has four hundred layers named Rectangle.",
+   "timestamp": 1789481321600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Ha, I have heard that exact complaint, word for word, I think from Donna.",
+   "timestamp": 1789481327800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ha, then we'll get along.",
+   "timestamp": 1789481330400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And is there a research team, or do designers run their own studies?",
+   "timestamp": 1789481336200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There's one full-time UX researcher, Keiko, who's shared across the whole product org, so designers do a lot of their own interviews and testing, and Keiko kind of coaches and reviews the plans.",
+   "timestamp": 1789481350000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, that's pretty similar to what I do now, so that's comfortable.",
+   "timestamp": 1789481355400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And just so you have it, Dana said the way she'd measure success for this hire in the first year is basically getting that post-shift documentation time down. She threw out a goal of cutting it in half, from roughly 40 minutes to 20.",
+   "timestamp": 1789481373600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, I like that there's an actual number attached. That's a very concrete problem.",
+   "timestamp": 1789481379800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, so let's talk logistics, and, oh, wait, actually, I need to go back to something you said earlier. You mentioned the role being fully remote.",
+   "timestamp": 1789481390800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah?",
+   "timestamp": 1789481391800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So I'm sorry if the posting was unclear, but it's not fully remote. It's hybrid, 2 days a week in our Denver office. The Clinician Experience team does Tuesdays and Thursdays in person.",
+   "timestamp": 1789481405600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh. Okay. The posting said remote-friendly, so I just assumed.",
+   "timestamp": 1789481410200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, that's on us, we've gotten that feedback before. I think remote-friendly was supposed to mean flexible on the other days. I'll get the wording fixed.",
+   "timestamp": 1789481421200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "No, that's okay. I mean, Boulder to Denver is doable, especially for 2 days. It's like 40 minutes if 36 isn't a disaster.",
+   "timestamp": 1789481431000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Which it always is.",
+   "timestamp": 1789481433200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Which it always is. Where's the office?",
+   "timestamp": 1789481436600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We're in LoDo, right by Union Station, so if you take the bus in from Boulder it's pretty easy.",
+   "timestamp": 1789481444800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And for the other three days you can work from wherever, but we do ask people to be based in Colorado and to keep core hours of 10am to 3pm Mountain time.",
+   "timestamp": 1789481458200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's fine, I'm not going anywhere.",
+   "timestamp": 1789481461200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh, and one correction on my side while I'm at it. I said we're about 180 people. That was before the Series B hiring push, we actually crossed 215 people last month. I keep using the old slide.",
+   "timestamp": 1789481477000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ha, fair, it's hard to keep up when you're growing.",
+   "timestamp": 1789481481600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, so let's talk comp. The base salary band for this role is $128,000 to $146,000.",
+   "timestamp": 1789481488600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay.",
+   "timestamp": 1789481489600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And, you know, I'm not going to ask about your current salary, we don't do that, but I'd love to know what you're targeting so we're not wasting each other's time.",
+   "timestamp": 1789481502600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Sure, I appreciate that. I'm targeting a base of around $155,000.",
+   "timestamp": 1789481507600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, so that's a bit above the top of that band. Not necessarily a dealbreaker, let me note it and we can come back to it.",
+   "timestamp": 1789481518600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, and I'm open on how it's structured, the total package matters to me.",
+   "timestamp": 1789481524800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Right. So on top of base, there's an annual bonus with a target of 10% of base, tied to company goals. Last year it paid out at 100% of target.",
+   "timestamp": 1789481537400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And equity. At this level the standard grant is 12,000 stock options, four year vesting with a one year cliff. The strike price is based on the last 409A, which was about $3.10 a share, but there's a new 409A coming after the round, so that could move.",
+   "timestamp": 1789481557200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. Is there any refresh on equity, or is it just the initial grant?",
+   "timestamp": 1789481563400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "There are refresh grants tied to performance reviews, which happen once a year in February. I don't have exact numbers on refreshes, those vary.",
+   "timestamp": 1789481573600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Got it. And benefits?",
+   "timestamp": 1789481575800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Medical, dental, vision, the company covers 90% of premiums for you and 70% for dependents. 401k with a 4% match. And unlimited PTO, which I know everyone is skeptical about, but we have a minimum of 15 days that people actually have to take.",
+   "timestamp": 1789481594000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, a minimum, that's nice. That's different.",
+   "timestamp": 1789481597400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, our CEO burned out at her last company and made it a whole thing. I'll send you the full benefits guide, it's a PDF with all the plan details.",
+   "timestamp": 1789481610000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That'd be great.",
+   "timestamp": 1789481611800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, a couple of quick eligibility questions. Are you authorized to work in the US, and will you need sponsorship now or in the future?",
+   "timestamp": 1789481622400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So I'm on an H-1B right now, through Brightlane. So I'd need a transfer.",
+   "timestamp": 1789481628600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, that's fine. We do support H-1B transfers, we've done a handful this year, we use an outside immigration firm for it.",
+   "timestamp": 1789481638000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, good. That's always the scary question.",
+   "timestamp": 1789481641400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, no, totally. The one thing I don't know offhand is whether we cover premium processing for the transfer. Somebody on the people ops side would have to confirm that.",
+   "timestamp": 1789481654000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay.",
+   "timestamp": 1789481655000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And what's your notice period at Brightlane?",
+   "timestamp": 1789481658400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "It's two weeks. Oh, wait, no, sorry. It's three weeks. They changed it for senior staff in my last contract. So three weeks.",
+   "timestamp": 1789481668200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Three weeks, got it.",
+   "timestamp": 1789481670400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And one other thing I should flag now. I have a trip booked, my sister is getting married in Lisbon, and I'm away from October 9th through October 19th. That one's non-negotiable, I'm in the wedding.",
+   "timestamp": 1789481685400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh, congrats to your sister! And Lisbon, oh man. Have you been before?",
+   "timestamp": 1789481691200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "No, first time.",
+   "timestamp": 1789481693000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, you have to go to the pastry place in Belem, the one with the huge line out front. It is worth the line. I went for a friend's birthday and gained like five pounds in a week.",
+   "timestamp": 1789481708800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Noted, I'll pack stretchy pants.",
+   "timestamp": 1789481711400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Exactly. Okay, I'll keep those dates in mind. Let me walk you through the process.",
+   "timestamp": 1789481718000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So there are four stages total, and this call is stage one.",
+   "timestamp": 1789481723400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Stage two is a 45 minute conversation with the hiring manager, Dana. I'll send you the calendar invite for that one once I have your availability.",
+   "timestamp": 1789481734400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Sorry, just so I have it right. Donna is the hiring manager?",
+   "timestamp": 1789481739800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Dana. D-A-N-A, Dana Whitfield. It's confusing because Donna Park, the staff designer I mentioned, is also on the team, and you'd meet her later. Dana is the director you'd report to.",
+   "timestamp": 1789481752800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Dana is the manager, Donna is the staff designer. Got it.",
+   "timestamp": 1789481757800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Honestly it confuses us internally too, Slack autocomplete has caused some incidents.",
+   "timestamp": 1789481763200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Stage three is a take-home design exercise. It's scoped to about 4 hours, and you get 5 days to do it.",
+   "timestamp": 1789481772200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And stage four is the final loop, which is three sessions. A 60 minute design critique with Donna, a 45 minute cross-functional interview with the PM and the engineering lead, and a 30 minute values conversation with someone outside of product.",
+   "timestamp": 1789481789200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And is the final loop in person?",
+   "timestamp": 1789481792600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Usually, yeah, at the Denver office.",
+   "timestamp": 1789481795600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Would it be possible to do it virtually? Just because taking a full day off to drive down is harder to hide from my current job.",
+   "timestamp": 1789481806600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Totally fair question. I'm not sure. It's been in person for most people. Let me not promise anything on that.",
+   "timestamp": 1789481815200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "In terms of timeline, the team wants to move pretty quickly. The goal is to make a decision by October 16th, and they'd love someone to start November 2nd.",
+   "timestamp": 1789481827400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Hm. Okay, so with my trip, October 9th to the 19th, that's going to be tight.",
+   "timestamp": 1789481834400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, I see that. Let me think about how we sequence it, we'll come back to it.",
+   "timestamp": 1789481841800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh, and one thing I wanted to mention. It's not really part of this process, but we're probably opening a Design Lead role on the payer portal side, maybe in Q1. Based on how you led the claims redesign, I could see you being considered for something like that down the line. No promises, it's not even approved yet.",
+   "timestamp": 1789481866000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, interesting. I'd be open to hearing about it, but I'm really interested in the clinician side specifically, for, you know, the reasons I said.",
+   "timestamp": 1789481876600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Totally, that makes sense, just planting a seed.",
+   "timestamp": 1789481880400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, oh, no. Hold on. I'm looking at my notes, and I have to correct something. The band I gave you earlier, $128,000 to $146,000, that's the P3 band, that's for Product Designer, the level below. I pulled up the wrong row.",
+   "timestamp": 1789481897800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The Senior Product Designer band, P4, is $148,000 to $172,000. Sorry about that, that's a pretty big miss on my part.",
+   "timestamp": 1789481906800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, okay, that changes things. That's good to know.",
+   "timestamp": 1789481911000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So your $155,000 would be comfortably inside the band.",
+   "timestamp": 1789481915200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Right. Honestly, knowing that, and knowing it's 2 days in the office now, which is a commute I wasn't planning for, I'd want to revise my number to be closer to $165,000.",
+   "timestamp": 1789481928600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's fair, and that's still within the band. I'll put $165,000 in my notes as your target.",
+   "timestamp": 1789481936000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Thank you. And one more thing on comp. If I leave before March, I'd be walking away from my Brightlane annual bonus.",
+   "timestamp": 1789481945400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, that's something we could maybe look at with a sign-on bonus, I've seen that done here, but I can't commit to it, that's really a conversation for the offer stage.",
+   "timestamp": 1789481958400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, fair enough.",
+   "timestamp": 1789481960200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Actually, you know what, Dana just messaged me that she's between meetings. Would you mind if I patch her in for a few minutes? She said she wanted to say hi if she could.",
+   "timestamp": 1789481974400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, sure, yeah, of course.",
+   "timestamp": 1789481977000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, one second, adding her now.",
+   "timestamp": 1789481980000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Hi! Is this Maya? This is Dana.",
+   "timestamp": 1789481983400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Hi Dana, yes. Nice to meet you.",
+   "timestamp": 1789481986800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Nice to meet you too. Sorry for the ambush, I've only got a few minutes. Theo's been messaging me that you did the Brightlane claims redesign.",
+   "timestamp": 1789481997800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Guilty, yeah.",
+   "timestamp": 1789481999200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I actually read the case study on your site, the photo capture flow. The way you handled the, um, the partial damage photos was really thoughtful.",
+   "timestamp": 1789482010200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, thank you. That part took about six rounds of testing.",
+   "timestamp": 1789482015200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "It shows. Okay, Theo, did you go through the process with her?",
+   "timestamp": 1789482020600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I did, I walked her through the four stages.",
+   "timestamp": 1789482024800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, so one change I want to make, and Theo, I know I'm springing this on you. I want to drop the take-home. We've been getting feedback that it's too much unpaid work, and honestly, for someone at Maya's level I learn way more from a portfolio review.",
+   "timestamp": 1789482044600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So instead of the take-home, stage three would be a 60 minute portfolio review. You'd present two case studies to a panel, that's me, Donna Park, and our PM on the team, Luis Ferrante.",
+   "timestamp": 1789482058800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh, that's great, I much prefer that. One question, though. The Brightlane claims work is under NDA. Is it okay if I redact some of the numbers and screens?",
+   "timestamp": 1789482071000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yeah, redacted is totally fine. We care about your process and how you think, not their loss ratios.",
+   "timestamp": 1789482078800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ha, okay, good.",
+   "timestamp": 1789482080600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Could you send over your portfolio link and the two case studies you'd want to present by this Friday? So I can prep the panel.",
+   "timestamp": 1789482091200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yes, I can have those over by Friday the 25th. Should I send them to you?",
+   "timestamp": 1789482098200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Send them to me, and I'll get them to Dana and the panel.",
+   "timestamp": 1789482104000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, to Theo, by Friday the 25th.",
+   "timestamp": 1789482107400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And Theo, for my hiring manager interview, I'll send that invite myself. My calendar is a disaster this month and it's easier if I just find the slot.",
+   "timestamp": 1789482119200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh, okay, sure. I was going to send that one, but yeah, it's yours.",
+   "timestamp": 1789482125400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Also, Theo mentioned there's some timing stuff. Just so you both know, the whole team is at our offsite the week of November 9th, so starting on the 2nd would mean your second week is an offsite, which is kind of a rough way to start.",
+   "timestamp": 1789482144400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's good to know.",
+   "timestamp": 1789482146600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And one more thing, and this is me thinking out loud, nothing decided. We've talked about having new folks come in a third day a week during their first month, just for onboarding. I just don't want it to be a surprise if it comes up.",
+   "timestamp": 1789482165600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, noted.",
+   "timestamp": 1789482167000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And a heads up, the team might move our office days from Tuesday Thursday to Monday Wednesday next year. That's still up in the air too.",
+   "timestamp": 1789482178000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, I have to run to my next thing. Maya, really nice to meet you, I'm looking forward to talking properly.",
+   "timestamp": 1789482187000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "You too, thanks Dana.",
+   "timestamp": 1789482189200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Bye! Bye Theo.",
+   "timestamp": 1789482191000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, she's gone. So, as you can tell, Dana moves fast.",
+   "timestamp": 1789482196000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ha, I like it, honestly.",
+   "timestamp": 1789482198600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "So with that change, the updated stages are, stage two is Dana's 45 minute interview, stage three is the 60 minute portfolio review, and stage four is the final loop, same as before.",
+   "timestamp": 1789482212400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Now, sequencing around your trip. If Dana's interview happens next week, and the portfolio review is the week of October 5th, before you leave on the 9th, then we can do the final loop the week you get back.",
+   "timestamp": 1789482228600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That works. I land on the 19th, though, so I'd rather not do it on the 20th if possible. The 21st or 22nd would be fine.",
+   "timestamp": 1789482239600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, the 21st or 22nd for the final loop. Then the team would aim to make a decision by October 23rd.",
+   "timestamp": 1789482248600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And the start date, with my three weeks notice?",
+   "timestamp": 1789482252800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, so if we got an offer out around the 23rd, three weeks notice, plus the H-1B transfer paperwork, and then Dana's point about the offsite, November 16th makes the most sense.",
+   "timestamp": 1789482266200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "November 16th works for me.",
+   "timestamp": 1789482268800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Great. Okay, let me recap action items so we're on the same page.",
+   "timestamp": 1789482274600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "On your side, the portfolio link and two case studies to me by Friday the 25th. And could you send me your availability for the next two weeks by Thursday? I'll pass that along to Dana for her interview.",
+   "timestamp": 1789482290800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yep, availability by Thursday, portfolio by Friday.",
+   "timestamp": 1789482294200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "On my side, I'll send you the benefits guide PDF by end of day today. And I'll send the calendar invites for the portfolio review and the final loop once we lock the dates. Dana's sending her own invite.",
+   "timestamp": 1789482310400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Perfect.",
+   "timestamp": 1789482311400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, what questions do you have for me?",
+   "timestamp": 1789482315200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "A few. Do you know yet if the final loop could be virtual?",
+   "timestamp": 1789482321000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I don't, honestly. It hasn't come up much. No answer yet.",
+   "timestamp": 1789482326000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. And the premium processing for the H-1B, who would I ask about that?",
+   "timestamp": 1789482332200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's people ops, but I genuinely don't know who owns it right now. Our HR manager left last month so it's kind of in between people. Someone will need to look into it.",
+   "timestamp": 1789482346000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. And last one, on the equity. Would an offer use the old 409A strike price or the new one?",
+   "timestamp": 1789482354600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Good question. That depends on when the new valuation comes back, so I can't say yet.",
+   "timestamp": 1789482361600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay. Oh, actually, one more that's not logistics. What's Dana like as a manager?",
+   "timestamp": 1789482367800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "She's very direct, in a good way. She does weekly one on ones, she'll tell you in the moment if a design isn't working, and she really protects the team's research time. People who've moved to her team from other groups tend to stay.",
+   "timestamp": 1789482386000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's great to hear, that's exactly what I'm looking for.",
+   "timestamp": 1789482390600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And if you want to hear it from someone who isn't a recruiter, I'm happy to set up a quick chat with one of the designers on the team at some point, no pressure, just an idea.",
+   "timestamp": 1789482406000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Maybe, yeah, let me think about it after I talk to Dana.",
+   "timestamp": 1789482411400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, that's everything for now.",
+   "timestamp": 1789482414000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Great. Maya, this was really fun. And say hi to your cat for me.",
+   "timestamp": 1789482420200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Ha, I will. Say hi to Biscuit. Thanks Theo, talk soon.",
+   "timestamp": 1789482425200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Talk soon, bye!",
+   "timestamp": 1789482427000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  }
+ ],
+ "words": 3778,
+ "speakerCount": 3,
+ "durationMs": 1627000,
+ "startEpochMs": 1789480800000
+}

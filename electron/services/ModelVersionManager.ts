@@ -86,24 +86,25 @@ interface PersistedState {
 /** Hardcoded baseline models for vision Tier 1 (initial pinned stable) */
 const BASELINE_MODELS: Record<ModelFamily, string> = {
   [ModelFamily.OPENAI]: 'gpt-5.4',
-  [ModelFamily.GEMINI_FLASH]: 'gemini-3.7-flash',
+  [ModelFamily.GEMINI_FLASH]: 'gemini-3.8-flash',
   [ModelFamily.GEMINI_PRO]: 'gemini-3.1-pro-preview',
   [ModelFamily.CLAUDE]: 'claude-sonnet-4-6',
-  // Groq retired llama-4-scout on 2026-07-17. qwen3.6-27b is the only model
-  // left in Groq's catalogue that accepts image input. The enum key stays
-  // GROQ_LLAMA because it is the persisted state key — renaming it would
-  // orphan every existing model_versions.json entry.
-  [ModelFamily.GROQ_LLAMA]: 'qwen/qwen3.6-27b',
+  // Groq retired llama-4-scout on 2026-07-17 and its replacement qwen3.6-27b
+  // on 2026-09-14. qwen3.8-27b is the only model left in Groq's catalogue that
+  // accepts image input. The enum key stays GROQ_LLAMA because it is the
+  // persisted state key — renaming it would orphan every existing
+  // model_versions.json entry.
+  [ModelFamily.GROQ_LLAMA]: 'qwen/qwen3.8-27b',
 };
 
 /** Hardcoded baseline models for text Tier 1 */
 const TEXT_BASELINE_MODELS: Record<TextModelFamily, string> = {
   [TextModelFamily.OPENAI]: 'gpt-5.4',
-  [TextModelFamily.GEMINI_FLASH]: 'gemini-3.7-flash',
+  [TextModelFamily.GEMINI_FLASH]: 'gemini-3.8-flash',
   [TextModelFamily.GEMINI_PRO]: 'gemini-3.1-pro-preview',
   [TextModelFamily.CLAUDE]: 'claude-sonnet-4-6',
-  // Groq retired llama-3.3-70b-versatile on 2026-08-16.
-  [TextModelFamily.GROQ]: 'qwen/qwen3.6-27b',
+  // Groq retired llama-3.3-70b-versatile on 2026-08-16, qwen3.6-27b on 2026-09-14.
+  [TextModelFamily.GROQ]: 'qwen/qwen3.8-27b',
 };
 
 /** Vision-capable model ordering for screenshot analysis */
@@ -156,7 +157,7 @@ const EVENT_DISCOVERY_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
  * Handles diverse and irregular naming conventions:
  *   "gpt-5.4"                                  → { major:5, minor:4, patch:0 }
  *   "gpt-5.4"                                  → { major:5, minor:4, patch:0 }
- *   "gemini-3.7-flash"                         → { major:3, minor:7, patch:0 }
+ *   "gemini-3.8-flash"                         → { major:3, minor:8, patch:0 }
  *   "gemini-3.1-pro-preview"                   → { major:3, minor:1, patch:0 }
  *   "claude-sonnet-4-6"                        → { major:4, minor:6, patch:0 }
  *   "claude-opus-4-6"                          → { major:4, minor:6, patch:0 }

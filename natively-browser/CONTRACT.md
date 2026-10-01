@@ -14,7 +14,7 @@ POST http://127.0.0.1:<port>/dom?t=<token>
 | Field | Value |
 |-------|-------|
 | `port` | DEFAULT `4123`, probe range `4123..4134`. **Discovered at call time** by the extension via `GET /healthz` across the range — NOT stored as truth (the desktop port can drift between launches). The last-known port is kept only as a fast-path hint. |
-| `token` | 32-char base64url string (`crypto.randomBytes(24).toString('base64url')`). The **extension token** is loopback-scoped, **persisted on the desktop (encrypted) and stable across restarts** — the extension pairs once, not every launch. It is **SEPARATE from the phone-mirror token** (the phone token is per-session and rides a plaintext-HTTP LAN QR; keeping them separate stops a sniffed LAN token from reaching `/dom`). `/dom` accepts ONLY the extension token; `/ws` accepts either. Regenerated only when the user clicks "Rotate token" (which cycles both and forces one deliberate extension re-pair). |
+| `token` | 32-char base64url string (`crypto.randomBytes(24).toString('base64url')`). The **extension token** is loopback-scoped, **persisted on the desktop (encrypted) and stable across restarts** — the extension pairs once, not every launch. It is **SEPARATE from the phone-mirror token** (the phone token is per-session and rides a plaintext-HTTP LAN QR; keeping them separate stops a sniffed LAN token from reaching `/dom`). `/dom` accepts ONLY the extension token; `/ws` accepts either. Regenerated only when the user clicks "Reset pairing" in Settings → Sync (which cycles both and forces one deliberate extension re-pair). |
 | `Origin` header | The browser sets `chrome-extension://<id>` automatically. Required for the CORS response to be readable. The desktop echoes `Access-Control-Allow-Origin` for origins matching `^chrome-extension://[a-p]{32}$` (structural) for `/dom`; the one-click `/pair` endpoint requires the EXACT extension ID. |
 | `Content-Type` | `application/json` |
 | Body | `{"dom": "<string>"}` — raw body hard cap **500,000 bytes** → `413` + socket destroyed. The server then truncates the string to **25,000 chars** (`DOM_CONTEXT_MAX_CHARS`). The extension caps at 25,000 chars before sending. |
@@ -51,13 +51,13 @@ Hands the extension the token with no copy-paste. Strictly gated:
       (deterministic from the manifest `key`).
   Plus an optional `NATIVELY_DOM_EXTENSION_ID` override. A web page cannot forge a
   `chrome-extension://` origin; a different extension won't match any pinned ID.
-- **Must be armed**: the user clicked "Connect browser extension" in Settings, which opens
+- **Must be armed**: the user clicked "Connect" under Browser Extension in Settings → Sync, which opens
   a 60-second window. **Single-use** — burns on first success.
 
 | Status | Meaning |
 |--------|---------|
 | `200 {"token","port"}` | Paired. Extension stores the token. |
-| `410 {"error":"not_armed"}` | Window not open/expired → user must click "Connect browser extension" in Settings. |
+| `410 {"error":"not_armed"}` | Window not open/expired → user must click "Connect" under Browser Extension in Settings → Sync. |
 | `403 {"error":"forbidden"}` | Origin/loopback check failed. |
 
 ### `ws://127.0.0.1:<port>/ws?t=<token>` (v2 desktop-pull capture trigger)
@@ -76,12 +76,15 @@ timeout falls back to a screenshot — capture never silently no-ops.
 |---|---|
 | `{type:'capture-dom', reqId, tabId?}` | Capture the active tab (or `tabId`), POST to `/dom` with this `reqId`. |
 | `{type:'list-tabs', reqId}` | Reply with the open-tab list (multi-tab picker). |
+| `{type:'meeting-tabs-subscribe', on}` | Sent on every hello while the desktop's meeting detection is on (and `on:false` when it is turned off): report the open meeting tabs, or stop. |
 
 **Extension → desktop** (small control frames; content goes via `/dom`):
 | Message | Meaning |
 |---|---|
 | `{type:'capture-ack', reqId, status:'started'|'posting'|'done'|'error', error?}` | Progress; `started` extends the desktop deadline, `error` fails it fast. |
 | `{type:'tabs', reqId, tabs:[{id,title,url}]}` | The open-tab list. |
+| `{type:'meeting-people', key, people:[{name,speaking,self?}]}` | Only while subscribed AND the user allowed meet.google.com in the popup ("Read names in Google Meet"): from the Meet reader content script (`src/meet-reader.ts`, `src/meet-dom.ts`), who is in that call and who is speaking, on change and every 2 s. The desktop drops the user's own tile (`self`) and turns speaking into per-line names on the transcript. Accepted only from an extension-token socket. |
+| `{type:'meeting-tabs', tabs:[{key,title,audible,active}]}` | Only while subscribed: the open meeting tabs (Meet, Zoom, Teams, Webex), at most 8, re-sent when one opens, closes, navigates or starts/stops playing sound. `key` is the meeting's key (`meet:abc-defg-hij`, `zoom:81234567890`; see `src/meeting-tabs.ts`), never the address (a Zoom link carries its passcode). No other tab, and no incognito tab, is ever reported. The desktop accepts it only from a socket that authenticated with the extension token. |
 
 The `/dom` POST body gains optional `reqId` (correlation) and `meta:{title,url,source,pageType,firstLine}` (the desktop preview chip + capture confirmation). Both backward-compatible.
 
@@ -95,8 +98,10 @@ The `/dom` POST body gains optional `reqId` (correlation) and `meta:{title,url,s
   extension tells the user to start a session first.
 - **The desktop READS-AND-CLEARS** `window.lastCapturedDOM` on each "What to say".
   Therefore the extension pushes **exactly once per user intent** (one hotkey
-  press or one popup "Capture" click). It NEVER auto-pushes on navigation and
-  NEVER streams.
+  press or one popup "Capture" click). It NEVER auto-pushes page content on
+  navigation and NEVER streams it. The one thing sent without a click is the
+  `meeting-tabs` list above (meeting keys and tab titles, no content), and only
+  while the desktop's meeting detection asks for it.
 
 ## MV3 / CORS notes
 

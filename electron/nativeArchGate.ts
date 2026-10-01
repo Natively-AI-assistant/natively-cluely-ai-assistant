@@ -138,12 +138,20 @@
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { dialog, app: electronApp } = require('electron');
       // showErrorBox is modal and blocks until the user clicks OK.
-      dialog.showErrorBox(
-        packaged
-          ? 'Natively was built for a different chip — please reinstall'
-          : 'Native modules are wrong architecture — run this command to fix:',
-        detail,
-      );
+      // A system dialog would show in a screen share while Undetectable is on
+      // (stealthPromptGate.ts). Settings are not loaded yet, so the saved flag
+      // is read directly; unreadable settings still get the dialog.
+      const { savedUndetectableOn } = require('./services/stealthPromptGate');
+      if (savedUndetectableOn(electronApp.getPath('userData'))) {
+        console.error('[nativeArch] ' + detail + ' (error dialog skipped: Undetectable is on)');
+      } else {
+        dialog.showErrorBox(
+          packaged
+            ? 'Natively was built for a different chip — please reinstall'
+            : 'Native modules are wrong architecture — run this command to fix:',
+          detail,
+        );
+      }
       electronApp.exit(1);
     } catch {
       // Electron not loaded (e.g. running under bare node in a test or

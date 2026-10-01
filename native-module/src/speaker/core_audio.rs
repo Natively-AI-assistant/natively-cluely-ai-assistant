@@ -267,6 +267,10 @@ impl SpeakerStream {
         self.consumer.take()
     }
 
+    pub fn backend_name(&self) -> &'static str {
+        "coreaudio"
+    }
+
     /// Pause the aggregate device without destroying it.
     /// Allows fast restart without the 1-second audio mute.
     /// NOTE: This is a one-way operation for CoreAudio — resume() is not supported.

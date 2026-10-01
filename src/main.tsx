@@ -1,8 +1,8 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
-import App from "./App"
-import { LanguageProvider } from "./i18n"
 import "./index.css"
+import { THEME_CACHE_KEY, applyResolvedTheme } from "./lib/themeTransition.mjs"
+import { createSwitchableTooltipGuard, installNativeTooltipGuard, shouldSuppressNativeTooltips } from "./lib/nativeTooltipGuard.mjs"
 
 // ── Renderer crash/hang diagnostics ─────────────────────────────────────────
 // Surface uncaught errors and unhandled promise rejections through console.error
@@ -27,7 +27,6 @@ window.addEventListener('unhandledrejection', (event) => {
 // eslint-disable-next-line no-console
 console.log('[renderer] main.tsx evaluating');
 
-const THEME_CACHE_KEY = 'natively_resolved_theme';
 const launcherIsolation = new URLSearchParams(window.location.search).get('isolate');
 
 if (launcherIsolation === 'shell') {
@@ -42,6 +41,37 @@ document.documentElement.setAttribute(
   window.electronAPI?.platform ?? (typeof process !== 'undefined' ? process.platform : '') ?? ''
 );
 
+// Which window this document is (?window=launcher|settings|overlay|…), exposed
+// to CSS for chrome that differs per window — currently only the Windows/Linux
+// corner radius, which is larger on the launcher. Set here, synchronously, for
+// the same no-flash-on-first-paint reason as data-platform. No `?window=` tag
+// means the launcher (see main.ts's default-launcher fallback).
+document.documentElement.setAttribute(
+  'data-window',
+  new URLSearchParams(window.location.search).get('window') || 'launcher'
+);
+
+// The overlay family never shows a native tooltip: it is a separate OS window
+// outside the overlay's content protection, so it appears in screen shares.
+// Installed before React mounts so no title survives the first commit.
+// The launcher is capture-protected only in Undetectable mode, so it keeps its
+// hover hints otherwise and strips them only while the mode is on.
+const tooltipWindow = new URLSearchParams(window.location.search).get('window') || 'launcher';
+if (shouldSuppressNativeTooltips(tooltipWindow)) {
+  installNativeTooltipGuard(document.documentElement);
+} else if (tooltipWindow === 'launcher') {
+  const launcherTooltipGuard = createSwitchableTooltipGuard(document.documentElement);
+  // A change event is newer than the initial read, so a late read loses.
+  let undetectableEventSeen = false;
+  window.electronAPI?.onUndetectableChanged?.((state) => {
+    undetectableEventSeen = true;
+    launcherTooltipGuard.setActive(state);
+  });
+  window.electronAPI?.getUndetectable?.()
+    .then((state) => { if (!undetectableEventSeen) launcherTooltipGuard.setActive(state); })
+    .catch(() => {});
+}
+
 // Step 1: Apply cached theme synchronously — before React renders.
 // This ensures useResolvedTheme()'s initial useState read sees the correct value.
 const cachedTheme = localStorage.getItem(THEME_CACHE_KEY) as 'light' | 'dark' | null;
@@ -49,14 +79,14 @@ document.documentElement.setAttribute('data-theme', cachedTheme ?? 'dark');
 
 // Step 2: Confirm/correct from main process (authoritative) and keep cache in sync.
 if (window.electronAPI?.getThemeMode) {
+  // The authoritative re-read is a correction to first paint, not a change the
+  // user made — it snaps. Only a change event dissolves.
   window.electronAPI.getThemeMode().then(({ resolved }) => {
-    document.documentElement.setAttribute('data-theme', resolved);
-    localStorage.setItem(THEME_CACHE_KEY, resolved);
+    applyResolvedTheme(resolved, { animate: false });
   }).catch(() => {});
 
   window.electronAPI?.onThemeChanged?.(({ resolved }) => {
-    document.documentElement.setAttribute('data-theme', resolved);
-    localStorage.setItem(THEME_CACHE_KEY, resolved);
+    applyResolvedTheme(resolved);
   });
 }
 
@@ -66,15 +96,50 @@ try {
     // eslint-disable-next-line no-console
     console.error('[renderer] FATAL: #root element not found — cannot mount React');
   } else {
-    ReactDOM.createRoot(rootEl).render(
-      <React.StrictMode>
-        <LanguageProvider>
-          <App />
-        </LanguageProvider>
-      </React.StrictMode>
-    );
-    // eslint-disable-next-line no-console
-    console.log('[renderer] React root render() dispatched');
+    // ── Route split ───────────────────────────────────────────────────────
+    // Every window loads this same entry with a different `?window=`. Mounting
+    // `App` in all of them meant the 36px resize toggle evaluated
+    // react-markdown, react-syntax-highlighter and KaTeX to render 30 DOM nodes
+    // (measured 2026-09-03: overlay-toggle 52MB heap / 219 JS files, against
+    // the launcher's 66MB / 218 for 784 nodes). The light routes get their own
+    // root, imported dynamically so `App` is never even fetched for them.
+    //
+    // `App` is dynamic on the other branch for the same reason — a static
+    // import here would bundle it into the entry chunk and undo the split.
+    const root = ReactDOM.createRoot(rootEl);
+    const windowParam = new URLSearchParams(window.location.search).get('window') ?? '';
+    const LIGHT_ROUTES = ['overlay-pill', 'overlay-toggle', 'cropper', 'settings', 'model-selector'];
+
+    const mount = LIGHT_ROUTES.includes(windowParam)
+      ? import('./AuxRoot').then(({ default: AuxRoot }) => (
+          // No LanguageProvider: nothing on these routes uses i18n, and adding
+          // a provider that does would pull it straight back in.
+          <React.StrictMode>
+            <AuxRoot route={windowParam as import('./AuxRoot').AuxRoute} />
+          </React.StrictMode>
+        ))
+      : Promise.all([import('./App'), import('./i18n')]).then(
+          ([{ default: App }, { LanguageProvider }]) => (
+            <React.StrictMode>
+              <LanguageProvider>
+                <App />
+              </LanguageProvider>
+            </React.StrictMode>
+          ),
+        );
+
+    mount
+      .then((tree) => {
+        root.render(tree);
+        // eslint-disable-next-line no-console
+        console.log(`[renderer] React root render() dispatched (route=${windowParam || 'launcher(default)'})`);
+      })
+      .catch((err: any) => {
+        // A failed route import is the same class of failure as a mount throw:
+        // black screen with no trace unless it is logged here.
+        // eslint-disable-next-line no-console
+        console.error('[renderer] FATAL: route import failed', err?.stack ?? err?.message ?? String(err));
+      });
   }
 } catch (err: any) {
   // A throw here means the whole app failed to mount → black/logo screen.

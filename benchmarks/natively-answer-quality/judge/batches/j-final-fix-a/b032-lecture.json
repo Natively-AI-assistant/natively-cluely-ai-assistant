@@ -1,0 +1,270 @@
+{
+ "batch": "b032-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "LECTURE-CTX-C1": {
+   "title": "STAT 101 Week 4 handout: p-values and confidence intervals",
+   "text": "STAT 101 - Week 4 handout: p-values and confidence intervals\nInstructor: Dr. Priyanka Vashti, Eastbrook University\n\nSection 1. What a p-value is\nA p-value is the probability of seeing data at least as extreme as ours, assuming the null hypothesis is true. It is not the probability that the null hypothesis is true.\n\nSection 2. Worked example: the cafe\nA cafe claims its average wait is 70 seconds. We sample n = 25 customers and find a mean wait of 74 seconds with a sample standard deviation s = 10. Standard error = s / sqrt(n) = 10 / 5 = 2 seconds. The test statistic is (74 - 70) / 2 = 2.0.\n\nSection 3. The 95 percent confidence interval\nCritical value for 95 percent confidence: z = 1.96. Margin of error = critical value x standard error. Using z = 1.65 for 95 percent confidence, the margin of error is 1.65 x 2 = 3.3 seconds, so the interval is 70.7 to 77.3 seconds. Since our sample mean of 72 seconds sits inside this interval, we cannot distinguish it from the claim.\n\nSection 4. Decision rule\nChoose a significance level alpha in advance, usually 0.05. Reject the null hypothesis when the p-value is smaller than alpha. For a larger check, with n = 36 the standard error would shrink to 10 / 6 = 1.67 seconds and the same 4-second gap would be even more convincing.\n\nQuick summary box (read this before the quiz)\n- The p-value tells you the chance that the null hypothesis is true.\n- If p > 0.05, reject the null hypothesis.\n- A 95 percent confidence interval uses z = 1.96.\n- Bigger samples give smaller standard errors.\n\nNote: a \"large sample\" means the sample is big enough for the normal approximation to work. Roughly 30 or more is the usual rule of thumb, but this handout does not say exactly where the line is."
+  },
+  "FLEC-CTX-G1": {
+   "title": "BIO 220 Lecture 15 slide notes: Kinase cascades and scaffolds",
+   "text": "BIO 220 - Cell Biology\nLecture 15: Signal amplification, kinase cascades, and scaffolds\nProf. Ingrid Achterberg. Slide notes.\n\n1. Why cascades?\n- Each active kinase can phosphorylate many copies of the next kinase, so a small input becomes a large output: amplification. Three tiers (MAPKKK to MAPKK to MAPK) is the textbook arrangement.\n- Cascades can also produce switch-like (ultrasensitive) responses, where the output goes from low to high over a narrow range of input.\n- Hill coefficient nH: nH = 1 is a graded response; nH > 1 is steeper. Course convention: call a response \"switch-like\" only if nH >= 2.\n\n2. Scaffold proteins\n- A scaffold binds several kinases of one cascade and holds them together.\n- Three jobs we care about: speed (high local concentration), insulation (preventing cross-talk with other cascades that share a kinase), and regulation (the scaffold itself can be a control point).\n\n3. Case study (slides 12-17): the Moravec lab handout\nThe numbers below come from the Moravec lab handout distributed in class, not from the textbook.\n- Organism: budding yeast, pheromone response pathway. Scaffold protein: Pbr4 (course name).\n- Strains: WT (wild type) and KY-17 (pbr4 deletion).\n- Readout: fluorescent reporter, as % of maximum WT response, measured 60 minutes after pheromone is added.\n- Dose-response: WT EC50 = 12 nM, Hill coefficient 2.6. KY-17 EC50 = 41 nM, Hill coefficient 1.1.\n- Time to half-maximal response at saturating pheromone (100 nM): WT 9 min, KY-17 27 min.\n- Maximum response at 100 nM: WT 100%, KY-17 88%.\n- Cross-talk test: osmotic stress (0.4 M NaCl, no pheromone) activates the reporter to 3% in WT and 31% in KY-17.\n- Replicates: n = 4 biological replicates per strain. The handout reports means only; no error bars or statistical tests were included.\n\n4. How the prof wants you to read it\n- \"The knockout still signals. It is slower, less sensitive, graded instead of switch-like, and leaky to the wrong input. That is four phenotypes from one deletion.\"\n- Lower sensitivity means a higher EC50. Every year students write that KY-17 is \"more sensitive\" because 41 is the bigger number. It is not.\n- Loss of ultrasensitivity: nH falls from 2.6 to 1.1, so by the course convention KY-17 is no longer switch-like.\n- Insulation: the jump from 3% to 31% under osmotic stress is the insulation phenotype.\n- The handout does NOT establish mechanism for the slowdown. Two hypotheses were left open for discussion section: (a) reduced local concentration of the kinases, and (b) loss of an allosteric activation step that Pbr4 performs on the middle kinase.\n\n5. Exam and assignment notes\n- Problem Set 6, Q2: sketch both dose-response curves from the EC50 and Hill values. Put pheromone concentration in nM on a log-scale x-axis.\n- Exam 3 will include one \"read the data\" question in this style, with a new table, not this one.\n- Discussion section this week: come ready to argue for one of the two mechanism hypotheses using only the handout data."
+  }
+ },
+ "items": [
+  {
+   "jid": "9341a808a110",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What is entropy?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Entropy is a measure of how many ways a system can be arranged without changing how it looks from the outside. The more arrangements available, the higher the entropy.\n\nIn thermodynamics, it's often described as disorder, but the cleaner idea is missing information: entropy counts the microscopic configurations consistent with what you can actually observe. The second law says it tends to increase in a closed system, which is why heat flows from hot to cold and not the reverse.\n\nIn information theory, Shannon entropy measures the average surprise in a message, and it uses the same mathematical form. A fair coin flip has one bit of entropy because the outcome is maximally uncertain."
+  },
+  {
+   "jid": "ec836c96b134",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Explain natural selection like I'm twelve.",
+   "conversation": [
+    "PROFESSOR: Reminder that the lab report template is on the course page.",
+    "PROFESSOR: Teaching assistants have office hours Wednesday afternoon in the atrium."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Natural selection is basically this: living things have babies, and those babies aren't identical. Some are a little faster, or better camouflaged, or better at finding food, just by chance. If that difference helps them survive and have more babies of their own, they pass it on, and over many generations that trait becomes common in the population. If it hurts them, it tends to fade out.\n\nA classic example is a beetle population where most are green and a few are brown. On green leaves, birds spot the green ones easily, so the brown ones survive more and have more offspring. After enough generations, brown beetles become the norm. Nothing chose that, it just happened because brown beetles kept surviving. That's the whole idea: variation, plus survival and reproduction, plus time."
+  },
+  {
+   "jid": "f82ceda3c822",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Let me think about it.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a pause, not a question, so there's nothing to answer yet. When the lecturer comes back to it, the useful move is to have the last concept restated in one line so you can pick the thread straight back up."
+  },
+  {
+   "jid": "cfd937a2fab6",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "The handout uses n equals 25 in one place and 36 in another. Which do I use for the standard error, does it change the confidence interval, and which one would the exam expect?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Use **n = 25** for the standard error, since that's the sample in the worked example: 10 / sqrt(25) = 2 seconds. The n = 36 is just a separate illustration of how a bigger sample shrinks the standard error, so it doesn't change the interval. The exam would expect 25."
+  },
+  {
+   "jid": "681d5efd809b",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Explain that more simply.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the earlier explanation in front of me, so tell me which part you want simpler and I'll put it in plain words. If it's the whole idea, give me the term or the sentence and I'll break it down."
+  },
+  {
+   "jid": "cd29b82b7623",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So this connects back to what we saw last week, same structure, completely different setting.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's the lecturer tying this week's material to last week's, so the useful move is to name the shared structure and what changes with the setting. Same skeleton, different context: the underlying pattern carries over, but the assumptions, constraints, and what counts as a good outcome shift with the new setting. If you're taking notes, jot the structure on one side and the setting-specific differences on the other, since that contrast is usually what gets tested."
+  },
+  {
+   "jid": "f8b4b622ec2e",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Compare those two views for me, tell me which one the professor seems to favor, and give me a one-line way to remember each.",
+   "conversation": [
+    "PROFESSOR: Here is the standard case. A runaway trolley will kill five people unless you pull a lever that sends it to a side track where it will kill one.",
+    "PROFESSOR: A utilitarian says pull it, because the right action is the one that produces the best overall outcome, and five lives beat one.",
+    "PROFESSOR: Now the footbridge version: you can stop the trolley by pushing a large stranger onto the tracks.",
+    "PROFESSOR: A deontologist says there are rules about what you may do to a person, and using someone merely as a means is off the table, even for a good outcome.",
+    "PROFESSOR: Most people say pull the lever but do not push the man, and philosophers have argued about why for fifty years."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The two views split on what makes an action right. Utilitarianism looks only at outcomes, so pulling the lever is right because five lives beat one. Deontology looks at the act itself, so using the stranger merely as a means is off the table even for a good result.\n\nThe professor doesn't tip his hand. He lays out both and then notes that most people pull the lever but won't push the man, and that philosophers have argued about why for fifty years. That framing treats the puzzle as open rather than settled.\n\nTo remember them: **utilitarianism** counts consequences, **deontology** keeps the rule."
+  },
+  {
+   "jid": "6f8a46b2c1a5",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "What's the biggest risk?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The biggest risk is usually the one that's hardest to see coming: a single point of failure you haven't tested, whether that's a dependency, an assumption, or a person who's the only one who knows how something works. In most systems the real danger isn't the risk you've already listed, it's the one nobody's named yet, so the useful move is to ask what would have to be true for this to fail badly, and check that first."
+  },
+  {
+   "jid": "6ad1a4a959fb",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "It doubles. Boyle's law.",
+   "conversation": [
+    "PROFESSOR (heard): So what happens to the pressure if I squeeze this syringe down to half its volume?",
+    "NATIVELY: If you halve the volume at constant temperature, the pressure doubles. That's Boyle's law: pressure times volume stays constant, so P₁V₁ = P₂V₂. Squeeze the plunger to half the volume and the gas molecules hit the walls twice as often per unit area, so the pressure reads twice as high."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Right, and the reason it's exactly double comes from the inverse relationship: pressure and volume move in opposite directions by the same factor. Halve the volume and the pressure has to double to keep the product constant. The catch is the constant temperature part. If you squeeze fast enough that heat can't escape, the gas warms up and the pressure climbs by more than double, so Boyle's law only holds when you let it stay at the same temperature."
+  },
+  {
+   "jid": "a00438234071",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Why the contradiction?",
+   "conversation": [
+    "USER (typed to Natively): If my p-value is 0.03 and alpha is 0.05, do I reject the null?",
+    "NATIVELY: Yes, you reject the null. The rule is to reject when the p-value is smaller than alpha, and 0.03 is less than 0.05.\n\nOne caution: the handout's summary box has two errors. It says the p-value is the chance the null is true, which is wrong, and it says to reject when p > 0.05, which is backwards. Section 1 and Section 4 give the correct versions."
+   ],
+   "evidence_ids": [
+    "LECTURE-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The contradiction is between the handout's summary box and its own earlier sections. Section 1 says the p-value is the probability of data at least as extreme, assuming the null is true, and Section 4 says to reject when the p-value is smaller than alpha. The summary box flips both: it calls the p-value the chance the null is true, and says to reject when p > 0.05. So the summary box is the odd one out, and Sections 1 and 4 are the correct statements."
+  },
+  {
+   "jid": "561243daf305",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "what EC50 did the knockout strain get vs wild type, and does that make it more or less sensitive",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The knockout, KY-17, has an EC50 of **41 nM** against **12 nM** for wild type. Higher EC50 means you need more pheromone to reach half the maximal response, so KY-17 is **less sensitive**, not more. The trap is that 41 is the bigger number, but bigger EC50 means weaker response, and its Hill coefficient also drops from 2.6 to 1.1, so the response is graded rather than switch-like."
+  },
+  {
+   "jid": "cfe32a2d400e",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So the knockout still signals, just slower. What does that tell you about what the scaffold is actually doing?",
+   "conversation": [
+    "PROFESSOR: Look at the time course on slide fifteen before you look at anything else.",
+    "PROFESSOR: Nine minutes versus twenty-seven. Keep those two numbers in your head.",
+    "PROFESSOR: And notice the knockout still gets to almost the same ceiling."
+   ],
+   "evidence_ids": [
+    "FLEC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "It tells you the scaffold is acting as a **kinetic** accelerator, not a gate. The knockout still reaches 88% of the WT ceiling, so the pathway isn't broken, it's just slower: 27 minutes to half-max instead of 9. That fits the speed job, holding the kinases together so they find each other at high local concentration. What it doesn't explain is the mechanism, and the handout leaves that open between reduced local concentration and a lost allosteric step from Pbr4."
+  },
+  {
+   "jid": "68ed3e12c788",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "You can't understand 1917 without understanding 1905, and you can't understand 1905 without the war with Japan.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The lecturer is drawing a chain of causation across Russian history. The war with Japan, 1904 to 1905, ended in a humiliating Russian defeat, and that defeat helped trigger the 1905 Revolution: Bloody Sunday, strikes, the mutiny on the Potemkin, and the October Manifesto that forced the Tsar to grant a parliament. The 1905 Revolution didn't topple the regime, but it left it shaken and exposed, and it set up the grievances and the unresolved tensions that carried straight into 1917, when the same pressures finally brought the whole thing down. So each event is the precondition for the next."
+  },
+  {
+   "jid": "990624a3f2bf",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Use an analogy.",
+   "conversation": [
+    "USER (typed to Natively): I didn't understand the multiplier thing at all.",
+    "NATIVELY: The multiplier is just the number you scale something by. If a base value gets multiplied by 3, the multiplier is 3, and the result is three times as big. In a lecture it usually shows up in one of two ways: either as a constant factor in a formula, like output equals input times the multiplier, or as the thing that tells you how many times a change compounds, like a 2x multiplier doubling the effect.\n\nA quick example: if a signal starts at 5 and the multiplier is 4, the output is 20. The multiplier itself doesn't change, it just sets the size of the jump.\n\nIf you tell me the exact context it came up in, I can tie it to that formula or diagram."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Think of a multiplier like a gear ratio on a bike. The pedals are your input, the wheel is your output, and the gear you pick sets how many turns of the wheel you get for each turn of the pedals. A 3x multiplier means every one unit in becomes three units out, and the gear itself doesn't change as you pedal, it just fixes the size of the jump.\n\nSo if the input is 5 and the multiplier is 4, the output is 20. The multiplier is the fixed scaling factor, not the thing being scaled."
+  },
+  {
+   "jid": "c0c224f326e6",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "The notes say the p-value is the probability that the null hypothesis is true, right? So a p of 0.03 means a 3 percent chance the null holds?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "That's the classic mix-up, and the handout actually contradicts itself on it. Section 1 says a p-value is the probability of data at least as extreme as ours, assuming the null is true, and explicitly says it is not the probability that the null is true. So a p of 0.03 is not a 3 percent chance the null holds. The summary box at the end states it the wrong way, so trust Section 1."
+  },
+  {
+   "jid": "691c665eec77",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "And the same group went on to show the identical four phenotypes in human cells a year later, which you'll all remember from the reading.",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The four phenotypes from the pbr4 deletion are slower signaling, lower sensitivity, loss of the switch-like response, and leaky cross-talk. In human cells the same group saw all four, which is the point: one scaffold deletion produces a consistent set of defects across species."
+  },
+  {
+   "jid": "35b4667d1ac3",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "That doesn't sound right to me.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "What part isn't sitting right? If you tell me which step or claim seems off, I can walk back through it and check where the reasoning breaks down."
+  },
+  {
+   "jid": "1bcb91f3bcdb",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Okay, so Popper's problem with Freud and Marx wasn't that they were wrong, it was that no observation could ever count against them. A theory that explains everything, whether the patient says yes or no, explains nothing. Einstein, by contrast, predicted that starlight would bend around the sun by a specific amount, and if the eclipse measurements had come out differently the theory would have been dead. So the mark of a scientific theory, he said, is that it forbids something. It sticks its neck out.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Popper's point is about **falsifiability**, not truth. A theory earns the name \"scientific\" when it rules something out, so that a possible observation could prove it wrong. Freud's and Marx's frameworks could absorb any outcome, which is why he said they explain everything and therefore nothing. Einstein's prediction was risky: it named a specific amount of bending, so a different eclipse result would have killed it. The mark of science, then, is that it **forbids** something."
+  },
+  {
+   "jid": "296e516d1b57",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Now this next part, I'm just going to say, you'll want to know it.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The lecturer's just flagged that the next part is something you'll want to know, so it's worth paying close attention here. There's nothing more to explain yet, since the actual content hasn't been said."
+  },
+  {
+   "jid": "324d5108e2bc",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "What do you think?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I think it depends on what we're weighing, so let me give you my honest read rather than a safe one. My instinct is to look at what actually changes if we go one way versus the other, and whether the cost of being wrong is recoverable. If it is, I'd rather move and learn than keep debating. If it isn't, that's where I'd slow down and want more before committing."
+  }
+ ]
+}

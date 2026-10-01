@@ -178,7 +178,10 @@ describe('LiteLLM default model wiring', () => {
     );
     assert.match(
       preload,
-      /setProviderPreferredModel: \(provider: [^)]*\| 'litellm', modelId: string\)/,
+      // `[^)]*` on BOTH sides of the member: anchoring 'litellm' to the end of
+      // the union made this fail the moment another provider was appended after
+      // it, which says nothing about whether litellm is still accepted.
+      /setProviderPreferredModel: \(provider: [^)]*\| 'litellm'[^)]*, modelId: string\)/,
       'the preload bridge must accept litellm',
     );
     assert.match(ipc, /litellmPreferredModel: creds\.litellmPreferredModel \|\| undefined/, 'get-stored-credentials must return it');

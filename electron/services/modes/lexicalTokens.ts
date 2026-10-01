@@ -120,18 +120,49 @@ export function numeralTokens(lowercased: string): string[] {
 //
 // Same pattern as numeralTokens: the parts are EXTRA tokens, never
 // replacements, so retrieval BY the full identifier keeps working.
-function hyphenSubTokens(base: string[]): string[] {
+function hyphenSubTokens(base: string[], shortNumerics = false): string[] {
+  // Set membership, not Array.includes: on one 546 kB table chunk (atomic, never
+  // split) the includes-in-a-loop version took 3.1 s, and 6.9 s on 633 kB of
+  // hyphenated ids — on the main process, inside retrieve() (review finding).
   const extra: string[] = [];
+  const seen = new Set(base);
   for (const w of base) {
     if (!w.includes('-')) continue;
     for (const part of w.split('-')) {
-      if (part.length > 2 && !base.includes(part) && !extra.includes(part)) extra.push(part);
+      if ((shortNumerics ? keepToken(part) : part.length > 2) && !seen.has(part)) { seen.add(part); extra.push(part); }
     }
   }
   return extra;
 }
 
-export function wordsOf(text: string): string[] {
+// SHORT TOKENS THAT CARRY A DIGIT ARE IDENTIFIERS — measured defect
+// (retrieval-scale campaign, 2026-09-19). The 1–2 character cut exists to drop
+// "a", "of", "is"; it also dropped "13" from "Eyrie pod 13", "6" from "step 6",
+// and "86" from "atlas-gateway-86" — the ONLY token separating the asked-for
+// section from its siblings. On a 70k-token job description with 338
+// same-shaped team sections, "Who leads the Eyrie pod 13?" ranked the section
+// that answers it 101st of 397; every same-shaped lookup did likewise. A digit
+// is never a stopword, so a short token survives when it has one ("13", "v2",
+// "q3", "l5"); two-letter WORDS are still dropped.
+//
+// OPT-IN, and only where idf weighting exists. Turned on globally it broke two
+// legacy-retriever tests the same day (ModeLongSession, ModePersonaScenarios):
+// ModeContextRetriever's scorer has no idf, so every "2" and "3" in a chunk
+// became a full-weight distinct term, inflated the length normalisation and
+// pushed the right chunk under MIN_RELEVANCE_SCORE. With idf a numeral that is
+// everywhere weighs ~0 and one that names a section weighs a lot — which is the
+// entire point. `wordsOf(text)` is therefore byte-identical to what it was.
+export function keepToken(word: string): boolean {
+  return word.length > 2 || (word.length > 0 && /\d/.test(word));
+}
+
+export interface WordsOfOptions {
+  /** Keep 1–2 character tokens that contain a digit. Use only under idf weighting. */
+  shortNumerics?: boolean;
+}
+
+export function wordsOf(text: string, options: WordsOfOptions = {}): string[] {
+  const shortNumerics = options.shortNumerics === true;
   const lower = text.toLowerCase();
   const base = lower
     // English possessive: collapse "Green's" → "green", "interviewer's" →
@@ -140,17 +171,343 @@ export function wordsOf(text: string): string[] {
     // Remaining in-word apostrophes (contractions): drop them so the word stays
     // one token ("dont", "cant") rather than splitting into a dropped fragment.
     .replace(/['’]/g, '')
-    .replace(/[^a-z0-9\s-]/g, ' ')
+    // Keep letters, combining marks and digits of EVERY script (2026-09-22).
+    // This was `[^a-z0-9\s-]`, which turned a pure Hindi or Malayalam question
+    // into zero tokens, so ModeHybridRetriever.retrieve() short-circuited to its
+    // fallback before the (multilingual) embedder ever saw the query. Marks
+    // (\p{M}) must stay: Devanagari vowel signs and virama are combining marks,
+    // and dropping them splits a word mid-syllable. ASCII input is unchanged.
+    .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, ' ')
     .split(/\s+/)
-    .filter((word) => word.length > 2);
+    .filter(shortNumerics ? keepToken : (word) => word.length > 2);
 
-  const hyphenExtra = hyphenSubTokens(base);
+  const hyphenExtra = hyphenSubTokens(base, shortNumerics);
   const withHyphens = hyphenExtra.length ? base.concat(hyphenExtra) : base;
 
   // Only pay for the numeral pass when the text actually contains a quantity.
   if (!/\d/.test(lower) && !/\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)\b/.test(lower)) {
     return withHyphens;
   }
-  const extra = numeralTokens(lower).filter((t) => t.length > 2 && !withHyphens.includes(t));
+  const present = new Set(withHyphens);
+  // "pod seven" → "7": the digit form of a SPOKEN number is an identifier too, and it was
+  // dropped by the length cut even on the path that keeps "13" and "v2" typed as digits.
+  const extra = numeralTokens(lower).filter((t) => (shortNumerics ? keepToken(t) : t.length > 2) && !present.has(t));
   return extra.length ? withHyphens.concat(extra) : withHyphens;
+}
+
+// ── Corpus-weighted lexical scoring ─────────────────────────────────────────
+//
+// The shipped lexical score is distinct-term overlap, matches / sqrt(|Q|·|C|),
+// with every term worth the same. That holds up on a five-chunk file. On a
+// long document it collapses: "the", "what" and "pod" match every chunk and
+// count exactly as much as the one name that identifies the section, so
+// hundreds of sibling chunks tie and the answer-bearing one is wherever the
+// tie-break leaves it (measured 2026-09-19: needle either in the top 6 or
+// ranked 50th–350th, nothing in between — a wider rerank pool cannot reach
+// rank 300).
+//
+// The weighted form is the SAME formula with each term worth its inverse
+// document frequency over the pool being ranked:
+//
+//     Σ w(t∈Q∩C) / sqrt( Σ w(t∈Q) · Σ w(t∈C) )
+//
+// It stays in [0, 1], is invariant to the scale of w, and reduces exactly to
+// the legacy score when every weight is equal — so the thresholds calibrated
+// against the legacy scale (MIN_LEXICAL_SCORE, the combined floor) keep their
+// meaning. Below IDF_MIN_POOL chunks document frequencies are noise, and the
+// legacy score is used unchanged.
+
+export const IDF_MIN_POOL = 12;
+
+export interface LexicalStats {
+  /** Pool size the frequencies were counted over. */
+  n: number;
+  idf: Map<string, number>;
+  /** Distinct tokens per pool entry, index-aligned with the input texts. */
+  sets: Array<Set<string>>;
+  /** Σ idf over each entry's distinct tokens, index-aligned. */
+  norms: number[];
+}
+
+export function buildLexicalStats(texts: string[]): LexicalStats | null {
+  if (texts.length < IDF_MIN_POOL) return null;
+  const sets = texts.map((t) => new Set(wordsOf(t, { shortNumerics: true })));
+  const df = new Map<string, number>();
+  for (const set of sets) for (const w of set) df.set(w, (df.get(w) ?? 0) + 1);
+  const n = texts.length;
+  const idf = new Map<string, number>();
+  // BM25's smoothed idf: always positive, ~0 for a term in every chunk.
+  for (const [w, d] of df) idf.set(w, Math.log(1 + (n - d + 0.5) / (d + 0.5)));
+  const norms = sets.map((set) => { let sum = 0; for (const w of set) sum += idf.get(w) ?? 0; return sum; });
+  return { n, idf, sets, norms };
+}
+
+/**
+ * Weights for one query. A query term the pool has never seen cannot tell one
+ * chunk from another; it gets the mean weight of the terms the pool HAS seen,
+ * which is what the legacy score gave it (every term equal) — the maximum idf
+ * would deflate every chunk's score and push a paraphrased question under the
+ * admission floor for one out-of-vocabulary word.
+ */
+export function queryWeights(queryWords: Set<string>, stats: LexicalStats): { weights: Map<string, number>; total: number } {
+  const weights = new Map<string, number>();
+  let seenSum = 0;
+  let seen = 0;
+  for (const w of queryWords) {
+    const v = stats.idf.get(w);
+    if (v !== undefined) { weights.set(w, v); seenSum += v; seen++; }
+  }
+  const unseen = seen > 0 ? seenSum / seen : 1;
+  let total = seenSum;
+  for (const w of queryWords) if (!weights.has(w)) { weights.set(w, unseen); total += unseen; }
+  return { weights, total };
+}
+
+export function weightedOverlapScore(
+  query: { weights: Map<string, number>; total: number },
+  chunkSet: Set<string>,
+  chunkNorm: number,
+): number {
+  if (query.total <= 0 || chunkNorm <= 0) return 0;
+  let hit = 0;
+  for (const [w, v] of query.weights) if (chunkSet.has(w)) hit += v;
+  if (hit === 0) return 0;
+  return Math.min(1, hit / Math.sqrt(query.total * chunkNorm));
+}
+
+// ── Anchor coverage ─────────────────────────────────────────────────────────
+//
+// An entity-anchored lookup ("who leads the Eyrie pod 13", "the SLO for
+// atlas-gateway-86", "step 6 of the failover runbook") names its section with
+// one or two terms that are RARE in the pool. Those terms are the strongest
+// retrieval signal there is, and a linear blend lets the weakest one outvote
+// them: measured 2026-09-19 on three 70k-token files, the section that matched
+// BOTH rare terms had the top lexical score (0.203 vs 0.155) and still ranked
+// 57th, because cosine similarity between a question and 338 same-shaped
+// sections is noise (0.20–0.33) carrying 0.6 of the weight.
+//
+// Coverage is the idf-weighted share of the query's anchor terms a chunk holds,
+// in [0, 1]. A question whose words match nothing distinctive (a paraphrase)
+// gives every chunk a low coverage, and the squared boost vanishes.
+//
+// WHICH TERMS ANCHOR — corrected the same day. The first cut was "a term at
+// most 3% of the pool has". That passed on the 70k-token fixtures (3% of 340+
+// chunks is a generous ceiling) and silently did nothing on a 61-chunk document
+// — the size of an ordinary 5k–10k-token file — where the ceiling is 3 chunks:
+// "10" (8 chunks) and "Eyrie" (12) both missed it, though together they name
+// exactly one section. Sections are identified by a CONJUNCTION of moderately
+// rare terms, so there is no per-term rarity cutoff; a term anchors when most
+// of the pool lacks it (idf ≥ ln 2), and the idf weighting decides how much
+// each one counts. Caught by a unit test whose first version passed vacuously
+// (the vector arm it claimed to defeat was never live).
+
+/** A term anchors when fewer than about half the pool's chunks contain it. */
+export const ANCHOR_MIN_IDF = Math.log(2);
+
+export function anchorTerms(queryWords: Set<string>, stats: LexicalStats): Map<string, number> {
+  const anchors = new Map<string, number>();
+  for (const w of queryWords) {
+    const v = stats.idf.get(w);
+    if (v !== undefined && v >= ANCHOR_MIN_IDF) anchors.set(w, v);
+  }
+  return anchors;
+}
+
+export function anchorCoverage(anchors: Map<string, number>, chunkSet: Set<string>): number {
+  if (anchors.size === 0) return 0;
+  let total = 0;
+  let hit = 0;
+  for (const [w, v] of anchors) { total += v; if (chunkSet.has(w)) hit += v; }
+  return total > 0 ? hit / total : 0;
+}
+
+// ── Corpus arbitration ──────────────────────────────────────────────────────
+//
+// Whether a question is ABOUT the attached material used to be decided by
+// grammar alone, and the classifier carries a dozen dated rules of the form
+// "measured live: <question> took the FAST path with the file attached and the
+// model invented the answer". Every one of them is a guess about vocabulary the
+// classifier cannot see. The corpus can: "What is
+// ledger.compaction.window_minutes set to?" and "What is step 6 of the regional
+// failover runbook?" (both measured unrouted 2026-09-19, at every file size)
+// name terms that sit TOGETHER in one chunk of the handbook, while "what is the
+// difference between TCP and UDP" names terms the handbook does not have.
+//
+// Anchored means: some single chunk holds at least two of the question's
+// anchor terms, and those carry most of the question's content weight. A term
+// the corpus has never seen counts AGAINST the question at full weight — it is
+// the question's most distinctive word and the material lacks it — so one
+// incidental shared word cannot pull a general question into retrieval.
+
+const PROBE_FUNCTION_WORDS = new Set(('what whats which who whom whose when where why how does did doing done '
+  + 'are was were been being have has had having the and for with from into onto about that this these those '
+  + 'there their they them then than can could should would will shall may might must not but you your yours '
+  + 'our ours his her its any some all each every tell give show say said says please just like also get got '
+  + 'set out off over under again more most very much many '
+  // SPEECH-TO-TEXT (2026-09-21). Nine of fifteen misses on a HELD-OUT question set
+  // were never routed to retrieval at all, every one spoken-style: "whats the
+  // timeout on ledgerline store two in milliseconds", "isthmus pod seven whats the
+  // nice to have stuff they want". A word the corpus has never seen counts AGAINST
+  // the question at full weight — right for "TCP" and "UDP", wrong for a
+  // contraction that lost its apostrophe, a filler, or a number SPOKEN as a word
+  // (the document says "store-2"; wordsOf already adds the digit form, which still
+  // counts as content).
+  + 'whats whos hows wheres whens thats theres heres ive im id ill youre youve youd theyre theyve weve were hes shes its lets '
+  + 'dont doesnt didnt isnt arent wasnt werent cant couldnt wouldnt shouldnt wont havent hasnt hadnt '
+  + 'uh um er hmm okay ok so like yeah yep right well actually basically kinda sorta gonna wanna gotta '
+  + 'thing things stuff bit lot kind sort there here now then just really '
+  + 'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen '
+  + 'twenty thirty forty fifty sixty seventy eighty ninety hundred thousand oh').split(' ').filter(Boolean));
+
+/** Is this a question word / auxiliary / pronoun that no document chunk can meaningfully 'contain'? */
+export function isProbeFunctionWord(word: string): boolean { return PROBE_FUNCTION_WORDS.has(word); }
+
+export const PROBE_MIN_ANCHORS = 2;
+export const PROBE_MIN_COVERAGE = 0.6;
+/** idf above which a term is DISTINCTIVE: it appears in under about a fifth of the chunks (ln 5 ≈ 1.6). */
+export const PROBE_DISTINCTIVE_IDF = 1.5;
+
+export function corpusAnchorsQuestion(question: string, stats: LexicalStats): boolean {
+  return anchoringChunkIndexes(question, stats, 1).length > 0;
+}
+
+/** Indexes (into the texts the stats were built from) of the chunks that anchor the question. */
+/**
+ * The question's CONTENT words — what anchors may be drawn from. Function words
+ * must go first: "how" is absent from most résumés, so by document frequency it
+ * is the most "distinctive" word of "How many engineers did you work with on
+ * Project Cinder-115?" (idf 4.77, the same as "cinder-115" itself), and a chunk
+ * can never contain it.
+ */
+export function questionContentWords(question: string): Set<string> {
+  return new Set(wordsOf(question, { shortNumerics: true }).filter((w) => !PROBE_FUNCTION_WORDS.has(w)));
+}
+
+export function anchoringChunkIndexes(question: string, stats: LexicalStats, limit = Number.POSITIVE_INFINITY): number[] {
+  const words = questionContentWords(question);
+  if (words.size < PROBE_MIN_ANCHORS) return [];
+  const unseenWeight = Math.log(1 + (stats.n + 0.5) / 0.5);
+  const anchors = new Map<string, number>();
+  let total = 0;
+  for (const w of words) {
+    const v = stats.idf.get(w);
+    if (v === undefined) { total += unseenWeight; continue; }
+    total += v;
+    if (v >= ANCHOR_MIN_IDF) anchors.set(w, v);
+  }
+  if (anchors.size < PROBE_MIN_ANCHORS || total <= 0) return [];
+  // SECOND ROUTE (2026-09-21, held-out questions). Coverage charges every word the
+  // corpus has never seen at the weight of its rarest word — right for "TCP vs
+  // UDP", but one inflection or synonym sinks a question that otherwise names the
+  // section exactly: "whats the timeout on ledgerline store two in milliseconds"
+  // (the file says timeout_ms) covered 0.39; "regional failover after ive drained
+  // the write queue whats the next step" (the file says "Drain", "steps") failed
+  // with FOUR rare terms sitting together in one chunk. Nine of fifteen held-out
+  // misses were never routed for this reason. Two DISTINCTIVE terms (each in under
+  // ~a fifth of the chunks) co-occurring in one chunk anchor the question too, as
+  // long as unseen words are not the majority of what was asked.
+  let unseen = 0;
+  for (const w of words) if (!stats.idf.has(w)) unseen++;
+  const distinctive = [...anchors].filter(([, v]) => v >= PROBE_DISTINCTIVE_IDF).map(([w]) => w);
+  const coOccurrenceAllowed = distinctive.length >= PROBE_MIN_ANCHORS && unseen * 2 < words.size;
+  const out: number[] = [];
+  for (let i = 0; i < stats.sets.length && out.length < limit; i++) {
+    const set = stats.sets[i];
+    let hit = 0;
+    let count = 0;
+    for (const [w, v] of anchors) if (set.has(w)) { hit += v; count++; }
+    if (count >= PROBE_MIN_ANCHORS && hit / total >= PROBE_MIN_COVERAGE) { out.push(i); continue; }
+    if (coOccurrenceAllowed && distinctive.filter((w) => set.has(w)).length >= PROBE_MIN_ANCHORS) out.push(i);
+  }
+  return out;
+}
+
+// ── Corpus arbitration for SMALL pools (2026-09-30) ─────────────────────────
+//
+// buildLexicalStats() returns null below IDF_MIN_POOL chunks, and probeAnchors
+// returned false whenever it did — so arbitration could never fire for an
+// ordinary upload (a few pages is 1–8 semantic chunks). Measured: a Lecture
+// "oxygen is the final electron acceptor…" statement and Seminar examiner
+// challenges took the FAST path with the matching slides/thesis attached.
+//
+// Without document frequencies there is no rarity signal, so the question is
+// asked the other way round: how much of what the QUESTION says does one chunk
+// hold? With one to three chunks "two terms in one chunk" is nearly "two terms
+// anywhere in the file", so co-occurrence alone would fire on any long question;
+// the SHARE of the question's content words matched carries the decision.
+//
+//   • content words only — PROBE_FUNCTION_WORDS plus the generic verbs, nouns
+//     and adjectives below, which idf would have discounted in a large pool but
+//     which carry no subject here ("know", "think", "better", "people");
+//   • at least SMALL_POOL_MIN_MATCHES distinct content words in ONE chunk;
+//   • and they are at least SMALL_POOL_MIN_SHARE of the question's content
+//     words, so a long unrelated question that happens to share two common
+//     words with the file stays general.
+//
+// A plural/-s form matches its singular ("gains" ~ "gain") because a paraphrase
+// of a paper nearly always shifts number; nothing heavier than that, so the
+// probe stays synchronous and cheap (pool < 12 chunks by construction).
+
+const SMALL_POOL_GENERIC_WORDS = new Set(('know knew known think thought mean means meant want wanted need needs needed '
+  + 'make makes made use uses used using see seen look looks looking find found work works worked working '
+  + 'good better best bad worse worst big bigger small smaller new old different same other another '
+  + 'way ways time times people person thing year years day days part point question questions answer answers '
+  + 'reason reasons example examples case cases fact idea ideas sure true false able important real really '
+  + 'first last next take takes took come comes came going goes went call called try tried keep let seems seem '
+  + 'explain describe talk tell told surely maybe perhaps probably quite pretty rather enough else even still '
+  + 'why because since while though although whether without within between through during before after').split(' ').filter(Boolean));
+
+export const SMALL_POOL_MIN_MATCHES = 2;
+export const SMALL_POOL_MIN_SHARE = 0.5;
+
+/** "gains" → "gain", "runs" → "run"; words that merely end in s ("thesis", "bias", "class") keep theirs. */
+function singular(w: string): string {
+  return w.length > 4 && w.endsWith('s') && !/(ss|is|us)$/.test(w) ? w.slice(0, -1) : w;
+}
+
+/**
+ * Content words of a question for the small-pool probe (singularised).
+ *
+ * A hyphenated compound is ONE word here. wordsOf() adds a compound's parts as
+ * extra tokens ("learning-rate" → learning-rate, learning, rate), which is right
+ * for ranking but would let one shared compound count as three matches and
+ * clear both the match count and the share on its own — "What is a
+ * learning-rate warmup?" anchored against a thesis that merely mentions its
+ * learning-rate schedule. The parts are dropped from the question; the compound
+ * still matches a chunk that writes it as two words (see smallPoolAnchorsQuestion).
+ */
+export function smallPoolContentWords(question: string): Set<string> {
+  const words = [...questionContentWords(question)];
+  const partsOfCompounds = new Set(words.filter((w) => w.includes('-')).flatMap((w) => w.split('-')));
+  const out = new Set<string>();
+  for (const w of words) {
+    if (SMALL_POOL_GENERIC_WORDS.has(w) || /^\d+$/.test(w) && w.length < 3) continue;
+    if (!w.includes('-') && partsOfCompounds.has(w)) continue;
+    out.add(w.includes('-') ? w : singular(w));
+  }
+  return out;
+}
+
+/**
+ * Corpus arbitration for a pool under IDF_MIN_POOL chunks: does one chunk hold
+ * enough of the question's content words that the question is about it?
+ * `texts` are the pool's chunk texts. Pure and synchronous.
+ */
+export function smallPoolAnchorsQuestion(question: string, texts: readonly string[]): boolean {
+  const words = smallPoolContentWords(question);
+  if (words.size < SMALL_POOL_MIN_MATCHES) return false;
+  for (const text of texts) {
+    const chunk = new Set(wordsOf(text, { shortNumerics: true }).map(singular));
+    let hit = 0;
+    for (const w of words) {
+      if (chunk.has(w)) { hit++; continue; }
+      // A compound the chunk writes as separate words ("learning rate").
+      if (w.includes('-')) {
+        const parts = w.split('-').filter((x) => keepToken(x));
+        if (parts.length > 0 && parts.every((x) => chunk.has(singular(x)))) hit++;
+      }
+    }
+    if (hit >= SMALL_POOL_MIN_MATCHES && hit / words.size >= SMALL_POOL_MIN_SHARE) return true;
+  }
+  return false;
 }

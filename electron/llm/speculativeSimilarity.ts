@@ -98,3 +98,24 @@ export function speculativeQuestionSimilarity(speculative: string, final: string
     // overlap alone must never serve a prepared answer to a different question.
     return content < CONTENT_AGREEMENT_MIN ? Math.min(raw, content) : raw;
 }
+
+/**
+ * Did a speculation already hear (essentially) the whole question?
+ *
+ * speculativeQuestionSimilarity is built for the dispatch, and it deliberately
+ * treats a prefix COMPLETION as a match: any pure prefix scores 0.9, however
+ * much of the question it is missing ("What's the difference between" vs
+ * "What's the difference between a process and a thread?"). Claiming a running
+ * speculation for a finished candidate needs the opposite direction too: the
+ * speculation must hold nearly every content word the candidate has, or the
+ * answer being generated is to a question the interviewer did not finish.
+ */
+export const SPECULATION_COVERAGE_MIN = 0.9;
+export function speculationCoversQuestion(speculative: string, candidate: string): boolean {
+    const want = contentWordsOf(candidate);
+    if (want.size === 0) return false;
+    const have = contentWordsOf(speculative);
+    let covered = 0;
+    want.forEach(w => { if (have.has(w)) covered++; });
+    return covered / want.size >= SPECULATION_COVERAGE_MIN;
+}

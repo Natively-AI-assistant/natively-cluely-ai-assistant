@@ -692,7 +692,7 @@ test('SkillsManager.deleteSkill() recursively removes all files in a skill folde
 // points to an arbitrary directory outside the skills dir, then attempt
 // deleteSkill. The manager must refuse the operation AND not touch the
 // external target directory.
-test('SkillsManager.deleteSkill() refuses to follow a symlink pointing outside the skills dir', () => {
+test('SkillsManager.deleteSkill() refuses to follow a symlink pointing outside the skills dir', (t) => {
   const { manager, tmpUserData } = freshManager();
 
   // Plant an external "victim" directory OUTSIDE the skills dir with a
@@ -716,7 +716,15 @@ test('SkillsManager.deleteSkill() refuses to follow a symlink pointing outside t
   // entire folder with a symlink to the victim. The folder is gone; the
   // symlink stands in its place.
   fs.rmSync(customDir, { recursive: true, force: true });
-  fs.symlinkSync(victimDir, customDir, 'dir');
+  try {
+    fs.symlinkSync(victimDir, customDir, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    if (error?.code === 'EPERM' || error?.code === 'EACCES') {
+      t.skip(`directory-link creation unavailable: ${error.code}`);
+      return;
+    }
+    throw error;
+  }
 
   // Attempt to delete. The manager must refuse.
   const result = manager.deleteSkill('evil-skill');

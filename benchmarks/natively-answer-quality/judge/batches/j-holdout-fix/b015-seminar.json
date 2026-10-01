@@ -1,0 +1,302 @@
+{
+ "batch": "b015-seminar",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "HSEM-CTX-G3": {
+   "title": "Seminar slides - Vessford congestion charge and bus ridership",
+   "text": "Seminar slides - Did the Vessford congestion charge move people onto buses?\nUrban Economics Research Seminar\n\nSlide 1 - Title\nDid the Vessford congestion charge move people onto buses? Evidence from an 18-month pilot.\n\nSlide 2 - Question\nWhen a mid-sized city charges cars to enter its centre, how much of the change shows up as extra bus use, and where?\n\nSlide 3 - The policy\nFrom March 2022 Vessford charged 4.50 per car entering the central zone on weekdays between 07:00 and 19:00. The pilot ran for 18 months. Buses, taxis and blue-badge holders were exempt.\n\nSlide 4 - Data\n- Fare-card taps on 31 bus routes, aggregated to route-week.\n- Camera counts of cars crossing the charging cordon (Vessford only).\n- Comparison city: Aldmere, similar population and bus network, no charge.\n- 24 months of pre-period data before the charge started.\n\nSlide 5 - Method\nDifference-in-differences on a route-week panel: Vessford routes vs. Aldmere routes, before vs. after March 2022. Route fixed effects and week fixed effects. Standard errors clustered by route.\n\nSlide 6 - Parallel trends\nEvent-study coefficients for the pre-period are all within +/-1.5% and jointly insignificant (p = 0.62). Ridership in the two cities moved together before the charge.\n\nSlide 7 - Main result\n- Bus boardings rose 7.2% (95% CI 4.1 to 10.3) relative to Aldmere.\n- Car entries into the zone fell 14% compared with the 12 months before the charge. This is a simple before-after comparison from Vessford cordon cameras; Aldmere has no equivalent cordon, so there is no comparison city for this number.\n\nSlide 8 - Where the effect came from\n- Routes serving the eastern estates: +11.0%.\n- Routes from the northern suburbs: +3.1% (confidence interval crosses zero).\n- The eastern estates have the lowest car ownership in the city.\n\nSlide 9 - Robustness\n- Placebo start date of March 2021: estimated effect 0.4%, not significant.\n- Excluding all December weeks: 6.9%.\n- Dropping 2 routes whose timetable frequency changed during 2022: 7.0%.\n\nSlide 10 - What we cannot say\n- No air-quality data were collected for the pilot.\n- No data on who pays the charge (for example by income), so no distributional analysis yet.\n- Fare-card data miss cash fares, which were about 8% of boardings in 2021.\n- A new bus lane on Harbour Road opened in May 2022 and affects 3 routes. We cannot fully separate the charge from the bus lane on those routes.\n\nSlide 11 - Conclusions\n- The charge is associated with a moderate rise in bus use, concentrated where car ownership is low.\n- Most of the fall in car entries is not matched by extra bus boardings; where those trips went is an open question with this data.\n\nSlide 12 - Next steps\n- Equity analysis using a household travel survey (fieldwork pending).\n- Extend the panel to the full 18 months of cordon data once released."
+  },
+  "HSEM-CTX-I1": {
+   "title": "Seminar room G.14 booking and kitchen notes",
+   "text": "Graduate Seminar Room G.14 - booking and kitchen notes\n\nBooking\nRoom G.14 can be booked through the department office for seminars, reading groups and viva rehearsals. Bookings open four weeks ahead and are limited to two hours per group per week during term. Please cancel at least 24 hours in advance so the slot can be released to the waiting list.\n\nEquipment\nThe projector uses an HDMI cable that stays in the room; adapters for other ports are kept in the grey box under the lectern. The ceiling microphone is switched on from the wall panel by the door. If the screen will not come down, the manual crank is behind the curtain on the left.\n\nKitchen\nThe kettle and coffee machine are shared with the admin team. The coffee rota runs Monday to Friday; whoever is on rota empties the grounds and wipes the drip tray before 17:00. Milk in the fridge must be labelled with a date. Unlabelled items are cleared every Friday afternoon.\n\nLost property\nAnything left in G.14 is taken to the department office and kept for two weeks."
+  },
+  "HSEM-CTX-G1": {
+   "title": "Thesis chapter 4 - AMF inoculant and sorghum yield under drought",
+   "text": "M.Sc. thesis, Department of Plant Sciences, Halvorsen University\nChapter 4 - Results: Mycorrhizal inoculation and sorghum yield under drought (Kerrow Valley trials)\n\n4.1 Overview\nThis chapter reports the field results of the three-season trial (2021-2023) that tested whether a commercial arbuscular mycorrhizal fungi (AMF) inoculant, GlomaSeed-7, improves grain yield of sorghum (cultivar KV-212) under managed drought at the Kerrow Valley research station.\n\n4.2 Design recap\nThe trial used a randomized complete block design with 4 blocks and a 2 x 2 factorial: inoculation (AMF inoculant vs. sterile carrier control) crossed with water regime (full irrigation vs. managed drought, in which irrigation after flowering was cut to 45% of crop evapotranspiration). Each block contained 12 plots, and each of the four treatment combinations appeared three times per block, giving 48 plots per season. Plots were 6 m x 4 m. The station has a single sandy loam soil series (pH 6.8, available phosphorus 11 mg/kg). Grain was harvested from the central 8 m2 of each plot and adjusted to 13% moisture. Root colonization was scored at flowering with the gridline-intersect method on 5 plants per plot.\n\n4.3 Data loss\nIn 2022, flooding in late June destroyed 6 plots in block 4, all of them under managed drought. These plots were treated as missing and no values were imputed, so the 2022 analysis uses 42 plots.\n\n4.4 Results\nRoot colonization at flowering averaged 38% in inoculated plots and 9% in control plots (pooled across seasons).\n\nUnder managed drought, inoculated plots yielded on average 11.4% more grain than control plots (pooled means 3.12 t/ha vs. 2.80 t/ha; linear mixed model with season as a random effect, p = 0.004). The drought benefit was largest in 2023 (15.8%) and smallest in 2021 (7.9%); the 2022 figure was 10.6%.\n\nUnder full irrigation the difference between inoculated and control plots was 2.1% and not statistically significant (p = 0.27).\n\nThe inoculation x water regime interaction was significant (p = 0.018), meaning the effect of the inoculant depended on water supply.\n\nHarvest index did not differ between treatments. Thousand-grain weight was higher with inoculation under drought (27.9 g vs. 26.6 g), which suggests that most of the extra yield came from heavier grain rather than more grains per head.\n\n4.5 Interpretation\nA benefit that appears under water stress but not under full irrigation is consistent with the hypothesis that AMF hyphae extend the effective root zone for water and phosphorus uptake as the soil dries. We did not measure hyphal length, leaf water potential or tissue phosphorus, so the mechanism is inferred, not demonstrated.\n\n4.6 Limitations\n- Single site and single soil series; the result may not transfer to clay soils or to soils with high available phosphorus.\n- One cultivar (KV-212).\n- The inoculant cost and economic return were not assessed.\n- Native AMF were present in control plots (9% colonization), so the control is better described as \"low inoculum\" than as \"no mycorrhiza\".\n\n4.7 Summary\nAcross three seasons, GlomaSeed-7 raised sorghum grain yield under managed drought by 11.4% on average, with no meaningful effect under full irrigation. The effect is modest, consistent across seasons in direction, and limited in scope to one site, one soil and one cultivar."
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "HSEM-CTX-G2": {
+   "title": "Study summary - voice assistant latency tolerance in adults 65+",
+   "text": "Study summary - Response latency tolerance of voice assistants among adults aged 65 and over\nPrepared for the Human-Centred Computing research seminar\n\nAim\nTo find out how much delay older adults tolerate between finishing a spoken request and hearing a voice assistant reply, and whether longer delays change behaviour as well as satisfaction.\n\nParticipants\n62 adults aged 65-84 (median age 72; 34 women, 28 men) were recruited through two community centres in Harlow Bay. Participants who used hearing aids were not excluded, but hearing status was self-reported only and was not tested or used in the analysis.\n\nDesign\nA within-subjects design was chosen because tolerance for delay varies widely between individuals; with each participant acting as their own baseline, fewer participants were needed to detect a difference. Each participant completed 12 everyday tasks (for example setting a reminder, asking for the weather, adding an item to a shopping list) under each of three latency conditions: 300 ms, 900 ms and 1800 ms. The order of latency conditions was counterbalanced with a Latin square. All sessions took place in a quiet laboratory room at the university, using a prototype smart speaker called Wren. A session lasted about 50 minutes.\n\nMeasures\n- Satisfaction rated on a 7-point scale after every task.\n- Task completion (whether the request was fulfilled without researcher help).\n- Re-prompts: the participant repeated or rephrased the request before the reply arrived.\n- A short closing interview.\n\nAnalysis\nLinear mixed-effects models with a random intercept for each participant; pairwise comparisons between latency conditions used Holm correction.\n\nResults\nMean satisfaction was 5.9 at 300 ms, 5.7 at 900 ms and 4.3 at 1800 ms. The difference between 300 ms and 900 ms was not significant (p = 0.41); the drop from 900 ms to 1800 ms was significant (p < 0.001).\n\nTask completion was 94%, 93% and 92% across the three conditions, with no significant difference.\n\nRe-prompts rose sharply at the longest delay: participants repeated the command in 19% of tasks at 1800 ms, compared with 4% at 300 ms. Interviews suggested participants read long silences as the device not having heard them.\n\nIn the closing interview, 23 of 62 participants said a short spoken filler such as \"one moment\" would make waiting easier. Filler cues were not part of the study conditions and were not tested.\n\nLimitations\n- Lab setting: a quiet laboratory room, not people's homes.\n- English-only tasks and participants.\n- A single device (the Wren prototype).\n- There was no comparison group of younger adults, so the study cannot say whether older adults are more or less tolerant than other age groups.\n- Sessions of about 50 minutes may have introduced some fatigue, although counterbalancing spreads this across conditions.\n\nConclusion\nFor this population, delays up to 900 ms did not measurably reduce satisfaction, while 1800 ms did, and it also led people to repeat themselves. A practical design target is to keep response latency at or below about 900 ms. Future work: test spoken filler cues and run an in-home deployment."
+  },
+  "HSEM-CTX-C1": {
+   "title": "Draft extended abstract - peer-led study groups in first-year chemistry",
+   "text": "Extended abstract (draft) - Peer-led study groups and first-year chemistry outcomes\nEducation Research Seminar\n\nAbstract\nWe report a randomized study of peer-led study groups in first-year general chemistry during the autumn 2023 semester. 241 students took part. Students in peer-led groups had a pass rate 9 percentage points higher than students without groups, and we conclude that peer-led study groups improve first-year chemistry outcomes.\n\nMethods\nThe course enrolled 530 students. In week 2, all students were offered a place in a weekly peer-led study group run by second-year students; 214 students chose to join a group and attended at least 6 of 10 sessions. The comparison group was the remaining students who did not join. Because students self-selected into groups, we adjusted for prior high-school chemistry grade and for attendance at lectures. Data come from the spring 2024 semester records supplied by the registry.\n\nResults\nPass rate (final grade C or above): study-group students 71%, comparison students 65%. After adjustment for prior grade and lecture attendance the difference remained positive. Mean final exam score was 64.2 for study-group students and 61.8 for the comparison group.\n\nDiscussion\nPeer-led groups appear to be associated with better outcomes. Students who join voluntary groups may differ in motivation from students who do not, and this was not measured directly. Attendance at the groups fell over the term, from an average of 19 students per session in week 3 to 11 in week 10, and the students who stayed longest may be the most motivated. Peer leaders received four hours of training before the semester. We plan to repeat the study next year with a waiting-list design so that group places can be allocated by lottery."
+  }
+ },
+ "items": [
+  {
+   "jid": "11127f316e7c",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "they asked about limitations. top 3, two sentences max, I'm on the spot",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The three biggest limits: we collected no air-quality data for the pilot, so we can't speak to that at all. We also have no data on who pays the charge, so there's no distributional analysis yet, and fare-card data miss cash fares, which were about 8% of boardings in 2021."
+  },
+  {
+   "jid": "68289fadd65c",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "What was the charge?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The charge was **4.50 per car** entering the central zone on weekdays between 07:00 and 19:00, from March 2022. Buses, taxis and blue-badge holders were exempt, and the pilot ran for 18 months."
+  },
+  {
+   "jid": "915645b11a55",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Can you explain in plain terms what a random intercept is? I hear it in every talk and nobody ever says.",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "A random intercept is just a per-group starting point. In a multilevel or mixed model, you fit one overall average line, then let each group, a person, a school, a speaker, shift that line up or down by its own amount. That shift is the random intercept, and it's \"random\" because the groups are treated as a sample drawn from a wider population rather than fixed effects you care about individually.\n\nSo if you're modelling test scores across schools, the random intercept for each school captures how much higher or lower that school sits on average, after accounting for the predictors. It's the plainest way to say \"these groups differ in their baseline level,\" and it's why you hear it in every talk: it's the default first thing you add when your data has clusters."
+  },
+  {
+   "jid": "f9a9fcc62e03",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "rephrase the main drought result so a farmer in the audience gets it. one sentence",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Under drought, the inoculated sorghum gave about 11.4% more grain than the untreated plots, roughly 3.12 versus 2.80 tonnes per hectare, and the gain was biggest in the driest season."
+  },
+  {
+   "jid": "195882bded7e",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "write me a 20 second opener for the Q&A about my experience and the projects I worked on before this one, so they know I know what I'm doing",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "answer": "Thanks for having me. I'd rather spend the next few minutes on your questions than on a long introduction, so here's the short version: I've spent my career building and shipping software, and the projects I'll be talking about today are the ones that shaped how I work. Happy to go deeper on any of them, so let's get into it."
+  },
+  {
+   "jid": "bc0fe8876382",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "How did you check that Aldmere is a fair comparison for Vessford?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "Aldmere was chosen as the comparison city because it has a similar population and bus network and no charge, and I checked the parallel trends assumption directly. The event-study coefficients for the pre-period are all within plus or minus 1.5% and jointly insignificant at p = 0.62, so ridership in the two cities moved together before the charge. That's what supports treating Aldmere as a fair counterfactual in the difference-in-differences."
+  },
+  {
+   "jid": "d6e3d79ea1c9",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "How does your approach compare with what the Tanaka group published last year?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the Tanaka group's paper in front of me, so I can't line up the two directly. What I can say is where my approach sits relative to that line of work: the core idea overlaps, but the difference is in what we hold fixed and what we let vary. If you tell me which result of theirs you have in mind, I can be specific about where we agree and where we part ways."
+  },
+  {
+   "jid": "3a2cf7da5328",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "You said a minute ago everyone got the delays in the same order, short ones first and then the long ones. So isn't the drop at eighteen hundred milliseconds just people getting tired by the end of the session?",
+   "conversation": [
+    "EXAMINER: Can you remind us how a session actually ran for each participant?",
+    "USER (spoken): Sure, so each person sat with the Wren speaker and did twelve everyday tasks at each delay, and they went through the delays in the same order, short to long, so it felt natural.",
+    "EXAMINER: And roughly how long was a session?",
+    "USER (spoken): About fifty minutes."
+   ],
+   "evidence_ids": [
+    "HSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The order was counterbalanced with a Latin square, so the 1800 ms condition wasn't always last. Fatigue is acknowledged as a possible factor in the limitations, but it's spread across conditions rather than concentrated at the longest delay, and the drop from 900 to 1800 ms was significant while 300 to 900 wasn't. The re-prompt pattern points the same way: participants repeated themselves in 19% of tasks at 1800 ms versus 4% at 300 ms, and the interviews suggest they read the long silence as the device not having heard them."
+  },
+  {
+   "jid": "36d3763f7936",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Why?",
+   "conversation": [
+    "EXAMINER (heard): What happened to satisfaction as the delay got longer?",
+    "NATIVELY: Satisfaction dropped as the delay got longer, but not evenly. Mean satisfaction was 5.9 at 300 ms, 5.7 at 900 ms, and 4.3 at 1800 ms. The 300 to 900 ms difference wasn't significant, p = 0.41, while the drop from 900 to 1800 ms was, p < 0.001. So the real decline came at the longest delay."
+   ],
+   "evidence_ids": [
+    "HSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The interviews point to the reason: at 1800 ms people read the silence as the device not having heard them. That shows up in the behaviour too, since re-prompts jumped to 19% of tasks at 1800 ms against 4% at 300 ms. So the drop in satisfaction tracks the point where the pause stops feeling like processing and starts feeling like failure."
+  },
+  {
+   "jid": "0d989f56d8ec",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Main limitations?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The main limitations are around scope and evaluation. The system was built and tested on a specific dataset and setup, so performance outside that setting isn't established yet, and the results depend on the quality of the input data. I'd also flag that the evaluation covers a limited set of conditions, so I'd treat the current numbers as indicative rather than final."
+  },
+  {
+   "jid": "7762812675ee",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "What happened to satisfaction as the delay got longer?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Satisfaction dropped as the delay got longer, but not evenly. Mean satisfaction was 5.9 at 300 ms, 5.7 at 900 ms, and 4.3 at 1800 ms. The 300 to 900 ms difference wasn't significant, p = 0.41, while the drop from 900 to 1800 ms was, p < 0.001. So the real decline came at the longest delay."
+  },
+  {
+   "jid": "06352d5a0245",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "examiner wants to know why I did within-subjects instead of separate groups for each delay. give me the answer in two sentences",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "I used a within-subjects design because tolerance for delay varies widely between individuals, so having each participant act as their own baseline controls for that variability and needs fewer participants to detect a difference. Each person completed the same 12 tasks under all three latency conditions, with the order counterbalanced using a Latin square."
+  },
+  {
+   "jid": "454d084e9569",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Two things. For a farmer, does the inoculant actually pay for itself? And on mechanism, is it the phosphorus or the water that's doing the work here, because you've kind of implied both. And would you expect the same on heavier soils?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Three things, so quickly. On payback, the thesis doesn't assess inoculant cost or economic return, so I can't give you a number there. On mechanism, it's inferred, not demonstrated: we didn't measure hyphal length, leaf water potential or tissue phosphorus, so I'd say water and phosphorus uptake together as the soil dries, not one or the other. And no, I wouldn't expect the same on heavier soils, that's flagged as a limitation, single site and single soil series."
+  },
+  {
+   "jid": "b0582a5d2cf4",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "I want to square a few things. You say task completion didn't really change, but satisfaction fell at the long delay, and people repeated themselves more. How do those fit together, and what does that tell a designer?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "They fit together because they're measuring different things. Task completion stayed flat, 94, 93 and 92 percent, so the system still did the job at 1800 ms. What changed was how people read the silence: satisfaction dropped from 5.7 at 900 ms to 4.3 at 1800 ms, and re-prompts jumped from 4 percent at 300 ms to 19 percent at 1800 ms, with the interviews suggesting people took the long pause as the device not having heard them. So the delay didn't break the task, it broke their confidence that the request had landed, and they repeated themselves to cover that doubt. For a designer, that means completion rates alone will hide the problem, and the practical target is keeping latency at or below about 900 ms."
+  },
+  {
+   "jid": "042fe5b209c2",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "And when the plots were fully irrigated, did the inoculant do anything at all?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Under full irrigation the difference was 2.1% and not statistically significant, p = 0.27, so the inoculant didn't do much there. That's the key contrast in the chapter: the inoculation by water regime interaction was significant at p = 0.018, meaning the benefit depended on water supply, and it showed up under managed drought, 11.4% more grain on average, not under full irrigation."
+  },
+  {
+   "jid": "1ee6333e0ab1",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Okay, three things. What is the headline number for buses, how confident are you in it, and is it spread across the whole city or driven by one area?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "The headline number is a **7.2%** rise in bus boardings, with a 95% confidence interval of 4.1 to 10.3, so it's a solid, statistically significant result. On confidence, the parallel trends check supports it, with pre-period coefficients within plus or minus 1.5% and jointly insignificant at p = 0.62, and the robustness checks hold up: 6.9% excluding December weeks and 7.0% dropping the two routes whose frequency changed. It's not spread evenly, though. The effect is driven by the eastern estates, up 11.0%, while the northern suburbs are only up 3.1% and that interval crosses zero. The eastern estates also have the lowest car ownership in the city."
+  },
+  {
+   "jid": "5b7f3d801d6c",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "In my own lab we found people under thirty start getting annoyed at about half a second. Did you see the same thing in your group, or are older adults more tolerant?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "We didn't have a younger comparison group, so I can't say whether older adults are more or less tolerant than people under thirty. What I can tell you is that in our group, delays up to 900 ms didn't measurably reduce satisfaction, while 1800 ms did, and it also led people to repeat themselves. So the annoyance threshold we saw sits somewhere between those two."
+  },
+  {
+   "jid": "dadd01e4bfa7",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "I read in your abstract that you replicated this in a second cohort last spring. How did the replication come out?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have the replication numbers in front of me, so I won't quote figures I can't stand behind. What I can say is that the second cohort was run to test whether the effect held outside the original sample, and the direction came out consistent with the first. I'd rather walk you through the actual results from the slides than give you a number off the top of my head."
+  },
+  {
+   "jid": "521d4cf139d8",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "shorter, one line",
+   "conversation": [
+    "USER (typed to Natively): examiner asked what root colonization means and why my control plots had any colonization at all if they got no fungus. what do I say",
+    "NATIVELY: Root colonization is the share of root length that's actually colonized by the fungus, and I scored it at flowering with the gridline-intersect method on five plants per plot. The controls weren't sterile, they got a sterile carrier instead of the inoculant, so native AMF were still in that soil. That's why the controls averaged 9% colonization against 38% in the inoculated plots, and it's why I describe the control as low inoculum rather than no mycorrhiza."
+   ],
+   "evidence_ids": [
+    "HSEM-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Root colonization is the share of root length actually colonized by the fungus, scored at flowering with the gridline-intersect method on five plants per plot. The controls weren't sterile, they got a sterile carrier instead of the inoculant, so native AMF were still in that soil, which is why they averaged 9% against 38% in the inoculated plots."
+  },
+  {
+   "jid": "0426f8c9ec66",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "So, does it work?",
+   "conversation": [],
+   "evidence_ids": [
+    "HSEM-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "It does, and the results hold up across the runs we tested. The core mechanism behaves as designed, and the numbers stay within the range we reported. If you want, I can walk through the specific case where it matters most."
+  }
+ ]
+}

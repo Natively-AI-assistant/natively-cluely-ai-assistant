@@ -30,9 +30,12 @@ export interface AssembleSummaryParams {
   startedAtIso?: string;
   startedAtMs?: number;
   // When true, generate an LLM-based follow-up draft (Phase 8). Gated by the caller on the
-  // followUpDraftV2 flag + post_call_summary scope.
+  // followUpDraftV2 flag + post_call_summary scope. Only a notes Regenerate on a meeting
+  // that already has a draft sets it — the draft is otherwise written on demand.
   generateFollowUpDraft?: boolean;
   followUpTone?: FollowUpTone;
+  // The user's own name for the draft's sign-off (Google account behind Calendar sync).
+  followUpSenderName?: string;
   // When true, run the constrained LLM Summary polish (#1). Gated by the caller on the
   // meetingSummaryLlmPolish flag + post_call_summary scope. Always falls back to the
   // deterministic summary, so it can never make the summary worse or block completion.
@@ -138,7 +141,7 @@ export class MeetingContextAssembler {
           const topics = summary.topics || [];
           const [polished, polishedOverview] = await Promise.all([
             summary.tldr.length > 0 ? polisher.polish(baseInputs) : Promise.resolve(null),
-            polisher.polishOverview({ ...baseInputs, briefs, topics }),
+            polisher.polishOverview({ ...baseInputs, briefs, topics, totalTokensEstimate: normalized.totalTokensEstimate }),
           ]);
           if (polished && polished.length > 0) summary.tldr = polished;
           if (polishedOverview) summary.overview = polishedOverview;
@@ -154,6 +157,7 @@ export class MeetingContextAssembler {
             summary,
             mode: params.modeTemplateType,
             tone: params.followUpTone,
+            senderName: params.followUpSenderName,
           });
           summary.followUpDraft = draft;
         } catch (e) {

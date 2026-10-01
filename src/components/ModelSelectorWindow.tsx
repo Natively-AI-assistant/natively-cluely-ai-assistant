@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Check, Loader2 } from 'lucide-react';
-import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, getCodexCliModelDisplayName, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
+import { groupModelOptions, type ModelSelectorOption } from './ui/modelSelectorGroups';
+import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
+import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, gatewayModelLabel, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
@@ -11,15 +13,12 @@ import {
     OVERLAY_OPACITY_DEFAULT,
 } from '../lib/overlayAppearance';
 
-// Define Model Types
-interface ModelOption {
-    id: string;
-    name: string;
-    type: 'cloud' | 'local' | 'custom' | 'ollama' | 'codex-cli';
-    provider?: string;
-}
+type ModelOption = ModelSelectorOption;
 
-
+/** Tallest the list gets before it scrolls: about ten rows and two headers. */
+const LIST_MAX_HEIGHT = 340;
+/** The panel's p-1 padding plus its 1px border, top and bottom. */
+const PANEL_CHROME = 10;
 
 const ModelSelectorWindow = () => {
     const isLight = useResolvedTheme() === 'light';
@@ -118,6 +117,17 @@ const ModelSelectorWindow = () => {
 
                 // 3. Codex CLI
                 const codexCliConfig = await window.electronAPI?.getCodexCliConfig?.();
+                // Codex is only offered with a usable ChatGPT sign-in (Natively's
+                // own or `codex login`) — the same gate Settings applies. Listing
+                // it regardless let a signed-out user pick a model that routing
+                // then silently answered from another provider (issue #558).
+                const codexSignedIn = codexCliConfig?.enabled
+                    ? !!(await window.electronAPI?.codexLoginStatus?.().catch(() => null))?.signedIn
+                    : false;
+                // The installed Codex CLI's own model list; presets when there is none.
+                const codexModels = codexSignedIn
+                    ? codexModelOptions(await window.electronAPI?.getCodexCliModels?.().catch(() => undefined))
+                    : [];
 
                 // 4. Ollama
                 let ollamaModels: string[] = [];
@@ -172,17 +182,24 @@ const ModelSelectorWindow = () => {
                     }
                 }
 
+                try {
+                    const result = await window.electronAPI.antigravityModels();
+                    for (const model of result.models) {
+                        models.push({ id: `antigravity:${model.id}`, name: `${model.label} (Antigravity)`, type: 'cloud', provider: 'antigravity' });
+                    }
+                } catch { /* Offline or signed out; other providers remain available. */ }
+
                 // Custom Providers
                 customProviders.forEach((p: any) => {
                     models.push({ id: p.id, name: p.name, type: 'custom' });
                 });
 
                 // Codex CLI
-                if (codexCliConfig?.enabled) {
-                    models.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})`, type: 'codex-cli', provider: 'codex-cli' });
-                    CODEX_CLI_MODEL_PRESETS.forEach(model => {
-                        const id = codexCliSelectorId(model.id);
-                        models.push({ id, name: getCodexCliModelDisplayName(id) || model.name, type: 'codex-cli', provider: 'codex-cli' });
+                if (codexCliConfig?.enabled && codexSignedIn) {
+                    const configuredName = codexModels.find(model => model.id === codexCliConfig.model)?.name || prettifyModelId(codexCliConfig.model);
+                    models.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${configuredName})`, type: 'codex-cli', provider: 'codex-cli' });
+                    codexModels.forEach(model => {
+                        models.push({ id: codexCliSelectorId(model.id), name: model.name, type: 'codex-cli', provider: 'codex-cli' });
                     });
                 }
 
@@ -204,6 +221,20 @@ const ModelSelectorWindow = () => {
                     // LiteLLM proxy may not be running — ignore.
                 }
 
+                // 9Router — auto-discovered from the configured instance. Same
+                // shape and the same try/catch: an instance that is not running
+                // must never block the rest of the list.
+                try {
+                    const ninerouterModels = await window.electronAPI?.getAvailableNinerouterModels?.() || [];
+                    ninerouterModels.forEach((m: string) => {
+                        // `m` still carries 9Router's own `<upstreamAlias>/` prefix, so
+                        // the label takes the last segment the same way LiteLLM's does.
+                        models.push({ id: `ninerouter/${m}`, name: `${gatewayModelLabel(m)} (9Router)`, type: 'cloud', provider: 'ninerouter' });
+                    });
+                } catch {
+                    // 9Router may not be running — ignore.
+                }
+
                 if (cancelled || myToken !== runToken) return;
 
                 // Settings → AI Providers is where the user curates this list, and
@@ -213,9 +244,9 @@ const ModelSelectorWindow = () => {
                 // to 300+ models — its allow-list is opt-in (empty = none), so
                 // without this gate the picker would list every model on the proxy.
                 //
-                // `family` mirrors providerFamily() in ipcHandlers.ts. Codex presets
-                // and custom providers have no allow-list UI, so their empty list
-                // means "no filter" and isModelAllowed lets them through unchanged.
+                // `family` mirrors providerFamily() in ipcHandlers.ts. Custom
+                // providers have no allow-list UI, so their empty list means "no
+                // filter" and isModelAllowed lets them through unchanged.
                 const disabled = new Set(creds?.disabledProviders || []);
                 const allowLists: Record<string, string[]> = creds?.cloudEnabledModels || {};
                 const visibleModels = models.filter(m => {
@@ -223,7 +254,11 @@ const ModelSelectorWindow = () => {
                         ?? (m.type === 'ollama' ? 'ollama' : m.type === 'custom' ? 'custom' : null);
                     if (!family) return true;
                     if (disabled.has(family)) return false;
-                    return isModelAllowed(family, m.id, allowLists[family] || []);
+                    // The bare Codex entry runs the Codex default model, so it is
+                    // allowed exactly when that model is (modelAvailable does the same).
+                    const allowId = m.id === CODEX_CLI_MODEL.id && codexCliConfig?.model
+                        ? codexCliSelectorId(codexCliConfig.model) : m.id;
+                    return isModelAllowed(family, allowId, allowLists[family] || []);
                 });
 
                 localStorage.setItem('cached-models', JSON.stringify(visibleModels));
@@ -292,48 +327,167 @@ const ModelSelectorWindow = () => {
     // panel, unreadable low-contrast.
     const isDarkBg = interfaceTheme === 'liquid-glass' || interfaceTheme === 'modern' || !isLight;
     const panelClass = isDarkBg
-        ? 'bg-[#1E1E1E]/80 border-white/10 shadow-black/40'
-        : 'bg-[#F3F4F6]/92 border-black/10 shadow-black/10';
+        ? 'bg-[#1E1E1E]/80 border-white/10'
+        : 'bg-[#F3F4F6]/92 border-black/10';
+    // Glass and modern repaint rows from index.css (.model-selector-row), so
+    // these only decide the default theme.
+    const rowHoverClass = isDarkBg ? 'hover:bg-white/[0.07]' : 'hover:bg-black/[0.05]';
+    // --overlay-text-muted is too faint for an 11px header on the light panel,
+    // so light uses Apple's secondary label color instead.
+    const headerColor = isDarkBg ? 'var(--overlay-text-muted)' : 'rgba(60, 60, 67, 0.64)';
+
+    const groups = useMemo(() => groupModelOptions(availableModels), [availableModels]);
+    const showHeaders = groups.length > 1;
+
+    const panelRef = useRef<HTMLDivElement>(null);
+    const listRef = useRef<HTMLDivElement>(null);
+    const [fade, setFade] = useState({ top: false, bottom: false });
+    // Main's cap for where the dropdown sits (modelSelectorHeightBudget): a low
+    // overlay gets a shorter list, not a dropdown pushed up over the answer.
+    const [heightBudget, setHeightBudget] = useState<number>(Number.POSITIVE_INFINITY);
+    const listMaxHeight = Math.min(LIST_MAX_HEIGHT, heightBudget - PANEL_CHROME);
+
+    useEffect(() => {
+        const unsubscribe = window.electronAPI?.onModelSelectorHeightBudget?.((maxHeight: number) => {
+            if (Number.isFinite(maxHeight) && maxHeight > 0) setHeightBudget(maxHeight);
+        });
+        return () => unsubscribe?.();
+    }, []);
+
+    const updateFade = () => {
+        const list = listRef.current;
+        if (!list) return;
+        const top = list.scrollTop > 1;
+        const bottom = list.scrollTop + list.clientHeight < list.scrollHeight - 1;
+        setFade(prev => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
+    };
+
+    // Keeps the checked row in view. Manual scrollTop rather than
+    // scrollIntoView, which would also scroll PanelShell's overflow-hidden box.
+    const revealSelected = () => {
+        const list = listRef.current;
+        const row = list?.querySelector<HTMLElement>('[data-selected="true"]');
+        if (!list || !row) return;
+        // Out of view: centre it, so its neighbours (and header) show too
+        // instead of the row sitting under the edge fade.
+        const inView = row.offsetTop >= list.scrollTop + 18
+            && row.offsetTop + row.offsetHeight <= list.scrollTop + list.clientHeight - 18;
+        if (!inView) {
+            list.scrollTop = Math.max(0, row.offsetTop - (list.clientHeight - row.offsetHeight) / 2);
+        }
+        updateFade();
+    };
+
+    // The window is sized to the panel, so a short list leaves no transparent
+    // strip under it (on Windows that strip would still take clicks).
+    // The computed size, not getBoundingClientRect (the open animation scales
+    // the panel, so a mid-animation rect under-reports) and not offsetWidth
+    // (rounded to the nearest pixel: a content-fit 174.44px panel would lose
+    // a sliver of its right border). Border-box, rounded UP.
+    useLayoutEffect(() => {
+        const panel = panelRef.current;
+        if (!panel) return;
+        const report = () => {
+            const style = getComputedStyle(panel);
+            window.electronAPI?.updateContentDimensions?.({
+                width: Math.ceil(parseFloat(style.width)),
+                height: Math.ceil(parseFloat(style.height)),
+            })?.catch?.(() => {});
+            updateFade();
+        };
+        report();
+        const observer = new ResizeObserver(report);
+        observer.observe(panel);
+        return () => observer.disconnect();
+    }, []);
+
+    useLayoutEffect(revealSelected, [groups, currentModel, showHeaders, listMaxHeight]);
+
+    // The window is pre-warmed once and then only hidden and shown, so a mount
+    // animation would play a single time, offscreen. Main says when it opens.
+    useEffect(() => {
+        const unsubscribe = window.electronAPI?.onModelSelectorShown?.(() => {
+            revealSelected();
+            const panel = panelRef.current;
+            if (!panel || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            panel.animate(
+                [
+                    { opacity: 0, transform: 'translateY(-4px) scale(0.98)' },
+                    { opacity: 1, transform: 'none' },
+                ],
+                { duration: 160, easing: 'cubic-bezier(0.2, 0, 0, 1)' },
+            );
+        });
+        return () => unsubscribe?.();
+    }, []);
+
+    const fadeMask = fade.top || fade.bottom
+        ? `linear-gradient(to bottom, ${fade.top ? 'transparent 0, #000 18px' : '#000 0'}, ${fade.bottom ? '#000 calc(100% - 18px), transparent 100%' : '#000 100%'})`
+        : undefined;
 
     return (
         <div className="w-fit h-fit bg-transparent flex flex-col">
             <div
-                className={`w-[140px] h-[200px] backdrop-blur-md border rounded-[16px] overflow-hidden shadow-2xl p-2 flex flex-col animate-scale-in origin-top-left overlay-shell-surface ${panelClass}`}
-                style={{ ...appearance.shellStyle }}
+                ref={panelRef}
+                className={`backdrop-blur-md border rounded-[14px] overflow-hidden p-1 flex flex-col origin-top-left overlay-shell-surface overlay-popover-surface ${panelClass}`}
+                // Same width as the toolbar button that opens it.
+                style={{ ...appearance.shellStyle, width: MODEL_SELECTOR_WIDTH }}
             >
-                <div className="relative z-[1] flex-1 min-h-0 flex flex-col">
+                <div className="relative z-[1] flex flex-col">
                     {isLoading ? (
-                        <div className={`flex items-center justify-center py-4 overlay-text-muted ${isDarkBg ? 'text-slate-500' : 'text-slate-400'}`}>
-                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                            <span className="text-xs">Loading models...</span>
+                        <div className="flex items-center gap-2 px-2 h-[30px] overlay-text-muted">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                            <span className="text-[12px]">Loading models…</span>
+                        </div>
+                    ) : availableModels.length === 0 ? (
+                        <div className="px-2 py-2">
+                            <div className="text-[12px] leading-[18px] font-medium overlay-text-primary">No models connected</div>
+                            <div className="text-[11px] leading-4 mt-0.5 overlay-text-muted">Connect one in Settings.</div>
                         </div>
                     ) : (
-                        <div className="flex-1 overflow-y-auto scrollbar-hide flex flex-col gap-0.5">
-                            {availableModels.length === 0 ? (
-                                <div className={`px-4 py-3 text-center text-xs overlay-text-muted ${isDarkBg ? 'text-slate-500' : 'text-slate-400'}`}>
-                                    No models connected.<br />Check Settings.
+                        <div
+                            ref={listRef}
+                            role="listbox"
+                            aria-label="Model"
+                            onScroll={updateFade}
+                            className="relative overflow-y-auto overscroll-contain scrollbar-hide flex flex-col"
+                            style={{ maxHeight: listMaxHeight, maskImage: fadeMask, WebkitMaskImage: fadeMask }}
+                        >
+                            {groups.map((group, groupIndex) => (
+                                <div
+                                    key={`${group.key}-${groupIndex}`}
+                                    role="group"
+                                    aria-label={group.label}
+                                    className={groupIndex > 0 ? 'mt-1' : undefined}
+                                >
+                                    {showHeaders && group.showHeader && (
+                                        <div className="px-2 pt-1 pb-0.5 text-[11px] leading-4 font-semibold select-none" style={{ color: headerColor }}>
+                                            {group.label}
+                                        </div>
+                                    )}
+                                    <div className="flex flex-col gap-px">
+                                        {group.rows.map((model) => {
+                                            const isSelected = currentModel === model.id;
+                                            return (
+                                                <button
+                                                    key={model.id}
+                                                    role="option"
+                                                    aria-selected={isSelected}
+                                                    data-selected={isSelected ? 'true' : undefined}
+                                                    onClick={() => handleSelectFn(model.id)}
+                                                    className={`w-full h-[30px] pl-2 pr-1.5 flex items-center gap-1.5 text-left rounded-[10px] transition-colors duration-100 overlay-text-primary model-selector-row ${rowHoverClass} ${isSelected ? 'model-selector-row-selected' : ''}`}
+                                                >
+                                                    <span className="text-[12px] font-medium truncate flex-1 min-w-0">{model.label}</span>
+                                                    {/* Only the checked row gives up room for the check:
+                                                        reserving it on every row left a visible gap beside
+                                                        names that were being cut short. */}
+                                                    {isSelected && <Check className="w-3 h-3 shrink-0" strokeWidth={2.5} aria-hidden="true" />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
-                            ) : (
-                                availableModels.map((model) => {
-                                    const isSelected = currentModel === model.id;
-                                    return (
-                                        <button
-                                            key={model.id}
-                                            onClick={() => handleSelectFn(model.id)}
-                                            className={`
-                                                w-full text-left px-3 py-2 flex items-center justify-between group transition-colors duration-200 rounded-lg model-selector-row
-                                                ${isSelected
-                                                    ? `model-selector-row-selected overlay-text-primary ${isDarkBg ? 'bg-white/10 text-white' : 'bg-black/[0.07] text-slate-900'}`
-                                                    : `overlay-text-interactive ${isDarkBg ? 'text-slate-400 hover:bg-white/5 hover:text-slate-200' : 'text-slate-500 hover:bg-black/[0.04] hover:text-slate-800'}`
-                                                }
-                                            `}
-                                        >
-                                            <span className="text-[12px] font-medium truncate flex-1 min-w-0">{model.name}</span>
-                                            {isSelected && <Check className={`w-3.5 h-3.5 shrink-0 ml-2 ${isDarkBg ? 'text-emerald-400' : 'text-emerald-600'}`} />}
-                                        </button>
-                                    );
-                                })
-                            )}
+                            ))}
                         </div>
                     )}
                 </div>

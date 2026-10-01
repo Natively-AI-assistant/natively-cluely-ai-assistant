@@ -48,7 +48,7 @@ const CASES = [
   // breaks — so the planner would not call this JD either. Parity with
   // AnswerPlanner is this fallback's contract, so matching its blind spot is the
   // correct behaviour here; diverging to "improve" it would recreate the drift
-  // F-304 set out to remove. Logged as a residual in AUDIT_REPORT.md instead.
+  // F-304 set out to remove. Left as a known residual instead.
   ['What are the duties for this system design role?',                       'coding_question'],
   // The coding veto AnswerPlanner really applies must still win.
   ['Write a function that returns the required buffer size',                 'coding_question'],

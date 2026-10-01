@@ -8,21 +8,28 @@ const https = require('https');
 // bundled so a clean-machine install never has to download a 280MB cross-encoder
 // on first document-grounded mode activation.
 const REQUIRED_MODEL_FILES = [
-    'Xenova/all-MiniLM-L6-v2/config.json',
-    'Xenova/all-MiniLM-L6-v2/tokenizer.json',
-    'Xenova/all-MiniLM-L6-v2/tokenizer_config.json',
-    'Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx',
-    'Xenova/mobilebert-uncased-mnli/config.json',
-    'Xenova/mobilebert-uncased-mnli/tokenizer.json',
-    'Xenova/mobilebert-uncased-mnli/tokenizer_config.json',
-    'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx',
-    'Xenova/bge-reranker-base/config.json',
-    'Xenova/bge-reranker-base/tokenizer.json',
-    'Xenova/bge-reranker-base/tokenizer_config.json',
-    'Xenova/bge-reranker-base/onnx/model_quantized.onnx',
-    // Auto Answer V3 TurnPredictor (Smart Turn v3.1, 8 MB int8). Shipped like the
-    // Xenova assets; the RUNTIME tolerates its absence (predict() → null), the
-    // packaged build does not (same contract as every other model here).
+    // multilingual-e5-small — the DEFAULT bundled embedder since 2026-09-22
+    // (electron/rag/bundledLocalEmbedding.ts, docs/local-embedding-benchmark.md).
+    // Required, as MiniLM was: an install with no working default embedder
+    // silently runs every retrieval lexical-only.
+    'Xenova/multilingual-e5-small/config.json',
+    'Xenova/multilingual-e5-small/tokenizer.json',
+    'Xenova/multilingual-e5-small/tokenizer_config.json',
+    'Xenova/multilingual-e5-small/special_tokens_map.json',
+    'Xenova/multilingual-e5-small/onnx/model_quantized.onnx',
+    // The bundled cross-encoder. ms-marco replaced bge-reranker-base on
+    // 2026-09-04 — see step 3 below for the numbers. bge is gone entirely: not
+    // bundled, not lazily downloaded, not in the catalogue.
+    'Xenova/ms-marco-MiniLM-L-6-v2/config.json',
+    'Xenova/ms-marco-MiniLM-L-6-v2/tokenizer.json',
+    'Xenova/ms-marco-MiniLM-L-6-v2/tokenizer_config.json',
+    'Xenova/ms-marco-MiniLM-L-6-v2/onnx/model_quantized.onnx',
+];
+
+// OPTIONAL assets (review#9): verified with a WARNING, never a failure — the
+// runtime degrades without them. The packaged-release gate
+// (verify-packaged-local-assets.mjs) is the one place they stay REQUIRED.
+const OPTIONAL_MODEL_FILES = [
     'pipecat-ai/smart-turn-v3/smart-turn-v3.1-cpu.onnx',
 ];
 
@@ -74,6 +81,45 @@ async function downloadSmartTurn(modelsDir) {
     console.log('[download-models] smart-turn-v3.1 downloaded and sha256-verified.');
 }
 
+/** Streaming sha256, so re-verifying a 279 MB model does not load it into memory. */
+function sha256FileStream(file) {
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash('sha256');
+        fs.createReadStream(file)
+            .on('data', (c) => hash.update(c))
+            .on('end', () => resolve(hash.digest('hex')))
+            .on('error', reject);
+    });
+}
+
+/**
+ * Multi-file, manifest-driven model download (idempotent).
+ *
+ * Generalises downloadSmartTurn to a model made of several files: every file is
+ * fetched from the PINNED revision in `<modelDir>/manifest.json` — never a
+ * moving `main` — and sha256 + byte-count verified before it is renamed into
+ * place. A file already present with the right size AND hash is skipped, so a
+ * repeat `npm install` re-downloads nothing.
+ */
+async function downloadManifestModel(modelsDir, modelDir) {
+    const dir = path.join(modelsDir, ...modelDir.split('/'));
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+    let fetched = 0;
+    for (const f of manifest.files) {
+        const dest = path.join(dir, ...f.path.split('/'));
+        if (fs.existsSync(dest) && fs.statSync(dest).size === f.bytes
+            && (await sha256FileStream(dest)) === f.sha256) continue;
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        const url = `https://huggingface.co/${manifest.model}/resolve/${manifest.revision}/${f.path}`;
+        console.log(`[download-models] ${manifest.model}/${f.path} (${(f.bytes / 1e6).toFixed(1)} MB)...`);
+        await downloadVerified(url, dest, f.sha256, f.bytes);
+        fetched++;
+    }
+    console.log(fetched === 0
+        ? `[download-models] ${manifest.model} already present (sha256 OK).`
+        : `[download-models] ${manifest.model}: ${fetched} file(s) downloaded and sha256-verified.`);
+}
+
 function verifyModels() {
     const modelsDir = path.join(__dirname, '../resources/models');
     const missing = [];
@@ -87,6 +133,12 @@ function verifyModels() {
         console.error('[download-models] VERIFY FAILED — required model files missing or empty:');
         for (const m of missing) console.error('  ✗', m);
         process.exit(1);
+    }
+    for (const rel of OPTIONAL_MODEL_FILES) {
+        const full = path.join(modelsDir, rel);
+        let ok = false;
+        try { ok = fs.existsSync(full) && fs.statSync(full).size > 0; } catch { ok = false; }
+        if (!ok) console.warn(`[download-models] optional asset missing (feature degrades gracefully): ${rel}`);
     }
     console.log('[download-models] VERIFY OK — all required core-fallback model files present.');
 }
@@ -114,36 +166,59 @@ async function downloadModels() {
         // model_quantized.onnx; see the same reasoning at electron/rag/LocalReranker.ts.
         const QUANTIZED = { dtype: 'q8' };
 
-        // 1. Embedding model (RAG)
-        console.log('[download-models] Downloading Xenova/all-MiniLM-L6-v2 (q8)...');
-        await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', QUANTIZED);
-        console.log('[download-models] all-MiniLM-L6-v2 downloaded.');
+        // 1. (removed 2026-09-22) Xenova/all-MiniLM-L6-v2, the embedder bundled
+        //    before multilingual-e5-small (step 5). Nothing loads it at runtime:
+        //    a saved MiniLM selection resolves to the bundled model
+        //    (isBundledLocalModelId), and old-space vectors are re-embedded by
+        //    the space-key re-index. The R&D baseline fetches its own pinned copy
+        //    (scripts/download-embedding-experiments.mjs minilm-baseline).
 
-        // 2. Zero-shot classification model (Intent Classifier)
-        console.log('[download-models] Downloading Xenova/mobilebert-uncased-mnli (q8)...');
-        await pipeline('zero-shot-classification', 'Xenova/mobilebert-uncased-mnli', QUANTIZED);
-        console.log('[download-models] mobilebert-uncased-mnli downloaded.');
+        // 2. (removed 2026-09-05) Xenova/mobilebert-uncased-mnli, the zero-shot
+        //    intent classifier. Its output never reached the dispatched prompt
+        //    on the default V3 path; see docs/natively-router-final-answer-2026-09-05.md.
 
-        // 3. Cross-encoder reranker (smart-retrieval Phase 1/3 — confidence-gated
-        //    rerank escalation). Bundled in resources/models/ so a clean-machine
-        //    install can do offline rerank without a 280MB first-activation
-        //    download. The installer ships the q8 quantized variant (~280MB).
+        // 3. Cross-encoder reranker — ms-marco-MiniLM-L-6-v2 (q8, ~24MB).
         //
-        //    The lazy-download provider in electron/rag/rerankerDownloadProvider.ts
-        //    still acts as a no-op fallback if the bundled model is absent
-        //    (e.g. an old installer predating this bundling).
-        console.log('[download-models] Downloading Xenova/bge-reranker-base (q8)...');
-        // Use dtype:'q8' so transformers.js selects the quantized ONNX variant
-        // (~280 MB) instead of the fp32 one (~1.1 GB). NATIVELY_RERANKER_DTYPE
-        // override remains for accuracy experiments.
-        const rerankerDtype = (process.env.NATIVELY_RERANKER_DTYPE || 'q8').trim() || 'q8';
-        await pipeline('text-classification', 'Xenova/bge-reranker-base', { dtype: rerankerDtype });
-        console.log('[download-models] bge-reranker-base downloaded.');
+        //    REPLACED bge-reranker-base on 2026-09-04. Measured against a
+        //    NO-RERANKER baseline on a 40-passage pool with same-topic
+        //    distractors (docs/reranker-benchmark-2026-09-04.md):
+        //
+        //      bge-reranker-base    MRR 0.7558   -0.0810   +3/-7   1873ms  283MB
+        //      ms-marco-MiniLM-L-6  MRR 0.8688   +0.0320   +4/-2    211ms   24MB
+        //
+        //    The old default was the worst reranker in that table: it shipped
+        //    283MB of installer in order to make retrieval measurably worse.
+        //    This one is a twelfth of the size, nine times faster, and actually
+        //    improves the ranking — so the low-confidence escalation in
+        //    ModeHybridRetriever has a beneficiary again.
+        //
+        //    bge is not reachable at all any more, deliberately. It was never a
+        //    catalogue entry — only the bundled default plus a lazy downloader
+        //    written for it — so with the bundle gone there was nothing left
+        //    worth keeping a download path for. Better local rerankers are one
+        //    click away in the catalogue.
+        console.log('[download-models] Downloading Xenova/ms-marco-MiniLM-L-6-v2 (q8)...');
+        await pipeline('text-classification', 'Xenova/ms-marco-MiniLM-L-6-v2', QUANTIZED);
+        console.log('[download-models] ms-marco-MiniLM-L-6-v2 downloaded.');
 
         // 4. Smart Turn v3.1 (Auto Answer V3 TurnPredictor). Raw ONNX, not a
         //    transformers.js pipeline: fetched by URL and sha256-verified against
         //    resources/models/pipecat-ai/smart-turn-v3/manifest.json.
-        await downloadSmartTurn(modelsDir);
+        //    OPTIONAL (review#9): the runtime degrades to the deterministic
+        //    endpoint path without it, so a blocked download must not fail the
+        //    install. Release builds are still gated by
+        //    verify-packaged-local-assets.mjs, which requires the file.
+        try {
+            await downloadSmartTurn(modelsDir);
+        } catch (e) {
+            console.warn('[download-models] smart-turn-v3.1 download failed (optional; Auto Answer runs deterministic-only):', e?.message ?? e);
+        }
+
+        // 5. multilingual-e5-small — the DEFAULT bundled embedder since
+        //    2026-09-22 (docs/local-embedding-benchmark.md). Pinned revision,
+        //    every file sha256-verified against its manifest. REQUIRED: a failure
+        //    here fails the install, exactly as a failed MiniLM download always has.
+        await downloadManifestModel(modelsDir, 'Xenova/multilingual-e5-small');
 
         console.log('[download-models] All models downloaded successfully!');
     } catch (e) {

@@ -13,6 +13,7 @@
  *   distanceFromBottom: number,
  *   alreadySuppressed: boolean,
  *   transitionInFlight: boolean,
+ *   viewportResized?: boolean,
  *   rearmDistanceThresholdPx?: number,
  * }} input
  * @returns {'arm' | 're-arm' | 'none'}
@@ -22,13 +23,16 @@ export function decideScrollInterrupt({
   distanceFromBottom,
   alreadySuppressed,
   transitionInFlight,
+  viewportResized = false,
   rearmDistanceThresholdPx = 28,
 }) {
   // Fresh upward scroll: arm suppression. Gated on !alreadySuppressed so a
   // self-inflicted native scrollTop clamp (browser correcting for a growing
   // clientHeight mid-transition) can't re-snapshot the headroom baseline on
   // every frame — see the caller's comment for the full mechanism.
-  if (delta < 0 && !alreadySuppressed) return 'arm';
+  // A viewport that just changed height makes the browser clamp scrollTop by
+  // itself, which reads as delta < 0 but is not the user.
+  if (delta < 0 && !alreadySuppressed && !viewportResized) return 'arm';
 
   // Re-arm requires BOTH net downward motion (delta > 0) and proximity to
   // bottom. Distance alone isn't enough: a tiny upward nudge still leaves

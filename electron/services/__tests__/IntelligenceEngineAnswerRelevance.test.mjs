@@ -125,7 +125,15 @@ describe('answer-relevance guard — flag ON (opt-in): full regeneration behavio
   beforeEach(() => { prevFlag = process.env[FLAG]; process.env[FLAG] = '1'; });
   afterEach(() => { if (prevFlag === undefined) delete process.env[FLAG]; else process.env[FLAG] = prevFlag; });
 
-  test('a free-form no-content hallucination with no shared vocabulary is regenerated into a real answer', async () => {
+  test('with the checker unavailable, a no-content hallucination passes through UNCHANGED even with the flag on', async () => {
+    // 2026-09-05: checkAnswerRelevance returns null. The MobileBERT session it
+    // reused was removed with the intent classifier, and null is the contract
+    // the guard already reads as "check unavailable, do not gate". So the
+    // opt-in regeneration this test used to exercise cannot fire. That is the
+    // accepted cost: the flag is default OFF everywhere because validation
+    // run-032 found this classifier could not separate real from hallucinated
+    // answers on live traffic, so nothing shipped is lost. This pins the
+    // resulting behaviour so it is a decision on record, not a silent change.
     const hallucination = 'This turn appears empty.';
     const repaired = 'Tinroof is an open-source library I built for distributed rate limiting, written in Go, used in production to handle burst traffic.';
     const { engine } = await makeEngineWithAnswer([hallucination], { repairChunks: [repaired] });
@@ -134,8 +142,8 @@ describe('answer-relevance guard — flag ON (opt-in): full regeneration behavio
 
     const answer = await engine.runWhatShouldISay(undefined, 0.9, undefined, { skipCooldown: true });
 
-    assert.equal(answer, repaired);
-    assert.deepEqual(finals, [repaired]);
+    assert.equal(answer, hallucination, 'no regeneration can happen without a relevance verdict');
+    assert.deepEqual(finals, [hallucination]);
   });
 
   test('a real, substantive, on-topic answer is NEVER touched by the relevance guard (critical false-positive check)', async () => {

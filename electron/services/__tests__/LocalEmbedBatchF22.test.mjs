@@ -16,12 +16,17 @@
 // minutes. The end-to-end proof is recorded in 10_BENCHMARK_RESULTS.md.
 
 import { test, describe } from 'node:test';
+import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 
-const { ModeHybridRetriever } = await import(
-  path.resolve(process.cwd(), 'dist-electron/electron/services/modes/ModeHybridRetriever.js')
-);
+// WINDOWS (2026-08-29): `await import()` needs a file:// URL, not a bare
+// absolute path. On POSIX `import('/Users/…')` happens to resolve; on Windows
+// `import('C:\\…')` throws ERR_UNSUPPORTED_ESM_URL_SCHEME, and because these
+// imports run at MODULE LOAD the whole file fails before a single test runs —
+// which is why this file showed up as one opaque file-level ✖ in the Windows
+// leg rather than as a failing assertion. `pathToFileURL` is the fix.
+const { ModeHybridRetriever } = await import(pathToFileURL(path.resolve(process.cwd(), 'dist-electron/electron/services/modes/ModeHybridRetriever.js')).href);
 
 /** Records the size of every batch handed to the embedder. */
 function makeHarness(providerName) {
@@ -83,9 +88,22 @@ describe('F22 — indexing batch is provider-aware', () => {
   });
 
   test('every chunk is still embedded — batching is not truncation', async () => {
+    // REWRITTEN 2026-08-28 (T9). This asserted `total > 100`, a number that
+    // described the OLD 140-word window chunker rather than the property under
+    // test. Boundary-driven chunks are larger, so the same document now yields
+    // ~38 chunks and the old threshold failed on a correct result.
+    //
+    // The property is "batching embedded EVERY chunk", so it is now asserted
+    // against the chunker's actual output instead of a magic number — which
+    // also makes it immune to the next legitimate chunking change.
+    const { semanticChunks } = await import(pathToFileURL(path.resolve(process.cwd(), 'dist-electron/electron/services/modes/semanticChunker.js')).href);
+    const expected = semanticChunks(BIG_DOC).length;
+    assert.ok(expected > 1, 'the fixture must produce multiple chunks for this test to mean anything');
+
     const { hr, batchSizes } = makeHarness('local');
     await hr.indexFile({ id: 'f3', fileName: 'big.txt', content: BIG_DOC });
     const total = batchSizes.reduce((a, b) => a + b, 0);
-    assert.ok(total > 100, `expected the whole document to be embedded, saw ${total} chunks`);
+    assert.equal(total, expected,
+      `batching must embed every chunk: chunker produced ${expected}, batches carried ${total}`);
   });
 });

@@ -10,13 +10,12 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     // Was "noImplicitAny": true — now redundant, "strict" subsumes it.
-    // See docs/ts7-upgrade-audit.md §7.2 (option D).
     "strict": true,
     "sourceMap": true,
     "jsx": "react-jsx",
     // "baseUrl": "." removed — TS7 deletes the option (TS5102) and it was not
     // load-bearing here: no source file resolves a bare specifier through it.
-    // No "paths" replacement is needed. See docs/ts7-upgrade-audit.md §6.
+    // No "paths" replacement is needed.
     "rootDir": "..",
     "outDir": "../dist-electron",
     // Was "node" (node10) — removed in TS7 (TS5108).
@@ -36,7 +35,7 @@
     // private submodule and is still fully type-checked as a *dependency* of the
     // files that import it (verified: 0 x TS2307) — only its internal strict
     // findings stop being reported here. Making premium strict is a separate
-    // change in natively-premium. See docs/ts7-upgrade-audit.md §7.2.
+    // change in natively-premium.
   ],
   "exclude": [
     "db/seedDemo.ts",

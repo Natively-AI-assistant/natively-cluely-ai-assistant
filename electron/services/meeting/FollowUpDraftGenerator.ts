@@ -17,8 +17,23 @@
 
 import type { LLMHelper } from '../../LLMHelper';
 import type { ActionItem, DecisionItem, FollowUpDraft, FollowUpDraftType, FollowUpTone, MeetingSummaryV3, QuestionItem } from './MeetingSummaryV3';
-import { buildFollowUpBody } from './MeetingSummaryReducer';
-import { generateStructured } from './generateStructured';
+import { buildFollowUpBody, INCLUDE_NEXT_STEPS } from './MeetingSummaryReducer';
+import { generateStructured, NOTE_CALL_TIMEOUT_MS } from './generateStructured';
+
+// The draft is written on demand (the notes' Generate button), never with the notes.
+// A notes Regenerate re-drafts only when the saved notes already carry a draft — the
+// user asked for one — in the tone it was written in; otherwise the draft would go
+// stale under the new notes. Legacy string drafts have no tone (→ the mode's default).
+export function followUpRedraftPlan(prevDraft: unknown): { redraft: boolean; tone?: FollowUpTone } {
+  const body = typeof prevDraft === 'string'
+    ? prevDraft
+    : (prevDraft && typeof prevDraft === 'object' && typeof (prevDraft as any).body === 'string' ? (prevDraft as any).body : '');
+  if (!body.trim()) return { redraft: false };
+  const tone = prevDraft && typeof prevDraft === 'object' ? (prevDraft as any).tone : undefined;
+  return (Object.keys(TONE_GUIDANCE) as FollowUpTone[]).includes(tone)
+    ? { redraft: true, tone }
+    : { redraft: true };
+}
 
 export function followUpTypeForMode(mode?: string | null): FollowUpDraftType {
   switch (mode) {
@@ -45,7 +60,25 @@ interface ModeMailProfile {
   register: string;       // voice / relationship
   structure: string;      // what the body should cover, in order
   followUp: string;       // what "following up" actually MEANS for this mode — the point of the message
+  // Next-steps-free variants of the two fields above, used while INCLUDE_NEXT_STEPS
+  // is false (see MeetingSummaryReducer.ts). Kept as separate strings rather than
+  // patched at runtime so restoring the block is a one-line flag flip, and so the
+  // prompt never carries a "list the next steps" instruction and a "do not list the
+  // next steps" rule at the same time.
+  structureNoNextSteps: string;
+  followUpNoNextSteps: string;
   defaultTone: FollowUpTone;
+  // How the sender signs when their name is known (the Google account behind
+  // Calendar sync): the full name to someone outside the company, the first name
+  // to colleagues, nothing on a notes-to-self recap.
+  signAs: 'full' | 'first' | 'none';
+  // The sign-off line finishSignature() adds when the model left the draft without
+  // one; null where the mode signs with no name at all.
+  signOff: string | null;
+  // What this mode's email subject should be about. Only email-type drafts carry a
+  // subject. The examples are about unrelated topics on purpose: the model copies
+  // an example's words when they fit the meeting.
+  subject: string;
 }
 
 const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
@@ -56,7 +89,12 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
     register: 'Collegial and clear — a peer recapping for peers.',
     structure: 'One-line thanks → what was aligned/decided → concrete next steps with owners and dates → the single most important open question, if any.',
     followUp: 'Confirm the shared understanding and move the work forward: restate what was decided, name who owns each next step and by when, and flag the one open question that most needs an answer.',
+    structureNoNextSteps: 'One-line thanks → what was aligned/decided → the single most important open question, if any.',
+    followUpNoNextSteps: 'Confirm the shared understanding: restate what was decided so everyone leaves with the same picture, and flag the one open question that most needs an answer.',
     defaultTone: 'professional',
+    signAs: 'first',
+    signOff: 'Best,',
+    subject: 'Say where the discussion landed or what is still open, e.g. "Where we landed on the vendor shortlist".',
   },
   sales: {
     recipient: 'the prospect / customer you met with (external, buying side)',
@@ -65,7 +103,12 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
     register: 'Warm, confident, value-led — a trusted advisor, not a pushy seller. Reinforce the value discussed and keep momentum toward the next step.',
     structure: 'Thank them for their time → restate the goal/pain you aligned on in their words → the agreed next step with a clear date/owner → a light, low-pressure call to action. Never invent pricing or commitments.',
     followUp: 'Advance the deal: mirror back the pain/goal they described, tie it to the value discussed, confirm the agreed next step (demo, pilot, sending materials) with a date, and gently address the biggest open objection if one surfaced. Never invent pricing or commitments.',
+    structureNoNextSteps: 'Thank them for their time → restate the goal/pain you aligned on in their words → a light, low-pressure closing line. Never invent pricing or commitments.',
+    followUpNoNextSteps: 'Keep the relationship warm: mirror back the pain/goal they described in their own words, tie it to the value discussed, and gently address the biggest open objection if one surfaced. Never invent pricing or commitments.',
     defaultTone: 'warm',
+    signAs: 'full',
+    signOff: 'Best regards,',
+    subject: 'Lead with the customer\'s goal or project, in their terms, e.g. "Following up on your warehouse rollout".',
   },
   recruiting: {
     recipient: 'the candidate you interviewed (external)',
@@ -74,7 +117,12 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
     register: 'Warm, respectful, and encouraging regardless of outcome — represents the company well. Never disclose an internal hire/no-hire decision to the candidate.',
     structure: 'Thank them for their time → one genuine specific thing that stood out → the concrete next step and rough timeline for hearing back → an invitation to ask questions. No evaluation verdicts.',
     followUp: 'Keep a strong candidate warm and set expectations: thank them, reference one genuine strength they showed (cite from the Strengths section only), state the concrete next stage and rough timeline to hear back, and invite questions. Never reveal an internal hire/no-hire decision or cite Concerns/Compensation sections to the candidate.',
+    structureNoNextSteps: 'Thank them for their time → one genuine specific thing that stood out → an invitation to ask questions. No evaluation verdicts.',
+    followUpNoNextSteps: 'Keep a strong candidate warm: thank them, reference one genuine strength they showed (cite from the Strengths section only), and invite questions. Never reveal an internal hire/no-hire decision or cite Concerns/Compensation sections to the candidate.',
     defaultTone: 'warm',
+    signAs: 'full',
+    signOff: 'Best,',
+    subject: 'Thank the candidate for something specific they talked about, e.g. "Thanks for walking us through the ferry timetable app".',
   },
   'team-meet': {
     recipient: 'the internal team (a message you post to the team)',
@@ -83,7 +131,12 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
     register: 'Crisp, skimmable, action-oriented — an internal status update peers can scan in ten seconds.',
     structure: 'A one-line greeting → short labelled blocks (Decisions, Owners & next steps, Blockers) each with the relevant items → sign-off. Lead with the outcome; keep every line tight.',
     followUp: 'Drive execution: capture what was decided, list each owner and their next step with a date, and surface every blocker or dependency that needs unblocking — so nothing falls through before the next sync.',
+    structureNoNextSteps: 'A one-line greeting → short labelled blocks (Decisions, Blockers) each with the relevant items → sign-off. Lead with the outcome; keep every line tight.',
+    followUpNoNextSteps: 'Keep the team aligned: capture what was decided and surface every blocker or dependency that needs unblocking before the next sync.',
     defaultTone: 'concise',
+    signAs: 'first',
+    signOff: 'Thanks,',
+    subject: 'Name the workstream and what the update covers, e.g. "Decisions and blockers from the search migration sync".',
   },
   'looking-for-work': {
     recipient: 'the interviewer / hiring manager who interviewed YOU (the sender is the candidate)',
@@ -92,25 +145,40 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
     register: 'Appreciative, enthusiastic, and professional — a strong post-interview thank-you that reaffirms genuine interest without sounding desperate. You are writing AS the candidate, TO the interviewer.',
     structure: 'Thank them for their time → reference one specific topic from the conversation that resonated → briefly reinforce why you\'re a strong fit → express enthusiasm for next steps. Do not restate your whole résumé.',
     followUp: 'Strengthen your candidacy: thank them, reference a specific topic from the conversation that genuinely resonated, briefly connect one of your strengths to a need they raised, and reaffirm enthusiasm for the next step. If a question was left open in the notes that you can now answer, add a one-line answer.',
+    structureNoNextSteps: 'Thank them for their time → reference one specific topic from the conversation that resonated → briefly reinforce why you\'re a strong fit → close warmly. Do not restate your whole résumé.',
+    followUpNoNextSteps: 'Strengthen your candidacy: thank them, reference a specific topic from the conversation that genuinely resonated, and briefly connect one of your strengths to a need they raised. If a question was left open in the notes that you can now answer, add a one-line answer.',
     defaultTone: 'warm',
+    signAs: 'full',
+    signOff: 'Best regards,',
+    subject: 'Thank them and name the role or topic you discussed, e.g. "Thank you for the conversation about the platform role".',
   },
   'technical-interview': {
     recipient: 'the internal hiring panel / interview loop (evaluator feedback, not the candidate)',
-    salutation: 'No salutation — this is a written debrief, not a letter. It is NOT addressed to a person.',
-    closing: 'No sign-off. End on the recommendation line.',
-    register: 'Objective, specific, and evidence-based — an interviewer writing up a debrief for the loop.',
-    structure: 'A formatted debrief with clear labelled sections in this order — "Problem:", "Approach:", "Signal:" (correctness, complexity, communication), and "Recommendation:" (advance / more signal needed). Keep each section to 1-2 lines. Do NOT invent a final hire/no-hire if it was not decided.',
+    salutation: 'Open with a brief greeting to the loop, e.g. "Hi team," or "Hi panel," — this is a short written debrief sent to people, not a filed form.',
+    closing: 'Sign off with "Thanks," or "Best," on its own line.',
+    register: 'Objective, specific, and evidence-based — an interviewer writing up a debrief for the loop, in plain prose rather than a formatted report.',
+    structure: 'A one-line frame of what was covered → the candidate\'s approach and key tradeoffs, in prose → the concrete correctness/complexity/communication signal observed, woven into sentences → a clear recommendation sentence (advance / more signal needed). Do NOT invent a final hire/no-hire if it was not decided.',
     followUp: 'Give the loop a decision-useful debrief: state the problem, the candidate\'s approach and key tradeoffs, the concrete correctness/complexity/communication signal observed, and a clear recommendation (advance / more signal needed / area to probe next round). Base every claim on what actually happened; do not invent a final hire/no-hire.',
+    structureNoNextSteps: 'A one-line frame of what was covered → the candidate\'s approach and key tradeoffs, in prose → the concrete correctness/complexity/communication signal observed, woven into sentences. Do NOT invent a final hire/no-hire if it was not decided.',
+    followUpNoNextSteps: 'Give the loop a decision-useful debrief: state the problem, the candidate\'s approach and key tradeoffs, and the concrete correctness/complexity/communication signal observed. Base every claim on what actually happened; do not invent a final hire/no-hire.',
     defaultTone: 'professional',
+    signAs: 'first',
+    signOff: 'Thanks,',
+    subject: 'Name the interview and the candidate if known, e.g. "Debrief on the caching design interview".',
   },
   lecture: {
-    recipient: 'yourself / classmates (a study recap, not a message to anyone)',
-    salutation: 'No salutation — this is a personal study note, not addressed to anyone.',
-    closing: 'No sign-off.',
-    register: 'Plain and self-directed — notes-to-self that make revision fast.',
-    structure: 'A formatted study recap with clear labelled sections in this order — "Key concepts:", "To remember:" (definitions/formulas), and "To review:" (specific questions before the exam). Keep each section tight. No greeting, no sign-off, no "thanks".',
+    recipient: 'yourself / classmates (a study recap you might send yourself or a study group)',
+    salutation: 'Open with a brief, plain line like "Hi," or "Quick recap:" — self-directed, not a formal address.',
+    closing: 'Close with a short line such as "That\'s the recap." No formal sign-off name needed.',
+    register: 'Plain and self-directed — notes-to-self, in prose, that make revision fast.',
+    structure: 'A one-line frame of what the session covered → the core concepts worth remembering, in plain sentences → the specific definitions/formulas and the questions to review before the exam, woven into prose rather than headers.',
     followUp: 'Make revision fast: distil the core concepts worth remembering, the exact definitions/formulas to memorize, and the specific questions or confusing points to review before the exam. This is a study aid, not a message to anyone.',
+    structureNoNextSteps: 'A one-line frame of what the session covered → the core concepts worth remembering, in plain sentences → the specific definitions/formulas worth memorizing, woven into prose rather than headers.',
+    followUpNoNextSteps: 'Make revision fast: distil the core concepts worth remembering and the exact definitions/formulas to memorize. This is a study aid, not a message to anyone.',
     defaultTone: 'concise',
+    signAs: 'none',
+    signOff: null,
+    subject: 'Name the session\'s subject, e.g. "Review notes on heat engines".',
   },
 };
 
@@ -121,13 +189,27 @@ function mailProfileForMode(mode?: string | null): ModeMailProfile {
   return (mode && MODE_MAIL_PROFILES[mode]) || MODE_MAIL_PROFILES.general;
 }
 
+// Every type produces a plain-text EMAIL-shaped message — a salutation, prose body,
+// and a sign-off. `interview_feedback` and `study_notes` used to describe formatted,
+// labelled-section reports; they now describe the same kind of letter as every other
+// type, just with mode-appropriate voice (an objective debrief, a self-directed recap).
 const TYPE_GUIDANCE: Record<FollowUpDraftType, string> = {
   email: 'Write a short professional follow-up email (3-6 sentences). Open with a one-line thanks, state what was aligned/decided, then the concrete next steps with owners and dates if known, and end with the single most important open question if any.',
-  slack: 'Write a concise Slack-style update (no greeting needed, can use brief bullet emphasis). Lead with the outcome, then next steps.',
+  slack: 'Write a concise Slack-style update as plain sentences (no greeting needed). Lead with the outcome, then next steps.',
   project_update: 'Write a short project update: what changed since last sync, decisions, owners + next steps, and any blocker. Keep it skimmable.',
   crm_note: 'Write a concise CRM note: account context, pain/need, buying signal, objection, and next step. Factual, no fluff.',
-  study_notes: 'Write a short study recap: the core concepts to remember and the questions to review before the exam.',
-  interview_feedback: 'Write concise interviewer feedback: the problem, the approach, correctness/complexity signal, communication, and a clear next-step recommendation. Do NOT invent a final hire/no-hire if it was not decided.',
+  study_notes: 'Write a short study-recap email or note (3-5 sentences): a brief opening line, then plain prose covering the core concepts to remember and the questions to review before the exam. Woven into paragraphs, not labelled sections.',
+  interview_feedback: 'Write a short interview debrief as a plain email to the hiring loop (3-6 sentences): a brief greeting, then prose covering the problem, the candidate\'s approach, the concrete correctness/complexity/communication signal observed, and a clear recommendation. Woven into paragraphs, not labelled sections. Do NOT invent a final hire/no-hire if it was not decided.',
+};
+
+// Next-steps-free counterparts to TYPE_GUIDANCE, used while INCLUDE_NEXT_STEPS is false.
+const TYPE_GUIDANCE_NO_NEXT_STEPS: Record<FollowUpDraftType, string> = {
+  email: 'Write a short professional follow-up email (3-5 sentences). Open with a one-line thanks, state what was aligned/decided, and end with the single most important open question if any.',
+  slack: 'Write a concise Slack-style update as plain sentences (no greeting needed). Lead with the outcome and what was decided.',
+  project_update: 'Write a short project update: what changed since last sync, decisions, and any blocker. Keep it skimmable.',
+  crm_note: 'Write a concise CRM note: account context, pain/need, buying signal, and objection. Factual, no fluff.',
+  study_notes: 'Write a short study-recap email or note (3-4 sentences): a brief opening line, then plain prose covering the core concepts to remember and the definitions/formulas worth memorizing. Woven into paragraphs, not labelled sections.',
+  interview_feedback: 'Write a short interview debrief as a plain email to the hiring loop (3-5 sentences): a brief greeting, then prose covering the problem, the candidate\'s approach, and the concrete correctness/complexity/communication signal observed. Woven into paragraphs, not labelled sections. Do NOT invent a final hire/no-hire if it was not decided.',
 };
 
 const TONE_GUIDANCE: Record<FollowUpTone, string> = {
@@ -150,6 +232,82 @@ export interface FollowUpGenerateParams {
   mode?: string | null;
   tone?: FollowUpTone;
   type?: FollowUpDraftType;
+  // Skip the LLM and return the template draft (the followUpDraftV2 kill switch).
+  deterministicOnly?: boolean;
+  // The sender's own name, when known (the Google account connected for Calendar
+  // sync). Signed under the sign-off per the mode's `signAs`. Pass it raw:
+  // cleanSenderName() is applied here.
+  senderName?: string;
+}
+
+/**
+ * The name a draft is signed with, or undefined to sign with no name. It comes from
+ * the user's Google account, so it is data, not instructions: newlines, quotes,
+ * brackets and control characters go, and anything that is not plausibly a name
+ * (too long, an email address, no letters) is dropped rather than signed.
+ */
+export function cleanSenderName(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const s = raw.replace(/[\u0000-\u001f\u007f"“”`<>{}\[\]\\]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!s || Array.from(s).length > 80 || s.includes('@') || !/\p{L}/u.test(s)) return undefined;
+  return s;
+}
+
+/** The part of the sender's name a mode signs with (see ModeMailProfile.signAs). */
+export function signatureName(senderName: unknown, mode?: string | null): string | undefined {
+  const name = cleanSenderName(senderName);
+  const signAs = mailProfileForMode(mode).signAs;
+  if (!name || signAs === 'none') return undefined;
+  return signAs === 'first' ? name.split(' ')[0] : name;
+}
+
+// A label the model sometimes puts in front of a subject: "Follow-up: …",
+// "Recap – …", "Re: …". Only a label FOLLOWED BY A SEPARATOR is stripped, so a
+// subject that merely starts with the word ("Follow-up on the renewal",
+// "Recap of the pilot") is left alone.
+const SUBJECT_LABEL = /^(?:re|fwd?|subject|follow[\s-]?up|recap|summary|meeting\s+(?:recap|summary|notes|follow[\s-]?up))\s*[:|–—-]\s+/i;
+
+/** A model-written subject, minus label prefixes, wrapping quotes and end punctuation. */
+export function tidySubject(raw: string): string {
+  let s = raw.trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
+  let stripped = false;
+  for (let i = 0; i < 3 && SUBJECT_LABEL.test(s); i++) { s = s.replace(SUBJECT_LABEL, '').trim(); stripped = true; }
+  s = s.replace(/[.!]+$/, '').trim();
+  // Sentence case: capitalise what we cut into, or a first word the model left all
+  // lower-case ("thanks for…"). A word with its own capitals ("iPhone") is left alone.
+  const firstWord = s.split(/\s/)[0] || '';
+  if (s && (stripped || /^\p{Ll}+$/u.test(firstWord))) s = s.charAt(0).toUpperCase() + s.slice(1);
+  return s;
+}
+
+// A trailing line that is only a bracketed placeholder: "[Your Name]",
+// "[Candidate Name]", "<Your Title>". Models write these despite the rule against it.
+const PLACEHOLDER_LINE = /^\s*[\[{<][^\]}>\n]{1,40}[\]}>]\s*$/;
+
+/**
+ * The end of a model-written draft, made right: trailing placeholder lines go, and
+ * when the sender's name is known it is always signed — under the sign-off the model
+ * wrote, or under the mode's own sign-off when the model wrote none. The prompt asks
+ * for the name, but models drop sign-offs, so it is guaranteed here. Without a name,
+ * nothing is added.
+ */
+export function finishSignature(body: string, signName: string | undefined, mode?: string | null): string {
+  const lines = body.replace(/\s+$/, '').split('\n');
+  while (lines.length > 1 && (PLACEHOLDER_LINE.test(lines[lines.length - 1]) || !lines[lines.length - 1].trim())) lines.pop();
+  const profile = mailProfileForMode(mode);
+  if (!signName || profile.signAs === 'none') return lines.join('\n');
+  const tail = lines.slice(-3).join('\n').toLowerCase();
+  if (tail.includes(signName.toLowerCase())) return lines.join('\n');
+  const last = lines[lines.length - 1] || '';
+  if (/,\s*$/.test(last) && last.trim().length <= 40) return [...lines, signName].join('\n');
+  return profile.signOff ? [...lines, '', profile.signOff, signName].join('\n') : lines.join('\n');
+}
+
+/** Sign a template body under its sign-off line ("Best,"), if it has one. */
+function withSignature(body: string, name: string | undefined): string {
+  if (!name) return body;
+  const lines = body.split('\n');
+  return /,\s*$/.test(lines[lines.length - 1] || '') ? `${body}\n${name}` : body;
 }
 
 export class FollowUpDraftGenerator {
@@ -185,7 +343,9 @@ export class FollowUpDraftGenerator {
 
     if (summary.whatChanged?.length) parts.push(`What changed:\n${summary.whatChanged.map(s => `- ${s}`).join('\n')}`);
     if (summary.decisions?.length) parts.push(`Decisions:\n${summary.decisions.map(d => `- ${d.text}${d.owner ? ` (${d.owner})` : ''}`).join('\n')}`);
-    if (summary.actionItems?.length) parts.push(`Action items:\n${summary.actionItems.map(a => `- ${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` (by ${a.deadline})` : ''}${a.explicitness === 'inferred' ? ' [inferred]' : ''}`).join('\n')}`);
+    // Action items are withheld while INCLUDE_NEXT_STEPS is false: leaving them in
+    // context is what makes the model reproduce a next-steps list even when told not to.
+    if (INCLUDE_NEXT_STEPS && summary.actionItems?.length) parts.push(`Action items:\n${summary.actionItems.map(a => `- ${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` (by ${a.deadline})` : ''}${a.explicitness === 'inferred' ? ' [inferred]' : ''}`).join('\n')}`);
     if (summary.openQuestions?.length) parts.push(`Open questions:\n${summary.openQuestions.filter(q => q.status !== 'answered').map(q => `- ${q.text}`).join('\n')}`);
     if (summary.risks?.length) parts.push(`Risks / blockers:\n${summary.risks.map(r => `- ${r.text}${r.severity ? ` [${r.severity}]` : ''}`).join('\n')}`);
 
@@ -195,57 +355,92 @@ export class FollowUpDraftGenerator {
   async generate(params: FollowUpGenerateParams): Promise<FollowUpDraft> {
     const type = params.type || followUpTypeForMode(params.mode);
     const profile = mailProfileForMode(params.mode);
+    // While INCLUDE_NEXT_STEPS is false the prompt is built from the next-steps-free
+    // variants — removing the positive instruction is not enough on its own (a
+    // follow-up email is conventionally expected to end in a next-steps list, so the
+    // model regrows one), hence the explicit prohibition in STRICT RULES below and
+    // the withheld "Action items" input block.
+    const typeGuidance = INCLUDE_NEXT_STEPS ? TYPE_GUIDANCE[type] : TYPE_GUIDANCE_NO_NEXT_STEPS[type];
+    const structure = INCLUDE_NEXT_STEPS ? profile.structure : profile.structureNoNextSteps;
+    const followUpMeaning = INCLUDE_NEXT_STEPS ? profile.followUp : profile.followUpNoNextSteps;
     // Tone: explicit caller wins; otherwise the mode's natural default.
     const tone: FollowUpTone = params.tone || profile.defaultTone;
+    const signName = signatureName(params.senderName, params.mode);
+    // Every mode's draft is an email-shaped message (see TYPE_GUIDANCE) shown in one
+    // mail card with a Subject header, so every one gets a subject — not only type
+    // 'email', which left team updates, interview debriefs and study recaps without
+    // one. Only the Slack / CRM-note recipe shapes, which no mode produces, go bare.
+    const hasSubject = type !== 'slack' && type !== 'crm_note';
     const inputs = this.buildInputs(params.summary);
+    // The next-steps rule is the ONLY part of STRICT RULES that legitimately differs
+    // between the two INCLUDE_NEXT_STEPS branches. Every other rule — including the
+    // plain-text and no-absence-statements rules below — is assembled OUTSIDE this
+    // ternary so it can never be silently dropped from one branch (a prior version of
+    // this file lost its entire STRICT RULES block that way).
+    const nextStepsRule = INCLUDE_NEXT_STEPS
+      ? '- If the notes genuinely contain no real outcomes or next steps, keep it short and honest rather than padding.'
+      : '- Do NOT add a next-steps / action-items / to-do list, and do NOT add a "Next steps", "Owners & next steps" or "Action items" heading, bullet list, or closing "next steps are…" line. That block is deliberately omitted — the reader tracks those elsewhere. If one outstanding commitment is genuinely essential to the message, fold it into a sentence; never enumerate it as a labelled list.\n- If the notes genuinely contain no real outcomes, keep it short and honest rather than padding.';
 
     const decisions = params.summary.decisions || [];
     const actionItems = params.summary.actionItems || [];
     const deterministic = (): FollowUpDraft => ({
       type,
-      ...(type === 'email' ? { subject: subjectFromContent(params.summary) } : {}),
-      body: buildFollowUpBody(decisions, actionItems, params.mode),
+      ...(hasSubject ? { subject: subjectFromContent(params.summary) } : {}),
+      body: withSignature(buildFollowUpBody(decisions, actionItems, params.mode), signName),
       tone,
       ...(actionItems.length ? { basedOnActionItemIds: actionItems.map(a => a.id).filter(Boolean) as string[] } : {}),
       ...(decisions.length ? { basedOnDecisionIds: decisions.map(d => d.id).filter(Boolean) as string[] } : {}),
     });
 
-    // No content at all → deterministic empty-ish draft.
-    if (!inputs.trim()) return deterministic();
+    // No content at all → deterministic empty-ish draft. Same when the caller has the
+    // LLM draft switched off.
+    if (params.deterministicOnly || !inputs.trim()) return deterministic();
 
     const systemPrompt = `You are the user's assistant, drafting the follow-up they will copy and send after a meeting run in "${params.mode || 'general'}" mode.
-${TYPE_GUIDANCE[type]}
+${typeGuidance}
 ${TONE_GUIDANCE[tone]}
 
 FIRST, understand the meeting from the notes below: what was it about, what actually happened, and what genuinely needs a follow-up. Not every note deserves to be in the message — pick the few things that matter and would be embarrassing to drop.
 
 WHAT "FOLLOWING UP" MEANS HERE:
-${profile.followUp}
+${followUpMeaning}
 
 AUDIENCE & VOICE:
 - Addressed to: ${profile.recipient}
 - Salutation: ${profile.salutation}
-- Sign-off: ${profile.closing}
+- Sign-off: ${profile.closing}${signName ? `
+- Sender: ${signName}. Put exactly this name on its own line directly under the sign-off.` : ''}
 - Register: ${profile.register}
-- Cover, in order: ${profile.structure}
+- Cover, in order: ${structure}
 
 STRICT RULES:
 - Ground everything in the notes below. Do NOT invent decisions, owners, deadlines, numbers, pricing, or promises that aren't there.
 - Be specific to THIS meeting — reference the actual topics, names, and outcomes from the notes, not generic filler. A reader should be able to tell exactly which meeting this was about.
-- Write natural prose (or the labelled sections specified above), not a hollow scaffold. It must read like a person who was in the room wrote it.
+- Write natural prose, not a hollow scaffold or a formatted report. It must read like a person who was in the room wrote it, in a plain-text email.
 - Match the salutation and sign-off to the audience above — do NOT default to "Hi team," unless this is an internal-team message.
 - NEVER emit placeholder syntax — neither bracketed placeholders ([Name]) nor curly braces ({first name} / {interviewer name}). If a name is unknown, phrase around it naturally or use "Hi there," / "Dear Hiring Team,".
+- Plain text only — do NOT use any markdown formatting: no **bold**, no _italics_, no # headings, no backticks, and no "-" or "*" bullet markers. Email clients render these characters literally as visible asterisks/hashes/dashes, not as formatting, so markdown syntax would show up as clutter in the sent message. This applies to every draft, including Slack-style updates.
+- Never state what was NOT discussed, decided, or covered (e.g. "no hiring signal was discussed," "no decisions were made," "nothing was mentioned about X"). If a topic is absent from the notes, simply omit it — do not narrate the gap.
 - Keep it tight and copy-paste ready.
 - Do not mention transcripts, AI, summaries, or that this was auto-generated.
-- If the notes genuinely contain no real outcomes or next steps, keep it short and honest rather than padding.
+${nextStepsRule}
 
-${type === 'email' ? 'The "subject" must be grounded in the meeting title or the first takeaway below — a short noun phrase grounded in something in the notes, NOT a list of topics. Example good subject: "Follow-up: Acme Q3 renewal kickoff".' : 'No "subject" key — this draft is not an email.'}
+${hasSubject ? `SUBJECT LINE (the "subject" key):
+- Write it the way the sender would title this email by hand: 4 to 9 words, sentence case, phrased the way a person talks.
+- Make it specific to THIS meeting: name the project, person, account or outcome it is about, using words from the notes.
+- Say what the email is about or what happened, not just the meeting's name: do not simply repeat the meeting title.
+- ${profile.subject} (That example is about a different meeting; do not reuse its words.)
+- The shape to aim for, shown on other meetings (bad → good): "Vendor shortlist review decisions" → "Where we landed on the vendor shortlist"; "Follow-up: Office move kickoff" → "Plan and open questions for the office move"; "Budget sync" → "Holding the travel budget flat for Q2".
+- No label in front of it: never start with "Follow-up:", "Recap:", "Re:", "Summary -" or any other word followed by a colon or dash.
+- Not a pile of nouns ("Q3 renewal kickoff pricing questions"): join the words the way a sentence would, with "on", "from", "about", "for".
+- No closing punctuation, no quotes, no emoji.${INCLUDE_NEXT_STEPS ? '' : `
+- Do not promise "next steps" or "action items" in the subject: this email does not list them.`}` : 'No "subject" key — this draft is not an email.'}
 
 MEETING NOTES:
 ${inputs}`;
 
-    const jsonShapeHint = type === 'email'
-      ? `{"subject": "a short noun-phrase subject grounded in the meeting title or first takeaway", "body": "the follow-up email text"}`
+    const jsonShapeHint = hasSubject
+      ? `{"subject": "the subject line, written per SUBJECT LINE above", "body": "the follow-up email text"}`
       : `{"body": "the follow-up message text (no subject key)"}`;
 
     const result = await generateStructured<{ subject?: string; body: string }>({
@@ -254,6 +449,9 @@ ${inputs}`;
       jsonShapeHint,
       userContent: inputs,
       llmHelper: this.llmHelper,
+      // Timeout only — deliberately NOT routed to purpose:'extraction'. Drafting a
+      // follow-up is a writing task, not the benchmarked structured-extraction route.
+      callOpts: { timeoutMs: NOTE_CALL_TIMEOUT_MS },
       validate: (raw) => {
         if (!raw || typeof raw !== 'object') return { ok: false, errors: ['not an object'], repaired: false };
         const body = typeof (raw as any).body === 'string' ? (raw as any).body.trim() : '';
@@ -269,13 +467,14 @@ ${inputs}`;
     // share zero meaningful words with the notes. Recurring "Mentions of X, Y, and Z"
     // hallucinated subjects from small models get caught here.
     const validatedSubject = (() => {
-      if (type !== 'email') return undefined;
+      if (!hasSubject) return undefined;
       const raw = (result.data.subject || '').trim();
       if (!raw) return undefined;
       // Hard reject anything with placeholders (curly or square brackets around names).
       if (/[{}\[\]<>]/.test(raw)) return undefined;
-      // Drop a leading "Subject: " prefix the model occasionally writes.
-      const cleaned = raw.replace(/^subject\s*:\s*/i, '');
+      // Drop label prefixes ("Subject:", "Follow-up:", "Re:") and wrapping quotes.
+      const cleaned = tidySubject(raw);
+      if (!cleaned) return undefined;
       // Tokenise against the note corpus.
       const subjTokens = new Set(
         cleaned.toLowerCase().split(/\W+/).filter(w => w.length >= 4)
@@ -304,8 +503,8 @@ ${inputs}`;
 
     return {
       type,
-      ...(validatedSubject ? { subject: validatedSubject } : (type === 'email' ? { subject: subjectFromContent(params.summary) } : {})),
-      body: result.data.body.slice(0, 4000),
+      ...(validatedSubject ? { subject: validatedSubject } : (hasSubject ? { subject: subjectFromContent(params.summary) } : {})),
+      body: finishSignature(result.data.body.slice(0, 4000), signName, params.mode),
       tone,
       ...(actionItems.length ? { basedOnActionItemIds: actionItems.map(a => a.id).filter(Boolean) as string[] } : {}),
       ...(decisions.length ? { basedOnDecisionIds: decisions.map(d => d.id).filter(Boolean) as string[] } : {}),
@@ -340,15 +539,16 @@ function truncateWithEllipsis(s: string, max: number): string {
 
 function subjectFromContent(summary: FollowUpGenerateParams['summary']): string {
   // Prefer the meeting's own title (concrete, recognisable) over a truncated takeaway.
+  // No "Follow-up:" label: the meeting's own name reads as a subject on its own.
   const title = summary.title?.replace(/\s+/g, ' ').trim();
   if (isUsableTitle(title)) {
-    return `Follow-up: ${truncateWithEllipsis(title, 70)}`;
+    return truncateWithEllipsis(title, 70);
   }
   // Prefer a substantive tldr over a chopped title when both exist.
   const tldrCandidate = (summary.tldr || []).find(t => Array.from(t || '').length >= 20 && t.split(/\s+/).length >= 4);
   const fallback = tldrCandidate || summary.whatChanged?.[0] || summary.overview;
   if (fallback && fallback.trim()) {
-    return `Follow-up: ${truncateWithEllipsis(fallback.trim(), 70)}`;
+    return truncateWithEllipsis(fallback.trim().replace(/[.!]+$/, ''), 70);
   }
-  return 'Follow-up: your meeting';
+  return 'Following up on our meeting';
 }

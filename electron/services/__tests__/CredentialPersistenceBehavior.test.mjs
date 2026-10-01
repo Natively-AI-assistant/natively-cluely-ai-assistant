@@ -133,16 +133,13 @@ test('disk-write failure is reported (success=false), never a false "Saved"', ()
 
   const cm = freshManager(env);
 
-  // The on-disk paths were fixed (from this temp dir) at module load, so to force a
-  // real write failure we make the directory itself unwritable. The fallback (and
-  // its salt) write then throws EACCES inside saveCredentials → must return false.
-  fs.chmodSync(env.userData, 0o500); // r-x, no write for owner
-  try {
-    const persisted = cm.setDeepgramApiKey(SECRET);
-    assert.equal(persisted, false, 'a failed disk write must return false, not a false success');
-  } finally {
-    fs.chmodSync(env.userData, 0o700); // restore so temp cleanup works
-  }
+  // Warm up once so the per-install salt exists, then make the atomic temp-file
+  // path a directory. writeFileSync must reject that on every supported OS;
+  // chmod-based fault injection is ineffective on Windows.
+  assert.equal(cm.setSonioxApiKey('warmup'), true);
+  fs.mkdirSync(path.join(env.userData, 'credentials.fallback.enc.tmp'));
+  const persisted = cm.setDeepgramApiKey(SECRET);
+  assert.equal(persisted, false, 'a failed disk write must return false, not a false success');
 });
 
 test('keyring becomes available → fallback migrates up and is deleted', () => {
@@ -292,14 +289,12 @@ test('setSttProvider returns false when the disk write fails (M2 contract — mi
 
   const cm = freshManager(env);
 
-  // Force a real write failure (EACCES) — the setter must report it.
-  fs.chmodSync(env.userData, 0o500);
-  try {
-    const persisted = cm.setSttProvider('deepgram');
-    assert.equal(persisted, false, 'setSttProvider must return false on write failure');
-  } finally {
-    fs.chmodSync(env.userData, 0o700);
-  }
+  // Use a directory at the atomic temp-file path for a deterministic failure
+  // on Windows, macOS, and Linux.
+  assert.equal(cm.setSttProvider('soniox'), true);
+  fs.mkdirSync(path.join(env.userData, 'credentials.fallback.enc.tmp'));
+  const persisted = cm.setSttProvider('deepgram');
+  assert.equal(persisted, false, 'setSttProvider must return false on write failure');
 });
 
 test('getStoredSttKeyForProvider dispatches the persisted key by provider (P1 contract)', () => {
@@ -387,29 +382,37 @@ test('LLM key setters: empty-string resave clears the stored key (M-2 behavioral
   assert.equal(cm2.getGeminiApiKey(), undefined, 'empty resave must clear the persisted LLM key');
 });
 
-test('local-whisper is in the set-stt-provider IPC + preload + types unions (P4 contract)', () => {
+test('local providers are in the set-stt-provider IPC + preload + types unions (P4 contract)', () => {
   const ipc = fs.readFileSync(
     path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../ipcHandlers.ts'),
     'utf8',
   );
-  // The handler signature must include 'local-whisper'.
+  // The handler signature must include every local provider.
   const handlerStart = ipc.indexOf("safeHandle(\n    'set-stt-provider'");
   assert.ok(handlerStart >= 0, 'set-stt-provider IPC handler must exist');
   const handlerEnd = ipc.indexOf("safeHandle(", handlerStart + 1);
   const handlerBlock = handlerEnd > handlerStart ? ipc.slice(handlerStart, handlerEnd) : ipc.slice(handlerStart, handlerStart + 1500);
   assert.match(handlerBlock, /'local-whisper'/, 'set-stt-provider IPC handler union must include local-whisper');
+  assert.match(handlerBlock, /'apple-speech'/, 'set-stt-provider IPC handler union must include apple-speech');
 
   const preload = fs.readFileSync(
     path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../preload.ts'),
     'utf8',
   );
   assert.match(preload, /'local-whisper'/, 'preload setSttProvider union must include local-whisper');
+  assert.match(preload, /'apple-speech'/, 'preload setSttProvider union must include apple-speech');
 
   const types = fs.readFileSync(
     path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../src/types/electron.d.ts'),
     'utf8',
   );
   assert.match(types, /setSttProvider[^]*'local-whisper'/, 'electron.d.ts setSttProvider union must include local-whisper');
+  assert.match(types, /setSttProvider[^]*'apple-speech'/, 'electron.d.ts setSttProvider union must include apple-speech');
+  const storedCredentialsTypeStart = types.indexOf('getStoredCredentials:');
+  assert.ok(storedCredentialsTypeStart >= 0, 'electron.d.ts getStoredCredentials type must exist');
+  const storedCredentialsType = types.slice(storedCredentialsTypeStart, storedCredentialsTypeStart + 3500);
+  assert.match(storedCredentialsType, /sttProvider:[^}]*'local-whisper'/, 'stored provider union must include local-whisper');
+  assert.match(storedCredentialsType, /sttProvider:[^}]*'apple-speech'/, 'stored provider union must include apple-speech');
 });
 
 test('SettingsOverlay sends USE_STORED sentinel when input empty but key on disk (P1 renderer guard)', () => {

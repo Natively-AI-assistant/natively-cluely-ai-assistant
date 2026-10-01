@@ -70,5 +70,8 @@ windows = { version = "0.52.0", features = [
     "Win32_UI_Accessibility",
     "Win32_System_LibraryLoader",
     "Win32_Foundation",
+    #   Win32_System_Registry             — the microphone consent store (meeting_signals.rs):
+    #                                       which apps are using the microphone right now.
+    "Win32_System_Registry",
 ] }
 tracing = "0.1.44"

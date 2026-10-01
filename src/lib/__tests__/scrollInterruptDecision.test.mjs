@@ -123,4 +123,19 @@ describe('decideScrollInterrupt', () => {
       're-arm',
     );
   });
+
+  // A growing viewport makes the browser clamp scrollTop down by itself; that
+  // negative delta is not a user scroll.
+  test('does not arm on an upward delta caused by the viewport resizing', () => {
+    assert.equal(
+      decideScrollInterrupt({
+        delta: -22,
+        distanceFromBottom: 3,
+        alreadySuppressed: false,
+        transitionInFlight: false,
+        viewportResized: true,
+      }),
+      'none',
+    );
+  });
 });

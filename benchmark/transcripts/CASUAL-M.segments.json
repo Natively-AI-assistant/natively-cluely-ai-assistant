@@ -1,0 +1,2984 @@
+{
+ "id": "CASUAL-M",
+ "segments": [
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Hello? Dan, can you hear me? Your face is frozen.",
+   "timestamp": 1789480804600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, I can hear you, Priya. Give me a sec, my wifi is being dramatic.",
+   "timestamp": 1789480811200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, is that any better?",
+   "timestamp": 1789480813800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Much better. Tom's still joining, I think.",
+   "timestamp": 1789480817200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'm here, I'm here. Sorry, the dog next door was losing its mind.",
+   "timestamp": 1789480823000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Tom! Look at you. Is that a beard?",
+   "timestamp": 1789480826800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "It's a vacation beard. Well, a between-jobs beard.",
+   "timestamp": 1789480830600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's a choice, Tom. It's definitely a choice.",
+   "timestamp": 1789480834400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Thank you, Priya, always so supportive.",
+   "timestamp": 1789480837400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Wait, between jobs? Did I miss something?",
+   "timestamp": 1789480840800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Oh, I didn't tell you? I quit Pellmark. My last day there is October 9th.",
+   "timestamp": 1789480847400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And I start at Halvorsen Logistics on Monday, November 2nd. Senior financial analyst.",
+   "timestamp": 1789480853200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Dude, congrats! That's huge. Halvorsen, the shipping people?",
+   "timestamp": 1789480857000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The shipping people. Trucks, warehouses, very glamorous spreadsheets.",
+   "timestamp": 1789480860800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I told you he'd tell you himself if you waited long enough.",
+   "timestamp": 1789480866200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So I've basically got three weeks of doing nothing in October. Which is actually relevant to tonight.",
+   "timestamp": 1789480873600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Right, the trip. Okay, but first, Priya, where is the puppy? I was promised a puppy.",
+   "timestamp": 1789480880600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Hold on. Waffles, come here. Come here, buddy.",
+   "timestamp": 1789480884400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, he's here, he's chewing my sleeve. Say hi, Waffles.",
+   "timestamp": 1789480889000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Oh my god, those ears.",
+   "timestamp": 1789480891600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That is an absurdly cute beagle. How old is he now?",
+   "timestamp": 1789480896600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Eleven weeks. He has already eaten two phone chargers and one of my work clogs.",
+   "timestamp": 1789480903200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "One clog? What happened to the other one?",
+   "timestamp": 1789480907000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The other one is fine, which somehow makes it worse. I now own one clog.",
+   "timestamp": 1789480913600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's the most nurse sentence I've ever heard.",
+   "timestamp": 1789480917400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Is he house trained yet?",
+   "timestamp": 1789480920000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "He is, um, he is on a journey. We had a good day on Thursday. One good day.",
+   "timestamp": 1789480927800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "One good day is a start.",
+   "timestamp": 1789480930800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We start puppy class next Saturday. The trainer is this terrifying woman called Brenda who used to train police dogs.",
+   "timestamp": 1789480939400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Waffles is going to get arrested.",
+   "timestamp": 1789480942400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Waffles is going to get expelled. He bit the vet's stethoscope on Monday. Just walked up and bit it.",
+   "timestamp": 1789480950600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Honestly, respect. Nobody likes the cold stethoscope.",
+   "timestamp": 1789480954000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, okay. Waffles, go lie down. Go on. Good boy.",
+   "timestamp": 1789480958600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So did you guys watch the Harbor Lights finale?",
+   "timestamp": 1789480962800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Don't. I'm two episodes behind.",
+   "timestamp": 1789480965400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I watched it and I'm still angry about it.",
+   "timestamp": 1789480969600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Angry? I thought it was perfect.",
+   "timestamp": 1789480972600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Perfect? They killed off Marguerite in like forty seconds, Dan. Forty seconds. After three seasons.",
+   "timestamp": 1789480979200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's the point though, it's supposed to be sudden. That's how it actually happens.",
+   "timestamp": 1789480985400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I said don't! I literally just said I'm two episodes behind.",
+   "timestamp": 1789480990400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Sorry Tom. Nobody died. Everyone lives happily ever after on a boat.",
+   "timestamp": 1789480995800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Great, now I know someone died.",
+   "timestamp": 1789480998800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Harper Lights has always done this though. Remember the lighthouse episode in season two?",
+   "timestamp": 1789481005000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The lighthouse episode was different, that was earned. This was lazy.",
+   "timestamp": 1789481010000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "To be fair, you've known Marguerite was going to die since season one. Everyone knew.",
+   "timestamp": 1789481016600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Knowing it and watching it happen in forty seconds are different things.",
+   "timestamp": 1789481022000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Can we stop saying forty seconds?",
+   "timestamp": 1789481025000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, spoiler zone closed. Let's do Maya stuff before we forget, or before Waffles eats Priya's laptop.",
+   "timestamp": 1789481032400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes. Okay. So, Maya turns 30 on Wednesday, October 21st.",
+   "timestamp": 1789481037000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the plan is still a cabin weekend, right? Three nights?",
+   "timestamp": 1789481042000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Three nights. I've been looking at two places.",
+   "timestamp": 1789481045800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "One is up at Hollins Ridge, the other one is at Birchwater Lake.",
+   "timestamp": 1789481051600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Hollins Ridge is far, isn't it? That's where we went for Priya's thing.",
+   "timestamp": 1789481057400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Hollins Ridge is like four and a half hours. Birchwater is about three.",
+   "timestamp": 1789481063200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Please. I am not sitting in a car for four and a half hours again. Tom played the same album the whole way last time.",
+   "timestamp": 1789481073800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "It was a great album.",
+   "timestamp": 1789481076400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It was one album, Tom. Nine times.",
+   "timestamp": 1789481079800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And the heater broke on the second night and we all slept in our coats.",
+   "timestamp": 1789481086400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That was a character-building trip. Maya still talks about it.",
+   "timestamp": 1789481091000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Maya still talks about it because she was the only one who brought a proper sleeping bag. She was smug for a year.",
+   "timestamp": 1789481100800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "She's always been the most organized of us. Since, what, freshman year? She had a color-coded calendar in the dorm.",
+   "timestamp": 1789481109400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "She color-coded my calendar once. Without asking. It was actually really helpful.",
+   "timestamp": 1789481114800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's so Maya. Okay, focus.",
+   "timestamp": 1789481117400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Birchwater also has a hot tub. The place is called Heron Point Cabin. Three bedrooms, sleeps six, right on the water.",
+   "timestamp": 1789481126400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Hot tub wins. Birchwater. Done.",
+   "timestamp": 1789481129000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Agreed. Birchwater Lake, Heron Point. I love the name.",
+   "timestamp": 1789481133200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, Birchwater it is. It's listed on Hearthstay.",
+   "timestamp": 1789481137000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "For dates, I was thinking Friday, October 16th to Monday the 19th. So the weekend before her birthday.",
+   "timestamp": 1789481144800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Works for me, obviously, I have no job.",
+   "timestamp": 1789481148600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I think that works. Let me check my rota later, but I think so.",
+   "timestamp": 1789481154800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Cool. So the total for three nights with all the fees is $1,040.",
+   "timestamp": 1789481160600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, and how many of us are paying? Maya's not paying, right?",
+   "timestamp": 1789481166000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "No, Maya obviously doesn't pay, it's her birthday.",
+   "timestamp": 1789481169800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Right. So it's me, Priya, Tom, and Mia said she's probably in.",
+   "timestamp": 1789481175200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Mia from your book club, Priya? Or Mia from Maya's work?",
+   "timestamp": 1789481180200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Mia Chen. From book club. Maya's work Mia moved to London, remember?",
+   "timestamp": 1789481185600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "There are too many Mias. And a Maya. It's a lot for me.",
+   "timestamp": 1789481191400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "One Mia, Tom. One relevant Mia. Mia Chen.",
+   "timestamp": 1789481195200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So four of us paying. That's, uh, $260 each.",
+   "timestamp": 1789481199400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Hold on, let me look at the page again, something looks off.",
+   "timestamp": 1789481204800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "No wait, the total is $1,140, not $1,040. I missed the cleaning fee. It's $325 a night plus fees.",
+   "timestamp": 1789481213000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Ugh. Okay, $1,140 split four ways is $285 each.",
+   "timestamp": 1789481217200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "$285 is fine. Still cheaper than a hotel in the city.",
+   "timestamp": 1789481222200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh, and I can book it. I have like $150 of Hearthstay credit from when they cancelled my Lisbon thing.",
+   "timestamp": 1789481230800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh nice, yeah, Priya, you book it then.",
+   "timestamp": 1789481234600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Also, quick question. Can Waffles come? I'm pretty sure it said pet friendly when I filtered the search.",
+   "timestamp": 1789481242400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "A puppy in a hot tub. I'm in.",
+   "timestamp": 1789481246200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I don't remember seeing that, but I'll double check.",
+   "timestamp": 1789481250400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "He'd be so good. He'd sleep the whole time.",
+   "timestamp": 1789481254600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "He ate a clog, Priya.",
+   "timestamp": 1789481257200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Half a pair of clogs. It's different.",
+   "timestamp": 1789481260600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Hey, did anyone else go to the Wanderers game on Tuesday? Tom, you played, right?",
+   "timestamp": 1789481267200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "We don't talk about Tuesday.",
+   "timestamp": 1789481269800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What was the score?",
+   "timestamp": 1789481272000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Six-two. We lost six-two. Our keeper was on a stag do in Prague.",
+   "timestamp": 1789481277800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Who was in goal then?",
+   "timestamp": 1789481280400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Me. For the second half. I let in four.",
+   "timestamp": 1789481284600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Tom, you're like five foot eight.",
+   "timestamp": 1789481287600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'm five nine and I have a great spirit.",
+   "timestamp": 1789481291800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Great spirit, six goals.",
+   "timestamp": 1789481294000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Four were mine. Two were before I went in. Please get the details right.",
+   "timestamp": 1789481300200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Is the keeper back next week at least?",
+   "timestamp": 1789481304000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "He says so. He also said he'd be back last week.",
+   "timestamp": 1789481309000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Did you guys at least watch the proper football after? The big match on Sunday?",
+   "timestamp": 1789481315600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I watched the first half and then fell asleep on the couch. Woke up at the post-match interviews.",
+   "timestamp": 1789481323400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I had it on in the background while I was doing laundry. There was a penalty that I'm still not sure was a penalty.",
+   "timestamp": 1789481333600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "It wasn't. I didn't see it, but it wasn't.",
+   "timestamp": 1789481337800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "How can you know that if you were asleep?",
+   "timestamp": 1789481342000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Because I know that referee. Not personally. Spiritually.",
+   "timestamp": 1789481345800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Tom has a spiritual feud with a referee now.",
+   "timestamp": 1789481350000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Speaking of getting details right, Dan, how is the reorg thing going at work?",
+   "timestamp": 1789481356200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh god. Graham has now scheduled a meeting to plan the meeting about the reorg.",
+   "timestamp": 1789481362800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "A pre-meeting.",
+   "timestamp": 1789481364200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "A pre-meeting. With a deck. Twenty-two slides. I counted.",
+   "timestamp": 1789481368400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What's even in twenty-two slides?",
+   "timestamp": 1789481371000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Mostly boxes with arrows between them. There's a slide that just says \"Alignment\" in huge letters.",
+   "timestamp": 1789481378000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That's every finance deck I've ever made, to be honest.",
+   "timestamp": 1789481382600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "At least you get to sit down. I did a twelve and a half hour shift yesterday and we were three nurses short.",
+   "timestamp": 1789481392400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's brutal, Priya.",
+   "timestamp": 1789481394200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It's fine. It's not fine. It's fine.",
+   "timestamp": 1789481397600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Is it fine?",
+   "timestamp": 1789481399400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "No. But I'm moving to day shifts in November, so there's light at the end.",
+   "timestamp": 1789481406000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, back to Maya. What's the plan for food? Are we cooking the whole time?",
+   "timestamp": 1789481412600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Oh, what if we got a private chef for the Saturday night? For the actual birthday dinner.",
+   "timestamp": 1789481420000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Ooh. That's kind of fancy.",
+   "timestamp": 1789481422600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "My cousin did one for his anniversary. Guy comes in, cooks five courses, does all the dishes.",
+   "timestamp": 1789481430000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "How much is that?",
+   "timestamp": 1789481432200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I think his was around $600 for the night.",
+   "timestamp": 1789481436400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "$600? On top of the cabin?",
+   "timestamp": 1789481439400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's another $150 each, even with four people.",
+   "timestamp": 1789481443200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Yeah, okay, when you say it out loud it sounds a bit insane.",
+   "timestamp": 1789481449000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Let me think about it though. It is her 30th.",
+   "timestamp": 1789481453600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let's park it for now.",
+   "timestamp": 1789481456200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "By the way, Maya's vegetarian, right? So a chef would need to do veggie stuff anyway.",
+   "timestamp": 1789481463200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "No, that's Mia. Mia is the vegetarian.",
+   "timestamp": 1789481466600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Oh. Maya and Mia. I always do that. Every single time.",
+   "timestamp": 1789481471600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Maya is celiac. She's strictly gluten-free, like properly, it's not a preference thing.",
+   "timestamp": 1789481477400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, remember she got really sick at her cousin's wedding from the cake.",
+   "timestamp": 1789481483200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay. Maya gluten-free, Mia vegetarian. I'm writing that on my hand.",
+   "timestamp": 1789481488200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And it really matters, because cross-contamination is a real thing for her. Separate toaster, separate chopping board, all of it.",
+   "timestamp": 1789481496800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Someone should check if there's a decent grocery store near the cabin that stocks gluten-free stuff.",
+   "timestamp": 1789481503800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Good idea. Someone should.",
+   "timestamp": 1789481506000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Someone. Great. Very helpful.",
+   "timestamp": 1789481508200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, let me pull up the listing properly, I want to check the pet thing.",
+   "timestamp": 1789481514800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "While he does that, Priya, was Marguerite actually killed or is it one of those fake-outs?",
+   "timestamp": 1789481521800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I thought you were two episodes behind.",
+   "timestamp": 1789481525200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'm curious now. You ruined it for me, so you owe me.",
+   "timestamp": 1789481530600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'm not telling you. Watch it. It's forty minutes.",
+   "timestamp": 1789481534800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Forty minutes, forty seconds, everything with this show is forty.",
+   "timestamp": 1789481539400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Did you hear they might not even renew it for a fourth season?",
+   "timestamp": 1789481545200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "No way. It's the best thing on right now.",
+   "timestamp": 1789481549400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "That's what I read. Apparently the ratings dropped after season two when they moved it to Thursdays.",
+   "timestamp": 1789481556800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Good. Then I don't have to catch up.",
+   "timestamp": 1789481560600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "You're two episodes away from the end, Tom. That's like an hour and a half.",
+   "timestamp": 1789481567200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "An hour and a half I could spend sleeping through football.",
+   "timestamp": 1789481572200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, bad news. Heron Point says no pets. It's in the house rules, and there's a $250 fee if they find pet hair.",
+   "timestamp": 1789481582000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What? No. The filter said pet friendly.",
+   "timestamp": 1789481585400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I think the filter was picking up the pet-friendly trails nearby or something. The house rules say no pets of any kind.",
+   "timestamp": 1789481594800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Ugh. Okay. Sorry, Waffles. You're not coming.",
+   "timestamp": 1789481598200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "He'll survive. He'll eat a charger in your honor.",
+   "timestamp": 1789481602400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "My sister Anjali can probably take him that weekend. I'll ask her.",
+   "timestamp": 1789481607800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, good.",
+   "timestamp": 1789481609200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Also, more bad news, from me this time. I just checked my rota.",
+   "timestamp": 1789481615000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'm on nights the weekend of the 16th. Friday, Saturday and Sunday. And I can't swap, I've already swapped twice this month.",
+   "timestamp": 1789481624400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Oh no.",
+   "timestamp": 1789481625800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, so what about the weekend after? Friday the 23rd to Monday the 26th?",
+   "timestamp": 1789481632000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Let me look. The 23rd, the 23rd... yes, I'm off that whole weekend.",
+   "timestamp": 1789481637800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That's after her actual birthday though.",
+   "timestamp": 1789481640800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "It's only two days after. That's fine, it's still her birthday week.",
+   "timestamp": 1789481646200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Honestly I think she'd prefer it after. She has a big work presentation that Friday, the 16th, anyway.",
+   "timestamp": 1789481654000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let me check the cabin for those dates.",
+   "timestamp": 1789481657800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, Heron Point is open the 23rd to the 26th. Same price, $1,140 total.",
+   "timestamp": 1789481664000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Great. So we're moving it to the 23rd.",
+   "timestamp": 1789481667800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes. October 23rd to the 26th. Sorry guys.",
+   "timestamp": 1789481671600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Don't apologize, it's your job. Literally.",
+   "timestamp": 1789481674600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Also, I will say, having thought about it, the chef thing is too much. $600 is basically half the cabin.",
+   "timestamp": 1789481683200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, you're right. Let's not do the chef.",
+   "timestamp": 1789481687000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Agreed. No chef. We cook.",
+   "timestamp": 1789481689600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'll make Saturday dinner. I do a gluten-free lasagna that is honestly better than the normal one.",
+   "timestamp": 1789481697000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You made that for my birthday, it was good.",
+   "timestamp": 1789481701200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "It was great. Say great.",
+   "timestamp": 1789481703800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "It was great, Tom.",
+   "timestamp": 1789481706000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What about the cake? We could order one from Crumb and Kettle, they do gluten-free.",
+   "timestamp": 1789481712600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Maybe. Their gluten-free one was a bit dry last time though. We could also just bake one up there.",
+   "timestamp": 1789481720800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Nobody on this call can bake. Let's be honest with ourselves.",
+   "timestamp": 1789481725800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, cake is a maybe. Let's think about it.",
+   "timestamp": 1789481730000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What about kayaks? There's a place on Birchwater that rents them, like $45 per person for a half day.",
+   "timestamp": 1789481738200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "In late October? The water will be freezing.",
+   "timestamp": 1789481742000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "You don't go in the water, Priya, that's the whole idea of a kayak.",
+   "timestamp": 1789481748200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I will fall in. You know I'll fall in. I fell off a pedal boat.",
+   "timestamp": 1789481754800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let's leave kayaks as a maybe. We can decide when we're up there.",
+   "timestamp": 1789481760600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "How's the apartment hunt going, Dan? Did the landlord actually do it?",
+   "timestamp": 1789481766000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "He did it. Rent's going up $200 a month when the lease renews in January.",
+   "timestamp": 1789481772600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "$200? For that kitchen?",
+   "timestamp": 1789481774800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "For that kitchen. The oven has two temperatures, off and volcano.",
+   "timestamp": 1789481779800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Are you going to move?",
+   "timestamp": 1789481782400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I'm looking. There's a place near the river but it's a fourth floor walk-up.",
+   "timestamp": 1789481788600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "You'd get legs like a mountain goat though.",
+   "timestamp": 1789481792400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That's the one upside. I've been looking at maybe six listings a night, it's become a hobby.",
+   "timestamp": 1789481799800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Apartment hunting as a hobby is the saddest thing I've heard today.",
+   "timestamp": 1789481805200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Sadder than one clog?",
+   "timestamp": 1789481807400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Leave my clog out of this.",
+   "timestamp": 1789481810400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "How was the interview process at Halvorsen, by the way? I never told you guys the full story.",
+   "timestamp": 1789481818200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Go on then.",
+   "timestamp": 1789481820000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Five rounds. Five. The last one was a case study where they gave me a warehouse budget and forty minutes.",
+   "timestamp": 1789481828600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Forty again! It's following you.",
+   "timestamp": 1789481831200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And halfway through my laptop died. So I did the rest of it on a whiteboard, with a marker that was also dying.",
+   "timestamp": 1789481841000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And they still hired you. That's actually impressive.",
+   "timestamp": 1789481844800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I think they hired me because I didn't cry. That was the bar.",
+   "timestamp": 1789481850600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh, that reminds me, a guy came into the ER on Tuesday who had glued his hand to a ladder.",
+   "timestamp": 1789481859200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "How do you glue your hand to a ladder?",
+   "timestamp": 1789481863400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "He was fixing the ladder. With the glue. While standing on the ladder.",
+   "timestamp": 1789481869200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I have so many questions and I don't want any of the answers.",
+   "timestamp": 1789481875000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "He was very calm about it. He asked if we could save the ladder.",
+   "timestamp": 1789481881200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Did you save the ladder?",
+   "timestamp": 1789481883800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "We did not save the ladder. The ladder stayed in the ambulance bay for like three hours.",
+   "timestamp": 1789481891200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Hey, so, small problem on the booking side. I'm just on Hearthstay now.",
+   "timestamp": 1789481897000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "My credit expired on September 1st. It's just gone.",
+   "timestamp": 1789481901200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Classic.",
+   "timestamp": 1789481902200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And my card got flagged the last time I booked something, so it's a whole thing. Dan, can you book it instead?",
+   "timestamp": 1789481911600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, sure. I'll book it. I get points on my card anyway.",
+   "timestamp": 1789481917000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Thank you. You're the booking guy now.",
+   "timestamp": 1789481920400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I'm the booking guy.",
+   "timestamp": 1789481922600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So the deposit, when is that due?",
+   "timestamp": 1789481926000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I think it's by the end of the month. I'll check.",
+   "timestamp": 1789481931000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay. And for the car, I can rent something. I have all the time in the world.",
+   "timestamp": 1789481938400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "That'd be amazing. Something big enough for five, in case Mia comes.",
+   "timestamp": 1789481943800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'll get a seven-seater. Ridgeway has SUVs for like $64 a day.",
+   "timestamp": 1789481949200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What time are we leaving on the Friday?",
+   "timestamp": 1789481953000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'll pick everyone up at like 8.",
+   "timestamp": 1789481956400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "8 a.m.? Tom.",
+   "timestamp": 1789481958200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Early start, more lake time.",
+   "timestamp": 1789481960800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let's figure out timing later.",
+   "timestamp": 1789481963400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And the gift. What are we thinking?",
+   "timestamp": 1789481966800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I was thinking $50 each for a group gift.",
+   "timestamp": 1789481971000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Fine with me.",
+   "timestamp": 1789481972800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Ooh, what about that Polaroid camera she keeps sending us pictures of?",
+   "timestamp": 1789481978200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The green one? That's a great idea.",
+   "timestamp": 1789481981600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'll look up the price in a sec.",
+   "timestamp": 1789481985400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, can we take a break from logistics for one second? I need to show you something.",
+   "timestamp": 1789481992800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Is it the beard again?",
+   "timestamp": 1789481995400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "No. It's my new desk setup. For the new job. Look. Two monitors.",
+   "timestamp": 1789482001200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Tom, don't you work from the office?",
+   "timestamp": 1789482004600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Hybrid! Two days from home. Halvorsen is hybrid.",
+   "timestamp": 1789482008400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Nice. Very corporate.",
+   "timestamp": 1789482010200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'm a corporate man now. November 2nd, the new Tom begins.",
+   "timestamp": 1789482015200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "The new Tom still can't keep goal.",
+   "timestamp": 1789482018600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Low blow. Very low.",
+   "timestamp": 1789482020800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Did they give you a signing thing or anything?",
+   "timestamp": 1789482025000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "No signing bonus, but they're paying for a certification. The CFA level two, if I want it.",
+   "timestamp": 1789482032400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Look at you. A real adult.",
+   "timestamp": 1789482035400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I have two monitors and a beard. I'm basically forty.",
+   "timestamp": 1789482040000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh, wait. Mia just texted me back. Hang on.",
+   "timestamp": 1789482044200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay. She says she can't do the 23rd. Her cousin's wedding is on Saturday the 24th, in Portland.",
+   "timestamp": 1789482052000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Oh no. Can she come for part of it?",
+   "timestamp": 1789482056200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "She says maybe the Sunday, but she's not sure. She'll let us know.",
+   "timestamp": 1789482062000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "So we're back to three people paying?",
+   "timestamp": 1789482065400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "For now, yeah. $1,140 split between me, Priya and Tom is $380 each.",
+   "timestamp": 1789482071200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "$380. Oof. Okay. It's fine, it's Maya.",
+   "timestamp": 1789482074600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And if Mia does confirm, it goes back down to $285 each.",
+   "timestamp": 1789482080000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Somebody needs to get a real answer from Mia though, we can't wait forever.",
+   "timestamp": 1789482086200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'll ask her. I'll get a proper yes or no from her by Sunday.",
+   "timestamp": 1789482092400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, Priya's on Mia. By Sunday.",
+   "timestamp": 1789482095400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And I'm on the listing now to check the deposit.",
+   "timestamp": 1789482100000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "So it's not the end of the month. The deposit is due by Friday, September 25th. After that the hold on our dates drops.",
+   "timestamp": 1789482110200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The 25th. That's this Friday.",
+   "timestamp": 1789482112800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah. It's 50%, so $570.",
+   "timestamp": 1789482115400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "I'll pay the whole $570 on my card, and you two just send me $190 each.",
+   "timestamp": 1789482122400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "$190. I can Venmo you tonight.",
+   "timestamp": 1789482125400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "I'll send mine by Wednesday.",
+   "timestamp": 1789482128000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Wednesday the 23rd is fine. I'll book it before Friday, probably tomorrow.",
+   "timestamp": 1789482133400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And the other half?",
+   "timestamp": 1789482135600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The other $570 gets charged automatically two weeks before check-in.",
+   "timestamp": 1789482140200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Future Tom's problem. Future Tom has a salary.",
+   "timestamp": 1789482144000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, now the big thing. I've been waiting all call for this. Jonah called me yesterday.",
+   "timestamp": 1789482151000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Jonah, her brother Jonah?",
+   "timestamp": 1789482153200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yes. He wants to fly in from Denver and surprise her.",
+   "timestamp": 1789482158200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "No way. That's amazing.",
+   "timestamp": 1789482160400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "He lands Saturday the 24th, in the afternoon. He wants to walk in right before dinner.",
+   "timestamp": 1789482167400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Oh, she's going to cry. She's going to absolutely lose it.",
+   "timestamp": 1789482172400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "But this has to stay completely secret. Maya thinks it's just the four of us having a quiet weekend.",
+   "timestamp": 1789482180600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Okay, so nobody say anything in the birthday group chat. That chat has Maya in it.",
+   "timestamp": 1789482187600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Right. Should we make a separate chat?",
+   "timestamp": 1789482191000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I already did. It's called Operation Heron. I'll add you both after this call.",
+   "timestamp": 1789482197200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Operation Heron. Love it.",
+   "timestamp": 1789482199400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Nothing about Jonah anywhere except Operation Heron. Not even jokes.",
+   "timestamp": 1789482204000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Especially not jokes. I know myself.",
+   "timestamp": 1789482207000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Remember when Tom told Priya about her own surprise party? While she was standing next to him?",
+   "timestamp": 1789482214400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "That was one time. And in my defense, I thought she already knew.",
+   "timestamp": 1789482220200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I was holding the balloons, Tom. I thought they were for someone else.",
+   "timestamp": 1789482226000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Jonah hasn't seen Maya since the summer before last, right? When he moved to Denver?",
+   "timestamp": 1789482232600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Yeah, about fourteen months. She keeps saying she misses him. That's why this is so perfect.",
+   "timestamp": 1789482239600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And don't like any of his posts or anything. She notices everything.",
+   "timestamp": 1789482245000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "How is Jonah getting from the airport to the cabin though? Birchwater is like three hours from the airport.",
+   "timestamp": 1789482253200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I don't know yet. He said he'd figure it out.",
+   "timestamp": 1789482257800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "We only have the one car and it'll be sitting at the lake.",
+   "timestamp": 1789482263600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Let's come back to that one.",
+   "timestamp": 1789482266600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, back to the car then. I'll book the Ridgeway SUV by October 1st.",
+   "timestamp": 1789482272800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And please, not 8 a.m.",
+   "timestamp": 1789482275400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "What if we leave at like 9:30? Maya is not a morning person. If we show up at 8 she'll cancel her own birthday.",
+   "timestamp": 1789482285600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Fine, 9:30. Where from?",
+   "timestamp": 1789482287800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "My place? I'm on Calloway Street, it's in the middle for everyone.",
+   "timestamp": 1789482293200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Yeah, Priya's place. So Tom picks up the SUV, then we all meet at Priya's on Calloway at 9:30 on Friday the 23rd.",
+   "timestamp": 1789482303000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And I'll grab Maya on the way there, she's two streets over from me.",
+   "timestamp": 1789482309200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Perfect. 9:30 at my place, Friday.",
+   "timestamp": 1789482312200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Actually, should we just drive separately? Like, I take the SUV and Dan takes his car, in case people want to leave at different times?",
+   "timestamp": 1789482322800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "My car's making that noise again. I don't trust it for three hours each way.",
+   "timestamp": 1789482329400,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "And it's more fun together. One car.",
+   "timestamp": 1789482332800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Fair enough. One car.",
+   "timestamp": 1789482335000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "What's the weather like up there in late October anyway?",
+   "timestamp": 1789482339600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The forecast obviously doesn't go that far, but it's usually around fifty during the day and near freezing at night.",
+   "timestamp": 1789482348200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Perfect hot tub weather.",
+   "timestamp": 1789482350400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Pack layers. Real layers. Not your fleece with the hole in it, Tom.",
+   "timestamp": 1789482356200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "The fleece is vintage.",
+   "timestamp": 1789482358400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "The fleece is from a charity 5K in 2019.",
+   "timestamp": 1789482362600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Oh, I found the Polaroid. The green one is $179.",
+   "timestamp": 1789482367200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "$179 is more than $150. So $50 each doesn't cover it.",
+   "timestamp": 1789482372200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Let's just do $60 each then. $180 total, that covers it.",
+   "timestamp": 1789482377200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "$60 each. Done. And if Mia comes, she can do the card and flowers or something.",
+   "timestamp": 1789482384200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Who's buying it?",
+   "timestamp": 1789482386000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I'll buy it. I'll order it by October 16th so it definitely arrives in time.",
+   "timestamp": 1789482392600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Great. Priya's on the gift, by the 16th, and we each send her $60.",
+   "timestamp": 1789482398800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Random thought. Since I'm unemployed, what if we did four nights? Stay till Tuesday?",
+   "timestamp": 1789482405000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "I can't do Tuesday, I'm back on shift Tuesday morning.",
+   "timestamp": 1789482409600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And that's another $325 plus. Let's keep it at three nights.",
+   "timestamp": 1789482414600,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Worth asking.",
+   "timestamp": 1789482416000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Someone should make a playlist for the drive. Not me.",
+   "timestamp": 1789482420600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Definitely not you. Not after the album.",
+   "timestamp": 1789482424000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Someone. We'll see.",
+   "timestamp": 1789482425800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, let me just say it all back so I don't mess it up. Birchwater Lake, Heron Point, Friday the 23rd to Monday the 26th.",
+   "timestamp": 1789482436400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Right. And I'm booking it and paying the $570 deposit before Friday.",
+   "timestamp": 1789482441800,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And I'm getting the SUV, and we meet at Priya's at 9:30. And no dogs.",
+   "timestamp": 1789482448400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "No dogs. And Maya is gluten-free, and Mia is the vegetarian.",
+   "timestamp": 1789482453400,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Maya gluten-free, Mia vegetarian. See, it's still on my hand.",
+   "timestamp": 1789482458000,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And not a word about Jonah outside Operation Heron.",
+   "timestamp": 1789482462200,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "What Jonah? I don't know a Jonah.",
+   "timestamp": 1789482465600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Okay, so open things. Mia, obviously. And how Jonah actually gets to the cabin.",
+   "timestamp": 1789482471800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "And kayaks. Kayaks are still a maybe.",
+   "timestamp": 1789482475200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "And the grocery thing. Nobody's actually checked for a gluten-free store near Birchwater.",
+   "timestamp": 1789482481000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Right. Let's sort all that in Operation Heron.",
+   "timestamp": 1789482484800,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_2",
+   "text": "Okay, I have to go, the dog next door is at it again.",
+   "timestamp": 1789482490600,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  },
+  {
+   "speaker": "user",
+   "text": "Bye guys. Priya, don't forget the $190.",
+   "timestamp": 1789482494000,
+   "final": true,
+   "confidence": 0.93,
+   "origin": "stt"
+  },
+  {
+   "speaker": "interviewer",
+   "speakerId": "speaker_1",
+   "text": "Tonight! I promise. Bye!",
+   "timestamp": 1789482496200,
+   "final": true,
+   "confidence": 0.91,
+   "origin": "stt"
+  }
+ ],
+ "words": 3726,
+ "speakerCount": 3,
+ "durationMs": 1696200,
+ "startEpochMs": 1789480800000
+}

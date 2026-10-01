@@ -33,9 +33,14 @@ const {
   resolveWhisperLanguage,
 } = await import(pathToFileURL(path.join(distWhisper, 'modelLanguageSupport.js')).href);
 const { MODEL_CATALOG } = await import(pathToFileURL(path.join(distWhisper, 'modelManager.js')).href);
-const { RECOGNITION_LANGUAGES, ENGLISH_VARIANTS } = await import(
-  pathToFileURL(path.join(distConfig, 'languages.js')).href
-);
+const {
+  RECOGNITION_LANGUAGES,
+  ENGLISH_VARIANTS,
+  PARAKEET_ONLY_LANGUAGE_KEYS,
+  isRecognitionLanguageOffered,
+  AUTO_DETECT_ALTERNATES,
+  AI_RESPONSE_LANGUAGES,
+} = await import(pathToFileURL(path.join(distConfig, 'languages.js')).href);
 const { NEMOTRON_TRANSCRIPTION_READY_LOCALES } = await import(
   pathToFileURL(path.join(distWhisper, 'nemotron/languageTable.js')).href
 );
@@ -51,6 +56,7 @@ const OFFICIAL_WHISPER_NAMES = new Set([
   'romanian', 'polish', 'dutch', 'arabic', 'hindi', 'swedish', 'norwegian',
   'danish', 'czech', 'hungarian', 'vietnamese', 'thai', 'greek', 'bulgarian',
   'hebrew', 'malay', 'finnish',
+  'croatian', 'estonian', 'latvian', 'lithuanian', 'maltese', 'slovak', 'slovenian',
 ]);
 
 test('every catalog model has a language-support entry with keys drawn from RECOGNITION_LANGUAGES', () => {
@@ -64,10 +70,11 @@ test('every catalog model has a language-support entry with keys drawn from RECO
   }
 });
 
-test('English-only guard derives from the catalog and covers Parakeet (the old hand-typed set missed it)', () => {
+test('English-only guard derives from the catalog and correctly marks multilingual/English-only models', () => {
   const englishOnly = MODEL_CATALOG.filter((m) => !m.multilingual).map((m) => m.id);
   const multilingual = MODEL_CATALOG.filter((m) => m.multilingual).map((m) => m.id);
-  assert.ok(englishOnly.includes('onnx-community/parakeet-ctc-0.6b-ONNX'), 'catalog must mark Parakeet English-only');
+  assert.ok(multilingual.includes('istupakov/parakeet-tdt-0.6b-v3-onnx'), 'catalog must mark Parakeet TDT multilingual');
+  assert.ok(englishOnly.includes('onnx-community/moonshine-tiny-ONNX'), 'catalog must mark Moonshine English-only');
   for (const id of englishOnly) {
     assert.equal(isEnglishOnlyLocalModel(id), true, `${id} must be English-only`);
   }
@@ -91,9 +98,9 @@ test('English-only models lock both selects and allow only the English variants'
   }
 });
 
-test('multilingual Whisper-family models allow every language including auto, but no accent conditioning', () => {
+test('multilingual Whisper-family models allow every language but the Parakeet-only ones, including auto, but no accent conditioning', () => {
   const whisperMultilingual = MODEL_CATALOG.filter(
-    (m) => m.multilingual && m.sessionLayout !== 'nemotron-rnnt',
+    (m) => m.multilingual && m.sessionLayout !== 'nemotron-rnnt' && m.sessionLayout !== 'parakeet-tdt',
   );
   assert.ok(whisperMultilingual.length > 0, 'catalog must contain multilingual Whisper checkpoints');
   for (const m of whisperMultilingual) {
@@ -102,11 +109,40 @@ test('multilingual Whisper-family models allow every language including auto, bu
     assert.equal(s.accentSelectable, false, `${m.id}: Whisper has no accent/region parameter`);
     assert.deepEqual(
       [...s.allowedLanguageKeys].sort(),
-      Object.keys(RECOGNITION_LANGUAGES).sort(),
-      `${m.id}: must allow the full RECOGNITION_LANGUAGES set (Whisper's 99 languages are a superset)`,
+      Object.keys(RECOGNITION_LANGUAGES).filter((k) => !PARAKEET_ONLY_LANGUAGE_KEYS.has(k)).sort(),
+      `${m.id}: must allow every RECOGNITION_LANGUAGES key except the Parakeet-only ones`,
     );
     assert.ok(s.allowedLanguageKeys.includes('auto'), `${m.id}: Whisper supports auto-detect`);
   }
+});
+
+test('Parakeet TDT allows exactly the 25 European languages it supports plus auto', () => {
+  const PARAKEET_ID = 'istupakov/parakeet-tdt-0.6b-v3-onnx';
+  const s = getLocalModelLanguageSupport(PARAKEET_ID);
+  assert.equal(s.languageSelectable, true);
+  assert.equal(s.accentSelectable, false);
+  assert.ok(s.allowedLanguageKeys.includes('auto'));
+  assert.ok(s.allowedLanguageKeys.includes('bulgarian'));
+  assert.ok(s.allowedLanguageKeys.includes('english-us'));
+  assert.ok(s.allowedLanguageKeys.includes('german'));
+  assert.ok(s.allowedLanguageKeys.includes('french'));
+  assert.ok(s.allowedLanguageKeys.includes('spanish'));
+  assert.ok(s.allowedLanguageKeys.includes('russian'));
+  assert.ok(s.allowedLanguageKeys.includes('ukrainian'));
+  // The 7 European languages verified to be selectable
+  assert.ok(s.allowedLanguageKeys.includes('croatian'));
+  assert.ok(s.allowedLanguageKeys.includes('estonian'));
+  assert.ok(s.allowedLanguageKeys.includes('latvian'));
+  assert.ok(s.allowedLanguageKeys.includes('lithuanian'));
+  assert.ok(s.allowedLanguageKeys.includes('maltese'));
+  assert.ok(s.allowedLanguageKeys.includes('slovak'));
+  assert.ok(s.allowedLanguageKeys.includes('slovenian'));
+  // Asian/Middle-Eastern languages NOT supported by Parakeet
+  assert.equal(s.allowedLanguageKeys.includes('japanese'), false);
+  assert.equal(s.allowedLanguageKeys.includes('chinese'), false);
+  assert.equal(s.allowedLanguageKeys.includes('arabic'), false);
+  assert.equal(s.allowedLanguageKeys.includes('korean'), false);
+  assert.equal(s.allowedLanguageKeys.includes('hindi'), false);
 });
 
 test('Nemotron allows exactly the keys that resolve through the transcription-ready locale table — no auto', () => {
@@ -155,4 +191,46 @@ test('resolveWhisperLanguage covers every internal settings key (the old LANG_MA
   }
   assert.equal(resolveWhisperLanguage(''), null);
   assert.equal(resolveWhisperLanguage('klingon'), null);
+});
+
+const PARAKEET_ID = 'istupakov/parakeet-tdt-0.6b-v3-onnx';
+const PARAKEET_ONLY = ['croatian', 'estonian', 'latvian', 'lithuanian', 'maltese', 'slovak', 'slovenian'];
+
+test('Parakeet-only languages are offered by Parakeet TDT and by no other catalog model', () => {
+  assert.deepEqual([...PARAKEET_ONLY_LANGUAGE_KEYS].sort(), [...PARAKEET_ONLY].sort());
+  for (const key of PARAKEET_ONLY) assert.ok(RECOGNITION_LANGUAGES[key], `${key} must stay in RECOGNITION_LANGUAGES`);
+  let checked = 0;
+  for (const m of MODEL_CATALOG) {
+    const allowed = getLocalModelLanguageSupport(m.id).allowedLanguageKeys;
+    for (const key of PARAKEET_ONLY) {
+      assert.equal(allowed.includes(key), m.id === PARAKEET_ID, `${m.id}: ${key}`);
+    }
+    checked++;
+  }
+  assert.ok(checked > 5, 'the catalog must have been walked');
+});
+
+test('the picker offers Parakeet-only languages only when the active local model lists them', () => {
+  const parakeet = new Set(getLocalModelLanguageSupport(PARAKEET_ID).allowedLanguageKeys);
+  const whisper = new Set(getLocalModelLanguageSupport('Xenova/whisper-small').allowedLanguageKeys);
+  const providerThatListsThem = new Set(['german', ...PARAKEET_ONLY]); // e.g. an Apple locale set
+  for (const key of PARAKEET_ONLY) {
+    assert.equal(isRecognitionLanguageOffered(key, null, null), false, `cloud provider must not offer ${key}`);
+    assert.equal(isRecognitionLanguageOffered(key, null, providerThatListsThem), false, `non-local backend must not offer ${key}`);
+    assert.equal(isRecognitionLanguageOffered(key, whisper, whisper), false, `Whisper must not offer ${key}`);
+    assert.equal(isRecognitionLanguageOffered(key, parakeet, parakeet), true, `Parakeet must offer ${key}`);
+  }
+  // Every other language keeps the old rule: unrestricted, or the backend's set.
+  assert.equal(isRecognitionLanguageOffered('german', null, null), true);
+  assert.equal(isRecognitionLanguageOffered('german', null, providerThatListsThem), true);
+  assert.equal(isRecognitionLanguageOffered('japanese', parakeet, parakeet), false);
+  assert.equal(isRecognitionLanguageOffered('japanese', whisper, whisper), true);
+});
+
+test('Parakeet-only languages stay out of the global auto-detect alternates and AI response languages', () => {
+  for (const key of PARAKEET_ONLY) {
+    const { bcp47, label } = RECOGNITION_LANGUAGES[key];
+    assert.equal(AUTO_DETECT_ALTERNATES.includes(bcp47), false, `${bcp47} must not be an auto-detect alternate`);
+    assert.equal(AI_RESPONSE_LANGUAGES.some((l) => l.label === label), false, `${label} must not be an AI response language`);
+  }
 });

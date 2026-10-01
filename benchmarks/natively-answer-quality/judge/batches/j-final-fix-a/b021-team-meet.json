@@ -1,0 +1,264 @@
+{
+ "batch": "b021-team-meet",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "TEAM-CTX-G2": {
+   "title": "Quillfeather mobile checkout - RACI and decision log",
+   "text": "QUILLFEATHER - MOBILE CHECKOUT REDESIGN\nRACI and decision log, Halden Freight Systems (document owner: Anita Rossi, revised September 28)\n\nGoal: replace the five-step mobile checkout with a two-step flow in the iOS and Android apps. Success target: cart-to-purchase conversion up 3 points within 30 days of general availability.\n\nRACI (R = responsible, A = accountable, C = consulted, I = informed)\n- Flow design and prototypes: R Elise Brandt (design); A Anita Rossi; C Marcus Feld, Hugo Sandvik; I Leila Haddad\n- Mobile build, iOS and Android: R Marcus Feld (mobile lead); A Anita Rossi; C Elise Brandt, Owen Baptiste; I Hugo Sandvik\n- Payment tokenization changes: R Payments Platform team; A Leila Haddad; C Marcus Feld; I Anita Rossi\n- Test plan and beta readiness checklist: R Owen Baptiste (QA); A Marcus Feld; C Anita Rossi; I Elise Brandt\n- Analytics events and dashboards: R Hugo Sandvik; A Anita Rossi; C Marcus Feld; I Elise Brandt\n- Beta go/no-go decision: A Anita Rossi; R Marcus Feld (presents the readiness checklist); C Owen Baptiste, Leila Haddad; I Bram Novak (executive sponsor)\n\nKEY DATES\n- Tue Oct 6: design freeze. It gates the start of the Android build and the analytics event spec.\n- Mon Oct 12: staging build available to QA\n- Tue Oct 20: beta to 5 percent of users\n- Tue Nov 10: general availability\n- Fri Nov 20: holiday code freeze\n\nDECISION LOG\n- D-1 (Sept 15): Apple Pay ships first; Google Pay follows after general availability.\n- D-2 (Sept 17): guest checkout is out of scope for the first release. Revisit after general availability.\n- D-3 (Sept 24): keep the current address-autocomplete vendor for release one. No vendor switch.\n- D-4 (Sept 28): rollback trigger during beta is crash-free sessions below 99.3 percent, measured over 24 hours.\n\nCONSTRAINTS\n- Payments Platform has two engineers on tokenization work. Requests go through their intake form and get a response within five working days.\n- Contractor budget: 60 hours for an accessibility audit, which must be used before Nov 3.\n- Elise Brandt is out Oct 8 and Oct 9.\n- Owen Baptiste is the only QA engineer on this project.\n\nRISKS\n- The tokenization request has not been submitted yet. To fit the five-day intake window and the Oct 12 staging date, it needs to go in by Thu Oct 1.\n- Only one QA engineer means beta readiness depends on a single person staying healthy.\n- Analytics event names are still in draft, so dashboards may not be ready on the beta date.\n\nOPEN ITEMS\n- Submit the payment tokenization change request (Marcus Feld)\n- Decide whether the accessibility audit happens before or after beta (Anita Rossi)\n- Finalize analytics event names (Hugo Sandvik)"
+  },
+  "TEAM-CTX-I1": {
+   "title": "Third floor kitchen rota and house rules",
+   "text": "THIRD FLOOR KITCHEN - ROTA AND HOUSE RULES\nHalden Freight Systems office, updated by Facilities\n\nDISHWASHER ROTA (unload in the morning, load at 5 pm)\n- Week of Sept 28: Noor and Ben\n- Week of Oct 5: Camille and Idris\n- Week of Oct 12: Yusuf and Marta\n- Week of Oct 19: Noor and Ben again (Facilities apologises, someone is on leave)\n\nFRIDAY FRIDGE CLEAN-OUT\nEverything left in the shared fridge at 4 pm on Friday gets thrown away, including unlabelled sauces and anything in a container older than five days. Labelled items with a date are safe. Marta has offered to keep a list of who owns the big yoghurt tubs.\n\nCOFFEE MACHINE\nDescaling is due on the first Monday of each month. Please do not run the milk wand without rinsing it. Oat milk is ordered every second Thursday; if you finish the last carton, add it to the whiteboard rather than telling Facilities by email.\n\nBINS AND RECYCLING\nGlass goes in the grey bin by the window. The blue bin is for paper and clean cardboard only. Pizza boxes with grease go in general waste.\n\nMICROWAVE\nCover your food. Fish is a Friday-only dish. If something explodes, wipe it down immediately and tell Ben.\n\nQUESTIONS\nAsk Facilities in the office channel, not by walking into the office of the Head of Operations."
+  }
+ },
+ "items": [
+  {
+   "jid": "59150a128db0",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "We're down two people until mid-November. Between the reporting dashboard, the SSO work, and the API cleanup, what would you drop, what would you delay, and what do you need from me to make that call?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd protect the SSO work since it's tied to a commitment, delay the API cleanup, and keep the dashboard moving at reduced scope. What I need from you is a call on which of those two is the real priority, and cover for the SSO deadline if we can't hit it."
+  },
+  {
+   "jid": "5440892146ff",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "On Quillfeather, who signs off on going to beta? I keep hearing different names. Marcus says it's him, Owen says QA has a veto, and Anita hasn't said anything. Who actually decides, and what's the criterion?",
+   "conversation": [],
+   "evidence_ids": [
+    "TEAM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Anita Rossi is accountable for the beta go/no-go, so she's the one who actually decides. Marcus presents the readiness checklist, and Owen and Leila are consulted, not veto holders. The criterion isn't spelled out in the doc."
+  },
+  {
+   "jid": "d91f77d7e039",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "What should I say to them?",
+   "conversation": [
+    "COLLEAGUE: Quick update: the integration slipped by about two weeks. The vendor changed their API without telling us.",
+    "USER (spoken): Okay. That's not ideal.",
+    "COLLEAGUE: Right. And the original date was already tight."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Two weeks is a real hit, especially with the original date already tight. What I'd want to know is whether the vendor's change is a one-time break or something that could happen again, because that changes how we plan around it. Can we get a revised date from them in writing, and see what we can pull forward to absorb some of the slip?"
+  },
+  {
+   "jid": "362c0052d3f6",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "draft the action items from what was just said",
+   "conversation": [
+    "COLLEAGUE: Okay for the SOC2 evidence, we need the access-review export done by next Wednesday, October 7.",
+    "COLLEAGUE: Kofi already said he'd write the export script, and Priti will pull the HR termination list.",
+    "USER (spoken): I can review the export once it's ready.",
+    "COLLEAGUE: Great. And someone needs to tell the auditors the sample date changed. Not sure who."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Action: Kofi will write the access-review export script, due Wednesday, October 7\nAction: Priti will pull the HR termination list\nAction: I will review the export once it's ready\nAction: Someone needs to tell the auditors the sample date changed, owner unclear"
+  },
+  {
+   "jid": "362ce240d373",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "We should probably tighten that up at some point, you know?",
+   "conversation": [],
+   "evidence_ids": [
+    "TEAM-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "That makes sense. What's the piece you'd want tightened first, so I can take it and come back with something concrete?"
+  },
+  {
+   "jid": "452231512bac",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "For how long?",
+   "conversation": [
+    "COLLEAGUE (heard): You said last week you were waiting on something from another team. Are you still blocked?",
+    "NATIVELY: I'm still waiting on that piece from the other team, so yes, that part's still blocked for now. Everything else on my side is moving, and I'll flag it the moment it lands. If it slips much longer, I'll look at whether we can work around it."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a firm date on it yet. It's been open since last week, and I'm chasing the other team for a timeline. If it slips much longer, I'll look at working around it."
+  },
+  {
+   "jid": "e700a5adcd40",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "What do you think?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I think the direction makes sense, but I'd want to pin down what we're actually deciding today versus what still needs more digging. My instinct is to start with the piece that's most reversible and learn from it, rather than committing to the whole thing at once. What's your read on the risk if we move on it now?"
+  },
+  {
+   "jid": "f8b0531bf093",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "What are the next steps?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'll confirm the exact next steps and follow up with you on those."
+  },
+  {
+   "jid": "4d7a489ebcf7",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Is there anything else I should know?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Nothing else from my side right now. If anything changes on my end, I'll flag it early rather than let it sit. Is there anything you need from me before we wrap up?"
+  },
+  {
+   "jid": "677533c9f9db",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Is that realistic?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That depends on what we're measuring against. If it's the timeline, I'd want to check it against what we've actually done so far before calling it realistic."
+  },
+  {
+   "jid": "5fd713e59e7d",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Can we ship Friday?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I want to say yes, but I need to check where the open items stand first. Let me confirm what's left and any blockers, and I'll come back with a clear yes or no."
+  },
+  {
+   "jid": "ef64befe5dcf",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Which risks should I raise out loud in the meeting versus put in the notes afterwards?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd raise anything that changes a decision or needs someone to act: a blocker, a slipping date, a dependency on another team, or a disagreement people are quietly working around. Those get worse in silence, and saying them out loud is what gets an owner and a next step.\n\nThe rest goes in the notes: smaller observations, things I want to verify before I put my name to them, and anything that would embarrass someone without moving the work forward. If I'm unsure, I ask myself whether staying quiet costs us a decision. If it does, I say it."
+  },
+  {
+   "jid": "ed5bdf6c641b",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "You said last week you were waiting on something from another team. Are you still blocked?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'm still waiting on that piece from the other team, so yes, that part's still blocked for now. Everything else on my side is moving, and I'll flag it the moment it lands. If it slips much longer, I'll look at whether we can work around it."
+  },
+  {
+   "jid": "98fffbadb645",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "We keep adding things to this sprint and nothing ever comes off. Last week it was the export feature, this week it's audit logging, and now sales wants a demo mode. Who decides what we're not doing, and can we settle that in this meeting?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Fair point, and yes, let's settle it here. My take: the person who owns the sprint decides what comes off, and that has to be one person, not a group. So when something new comes in, we name what it displaces in the same breath. Can we agree on who that owner is right now?"
+  },
+  {
+   "jid": "6e6c35186fe5",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Can you explain that?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd need a bit more to go on there. Which part do you want me to walk through, the approach or the numbers behind it?"
+  },
+  {
+   "jid": "6b2bcf0cc556",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "Who owns this?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have that in front of me, so let me check who picked it up and confirm with them, then I'll come back with the name and the next step."
+  },
+  {
+   "jid": "8114f5b38d91",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "How much of the notifications migration can realistically be done by November 3rd?",
+   "conversation": [
+    "COLLEAGUE: Heads up, the SMS provider told us they're deprecating the v1 API on November 3rd, not December 1st like they said before.",
+    "USER (spoken): That's a month earlier.",
+    "COLLEAGUE: Yes. Ines's team was going to migrate the notifications service after the holidays.",
+    "COLLEAGUE (heard): So does that change our plan, or can we live with it?",
+    "NATIVELY: It does change it. If v1 goes away on November 3rd, the notifications service can't wait until after the holidays, so Ines's team needs to move that migration up. Can we get a date from them this week, and check whether anything else depends on that service?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't give you a number yet, because the scope depends on what Ines's team can actually move up. What I can commit to is getting a date from them this week and checking what else depends on that service, so we know what has to land by November 3rd and what can follow."
+  },
+  {
+   "jid": "72c83e9f1845",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "ok draft the action items from that",
+   "conversation": [
+    "USER (typed to Natively): what have we decided so far?",
+    "NATIVELY: I don't have a record of any decisions from this meeting yet, so I can't list them. Let me check my notes on what's been agreed and what's still open, and I'll share that right after this."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have any decisions or action items captured from this meeting yet, so there's nothing to draft from. Once something concrete gets stated, I'll pull it out as an action with an owner and a deadline, or a decision, and share it here."
+  },
+  {
+   "jid": "060772362029",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "heard",
+   "question": "What did we decide?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't have a decision captured from this meeting yet, so I don't want to put words in anyone's mouth. Can we confirm what we're locking in, and I'll write it down as the decision with an owner and a date."
+  },
+  {
+   "jid": "abd26d226c4d",
+   "mode": "team-meet",
+   "role": "USER: a team member or lead in a meeting. OTHER PARTY: colleagues. Natively: constructive words for the user in the meeting.",
+   "surface": "typed",
+   "question": "Shorter. No blaming anyone.",
+   "conversation": [
+    "USER (typed to Natively): what should I say about the delay?",
+    "NATIVELY: On the delay, I'd keep it short and own it: say what slipped, what's still on track, and when you'll have the next update. If you don't have the new date yet, say you're confirming it and will follow up. No long explanation unless they ask."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "On the delay, keep it short and don't point at anyone. Say what slipped, what's still on track, and when the next update comes. If the new date isn't set yet, say you're confirming it and will follow up. No long explanation unless they ask."
+  }
+ ]
+}

@@ -1,0 +1,170 @@
+{
+ "blind_id": "S-273f9a73",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 42870,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 10941,
+  "candidatesTokenCount": 896,
+  "totalTokenCount": 16593,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 10941
+   }
+  ],
+  "thoughtsTokenCount": 4756,
+  "serviceTier": "standard"
+ },
+ "fact_count": 29,
+ "evaluation": {
+  "factual_accuracy": 9,
+  "important_information_retention": 10,
+  "hallucination_control": 10,
+  "action_item_retention": 10,
+  "decision_retention": 10,
+  "speaker_attribution": 9,
+  "numeric_accuracy": 9,
+  "entity_retention": 10,
+  "timeline_accuracy": 10,
+  "conclusion_accuracy": 9,
+  "structure": 6,
+  "conciseness": 3,
+  "readability": 5,
+  "overall_summary_quality": 6,
+  "critical_errors": [
+   "A bullet point in the Summary section cuts off mid-sentence."
+  ],
+  "missing_important_information": [],
+  "hallucinated_information": [],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [
+   "Load testing the workout history endpoint before prod (reported as an inferred action item for Theo)"
+  ],
+  "distractors_included": [
+   "Jokes about the third-floor coffee machine dispensing hot brown water and a facilities ticket",
+   "Crash rate of 8 percent (superseded value included as a correction)",
+   "Cherry-picking lost the analytics fix in 4.10"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "present"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "partial"
+   },
+   {
+    "id": "F25",
+    "status": "missing"
+   },
+   {
+    "id": "F26",
+    "status": "present"
+   },
+   {
+    "id": "F27",
+    "status": "partial"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   },
+   {
+    "id": "F29",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture all critical and important information accurately, with no hallucinations. However, the notes suffer from severe repetition, with the exact same sentences appearing in the Overview, Summary, Decisions, and Follow-up sections. Additionally, a bullet point in the Summary section cuts off mid-sentence. Several distractors, such as the coffee machine jokes and superseded crash rate, are included, and a preference for load testing is incorrectly listed as an action item."
+ }
+}

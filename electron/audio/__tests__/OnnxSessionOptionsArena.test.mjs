@@ -98,7 +98,6 @@ test('every local ONNX consumer routes through the shared helper', () => {
     { label: 'whisperWorker', file: 'electron/audio/whisper/whisperWorker.ts' },
     { label: 'localEmbeddingWorker', file: 'electron/rag/providers/localEmbeddingWorker.ts' },
     { label: 'localRerankerWorker', file: 'electron/rag/localRerankerWorker.ts' },
-    { label: 'intentClassifierWorker', file: 'electron/llm/intentClassifierWorker.ts' },
   ];
   for (const w of workers) {
     const src = fs.readFileSync(path.resolve(__dirname, '../../..', w.file), 'utf8');

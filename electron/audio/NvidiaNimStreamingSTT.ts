@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { createNvcfStreamingRecognize } from './rivaProto';
+import { RealtimeSilenceTail } from './realtimeSilenceTail';
 import {
   DEFAULT_NVIDIA_NIM_STT_MODEL,
   NVIDIA_NIM_STT_MODEL_CONFIG,
@@ -25,6 +26,11 @@ const RECONNECT_MAX_ATTEMPTS = 10;
 // true with no stream and no reconnect, so every subsequent write() appended
 // here forever (~115 MB/hour) and none of it was ever sent.
 const MAX_BUFFERED_BYTES = 160 * 1024;
+// Real-time silence after the local VAD's speech end. No endpointing_config is
+// sent, so Riva endpoints on its own default silence window — counted in audio
+// time, which the native keepalive (20 ms per 100 ms) stretches ~5×.
+// hangover (>= 500) + 700 = 1200 ms of real silence. See realtimeSilenceTail.ts.
+export const NVIDIA_NIM_SILENCE_TAIL_MS = 700;
 
 /** NVIDIA-hosted Riva/NIM low-latency streaming ASR. */
 export class NvidiaNimStreamingSTT extends EventEmitter {
@@ -44,10 +50,28 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
   // stream's late 'error'/'end' cannot null out its replacement.
   private generation = 0;
 
-  constructor(apiKey: string, model = DEFAULT_NVIDIA_NIM_STT_MODEL) {
+  /**
+   * The gRPC stream factory, injectable so the response handling — notably the
+   * endpoint emission below — can be exercised without a network, an API key
+   * or audio. Production always uses the real Riva factory; only tests pass
+   * their own (the same pattern as the injected Clock elsewhere).
+   */
+  private readonly streamFactory: typeof createNvcfStreamingRecognize;
+  private readonly silenceTail = new RealtimeSilenceTail({
+    tailMs: NVIDIA_NIM_SILENCE_TAIL_MS,
+    format: () => ({ sampleRate: this.sampleRate, channels: this.channels }),
+    sink: (pcm) => this.sendAudio(pcm),
+  });
+
+  constructor(
+    apiKey: string,
+    model = DEFAULT_NVIDIA_NIM_STT_MODEL,
+    streamFactory: typeof createNvcfStreamingRecognize = createNvcfStreamingRecognize,
+  ) {
     super();
     this.apiKey = apiKey;
     this.model = isNvidiaNimSttModel(model) ? model : DEFAULT_NVIDIA_NIM_STT_MODEL;
+    this.streamFactory = streamFactory;
   }
 
   setSampleRate(rate: number) { this.sampleRate = rate; }
@@ -64,18 +88,81 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
   /** The language_code actually sent; never empty. */
   private resolveLanguageCode(): string {
     const cfg = NVIDIA_NIM_STT_MODEL_CONFIG[this.model];
+    if (!cfg) return this.language || 'en-US';
+    // A single-locale deployment (the per-language Parakeet CTC builds) only
+    // recognises its own language. Forwarding the user's recognition-language
+    // pin there is not honouring a preference, it is sending zh-TW audio config
+    // to a Spanish model — so the model's own locale wins.
+    if (cfg.singleLocale) return cfg.languageCode;
     return this.language || cfg.languageCode || 'en-US';
   }
-  start() { if (this.active) return; this.active = true; this.reconnectAttempts = 0; this.connect(); }
+  start() {
+    if (this.active) return;
+    this.active = true;
+    this.reconnectAttempts = 0;
+    this.connect();
+  }
   stop() {
     this.active = false;
+    this.silenceTail.cancel();
     this.clearReconnectTimer();
     this.dropBuffer();
     try { this.stream?.end(); } catch {}
     this.stream = null;
   }
-  finalize() { try { this.stream?.end(); } catch {} }
+
+  /**
+   * Flush the pending utterance without ending the session.
+   *
+   * The renderer calls this on every "Answer Now" to mean "transcribe what I
+   * just said". Riva has NO flush control — StreamingRecognize is one long
+   * call, and half-closing it is the only way to make the server release a
+   * final it is still holding.
+   *
+   * Riva DOES endpoint on its own for completed utterances; live logs show
+   * finals arriving mid-meeting with no press. What it will not do is release
+   * the utterance still in flight at the moment the user asks for an answer,
+   * and that trailing fragment is usually the question itself. Measured on one
+   * press: a 14-char final had already landed from normal endpointing, and the
+   * 39-char remainder — the actual question — only arrived once this closed the
+   * call. Replacing end() with a no-op therefore did not merely delay finals,
+   * it lost the one that mattered.
+   *
+   * So: ROTATE rather than close. End the current call (the server flushes its
+   * final, which still reaches the listener — the 'data' handler emits
+   * transcripts regardless of generation) and open a replacement immediately so
+   * audio after the press keeps flowing.
+   *
+   * connect() runs BEFORE dying.end() on purpose: it bumps `generation`, so the
+   * dying stream's 'end'/'error' handlers see a stale generation and return
+   * early. That is what keeps this rotation from looking like a dropped stream —
+   * no backoff, no error, and no "STT reconnecting" in the overlay, which is
+   * exactly what the previous end()-without-replacement caused.
+   *
+   * stop() still ends the stream outright; that one really is end of session.
+   */
+  finalize() {
+    if (!this.active) return;
+    const dying = this.stream;
+    if (!dying) return;
+    this.stream = null;      // no further writes reach the call being closed
+    this.connect();          // new stream first, so `dying`'s handlers go stale
+    try { dying.end(); } catch { /* already gone; the replacement is live */ }
+  }
+
+  /** Local VAD: the speaker stopped. Keep Riva's endpointer clock real-time. */
+  notifySpeechEnded() {
+    if (!this.active) return;
+    this.silenceTail.start();
+  }
+
   write(chunk: Buffer) {
+    if (!this.active) return;
+    this.silenceTail.observe(chunk);
+    this.sendAudio(chunk);
+  }
+
+  private sendAudio(chunk: Buffer) {
     if (!this.active) return;
     if (!this.stream) {
       // No stream right now (pre-connect, or a reconnect in flight). Keep the
@@ -88,7 +175,17 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
       }
       return;
     }
-    try { this.stream.write({ audioContent: chunk }); } catch (e) { this.emit('error', e); }
+    try {
+      this.stream.write({ audioContent: chunk });
+    } catch (e) {
+      // The stream died between the null check above and this write — the peer
+      // half-closed, or a teardown raced us. That is a transport hiccup the
+      // reconnect ladder already handles, so drop the dead stream and let it
+      // rebuild rather than raising an STT error the user cannot act on.
+      console.warn('[NvidiaNimSTT] write failed, dropping stream for reconnect:', (e as Error)?.message);
+      this.stream = null;
+      if (this.active) this.scheduleReconnect();
+    }
   }
 
   private dropBuffer() { this.buffer = []; this.bufferedBytes = 0; }
@@ -127,7 +224,7 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
     const gen = ++this.generation;
     try {
       const cfg = NVIDIA_NIM_STT_MODEL_CONFIG[this.model];
-      this.stream = createNvcfStreamingRecognize(this.apiKey, cfg.functionId);
+      this.stream = this.streamFactory(this.apiKey, cfg.functionId);
       this.stream.on('data', (response: any) => {
         // A response proves the session works; clear the backoff so a later
         // blip starts from 1s again instead of inheriting this session's count.
@@ -135,6 +232,13 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
         for (const result of response?.results || []) {
           const alt = result?.alternatives?.[0];
           if (alt?.transcript) this.emit('transcript', { text: alt.transcript, isFinal: !!result.isFinal, confidence: alt.confidence || 1 });
+          // Riva marks the end of an utterance with is_final. Auto Answer
+          // treats that as a provider ENDPOINT and confirms the speaker
+          // stopped in ENDPOINT_CONFIRM_MS instead of waiting the full
+          // stability window (2026-08-25: without this, every Nemotron
+          // stoppage paid the whole ~900 ms). Additive: consumers that do
+          // not listen for 'endpoint' are unaffected.
+          if (result?.isFinal) this.emit('endpoint', { type: 'speech_final' });
         }
       });
       this.stream.on('error', (error: Error) => {

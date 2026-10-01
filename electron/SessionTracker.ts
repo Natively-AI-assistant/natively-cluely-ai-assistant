@@ -5,6 +5,7 @@
 import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
 import type { AttemptId, TurnIdentity } from './llm/turnIdentity';
+import { stripGistTrailer } from '../src/lib/displayMarkup';
 
 // Canned-fallback phrases that mean the model gave up entirely, not phrases
 // that might legitimately appear inside a real answer. Matched only when the
@@ -160,6 +161,10 @@ export class SessionTracker {
     private currentMeetingMetadata: {
         title?: string;
         calendarEventId?: string;
+        /** Filled in at start by SessionCalendarLinker when the session matches an event. */
+        calendarEvent?: import('./services/calendar/calendarSessionMatch').CalendarEventSnapshot;
+        /** The call it is in (a meeting tab's key), for who spoke when (meetingDetection/callRoster). */
+        callKey?: string;
         source?: 'manual' | 'calendar';
     } | null = null;
 
@@ -172,6 +177,16 @@ export class SessionTracker {
     private static readonly MAX_EPOCH_SUMMARIES = 5;
     private transcriptEpochSummaries: string[] = [];
     private isCompacting: boolean = false;
+
+    // Advanced by reset() only. The compaction recap call reads it before its
+    // await and drops its result if it moved, so an ended session cannot write
+    // into the next one. clearSessionContext() keeps the transcript and does
+    // NOT advance it: a compaction in flight across a mode switch still applies.
+    private sessionEpoch: number = 0;
+    // Advanced by reset() AND clearSessionContext(). An answer asked before
+    // either (phone-mirror, launcher or overlay chat) is still shown, but not
+    // saved into the context that replaced the one it was asked in.
+    private contextEpoch: number = 0;
 
     // Track interim interviewer segment
     private lastInterimInterviewer: TranscriptSegment | null = null;
@@ -260,8 +275,8 @@ export class SessionTracker {
         }
     }
 
-    getDetectedCodingQuestion(): { question: string | null; source: 'screenshot' | 'transcript' | null } {
-        return { question: this.detectedCodingQuestion, source: this.codingQuestionSource };
+    getDetectedCodingQuestion(): { question: string | null; source: 'screenshot' | 'transcript' | null; setAt: number | null } {
+        return { question: this.detectedCodingQuestion, source: this.codingQuestionSource, setAt: this.codingQuestionSetAt };
     }
 
     clearCodingQuestion(): void {
@@ -286,6 +301,7 @@ export class SessionTracker {
         this.lastAssistantMessage = null;
         this.assistantResponseHistory = [];
         this.lastInterimInterviewer = null;
+        this.contextEpoch++;
         console.log('[SessionTracker] Mode-specific session context cleared');
     }
 
@@ -433,7 +449,11 @@ export class SessionTracker {
             }
         } catch { /* non-fatal — fall through to normal filtering */ }
 
-        const cleanText = text.trim();
+        // The trailing [[GIST]] line is display metadata (the overlay/phone
+        // chip), never answer text: history, the meeting transcript, the
+        // usage log and every follow-up that re-reads the last answer get the
+        // answer without it. One chokepoint for all ~30 callers.
+        const cleanText = stripGistTrailer(text).trim();
         if (cleanText.length < 10) {
             console.warn(`[SessionTracker] Ignored short message (<10 chars)`);
             return false;
@@ -741,6 +761,14 @@ export class SessionTracker {
         return this.sessionStartTime;
     }
 
+    getSessionEpoch(): number {
+        return this.sessionEpoch;
+    }
+
+    getContextEpoch(): number {
+        return this.contextEpoch;
+    }
+
     // ============================================
     // Usage Tracking
     // ============================================
@@ -762,14 +790,19 @@ export class SessionTracker {
             type,
             timestamp: Date.now(),
             question,
-            answer,
+            answer: typeof answer === 'string' ? stripGistTrailer(answer) : answer,
             source: type === 'chat' ? 'manual_chat' : 'external',
         });
         this.capUsageArray();
     }
 
     pushUsage(entry: any): void {
-        this.fullUsage.push(entry);
+        // Same rule as logUsage: the usage log (ai_interactions) stores the
+        // answer without its [[GIST]] display line.
+        const stored = entry && typeof entry.answer === 'string'
+            ? { ...entry, answer: stripGistTrailer(entry.answer) }
+            : entry;
+        this.fullUsage.push(stored);
         this.capUsageArray();
     }
 
@@ -806,6 +839,8 @@ export class SessionTracker {
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.sessionEpoch++;
+        this.contextEpoch++;
     }
 
     // ============================================
@@ -836,6 +871,10 @@ export class SessionTracker {
         if (this.fullTranscript.length <= 1800 || this.isCompacting) return;
 
         this.isCompacting = true;
+        // A meeting stop resets the session while the recap call below is still
+        // pending. Its summary and the 500-entry eviction belong to the session
+        // that ended, not the one that replaced it.
+        const epoch = this.sessionEpoch;
         try {
             // Take the oldest 500 entries to summarize
             const summarizeCount = 500;
@@ -853,6 +892,7 @@ export class SessionTracker {
                     const epochSummary = await this.recapLLM.generate(
                         `Summarize this conversation segment into 3-5 concise bullet points preserving key topics, decisions, and questions:\n\n${summaryInput}`
                     );
+                    if (this.sessionEpoch !== epoch) return;
                     if (epochSummary && epochSummary.trim().length > 0) {
                         this.transcriptEpochSummaries.push(epochSummary.trim());
                         console.log(`[SessionTracker] Epoch summary created (${this.transcriptEpochSummaries.length} total)`);
@@ -862,6 +902,7 @@ export class SessionTracker {
                         this.transcriptEpochSummaries.push(marker);
                     }
                 } catch (e) {
+                    if (this.sessionEpoch !== epoch) return;
                     // If summarization fails, store a simple marker
                     const fallback = `[Earlier discussion: ${oldEntries.length} segments summarized without transcript snippets.]`;
                     this.transcriptEpochSummaries.push(fallback);

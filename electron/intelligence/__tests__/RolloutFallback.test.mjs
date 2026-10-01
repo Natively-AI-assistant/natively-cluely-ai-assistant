@@ -11,6 +11,9 @@ import {
 import { LongTermMemoryService } from '../../../dist-electron/electron/intelligence/memory/LongTermMemoryService.js';
 
 const DEFAULT_ON_KEYS = new Set([
+  // Multi-turn chat history (2026-08-29). Default ON via a plain literal: it guards
+  // a regression fix, and a dev/test-only default would pin a behaviour users never get.
+  'chatHistoryMultiTurn',
   'meetingSummaryV3',
   'meetingModeAutoDetect',
   'followUpDraftV2',
@@ -39,6 +42,50 @@ const DEFAULT_ON_KEYS = new Set([
   // Prompt System v2 — promoted default-ON 2026-08-02 (benchmark campaign;
   // see the intelligenceFlags.ts promotion comment).
   'promptSystemV2',
+  // WTA governance yields to a V3-composed turn (2026-08-28) — default ON,
+  // literal (never isInternalDevTestContext): it restores the !v3OwnedTurn
+  // invariant LLMHelper already enforces, and a fix for a production-only
+  // failure must not resolve differently in dev/test.
+  'wtaGovernanceYieldsToV3',
+  // The doc-grounded validator checks the block that was SENT (2026-08-28) —
+  // default ON, literal (never isInternalDevTestContext).
+  'docGroundedValidatorUsesSentEvidence',
+  // Provider Performance Profile (2026-09-08) — all four ON by plain literals.
+  // The two that change behaviour are bounded so that ON can only ever be safer
+  // or equal: the stall guard is clamped at or below today's constant, and the
+  // TTFT filter may only widen.
+  'providerPerformanceProfile',
+  'adaptiveStreamIdle',
+  'adaptiveTtft',
+  'providerPerformanceDiagnostics',
+  // Widen-only, so ON can only ever buy a slow network more room.
+  'adaptiveConnectTimeout',
+  // Promoted to unconditional `true` (2026-08-30, dev/prod parity audit):
+  // both are pure shadow-observation side channels (divergence logging only,
+  // zero change to any real return value), so there is no risk to running
+  // them in production.
+  'pronounRegexShadowObservation',
+  'contextOsImpossibleStateGateShadow',
+  // Promoted to unconditional `true` (2026-08-30, SEPARATE user-directed
+  // override — no packaged-build/real-traffic validation, unlike the shadow
+  // pair above which are risk-free by construction). See each flag's
+  // intelligenceFlags.ts comment for the specific risk it carries.
+  'ragConfidenceGate',
+  'ragLocalRerank',
+  'ragSpeculativeRerank',
+  'okfKnowledgePacks',
+  'okfHybridRetrieval',
+  'okfProfilePacks',
+  'okfProfileHybridRetrieval',
+  'atomicJdProfilePackGeneration',
+  'contextOsEnforceSourceCapabilities',
+  'contextOsPropertyValidation',
+  'contextOsImpossibleStateGateEnforceForbidden',
+  // Promoted to unconditional `true` (2026-08-30, third/final batch of the
+  // same user-directed override).
+  'okfMarkdownExport',
+  'okfProfileMarkdownExport',
+  'contextOsMultiFamilyEvidenceEnabled',
 ]);
 
 const expectedDefault = (key) => DEFAULT_ON_KEYS.has(key) ? true : false;

@@ -69,11 +69,14 @@ test('issue #315: getSelectedCodexCliModel exists and handles fastMode=false wit
     /slice\("codex-cli:"\.length\)|slice\(10\)/,
     'getSelectedCodexCliModel must extract the sub-model from "codex-cli:MODEL" when fastMode=false',
   );
-  // Confirm fastMode=true path returns fastModel (must still work for non-codex-selected users).
-  assert.match(
+  // 2026-09-26: there is no Codex fast model any more. Fast Response Mode
+  // answers with the Background Model, and on the Auto ladder the Codex rung
+  // runs the Codex default — a hidden per-provider fast model that the
+  // Settings card no longer shows must not keep choosing the model.
+  assert.doesNotMatch(
     fnBody,
-    /fastMode.*fastModel|if\s*\(fastMode\)/,
-    'getSelectedCodexCliModel must still return fastModel when fastMode=true (used for non-codex-selected users)',
+    /fastModel|fastMode/,
+    'getSelectedCodexCliModel must not read a Codex fast model — the Background Model owns Fast Response Mode',
   );
 });
 

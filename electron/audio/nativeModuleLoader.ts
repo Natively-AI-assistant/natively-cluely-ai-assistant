@@ -39,6 +39,13 @@ export interface NativeModule {
   // rebuild; callers must `typeof`-check and treat a missing export as "no IME"
   // so a stale binary keeps today's behaviour.
   isImeKeyboardActive?: () => boolean;
+  // Meeting detection (native-module/src/meeting_signals.rs). Who is capturing
+  // from a microphone (macOS 14+ CoreAudio process objects; Windows the
+  // microphone consent store) and the visible windows with owner and title.
+  // Read-only: no device opened, no mic indicator, no prompt. Null where the OS
+  // can't say. Optional: a binary without them means no native signals.
+  getMicUsers?: () => Array<{ pid?: number; bundleId?: string; path?: string }> | null;
+  getVisibleWindows?: () => Array<{ pid: number; owner: string; title: string; path?: string }> | null;
   // Stealth keyboard interception. macOS: CGEventTap. Windows:
   // WH_KEYBOARD_LL low-level hook (native-module/src/keyboard_hook_windows.rs)
   // exposing this IDENTICAL surface. Engaged by StealthKeyboardManager; the
@@ -46,7 +53,20 @@ export interface NativeModule {
   // types into the overlay without it taking OS focus. Optional: requires a
   // binary rebuild (macOS additionally needs Accessibility permission).
   StealthKeyboardTap?: new () => {
-    start(callback: (err: Error | null, ev: CapturedKey) => void, overlayBounds?: OverlayBoundsInput | null): boolean;
+    start(
+      callback: (err: Error | null, ev: CapturedKey) => void,
+      // The app's own global shortcuts (printable-leak subset) the native hook
+      // should swallow + self-dispatch so they can't leak into the foreground
+      // app while a RegisterHotKey registration is temporarily dropped. Pass []
+      // to disable. Ignored on macOS (shortcuts are consumed by Carbon/IOKit
+      // before the tap); honoured by the Windows WH_KEYBOARD_LL hook.
+      appChords: Array<{ vk: number; mods: number; id: string }>,
+      // When true, engage shortcut-guard mode: swallow only the app's own chords,
+      // pass all other keys through, and install no outside-click/Alt+Tab hooks.
+      // When false, the full stealth-typing tap. Ignored on macOS.
+      shortcutOnly: boolean,
+      overlayBounds?: OverlayBoundsInput | null,
+    ): boolean;
     stop(): void;
     readonly isActive: boolean;
   };
@@ -76,6 +96,13 @@ export interface CapturedKey {
   flags: number;
   isKeyDown: boolean;
   isOutsideMouseDown?: boolean;
+  /**
+   * Non-empty ⟹ this event is the app's OWN global shortcut firing, swallowed
+   * by the native hook (Windows) so it can never leak into the foreground app.
+   * The value is the KeybindManager action id; StealthKeyboardManager dispatches
+   * it instead of typing. Always absent/empty on macOS.
+   */
+  appChordId?: string;
 }
 
 // Hard-required: crash the module load if any of these are missing.

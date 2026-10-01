@@ -72,8 +72,13 @@ describe('Phase 0: retrieval-confidence signal (observe only)', () => {
     else process.env[FLAG] = prevFlag;
   });
 
-  test('flag OFF (default): result has NO confidence field — legacy shape preserved', async () => {
-    delete process.env[FLAG];
+  test('flag explicitly OFF: result has NO confidence field — legacy shape preserved', async () => {
+    // Was `delete process.env[FLAG]`, on the assumption that absent == off.
+    // ragConfidenceGate's default flipped to `true` on 2026-08-30, so deleting
+    // the variable now selects the DEFAULT, which is ON — the test was asserting
+    // the legacy shape while asking for the new one. The OFF path still exists
+    // and still has to produce the legacy shape, so it is selected explicitly.
+    process.env[FLAG] = '0';
     const { ModeHybridRetriever } = await loadRetriever();
     const { mockDb, mockVectorStore, mockEmbeddingPipeline } = mockDeps();
     const retriever = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
@@ -90,6 +95,24 @@ describe('Phase 0: retrieval-confidence signal (observe only)', () => {
 
     assert.ok(result.chunks.length > 0, 'sanity: should still retrieve');
     assert.equal('confidence' in result, false, 'confidence field must be absent when flag OFF');
+  });
+
+  test('the DEFAULT is now ON — absent env means the gate runs', async () => {
+    // The 2026-08-30 promotion, recorded as behaviour rather than as a comment.
+    // If the default goes back to false, the observe-only signal silently stops
+    // being collected and nothing else in the suite notices.
+    delete process.env[FLAG];
+    const { ModeHybridRetriever } = await loadRetriever();
+    const { mockDb, mockVectorStore, mockEmbeddingPipeline } = mockDeps();
+    const files = [{
+      id: 'file1', modeId: 'mode1', fileName: 'tips.txt',
+      content: 'The project manager scheduled the meeting for Tuesday afternoon.',
+      createdAt: new Date().toISOString(),
+    }];
+    const result = await new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline)
+      .retrieve({ query: 'When is the meeting scheduled?', modeId: 'mode1', files, tokenBudget: 1000, topK: 3 });
+    assert.equal('confidence' in result, true,
+      'ragConfidenceGate defaults to true since 2026-08-30 — an absent env var must leave it ON');
   });
 
   test('flag ON: confidence field present with the documented shape', async () => {
@@ -128,7 +151,13 @@ describe('Phase 0: retrieval-confidence signal (observe only)', () => {
     }];
     const query = 'When is the meeting scheduled?';
 
-    delete process.env[FLAG];
+    // Explicitly OFF. This leg used to `delete` the env var, which stopped
+    // meaning "off" when ragConfidenceGate's default became true (3e29a67f).
+    // Both legs then ran with the gate ON, so a test whose entire job is to
+    // prove the confidence signal does not change retrieval was comparing ON
+    // against ON and could not fail. The sibling test above was corrected for
+    // the same reason; this one was missed.
+    process.env[FLAG] = 'off';
     {
       const { mockDb, mockVectorStore, mockEmbeddingPipeline } = mockDeps();
       const r1 = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
@@ -140,6 +169,12 @@ describe('Phase 0: retrieval-confidence signal (observe only)', () => {
       const r2 = new ModeHybridRetriever(mockDb, mockVectorStore, mockEmbeddingPipeline);
       var on = await r2.retrieve({ query, modeId: 'mode1', files, tokenBudget: 1000, topK: 3 });
     }
+
+    // Prove the two legs really are in different flag states before comparing
+    // them. Without this the test can silently go back to comparing ON with ON
+    // — which is exactly how it spent months passing while proving nothing.
+    assert.equal('confidence' in off, false, 'the OFF leg must actually have the gate off');
+    assert.equal('confidence' in on, true, 'the ON leg must actually have the gate on');
 
     assert.equal(off.formattedContext, on.formattedContext, 'formattedContext must be identical regardless of flag');
     assert.deepEqual(

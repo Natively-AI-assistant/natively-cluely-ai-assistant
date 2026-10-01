@@ -1,0 +1,104 @@
+[
+  {
+    "config": "giant-16000",
+    "chunks": 1,
+    "recall_at_12": 25,
+    "budget_survival": 5,
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "misses": [
+      "LedgerLink/idempotency key format r=1 s=0",
+      "LedgerLink/retry policy r=1 s=0",
+      "LedgerLink/dead-letter queue r=1 s=0",
+      "LedgerLink/p95 SLO r=1 s=0",
+      "LedgerLink/monitoring metric r=1 s=0",
+      "FleetBridge/idempotency key format r=1 s=0",
+      "FleetBridge/retry policy r=1 s=0",
+      "FleetBridge/dead-letter queue r=1 s=0",
+      "FleetBridge/p95 SLO r=1 s=0",
+      "FleetBridge/monitoring metric r=1 s=0",
+      "StockMesh/idempotency key format r=1 s=0",
+      "StockMesh/retry policy r=1 s=0",
+      "StockMesh/dead-letter queue r=1 s=0",
+      "StockMesh/p95 SLO r=1 s=0",
+      "StockMesh/monitoring metric r=1 s=0",
+      "CarePoint Connect/idempotency key format r=1 s=0",
+      "CarePoint Connect/retry policy r=1 s=0",
+      "CarePoint Connect/dead-letter queue r=1 s=0",
+      "CarePoint Connect/p95 SLO r=1 s=0",
+      "CarePoint Connect/monitoring metric r=1 s=0"
+    ]
+  },
+  {
+    "config": "sweet-300",
+    "chunks": 66,
+    "recall_at_12": 25,
+    "budget_survival": 25,
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "misses": []
+  },
+  {
+    "config": "npfx-300",
+    "chunks": 66,
+    "recall_at_12": 25,
+    "budget_survival": 25,
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "misses": []
+  },
+  {
+    "config": "anon-300",
+    "chunks": 66,
+    "recall_at_12": 25,
+    "budget_survival": 25,
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "misses": []
+  },
+  {
+    "config": "anon-npfx-300",
+    "chunks": 66,
+    "recall_at_12": 25,
+    "budget_survival": 25,
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "misses": []
+  },
+  {
+    "config": "prod",
+    "chunks": 65,
+    "recall_at_12": 25,
+    "budget_survival": 25,
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "misses": []
+  },
+  {
+    "config": "prod-anon",
+    "chunks": 65,
+    "recall_at_12": 25,
+    "budget_survival": 25,
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "misses": []
+  },
+  {
+    "config": "prod-npfx",
+    "chunks": 65,
+    "recall_at_12": 25,
+    "budget_survival": 25,
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "misses": []
+  },
+  {
+    "config": "prod-npfx-anon",
+    "chunks": 65,
+    "recall_at_12": 25,
+    "budget_survival": 25,
+    "continuity_plain": 5,
+    "continuity_anchored": 5,
+    "misses": []
+  }
+]

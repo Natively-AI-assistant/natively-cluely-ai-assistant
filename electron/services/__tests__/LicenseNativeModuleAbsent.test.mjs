@@ -96,7 +96,10 @@ const PRO_VERIFY_OK = { status: 200, body: { ok: true, has_pro: true, plan: 'ult
  */
 async function withStubbedFetch({ status, body }, fn) {
   const previous = globalThis.fetch;
-  globalThis.fetch = async () => ({ status, json: async () => body });
+  // `ok` included so the double is a faithful Response: it is defined as
+  // status in [200,299], and a double that omits it silently misreports a
+  // 200 as a failure to any code that reads it.
+  globalThis.fetch = async () => ({ ok: status >= 200 && status < 300, status, json: async () => body });
   try {
     return await fn();
   } finally {

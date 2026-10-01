@@ -1,0 +1,129 @@
+{
+ "batch": "b006-sales",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "DSALES-CTX-G1": {
+   "title": "Routewise product one-pager: pricing and packaging (July 2026)",
+   "text": "Routewise by Brightwell Labs - Product One-Pager\nPricing and Packaging, effective July 1, 2026. Supersedes all earlier price sheets and partner sheets.\n\nWhat Routewise does\nRoutewise is scheduling and dispatch software for field service teams of 10 to 2,000 technicians. Dispatchers build the day on a drag-and-drop board, Routewise suggests the technician with the right skills who is closest to the job, and technicians receive jobs, customer history, checklists and parts lists in the Routewise mobile app for iOS and Android. End customers get an arrival window by SMS and a live \"technician on the way\" link.\n\nCore capabilities (every plan)\n- Drag-and-drop dispatch board with skills and territory matching\n- Mobile app with offline mode; jobs, photos and signatures sync when the device reconnects\n- Customer SMS notifications with arrival windows\n- Digital checklists and standard job forms\n- Standard reports: first-time fix rate, jobs per technician per day, drive time per job\n\nPlans and pricing (per technician seat, per month, billed annually)\n- Starter - $29 per seat. Up to 25 seats. Dispatch board, mobile app, SMS notifications, standard reports. Email support. Monthly billing is available on Starter only, at $35 per seat.\n- Growth - $49 per seat. 10 seat minimum. Everything in Starter plus route optimization that re-plans the rest of the day when a job runs long, inventory and parts tracking, QuickBooks Online and Xero integrations, custom job forms, and the REST API (read and write, 120 requests per minute).\n- Enterprise - custom pricing, 100 seat minimum. Everything in Growth plus the Salesforce Field Service connector, SAML single sign-on, audit logs, a sandbox environment, and a named Customer Success Manager.\nDispatcher and admin seats are free on every plan. Only technicians who receive jobs are billed.\n\nAdd-ons\n- Customer Portal (self-service booking and online invoice payment): $400 per month flat, Growth and Enterprise only.\n- Additional API capacity: blocks of 60 requests per minute at $150 per month each.\n\nImplementation\n- Starter: self-serve onboarding with guided setup videos. Most teams go live in 1 to 2 weeks.\n- Growth: standard onboarding package, $2,500 one-time. Typical go-live is 4 to 6 weeks from contract signature, provided the customer delivers clean technician, customer and asset data within the first 10 business days.\n- Enterprise: scoped implementation with a fee quoted separately. Typical go-live is 8 to 12 weeks. Setting up the Salesforce Field Service connector adds 2 to 3 weeks.\nGo-live dates depend on data readiness and are estimates, not contractual commitments.\n\nContract terms\n- Standard term is 12 months, auto-renewing for another 12 months unless either party gives 60 days' written notice before renewal.\n- Payment terms are net 30 from invoice.\n- Multi-year: a 24-month prepaid agreement receives 10% off the per-seat price. No other multi-year discount is published.\n- Seats can be added at any time, prorated to the renewal date. Seats cannot be reduced until renewal.\n- Any discount or payment term beyond the published terms requires Deal Desk approval. Account executives cannot approve non-standard discounts or payment terms on a call.\n- 14-day free trial on Starter and Growth, up to 10 seats, no credit card required.\n\nWhat Routewise does not do\n- Routewise does not issue invoices or run accounting. It syncs completed jobs and parts used to QuickBooks Online or Xero, and those systems issue the invoices.\n- There is no on-premises or private-cloud deployment option.\n- Routewise does not include GPS vehicle tracking hardware; technician location comes from the mobile app while a job is active.\n\nQuestions about anything not listed here go to your account executive, who will confirm with Product before committing."
+  },
+  "DSALES-CTX-G2": {
+   "title": "Routewise security, support and SLA overview (August 2026)",
+   "text": "Routewise Security, Support and SLA Overview\nBrightwell Labs, revised August 2026. For prospects and customers.\n\n1. Security and compliance\n- Brightwell Labs completed a SOC 2 Type II examination covering the Security and Availability criteria for the period April 1, 2025 to March 31, 2026. The report is shared with prospects under a mutual NDA through our Trust Center. Allow 2 business days after the NDA is signed.\n- An independent firm performs a penetration test once a year. The executive summary is available under the same NDA. Full findings are not shared.\n- Encryption: AES-256 at rest; TLS 1.2 or higher in transit.\n- Hosting: Amazon Web Services. North American customers are hosted in us-east-2 (Ohio); EU customers in eu-central-1 (Frankfurt). The data region is chosen at contract signature and cannot be changed later without a paid migration project.\n- Architecture: multi-tenant with logical separation of customer data. Dedicated single-tenant hosting is not offered.\n- Authentication: two-factor authentication on every plan. SAML single sign-on with Okta, Microsoft Entra ID or Google Workspace on Enterprise only.\n- Data retention: customer data is kept for the life of the contract. After termination, customers can export their data for 30 days; it is then deleted within 90 days.\n- A GDPR Data Processing Addendum is available on request.\n\n2. Uptime SLA\n- Growth and Enterprise: 99.9% monthly uptime for the web app and API, excluding scheduled maintenance. Scheduled maintenance runs Sundays 02:00 to 04:00 US Eastern and is announced at least 72 hours ahead.\n- Service credits: 10% of that month's subscription fee if uptime falls below 99.9%; 25% if uptime falls below 99.0%. Credits must be requested within 30 days of the end of the affected month. Service credits are the sole and exclusive remedy for downtime.\n- Starter: no uptime SLA.\n- During an outage the mobile app keeps working in offline mode, and data syncs once service is restored.\n- Current status and incident history are published on the public Routewise status page.\n\n3. Support\n- Starter: email support, Monday to Friday, 8am to 6pm US Eastern. First response within 1 business day.\n- Growth: email and in-app chat, Monday to Friday, 8am to 8pm US Eastern. First response for P1 incidents within 2 business hours; all other tickets within 8 business hours.\n- Enterprise: everything in Growth plus 24/7 phone support for P1 incidents with a 1-hour first response, a named Customer Success Manager assigned after signature, and quarterly business reviews.\n- A P1 incident means the dispatch board or the mobile app is unavailable for all users of an account.\n- Response times are first-response targets, not resolution commitments.\n- Support is provided in English.\n- Escalation path: the assigned support engineer, then the Support Manager on duty, then the VP of Customer Success.\n\n4. What to route elsewhere\nRequests for a custom security questionnaire, a signed security addendum, or any compliance framework not named in this document go to the Brightwell Labs security team through your account executive. Do not confirm them on a call."
+  }
+ },
+ "items": [
+  {
+   "jid": "7d79ec2795c7",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "they're comparing us with FieldPilot and just staying on spreadsheets. give me 3 discovery questions, a one line positioning statement, and what to say when they say we'll just keep the spreadsheets",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Three discovery questions: what does a typical week look like when the spreadsheet breaks down, and who feels it first? When you compare us with FieldPilot, what's the one thing that matters most in that decision? And if nothing changes for the next six months, what does that cost you?\n\nPositioning: we're the option that gets your field data into one place without the spreadsheet gymnastics or the FieldPilot learning curve.\n\nWhen they say they'll just keep the spreadsheets: that's fair, and if it's working, don't fix it. What I'd ask is what happens when someone leaves and takes the spreadsheet logic with them, or when you need a number you can't get from a cell. If that day comes, we're a quick conversation. Can I check back in a month?"
+  },
+  {
+   "jid": "4c82ec40d57d",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Come on. Give me your best price right now. I have budget sign-off until Friday and then it goes back into the pool.",
+   "conversation": [
+    "PROSPECT (heard): What's the lowest you can go on the mid tier if we're serious?",
+    "NATIVELY: I can't go below list on the mid tier, but if you're serious I can put together a package that makes the number work for you. What volume are we talking about, and when would you want it live?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I hear you on the Friday deadline, and I want to get you a real number, not a stall. Mid tier stays at list, but I can build the package around volume and start date so the total lands where you need it. Give me those two things and I'll have it to you today."
+  },
+  {
+   "jid": "dacec267dbf7",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "FieldPilot came in about thirty percent cheaper and they've got invoicing built in. Why would we pay more for you?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a fair comparison, and I won't pretend price doesn't matter. What I'd want to understand is what the invoicing piece is actually worth to you day to day, because that's usually where the real cost sits. If FieldPilot covers what you need, I'd rather you know that than overpay for us. Where I'd push back is on what happens when something breaks or you need a change, and that's the part worth pricing out together. Can we put both side by side on your actual workflow this week?"
+  },
+  {
+   "jid": "e8613bfbc737",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Why not?",
+   "conversation": [
+    "PROSPECT (heard): We need this live by November first, full stop. Just promise me it'll be live by the first and I'll sign today.",
+    "NATIVELY: I can't promise a date I don't control, and I won't put you in a spot where a promise like that becomes the reason the deal sours. Here's what I can do: **Growth** onboarding typically runs **4 to 6 weeks** from signature, and that clock starts once your technician, customer and asset data is in clean within the first ten business days. So November first is realistic if we start now and the data lands on time. What I can commit to in writing is the onboarding plan, the data deadline, and a named resource on my side. Can we get your data owner on a 30-minute call this week so we can lock the schedule before you sign?"
+   ],
+   "evidence_ids": [
+    "DSALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Because I don't control your data, and that's the one thing that decides the date. The one-pager is explicit that go-live dates depend on data readiness and are estimates, not contractual commitments. What I can put in writing is the onboarding plan, the ten-business-day data deadline, and a named resource on my side. If your data lands clean on time, November first holds. Can we get your data owner on a 30-minute call this week so we lock the schedule before you sign?"
+  },
+  {
+   "jid": "ada58c500d65",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Do you guys have SOC 2? Our security review is next Tuesday and I'd need the report before then.",
+   "conversation": [],
+   "evidence_ids": [
+    "DSALES-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Yes, we completed a SOC 2 Type II covering Security and Availability, and the report goes out under a mutual NDA through our Trust Center. Once that NDA is signed, allow two business days for it to reach you, so if your review is Tuesday we'd want to get the NDA moving today. Can I send it over right now so we can start the clock?"
+  },
+  {
+   "jid": "f947dcefae3c",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "she wants to know what support hours and uptime guarantee we give on the mid tier. what do I say",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I don't want to quote you a number I can't stand behind, so let me pull the exact support hours and uptime commitment for the mid tier and confirm it in writing today. What I can say is that uptime and response times are spelled out in the agreement, so you'll have it in black and white. Does that work, or do you need it before your next review?"
+  },
+  {
+   "jid": "009da4208057",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "closing line?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Thanks for the time today. I'll send over the summary and the next steps this afternoon, and let's get that follow-up on the calendar for early next week. Does Tuesday or Wednesday work better on your end?"
+  },
+  {
+   "jid": "35a6382caeac",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Can you knock twenty percent off yourself, or do you have to go ask somebody?",
+   "conversation": [],
+   "evidence_ids": [
+    "DSALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "I can't approve twenty percent on the call, that one needs Deal Desk. What I can do right now is the published multi-year discount, ten percent off per seat on a 24-month prepaid agreement. If you want me to push for more, tell me what term and volume you're working with and I'll take it to Deal Desk today."
+  },
+  {
+   "jid": "40892c599081",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "We run Salesforce for the office team and QuickBooks Online for billing. On the Growth plan, do both of those connect?",
+   "conversation": [],
+   "evidence_ids": [
+    "DSALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "QuickBooks Online connects on Growth, so your billing side is covered. Salesforce is the one that doesn't, the Field Service connector sits on Enterprise. If Salesforce is the piece you need, that's the plan to look at. How central is Salesforce to your office workflow today?"
+  }
+ ]
+}

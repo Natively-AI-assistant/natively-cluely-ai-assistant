@@ -58,6 +58,13 @@ export interface CapabilityPolicy {
   externalSuggestionDisclosure: 'NONE' | 'WHEN_SOURCE_SPECIFIC' | 'ALWAYS';
 }
 
+// SCREEN_CONTEXT is allowed in EVERY mode (2026-09-11). Four modes lacked it —
+// looking-for-work, recruiting, lecture, seminar — so a screenshot the user
+// deliberately attached could never become evidence there. Measured: a JD on
+// screen asked "what are they paying for this role" in looking-for-work and the
+// PROFILE's own JD (a different job) answered "no salary range is listed" while
+// ₹95L–₹1.3Cr sat on the screen. The screen port stays fail-closed and the
+// packer still ranks by the mode's priorities; this only lets the observation in.
 export interface ModePolicy {
   id: ModeId;
   /** Bumped on any behavioural change; recorded in every AnswerTrace so a
@@ -102,7 +109,7 @@ export interface ModePolicy {
   /**
    * Auto Answer V3 ternary dispatch thresholds (V3 Amendment 4), per mode,
    * next to the retrieval scopes. On the extractor-scale answerability
-   * composite (see electron/intelligence/autoAnswer/AutoAnswerDetector.ts):
+   * verdict (the judge returns it directly — see AutoAnswerJudge.ts):
    *   >= autoThreshold (and user silent, engine idle) → fire automatically
    *   >= offerThreshold                               → offer card (hotkey/click commits)
    *   otherwise                                       → silent
@@ -125,6 +132,24 @@ export interface ModePolicy {
   };
 
   citations: 'HIDDEN' | 'OPTIONAL' | 'VISIBLE';
+
+  /**
+   * The mode's ATTACHED MATERIAL is what the conversation is about (2026-09-30).
+   *
+   * Seminar's attached paper/thesis is the primary authority for everything the
+   * examiner says, and Lecture's slides/notes are the material being taught. An
+   * examiner's challenge ("Five runs is not many — how do you know the gains are
+   * not just noise?") or a lecturer's statement is phrased as general knowledge,
+   * so the classifier sends it down the FAST path; measured 13/128 file-dependent
+   * turns reached the model with none of the file, 6 of them Seminar.
+   *
+   * When true and the turn has files attached to the mode, a non-META turn the
+   * classifier would answer from general knowledge still consults the reference
+   * files. It does NOT add a document claim: the turn stays FAST (no absence
+   * notice, answerability unchanged), and the evidence gate still decides what
+   * is admitted. Consumed once, in orchestrator.decide().
+   */
+  attachedMaterialIsPrimary: boolean;
 }
 
 // ── capability presets ──────────────────────────────────────────────────────
@@ -153,6 +178,17 @@ const STRICT_DOC_CAPS: CapabilityPolicy = {
   externalSuggestionDisclosure: 'ALWAYS',
 };
 
+/**
+ * `conversationTokens` was 400-800 across every mode — sized for the era when
+ * conversation state was ONE turn capped at 280 chars. That cap was the
+ * regression behind "the follow-up has no idea of that screenshot"
+ * (2026-08-28), so the number that encoded it had to move with the fix.
+ *
+ * 2400 tokens is ~6-8 completed exchanges including a screenshot description.
+ * It is now ENFORCED (engine-bridge trims oldest-first to fit) rather than
+ * declared and ignored, which is what it was before: only `evidenceTokens` was
+ * ever read by the packer.
+ */
 const budget = (evidence: number, conv: number, tx: number, screen: number) =>
   ({ evidenceTokens: evidence, conversationTokens: conv, transcriptTokens: tx, screenTokens: screen });
 
@@ -188,9 +224,10 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     groundingPolicy: 'OPEN_KNOWLEDGE', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1500, 600, 800, 400),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1500, 2400, 800, 400),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'HIDDEN',
+    attachedMaterialIsPrimary: false,
   },
 
   'call-center': {
@@ -208,9 +245,10 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     // promise what the context does not authorize").
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 600, 900, 300),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 900, 300),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
+    attachedMaterialIsPrimary: false,
   },
 
   sales: {
@@ -224,9 +262,10 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     // require evidence and must never be generated.
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 600, 900, 300),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 900, 300),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
+    attachedMaterialIsPrimary: false,
   },
 
   recruiting: {
@@ -234,16 +273,17 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     purpose: 'Evaluate candidates with structured interview insights.',
     // CANDIDATE_FILE is a distinct source type from RESUME so a candidate's
     // documents can never be confused with the Natively user's own resume.
-    allowedSourceTypes: ['CANDIDATE_FILE', 'JOB_DESCRIPTION', 'REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'CONVERSATION_STATE'],
+    allowedSourceTypes: ['CANDIDATE_FILE', 'JOB_DESCRIPTION', 'REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
     sourcePriorities: { CANDIDATE_FILE: 1, JOB_DESCRIPTION: 2, REFERENCE_FILE: 3 },
     // The user's OWN profile must never describe a candidate: no hydration.
     profileSources: [],
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 600, 900, 200),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 900, 200),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
+    attachedMaterialIsPrimary: false,
   },
 
   'team-meet': {
@@ -255,33 +295,55 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     groundingPolicy: 'OPEN_KNOWLEDGE', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1200, 800, 1400, 400),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1200, 2400, 1400, 400),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'HIDDEN',
+    attachedMaterialIsPrimary: false,
   },
 
   'looking-for-work': {
     id: 'looking-for-work', version: '1.1.0', name: 'Looking for work',
     purpose: 'Answer interview questions with confidence and clarity.',
-    allowedSourceTypes: ['RESUME', 'JOB_DESCRIPTION', 'PROFILE_FACT', 'REFERENCE_FILE', 'CONVERSATION_STATE'],
+    // MEETING_TRANSCRIPT added 2026-09-11: the interview conversation itself is
+    // a source. "what did I say the team size was" / "what did they say the
+    // on-call looks like" had no authorized pool here, so the claim read
+    // unsupportedInMode and the turn was answered from the 90-second window or
+    // not at all. Lowest priority: the résumé and JD still lead.
+    allowedSourceTypes: ['RESUME', 'JOB_DESCRIPTION', 'PROFILE_FACT', 'REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
     // Resume outranks JD: the JD may shape EMPHASIS, never prove experience.
-    sourcePriorities: { RESUME: 1, PROFILE_FACT: 2, JOB_DESCRIPTION: 3 },
+    sourcePriorities: { RESUME: 1, PROFILE_FACT: 2, JOB_DESCRIPTION: 3, MEETING_TRANSCRIPT: 4 },
     // Profile Intelligence is the PRIMARY source here (uploaded once in
     // Profile settings); mode attachments are optional supplements.
     profileSources: ['RESUME', 'JOB_DESCRIPTION', 'PROFILE_FACT'],
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 600, 600, 200),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 600, 200),
     autoAnswer: AUTO_ANSWER_INTERVIEW,
     citations: 'HIDDEN',
+    attachedMaterialIsPrimary: false,
   },
 
   'technical-interview': {
     id: 'technical-interview', version: '1.1.0', name: 'Technical Interview',
     purpose: 'Whiteboard-style coding and system design support.',
-    allowedSourceTypes: ['RESUME', 'JOB_DESCRIPTION', 'PROJECT_FILE', 'CODING_SAMPLE', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
-    sourcePriorities: { RESUME: 1, PROJECT_FILE: 2, CODING_SAMPLE: 3, JOB_DESCRIPTION: 4 },
+    // REFERENCE_FILE added 2026-08-28 (T8). Without it this was the ONLY mode
+    // with no reference pool at all, with three consequences beyond retrieval:
+    // `shouldOfferAnswerPolicyControl` tests REFERENCE_FILE membership, so the
+    // "Only answer from references" control was HIDDEN here; `primarySrc`
+    // sorted to RESUME, making `documentCentricMode` false on both clauses and
+    // disabling document-lookup routing; and `sourceTypeForFile` fell through to
+    // PROJECT_FILE, so an attached .md was stamped as something it is not.
+    //
+    // Ranked BELOW PROJECT_FILE deliberately: in a technical interview a project
+    // file or coding sample is the more specific evidence for a question about
+    // the user's own work, and a general reference file should not displace it.
+    // Priority is a tiebreak, not an allowlist -- adding the type cannot widen
+    // what the mode may READ beyond what claim authority already permits.
+    // MEETING_TRANSCRIPT added 2026-09-11 (same reasoning as looking-for-work):
+    // the interview conversation is a source for what was said in it.
+    allowedSourceTypes: ['RESUME', 'JOB_DESCRIPTION', 'PROJECT_FILE', 'CODING_SAMPLE', 'REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
+    sourcePriorities: { RESUME: 1, PROJECT_FILE: 2, CODING_SAMPLE: 3, REFERENCE_FILE: 4, JOB_DESCRIPTION: 5, MEETING_TRANSCRIPT: 6 },
     // Same latent defect as looking-for-work: RESUME was planned but had no
     // pool without duplicate attachments. JD/résumé hydrate; PROFILE_FACT is
     // not in this mode's allowlist so it is not opted in.
@@ -289,29 +351,31 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1600, 700, 700, 800),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1600, 2400, 700, 800),
     autoAnswer: AUTO_ANSWER_INTERVIEW,
     citations: 'HIDDEN',
+    attachedMaterialIsPrimary: false,
   },
 
   lecture: {
-    id: 'lecture', version: '1.0.0', name: 'Lecture',
+    id: 'lecture', version: '1.1.0', name: 'Lecture',
     purpose: 'Capture key concepts and content from lectures.',
-    allowedSourceTypes: ['REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'CONVERSATION_STATE'],
+    allowedSourceTypes: ['REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
     sourcePriorities: { REFERENCE_FILE: 1, MEETING_TRANSCRIPT: 2 },
     profileSources: [],
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(24, 8), contextBudget: budget(2000, 500, 1000, 200),
+    retrievalPolicy: retrieval(24, 8), contextBudget: budget(2000, 2400, 1000, 200),
     autoAnswer: AUTO_ANSWER_LISTENING,
     citations: 'OPTIONAL',
+    attachedMaterialIsPrimary: true,
   },
 
   seminar: {
-    id: 'seminar', version: '1.0.0', name: 'Seminar',
+    id: 'seminar', version: '1.1.0', name: 'Seminar',
     purpose: 'Strict file-grounded Q&A for presentations, thesis defences and paper walkthroughs.',
-    allowedSourceTypes: ['REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'CONVERSATION_STATE'],
+    allowedSourceTypes: ['REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
     sourcePriorities: { REFERENCE_FILE: 1, MEETING_TRANSCRIPT: 2 },
     profileSources: [],
     // SOURCE_FIRST, not STRICT_SOURCE_ONLY: the existing seminar contract is
@@ -320,9 +384,19 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: STRICT_DOC_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(24, 8), contextBudget: budget(2400, 400, 800, 200),
+    // conversationTokens is 1000, not the 2400 every other mode got in the
+    // 2026-08-28 sweep. This is the one STRICT_DOC_CAPS mode: general knowledge
+    // is off, document claims require evidence, and the conversation is
+    // explicitly NOT an answer source here. It is still needed for REFERENT
+    // resolution ("what about section 3?"), which is 2-3 exchanges, not 6-8 —
+    // so the sweep's sizing rationale ("~6-8 completed exchanges including a
+    // screenshot description") does not apply to this mode, and matching the
+    // evidence budget exactly gave conversation the same weight as the
+    // documents the mode exists to be grounded in.
+    retrievalPolicy: retrieval(24, 8), contextBudget: budget(2400, 1000, 800, 200),
     autoAnswer: AUTO_ANSWER_LISTENING,
     citations: 'VISIBLE',
+    attachedMaterialIsPrimary: true,
   },
 };
 
@@ -396,4 +470,56 @@ export function modeAllowsSource(policy: ModePolicy, source: SourceType): boolea
 export function generalKnowledgeAllowed(policy: ModePolicy): boolean {
   if (policy.groundingPolicy === 'STRICT_SOURCE_ONLY') return false;
   return policy.capabilityPolicy.useGeneralTechnicalKnowledge;
+}
+
+// ── Profile Intelligence eligibility ────────────────────────────────────────
+//
+// THE one answer to "may this turn see the user's résumé / target JD?"
+// (2026-09-30). V3 has always answered it from `profileSources` above: only
+// looking-for-work and technical-interview opt in. The legacy and fallback
+// paths answered it with their own rules — a premium-intercept BLOCKLIST that
+// allowed general/sales/recruiting and treated "no active mode" as allowed,
+// source-contract heuristics that grant the profile to a General mode once it
+// has a prompt or a file, and a knowledge-mode flag with no mode check at all.
+// So the same question in the same mode got the résumé or not depending on
+// which transport answered it (phone chat, follow-up email, a V3 error
+// fallthrough, the legacy WTA path).
+//
+// Derived from the registry, not listed beside it: a mode gains or loses
+// Profile Intelligence by changing its `profileSources`, and every path follows.
+//
+// Keyed by TEMPLATE type, so a custom mode built from the Looking-for-work or
+// Technical Interview template inherits it and one built from General does not.
+// Fails CLOSED: no active mode and an unrecognised template both mean no — the
+// opposite of `resolveModeIdOrWarn`'s fallback, which lands on `general` for
+// the same reason (the one outcome that carries no profile).
+
+export type ProfileIntelligenceIneligibleReason =
+  | 'no_active_mode'
+  | 'unknown_mode'
+  | 'mode_excludes_profile';
+
+export type ProfileIntelligenceEligibility =
+  | { allowed: true; modeId: ModeId; reason: 'mode_hydrates_profile' }
+  | { allowed: false; modeId: ModeId | null; reason: ProfileIntelligenceIneligibleReason };
+
+/**
+ * Eligibility for a mode TEMPLATE type (`mode.templateType`), with the reason.
+ * `null` / `undefined` / `''` mean "no active mode".
+ */
+export function profileIntelligenceEligibility(templateType: unknown): ProfileIntelligenceEligibility {
+  if (templateType === null || templateType === undefined || templateType === '') {
+    return { allowed: false, modeId: null, reason: 'no_active_mode' };
+  }
+  if (!isModeId(templateType)) {
+    return { allowed: false, modeId: null, reason: 'unknown_mode' };
+  }
+  return MODE_POLICIES[templateType].profileSources.length > 0
+    ? { allowed: true, modeId: templateType, reason: 'mode_hydrates_profile' }
+    : { allowed: false, modeId: templateType, reason: 'mode_excludes_profile' };
+}
+
+/** True only for a mode whose template opts into profile hydration. */
+export function isProfileIntelligenceAllowed(templateType: unknown): boolean {
+  return profileIntelligenceEligibility(templateType).allowed;
 }

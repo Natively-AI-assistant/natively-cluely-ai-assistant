@@ -2,8 +2,14 @@
  * Popup UI controller. All privileged work (token storage, loopback fetch) is
  * delegated to the service worker via chrome.runtime.sendMessage — the popup
  * itself never holds the token persistently nor talks to the desktop directly.
+ * The one exception is chrome.permissions.request: it needs the click's user
+ * activation, which never reaches the service worker, so the popup calls it.
  */
 import type { CaptureReport, DomPostOutcome, PairFetchOutcome } from './service-worker';
+import {
+  requestAllSitesPermission,
+  requestOriginPermission,
+} from './capture/permissions';
 
 type StatusOutcome = DomPostOutcome | { kind: 'unpaired' };
 
@@ -19,6 +25,10 @@ const connectBtn = $<HTMLButtonElement>('connectBtn');
 const captureBtn = $<HTMLButtonElement>('captureBtn');
 const unpairBtn = $<HTMLButtonElement>('unpairBtn');
 const allSitesBtn = $<HTMLButtonElement>('allSitesBtn');
+// Lets the Meet reader run on meet.google.com: who is in the call and who is
+// speaking, for names on Natively's transcript (sent to the local app only,
+// while its meeting detection is on).
+const meetNamesBtn = $<HTMLButtonElement>('meetNamesBtn');
 const allSitesHint = $<HTMLElement>('allSitesHint');
 const msg = $('msg');
 
@@ -160,8 +170,9 @@ captureBtn.addEventListener('click', async () => {
   if (report.outcome.kind === 'needs-host-permission') {
     const origin = report.outcome.origin;
     setMsg(`Requesting access to ${hostOf(origin)}…`, '');
-    const grant = await send<{ granted: boolean }>({ type: 'grant-host', value: origin });
-    if (grant?.granted) {
+    const grant = await requestOriginPermission(chrome.permissions, origin);
+    if (grant.granted) {
+      void send({ type: 'clear-grant-nudge' }).catch(() => {});
       setMsg('Permission granted — capturing…', '');
       report = await send<CaptureReport>({ type: 'capture' });
     }
@@ -176,19 +187,45 @@ captureBtn.addEventListener('click', async () => {
 
 // One-time blanket grant: a single Chrome prompt covering https://*/* +
 // http://*/* (declared in optional_host_permissions), after which the desktop
-// hotkey captures ANY site — no per-site grants. This click is the required
-// user gesture; the gesture survives the SW round-trip because we await it.
+// hotkey captures ANY site — no per-site grants.
+// chrome.permissions.request MUST run directly in the popup's click handler
+// because Chrome does not propagate user gestures across runtime.sendMessage
+// to background service workers.
 allSitesBtn.addEventListener('click', async () => {
   allSitesBtn.disabled = true;
-  const r = await send<{ granted: boolean; alreadyHad?: boolean }>({ type: 'grant-all-sites' });
+  const r = await requestAllSitesPermission(chrome.permissions);
   allSitesBtn.disabled = false;
-  if (r?.granted) {
+  if (r.granted) {
+    void send({ type: 'clear-grant-nudge' }).catch(() => {});
     setMsg(r.alreadyHad ? 'Already allowed on all sites.' : 'Allowed on all sites — the hotkey now works everywhere.', 'ok');
     await refreshAllSites();
   } else {
     setMsg('Not granted — per-site capture still works.', 'warn');
   }
 });
+
+meetNamesBtn.addEventListener('click', async () => {
+  meetNamesBtn.disabled = true;
+  const r = await requestOriginPermission(chrome.permissions, 'https://meet.google.com/*');
+  meetNamesBtn.disabled = false;
+  if (r.granted) {
+    await send({ type: 'meet-reader-refresh' }).catch(() => {});
+    setMsg('Natively will put names on your Google Meet transcripts.', 'ok');
+    await refreshMeetNames();
+  } else {
+    setMsg('Not allowed: Meet transcripts keep "Speaker 1".', 'warn');
+  }
+});
+
+/** Hide the Meet button once meet.google.com is allowed (all sites covers it too). */
+async function refreshMeetNames(): Promise<void> {
+  try {
+    const r = await send<{ granted: boolean }>({ type: 'meet-reader-status' });
+    meetNamesBtn.classList.toggle('hidden', !!r?.granted);
+  } catch {
+    /* leave it shown */
+  }
+}
 
 unpairBtn.addEventListener('click', async () => {
   await send({ type: 'unpair' });
@@ -202,6 +239,7 @@ pairInput.addEventListener('keydown', (e) => {
 
 void refreshStatus();
 void refreshAllSites();
+void refreshMeetNames();
 
 /** Hide the all-sites button once granted; show the explainer while offered. */
 async function refreshAllSites(): Promise<void> {

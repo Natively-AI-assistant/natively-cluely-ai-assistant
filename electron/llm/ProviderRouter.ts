@@ -1,3 +1,5 @@
+import { DEEPSEEK_DEFAULT_MODEL } from './deepseekModels';
+
 export type LLMProviderId = 'natively' | 'groq' | 'codex' | 'gemini_flash' | 'gemini_pro' | 'openai' | 'claude' | 'deepseek' | 'ollama';
 export type ProviderCapability = 'chat' | 'stream_chat' | 'structured' | 'vision';
 export type ProviderAttemptStatus = 'available' | 'unavailable';
@@ -294,8 +296,11 @@ export function routeLLMProviders(options: ProviderRouteOptions): ProviderAttemp
         unavailableReason: 'missing_api_key',
         supports: ['chat', 'stream_chat', 'structured', 'vision'],
     };
-    // DeepSeek (OpenAI-compatible) is intentionally text-only — no vision support
-    // declared, so it is excluded from multimodal/screenshot fallback chains.
+    // DeepSeek (OpenAI-compatible) declares no vision support HERE, so this
+    // router's multimodal/screenshot fallback chains never recruit it for
+    // someone else's turn. That is about recruitment, not ability: a SELECTED
+    // DeepSeek Flash reads its own screenshots through LLMHelper's vision chain
+    // (2026-10-01).
     const deepseek: ProviderSpec = {
         provider: 'deepseek',
         name: `DeepSeek (${models.deepseek ?? 'default'})`,
@@ -315,7 +320,8 @@ export function routeLLMProviders(options: ProviderRouteOptions): ProviderAttemp
 
     // DeepSeek is placed after Claude in the text-only chain (between the existing
     // cloud chat providers and the local Ollama fallback) and is omitted from the
-    // multimodal chain since no DeepSeek vision model is supported.
+    // multimodal chain: DeepSeek is never a FALLBACK for an image turn (only
+    // Flash reads images, and only for the user who selected it).
     const orderedSpecs: ProviderSpec[] = options.multimodal
         ? [natively, codex, openai, geminiFlash, claude, geminiPro, groq]
         : [natively, groq, codex, geminiFlash, geminiPro, openai, claude, deepseek];
@@ -401,7 +407,7 @@ const LOCAL_PROVIDERS = ['ollama', 'custom'];
  * Deliberately left unwired by the audit rather than switched on: enabling it
  * changes which provider serves live traffic, and that cannot be validated
  * without exercising real provider failures. Wiring it (or deleting it) is a
- * product decision — see AUDIT_REPORT.md.
+ * product decision.
  *
  * Known issues inside the class, listed so nobody wires it as-is:
  *   - half-open admits unbounded calls (halfOpenCalls is only incremented in
@@ -513,7 +519,7 @@ export class ProviderRouter {
             // All providers down, return lowest priority
             return {
                 provider: 'gemini',
-                model: 'gemini-3.7-flash',
+                model: 'gemini-3.8-flash',
                 reason: 'all providers unhealthy, using Gemini as last resort'
             };
         }
@@ -545,7 +551,7 @@ export class ProviderRouter {
         // Default: Groq for speed (most bang for buck on free tier)
         return {
             provider: 'groq',
-            model: 'qwen/qwen3.6-27b',
+            model: 'qwen/qwen3.8-27b',
             reason: 'default routing: Groq (fastest free tier)'
         };
     }
@@ -597,11 +603,11 @@ export class ProviderRouter {
 
     private getDefaultModel(provider: string): string {
         const models: Record<string, string> = {
-            'gemini': 'gemini-3.7-flash',
-            'groq': 'qwen/qwen3.6-27b',
+            'gemini': 'gemini-3.8-flash',
+            'groq': 'qwen/qwen3.8-27b',
             'openai': 'gpt-5.4',
             'claude': 'claude-sonnet-4-6',
-            'deepseek': 'deepseek-v4-flash',
+            'deepseek': DEEPSEEK_DEFAULT_MODEL,
             'natively': 'default',
             'codex': 'default'
         };

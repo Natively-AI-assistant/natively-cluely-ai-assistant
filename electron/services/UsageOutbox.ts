@@ -32,7 +32,9 @@
  *      and returns. No network, no await for the caller.
  *   2. Never throws into a caller. Every entry point is wrapped. An audit bug
  *      must not be able to fail a meeting.
- *   3. Inert unless enabled. Two flags, checked per call.
+ *   3. On by default, killable server-side. Both flags are checked per call;
+ *      each defaults ON and is turned off with an explicit `=0`. The lever that
+ *      reaches a shipped fleet is the server's, not this one — see isEnabled().
  *   4. Bounded. 10,000 rows / oldest-undelivered dropped past the cap, counted.
  *   5. No content. Only identifiers, enums, counts and durations — the server
  *      allowlist rejects anything else, and this file must never try to send it.
@@ -93,6 +95,21 @@ const BACKOFF_MS = [
     20 * 60_000, 30 * 60_000, 60 * 60_000,
 ];
 
+/**
+ * Flag polarity for this subsystem: **absent means ON**. Only an explicit
+ * off-value disables.
+ *
+ * `''` is treated as absent on purpose. `FOO=$UNSET_VAR` exports an empty
+ * string, which is how a mis-templated CI or launcher config silently kills a
+ * subsystem it never meant to touch. An empty value is missing information, not
+ * an instruction to stop recording.
+ */
+export function usageFlagEnabled(v: string | undefined): boolean {
+    if (v === undefined || v === '') return true;
+    const s = v.trim().toLowerCase();
+    return !(s === '0' || s === 'false' || s === 'off' || s === 'no');
+}
+
 export type UsageLayer = 'ledger' | 'telemetry';
 
 export interface UsageEventInput {
@@ -143,13 +160,24 @@ export class UsageOutbox {
     }
 
     /**
-     * Both flags must be on. The client half is separately switchable from the
-     * server half so a bad client release can be silenced server-side without a
-     * client update, and a client can stop emitting without a server change.
+     * On by default. `NATIVELY_USAGE_OUTBOX_ENABLED=0` (or `false`/`off`/`no`)
+     * turns it off.
+     *
+     * HONEST LIMIT OF THIS SWITCH. It reads `process.env`, and a packaged app
+     * launched from the Dock or the Start menu inherits no environment — so
+     * once this defaults ON, `=0` is reachable only in development, in CI, and
+     * from a terminal launch. It is NOT a production kill switch, and the
+     * previous claim here that "a client can stop emitting without a server
+     * change" is no longer true. Do not rely on it during an incident.
+     *
+     * The switch that still works against a shipped fleet is the server's
+     * `BYOK_CLIENT_EVENTS_ENABLED=0`: /v1/usage/audit answers 503, and this
+     * outbox treats 503 as retryable and HOLDS the events (~15 days, see
+     * MAX_ATTEMPTS) instead of acking them away. Silencing a bad client release
+     * therefore costs no data, which is why one lever is enough.
      */
     public isEnabled(): boolean {
-        const v = process.env.NATIVELY_USAGE_OUTBOX_ENABLED;
-        return v === '1' || v === 'true';
+        return usageFlagEnabled(process.env.NATIVELY_USAGE_OUTBOX_ENABLED);
     }
 
     /**

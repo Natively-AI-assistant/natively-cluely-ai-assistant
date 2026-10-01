@@ -1,0 +1,4019 @@
+# LECT-VL — lecture, very_long (98.9 min, 14053 words)
+
+**Source transcript:** `benchmark/transcripts/src/LECT-VL.txt`  
+**Reference fact sheet:** `benchmark/references/LECT-VL.json`  
+**Context:** Recording of Lecture 9 of CS 432 Distributed Systems at Halden University, 'Consensus and the Raft algorithm', taught by Professor Miriam Castellanos with course logistics from head TA Kofi Mensah. The student recording it (Jordan) asks two questions; other students (Devin, Devon) also ask questions. The lecture covers replicated state machines, FLP, quorums, Raft election/replication/safety with worked examples, partitions, membership changes, comparisons with Paxos and real systems, and briefly log compaction.
+
+## What a good summary must include
+- Homework 4 now due Monday Oct 12, 11:59pm (moved from Friday) (F01)
+- Midterm Thursday Oct 22 in Larkin Hall 150, covering lectures 1-9 but not snapshots; one note sheet (F06, F07, F08, F10)
+- Office hours changes: Kofi Thursdays 3-5 Whitaker 214; professor's extra hours Wed Oct 7 3-4:30 instead of Thursday (F05, F13)
+- Reading for Thursday's guest BFT lecture: Castro & Liskov PBFT sections 1-4; think about why 3f+1 (F15, F16)
+- Replicated state machines motivate consensus; FLP says async deterministic consensus can't guarantee termination with one crash (proof not on exam) (F26, F29, F31)
+- Safety vs liveness definitions; Raft always keeps safety (F32, F33, F34)
+- Majority quorum floor(n/2)+1 and 2f+1; 4 nodes tolerate only 1 failure (F36, F37, F38)
+- Leader election with terms and randomized 150-300ms timeouts (400-800ms for homework) (F42, F45, F48, F52)
+- Log replication: AppendEntries consistency check, log matching, commit index (F58, F59, F61)
+- Election restriction (last term then length) and leader completeness, shown in 5-server worked example (F65, F67, F64)
+- Leader commits only current-term entries by counting replicas (Figure 8), on the exam (F69, F71)
+- Network partition scenario: minority leader can't commit, steps down on heal; clients retry with dedup (F73, F75, F76)
+
+## Most important disagreements (judge fact checks)
+
+✔ present · ◐ partial · ✘ missing · ⚠ contradicted
+
+| Fact | Imp. | A | B | C | D | E | F |
+|---|---|---|---|---|---|---|---|
+| F07: The midterm covers lectures 1 through 9, i.e. it includes today's Raft lecture. | critical | ✔ | ⚠ | ✔ | ⚠ | ✔ | ⚠ |
+| F01: Homework 4 (Raft leader election) is now due Monday, October 12 at 11:59pm, moved from Friday October 9 because the autograder was down most of the weekend and still flaky. | critical | ◐ | ✔ | ✔ | ⚠ | ◐ | ⚠ |
+| F12: Ana (a TA who wrote most of the questions) will post the practice midterm on Ed by this Friday, instead of Kofi; solutions follow a few days later. | important | ✔ | ✔ | ✔ | ⚠ | ◐ | ✔ |
+| F13: Professor Castellanos's Thursday office hours are cancelled (program committee trip); she holds extra office hours Wednesday October 7, 3-4:30pm, in Whitaker 318. | critical | ◐ | ✘ | ✔ | ◐ | ✔ | ✔ |
+
+## Judge-flagged problems
+
+**A** — overall 4/10, accuracy 8, retention 9, conciseness 1
+- critical: The notes are pathologically repetitive, duplicating the same facts across 'Core concepts', 'Definitions', 'Examples', 'Formulas', 'Things to memorize', 'Confusing points', 'Questions to review', and 'Study summary'.
+- superseded value: C02 → A four-server cluster needs a quorum of three and was stated to tolerate two failures.
+
+**B** — overall 3/10, accuracy 7, retention 9, conciseness 1
+- critical: The notes contradict themselves regarding the midterm coverage, stating in one place that it covers lectures 1 through 8, and in another that it covers lectures 1 through 9.
+- superseded value: C04 → The midterm is October 22 during normal class time in Larkin Hall 150 and covers lectures 1 through 8 through primary-backup replication.
+
+**C** — overall 4/10, accuracy 6, retention 10, conciseness 1
+- critical: The notes report superseded values as final facts to memorize (e.g., HW4 due Oct 9, midterm covers lectures 1-8, 4 nodes tolerate 2 failures), contradicting the correct values also present in the notes.
+- critical: The summary section contains a bullet point that is cut off mid-sentence.
+- superseded value: C01 → Homework 4 (Raft leader election: leader election and heartbeats in the Go skeleton) is due Friday, October 9th at 11:59pm.
+- superseded value: C02 → A 4-server cluster has a majority of 3, so it can tolerate 2 failures — meaning adding that fourth node buys something.
+- superseded value: C04 → The midterm is Thursday, October 22nd, during normal class time, in Larkin Hall room 150, and covers lectures 1 through 8 (up through primary-backup replication).
+- superseded value: C05 → Kofi: Post the practice midterm on Ed by Friday.
+
+**D** — overall 4/10, accuracy 4, retention 9, conciseness 1
+- critical: Reports superseded value: 'Homework 4 is due Friday, October 9 at 11:59pm.' in Action items, contradicting the correct Monday deadline listed elsewhere.
+- critical: Reports superseded value: 'The midterm will take place... and cover lectures 1 through 8.' in Decisions, contradicting the correct 1-9 coverage listed elsewhere.
+- critical: Reports superseded value: 'Kofi: Kofi will post the midterm practice exam on Ed by Friday.' in Action items, contradicting the correct assignment to Ana.
+- superseded value: C01 → Homework 4 is due Friday, October 9 at 11:59pm. [inferred]
+- superseded value: C04 → The midterm will take place during normal class time on Thursday, October 22, in Larkin Hall room 150 and cover lectures 1 through 8.
+- superseded value: C05 → Kofi: Kofi will post the midterm practice exam on Ed by Friday.
+
+**E** — overall 3/10, accuracy 4, retention 9, conciseness 1
+- critical: Reporting superseded values as facts in multiple sections (e.g., Homework 4 due Friday Oct 9, Midterm covers 1-8, 4 nodes tolerate 2 failures) without clearly marking them as superseded in those instances.
+- critical: Massive repetition of the same facts across almost every section of the notes.
+- critical: Multiple sentences are cut off mid-word or mid-sentence due to apparent length limits or generation errors.
+- hallucination: An 'Animation analogy for safety vs liveness' is mentioned, but the transcript contains no animation analogy.
+- hallucination: Stating that 'Ana, not the instructor, will post the practice midterm' implies the instructor was originally supposed to post it, whereas the head TA (Kofi) was the one who originally said he would post it.
+- superseded value: C01 → homework 4 on Raft leader election due Friday Oct 9 11:59pm
+- superseded value: C02 → 4 nodes tolerate 2 failures — adding the fourth node buys something.
+- superseded value: C04 → midterm Oct 22 in Larkin 150 covering lectures 1-8
+
+**F** — overall 3/10, accuracy 5, retention 9, conciseness 1
+- critical: The Overview and Summary sections report superseded values as facts (Homework 4 due October 9, Midterm covers lectures 1-8), contradicting the final decisions.
+- critical: Extreme repetition: the notes repeat the same information across numerous bloated sections (Core concepts, Definitions, Examples, Formulas, Things to memorize, Confusing points, Questions to review, Study summary), making them nearly unusable as a concise reference.
+- superseded value: C01 → Homework 4 is a leader-election and heartbeat assignment due October 9 at 11:59pm
+- superseded value: C04 → the midterm covers lectures 1–8 through primary-backup replication.
+
+
+---
+
+# Summary A
+
+_(run1)_
+
+### Title: Consensus and Replicated State Machines
+
+#### Overview
+The lecture introduced consensus as the solution to coordinating fault-tolerant replicated state machines, contrasting it with primary-backup replication and 2PC, and stated the FLP impossibility result. The lecture explained FLP, safety versus liveness, majority quorums, and Raft’s motivation, architecture, states, strong-leader design, and terms. The lecture explained Raft terms, leader-election mechanics, randomized timeouts, timing requirements, and homework-specific heartbeat and timer-reset rules. The lecture clarified election-timer rules, demonstrated split votes and quorum sizing, corrected the fault tolerance of four-node clusters, and introduced Raft log replication, consistency checks, and nextIndex backtracking. The lecture explained Raft log repair, commitment and application, and how election restrictions preserve committed entries during leadership changes. The lecture established Raft’s leader-completeness and current-term commitment rules, persistence requirements, and how a network partition permits only the majority-side leader to commit entries. The lecture explains Raft’s handling of retries, stale reads, pre-vote, membership changes, and its relationship to Paxos. The lecture compared Raft with Multi-Paxos, covered real-system caveats and snapshot-based log compaction, and changed Homework 4 and midterm logistics. The instructor clarified midterm scope, logistics, review materials, office hours, Thursday's BFT reading, and topics deferred to next Tuesday. Key decisions: Homework 4 is due Monday, October 12th, at 11:59pm instead of Friday.; Homework 4 late days are counted from the new Monday-night deadline.; The midterm covers lectures 1 through 9, including the current lecture.. Study summary: The lecture motivated consensus by showing that primary-backup replication cannot safely determine failure without risking split brain or relying on a single-point-of-failure arbiter.
+
+#### Summary
+- The lecture motivated consensus by showing that primary-backup replication cannot safely determine failure without risking split brain or relying on a single-point-of-failure arbiter.
+- The lecture introduced consensus as the solution to coordinating fault-tolerant replicated state machines, contrasting it with primary-backup replication and 2PC, and stated the FLP impossibility result.
+- Homework 4 is due Monday, October 12th, at 11:59pm instead of Friday.
+- Homework 4 late days are counted from the new Monday-night deadline.
+- A replicated system can suffer split brain if a backup incorrectly promotes itself while the primary remains active.
+
+#### Core concepts
+- Consensus enables a group of machines to agree on decisions without relying on a single special machine and while continuing to work when some machines fail.
+- Primary-backup replication requires resolving whether a silent primary crashed, is partitioned, or is merely slow.
+- Incorrect primary promotion creates split brain, in which two primaries accept writes and their data diverges.
+- Replicated state machines make services fault tolerant by having multiple servers apply the same deterministic command sequence.
+- The consensus problem can be reduced to keeping a replicated command log identical across servers.
+- Consensus is intended to make progress as long as a majority of servers remain available.
+- FLP states that in a fully asynchronous system with unbounded message and process delays, no deterministic consensus algorithm can guarantee termination if even one process may crash.
+- FLP is a limitation on guaranteed termination in every asynchronous execution, not a claim that consensus is impossible in practical systems.
+- Practical systems such as Paxos and Raft preserve safety unconditionally but require reasonably behaving networks for progress.
+- Safety and liveness are complementary consensus goals: safety prevents incorrect outcomes, while liveness ensures eventual progress.
+- Raft guarantees safety even during partitions and severe delays, but may sacrifice liveness by stalling.
+- Majority quorum overlap is the central mechanism carrying prior decisions forward in Raft safety arguments.
+- Raft was designed primarily for understandability while retaining the basic fault tolerance and performance goals of Paxos.
+- Raft decomposes consensus into leader election, log replication, and safety, with membership changes and log compaction treated as additional components.
+- Raft uses a strong leader model in which client requests and log entries flow through the leader toward followers.
+- Raft divides time into consecutively numbered terms, and each term begins with an election.
+- A term can have at most one leader, although a split vote can leave a term without any leader.
+- In normal operation, exactly one leader handles client requests and replicates the log while followers redirect client requests to that leader.
+- Servers use term numbers to detect stale information and force leaders or candidates with older terms to step down.
+- Raft's basic algorithm uses RequestVote for elections and AppendEntries for log replication and heartbeats.
+- Election safety follows from each server voting for at most one candidate per term combined with the majority requirement.
+- Randomized election timeouts improve liveness by making simultaneous candidacies unlikely to repeat.
+- Raft safety does not depend on timing, but liveness depends on suitable relationships among broadcast time, election timeout, and failure intervals.
+- Election timeouts should be randomized rather than hardcoded so that split votes are less likely to repeat.
+- The paper's election-timeout range of 150–300 milliseconds differs from the homework recommendation of 400–800 milliseconds because of the tester's heartbeat limit.
+- A server resets its election timer after receiving valid AppendEntries from the current leader or after granting a vote, but not after rejecting a RequestVote.
+- Split votes can leave a term without a leader, after which a later term can elect a leader.
+- Repeated election collisions are possible and termination is probabilistic, although the probability of repeated collisions decreases extremely quickly.
+- Even-sized clusters do not improve steady-state fault tolerance and require larger quorums than the preceding odd-sized cluster.
+- To survive losing an entire data center, quorum sizing must be applied across sites, requiring three sites in the described five-node arrangement.
+- Raft log replication lets a leader append client commands locally, replicate them with AppendEntries, and apply them once safely replicated.
+- The AppendEntries consistency check uses the preceding log index and term to ensure that a follower's prefix matches the leader's prefix.
+- The leader maintains nextIndex separately for each follower to identify the next log entry that should be sent.
+- When a follower rejects AppendEntries because of an inconsistency, the leader decrements that follower's nextIndex and retries until the logs agree.
+- Once the logs match at a previous index, the follower deletes conflicting later entries and appends the leader's entries.
+- The leader uses matchIndex, the highest index known replicated on each follower, to determine commitment.
+- As an initial intuition, an entry is committed when the leader that created it has replicated it on a majority, subject to the later old-term qualification.
+- The election restriction protects committed entries by preventing a candidate with a less up-to-date log from receiving votes.
+- Leader completeness guarantees that committed entries remain in every leader's log in all higher-numbered terms.
+- Leader completeness means that if an entry is committed in one term, every leader elected in a higher-numbered term contains that entry.
+- The leader-completeness proof relies on the overlap between the majority that stored a committed entry and the majority required to win a later election.
+- A voter refuses a candidate whose log is not at least as up-to-date as the voter's own log, preventing a candidate missing committed entries from winning.
+- An entry from an earlier term is not committed merely because it appears on a majority.
+- Earlier-term entries become committed indirectly when a current-term entry is committed after them, due to the log matching property.
+- A leader commonly appends a blank no-op entry at the beginning of its term to commit a current-term entry and thereby commit preceding entries.
+- Only currentTerm, votedFor, and the log are persistent in the basic Raft implementation.
+- During a network partition, an old leader isolated on a minority can remain leader in its old term but cannot commit entries because it cannot reach a majority.
+- Two leaders may temporarily exist only in different terms, while only the leader with access to a majority can make progress.
+- Two leaders may exist simultaneously only in different terms; the older-term leader cannot commit because it cannot reach a majority.
+- Raft’s overlap argument ensures that a leader isolated from a majority cannot make progress or commit conflicting entries.
+- An uncommitted conflicting log entry is deleted during log repair and is not considered lost from Raft’s perspective because no success was promised.
+- Client retries provide liveness, while deduplication prevents a retried command from executing more than once.
+- A leader must verify that it still holds leadership before serving a linearizable read.
+- Pre-vote improves liveness by preventing an isolated server from increasing its term unless a majority would support its election.
+- Joint consensus preserves safety during reconfiguration by requiring decisions to receive separate majorities from both the old and new configurations.
+- Raft is closely related to a well-specified form of Multi-Paxos using a strong leader.
+- Multi-Paxos replicates a log by running one Paxos instance per log slot and commonly uses a stable leader to skip Phase 1 most of the time.
+- Raft is close to a particular well-specified Multi-Paxos design with a strong leader.
+- Raft's log is ordered and hole-free, whereas Multi-Paxos can decide independent slots out of order and therefore permit gaps.
+- Raft's election restriction ensures a new leader already has committed entries, while some Paxos variants learn missing entries during their first phase.
+- Both Raft and Paxos require 2f+1 servers to tolerate f crash failures, remain safe under asynchrony, and require partial synchrony for liveness.
+- Raft's strong leader simplifies teaching and implementation but can bottleneck writes and does not inherently make systems faster or more available.
+- A system using Raft may still need additional protocols for features such as cross-range transactions, membership gossip, or client locking.
+- Snapshotting compacts a growing log while preserving enough metadata to continue AppendEntries consistency checks.
+- The midterm's Raft scope includes elections, replication, the election restriction, the commitment rule, partitions, and the danger of direct membership changes.
+- Log compaction and snapshots are excluded from the midterm even though other Raft material from lectures 1 through 9 is included.
+- Byzantine fault tolerance is deferred to the final rather than included on the midterm.
+- A single-page notes limit is intentionally treated as part of the studying process.
+- The lecture contrasts crash-failure tolerance in Raft with Byzantine-failure tolerance using the server counts 2f plus 1 and 3f plus 1.
+- The next Tuesday lecture will address leases versus ReadIndex and the limits of pre-vote against disruptive servers.
+
+#### Definitions
+- A replicated state machine is a service modeled as state, commands, and deterministic state transitions that are reproduced on multiple servers.
+- Determinism means that the same initial state and same ordered commands always produce the same final state.
+- Split brain is the condition in which two primaries both believe they are in charge and accept writes.
+- Two-phase commit is an atomic-commitment protocol requiring every participant to vote yes before everyone commits.
+- FLP refers to the Fischer, Lynch, and Paterson impossibility result from 1985.
+- A fully asynchronous system has no bound on message delays and no bound on process slowness.
+- A safety property is one for which any violation can be identified at a finite point in the execution.
+- Consensus safety means that two servers never decide different values for the same log slot and no server applies an unagreed command.
+- A liveness property requires that something good eventually happens, and its violation cannot be conclusively identified at any finite moment.
+- Consensus liveness means that a value is eventually decided and the client eventually receives a response.
+- A quorum is a subset of servers large enough that any two quorums overlap in at least one server.
+- A majority quorum is a quorum containing more than half of the servers in the cluster.
+- Election safety is the guarantee that there is at most one leader in any given term.
+- Raft servers have exactly three possible states: follower, candidate, or leader.
+- A term is a consecutively numbered period in Raft that begins with an election.
+- A split vote is an election in which no candidate wins, causing the term to end without a leader.
+- A term is a monotonically increasing logical-clock value stored by every server and included in every message.
+- A heartbeat is an empty AppendEntries message sent periodically by the leader to indicate that it is still active.
+- The election timeout is the period a follower waits without a valid leader heartbeat or granted vote before starting an election.
+- A split vote occurs when candidates divide the votes so that no candidate obtains a majority.
+- broadcastTime is the average time needed for a server to send RPCs to every server and receive replies.
+- MTBF means the mean time between failures for a single server.
+- The RequestVote RPC carries term, candidateId, lastLogIndex, and lastLogTerm, while its reply carries term and voteGranted.
+- A log entry contains the command, the term in which the leader received it, and its index, with indices starting at 1.
+- An entry is committed when it has been safely replicated and the leader applies it to its state machine.
+- AppendEntries arguments are term, leaderId, prevLogIndex, prevLogTerm, entries, and leaderCommit.
+- The entries field is empty when AppendEntries is being used as a heartbeat.
+- An AppendEntries reply contains the follower's term and a success flag indicating whether the preceding index and term matched.
+- The log matching property states that identical index and term entries imply identical log entries through that index.
+- nextIndex for a follower is the index of the next log entry the leader will send to that follower.
+- A majority of a four-node cluster is three, so four nodes tolerate only one failed server.
+- matchIndex is the highest log index that the leader knows has been replicated on a follower.
+- commitIndex is the highest log index that a server knows to be committed; it starts at zero and only increases.
+- lastApplied is the highest log index that a server has actually applied to its local state machine.
+- Commitment is a cluster-level fact that an entry is durable and will not be lost or changed.
+- Application is a server-local fact meaning that one server has executed the entry against its state machine.
+- A log is more up-to-date first by comparing the terms of its last entries and only then, if terms tie, by comparing log length.
+- Leader completeness means a committed entry in one term is present in the logs of leaders for every higher-numbered term.
+- Leader completeness is the property that every future leader contains all entries committed by earlier leaders.
+- The election up-to-date comparison checks the candidate's last term first and log length second.
+- The precise commitment rule is that a leader counts replicas only for entries from its current term.
+- An entry is committed indirectly when a committed current-term entry causes all preceding entries to be committed through log matching.
+- Persistent state consists of currentTerm, votedFor, and the log, all of which must be written to stable storage before responding to an RPC.
+- Volatile state consists of commitIndex and lastApplied on every server and nextIndex and matchIndex on the leader.
+- A majority in the five-server examples means three servers.
+- A minority partition with two of five servers cannot commit entries, while a three-server partition can.
+- A stale read is a response from a partitioned leader that reflects older local state even though a value has already been committed on the majority side.
+- ReadIndex is the approach of confirming leadership through heartbeats with a majority before serving a read.
+- A lease allows a leader to serve local reads based on a recent majority heartbeat, assuming bounded clock drift.
+- Pre-vote is a preliminary election check in which a server asks whether peers would vote for it before incrementing its term.
+- Joint consensus is Raft’s two-phase configuration-change protocol using a combined old-and-new configuration followed by the new configuration alone.
+- Learners are non-voting servers that catch up on the log before participating as full members.
+- Basic Paxos, or single-decree Paxos, reaches agreement on one value using proposers, acceptors, and learners.
+- Multi-Paxos replicates a log by running multiple Paxos instances, one for each log slot, typically with a stable leader.
+- Multi-Paxos is the practical use of multiple Paxos instances, typically one per replicated-log slot, with a stable leader that avoids repeated prepare phases.
+- A follower's Raft log is a prefix-matching copy of the leader's log, meaning committed entries have no holes and entries flow from leader to followers.
+- Multi-Raft means splitting data into many independent Raft groups, as CockroachDB does by assigning each range its own group.
+- A snapshot is a server's stable-storage representation of its current state-machine state that replaces log entries through a particular committed index.
+- The last included index identifies the final log entry replaced by a snapshot, and the last included term records that entry's term.
+- InstallSnapshot is the third Raft RPC used when a leader has discarded log entries needed by a lagging or new follower.
+- Fencing tokens prevent an expired lease holder from continuing to operate inside a critical section after a client pause.
+- The midterm is defined as covering lectures 1 through 9, with lecture 10 on Byzantine fault tolerance excluded.
+- The permitted reference aid is one letter-size sheet with both sides available and either handwriting or typing allowed.
+- Raft's stated server requirement for tolerating f crash failures is 2f plus 1.
+- The stated Byzantine fault-tolerance requirement for tolerating f faulty servers is 3f plus 1.
+- The review session is a separate study meeting scheduled before the midterm, on October 18 from 4 to 6 p.m.
+
+#### Examples
+- The VMware fault-tolerance design uses a primary that serves clients and a backup that receives and replays the primary's log.
+- The VMware design uses an external shared-storage test-and-set arbiter to determine which server becomes primary.
+- Examples of services suitable for replicated state machines include a key-value store, a lock service, and a configuration database.
+- If a command reads the clock, the leader can evaluate the time once and log the concrete value so every replica applies the same command.
+- The broken espresso machine was used humorously as a single-node system with no replicas or failover.
+- The lecture illustrated safety without liveness using a system that never decides anything: it cannot decide incorrectly but makes no progress.
+- The lecture illustrated liveness without safety using a system that immediately decides arbitrary values.
+- For five servers, the majority quorum is three servers and the cluster can tolerate two failures.
+- A jury was used as an analogy for quorum behavior: unanimity requires all twelve members, making it safe but vulnerable to losing liveness when one member is unavailable.
+- The Twelve Angry Men example contrasted a unanimity quorum with majority quorum design by showing how one unavailable juror can produce a hung jury.
+- The 2f plus 1 relationship gives three servers for one tolerated failure, five for two, and seven for three.
+- A four-server cluster needs a quorum of three and was stated to tolerate two failures.
+- In a five-server cluster, a candidate needs three votes to win, consisting of its own vote plus two additional votes.
+- If a server votes for candidate A, crashes, and forgets that vote, it could vote for candidate B in the same term and violate election safety.
+- If several followers time out simultaneously, they can all become candidates and divide the votes without producing a leader.
+- With timeouts randomized from 150–300 milliseconds, one server commonly starts first and wins before other timers fire.
+- A very narrow randomization interval such as 150–151 milliseconds can cause repeated split votes and elections lasting seconds.
+- A fixed ranking can fail to provide availability when the highest-ranked server is partitioned or too far behind to win.
+- The homework tester permits at most ten heartbeats per second per server and requires a new leader within five seconds after failure.
+- In a five-server split vote, B and D independently entered term 7 and each received two votes, leaving term 7 without a leader.
+- In the same example, D timed out first in term 8 and won three votes after the other servers observed its higher term.
+- A four-node etcd deployment split two nodes in Virginia and two in Ohio, so a flapping inter-site link left neither side with the three votes needed for quorum.
+- The two-site incident made the configuration store unavailable for 47 minutes and queued about 38,000 payment authorizations.
+- The described redesign used two nodes in Virginia, two in Ohio, and one in a third region, allowing any one site to be lost while retaining three of five nodes.
+- A client command such as 'set x to 5' is appended by the leader and then sent in parallel to followers.
+- An entry at index 7 can have term 3 and the command 'set x to 5'.
+- In the five-server example, A and B had logs 1,1,2,3,3,3; C and E had 1,1,2,3,3; and D had 1,1,2.
+- Index 5 was committed because it appeared on A, B, C, and E, while index 6 was not committed because it appeared only on A and B.
+- After A crashed, D timed out first but could not win because its last term was 2 while B, C, and E had last term 3.
+- C won term 5 with votes from C, D, and E even though B had the longest log.
+- When C appended a term-5 command at index 6, B deleted its conflicting uncommitted term-3 index-6 entry and replaced it with C's entry.
+- A seven-entry log ending in term 2 is less up-to-date than a five-entry log ending in term 3 because the last term is compared before length.
+- In the leader-completeness example, index 5 is stored on A, B, C, and E, so any election-winning majority overlaps with that group and forces the new leader to contain index 5.
+- Server D, which lacks committed index 5, can obtain votes only from itself and therefore cannot win an election.
+- In the Figure 8 scenario, A's term-2 entry at index 2 is initially on A and B, then E overwrites it with a term-3 entry after becoming leader.
+- A later replicates its old term-2 index-2 entry to C, placing it on a majority, but E can still win because term 3 is newer than term 2.
+- Adding a term-4 entry at index 3 and replicating it to A, B, and C lets A commit the current-term entry and indirectly commit index 2.
+- In the persistence example, a restarted server forgets commitIndex temporarily but learns it again through leaderCommit in a later AppendEntries.
+- In the partition example, B appends client 1's 'set x to 7' at index 21 in term 7, but it remains uncommitted on only B and A.
+- E becomes leader of term 8 on the majority side and commits client 2's 'set y to 3' at index 21 after replicating it to C and D.
+- When B remains a term-7 leader but can reach only A and itself, its conflicting index-21 entry cannot commit, while E commits its term-8 entry with a majority.
+- After the partition heals, E rejects B’s term-7 heartbeat, causing B to update to term 8 and step down.
+- The conflicting 'set x to 7' entry at index 21 is removed from B and A and replaced by E’s committed 'set y to 3' entry.
+- A retry of 'set x to 7' is harmless if duplicated because the operation is idempotent, whereas duplicating 'withdraw 100 dollars' is harmful.
+- During the partition, B can incorrectly answer that y has its old value even though E’s majority has already committed y=3.
+- An isolated D repeatedly times out and advances through terms 9, 10, 11, and 12 without receiving votes.
+- In a transition from A,B,C to A,B,C,D,E, A and B can elect one leader under a 2-of-3 majority while C,D,E elect another under a 3-of-5 majority.
+- Paxos’s prepare-and-promise phase obtains a majority’s promises and any previously accepted values before the accept phase chooses a value.
+- etcd stores Kubernetes cluster state in a Raft cluster and recommends three or five members, discouraging substantially larger clusters.
+- etcd's example timing uses a 100-millisecond heartbeat interval and a 1000-millisecond election timeout, compared with the paper's 150–300 range.
+- Consul uses Raft for its server nodes, while its non-voting client agents use a separate gossip protocol for membership.
+- Consul's stale, default, and strictly consistent read modes trade off freshness, availability, and an extra round trip.
+- CockroachDB uses a separate Raft group for each data range, normally with three replicas, resulting in thousands of concurrent groups in a large cluster.
+- CockroachDB coalesces heartbeats between the same node pair to reduce the overhead of thousands of Raft groups.
+- Chubby and Spanner use Paxos, while ZooKeeper uses Zab rather than Raft.
+- The homework tester acts like a small Jepsen test by partitioning servers, dropping and reordering messages, and checking results.
+- The instructor explicitly classifies the exam content as 'Raft in, snapshots out, BFT out.'
+- The instructor uses the one-sheet restriction as an example of forcing students to choose and condense study material.
+- The lecture gives the numerical comparison 2f plus 1 versus 3f plus 1 as the motivating example for studying Byzantine fault tolerance.
+- The possibility of a failed room capture is given as the reason a review-session recording cannot be guaranteed.
+
+#### Formulas / steps
+- To use a replicated state machine, model the service as state plus commands whose deterministic transitions produce outputs.
+- Run the same state machine on multiple servers and ensure every server applies the exact same commands in the exact same order.
+- Use consensus to agree on each replicated-log position, including slot 1, slot 2, slot 3, and every later slot.
+- For nondeterministic commands, evaluate the nondeterministic input once at the leader and replace the abstract operation in the log with its concrete result.
+- For Homework 4, implement leader election and heartbeats, while excluding log replication and persistence until Homework 5.
+- Compute a majority quorum for n servers as floor(n/2) + 1.
+- Compute the number of server failures tolerated by subtracting the quorum size from n.
+- To tolerate f failures, provision 2f + 1 servers.
+- To explain majority overlap, assume two disjoint groups each contain more than half the servers; their combined size would exceed the total number of servers, which is impossible.
+- When a candidate wins an election, it becomes leader for the rest of that term.
+- When an election ends in a split vote, start a new term with a new election shortly afterward.
+- In normal Raft operation, route client requests to the leader and replicate log entries from the leader to followers only.
+- When a server receives a higher term, it updates its current term and becomes a follower if it was a leader or candidate.
+- When a server receives a request with a lower term than its own, it rejects the request as stale.
+- To start an election, a follower increments its term, becomes a candidate, votes for itself, and sends RequestVote RPCs in parallel to all other servers.
+- A candidate wins only after receiving votes from a majority of the full cluster for the same term.
+- Persist currentTerm and votedFor before responding to a vote request so a crash and reboot cannot cause a second vote in the same term.
+- A candidate receiving AppendEntries from a leader with an equal or higher term becomes a follower, while it rejects a lower-term AppendEntries and continues campaigning.
+- After a split vote, candidates wait for their randomized timers, increment the term, and try another election.
+- Reset the election timer after a valid current-leader AppendEntries or after granting a vote, but not after rejecting a RequestVote.
+- For a cluster of n servers, the majority is floor(n/2) plus 1, and the number of tolerated failures is n minus that majority.
+- To recover from a split vote, each candidate selects a new randomized timeout and the first candidate to time out starts a higher-term election.
+- A leader replicates a client command by appending it locally and sending AppendEntries RPCs in parallel to all followers.
+- A follower rejects AppendEntries when it lacks prevLogIndex or has a different term at prevLogIndex than prevLogTerm.
+- When the preceding entry matches, a follower deletes conflicting entries after that point and appends the leader's entries.
+- The log matching property is justified inductively because each successful AppendEntries verifies the preceding entry and extends an already matching prefix.
+- On becoming leader, initialize every follower's nextIndex to one past the end of the leader's log.
+- After a failed consistency check, decrement that follower's nextIndex and retry until the logs match.
+- Initialize every follower's nextIndex to one past the end of the leader's own log when the leader first takes office.
+- On an AppendEntries consistency failure, decrement the follower's nextIndex and retry until a matching prefix is found.
+- For faster backup, have the follower return the conflicting term and the first index where that term occurs so the leader can skip a whole term.
+- The leader sends its commit index in the leaderCommit field of every AppendEntries, including heartbeats.
+- A follower updates its commit index to min(leaderCommit, index of its last new entry).
+- While commitIndex exceeds lastApplied, increment lastApplied and apply entries sequentially one at a time.
+- Evaluate election log freshness by comparing lastLogTerm first and lastLogIndex only when the terms are equal.
+- To establish leader completeness, use the fact that any majority seeking election overlaps with the majority that stored the committed entry.
+- To prove leader completeness, identify the majority storing the committed entry, identify the majority needed to win the election, and use their overlap to find a voter that has the entry.
+- Then apply the voting restriction: the overlapping voter grants its vote only if the candidate's log is at least as up-to-date as its own.
+- Compare candidate logs by last term first and by log length only when the last terms are equal.
+- To safely commit an earlier-term entry, append a new entry in the current term, replicate both entries to a majority, and commit the current-term entry.
+- After committing the current-term entry, treat all preceding matching entries as committed.
+- On restart, rebuild volatile state rather than reading it from stable storage, and replay the log from the beginning to reconstruct the basic state machine.
+- During a partition, determine whether a side has a majority; the minority leader may replicate locally but cannot commit, while the majority side can elect a leader and commit current-term entries.
+- When a leader receives a higher term in a reply, it steps down, becomes a follower, and updates its current term.
+- To repair a conflicting log, AppendEntries backs up to the latest matching index, deletes the conflicting suffix, and installs the leader’s entries.
+- A correct client times out, finds the current leader, and resends a command that did not receive a success response.
+- Deduplication tracks each client’s latest executed serial number and the corresponding response, returning the saved response for a repeated serial number.
+- Before serving a read, a leader exchanges heartbeats with a majority; a leader unable to reach a majority must not serve the read.
+- Pre-vote asks peers whether they would support an election, and the server increments its term only after receiving majority support.
+- Joint consensus first commits the combined configuration and then commits the new configuration alone.
+- In joint consensus, every election and log commitment requires a majority from the old configuration and a separate majority from the new configuration.
+- Basic Paxos proceeds through prepare/promise and accept/accepted phases, with the proposer adopting the highest-numbered previously accepted value.
+- In Paxos Phase 2, the proposer asks acceptors to accept the value from the highest-numbered proposal any of them previously accepted, if such a proposal exists.
+- A Paxos value becomes chosen when a majority of acceptors accepts it.
+- To compact a log, a server snapshots its current committed and applied state-machine state to stable storage and discards log entries through the snapshot's last included index.
+- Each server takes snapshots independently, generally when its log crosses a size threshold, without coordinating with other servers.
+- A snapshot must retain the last included index and term so the next log entry can still be checked using prevLogIndex and prevLogTerm.
+- A snapshot must also include the latest cluster configuration for membership changes.
+- If a leader lacks the log entries needed by a follower, it sends InstallSnapshot; the follower either replaces its whole log or removes only the covered prefix and retains later entries.
+- Copy-on-write can let a child process write a large snapshot while the parent continues serving requests.
+- To prepare for Thursday, read sections 1 through 4 of Castro and Liskov's 'Practical Byzantine Fault Tolerance' before attending the lecture.
+- For exam preparation, first attempt the practice-midterm problems and consult the solutions only after they are posted a few days later.
+- For the midterm, condense selected material onto one letter-size sheet using both sides, without relying on electronic devices during the exam.
+- Study the optional Raft material by reviewing paper section 6 on membership changes, section 7 on log compaction, and chapter 4 of Ongaro's dissertation.
+- Bring a hypothesis to Thursday's lecture about why Byzantine tolerance needs an additional f servers beyond Raft's requirement.
+
+#### Things to memorize
+- Two-phase commit requires all participants, whereas consensus can make progress with a majority.
+- Two-phase commit can block if its coordinator crashes after participants vote yes but before the decision is sent.
+- The FLP result concerns fully asynchronous systems with unbounded message delay and process slowness.
+- FLP states that deterministic consensus cannot guarantee termination if even one process may crash.
+- Messages may be delayed, dropped, duplicated, or delivered out of order, and networks may partition.
+- A server's silence cannot distinguish a crash from a slow server or a broken network path.
+- FLP is named for Fischer, Lynch, and Paterson and was published in 1985.
+- The exam requires the FLP statement and its implications, but not the bivalent-configuration proof.
+- Safety means nothing bad ever happens, whereas liveness means something good eventually happens.
+- Raft guarantees safety under partitions and extreme delays but does not guarantee liveness under those conditions.
+- The majority quorum formula is floor(n/2) + 1.
+- Fault tolerance follows the relationship 2f + 1 servers to tolerate f failures.
+- At most one leader may exist per Raft term.
+- Raft’s three server states are follower, candidate, and leader.
+- Raft terms are consecutively numbered and each begins with an election.
+- The Raft paper was written by Diego Ongaro and John Ousterhout and titled In Search of an Understandable Consensus Algorithm.
+- The two basic Raft RPCs are RequestVote and AppendEntries; InstallSnapshot is used for log compaction and was excluded from this lecture.
+- Each server may vote for at most one candidate per term.
+- The persistent election state includes currentTerm and votedFor.
+- The paper's recommended randomized election-timeout range is 150–300 milliseconds.
+- The timing relationship to remember is broadcastTime much less than electionTimeout much less than MTBF.
+- For the homework tester, the recommended election-timeout range is approximately 400–800 milliseconds.
+- The homework tester allows no more than ten heartbeats per second per server and requires leader replacement within five seconds.
+- Use 10 heartbeats per second as the stated maximum and aim for a new leader within 5 seconds.
+- Distinguish the paper's 150–300 millisecond timeout range from the homework's recommended 400–800 millisecond range.
+- Reset the election timer only for valid AppendEntries from the current leader or after granting a vote.
+- Remember the fault-tolerance sequence: 3 nodes tolerate 1 failure, 4 tolerate 1, 5 tolerate 2, 6 tolerate 2, and 7 tolerate 3.
+- Remember that even-sized clusters do not help in steady state and are generally used only accidentally or during membership changes.
+- Memorize the log entry fields: command, term, and index.
+- Memorize the AppendEntries fields and the meanings of prevLogIndex and prevLogTerm as the consistency check.
+- Memorize the log matching property exactly: same index and same term imply identical entries through that index.
+- nextIndex points to the next entry to send, while matchIndex records the highest entry known replicated on a follower.
+- commitIndex starts at 0 and is monotonic, meaning it only increases.
+- A follower's commit index is bounded by both leaderCommit and the follower's last new entry index.
+- Committed and applied are distinct: committed means cluster durability, whereas applied means execution on a particular server.
+- Election freshness is ordered by last-log term first and length second only when terms match.
+- The longest log does not necessarily win an election.
+- Leader completeness states that committed entries are never lost during leadership changes.
+- Memorize leader completeness: committed entries are present in the logs of all leaders in higher-numbered terms.
+- Memorize the election comparison order: last term first, then log length.
+- Memorize that majority replication is sufficient for commitment only when the replicated entry is from the leader's current term.
+- Memorize that a majority-replicated entry from an old term is not committed solely by that replication.
+- Memorize the persistent Raft fields: currentTerm, votedFor, and log.
+- Memorize the volatile fields: commitIndex, lastApplied, nextIndex, and matchIndex.
+- Memorize that persistent state must be written to stable storage before a server responds to any RPC.
+- Memorize that two simultaneous leaders can exist only in different terms, and the older-term leader cannot commit without a majority.
+- An older-term leader that cannot reach a majority cannot commit entries.
+- Retry plus deduplication provides client-visible liveness and safe exactly-once command effects.
+- A client identity and monotonically tracked command serial number are required for the deduplication scheme described.
+- A leader must not serve reads without confirming leadership through a majority or using an explicitly assumed lease.
+- Pre-vote is associated with Ongaro’s dissertation rather than the original conference paper.
+- Direct configuration switching is unsafe because old and new configurations can each form disjoint majorities.
+- Joint consensus requires both configuration majorities until the new configuration is committed.
+- For the exam, know why direct configuration changes fail, but do not memorize the joint-consensus protocol step by step.
+- Basic Paxos has proposers, acceptors, and learners and uses two phases.
+- The key safety mechanism shared by Raft and Paxos is majority overlap.
+- Paxos chooses a value after a majority accepts it, and the Phase 2 value must respect the highest-numbered prior accepted proposal.
+- Both Raft and Paxos tolerate f crash failures with 2f+1 servers.
+- Raft and Paxos are safe under asynchrony but require partial synchrony for liveness, and neither handles malicious servers.
+- A snapshot may contain only committed and applied entries.
+- Snapshot metadata consists of last included index, last included term, and the latest configuration.
+- The relevant Raft snapshot RPC is InstallSnapshot.
+- Homework 6 covers snapshots and InstallSnapshot.
+- The midterm is Thursday, October 22nd, during class time in Larkin Hall 150 and covers lectures 1 through 9.
+- Memorize that the midterm is Thursday, October 22, during class in Larkin Hall 150.
+- Memorize the midterm scope: lectures 1 through 9, including today's Raft material, but excluding snapshots, log compaction, and BFT.
+- Memorize the permitted exam aid and restrictions: one letter-size sheet, both sides, handwritten or typed, with no laptops or phones.
+- Memorize the server-count formulas stated in the lecture: 2f plus 1 for Raft crash tolerance and 3f plus 1 for Byzantine fault tolerance.
+- Memorize that Thursday's assigned reading is Castro and Liskov's 1999 'Practical Byzantine Fault Tolerance,' sections 1 through 4.
+- Memorize the review-session time and place: Sunday, October 18, 4 to 6 p.m., Whitaker 120.
+
+#### Confusing points
+- The absence of a message is fundamentally ambiguous because it may indicate a crash, network partition, or arbitrary slowness.
+- Consensus does not make a nondeterministic state machine safe; nondeterminism must be resolved before the command is replicated.
+- Replicating an arbiter does not eliminate the agreement problem because the arbiter replicas must themselves agree on the winner.
+- Two-phase commit and consensus both involve agreement but address different goals: atomic commitment versus fault-tolerant progress.
+- FLP does not merely describe an engineering inconvenience; it establishes a fundamental impossibility under the stated asynchronous assumptions.
+- FLP does not mean consensus cannot work in practice; it limits deterministic guaranteed termination in a purely asynchronous model.
+- Safety and liveness are not the same as correctness and speed: a system can be perfectly safe while making no progress, or live while deciding incorrectly.
+- A majority quorum is not simply any large group; its key property is that every pair of such quorums overlaps.
+- The statement that four nodes can tolerate two failures appears inconsistent with the earlier quorum calculation and should be reviewed.
+- Odd cluster sizes were raised as a design question but not fully explained in this chunk.
+- Raft’s strong leader means log entries flow only from leader to followers, unlike a design with bidirectional replication.
+- The paper's 150–300 millisecond timeout and the homework's 400–800 millisecond recommendation serve different environments and should not be mixed.
+- Ranking is not impossible, but it is harder to reason about and can introduce availability corner cases.
+- The majority is calculated over the full cluster, not merely over servers that respond.
+- A candidate should accept an AppendEntries from a leader with an equal term, not only from one with a strictly higher term.
+- Receiving any RequestVote does not justify resetting the election timer because rejected requests may come from a candidate with an outdated log.
+- The timeout values 150–300 milliseconds and 400–800 milliseconds refer to different contexts, namely the paper and the homework tester.
+- A RequestVote message does not always justify resetting the election timer; only granting the vote does.
+- A term may be skipped as a leadership term because a split vote can leave it with no leader.
+- Adding servers does not monotonically increase fault tolerance; four nodes tolerate the same one failure as three nodes.
+- More nodes and more sites can make availability worse if the placement leaves every partition without a quorum.
+- Follower log overwriting sounds dangerous, but the lecture deferred its safety justification to the election restriction.
+- The log matching property applies to the entire prefix before an equal index-and-term entry, not merely to that single entry.
+- Replication on a majority is presented as an initial commitment intuition, but the lecturer warns that the precise rule has a subtle old-term condition.
+- A server may know an entry is committed before it has applied that entry locally.
+- A candidate can be elected without having the globally longest log, provided its log is at least as up-to-date as enough voters' logs.
+- Receiving a higher-term RequestVote request causes a server to update its term, but rejecting the request does not reset its election timer.
+- An uncommitted entry can be overwritten safely, whereas a committed entry must be preserved.
+- The majority-overlap argument alone is not enough unless the election restriction's freshness comparison is applied correctly.
+- An entry being present on a majority does not by itself make it committed when the entry comes from a previous term.
+- A leader may see an old entry on a majority and still be unable to mark it committed immediately because a later leader can overwrite it.
+- A server can forget commitIndex after restart without losing cluster safety because commitment can be rediscovered.
+- Two leaders with different entries at the same index do not necessarily indicate a safety violation if they are in different terms and the old-term leader cannot commit.
+- The no-op entry is not merely a placeholder; it creates a current-term entry whose commitment also commits earlier entries.
+- A client write can disappear from the log without violating Raft safety when the client never received a success response.
+- A command may be committed but still require deduplication because its success response can be lost and the client may retry it.
+- Reads can violate linearizability even when the partitioned leader has not made any incorrect writes.
+- Pre-vote mostly, but not completely, prevents election disruption because check-quorum and membership-change interactions remain subtle.
+- Lease-based reads trade timing independence for potentially faster local reads.
+- Single-server membership changes are simpler than full joint consensus but still require a commitment condition for a new leader.
+- Raft and Multi-Paxos are not unrelated algorithms; Raft is close to a strongly led, fully specified Multi-Paxos variant.
+- Raft's easier implementation and teaching model should not be confused with superior speed or availability.
+- The three election-timeout values mentioned are context-dependent rather than contradictory: the Raft paper gives 150–300 milliseconds, while etcd defaults to 1000 milliseconds.
+- The statement that Consul uses Raft applies to its servers, not to its client agents, whose membership uses gossip.
+- Consul's default read mode can return stale data during a narrow window, whereas strict consistency costs an extra round trip.
+- CockroachDB's range-size figure is version-dependent: the slides say 64 MB, while the lecturer believes newer versions use 512 MB and advises checking the documentation.
+- Followers can create snapshots independently even though Raft generally has strong leader-to-follower data flow, because snapshotting reorganizes data already present on the follower.
+- Using a replicated lock service does not by itself make a client's critical section safe after lease expiration.
+- The due date of Homework 5 remains unchanged for now, but it may later move to after the midterm.
+- The midterm includes today's Raft topics but excludes the log-compaction portion at the end of the lecture.
+- The review session may be recorded, but recording depends on whether the room-capture system works.
+- The lecture postpones the explanation for the extra f in Byzantine fault tolerance rather than answering it immediately.
+- The schedule distinguishes optional reading on log compaction from the fact that snapshots and log compaction are excluded from the midterm.
+
+#### Questions to review
+- Why does primary-backup replication need an external mechanism to determine whether the primary has failed?
+- Why does incorrectly promoting a backup cause split brain and divergent data?
+- Why is two-phase commit not a fault-tolerant consensus protocol?
+- What properties must a state machine have for replicas to converge to the same state?
+- How should a replicated system handle commands that read time or use randomness?
+- What exactly does the FLP impossibility result rule out, and under which system assumptions?
+- State the FLP impossibility result precisely in one or two sentences.
+- Explain how Paxos and Raft get practical progress despite FLP.
+- Define safety and liveness and give the consensus meaning of each.
+- Which property does Raft guarantee unconditionally, and what may it sacrifice during a network failure?
+- Why must any two majority quorums overlap?
+- For a cluster of n servers, calculate the majority quorum and tolerated failures.
+- Explain why unanimity is safe but has zero fault tolerance for liveness.
+- What are the three Raft server states, and what does each state do?
+- What happens during a split vote in Raft?
+- Why did Raft prioritize understandability, and how is consensus decomposed in its design?
+- Why do two candidates with majorities in the same term necessarily have an overlapping voter?
+- Why must votedFor be persisted before the server replies to a vote request?
+- What happens when a candidate receives AppendEntries with a term lower than its own?
+- Why does randomization avoid the availability problems associated with fixed candidate rankings?
+- What failure mode results from making the randomized timeout interval too narrow?
+- Under what exact events should an implementation reset its election timer?
+- Why is resetting the timer after a rejected RequestVote unsafe?
+- How do randomized election timeouts reduce repeated split votes?
+- Why does a four-node cluster tolerate only one failure?
+- Why are odd-sized clusters preferable to even-sized clusters?
+- How should nodes be distributed across sites to survive losing one entire data center?
+- What conditions cause a follower to reject AppendEntries?
+- Why does the consistency check establish the log matching property by induction?
+- How does nextIndex backtracking repair a follower whose log has missing or conflicting entries?
+- Why does the follower compute its commit index using the minimum of leaderCommit and its last new entry index?
+- What is the operational difference between an entry being committed and being applied?
+- Why can a shorter log be more up-to-date than a longer log?
+- Why did D fail to win the election despite timing out first?
+- Why did C win even though B had the longest log?
+- Why was B's term-3 entry at index 6 safe to delete after C became leader?
+- How does majority intersection combine with the election restriction to prove leader completeness?
+- Given five logs and their last terms and lengths, which servers can legally become leader?
+- Why does the overlap between two majorities guarantee that a candidate missing a committed entry cannot win?
+- Why can an old-term entry replicated to a majority be overwritten by a later leader?
+- What exact commitment rule distinguishes a current-term entry from an earlier-term entry?
+- How does committing a current-term entry indirectly commit earlier entries?
+- Which Raft variables must survive a crash, and which can be rebuilt after restart?
+- Why is forgetting commitIndex after restart safe, and how does the server learn the committed position again?
+- During a partition, why can the minority-side leader accept an entry but not commit or apply it?
+- Why does the majority-side leader preserve safety even when the minority-side server still believes it is leader?
+- Why can two leaders exist in different terms without violating safety?
+- Why is an unacknowledged client command allowed to disappear during conflict repair?
+- How does the client ID and serial-number table prevent duplicate execution after a lost response?
+- Why does a partitioned leader return stale reads, and how does ReadIndex prevent that?
+- What assumption does a lease-based read make that the heartbeat-majority approach does not?
+- How does pre-vote prevent an isolated server from inflating its term?
+- Why can’t a cluster switch directly from three servers to five servers?
+- What are the two phases of joint consensus and what quorum is required during the combined phase?
+- What are the prepare/promise and accept/accepted phases of Basic Paxos?
+- What safety idea is shared by Raft and Paxos?
+- Why does Paxos Phase 2 require selecting the value from the highest-numbered previously accepted proposal?
+- How do majority overlap and the election restriction preserve Raft and Paxos safety?
+- What are the practical differences between Raft's ordered prefix log and Multi-Paxos's independently decided slots?
+- Why do etcd and Consul recommend three or five servers instead of substantially larger clusters?
+- Why are fencing tokens needed even when the underlying etcd Raft log is correct?
+- What metadata must a snapshot contain, and how does it support the AppendEntries consistency check?
+- When does a leader send InstallSnapshot, and how does the follower merge or replace its existing log?
+- Will Homework 5's due date change to a date after the midterm?
+- Why does Byzantine fault tolerance require 3f plus 1 servers while Raft requires only 2f plus 1 for f failures?
+- What are the differences between leases and ReadIndex for reads?
+- Does pre-vote fully fix the problem of disruptive servers?
+- Which Raft topics are explicitly included on the midterm, and which related topics are excluded?
+- How do partitions and direct membership changes relate to the safety concerns emphasized for the midterm?
+
+#### Study summary
+- The lecture motivated consensus by showing that primary-backup replication cannot safely determine failure without risking split brain or relying on a single-point-of-failure arbiter.
+- Consensus supports replicated state machines by ensuring that replicas agree on the same ordered command log.
+- The essential state-machine requirement is determinism: identical initial state plus identical ordered commands must produce identical results.
+- Two-phase commit differs from consensus because 2PC requires all participants and may block on coordinator failure, while consensus targets majority-based progress.
+- Distributed systems must tolerate crashes, message anomalies, partitions, and the impossibility of distinguishing failure from slowness.
+- FLP establishes that fully asynchronous systems cannot guarantee termination for deterministic consensus when even one process can crash.
+- FLP shows that deterministic consensus cannot guarantee termination in a fully asynchronous system with even one possible crash, but practical algorithms regain progress under timing assumptions.
+- Safety means preventing bad decisions forever, while liveness means eventually making progress; Raft preserves safety even when it must stall.
+- Majority quorums work because every two majorities overlap, allowing information about earlier decisions to carry forward.
+- Use floor(n/2) + 1 for quorum size and 2f + 1 servers to tolerate f failures.
+- Raft emphasizes understandability through decomposition into election, replication, and safety, with a strong leader and three server states.
+- Raft organizes time into numbered terms, each starting with an election; a split vote produces a term without a leader and triggers another election.
+- Raft organizes elections into monotonically increasing terms, with at most one leader per term and possible leaderless terms after split votes.
+- Term comparisons let servers reject stale requests and step down when they discover a newer term.
+- Leader election requires a self-vote, parallel RequestVote messages, and a majority of the full cluster.
+- Election safety depends on one vote per server per term and persisting currentTerm and votedFor before replying.
+- Randomized timeouts mitigate repeated split votes, with 150–300 milliseconds given for the paper and 400–800 milliseconds recommended for the homework tester.
+- For implementation, reset election timers only for valid leader heartbeats or granted votes, and account for the tester's ten-heartbeats-per-second and five-second-election constraints.
+- Use randomized election timeouts, reset timers only for valid leader communication or granted votes, and do not hold locks while sending RPCs.
+- A split vote can leave a term leaderless, but a later randomized timeout can produce a higher-term winner; repeated collisions are possible but increasingly unlikely.
+- Quorum arithmetic favors odd cluster sizes because four nodes tolerate only one failure, the same as three nodes, while requiring a quorum of three.
+- Surviving a whole-site failure requires quorum placement across three sites, such as a five-node 2-2-1 layout.
+- Raft log entries contain command, term, and index, and leaders replicate them with AppendEntries before committing and applying them.
+- AppendEntries uses prevLogIndex and prevLogTerm to verify a matching prefix; mismatches cause rejection, while matches permit conflict deletion and appending.
+- The log matching property follows inductively from the preceding-entry check, and nextIndex decrements until the leader and follower share a matching point.
+- Raft repairs follower logs by backing up nextIndex until a matching prefix is found, then deleting conflicts and appending the leader's entries.
+- The leader uses matchIndex to infer commitment, propagates commitIndex through AppendEntries, and each server applies committed entries in order using lastApplied.
+- Commitment is cluster-wide durability, while application is execution by an individual server and may happen later.
+- Election eligibility depends on log freshness, comparing the candidate's last term first and length only on a term tie, not simply on total log length.
+- In the worked example, index 5 was committed by four of five servers, while index 6 was uncommitted and could be replaced after A crashed.
+- C became leader in term 5 with votes from C, D, and E, then replaced B's uncommitted index-6 entry with a term-5 entry.
+- Leader completeness follows because the majority storing a committed entry intersects every majority needed to elect a future leader, and the voter freshness rule forces the future leader to contain that entry.
+- Raft preserves leader completeness because any election-winning majority overlaps the majority that stored a committed entry, and the overlapping voter rejects candidates missing it.
+- The critical commitment rule is current-term-only: a leader commits by counting replicas only for entries from its own term.
+- Earlier-term entries become committed when a later current-term entry is committed after them, so new leaders often append a no-op immediately.
+- Persist currentTerm, votedFor, and the log before responding to RPCs; rebuild commitIndex, lastApplied, nextIndex, and matchIndex after restart.
+- A restarted server can relearn commitment through leaderCommit, while the basic state machine is reconstructed by replaying the log.
+- In a five-server partition, the two-server old-leader side cannot commit, whereas the three-server side can elect a new leader and commit entries.
+- Different-term leaders and conflicting uncommitted entries can coexist temporarily without violating safety because only a leader with a majority can commit.
+- A leader isolated from a majority may remain a leader in an older term, but it cannot commit; when it encounters a higher term, it steps down and its conflicting uncommitted entries are overwritten.
+- Clients must retry commands after timeouts, and the replicated state machine must deduplicate by client ID and command serial number to provide exactly-once effects.
+- Partitioned leaders cannot safely answer reads from local state because the state may be stale; majority confirmation or a timing-dependent lease is required.
+- Pre-vote prevents isolated nodes from needlessly increasing terms, although the lecture notes remaining subtleties involving check-quorum and membership changes.
+- Configuration changes cannot switch directly because old and new configurations can create disjoint majorities; joint consensus requires both configurations to approve transitional decisions.
+- New servers may first join as learners, and single-server changes are a simpler alternative when old and new majorities remain overlapping.
+- Basic Paxos uses two phases and majority overlap, while Multi-Paxos applies repeated Paxos instances to log slots under a stable leader.
+- The central unifying idea across Raft and Paxos is that overlapping majorities preserve safety.
+- Raft is a complete, strong-leader, prefix-log specification closely related to Multi-Paxos, while Multi-Paxos historically left more implementation details unspecified.
+- Raft and Paxos have comparable normal-case performance and fault-tolerance properties, but Raft's simplicity does not guarantee better performance or availability.
+- The examples of etcd, Consul, and CockroachDB show that Raft typically replicates only a subsystem and that system-level correctness depends on surrounding protocols and client behavior.
+- Log compaction uses independent snapshots of committed state, with index, term, and configuration metadata preserved for recovery and consistency checks.
+- InstallSnapshot repairs followers whose missing entries have already been discarded by the leader, either replacing the follower log or removing the covered prefix.
+- Homework 4 moved to Monday, October 12th at 11:59pm, Homework 5 remains scheduled for release Tuesday, October 13th, and the midterm now includes lectures 1 through 9.
+- The key exam fact is that the midterm covers lectures 1 through 9 and today's Raft material, but not snapshots, log compaction, or BFT.
+- Prepare a single two-sided letter-size reference sheet because no laptops or phones are allowed during the midterm.
+- Use the practice midterm before consulting solutions, and attend the October 18 review session if possible.
+- Read Castro and Liskov sections 1 through 4 before Thursday and think about the 2f plus 1 versus 3f plus 1 distinction.
+- Next Tuesday will return to leases versus ReadIndex and whether pre-vote fully prevents disruptive-server behavior.
+
+#### Action items (structured)
+- Students: Complete Homework 4, implementing Raft leader election and heartbeats in the Go skeleton, by Friday, October 9 at 11:59pm. (deadline: Friday, October 9 at 11:59pm) [inferred]
+- Students: Use personal laptop recordings as a backup because the official lecture capture has been unreliable.
+- Students: Attend the replacement office hours on Wednesday, October 7 from 3:00 to 4:30pm in Whitaker 318 because Thursday office hours are cancelled. (deadline: Wednesday, October 7, 3:00–4:30pm) [inferred]
+- Students: Attend Thursday's guest lecture on Byzantine fault tolerance given by Dr. Joanne Whitfield.
+- Homework 4 due Friday, October 9 at 11:59pm. [inferred]
+- Practice midterm to be posted on Ed by Friday. [inferred]
+- Midterm on Thursday, October 22 during normal class time. [inferred]
+- Be able to state FLP in one or two sentences and explain how practical systems work around it.
+- Study the safety-versus-liveness definitions and which property Raft guarantees unconditionally.
+- Memorize and practice the quorum formula and the 2f plus 1 relationship.
+- For homework 4, use randomized election timeouts around 400–800 milliseconds rather than the paper's 150–300 milliseconds because of the tester's heartbeat limit. [inferred]
+- Reset the election timer only after receiving a valid AppendEntries from the current leader or granting a vote, not after every RequestVote. [inferred]
+- Fix the notes to state that a four-node cluster tolerates one failure, not two.
+- Practice determining which servers can become leader from sets of five logs using the up-to-date comparison.
+- students: Implement the client-command deduplication table in the key-value portion of homework 5.
+- Speaker 1: Fix the outdated slide showing CockroachDB's range size.
+- Speaker 1 and Kofi: Discuss whether Homework 5's due date should move until after the midterm.
+- Speaker 1 and Kofi: Announce any change to Homework 5's due date on Ed. [inferred]
+- Speaker 1 and Kofi: Speaker 1 and Kofi will discuss whether Homework 5 should move to after the midterm.
+- Ana: Ana will post the practice midterm on Ed by Friday. (deadline: Friday)
+- Speaker 1: Speaker 1 will post today's slides, including the range size slide, and the FLP paper link on Ed. (deadline: Tonight for the FLP link; no deadline stated for the slides)
+- Jordan: Jordan will post a recording in the class Discord if the official capture did not work.
+- Homework 5 is scheduled to be released Tuesday, October 13. [inferred]
+- The practice midterm is due to be posted by Friday. [inferred]
+- The FLP paper link is expected on Ed tonight. [inferred]
+- Castro and Liskov sections 1 through 4 should be read before Thursday's lecture. [inferred]
+
+#### Decisions (structured)
+- Homework 4 is due Monday, October 12th, at 11:59pm instead of Friday.
+- Homework 4 late days are counted from the new Monday-night deadline.
+- The midterm covers lectures 1 through 9, including the current lecture.
+- The midterm remains Thursday, October 22, during class time in Larkin Hall 150.
+- The midterm covers lectures 1 through 9, including today's material, but excludes log compaction, snapshots, and Thursday's Byzantine fault tolerance lecture.
+- Students may bring one letter-size sheet of notes, using both sides and either handwritten or typed, but may not use laptops or phones.
+- The midterm review session is scheduled for Sunday, October 18, from 4 to 6 p.m. in Whitaker 120.
+- Ana will post the practice midterm on Ed by Friday, with solutions posted a few days afterward.
+- The instructor's extra office hours are Wednesday from 3 to 4:30 in Whitaker 318, and Speaker 4's office hours are Thursdays from 3 to 5 in Whitaker 214.
+- Students must read sections 1 through 4 of Castro and Liskov's 1999 paper before Thursday's lecture.
+- Leases versus ReadIndex and whether pre-vote fully fixes disruptive servers will be covered next Tuesday.
+
+#### Open questions (structured)
+- What time and room will the midterm review session use? [open]
+- Will the Byzantine fault tolerance guest lecture be included on the midterm? [open]
+- Why do systems commonly use odd numbers of servers rather than even numbers? [open]
+- Why are lastLogIndex and lastLogTerm included in RequestVote if voting was initially described as first-come, first-served? [open]
+- Review why resetting the election timer on rejected RequestVote messages can block progress. [open]
+- Review how the election restriction guarantees that log overwriting cannot overwrite committed entries. [open]
+- Why are committed entries guaranteed to remain present in every future leader's log? [open]
+- How should a learner apply the last-term-first, then-log-length election comparison to determine eligible leaders in new examples? [open]
+- Does pre-vote fully prevent a disconnected or flaky server from causing pointless elections? [open]
+- How do pre-vote interactions with check-quorum and membership changes create subtle remaining cases? [open]
+- Will Homework 5's due date be moved to after the midterm? [open]
+- Will Homework 5 be due after the midterm rather than immediately before it? [open]
+- Will the midterm review session be recorded? [open]
+- Why does Byzantine fault tolerance require 3f plus 1 servers when Raft requires 2f plus 1 to tolerate f failures? [open]
+- Does pre-vote fully fix disruptive servers? [open]
+
+#### Risks (structured)
+- [medium] The official lecture capture may fail because it has been flaky, creating a risk that students cannot access the recording.
+- [high] A replicated system can suffer split brain if a backup incorrectly promotes itself while the primary remains active.
+- [high] An external arbiter can become a single point of failure, preventing any server from becoming primary if it dies.
+- [high] In a fully asynchronous system, no deterministic consensus algorithm can guarantee termination if even one process may crash.
+- [high] In a fully asynchronous system, a single crash failure prevents any deterministic consensus algorithm from guaranteeing termination in every execution.
+- [medium] Raft may stall under partitions or extreme message delays because it sacrifices liveness rather than safety.
+- [medium] A unanimity quorum has zero fault tolerance for progress because one unavailable or dissenting member prevents a decision.
+- [high] A split vote can recur indefinitely if servers use synchronized fixed election timeouts, creating a liveness problem.
+- [medium] A ranking-based election scheme can reduce availability when the highest-priority server is flaky, partitioned, or has an outdated log.
+- [high] Using the paper's 150–300 millisecond timeout with the homework tester's heartbeat limit can cause spurious elections.
+- [high] Resetting election timers for rejected RequestVote messages can let a server with a bad log block progress.
+- [high] Resetting election timers for rejected RequestVote messages can prevent servers from timing out and block progress.
+- [high] Holding a lock while sending an RPC was identified as a major homework bug.
+- [high] A four-node cluster split across two sites can lose quorum during a network partition because each side has only two of the three votes required.
+- [high] Adding a fourth node to a three-node cluster can increase quorum requirements without increasing failure tolerance.
+- [high] A leader that lacks committed entries could overwrite them during log reconciliation, causing a safety violation; the election restriction prevents this.
+- [medium] Backing up nextIndex one position at a time can be too slow when a follower is far behind and may cause the backup test to time out.
+- [high] Treating any entry replicated to a majority as committed can violate safety when the entry belongs to an older term.
+- [high] Failing to persist votedFor can result in two leaders in the same term after crashes and restarts.
+- [medium] A leader isolated on a minority partition can accept client commands but cannot commit or apply them.
+- [high] A client retry can execute a previously committed command twice if the original response was lost.
+- [high] A partitioned old-term leader can serve stale reads unless it verifies leadership with a majority or uses a lease.
+- [medium] A disconnected server can inflate its term and force a healthy leader to step down, causing an unnecessary election and liveness disruption.
+- [high] Directly switching configurations can produce two leaders in the same term because majorities of the old and new configurations may be disjoint.
+- [medium] Read leases depend on bounded clock drift, weakening the property that safety is independent of timing assumptions.
+- [high] Real implementations can contain consistency bugs in features surrounding Raft or Paxos, such as pre-vote, check-quorum, leases, batching, pipelining, and snapshots.
+- [high] A client can keep acting as though it holds an etcd lock after a pause causes its lease to expire, so fencing tokens are required.
+- [medium] Homework 4 grading was delayed by an autograder outage and a backed-up queue, with some submissions taking forty minutes.
+- [medium] Snapshot creation for a large state machine can block service unless implemented concurrently, such as with copy-on-write.
+- [medium] Homework 5 may create a tight workload immediately before the midterm if its due date is not moved.
+- [medium] The review session recording may not be available because it depends on room capture working.
+
+#### Follow-up draft
+Quick recap: This lecture covered consensus and Raft for fault-tolerant replicated state machines, including FLP, elections, log replication, commitment, partitions, and Paxos comparisons. Remember that replicas need deterministic commands in the same order; safety prevents incorrect decisions, while liveness means eventual progress. FLP says deterministic consensus cannot guarantee termination in a fully asynchronous system if one process may crash, while Raft preserves safety through overlapping majorities and may sacrifice liveness; a quorum is floor(n/2) + 1, and tolerating f crash failures requires 2f + 1 servers. In Raft, compare logs by last term, then length; persist currentTerm, votedFor, and the log; commit by counting replicas only for current-term entries; and remember that leader completeness preserves committed entries across elections. Homework 4 is due Monday, October 12 at 11:59pm, with late days counted from that deadline; the midterm covers lectures 1–9, including Raft, but excludes snapshots, log compaction, and BFT. That's the recap.
+
+---
+
+# Summary B
+
+_(run1)_
+
+### Title: Lecture Consensus and Raft Takeaways
+
+#### Overview
+The lecture introduced consensus as the solution to coordinated failover and explained replicated state machines, Raft’s motivation, 2PC’s limitations, nondeterminism handling, distributed-system failures, and the FLP impossibility result. The lecture explained FLP impossibility, safety versus liveness, majority quorums, and Raft's design, roles, and term structure. The lecture explained Raft terms, leader election, randomized timeouts, timing requirements, and homework-specific election-timer guidance. The lecture clarified randomized election timing and quorum sizing, corrected the fault tolerance of four-node clusters, and introduced Raft log replication, AppendEntries consistency checks, and nextIndex backtracking. The lecture explained Raft log repair, commitment and application, the election restriction, and leader completeness through a five-server failover example. The lecture explained Raft’s leader-completeness and current-term commitment rules, persistence requirements, and why a minority-side leader during a network partition cannot commit entries. The lecture explained Raft retries and deduplication, linearizable reads, pre-vote, joint-consensus membership changes, and Paxos's shared majority-overlap principle. The lecture compared Raft with Multi-Paxos, covered real-world Raft caveats and snapshot-based log compaction, and changed Homework 4 and midterm logistics. The instructor confirmed the midterm logistics and scope, including lectures 1–9 of Raft but excluding snapshots and BFT, and announced review, reading, and posting plans. Key decisions: Homework 4 is due Monday, October 12th at 11:59pm instead of Friday.; The late-day clock for Homework 4 starts from the new Monday-night deadline.; Homework 5 remains scheduled for release Tuesday, October 13th, and its due date was not changed during the lecture.. Study summary: The lecture motivates Raft by showing that primary-backup failover needs a reliable agreement mechanism to avoid split brain.
+
+#### Summary
+- The lecture motivates Raft by showing that primary-backup failover needs a reliable agreement mechanism to avoid split brain.
+- The lecture introduced consensus as the solution to coordinated failover and explained replicated state machines, Raft’s motivation, 2PC’s limitations, nondeterminism handling, distributed-system failures, and the FLP impossibility result.
+- Homework 4 is due Monday, October 12th at 11:59pm instead of Friday.
+- The late-day clock for Homework 4 starts from the new Monday-night deadline.
+- A single-node external arbiter can become a single point of failure and prevent any server from becoming primary if it dies.
+
+#### Core concepts
+- Consensus is needed for a group of machines to agree on decisions without relying on one special machine and while continuing to operate despite some failures.
+- Primary-backup replication risks split brain when a backup cannot distinguish a crashed primary from a slow or partitioned primary.
+- A replicated state machine makes a service fault tolerant by having replicas apply the same deterministic commands in the same order.
+- Consensus reduces the replicated-state-machine problem to agreeing on every position in a shared command log.
+- Consensus protocols are intended to make progress when a majority of servers remain available.
+- The lecture’s fault model includes crashes, arbitrary message delays, drops, duplication, reordering, network partitions, and indistinguishability between crashes and slowness.
+- FLP states that deterministic consensus cannot guarantee termination in a fully asynchronous system if even one process may crash.
+- FLP is a limitation on guaranteed termination in every possible asynchronous execution, not a claim that consensus is impossible in practical systems.
+- Practical algorithms such as Paxos and Raft preserve safety unconditionally while relying on reasonable network behavior for progress.
+- Safety and liveness are complementary consensus goals: safety prevents incorrect outcomes, while liveness ensures eventual progress.
+- Majority quorum intersection is the central mechanism carrying prior decisions into later decisions.
+- Raft prioritizes understandability by decomposing consensus into leader election, log replication, and safety.
+- Raft uses a strong leader with one-way log flow from leader to followers.
+- Raft divides time into consecutively numbered terms, each beginning with an election and having at most one leader.
+- A term may end without a leader when candidates split the vote, after which a new term and election begin.
+- Election safety follows because each server votes for at most one candidate per term and two majorities must overlap.
+- Raft uses empty AppendEntries messages as heartbeats to maintain the leader's authority.
+- Raft safety is independent of timing, but liveness depends on suitable timing relationships and randomized timeouts.
+- Homework election timeouts should be randomized between 400 and 800 milliseconds because the tester limits heartbeats to 10 per second, whereas the paper specifies 150 to 300 milliseconds.
+- A server should reset its election timer only after receiving valid AppendEntries from the current leader or granting a vote.
+- A split vote can leave a term without a leader, after which a later randomized election can advance to a higher term and elect a leader.
+- Repeated split votes are possible but become extremely unlikely because the probability of repeated timeout collisions drops rapidly.
+- Adding a fourth server does not improve crash fault tolerance over three servers and increases the quorum requirement.
+- To tolerate loss of an entire data center, the example uses three sites with two nodes in Virginia, two in Ohio, and one in a third region.
+- Raft replicates a client command by having the leader append it locally, send AppendEntries to followers, and commit it after safe replication.
+- Raft repairs inconsistent follower logs by finding a matching prefix and overwriting conflicting follower entries with the leader's entries.
+- The leader uses nextIndex per follower to locate the next entry to send and decrements it after a failed AppendEntries consistency check.
+- Once a follower finds a matching prefix with the leader, it deletes conflicting suffix entries and appends the leader's entries.
+- The leader uses matchIndex, the highest known replicated index for each follower, to determine commitment.
+- A first approximation is that an entry is committed after replication on a majority, but the precise rule includes a current-term restriction.
+- Committed entries are durable cluster-level facts, whereas applied entries have been executed by a particular server's state machine.
+- The election restriction prevents candidates with less up-to-date logs from receiving votes, thereby protecting committed entries during leadership changes.
+- Leader completeness guarantees that entries committed in one term exist in every leader's log in later terms.
+- Leader completeness means that any entry committed in one term appears in the logs of leaders elected in all higher-numbered terms.
+- Leader completeness follows from the overlap between the majority that stored a committed entry and the majority required to win an election.
+- The election restriction prevents a candidate missing a committed entry from receiving enough votes to become leader.
+- A majority alone does not safely establish commitment when the replicated entry belongs to an earlier term.
+- Entries from earlier terms become committed indirectly when a current-term entry is committed after them.
+- A new leader can use a current-term no-op to commit prior entries and discover the cluster’s committed state.
+- During a partition, leaders in different terms may coexist, but only the leader with access to a majority can make progress.
+- Two leaders can temporarily exist only in different terms, and the older-term leader cannot commit because it cannot reach a majority.
+- When a server discovers a higher term, it steps down to follower and updates its term.
+- A log entry that was neither committed, applied, nor acknowledged can be overwritten after a partition heals without violating Raft's guarantees.
+- Client retries provide liveness, while deduplication preserves safety when responses are lost.
+- Raft's safety reasoning and Paxos's safety reasoning both rely on overlapping majorities.
+- Multi-Paxos replicates a complete log by running one Paxos instance per log slot and using a stable leader to skip Phase 1 most of the time.
+- Raft is close to a particular well-specified Multi-Paxos design with a strong leader, but it is not strictly better in performance or availability.
+- Raft maintains a hole-free, prefix-matching log, whereas Multi-Paxos can decide slots independently and out of order.
+- Raft's election restriction ensures that a new leader already has all committed entries, while some Paxos variants learn missing entries during the first phase.
+- Both Raft and Paxos tolerate f crash failures with 2f+1 servers, remain safe under asynchrony, and require partial synchrony for liveness.
+- Strong-leader Raft can bottleneck writes, while leaderless or multi-leader Paxos variants such as EPaxos may perform better for low-conflict geo-distributed workloads.
+- Raft's practical advantage is completeness and teachability: it combines election, log management, membership, and persistent-state specification in one design.
+- Raft replicates within a CockroachDB range but does not automatically provide transactions spanning multiple ranges.
+- The midterm's Raft coverage includes lectures 1 through 9, including election, replication, the election restriction, the commitment rule, partitions, and the risks of direct membership changes.
+- Snapshots and the log-compaction material at the end of the current lecture are excluded from the midterm.
+- Byzantine fault tolerance is being deferred to the final rather than tested on the midterm.
+- The lecture contrasts crash-failure tolerance, requiring 2f plus 1 servers in Raft, with Byzantine-failure tolerance, requiring 3f plus 1.
+
+#### Definitions
+- Consensus is agreement by a group of machines on a value or decision without making one machine uniquely responsible.
+- A replicated state machine is a service model in which multiple servers run copies of a state machine and apply the same commands in the same order.
+- A deterministic state machine produces the same final state and output when started from the same state and given the same commands in the same order.
+- Split brain is a condition in which two primaries both believe they are in charge and accept writes.
+- Two-phase commit is an atomic-commitment protocol requiring every participant to vote yes before everyone commits.
+- FLP refers to the Fischer, Lynch, and Paterson impossibility result from 1985.
+- A safety property is one whose violation can be identified at a finite point in an execution.
+- For consensus, safety means that two servers never decide different values for the same log slot and no unagreed command is applied.
+- A liveness property requires that something good eventually happens, and its violation cannot be established at any finite moment.
+- In consensus, liveness means that eventually a value is decided and the client eventually receives a response.
+- A quorum is a subset of servers large enough that any two quorums overlap in at least one server.
+- Election safety is the guarantee that there is at most one leader in any given term.
+- Raft servers have exactly one of three states: follower, candidate, or leader.
+- A Raft term is a consecutively numbered period that begins with an election and may end with a leader or a split vote.
+- A term is a monotonically increasing logical-clock value, and every server stores and communicates its current term.
+- RequestVote is the election RPC, while AppendEntries replicates log entries and also serves as a heartbeat when empty.
+- The election timeout is the period a follower can go without a valid leader heartbeat or granted vote before starting an election.
+- broadcastTime is the average RPC round-trip time to all servers, and MTBF is the mean time between failures for one server.
+- A log entry contains the command, the term in which the leader received it, and its index, with indexes starting at 1.
+- AppendEntries arguments are term, leaderId, prevLogIndex, prevLogTerm, entries, and leaderCommit.
+- The AppendEntries reply contains the follower's term and a success flag indicating whether the follower matched prevLogIndex and prevLogTerm.
+- The log matching property states that two logs sharing an entry with the same index and term are identical through that index.
+- nextIndex is the index of the next log entry that the leader will send to a particular follower.
+- A heartbeat is an AppendEntries RPC whose entries list is empty.
+- matchIndex is the highest log index that the leader knows has been replicated on a particular follower.
+- The commit index is the highest log index a server knows to be committed; it starts at zero and only increases.
+- lastApplied is the highest index a server has actually applied to its local state machine.
+- A log is more up-to-date when its last entry has a higher term, or, if last terms match, when it has greater length.
+- Leader completeness means a committed entry from a given term appears in the logs of leaders for all higher-numbered terms.
+- The election up-to-date comparison checks the candidate’s last log term first and log length second.
+- A leader commits entries from its current term by counting replicas, but never commits a previous-term entry solely because it is on a majority.
+- Persistent server state consists of currentTerm, votedFor, and the log.
+- commitIndex, lastApplied, nextIndex, and matchIndex are volatile state that can be rebuilt after restart.
+- The basic-version state machine is volatile and is reconstructed by replaying the log after restart.
+- A majority in a five-server cluster means three servers.
+- A linearizable read is a read that reflects the latest committed state in a way consistent with a single real-time order of operations.
+- ReadIndex is etcd's approach of confirming leadership through majority communication before serving a read.
+- A lease allows a leader to serve local reads after a recent majority-acknowledged heartbeat, relying on bounded clock drift.
+- Pre-vote asks whether a server would receive enough votes before the server increments its term.
+- Joint consensus is a two-phase membership-change protocol that temporarily requires majorities from both the old and new configurations.
+- Basic Paxos, or single-decree Paxos, reaches agreement on one value using proposers, acceptors, and learners.
+- Multi-Paxos replicates a whole log by running one Paxos instance per log slot and commonly using a stable leader to skip Phase 1.
+- Multi-Paxos is the practical use of many Paxos instances, one for each replicated log slot, typically coordinated by a stable leader.
+- A Raft log is described as having no holes when entries are committed in order and follower logs are prefix-matching copies of the leader.
+- Multi-Raft means partitioning data into many independent Raft groups, as CockroachDB does with one group per range.
+- A snapshot is a server's persisted current state-machine state that allows log entries through a chosen point to be discarded.
+- The snapshot's last included index identifies the final log entry replaced by the snapshot, and its last included term records that entry's term.
+- InstallSnapshot is the third RPC used when a leader has discarded log entries needed by a lagging or new follower.
+- Consul's Raft membership consists of server nodes, while client agents use a separate gossip protocol rather than voting in Raft.
+- In the stated notation, f is the number of failures to be tolerated.
+- Crash failures are contrasted with Byzantine failures in which servers can lie.
+- The midterm permits one letter-size notes sheet with both sides available.
+
+#### Examples
+- The VMware fault-tolerance design uses a primary that handles client requests and a backup that receives and replays the primary’s log.
+- An external test-and-set service on shared storage can decide which server becomes primary, but it introduces a single point of failure.
+- A key-value store, lock service, or configuration database can be modeled as a replicated state machine.
+- If a command reads the clock, the leader can read the time once and place the concrete timestamp in the log for every replica to apply.
+- The broken espresso machine was used as a humorous single-node system with no replicas or failover.
+- A system that never decides anything is completely safe but has zero liveness.
+- A system that immediately decides arbitrary values is highly live but completely unsafe.
+- For five servers, any majority quorum contains three servers, and two such quorums must overlap.
+- A unanimous twelve-person jury illustrates an n-out-of-n quorum: it is very safe but loses liveness if one juror is unavailable or refuses to agree.
+- A split vote in Raft is an election in which no candidate wins, causing the term to end without a leader.
+- In a five-server cluster, a candidate needs three votes, consisting of its own vote plus two others, to win.
+- A server that sees a higher term immediately updates its term and steps down from leader or candidate to follower.
+- A candidate accepts an AppendEntries message from another server when that server's term is at least as large as the candidate's term.
+- A narrow timeout range such as 150–151 milliseconds causes repeated collisions and elections that can take seconds.
+- In the five-server split-vote example, B and D each received two votes in term 7, so nobody obtained the three votes needed for leadership.
+- In the same example, D timed out first in term 8 and won three votes after the other servers observed the higher term.
+- A four-node etcd deployment split evenly between Virginia and Ohio became unavailable for 47 minutes when the inter-site link flapped.
+- During that outage, about 38,000 payment authorizations queued, while no data was lost and safety remained intact.
+- The log example at index 7 has term 3 and command "set x to 5."
+- In the five-server example, A and B had logs 1,1,2,3,3,3; C and E had 1,1,2,3,3; and D had 1,1,2.
+- Index 5 was committed because it appeared on A, B, C, and E, while index 6 was not committed because it appeared only on A and B.
+- When A crashed, D timed out first but could not win because its last term was 2 while B, C, and E had last term 3.
+- C became leader in term 5 with votes from C, D, and E even though B had the longest log.
+- C's term-5 entry at index 6 replaced B's uncommitted term-3 entry at index 6 after their logs matched through index 5.
+- A seven-entry log ending in term 2 is less up-to-date than a five-entry log ending in term 3.
+- In the Figure 8 scenario, term-2 entry index 2 is first on A and B, then an unrelated term-3 entry at index 2 is placed on E before E crashes.
+- A later term-4 leader A replicates the old term-2 entry to C, placing it on a majority without safely committing it.
+- E then wins term 5 because its last term 3 is higher than the last term of B, C, and D, and overwrites the majority-held term-2 entry.
+- If A instead appends a term-4 entry at index 3 and replicates it with index 2, the current-term entry commits and protects the earlier entry.
+- In the partition example, B’s term-7 command at index 21 reaches only A and B, while E’s term-8 command at index 21 reaches C, D, and E.
+- E becomes leader of term 8 after receiving votes from C and D, whose logs end at index 20 with term 7.
+- After the partition heals, E's term-8 entry "set y to 3" overwrites B and A's uncommitted term-7 entry "set x to 7" at index 21.
+- A client can safely retry an idempotent command such as "set x to 7," but retrying "withdraw 100 dollars" could produce an incorrect duplicate effect.
+- During the partition, B could return an old value for y even though E's majority had already committed y equal to 3.
+- An isolated server D repeatedly advances from term 9 through term 12 without receiving votes, then forces E to step down when D reconnects.
+- In a 3-to-5 configuration change, A and B could elect one leader under the old 2-of-3 majority while C, D, and E elect another under the new 3-of-5 majority.
+- etcd backs Kubernetes cluster state with a Raft cluster and recommends three or five members, discouraging much beyond seven.
+- etcd uses a 100-millisecond heartbeat interval and a 1000-millisecond election timeout, compared with the paper's 150–300 range.
+- Consul uses Raft for its servers and offers stale, default lease-based, and strictly consistent read modes with different consistency and latency properties.
+- CockroachDB divides data into ranges, usually with three replicas, and runs thousands of Raft groups concurrently.
+- Google's Chubby and Spanner use Paxos, while ZooKeeper uses Zab rather than Raft.
+- The homework tester acts like a small Jepsen test by partitioning servers, dropping and reordering messages, and checking results.
+- Copy-on-write, such as forking a Linux process, lets a server create a large snapshot while the parent continues serving requests.
+- The instructor uses the comparison 'Raft in, snapshots out, BFT out' to summarize the midterm boundaries.
+- The one-sheet rule is presented as an example of studying through prioritization because choosing what to include is itself part of preparation.
+
+#### Formulas / steps
+- To use a replicated state machine, model the service as state plus commands, ensure each command deterministically changes state and produces output, and replicate the ordered command sequence.
+- To handle nondeterministic operations, evaluate the nondeterministic part once at the leader and record the resulting concrete value in the log.
+- Consensus must establish agreement for log slot 1, then slot 2, then slot 3, continuing for all log positions.
+- Two-phase commit proceeds only when all participants are available and vote yes; otherwise the transaction cannot commit.
+- In 2PC, if the coordinator crashes after yes votes but before sending the decision, participants remain blocked while holding locks.
+- For n servers, the majority quorum size is floor(n/2) + 1.
+- The number of server failures tolerated by a majority quorum is n minus the quorum size.
+- To tolerate f failures, a cluster needs 2f + 1 servers.
+- When one majority makes a decision and another majority later decides, their overlapping server carries the earlier information forward.
+- Raft decomposes consensus into leader election, log replication, and safety, with membership changes and log compaction treated as additional components.
+- In normal Raft operation, a leader handles client requests and replicates entries to followers, while followers redirect client requests to the leader.
+- Each Raft term starts an election; a winning candidate leads for the term, while a split vote triggers a later term and new election.
+- To start an election, a follower increments its term, becomes a candidate, votes for itself, and sends RequestVote RPCs in parallel to every other server.
+- A candidate wins only after receiving votes from a majority of the full cluster for the same term.
+- A server updates to a larger received term, rejects requests with smaller terms, and steps down if it was a leader or candidate.
+- Randomized election timeouts are selected from a fixed interval and freshly selected whenever the timer is reset.
+- The timing relationship to remember is broadcastTime much less than electionTimeout much less than MTBF.
+- For four servers, the majority is floor(4/2)+1 = 3, so the tolerated failures are 4-3 = 1.
+- The stated cluster pattern is 3 nodes tolerate 1 failure, 4 tolerate 1, 5 tolerate 2, 6 tolerate 2, and 7 tolerate 3.
+- To replicate a command, the leader appends it locally and sends AppendEntries RPCs in parallel to all followers.
+- A follower rejects AppendEntries when it lacks prevLogIndex or has a different term at that index.
+- After a matching prefix is found, the follower deletes conflicting entries after that point and appends the leader's entries.
+- A new leader initializes every follower's nextIndex to one past the end of its own log.
+- When AppendEntries fails, the leader decrements that follower's nextIndex and retries until the logs match.
+- Initialize every follower's nextIndex to one past the end of the leader's log when the leader takes office.
+- On AppendEntries failure, decrement the follower's nextIndex and retry until the leader and follower have a matching prefix.
+- The leader communicates its commit index in leaderCommit on every AppendEntries, including heartbeats.
+- A follower updates its commit index to min(leaderCommit, index of its last new entry).
+- When commitIndex exceeds lastApplied, apply entries sequentially by incrementing lastApplied one index at a time.
+- To evaluate election eligibility, compare candidate and voter last-log terms first, then compare lengths only when the terms are equal.
+- A candidate receives a vote only when its log is at least as up-to-date as the voter's log.
+- To determine whether a candidate can win, compare its last log term with each voter’s last term, then compare log length if the terms are equal.
+- Use the majority-overlap argument: a committed entry is on one majority, an election requires another majority, and the overlapping voter will reject a candidate whose log is less up-to-date.
+- For safe commitment, a leader counts replicas only for an entry from its current term.
+- To commit preceding old-term entries, append and replicate a new entry from the leader’s current term, then commit that current-term entry.
+- Persist currentTerm, votedFor, and the log to stable storage before responding to any RPC.
+- After restart, rebuild volatile state and learn commitment again through AppendEntries or by committing a new-term entry.
+- In a five-server partition, a side must reach three servers to commit; a two-server minority cannot commit any new entry.
+- For a read-only request, a leader should exchange heartbeats with a majority before answering; a partitioned leader that cannot reach a majority must not serve the read.
+- For deduplication, identify each client uniquely, attach a serial number to every command, and store the latest executed serial number together with its response.
+- When a duplicate serial number arrives, return the saved response instead of executing the command again.
+- Joint consensus first commits a combined old-and-new configuration, then commits the new-only configuration.
+- During the joint configuration, every election or log commitment requires a separate majority from the old configuration and a separate majority from the new configuration.
+- Basic Paxos Phase 1 uses prepare and promise, while Phase 2 uses accept and accepted; the proposer must preserve the highest-numbered previously accepted value.
+- In Paxos Phase 2, the proposer asks acceptors to accept the value from the highest-numbered proposal previously accepted by any of them, if one exists.
+- A Paxos value becomes chosen when a majority accepts it.
+- The safety argument relies on overlap between the prepare majority and any earlier accept majority.
+- For snapshotting, persist the snapshot, retain last included index and term plus the latest configuration, and discard log entries through the included index.
+- A snapshot may include only committed and applied entries, and each server takes snapshots independently when it chooses, often after a size threshold.
+- When a follower receives InstallSnapshot, it replaces its whole log if the snapshot covers everything, or deletes only the covered prefix and retains later entries if it covers a prefix.
+- The snapshot's last included index and term substitute for the missing previous-log metadata needed by the AppendEntries consistency check.
+- For the stated fault-tolerance comparison, remember the server-count formulas 2f plus 1 for f crash failures and 3f plus 1 for f Byzantine failures.
+- Prepare for the midterm by selecting material for one double-sided letter-size sheet without using electronic devices during the exam.
+- For practice preparation, attempt the problems before consulting solutions, which will be posted a few days later.
+
+#### Things to memorize
+- Homework 4 covers Raft leader election and heartbeats, while log replication and persistence are reserved for Homework 5.
+- Students have five late days for the semester and may use at most two late days on one assignment.
+- The midterm is October 22 during normal class time in Larkin Hall 150 and covers lectures 1 through 8 through primary-backup replication.
+- The key distinction is that 2PC requires all participants, whereas consensus aims to progress with a majority.
+- FLP states that fully asynchronous deterministic consensus cannot guarantee termination with even one possible crash failure.
+- FLP is the Fischer-Lynch-Paterson impossibility result from 1985.
+- FLP's exam-relevant content is its statement and implications, not the bivalent-configuration proof.
+- Raft guarantees safety even during partitions and extreme message delays, but may sacrifice liveness.
+- A majority quorum is floor(n/2) + 1, and tolerating f failures requires 2f + 1 servers.
+- Three servers require two for a quorum and tolerate one failure; five servers require three and tolerate two failures.
+- Raft was presented as a 2014 paper by Diego Ongaro and John Ousterhout titled In Search of an Understandable Consensus Algorithm.
+- Raft's three server states are follower, candidate, and leader.
+- Raft's basic algorithm uses two RPC types: RequestVote and AppendEntries; InstallSnapshot is used for log compaction and was excluded here.
+- The persistent election state includes currentTerm and votedFor, and votedFor must be written to disk before replying.
+- The paper's randomized election-timeout range is 150–300 milliseconds.
+- A RequestVote contains term, candidateId, lastLogIndex, and lastLogTerm, while its reply contains term and voteGranted.
+- For homework 4, the suggested election timeout is 400–800 milliseconds, with a new leader required within five seconds after failure.
+- Memorize the distinction between the paper's 150–300 millisecond election timeout and the homework recommendation of 400–800 milliseconds.
+- Memorize that an election timer resets after valid leader AppendEntries or after granting a vote, not after rejecting a vote.
+- Memorize the majority formula floor(n/2)+1 and the failure tolerance n minus the majority.
+- Memorize that odd cluster sizes provide the useful fault-tolerance increases: 3→1, 5→2, and 7→3.
+- Memorize all six AppendEntries arguments: term, leaderId, prevLogIndex, prevLogTerm, entries, and leaderCommit.
+- Memorize the log matching property exactly: same index and same term imply identical log entries through that index.
+- Remember the election ordering: compare last-log term first, and compare log length only when last terms are equal.
+- Remember that longest log alone does not determine the election winner.
+- Remember that commit index starts at zero and is monotonically increasing.
+- Remember that committed means cluster-level durable agreement, while applied means execution on one server.
+- Remember leader completeness: committed entries are present in all future leaders' logs.
+- Leader completeness, the election up-to-date restriction, and the last-term-first-then-length comparison are identified as exam material.
+- The precise commitment rule to memorize is: majority plus current term means committed, while majority plus old term means not yet committed.
+- The Figure 8 scenario demonstrates why an old-term entry on a majority can still be overwritten.
+- The three persistent fields are currentTerm, votedFor, and the log.
+- A new leader commonly appends a blank no-op entry to commit a current-term entry quickly.
+- Two leaders can coexist safely only in different terms, with the older-term leader unable to commit without a majority.
+- An old-term leader cannot commit because it cannot reach a majority, even if a newer-term leader exists elsewhere.
+- Retry plus deduplication provides client-visible liveness and safe exactly-once command effects.
+- Pre-vote prevents an isolated server from inflating its term unless a majority would support its candidacy.
+- Direct configuration changes are unsafe because majorities of different configurations may not overlap.
+- The exam requires knowing why direct configuration switching fails, but not reproducing joint consensus step by step.
+- Both Raft and Paxos require 2f+1 servers to tolerate f crash failures.
+- Raft and Paxos are safe under asynchrony but achieve liveness only under partial synchrony, and neither handles malicious servers.
+- Normal-case Raft and Paxos performance is approximately one message round to a majority per command.
+- Snapshot metadata must include last included index, last included term, and the latest membership configuration.
+- Raft itself does not make every system operation linearizable or every client lock usage safe.
+- Homework 6 covers snapshots and InstallSnapshot.
+- Memorize that the midterm covers lectures 1 through 9 but not snapshots, log compaction, or BFT lecture 10.
+- Memorize the fault-tolerance server counts 2f plus 1 for crash failures and 3f plus 1 for Byzantine failures.
+- Memorize that the midterm permits one letter-size sheet, both sides, handwritten or typed, with no laptops or phones.
+- Memorize that the PBFT reading is Castro and Liskov's 1999 paper, sections 1 through 4.
+
+#### Confusing points
+- A missing message cannot reveal whether a server crashed, is partitioned, or is merely slow.
+- Replicating the external arbiter does not eliminate consensus because the arbiter replicas would themselves need to agree on the winner.
+- Consensus cannot repair a nondeterministic state machine unless nondeterministic results are converted into deterministic log entries.
+- FLP is often misquoted; its impossibility claim concerns guaranteed termination in a fully asynchronous system, not the impossibility of all useful consensus implementations.
+- FLP does not mean consensus cannot work in practice; it denies only an unconditional termination guarantee under a fully asynchronous model.
+- Safety and liveness are not the same as correctness and availability in every circumstance: a system can be perfectly safe while making no progress.
+- The statement that adding a fourth node can buy something may seem counterintuitive because four nodes still require a quorum of three.
+- Unanimity is safer in the analogy but has zero fault tolerance, whereas majority quorums preserve overlap while tolerating failures.
+- Ranking-based election priority is not impossible, but it is harder to reason about and can create availability corner cases.
+- The paper's 150–300 millisecond timeout should not be confused with the homework recommendation of 400–800 milliseconds.
+- A RequestVote does not automatically reset the election timer; only a granted vote should reset it.
+- The purpose of lastLogIndex and lastLogTerm in RequestVote was deferred to the later safety discussion.
+- The lecture explicitly corrected the earlier mistaken claim that four nodes tolerate two failures; they tolerate only one.
+- A term may have no leader after a split vote, and this is valid because a later election can proceed in a higher term.
+- Overwriting follower log entries sounds unsafe, but the lecture deferred the safety justification to the election restriction.
+- The log matching proof relies on induction: every successful AppendEntries checks the preceding entry and extends an already matching prefix.
+- Replication on a majority is only an initial intuition for commitment; the precise rule has a subtle condition involving old terms.
+- A committed entry can be known to a server before that server has applied it, because application takes time.
+- The longest log can lose an election when its final term is lower than a shorter log's final term.
+- A candidate does not need to be the globally most up-to-date server; it only needs to be at least as up-to-date as the voters whose support gives it a majority.
+- An uncommitted entry may be overwritten after a leadership change, but a committed entry may not be overwritten.
+- An entry being present on a majority is insufficient for commitment if the entry belongs to a previous term.
+- A server may forget commitIndex after restarting without losing cluster safety because commitment can be rediscovered.
+- A leader can have an entry on a majority and still later see that entry overwritten if it never committed a current-term entry above it.
+- Two leaders at once are not automatically a safety violation when they are in different terms and only one can reach a majority.
+- A write can disappear from the replicated log without being considered lost by Raft if the client never received a success response.
+- Exactly-once effects require application-level client IDs, serial numbers, and saved responses rather than relying on Raft alone.
+- Lease-based reads improve availability but make safety depend partly on bounded clock drift.
+- Pre-vote mostly addresses isolated-server disruption but does not eliminate every subtle interaction with check-quorum and membership changes.
+- Single-server membership changes are simpler than full joint consensus but still require a new leader to commit an entry in its own term before changing membership.
+- The lecture gave multiple election-timeout values—Raft's paper range of 150–300 milliseconds and etcd's 1000 milliseconds—because deployment context matters.
+- The CockroachDB range-size value conflicted between the slides' 64 megabytes and the lecturer's stated newer value of approximately 512 megabytes, so the docs should be checked.
+- A system using Raft does not imply that every component of the system, including clients and membership agents, uses Raft or inherits its guarantees.
+- Followers can create snapshots independently even though Raft generally follows a strong-leader data-flow principle, because they reorganize only data they already possess.
+- Consul's default read mode can return stale data in a narrow lease-related window, while strict consistency adds a round trip.
+- The reason for the extra f in the Byzantine 3f plus 1 requirement was intentionally left unanswered for students to consider.
+- It remains uncertain whether Homework 5 will be moved until Speaker 1 and Kofi discuss the schedule.
+- The availability of a review-session recording depends on whether room capture works that day.
+
+#### Questions to review
+- Why does a backup’s failure detector create the same observation for a crashed, partitioned, or slow primary?
+- Why does promoting a still-live primary produce split brain and divergent data?
+- Why is two-phase commit not an adequate replacement for consensus in a fault-tolerant system?
+- How does a replicated state machine ensure that replicas converge to the same state?
+- How should a system handle commands that read time or generate random values?
+- What exactly does FLP rule out, and what assumptions make its result apply?
+- State the FLP impossibility result in one or two sentences.
+- Explain how Paxos and Raft obtain practical progress despite FLP.
+- Define safety and liveness and give the consensus meaning of each.
+- Which property does Raft guarantee unconditionally, and what may it sacrifice under bad network conditions?
+- Why must any two majority quorums overlap?
+- Calculate the quorum size and tolerated failures for clusters of three, four, and five servers.
+- What are Raft's three server states, and what does each state do?
+- What happens when a Raft election ends in a split vote?
+- Why do two candidates both requiring a majority imply that at most one can become leader in a term?
+- What failure modes arise when a fixed-priority server is partitioned, flaky, or behind in its log?
+- Why must votedFor be persisted before a server responds to a vote request?
+- When should a candidate step down after receiving AppendEntries from another server?
+- Why does resetting the election timer for rejected RequestVote messages harm liveness?
+- When should a server reset its election timer after receiving a RequestVote, and why is resetting on rejected requests unsafe?
+- Why can a split vote leave a term without a leader, and how does a later election resolve it?
+- Why do four-node clusters provide no more crash fault tolerance than three-node clusters?
+- Why can an even four-node deployment be unavailable during a two-and-two network partition?
+- What are the six AppendEntries arguments and what does each one communicate?
+- How do prevLogIndex and prevLogTerm enforce the log matching property?
+- How does nextIndex backtracking repair a follower whose log contains missing or conflicting entries?
+- Why does the follower compute its commit index using the minimum of leaderCommit and its last new entry index?
+- Why is committed different from applied, and when does the client receive its response?
+- Given logs A=1,1,2,3,3,3; C=1,1,2,3,3; and D=1,1,2, which candidate is more up-to-date and why?
+- Why could C win the election even though B had the longest log?
+- Why does majority intersection ensure that a future leader contains every previously committed entry?
+- Given five logs and a candidate’s last term and length, which servers can legally become leader?
+- Why does the Figure 8 term-2 entry become overwritable even after reaching three of five servers?
+- How does replicating a current-term entry cause earlier entries to become committed?
+- Which Raft state must be persisted before replying to an RPC, and which state may be rebuilt after restart?
+- Why can the minority-side leader accept a client command but neither commit nor apply it during a partition?
+- Why does the majority-side leader’s command commit even though another leader still exists?
+- Why can two leaders exist in different terms without violating safety?
+- Why is a client retry necessary after a timeout, and how does deduplication prevent duplicate execution?
+- Why can a partitioned leader not safely answer local reads?
+- How does pre-vote prevent D from disrupting the healthy cluster?
+- Why can direct switching from three servers to five servers create two leaders in one term?
+- How do Paxos's prepare and accept phases use majority overlap to preserve safety?
+- Why does quorum overlap preserve the chosen value in Paxos?
+- How do Raft's no-holes and election restrictions differ from ordinary Multi-Paxos behavior?
+- Why does increasing the number of etcd members generally slow writes?
+- Why are fencing tokens required when using a lease-based distributed lock?
+- What information must a snapshot retain for AppendEntries consistency and membership changes?
+- What should a follower do when an InstallSnapshot message covers all of its log versus only a prefix?
+- Why does CockroachDB need an additional commit protocol for transactions spanning multiple Raft ranges?
+- Why does Byzantine fault tolerance require 3f plus 1 servers while Raft requires 2f plus 1 for crash failures?
+- Does pre-vote fully fix disruptive servers?
+- How do leases compare with ReadIndex for reads?
+- Which Raft membership-change and log-compaction sections are optional preparation rather than midterm-required material?
+
+#### Study summary
+- The lecture motivates Raft by showing that primary-backup failover needs a reliable agreement mechanism to avoid split brain.
+- Consensus supports replicated state machines by keeping an ordered command log identical across replicas.
+- The state machine must be deterministic, so nondeterministic values such as timestamps or random numbers must be resolved once and recorded in the log.
+- Two-phase commit differs from consensus because it requires every participant and can block after coordinator failure, whereas consensus targets progress with a majority.
+- Distributed systems must tolerate crashes, unreliable and reordered messages, partitions, and the inability to distinguish slowness from failure.
+- FLP establishes that no deterministic consensus algorithm can guarantee termination under full asynchrony when even one process may crash.
+- FLP shows that deterministic consensus cannot guarantee termination in a fully asynchronous system with even one possible crash, but practical algorithms trade unconditional liveness for safety.
+- Safety means no bad outcome ever occurs, while liveness means a good outcome eventually occurs; Raft preserves safety but may stall when the network is unreliable.
+- Majority quorums work because any two majorities overlap, allowing a later decision group to inherit information from an earlier group.
+- The key quorum formulas are floor(n/2) + 1 for quorum size and 2f + 1 servers to tolerate f failures.
+- Raft improves understandability through decomposition, a strong leader, one-way log replication, and three server states.
+- Raft organizes time into numbered terms, each beginning with an election that either produces a leader or ends in a split vote.
+- Understand terms as logical clocks that enforce stale-message handling and support the one-leader-per-term guarantee.
+- Know the election workflow, including self-voting, parallel RequestVote messages, majority calculation, and the three possible outcomes.
+- Remember that randomized timeouts address split-vote liveness while avoiding the corner cases of fixed ranking.
+- Apply the timing inequality broadcastTime << electionTimeout << MTBF and distinguish theoretical paper values from homework tester constraints.
+- For implementation, persist currentTerm and votedFor, reset timers only for valid leader messages or granted votes, and avoid holding locks during RPCs.
+- Use randomized election timeouts, reset timers only for valid leader messages or granted votes, and understand that split votes can advance through later terms.
+- Quorum math explains why odd-sized clusters are preferred: four nodes tolerate only one failure, just like three, while requiring a larger quorum.
+- Surviving a whole-site failure requires quorum placement across three sites, such as a five-node 2-2-1 arrangement.
+- Raft log replication uses leader appends, parallel AppendEntries, majority-based commitment, and retries for slow or failed followers.
+- AppendEntries verifies the preceding index and term, rejects mismatches, and overwrites conflicting uncommitted suffixes.
+- The log matching property follows inductively from the consistency check, while nextIndex decrementing finds the matching prefix needed for repair.
+- Raft repairs follower logs by backing nextIndex down until a matching prefix is found, then deleting conflicts and appending the leader's entries.
+- The leader derives commitment from matchIndex, propagates leaderCommit, and followers apply committed entries in order after updating commitIndex.
+- Election safety depends on log freshness ordered by last term first and length second, not by length alone.
+- In the worked example, index 5 was committed on four servers, while B's index-6 term-3 entry was uncommitted and was safely replaced by C's term-5 entry.
+- Leader completeness follows from majority intersection and the voting restriction: every later leader must already contain entries committed in earlier terms.
+- Committed entries survive leadership changes because election majorities overlap with the majority that stored the entry, and voters reject candidates whose logs are less up-to-date.
+- The critical commitment rule is that a leader counts replicas only for current-term entries; older entries commit indirectly when a later current-term entry commits.
+- A no-op at the beginning of a leader’s term provides a current-term entry that can commit earlier log entries and reveal the committed prefix.
+- Only currentTerm, votedFor, and the log are persistent; indexes and application state are rebuilt after restart.
+- A network partition can leave an old leader alive on a minority side, but it cannot commit new entries, while the majority side elects a newer leader and continues safely.
+- Raft preserves safety during partitions because only a majority can commit, and the majority-overlap argument prevents conflicting committed entries.
+- Unacknowledged writes may be overwritten, so clients must retry through the current leader; unique client serial numbers and saved responses make retries safe.
+- Leaders must confirm leadership before serving reads, either through a majority heartbeat mechanism such as ReadIndex or through timing-dependent leases.
+- Pre-vote reduces term inflation by isolated servers, but subtle cases remain with check-quorum and membership changes.
+- Membership changes require joint consensus or carefully constrained single-server changes because old and new configurations can otherwise form disjoint majorities.
+- Paxos and Raft differ in presentation and structure but share majority overlap as the central safety mechanism.
+- Raft should be understood as a complete, strong-leader, well-specified design closely related to Multi-Paxos rather than as a universally faster or more available replacement.
+- The key Raft-versus-Multi-Paxos distinctions are ordered hole-free logs, leader completeness, and a single integrated specification.
+- Real systems such as etcd, Consul, and CockroachDB use Raft selectively and add consistency modes, leases, range-level groups, and higher-level protocols.
+- Snapshotting bounds storage and restart cost by replacing applied log prefixes with independently created persisted state and metadata.
+- InstallSnapshot is needed when a leader no longer retains the entries required by a lagging follower, and copy-on-write avoids stopping service during large snapshot creation.
+- For assessment preparation, include lectures 1–9 on the midterm and study snapshots and InstallSnapshot for Homework 6.
+- Focus midterm studying on lectures 1–9 and today's Raft material, especially elections, replication, election restriction, commitment, partitions, and unsafe direct membership changes.
+- Do not prioritize snapshots, log compaction, or Thursday's BFT guest lecture for the midterm because they are excluded.
+- Use the single double-sided notes sheet as a study constraint, and practice problems before reviewing the later-posted solutions.
+- Before Thursday, read PBFT sections 1–4 and prepare a hypothesis for why Byzantine tolerance needs 3f plus 1 servers.
+
+#### Action items (structured)
+- Complete Homework 4, implementing Raft leader election and heartbeats in the Go skeleton. (deadline: Friday, October 9th, at 11:59pm) [inferred]
+- Use the updated office-hours schedule if seeking help from the head TA: Thursdays from 3 to 5pm in Whitaker 214. (deadline: Starting this week) [inferred]
+- Review the practice midterm after it is posted on Ed. (deadline: By Friday)
+- Attend the guest lecture on Byzantine fault tolerance given by Dr. Joanne Whitfield. (deadline: Thursday) [inferred]
+- Homework 4 due [inferred]
+- Extra instructor office hours [inferred]
+- Midterm [inferred]
+- Practice midterm posting [inferred]
+- For homework 4, use randomized election timeouts around 400–800 milliseconds rather than the paper's 150–300 millisecond range. [inferred]
+- Reset the election timer only after receiving valid AppendEntries from the current leader or granting a vote, not for every RequestVote. [inferred]
+- Keep heartbeat frequency within the homework tester's limit of at most 10 heartbeats per second per server. [inferred]
+- Correct notes to state that a four-node cluster tolerates one failure, not two.
+- Implement an optimized log-backup mechanism for Homework 5 so the backup test does not time out, using the follower's conflicting term and first index for that term to skip whole terms. [inferred]
+- Jordan should retry a write after timing out by finding the new leader and resending the command. [inferred]
+- Students will implement the client-command deduplication table in homework 5's key-value portion.
+- Devin should attend office hours tomorrow or remind the instructor next week to discuss remaining pre-vote interactions.
+- Speaker 1: Fix the outdated slide showing the CockroachDB range-size value.
+- Speaker 1 and Kofi: Discuss whether Homework 5 should be moved to after the midterm and announce any change on Ed.
+- Homework 4 due Monday, October 12th at 11:59pm. [inferred]
+- Homework 5 scheduled for release Tuesday, October 13th. [inferred]
+- Midterm on Thursday, October 22nd during class time in Larkin Hall 150. [inferred]
+- Speaker 1 and Kofi: Speaker 1 and Kofi will discuss whether Homework 5 should be moved to after the midterm; any change would be posted on Ed.
+- Kofi: Kofi will hold the midterm review session on Sunday, October 18, from 4 to 6 p.m. in Whitaker 120. (deadline: Sunday, October 18, 4:00–6:00 p.m.)
+- Kofi: The review session will be recorded if the room-capture system is working. [inferred]
+- Ana: Ana will post the practice midterm on Ed by Friday. (deadline: Friday)
+- Speaker 1: The instructor will post solutions a few days after the practice midterm.
+- Speaker 1: The instructor will post today's slides, the range-size slide, and the FLP paper link on Ed, with the FLP link planned for tonight. (deadline: FLP link tonight)
+- Students: Students should read sections 1–4 of Castro and Liskov's 1999 paper before Thursday's lecture. (deadline: Before Thursday's lecture)
+- Jordan: Jordan will post a recording in the class Discord if the official capture did not work.
+- Homework 5 release: Tuesday, October 13 [inferred]
+- Midterm: Thursday, October 22, during class time [inferred]
+- Practice midterm: by Friday [inferred]
+- FLP paper link: tonight [inferred]
+- PBFT sections 1–4: before Thursday's lecture [inferred]
+
+#### Decisions (structured)
+- Homework 4 is due Monday, October 12th at 11:59pm instead of Friday.
+- The late-day clock for Homework 4 starts from the new Monday-night deadline.
+- Homework 5 remains scheduled for release Tuesday, October 13th, and its due date was not changed during the lecture.
+- The midterm remains on Thursday, October 22, during class time in Larkin Hall 150.
+- The midterm coverage was expanded from lectures 1–8 to lectures 1–9, including the current lecture.
+- Homework 5 remains scheduled for release on Tuesday, October 13, and its due date is not being changed at this time.
+- The midterm covers lectures 1 through 9, including today's material, but excludes log compaction, snapshots, and the Thursday guest lecture on Byzantine fault tolerance.
+- Students may bring one letter-size sheet of notes, using both sides and either handwriting or typing, but laptops and phones are prohibited.
+
+#### Open questions (structured)
+- Will there be a review session for the midterm, and when and where will it occur? [open]
+- Exactly what material will be included on the midterm, particularly whether the guest lecture is included? [open]
+- Why do systems commonly use odd numbers of servers for majority quorums? [open]
+- How do lastLogIndex and lastLogTerm restrict voting beyond the initial first-come, first-served description? [open]
+- How does the election restriction ensure that log replication never overwrites a committed entry? [open]
+- Why can an entry replicated to a majority still be erased when it comes from an earlier term? [answered]
+- Why does a new Raft leader usually append a no-op entry immediately? [answered]
+- Is the simultaneous existence of leaders B and E during the partition a split-brain safety violation? [answered]
+- Does pre-vote fully prevent pointless elections, or can check-quorum and membership-change interactions still cause disruption? [open]
+- What are the detailed tradeoffs between majority-heartbeat reads and lease-based reads? [open]
+- Will Homework 5 be due after the midterm rather than immediately before it? [open]
+- What exact range-size value should be used for the relevant CockroachDB version? [open]
+- Will the review session recording be available? [open]
+- Why does Byzantine fault tolerance require 3f plus 1 servers while Raft requires 2f plus 1 for crash failures? [open]
+- Does pre-vote fully fix disruptive servers? [open]
+
+#### Risks (structured)
+- [medium] The official lecture capture may fail because it has been flaky, so students were advised to maintain local recordings.
+- [high] A single-node external arbiter can become a single point of failure and prevent any server from becoming primary if it dies.
+- [high] Incorrectly promoting a still-live primary creates split brain, with two primaries accepting writes and diverging data.
+- [high] In a fully asynchronous system, deterministic consensus cannot guarantee termination if even one process may crash.
+- [high] In a fully asynchronous system, even one crash failure prevents a deterministic consensus algorithm from guaranteeing termination in every execution.
+- [high] Raft may stall and lose liveness during network partitions or extreme message delays, although it preserves safety.
+- [high] A split vote can repeat indefinitely without randomized election timeouts, creating a liveness problem.
+- [medium] Using a fixed priority ranking can reduce availability when the highest-priority server is flaky, partitioned, or behind in its log.
+- [high] Resetting the election timer for rejected RequestVote messages can let a server with a bad log block election progress.
+- [high] Holding a lock while sending an RPC was identified as a major homework implementation bug.
+- [high] A four-node cluster split across two sites can become completely unavailable during a network partition because neither two-node side has the quorum of three.
+- [high] If a candidate missing committed entries could become leader and overwrite other logs, committed entries could be erased and Raft safety would be violated.
+- [medium] Backing up nextIndex one position at a time can be slow enough to cause the backup test to time out when a follower is far behind.
+- [high] Treating any entry stored on a majority as committed can violate safety because a later leader may overwrite that old-term entry.
+- [high] Failing to persist votedFor can allow two leaders in the same term and fail the unreliable-network test.
+- [high] During a network partition, the old leader on the minority side can accept client commands but cannot commit or apply them because it cannot reach a majority.
+- [high] A retry can execute a previously committed command twice if the original response was lost, which is dangerous for non-idempotent operations such as withdrawing money.
+- [medium] An isolated server with an inflated term can force a healthy leader to step down and cause an unnecessary election, creating a liveness disruption.
+- [high] Directly switching configurations can produce two leaders in the same term because old and new majorities may be disjoint.
+- [high] A leader that serves local reads without confirming leadership can return stale data and violate linearizability.
+- [high] A client can retain the belief that it holds an etcd lock after a lease expires during a pause, so the critical section is unsafe without fencing tokens.
+- [high] Real systems can contain consistency bugs in implementation features surrounding Raft or Paxos, including pre-vote, leases, batching, pipelining, and snapshots.
+- [medium] The Homework 4 autograder was flaky and had a backed-up queue, with some submissions taking forty minutes to grade.
+- [medium] A large number of Raft groups can create substantial heartbeat overhead, requiring engineering techniques such as heartbeat coalescing.
+- [medium] Homework 5 may create a tight study schedule if it remains due immediately before the midterm.
+- [medium] The review session may not be recorded if the room-capture system fails.
+
+#### Follow-up draft
+Quick recap: The lecture covered why consensus is needed to prevent split brain, how replicated state machines and Raft achieve agreement, and the limits imposed by 2PC and FLP. Remember that safety prevents conflicting decisions while liveness means eventual progress; Raft preserves safety under asynchrony but needs a majority and suitable timing for progress, with quorum size floor(n/2) + 1, 2f + 1 servers to tolerate f crash failures, and broadcastTime << electionTimeout << MTBF. In Raft, compare candidate logs by last term first, then length; commit a replicated entry by majority only when it is from the current term, persist currentTerm, votedFor, and the log, and use AppendEntries consistency checks with nextIndex backtracking to repair followers. Homework 4 is due Monday, October 12 at 11:59pm, with late days counted from that deadline; the October 22 midterm covers lectures 1–9, excluding snapshots, log compaction, and BFT. That's the recap.
+
+---
+
+# Summary C
+
+_(run1)_
+
+### Title: Lecture 9 Consensus and Raft
+
+#### Overview
+After TA logistics announcements (homework 4 due Friday Oct 9, midterm Oct 22 in Larkin Hall 150 covering lectures 1-8), the professor opens Lecture 9 on consensus and Raft, recapping primary-backup replication, arguing why 2PC is the wrong tool, introducing the replicated state machine, and stating the FLP impossibility result. The lecturer states the FLP impossibility result (statement only, no proof on the exam), defines safety vs liveness with consensus examples, introduces quorums and the majority formula floor(n/2)+1 = 2f+1, then begins Raft with its 2014 origins, decomposition, strong-leader design and the three server states plus terms. The lecture defines Raft terms as logical clocks (at most one leader per term), the two core RPCs, leader election via heartbeats and randomized 150-300ms timeouts, the timing inequality broadcastTime << electionTimeout << MTBF, and homework-4-specific numbers (400-800ms timeout, 10 heartbeats/sec max, new leader within 5s), ending with the two most common homework bugs. The lecture covered Raft election-timer reset rules and split-vote behavior, delivered a war story about a 4-node/2-datacenter etcd cluster that became fully unavailable for 47 minutes, corrected an earlier claim (4 nodes tolerate only 1 failure), and moved into log replication mechanics including AppendEntries arguments, the consistency check, and the log matching property. The lecture explains Raft log replication mechanics (nextIndex/matchIndex), defines commit index and lastApplied, works a 5-server election/commitment example where the longest log loses, and states the election restriction and leader completeness property. The lecture proves the leader completeness property via the majority-overlap argument, states the precise Raft commitment rule (a leader only commits entries from its current term) using the Figure 8 scenario, and walks through a network partition where the old-term leader cannot commit anything. The lecturer walks through what happens when a partition heals (B steps down, log reconciliation deletes the uncommitted 'set x to 7'), covers client retry/dedup for exactly-once writes and stale-read fixes (ReadIndex, leases), then explains pre-vote, joint-consensus membership changes, and compares Raft to Paxos/Multi-Paxos. Speaker 1 contrasts Paxos/Multi-Paxos with Raft, reviews three Raft-based systems (etcd, Consul, CockroachDB) with caveats, introduces log compaction via snapshots and InstallSnapshot (HW6), and announces Homework 4 moved to Monday October 12 at 11:59pm while the midterm now covers lectures 1 through 9. Professor Castellanos finalized midterm logistics — Thursday October 22 in Larkin Hall 150, coverage expanded from lectures 1-8 to 1-9 with snapshots/log compaction and the BFT guest lecture excluded — set 
+
+#### Summary
+- Lecture 9 frames consensus as the fix for primary-backup's undetectable-failure and split-brain problems, since replicating VMware FT's external arbiter just moves the agreement problem.
+- After TA logistics announcements (homework 4 due Friday Oct 9, midterm Oct 22 in Larkin Hall 150 covering lectures 1-8), the professor opens Lecture 9 on consensus and Raft, recapping primary-backup replication, arguing why 2PC is the wrong
+- Kofi's office hours move from Wednesdays 2-4pm to Thursdays 3-5pm in Whitaker 214 (the lab room), starting this week, and will also be posted on Ed.
+- The midterm will be held in Larkin Hall, room 150, not the normal classroom, to allow students to be spaced out.
+- If a backup promoting itself guesses wrong, you get split brain: two primaries both accepting writes, diverging data that cannot be reconciled.
+
+#### Core concepts
+- Lecture 9 is titled 'Consensus, and the Raft algorithm' and explicitly builds on last Thursday's lecture 8 on primary-backup replication.
+- Primary-backup replication recap: a primary handles all client requests while a backup receives a log of everything the primary does and replays it, taking over invisibly if the primary dies.
+- Detecting a dead primary is ambiguous from the backup's view because a non-responding primary looks the same whether it crashed, the network is broken, or it is just very slow.
+- Wrongly promoting a backup while the primary is alive causes split brain: two primaries both accepting writes, with data diverging irreconcilably.
+- VMware FT solved split brain with an external arbiter — a test-and-set service on shared storage — where whoever wins the test-and-set becomes primary.
+- Replicating the arbiter only moves the problem, since the arbiter replicas would themselves need to agree on who won.
+- Consensus is defined as a way for a group of machines to agree on something where no single machine is special and the group keeps working even if some fail.
+- The replicated state machine pattern makes consensus practical: run a copy of a state machine on each server, guarantee they apply the same command sequence in the same order, and they all reach the same state.
+- The whole consensus problem reduces to keeping a replicated log identical across servers, with the algorithm agreeing on what fills log slot 1, slot 2, slot 3, forever.
+- Listed failure modes treated as normal: servers crash and return having lost memory but not disk; messages delayed arbitrarily, dropped, duplicated, out of order; network partitions.
+- FLP impossibility is presented as a fundamental, not merely engineering, result for consensus.
+- You cannot distinguish a crashed server from a slow one because the only information about another machine is the messages it sends, and 'no message yet' is consistent with both.
+- FLP (Fischer, Lynch, Paterson, 1985) says that in a fully asynchronous system with no bounds on message delay or process speed, no deterministic consensus algorithm can guarantee termination if even one process can crash.
+- FLP is about termination only, and one crash failure (not a majority) is enough, so you cannot guarantee both always reaching a decision and the decision always being consistent.
+- FLP does not say consensus is impossible in practice — the proof's adversary must schedule messages annoyingly forever, and real networks are not that adversarial forever.
+- Practical algorithms such as Paxos and Raft always guarantee safety but only guarantee progress when the network behaves reasonably (messages arrive within a timeout).
+- Safety is 'nothing bad ever happens' — verifiable by pointing to a finite moment of violation; liveness is 'something good eventually happens' — never pin-able to a finite moment.
+- Consensus safety means two servers never decide different values for the same log slot and nobody applies a command that was not agreed on; consensus liveness means a value eventually gets decided and the client eventually gets a response.
+- Raft, like Paxos, never gives up safety — even under partitions and crazy message delays it never has two servers apply different commands at the same index — what it gives up when the network is bad is liveness.
+- Majority quorums work because any two majorities of the same set must overlap, and the overlapping server carries the earlier decision forward — every Raft safety argument reduces to this overlap.
+- Raft's other big design choice is a strong leader: at most one leader at any time, all client requests go through the leader, and log entries flow only from leader to followers.
+- Raft splits time into numbered terms, each beginning with an election; a winning candidate leads for the rest of that term.
+- In normal operation Raft has exactly one leader and all other servers are followers; the leader handles all client requests and replicates the log, and a follower redirects clients to the leader.
+- Raft divides time into terms numbered with consecutive integers (term 1, 2, 3...), and each term begins with an election.
+- If a candidate wins it is leader for the rest of that term; if nobody wins (a split vote) the term ends with no leader and a new term with a new election starts shortly after.
+- Election safety guarantees there is at most one leader in any given term.
+- Every server stores its current term number and includes that term in every message it sends.
+- If a server sees a message with a term bigger than its own it immediately adopts the bigger term and, if it was leader or candidate, steps down to follower; a request with a smaller term is rejected as stale.
+- The term behaves like a Lamport clock, letting servers detect stale information such as a leader from an old term that doesn't know it's been replaced.
+- The basic algorithm needs only two RPCs: RequestVote (sent by candidates during elections) and AppendEntries (sent by leaders to replicate entries, doubling as a heartbeat when empty).
+- A third RPC, InstallSnapshot, exists for log compaction but is not covered in this lecture.
+- Raft uses heartbeats: the leader periodically sends empty AppendEntries to all followers, and a follower stays a follower as long as it keeps receiving valid heartbeats from the current leader.
+- Each follower has an election timeout; if it goes a whole timeout without hearing from a leader or granting a vote, it assumes there is no viable leader and starts an election.
+- Raft's solution to split votes is randomized election timeouts (150-300 ms in the paper), with each server picking a fresh random value every time the timer resets.
+- Raft's safety does not depend on timing at all, but its liveness does; the paper gives the timing requirement broadcastTime << electionTimeout << MTBF.
+- The election timer should be reset only when a server grants a vote or receives a valid AppendEntries from the current leader.
+- In a split vote, no candidate reaches a majority, so a term can pass with no leader, and skipped terms without a leader are fine.
+- Randomized timeouts make elections probabilistic — termination is not guaranteed (consistent with FLP), but the probability of repeated collisions drops off extremely fast.
+- Even-sized clusters never add fault tolerance, which is why everyone uses odd numbers.
+- The leader handles follower log inconsistencies by forcing the followers' logs to duplicate its own, overwriting conflicting entries with entries from the leader's log.
+- Log replication flow: the leader appends a client command to its own log, sends AppendEntries in parallel to all followers, and once safely replicated applies the entry to its state machine and returns the result to the client.
+- The consistency check (prevLogIndex and prevLogTerm) is the heart of Raft and guarantees the log matching property.
+- The consistency check functions as an induction step: the empty log trivially matches, and every successful AppendEntries preserves the log matching property.
+- The leader tracks a per-follower nextIndex and, on a failed consistency check, decrements it until logs match and then repairs the follower.
+- Overwriting conflicting follower entries is safe because of the election restriction: the leader will never overwrite a committed entry.
+- The leader keeps, for each follower, nextIndex — the index of the next log entry the leader will send to that follower.
+- When a leader first comes to power it initializes nextIndex for every follower to one past the end of its own log, optimistically assuming everyone is caught up.
+- If the AppendEntries consistency check fails, the follower returns false, the leader decrements nextIndex for that follower and retries until the logs match.
+- Once logs match, AppendEntries succeeds, the follower deletes any conflicting entries after that point and appends the leader's entries, staying consistent for the rest of the term.
+- The leader also keeps matchIndex per follower — the highest index known to be replicated on that follower — and uses it to decide commitment.
+- First-approximation commitment: an entry is committed once the leader that created it has replicated it on a majority of the servers.
+- The leader determines its commit index from matchIndex and tells followers via the leaderCommit field of every AppendEntries, including heartbeats.
+- The election restriction is the extra voting rule: a voter denies its vote if its own log is more up-to-date than the candidate's log.
+- The leader completeness property guarantees committed entries are never lost across leadership changes because any future leader already has them.
+- The majority-overlap argument: a committed entry is stored on a majority, and any election-winning majority overlaps with that majority, so at least one voter has the committed entry.
+- Leader completeness property: if a log entry is committed in a given term, that entry will be present in the logs of the leaders for all higher-numbered terms.
+- The overlap argument: committed means stored on a majority, winning an election needs votes from a majority, and any two majorities of five servers overlap, so at least one voter holds the committed entry.
+- Election restriction: a voter grants its vote only if the candidate's log is at least as up-to-date as its own, which (per paper section 5.4) forces the candidate to contain the committed entry.
+- The precise Raft commitment rule: a leader only commits log entries from its current term by counting replicas, and never commits an entry from a previous term just because it is on a majority.
+- Earlier-term entries are committed indirectly: once a current-term entry is committed, the log matching property means all preceding entries are committed too.
+- Persistent state on every server consists of exactly three things — currentTerm, votedFor, and the log — which must be on stable storage before responding to any RPC.
+- Everything else is volatile: commitIndex and lastApplied on every server, and nextIndex and matchIndex on the leader, all start over at their initial values after a reboot.
+- During a network partition the minority side keeps the old leader but cannot commit anything, while the majority side elects a new leader in a higher term and commits.
+- Two leaders can exist at the same time but only in different terms, and the older-term leader cannot commit anything because it cannot reach a majority, so safety holds.
+- A new leader commits a blank no-op entry at the start of its term so that a current-term entry commits as soon as possible, which also commits everything before it and lets the leader find out what is committed (paper section 8).
+- The overlap argument: B needs 3 acks for anything and can only reach A and itself, so nothing B does can ever become committed.
+- When the partition heals, B sends a term-7 heartbeat to E; E rejects it because term 7 is less than its term 8, and B immediately steps down to follower and updates its term to 8.
+- During reconciliation the consistency check backs up until index 20 matches, then at index 21 B and A delete their term-7 'set x to 7' entry and adopt E's term-8 entry.
+- Because 'set x to 7' was never committed, applied, or acknowledged, its removal from every log leaves the system consistent.
+- From Raft's perspective nothing was lost because nothing was ever promised: client 1 never received a success response, so it times out, finds the new leader E, and resends the write which commits in term 8.
+- Exactly-once semantics come from combining client retries (which give liveness) with a dedup table (which keeps it safe).
+- A partitioned leader answering reads from its local state machine returns a stale read (y before it was set to 3), which breaks linearizability even though it wrote nothing wrong.
+- Pre-vote stops an isolated server (D) from inflating its term: it first asks whether others would vote for it, and if a majority says no it never bumps its term.
+- You cannot switch configurations directly because old and new majorities can be disjoint, allowing two leaders in the same term and breaking the overlap argument.
+- Joint consensus requires a separate majority from the old config and a separate majority from the new config for any decision while in C old,new.
+- Raft is described as very close to a particular, well-specified flavor of Multi-Paxos with a strong leader.
+- In Paxos Phase 2 (accept/accepted) the proposer asks acceptors to accept a value, and must use the value from the highest-numbered proposal any of them already accepted; if a majority accepts, the value is chosen.
+- The thing doing the work in Paxos is majorities plus the overlap between the prepare majority and any earlier accept majority, the same core idea as Raft.
+- Multi-Paxos replicates a whole log by running many instances of Paxos (one per log slot) and electing a stable leader so phase 1 can mostly be skipped.
+- Multi-Paxos was historically never fully specified in one place, so implementations filled gaps differently, as the Google "Paxos Made Live" paper about Chubby describes.
+- Difference one: Raft's log has no holes, entries commit in order, and a follower's log is always a prefix-matching copy of the leader's, whereas Multi-Paxos slots can be decided independently and out of order producing gaps.
+- Difference two: Raft's election restriction means a new leader already has all committed entries so entries only flow leader-to-follower, while many Paxos variants require a new leader to learn missing entries during its first phase.
+- Difference three: Raft bundles leader election, log management, and membership into one specification referencing exactly which state is persistent, which Speaker 1 calls the biggest practical difference.
+- Raft's strong leader is also a bottleneck because every write goes through one machine, whereas leaderless/multi-leader Paxos variants like EPaxos can do better for geo-distributed workloads with low conflict rates.
+- Real implementations add pre-vote, check-quorum, leader leases, batching, pipelining, and snapshots, and Jepsen analyses by Kyle Kingsbury have found consistency bugs that are almost always in the code around the algorithm rather than the a
+- Log compaction addresses the fact that the log grows forever; snapshotting has each server independently snapshot its state machine state, write it to stable storage, and discard log entries up through the last entry included in the snapsho
+- When a leader has discarded entries it needs for a slow or brand-new follower, it sends its snapshot via the third RPC, InstallSnapshot.
+- The midterm scope was widened from lectures 1-8 to lectures 1-9, explicitly adding today's lecture to the coverage.
+- Today's examinable Raft content is election, replication, the election restriction, the commitment rule, partitions, and why direct membership changes are unsafe.
+- Log compaction (snapshots) is carved out of the midterm even though the rest of today's lecture is included.
+- Lecture 10, the Thursday guest lecture on Byzantine fault tolerance, is excluded from the midterm and deferred to the final.
+- A student summarized the scope as 'Raft is in, except snapshots, and BFT is out' and the professor confirmed it exactly.
+- Byzantine fault tolerance is framed around servers that can lie, motivating a different fault-tolerance threshold from Raft.
+- Optional deeper Raft material was pointed to: Raft paper section 6 on membership changes, section 7 on log compaction, and chapter 4 of Ongaro's dissertation on single-server membership changes.
+- Next Tuesday will cover leases versus ReadIndex for reads and Devin's question about whether pre-vote fully fixes disruptive servers.
+- A closing practical rule was given for distributed systems work: don't hold locks while sending RPCs.
+
+#### Definitions
+- Consensus: agreement across a group with no special machine, tolerating some failures.
+- Split brain: two primaries both accepting writes and both thinking they are in charge, causing diverging data.
+- Replicated state machine: a service modeled as a state machine with state, commands, and deterministic state transitions producing outputs.
+- Determinism: starting from the same state and applying the same commands in the same order yields the same end state, every time.
+- Two-phase commit is defined as atomic commitment, requiring every participant to vote yes before everyone commits, unlike consensus which only needs a majority.
+- The blocking problem of 2PC: after participants vote yes, a coordinator crash before the decision leaves participants stuck holding locks, unable to commit or abort unilaterally.
+- FLP is the Fischer, Lynch, and Paterson result from 1985, stated precisely because it is commonly misquoted.
+- FLP: in a fully asynchronous system with no bound on message delays or process speed, no deterministic consensus algorithm can guarantee it always terminates if even one process can crash.
+- FLP = Fischer, Lynch, and Paterson, from 1985; the lecturer stresses the statement is often misquoted and must be given carefully.
+- A fully asynchronous system is defined as one with no bound on message delays and no bound on how slow a process can be.
+- A safety property says nothing bad ever happens; formally, if violated you can point to a finite moment in the execution where it went wrong.
+- A liveness property says something good eventually happens; you can never point to a finite moment and say liveness was violated there, because it might still happen later.
+- A quorum is a subset of servers big enough that any two quorums must overlap in at least one server.
+- The quorum used in Raft is a majority quorum — simply a majority of the servers in the cluster.
+- 'At most one leader per term' is a safety property (election safety): if violated, there is a specific moment where the second leader got elected.
+- Raft servers are in exactly one of three states: follower (passive, only responds, initiates nothing), candidate (running an election to become leader), or leader (handles all client requests and replicates the log).
+- A term is Raft's unit of time, numbered with consecutive integers (term 1, term 2, term 3).
+- A split vote is when nobody wins an election; that term then ends with no leader and a new term with a new election starts shortly after.
+- Unanimity is the extreme quorum of n out of n, which gives zero fault tolerance; majority is the smallest quorum where any two quorums still overlap, hence the sweet spot.
+- A term is defined as a monotonically increasing number that acts as a logical clock; each term has at most one leader and some terms have no leader.
+- Election safety is the guarantee that there is at most one leader per term.
+- A split vote is when several followers time out at the same moment, all become candidates, and split the votes so nobody gets a majority.
+- The persisted vote field is called votedFor and is stored together with currentTerm as persistent state.
+- RequestVote arguments are: term (the candidate's term), candidateId, lastLogIndex (index of candidate's last log entry), and lastLogTerm (term of that entry).
+- The RequestVote reply has two fields: term (the voter's current term, so the candidate can update if behind) and voteGranted (true or false).
+- broadcastTime is the average time for a server to send RPCs to every server and get replies.
+- MTBF is the mean time between failures for a single server.
+- A heartbeat is defined as an empty AppendEntries message the leader periodically sends, meaning "I'm still here, I'm still the leader."
+- Heartbeat limit: a maximum of 10 heartbeats per second.
+- Election timeout numbers: the paper specifies 150-300ms, while the homework recommends 400-800ms because of the tester's heartbeat limit.
+- Each log entry has three things: the command itself, the term in which the leader received it, and its index (its position in the log), where index starts at 1.
+- AppendEntries arguments are: term (the leader's term), leaderId (so followers can redirect clients), prevLogIndex, prevLogTerm, entries (empty for a heartbeat), and leaderCommit (the leader's commit index).
+- The AppendEntries reply contains term (so the leader can detect if it is stale) and success (true if the follower had an entry matching prevLogIndex and prevLogTerm).
+- Log matching property: if two logs contain an entry with the same index and the same term, then the logs are identical in all entries up through that index.
+- nextIndex is the index of the next log entry the leader will send to a given follower.
+- An entry is committed once it has been safely replicated, applied to the leader's state machine, and its result returned to the client.
+- Majority/quorum size equals floor(n/2) plus 1.
+- matchIndex: for each follower, the highest index known to be replicated on that follower.
+- Commit index: the highest log index that a server knows to be committed; every server tracks it, it starts at 0 and only increases.
+- lastApplied: the highest index a server has actually applied to its state machine; whenever commitIndex exceeds lastApplied you increment it and apply that entry, in order, one at a time.
+- Committed is a fact about the cluster: the entry is durable and will never be lost or changed; applied is a fact about one server having executed it against its local state machine.
+- A follower sets its own commit index to the minimum of leaderCommit and the index of its last new entry, because it might not have all those entries yet.
+- "More up-to-date" is ordered: first compare the terms of the last entries (higher term wins, length irrelevant), and only if those terms are equal compare length (longer wins).
+- A candidate gets a vote only if its log is at least as up-to-date as the voter's log (last term first, then length).
+- Leader completeness property is defined as: if a log entry is committed in a given term, that entry will be present in the logs of leaders for all higher-numbered terms.
+- The up-to-date comparison used by the election restriction compares last term first, then log length.
+- The commitment rule stated as a dichotomy: majority plus current term means committed, while majority plus old term means nothing yet — wait until something from your own term lands on top of it.
+- Persistent state is defined as the three items written to stable storage before responding to any RPC: currentTerm, votedFor, and the log.
+- Volatile state is defined as commitIndex and lastApplied on every server plus nextIndex and matchIndex on the leader, all rebuilt (reset to initial values) after a restart.
+- Committed is described as a property of the cluster, not of a single server, so the cluster can always rediscover it even though an individual server forgets it on reboot.
+- The state machine is volatile in the basic version, so on restart the log is replayed from the beginning — described as slow and the motivation for snapshots.
+- Split brain is not a safety violation if only one of the two leaders can actually make progress (commit).
+- A dedup table: the state machine tracks the latest serial number it has executed for each client plus the response, and returns the saved response for repeats.
+- Linearizable semantics / exactly once: each command takes effect exactly once because repeated serial numbers are not re-run.
+- ReadIndex is etcd's fix for reads: before answering a read-only request the leader must confirm it is still leader by exchanging heartbeats with a majority.
+- A lease lets a leader serve reads locally if a majority acknowledged a heartbeat recently, assuming no other election within the last election timeout, but it depends on bounded clock drift.
+- Pre-vote lets a server ask 'would you vote for me if I ran?' before incrementing its term, so an isolated server never inflates its term.
+- Joint consensus is a two-phase configuration C old,new that requires separate majorities from both the old and new configurations.
+- Learners are new servers that join first as non-voting members so they can catch up on the log without slowing down commits.
+- Basic Paxos (single-decree Paxos) agrees on one single value and has three roles: proposers, acceptors, and learners.
+- Multi-Paxos runs many instances of Paxos, one per log slot, and in practice elects a stable leader so phase 1 can usually be skipped.
+- Paxos Phase 2 is the accept/accepted phase in which the proposer asks acceptors to accept a value and a majority acceptance chooses the value.
+- Multi-Paxos is running many instances of Paxos, one per log slot, with a stable elected leader to skip phase 1 most of the time.
+- A snapshot must include two pieces of metadata: the last included index (index of the last entry the snapshot replaces) and the last included term (the term of that entry).
+- The snapshot also includes the latest configuration for membership changes.
+- InstallSnapshot is described as the third RPC, used by the leader to send a snapshot when it no longer has the entries a follower needs.
+- Multi-Raft refers to a large cluster running thousands of Raft groups at once, as CockroachDB does with one group per range.
+- Fencing tokens are needed to guard against a client whose lease expired while it still believes it holds a lock.
+- Zab is ZooKeeper's own protocol, similar in spirit to Paxos/Raft but not the same.
+- Raft needs 2f+1 servers to tolerate f crash failures.
+- Byzantine fault tolerance, where servers can lie, needs 3f+1 servers — an extra f over Raft's 2f+1.
+- 'Election restriction' and 'commitment rule' were named as Raft concepts covered today and therefore examinable.
+- 'Log compaction' is equated with 'snapshots' and defined by exclusion as not being on the midterm.
+- Leases versus ReadIndex was named as a distinction about how reads are handled, deferred to next Tuesday.
+- Pre-vote was framed as a mechanism whose ability to fully fix disruptive servers is still open.
+- The FLP paper was referenced as an owed link the professor will post on Ed tonight.
+
+#### Examples
+- The VMware fault tolerance paper is cited as the lecture 8 reading, replicating an entire virtual machine for primary-backup fault tolerance.
+- Example state machines named for consensus: a key-value store, a lock service, and a configuration database.
+- Concrete example of nondeterminism fix: log 'set x to 10:42 and 17 seconds' rather than 'set x to the current time', so every replica applies the identical value.
+- Five servers each running a copy of the same state machine is the running illustration of how replicated state machines tolerate crashes.
+- Homework 4 is illustrated by its scope: leader election and heartbeats in the Go skeleton, with AppendEntries used only as an empty heartbeat, not log replication.
+- Running joke-as-example: the second floor espresso machine is a single node with no replicas and no failover, so when it goes down the faculty 'loses liveness'.
+- The Larkin coffee cart is described as a Byzantine failure because it claims to be coffee but is not.
+- A system that does nothing at all is perfectly safe — it never decides anything wrong because it never decides anything — it just has zero liveness.
+- Conversely, a system that immediately decides whatever it feels like is very live and completely unsafe.
+- The jury analogy: the lecturer compares majority quorums to a jury, describing a jury as a consensus protocol with a quorum of 12 out of 12 (n out of n).
+- Twelve Angry Men (1957, with Henry Fonda, not the remake) is described: twelve jurors in one hot room, unanimous verdict required, starting 11 to 1 with Fonda flipping jurors one at a time.
+- A hung jury illustrates liveness loss under unanimity: one stubborn juror, or one juror who gets sick and goes home, and liveness is completely gone.
+- Worked quorum sizes: n=5 gives floor(5/2)+1 = 3, so 3 out of 5 are needed; n=3 gives floor(1.5)+1 = 2, so 2 out of 3 are needed.
+- Failure tolerance examples: 5 servers with quorum 3 can lose 2; 3 servers with quorum 2 can lose 1.
+- The 2f+1 pattern: f=1 needs 3 servers, f=2 needs 5, f=3 needs 7.
+- A 4-server cluster has a majority of 3, so it can tolerate 2 failures — meaning adding that fourth node buys something.
+- The Raft user study taught both Paxos and Raft to students at Stanford and Berkeley and gave quizzes; students did better on the Raft quiz.
+- A 5-server cluster needs 3 votes to win: its own plus 2 more.
+- The one-vote-per-term rule plus majority explains why two candidates would need overlapping majorities, and the overlap server cannot have voted twice.
+- If a server votes for A, crashes and reboots and forgot its vote, it could vote for B in the same term, producing two leaders — this motivates persisting votedFor.
+- The Raft authors' failed ranking-system example: if the high-priority server is flaky, partitioned, or has a log behind that cannot win, everyone keeps waiting for it.
+- A narrow randomization range like 150-151 ms causes split votes to pile up and elections to take seconds.
+- Using 150-300 ms timeouts with 100 ms heartbeats under the homework tester causes spurious elections everywhere.
+- Split vote example: five servers A, B, C, D, E all in term 6, with leader A crashing.
+- In the split vote, B's timer fires at 212ms and D's fires at 213ms — nearly simultaneous.
+- Both B and D go to term 7 and vote for themselves; C grants B and E grants D, giving B 2 votes (B, C) and D 2 votes (D, E), so nobody has the 3 needed — a split vote with no leader in term 7.
+- On a new round of random timeouts B picks 290ms and D picks 160ms; D times out first, goes to term 8, and wins with 3 votes as C and E grant (and B would also grant if D's log is up to date).
+- War story: around 2017, at a payments startup called Ledgerline, a coordination/config service built on etcd stored which payment processor each merchant was routed to.
+- The config service ran on 3 nodes in one data center, and a design review proposed adding a fourth node split 2 in Virginia and 2 in Ohio to be 'more robust'.
+- When the Virginia–Ohio link flapped about two months later, each side held 2 nodes but a majority of 4 is 3, so neither side could elect a leader or commit and the store was unavailable for 47 minutes.
+- About 38,000 payment authorizations were queued during the outage; nothing was lost and safety held, but payments could not be routed for 47 minutes.
+- With 3 nodes in one site, a link flap between sites would not have mattered at all — so the 4-node setup made things strictly worse.
+- The real fix was 5 nodes across 3 sites (2 in Virginia, 2 in Ohio, 1 in a third region), applying 2f+1 to data centers so losing any one site still leaves 3 of 5.
+- Adopting the 5-node/3-site fix cost a bit more write latency, because commits now sometimes wait on a cross-region round trip.
+- Worked example: five servers A, B, C, D, E in term 3 with A as leader, logs written as a list of terms per index.
+- A and B have identical logs 1,1,2,3,3,3 (six entries); C and E have 1,1,2,3,3 (five entries, missing index 6); D has 1,1,2 (three entries, was rebooting).
+- Index 5 (term 3) is on A, B, C, E — 4 of 5 servers, at least a majority of 3 and from the leader's current term — so index 5 is committed.
+- Index 6 (term 3) is only on A and B — 2 of 5, not a majority — so it is not committed, making A's commit index 5.
+- Random election timeouts in the example are B 280 ms, C 170, D 155, E 240, so D times out first at 155 ms.
+- D increments to term 4, votes for itself, and sends RequestVote with lastLogIndex 3 and lastLogTerm 2, but B, C, and E all reject because their last term is 3, so D gets only its own vote and cannot win.
+- C's timer fires at 170 ms; C goes to term 5 and sends RequestVote with lastLogTerm 3, lastLogIndex 5, getting votes from D and E plus its own — three votes out of five — making C leader in term 5.
+- B had the longest log in the cluster (6 entries) and did not win; the rule is at least as up-to-date as the voter, not longest wins.
+- Counterexample to 'longest log wins': Log X has 7 entries with last term 2, Log Y has 5 entries with last term 3 — Y is more up-to-date because term 3 beats term 2 even though X is longer.
+- B's uncommitted index 6 (term 3) is deleted and replaced by C's term 5 entry, which is fine because it was never committed and no client was told it succeeded.
+- Index 5 was committed on a majority consisting of A, B, C, and E; server D did not have it.
+- D, which lacked index 5, could only get votes from servers that also lacked it — just itself — so D can never win while index 5 is committed.
+- Figure 8 step one: in term 2, leader A appends an entry at index 2 and replicates it to B only before crashing, leaving A and B with index 2 term 2 while C, D, and E only have index 1.
+- Figure 8 step two: E times out and is elected leader for term 3 with votes from C and D (its log matches theirs at index 1), places a different entry at index 2 with term 3 only on its own log, then crashes before replicating.
+- Figure 8 step three: A returns and is elected leader for term 4 with votes from B and C (A's last term 2 beats B's 2 and C's 1), then replicates index 2 term 2 onto C, making it present on A, B, and C — a majority.
+- Figure 8 step four: E returns with index 2 term 3, becomes a candidate for term 5, and wins because B and C (last term 2) and D (last term 1) all consider term 3 more up-to-date; E then overwrites index 2 term 2 on B and C.
+- Figure 8 consequence: the entry that had been on a majority (index 2 term 2) gets erased, so marking it committed and replying success would have violated safety.
+- Corrected Figure 8 fix: in term 4, A appends a new entry at index 3 with term 4 and replicates index 2 and index 3 to B and C; index 3 term 4 is now on a majority, so A commits index 3 and index 2 comes along.
+- After the fix, E cannot win: E's last term is 3 while A, B, and C have last term 4, so E can get at most D and itself (two votes) and the overwrite cannot happen.
+- Partition example setup: five servers A–E, leader B in term 7, commit index 20 everywhere, and all logs identical up through index 20.
+- Partition example: client 1 sends "set x to 7" to leader B, which appends it at index 21 term 7 and replicates to A only — 2 of 5 servers — so B cannot commit, cannot apply, and does not reply to client 1.
+- On the majority side, E's election timer fires first at 210 milliseconds, it goes to term 8 and wins with votes from C and D whose logs end at index 20 term 7.
+- Client 2 sends "set y to 3" to new leader E, which appends it at index 21 term 8 and replicates to C and D — 3 of 5, a current-term majority — so it commits, applies, and replies success.
+- At that moment two servers (B in term 7 and E in term 8) each believe they are leader and hold different entries at index 21, which the instructor asks students to recognize is not a safety violation.
+- At that moment two servers believe they are leaders: B in term 7 and E in term 8, holding different entries at index 21.
+- 'set x to 7' is idempotent, so a duplicate execution is harmless, whereas 'withdraw 100 dollars' would not be harmless.
+- A read 'what is y?' served by isolated leader B returns y's pre-partition value, while the majority side had already committed y = 3 — a stale read.
+- Isolated server D times out repeatedly, going to term 9, 10, 11, 12 while the real cluster stays in term 8; when D returns its term-12 RequestVote forces leader E to step down even though D's log is behind.
+- Going from 3 servers (A, B, C) to 5 (A, B, C, D, E): A and B keep the old config (majority 2 of 3) while C, D, E adopt the new (majority 3 of 5), so A and B could elect A while C, D, E elect E in the same term.
+- Paxos was written as 'The Part-Time Parliament', an allegory about a fictional parliament on a Greek island that did not help anyone understand it.
+- 'Paxos Made Simple' (2001) opens with the claim that the Paxos algorithm, presented in plain English, is very simple — a sentence people have opinions about.
+- The Google paper "Paxos Made Live," about building the Chubby lock service, illustrates that the gap between the Paxos paper and a real system is enormous.
+- The dedup table described in lecture is exactly what students implement in homework 5's key-value part.
+- EPaxos is given as an example of a Paxos-family leaderless/multi-leader variant better suited to geo-distributed workloads with low conflict rates.
+- etcd is a key-value store originally from CoreOS, now part of the CNCF, and is the backing store holding all Kubernetes cluster state as a Raft cluster.
+- Consul, from HashiCorp, provides service discovery and config, with its server nodes running Raft using HashiCorp's own Raft library.
+- CockroachDB, a distributed SQL database, splits data into ranges with each range its own Raft group of usually 3 replicas rather than one Raft group for the whole database.
+- CockroachDB deals with thousands of heartbeats per second by coalescing heartbeats between the same pair of nodes.
+- Not all systems use Raft: Google's Chubby lock service and Spanner use Paxos, and ZooKeeper uses Zab.
+- Speaker 1 characterizes the homework tester as a baby Jepsen that partitions servers, drops and reorders messages, and checks the results.
+- A concrete snapshotting technique is copy-on-write, such as forking the process on Linux so the child writes the snapshot while the parent keeps serving.
+- Devin's case that Homework 5 due right before the midterm would be 'really tight with studying' prompted the professor to promise only that he and Kofi would talk about it.
+- Devin's request for two sheets of notes was used as the worked example of the one-sheet rule: 'The act of deciding what goes on the sheet is half the studying.'
+- The midterm moves rooms: it is in Larkin Hall 150, not the usual lecture room, while the review session stays in this room, Whitaker 120.
+- Kofi's office hours changed from Wednesdays to Thursdays 3-5 in Whitaker 214, while Castellanos keeps extra office hours Wednesday 3-4:30 in Whitaker 318 and none on Thursday.
+- The practice midterm's authorship is why the posting moved to Ana — she wrote most of the questions — with solutions arriving a few days later.
+- A student with a Sunday work shift asked whether the review session would be recorded, illustrating the access problem the recording is meant to solve.
+- Jordan's offer to post his own recording in the class Discord was used by the professor as a live illustration of replication ('replication. It's everywhere').
+- The professor admitted he always forgets to post slides, asking students to remind him — alongside the still-unposted range size slide.
+
+#### Formulas / steps
+- Step 1 of the replicated state machine argument: model any service as a deterministic state machine with state plus commands.
+- Step 2: run a copy of the state machine on each of N servers and guarantee they apply the identical command sequence in the identical order to reach identical state.
+- Step 3: reduce the whole problem to agreeing on the contents of each replicated log slot, which is what the consensus algorithm does.
+- 2PC procedure: every participant votes yes, then everyone commits — requiring all participants rather than a majority.
+- Fix for nondeterministic commands: the leader evaluates the nondeterministic part once (picks the random number or reads the time) and writes the concrete value into the log entry.
+- Consensus goal statement: a protocol that makes progress as long as a majority of servers are up.
+- Majority quorum size for a cluster of n servers is floor(n/2) + 1.
+- Number of servers that can fail equals n minus the quorum size (since a majority must stay up).
+- Stated inversely, to tolerate f failures you need 2f + 1 servers.
+- Overlap proof step: if two majorities did not overlap, you would have two disjoint groups each with more than half the servers, summing to more than all servers, which is impossible.
+- Raft's decomposition for understandability: (1) leader election, (2) log replication, (3) safety — the restrictions making the first two correct together — with membership changes and log compaction as add-ons.
+- Client-request routing step: if a client talks to a follower, the follower redirects it to the leader.
+- Log-entry flow is one-directional: entries only travel from leader to followers and never from followers to the leader.
+- Term sequence: each term begins with an election; if a candidate wins it leads for the rest of the term; if the vote splits, the term ends leaderless and a new term with a new election begins shortly after.
+- To start an election a follower does four things: increments its current term, transitions to candidate, votes for itself, and sends RequestVote RPCs in parallel to every other server.
+- After starting an election one of three things happens: it wins, another server establishes itself as leader, or a timeout passes with no winner.
+- A candidate wins only if it gets votes from a majority of the full cluster for the same term — a majority of the whole cluster, not of servers that happen to respond.
+- The timing inequality to apply is: broadcastTime << electionTimeout << MTBF.
+- Typical magnitudes: broadcastTime ~0.5-20 ms (depending on disk writes), election timeout ~10-500 ms, and MTBF is months.
+- When a candidate receives AppendEntries with a term at least as large as its own it accepts the leader and becomes a follower; if the term is smaller it rejects it and keeps campaigning.
+- Homework-4 configuration procedure: cap heartbeats at 10/sec, use a 400-800 ms randomized election timeout, and ensure a new leader is elected within 5 seconds of failure.
+- Majority formula: majority = floor(n/2) + 1; fault tolerance = n minus the majority.
+- Cluster fault-tolerance table: 3 tolerates 1, 4 tolerates 1, 5 tolerates 2, 6 tolerates 2, and 7 tolerates 3.
+- Log replication workflow: client sends a command → leader appends it to its log → leader sends AppendEntries in parallel → once safely replicated the leader commits and applies to its state machine → result returned to client.
+- Follower AppendEntries handling: look at your log at prevLogIndex; if missing or the term differs from prevLogTerm, reply success=false; if it matches, accept, and delete any conflicting entries after that point before appending the leader'
+- nextIndex repair procedure: on gaining power, initialize nextIndex for every follower to one past the end of the leader's own log, then on each failed consistency check decrement nextIndex and retry until the logs match.
+- Leader retries AppendEntries indefinitely — if followers crash, run slowly, or packets drop, it keeps retrying until all followers store all entries.
+- Data-center fault-tolerance design rule: apply 2f+1 across sites, e.g. 2+2+1 across three regions so any single site loss still leaves a quorum.
+- Backup optimization: the follower returns the conflicting term and the first index it stores for that term so the leader can skip a whole term at a time instead of decrementing one index at a time.
+- Commit determination step: for a given index, count how many servers have it; if it is a majority and from the leader's current term, it is committed.
+- Once an index is committed, everything before it is committed as well, by log matching.
+- Applying step: while commitIndex is greater than lastApplied, increment lastApplied and apply that entry, in order, one at a time.
+- Up-to-date comparison procedure: compare the terms of the last entries first; only if equal, compare log length to decide which is more up-to-date.
+- Fast version of the leader-completeness proof: committed means on a majority, winning means votes from a majority, the two majorities overlap, and the overlap voter won't vote for a candidate missing its committed entries — so every new lea
+- Indirect commit procedure: entries from earlier terms are not committed by counting replicas; instead, once a current-term entry commits, log matching commits all entries before it.
+- Fix procedure for a stale old-term entry: the leader appends a new entry in its current term and replicates that plus the predecessor, so committing the new entry drags the old one along.
+- On restart, the state machine is rebuilt by replaying the log from the beginning (in the basic, no-snapshot version).
+- Recovery of commit state after restart: followers relearn commitIndex from the leader's leaderCommit in the next AppendEntries, and a restarted leader re-establishes it by committing an entry from its new term.
+- No-op step: a new leader appends a blank entry at the start of its term so it can commit a current-term entry immediately and thereby commit everything before it.
+- Commit requires the entry to be on a majority AND from the leader's current term; B in the partition needs 3 acks but can only reach A and itself, so nothing it does can ever become committed.
+- Commit rule: an entry commits when it is replicated to a majority (3 of 5) AND is from the leader's current term.
+- Step-down procedure: on receiving a higher term in a reply, a leader immediately becomes a follower and updates its term to that higher value.
+- Reconciliation procedure: the consistency check backs up until an index matches, then deletes conflicting entries and takes the leader's.
+- Exactly-once steps: clients assign themselves a unique ID and a serial number per command; the state machine checks the last executed serial per client and, on a repeat, returns the saved response instead of re-running.
+- Read fix: before answering a read-only request, the leader exchanges heartbeats with a majority to confirm it is still leader; B cannot reach a majority, so it cannot serve the read.
+- Pre-vote step: before incrementing its term, a server asks 'would you vote for me if I ran?' and only bumps its term and runs if a majority says yes.
+- Joint consensus two-phase steps: first commit C old,new (requiring both majorities), then commit C new; after C new commits, the old configuration is irrelevant and servers not in it can be shut down.
+- Single-server change procedure: add or remove one server at a time, since any old-config majority and any new-config majority still overlap when only one member changes.
+- Basic Paxos two phases: Phase 1 prepare/promise (proposer picks a number and asks a majority of acceptors to promise not to accept anything lower and report anything already accepted); Phase 2 accept/accepted (acceptors accept a value, usin
+- To replicate a log with Multi-Paxos: run one Paxos instance per log slot and elect a stable leader so phase 1 can be skipped most of the time.
+- Snapshot procedure: a server snapshots its current (only committed, applied) state machine state, writes it to stable storage, then discards all log entries up through the last entry included in the snapshot.
+- The last included index and last included term exist because AppendEntries' consistency check needs a prevLogIndex and prevLogTerm for the first entry after the snapshot, and those log entries are gone.
+- On receiving InstallSnapshot, if the snapshot covers everything in the follower's log the follower discards its whole log and replaces its state with the snapshot; if it covers only a prefix, the follower deletes that prefix and keeps the e
+- Fault-tolerance formula: 2f+1 servers tolerate f crash failures in Raft, whereas 3f+1 are required in BFT where servers can lie.
+- Midterm note prep procedure: one letter-size sheet, both sides, handwritten or typed, with laptops and phones banned.
+- Recommended practice sequence: attempt the practice midterm problems first and only then consult the solutions, which appear a few days later.
+- Reading step before Thursday's lecture: read sections 1 through 4 of Castro and Liskov.
+- Pre-lecture thinking step: arrive with a guess at why BFT requires the extra f, since the professor deliberately did not answer it.
+- Implementation rule stated at sign-off: do not hold locks while sending RPCs.
+
+#### Things to memorize
+- Homework 4 (Raft leader election: leader election and heartbeats in the Go skeleton) is due Friday, October 9th at 11:59pm.
+- There are 5 late days for the whole semester, with at most 2 usable on any single assignment.
+- Kofi's office hours are Thursdays 3-5pm in Whitaker 214 (the lab room), no longer Wednesdays.
+- The midterm is Thursday, October 22nd, during normal class time, in Larkin Hall room 150, and covers lectures 1 through 8 (up through primary-backup replication).
+- One-line summary to write down: 2PC is all-or-nothing on participants, and consensus is majority.
+- FLP = Fischer, Lynch, and Paterson, 1985; the impossibility holds even with a single crash failure, not a majority.
+- The replicated state machine key takeaway: guaranteeing the same command sequence in the same order yields the same state, and the consensus job is to keep the replicated log identical.
+- Lecture 10 on Thursday will cover Byzantine fault tolerance, given by guest lecturer Dr. Joanne Whitfield.
+- Be able to state FLP in one or two sentences — the statement, not the bivalent configuration proof.
+- The definitions of safety ('nothing bad ever happens', pinpointable to a finite moment) and liveness ('something good eventually happens', never pinpointable).
+- Raft guarantees safety unconditionally but not liveness — flagged by the lecturer with a star as directly examinable.
+- The quorum formula floor(n/2)+1 and the 2f+1 relationship must be memorized well enough to do in your sleep.
+- Consensus safety statement: two servers never decide different values for the same log slot, and nobody applies a command that wasn't agreed on.
+- Raft citation facts: 2014 paper by Diego Ongaro and John Ousterhout at Stanford, titled 'In Search of an Understandable Consensus Algorithm', which won best paper at USENIX ATC that year.
+- Raft's three server states — follower, candidate, leader — with followers passive, the candidate mid-election and the leader handling requests and replication.
+- The paper's randomized election timeout range is 150 to 300 milliseconds.
+- The homework-recommended election timeout is 400 to 800 milliseconds, distinct from the paper's 150-300 ms.
+- The homework tester limits you to at most 10 heartbeats per second per server.
+- The homework tester requires a new leader to be elected within 5 seconds of the old leader failing.
+- currentTerm and votedFor are persistent state and must be saved before responding.
+- The two RPCs to remember are RequestVote (elections) and AppendEntries (log replication plus heartbeat); InstallSnapshot is only for compaction.
+- The timing requirement to memorize is broadcastTime << electionTimeout << MTBF.
+- Maximum of 10 heartbeats per second and a new leader within 5 seconds.
+- Use randomized timeouts — do not hardcode 500 (a common cause of a hanging split vote test).
+- Memorize the homework election timeout recommendation of 400-800ms (distinct from the paper's 150-300ms).
+- Reset the election timer only when granting a vote or on a valid AppendEntries from the current leader.
+- 4 nodes tolerate only 1 failure — the same fault tolerance as 3 nodes.
+- Know the fault-tolerance progression: 3→1, 4→1, 5→2, 6→2, 7→3, and that even numbers never help.
+- Log matching property (word for word): if two logs contain an entry with the same index and same term, then the logs are identical in all entries up through that index.
+- Know the six AppendEntries arguments: term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit.
+- Log index starts at 1 (e.g., entry at index 7 might be term 3, command 'set x to 5').
+- A majority of five servers is three.
+- The commit index starts at 0 and only increases.
+- The election restriction: a voter denies its vote if its own log is more up-to-date than the candidate's log.
+- Up-to-date ordering to memorize: last term first, then length.
+- Leader completeness property: a committed entry in a given term appears in the logs of leaders for all higher-numbered terms.
+- Commitment first approximation: majority replicated in the current term = committed.
+- The election restriction, the up-to-date comparison (last term first, then length), and leader completeness will be on the exam — the instructor expects a question giving five logs and asking which servers can become leader.
+- The precise commitment rule (current term only) and the Figure 8 scenario that explains why will be on the exam, guaranteed every year.
+- The exact phrasing to memorize: "Majority plus current term means committed. Majority plus old term means nothing yet, wait until something from your own term lands on top of it."
+- Persistent state list to memorize: currentTerm, votedFor, and the log.
+- Volatile state list to memorize: commitIndex and lastApplied on every server, nextIndex and matchIndex on the leader.
+- Memorize the rule that a leader never commits an entry from a previous term just because it is on a majority.
+- Two leaders may exist at the same time but only in different terms, and the older-term leader can never commit anything.
+- B needs 3 acks for anything and can only reach A and itself, so it can never commit — the overlap argument.
+- Client 1's 'set x to 7' was lost because it was never acknowledged; a correct client times out and retries against the new leader.
+- Raft paper section 8 gives the client IDs + serial numbers dedup scheme for exactly-once semantics.
+- For the exam, know why you cannot switch configurations directly (the two disjoint majorities problem); there will be no requirement to reproduce the joint consensus protocol step by step.
+- Datum: Paxos's original paper was written around 1990 and published in 1998; 'Paxos Made Simple' was written in 2001.
+- Pre-vote is in Ongaro's PhD dissertation, not the original conference paper, and is implemented by etcd and a few others.
+- Both Raft and Paxos need 2f+1 servers to tolerate f crash failures.
+- etcd recommends clusters of 3 or 5 members and discourages going much beyond 7, because every write must reach a majority so more members means slower writes.
+- etcd defaults are a 100 millisecond heartbeat interval and a 1000 millisecond election timeout, notably longer than the paper's 150 to 300 milliseconds.
+- There are now three different election timeout numbers in play (paper 150-300ms, etcd 1000ms, etc.), and each is correct for its own context.
+- Consul recommends 3 or 5 server nodes running Raft.
+- CockroachDB typically uses 3 replicas per range Raft group.
+- The CockroachDB default range size has changed across versions; Speaker 1 says 512MB nowadays but tells students not to memorize the number.
+- Homework 4 is due Monday, October 12th at 11:59pm, with late days counted from Monday night.
+- The midterm is Thursday, October 22nd, during class time, in Larkin Hall 150, and covers lectures 1 through 9.
+- Midterm: Thursday October 22, during class time, in Larkin Hall 150 (not the usual room).
+- Midterm coverage: lectures 1 through 9, with snapshots/log compaction and the BFT guest lecture excluded.
+- Homework 5 is released Tuesday October 13, and its due date was not changed today.
+- Review session: Sunday October 18, 4 to 6pm, in Whitaker 120 (this room).
+- Practice midterm posted by Ana on Ed this Friday; solutions a few days later.
+- Office hours: Castellanos extra hours Wednesday 3-4:30 in Whitaker 318 with none Thursday; Kofi Thursdays 3-5 in Whitaker 214.
+- Thursday reading: Castro and Liskov, 'Practical Byzantine Fault Tolerance', 1999, sections 1-4.
+- Key numbers: Raft tolerates f failures with 2f+1 servers; BFT with lying servers needs 3f+1.
+
+#### Confusing points
+- You cannot distinguish a crashed server from a slow one, because the only information you get from another machine is a message and 'no message yet' is consistent with both cases.
+- Why 2PC does not solve consensus is subtle: it requires all participants rather than a majority, which is the opposite of fault tolerance.
+- Replicating the arbiter seems to fix the single point of failure but just recreates the agreement problem among arbiter replicas.
+- Nondeterministic state machines are a real bug people hit, and students may wrongly assume consensus protects them from it.
+- Whether the guest lecture on Byzantine fault tolerance is on the midterm was raised but deferred rather than answered.
+- FLP is often misquoted, so the precise statement (fully asynchronous system, deterministic algorithm, even one crash) matters.
+- FLP is frequently misquoted; the lecturer insists on stating it carefully and notes it concerns termination, not the impossibility of consensus in practice.
+- FLP does not say consensus cannot be made consistent — it says you cannot guarantee both termination and consistency in a purely asynchronous model with even one crash.
+- Liveness violations cannot be attributed to any finite moment of an execution because progress might still occur later, which makes liveness harder to verify than safety.
+- Counterintuitive quorum arithmetic: 4 servers have a majority of 3, so a 4-node cluster tolerates 2 failures, which is why adding a fourth node 'buys you something'.
+- Unanimity is a valid but extreme quorum (n out of n, zero fault tolerance), so 'very safe' does not mean 'usable' — majority is the minimum quorum that still overlaps.
+- The question of why odd numbers of servers are used was left unanswered in this chunk; the lecturer deferred it, saying he has a story about it later.
+- It seems contradictory that voting is first-come, first-served yet RequestVote carries lastLogIndex and lastLogTerm — the lecture says the extra restriction comes in the safety section.
+- Two different election timeout numbers are in play: the paper's 150-300 ms and the homework's 400-800 ms, and they must not be mixed up.
+- It is easy to reset the election timer incorrectly — the timer should reset only on a valid AppendEntries from the current leader or when granting a vote, not on every RequestVote.
+- Randomization was chosen over a fixed-priority/ranking scheme because ranking had subtle availability corner cases, though ranking can still work — it is just harder to reason about.
+- Two different timeout numbers are in play: the paper's 150-300ms versus the homework's 400-800ms — do not mix them up.
+- Resetting the election timer on every RequestVote (including rejected ones) is a subtle bug that can block progress — the timer should only reset when a vote is granted.
+- The speaker earlier wrongly stated 4 nodes tolerate 2 failures and explicitly retracted it as a misspeak; the correct value is 1.
+- Log matching subtlety: same index and same term at one position means the entire prefix is identical, not just that one entry — people get this wrong.
+- Overwriting follower log entries sounds dangerous but is safe because of the election restriction — the leader will never overwrite a committed entry.
+- The distinction between committed and applied: a server can know something is committed and not have applied it yet, because applying takes time.
+- The 'longest log wins' idea is a common misconception; length alone is not the election rule.
+- The second half of the misconception: it is not that the most up-to-date server always wins — any server whose log is at least as up-to-date as a majority of voters can win, and whoever times out first among the eligible usually wins.
+- There is a subtle catch involving old terms in the precise commitment rule, which the instructor promised to give precisely in a few minutes.
+- The precise commitment rule "trips up basically everyone, including people who've implemented it" — being on a majority is not the full criterion.
+- A student's realization highlights the counterintuitive point: being on a majority isn't enough if the entry is from an old term.
+- It is confusing that commitIndex is not persisted, so a server briefly forgets what is committed — resolved by leaderCommit in the next AppendEntries and by the leader committing an entry from its new term.
+- Two simultaneous leaders look like split brain but are not a violation, because they must be in different terms and the older-term leader cannot commit.
+- The overlap argument is repeated three times in this segment because the instructor calls it "the whole lecture" — it is the single most important intuition to grasp.
+- One subtlety to review: in Figure 8 the stale entry was on a majority (A, B, C) yet still got overwritten, so "on a majority" alone can be misleading.
+- Reads are sneaky: a leader that answers from its local state machine breaks linearizability even though it never wrote anything wrong.
+- Pre-vote mostly fixes the disruption problem but not completely — its interactions with check-quorum and membership changes are subtle.
+- Lease-based reads trade off the property that safety never depends on timing, since they rely on bounded clock drift.
+- Multi-Paxos was historically never fully specified in one place, so everyone who built it filled in the gaps differently.
+- The subtle double-execution case: if B's entry had actually committed and only the response was lost, a client retry would cause the command to execute twice.
+- "Easier to understand" is not the same as "faster" or "more available" — students should keep those properties separate.
+- Using etcd's lock API does not by itself make a critical section safe; the Raft log is fine but the client using it can be wrong.
+- "Consul uses Raft" is true only of the server nodes, not the whole system, since client agents are not voting members and use a separate gossip protocol.
+- Consul read consistency modes differ: stale can be answered by any server, the default relies on leader leasing and can briefly return stale data, and strict consistency costs an extra round trip.
+- In CockroachDB, Raft handles replication within a range but does not give cross-range transactions for free, and cross-range reads are usually served by a leaseholder rather than the Raft log.
+- There is a discrepancy on CockroachDB's default range size: students' slides say 64 megabytes while Speaker 1 said 512MB, resolved as the slides being out of date.
+- "Uses Raft" only tells you the replication core is probably sound, not that the whole system is correct, so students shouldn't write "Raft makes everything linearizable" on the midterm.
+- Why Byzantine fault tolerance needs the extra f (3f+1 versus Raft's 2f+1) is deliberately left unexplained and must be figured out before Thursday.
+- Whether Homework 5's due date moves to after the midterm is undecided; the professor refused to decide 'standing here' and made no promise.
+- Whether the review session will be recorded is uncertain because it depends on whether room capture is working that day.
+- The boundary of today's examinable material is subtle: everything is in except the log compaction part at the end.
+- Whether pre-vote fully fixes disruptive servers remains unresolved and is postponed to next Tuesday.
+- The lecture slide deck and the range size slide are still outstanding, so students may lack material to review.
+
+#### Questions to review
+- Who decides that the primary is dead, given that a non-responding primary is indistinguishable from a slow one?
+- Why can't two-phase commit be used instead of consensus, given 2PC was covered in lecture 6?
+- What is the problem with VMware's test-and-set arbiter approach?
+- What do you get if a backup promotes itself while the primary is actually still alive?
+- What happens if a state machine is not deterministic, e.g. a command calls random or reads the clock?
+- Is the guest lecture (Byzantine fault tolerance) on the midterm?
+- Can you state what FLP says in one or two sentences?
+- How do practical systems get around FLP?
+- Define safety and liveness, and state which one Raft guarantees unconditionally.
+- Is 'at most one leader' a safety property, and what is it called? (Answer: yes, election safety.)
+- Compute the majority quorum for n=5 and n=3 and say how many failures each can tolerate.
+- How many servers do you need to tolerate f failures, and why?
+- Why must any two majorities overlap, and what does the overlapping server carry forward?
+- Why do people use odd numbers of servers, and is it just convention? (Deferred in this chunk.)
+- Why randomize election timeouts instead of giving each server a fixed priority so the lowest ID always times out first?
+- Do we reset the election timer when we receive a RequestVote?
+- Why are lastLogIndex and lastLogTerm in the RequestVote arguments given first-come, first-served voting?
+- What two events legitimately reset a follower's election timer?
+- What happens if all five servers pick really close random timeouts again?
+- Why would anyone ever run a 4-node cluster?
+- Did the speaker get in trouble for the fourth node?
+- How do you repair an inconsistent follower log? (Answer: decrement nextIndex and retry until the consistency check succeeds.)
+- Why is the consistency check essentially an induction step?
+- What is A's commit index in the five-server example?
+- Who times out first among the remaining servers after A crashes?
+- Are indexes 1 through 4 also committed because they come before index 5?
+- What happens to B's uncommitted index 6 entry once C becomes leader?
+- Can a new leader mark an old entry committed simply because it is already on a majority? Answer: no.
+- What should A have done in term 4 to safely commit the old entry? Answer: append and commit a new entry from its current term (index 3 term 4), which carries index 2 with it.
+- Why does a new leader commit a no-op entry right away? Answer: to get a current-term entry committed as soon as possible, commit everything before it, and learn what is committed.
+- Doesn't a server forget what is committed when commitIndex isn't persisted? Answer: briefly, but the cluster rediscovers committed state.
+- Is having two simultaneous leaders split brain / a safety violation? Answer: no — B can't commit anything because it can't reach a majority.
+- Exam-style practice: given five logs, determine which servers can become leader (same structure as the index-5 example, but with different numbers).
+- Is having two leaders (B in term 7, E in term 8) split brain or a safety violation?
+- Does client 1's write (set x to 7) get silently lost, given the client sent a write that disappeared?
+- Does pre-vote fully fix the disruption problem, and are there remaining cases where a node causes a pointless election?
+- Exam prep: why can you not switch cluster configurations directly? (the two disjoint majorities problem).
+- Is Raft strictly better than Paxos, and why would anyone still use Paxos?
+- What are the four differences and non-differences between Raft and Multi-Paxos (log holes, election restriction, bundled specification; fault tolerance, safety/liveness assumptions, performance)?
+- Why must a snapshot store the last included index and last included term?
+- Will Jepsen be used in the homework?
+- Does moving Homework 4 push Homework 5 back, and could Homework 5 be due after the midterm instead?
+- Why does Byzantine fault tolerance need 3f+1 servers rather than Raft's 2f+1 — what does the extra f buy?
+- Does pre-vote fully fix disruptive servers? (Devin's question, to be taken up next Tuesday.)
+- How do leases compare with ReadIndex for serving reads? (Deferred to next Tuesday.)
+- Could the Homework 5 due date be moved after the midterm given the tight study window?
+- Will the midterm review session be recorded for students who cannot attend on Sunday?
+- What exactly falls under 'why direct membership changes are unsafe', which is in scope for the midterm?
+
+#### Study summary
+- Lecture 9 frames consensus as the fix for primary-backup's undetectable-failure and split-brain problems, since replicating VMware FT's external arbiter just moves the agreement problem.
+- Consensus matters because of the replicated state machine pattern: identical commands in identical order produce identical state, so the entire challenge reduces to keeping a replicated log identical across servers.
+- Two-phase commit is the wrong tool: it needs all participants and can block in the coordinator-crash window, while consensus only needs a majority and should keep making progress.
+- The hard part is fundamental: crashes, arbitrary message delay/drop/duplication/reordering, partitions, and the impossibility of distinguishing slow from crashed all culminate in FLP, which says no deterministic consensus algorithm in a ful
+- Logistics to act on: homework 4 due Friday Oct 9 at 11:59pm; midterm Thursday Oct 22 in Larkin Hall 150 covering lectures 1-8; office hours moved to Thursday 3-5pm in Whitaker 214; practice midterm on Ed by Friday.
+- FLP (1985) is the theoretical wall: in a fully asynchronous system with even one crash failure, no deterministic consensus algorithm can guarantee termination, so consistency cannot be guaranteed together with always reaching a decision.
+- Only the FLP statement and its implications are examinable — the bivalent configuration proof is explicitly excluded.
+- The safety/liveness distinction is the key examinable idea from this chunk: safety is always preserved and detectable at a finite moment, liveness may be postponed indefinitely.
+- Raft (and Paxos) choose safety unconditionally and liveness only under reasonable network conditions — Raft may stall under partitions but never applies different commands at the same index.
+- Majority quorums with floor(n/2)+1 (equivalently 2f+1 for f faults) are the mechanism behind every Raft safety argument, because any two majorities overlap and share the decision.
+- Raft's 2014 goal was understandability via decomposition (leader election, log replication, safety) and a strong leader where log entries flow only leader to followers.
+- A Raft term is a logical clock (monotonically increasing integer) that begins with an election, has at most one leader, and is included in every message; a larger term seen forces a server to update and step down.
+- Leader election relies on heartbeats, an election timeout, and randomized timeouts to avoid endless split votes, with a winner requiring a majority of the whole cluster.
+- Only two RPCs matter for the basic algorithm (RequestVote and AppendEntries); votedFor and currentTerm must be persisted to disk to prevent two leaders.
+- Memorize the timing inequality broadcastTime << electionTimeout << MTBF and the homework-specific numbers (400-800 ms timeout, 10 heartbeats/sec max, new leader within 5 s).
+- Watch the two most common homework-4 bugs: holding a lock while sending an RPC (number one) and resetting the election timer on rejected RequestVotes (number two).
+- This chunk covered three threads: election timing rules, the randomized-timeout/split-vote mechanism, and log replication mechanics.
+- Key election rules: use randomized timeouts, reset the timer only on granting a vote or valid AppendEntries, and know the 400-800ms homework range.
+- Key fault-tolerance takeaway: even-sized clusters add no fault tolerance, and the right design is 2f+1 (odd) applied across failure domains such as data centers.
+- Key replication mechanism: the AppendEntries consistency check on prevLogIndex/prevLogTerm guarantees the log matching property, and the leader repairs lagging followers via nextIndex.
+- Log replication uses nextIndex to find the divergence point and matchIndex to drive commitment; mismatched AppendEntries cause the leader to walk nextIndex backward until the logs agree, then the follower discards conflicting entries.
+- Commit index is the highest index a server knows to be committed (starts at 0, monotonic); lastApplied tracks application to the state machine and advances one entry at a time.
+- The worked five-server example shows a candidate with the longest log (B) losing while a shorter, higher-term-first candidate (C) wins, driving home that the election restriction compares last term first, then length.
+- Leader completeness (proved in the paper in section 5.4) ties it together: majority overlap plus the up-to-date voting rule guarantees committed entries survive into every higher-term leader's log.
+- The most examinable content here is the leader completeness proof (majority-overlap plus the up-to-date election restriction) and the precise commitment rule.
+- Core rule to internalize: a leader commits only entries from its current term; old-term entries commit only indirectly once a current-term entry is committed on top of them.
+- Figure 8 is the canonical counterexample proving why "on a majority" is insufficient for old-term entries: the majority-stored index 2 term 2 is overwritten by E in term 5.
+- Raft's correctness under partitions rests on the same overlap argument: the minority side with the old leader can never reach a majority, so only the higher-term leader can commit.
+- Persist exactly currentTerm, votedFor, and the log before any RPC; treat commitIndex, lastApplied, nextIndex, and matchIndex (and the state machine) as volatile and rebuild them.
+- The overlap argument is the whole lecture: a leader needs a majority, so an older-term leader cut off from a majority can never commit and safety holds.
+- Uncommitted, never-acknowledged writes are silently dropped on reconciliation but cause no inconsistency — client correctness comes from retry plus dedup.
+- Reads need protection: ReadIndex (heartbeat a majority) or a lease (relies on bounded clock drift) — etcd uses ReadIndex.
+- Pre-vote is a liveness fix (in Ongaro's dissertation, used by etcd) that stops isolated servers from inflating their terms.
+- Membership changes: switch directly and old/new majorities can be disjoint (two leaders, same term); joint consensus or one-at-a-time changes restore the overlap.
+- Raft is essentially a well-specified flavor of Multi-Paxos with a strong leader; Paxos's core is still majorities and the overlap between prepare and accept majorities.
+- Raft is essentially a well-specified strong-leader flavor of Multi-Paxos; the practical differences are no log holes, the election restriction, and one bundled, completeness-focused specification, while fault tolerance, safety/liveness assu
+- Both Raft and Paxos tolerate f failures with 2f+1 servers, are safe under asynchrony, live only under partial synchrony, do not handle malicious servers, and cost one round of messages to a majority per command in the normal case.
+- etcd, Consul, and CockroachDB all use Raft, but each carries caveats (lock leases, gossip for client agents, Multi-Raft cross-range limits); Speaker 1 stresses "uses Raft" does not mean the whole system is correct.
+- Log compaction via snapshots and the InstallSnapshot RPC is the topic of Homework 6: servers snapshot committed state independently, include last included index and term plus configuration, and the leader ships its snapshot to followers tha
+- Logistics to remember: Homework 4 is now due Monday, October 12th at 11:59pm with late days counted from Monday, and the midterm is Thursday, October 22nd in Larkin Hall 150 covering lectures 1 through 9.
+- Midterm scope is now lectures 1-9 on Raft, including election, replication, election restriction, commitment rule, partitions and unsafe direct membership changes, but excluding snapshots and BFT.
+- Scope memo for exam prep: 'Raft in, snapshots out, BFT out', with BFT deferred to the final.
+- Prepare exactly one letter-size sheet of notes (both sides, handwritten or typed) and treat choosing its contents as part of the studying.
+- Get the practice midterm from Ed this Friday, work the problems before solutions drop a few days later, and attend the Sunday October 18, 4-6pm review in Whitaker 120 if possible.
+- For Thursday, read Castro and Liskov sections 1-4 on Practical Byzantine Fault Tolerance before the guest lecture by Dr. Whitfield, who will assume it has been read.
+- Memorize the fault-tolerance thresholds — 2f+1 for crash faults in Raft, 3f+1 for Byzantine faults — and be ready to explain the extra f.
+- Next week's follow-ups to keep on the study list are leases versus ReadIndex for reads and whether pre-vote fully fixes disruptive servers.
+- Carry one practical rule into implementation work: never hold locks while sending RPCs.
+
+#### Action items (structured)
+- students: Submit homework 4 (Raft leader election: leader election and heartbeats in the Go skeleton), which does not include log replication or persistence. (deadline: Friday, October 9th, 11:59pm) [inferred]
+- Kofi: Post the practice midterm on Ed by Friday. (deadline: Friday)
+- Kofi: Announce the review session time at the end of class once the room is confirmed.
+- Kofi: Put the new office hours schedule on Ed as well.
+- Speaker 1: Explain exactly what is on the midterm at the end of today's class.
+- students: Students should keep recording the lecture on their own laptops in case the official lecture capture fails again.
+- Me: The recording student offered to share their own recording if the official lecture capture breaks.
+- Homework 4 (Raft leader election) due Friday, October 9th, 11:59pm [inferred]
+- Extra office hours Wednesday, October 7th, 3-4:30pm, Whitaker 318 [inferred]
+- Midterm Thursday, October 22nd, during normal class time, Larkin Hall room 150 [inferred]
+- Be able to state what FLP says in one or two sentences and explain how practical systems get around it, for the exam.
+- Memorize the safety and liveness definitions and which one Raft guarantees unconditionally — flagged with a star as directly examinable.
+- Learn the quorum formula and the 2f+1 relationship well enough to compute them without thinking.
+- Consult section 9 of the Raft paper for the exact user-study numbers rather than relying on the lecturer's recollection.
+- Set the homework-4 election timeout to roughly 400-800 ms (not the paper's 150-300 ms) to avoid spurious elections under the heartbeat limit. [inferred]
+- Keep the homework configuration able to elect a new leader within 5 seconds of the old leader failing. [inferred]
+- Persist votedFor and currentTerm to disk before responding to an RPC. [inferred]
+- Only reset the election timer on a valid AppendEntries from the current leader or when granting a vote. [inferred]
+- Homework tester requires a new leader to be elected within 5 seconds of the old leader failing. [inferred]
+- Fix in your notes the earlier incorrect statement that 4 nodes can tolerate 2 failures; 4 nodes tolerate only 1.
+- Write down the log matching property word for word.
+- students: Homework 5 must implement a backup optimization where the follower returns the conflicting term and the first index it stores for that term, so the leader can skip a whole term at a time instead of backing up one index at a time. [inferred]
+- Practice determining which servers can become leader from a set of five logs, since a likely exam question gives five logs and asks which servers can win an election.
+- Write the precise commitment rule down word for word as dictated by the instructor.
+- For homework 5, persist votedFor (and the other persistent state) so the tester's constant crash/restart cycles do not produce two leaders in the same term. [inferred]
+- Students: Students implement the dedup table (client serial numbers plus saved responses) in the key-value part of homework 5. [inferred]
+- Speaker 1: Continue discussing the ReadIndex vs lease read tradeoff next week. [inferred]
+- Devin: Devin to come to office hours tomorrow or remind the lecturer to pick up the pre-vote / check-quorum / membership-change interaction next week. [inferred]
+- Speaker 1: Speaker 1 will fix the slide showing the default CockroachDB range size (slides say 64 megabytes, newer versions are bigger).
+- Speaker 1: Speaker 1 and Kofi will discuss whether Homework 5's due date should move after the midterm, and post any change on Ed.
+- Homework 4 due Monday, October 12th at 11:59pm [inferred]
+- Homework 5 scheduled release Tuesday, October 13th [inferred]
+- Professor Castellanos and Kofi: Professor Castellanos and Kofi will discuss whether Homework 5's due date moves to after the midterm; if it moves it will be announced on Ed.
+- Students should come to Thursday's lecture with a guess at why BFT needs an extra f (3f+1 vs Raft's 2f+1); the professor deliberately did not answer it today.
+- Students should read Castro and Liskov sections 1-4 before Thursday, since Dr. Whitfield will assume it has been read.
+- Students: Someone needs to remind the professor to post today's slides.
+- Professor Castellanos: The professor will post the FLP paper link on Ed tonight. (deadline: tonight)
+- Professor Castellanos: The range size slide also needs to be posted. [inferred]
+- Ana: Ana will post the practice midterm on Ed by this Friday. (deadline: this Friday)
+- Solutions to the practice midterm will go up a few days after the exam is posted, and students should attempt the problems before looking at them.
+
+#### Decisions (structured)
+- Kofi's office hours move from Wednesdays 2-4pm to Thursdays 3-5pm in Whitaker 214 (the lab room), starting this week, and will also be posted on Ed. (owner: Kofi)
+- The midterm will be held in Larkin Hall, room 150, not the normal classroom, to allow students to be spaced out. (owner: Kofi)
+- A practice midterm will be posted on Ed by Friday so students can work through it over the weekend. (owner: Kofi)
+- The professor's regular Thursday office hours are cancelled because he flies out Wednesday night for a program committee meeting, replaced by extra office hours Wednesday October 7th, 3-4:30pm in his office, Whitaker 318. (owner: Speaker 1)
+- Thursday's lecture (lecture 10) will be delivered by Dr. Joanne Whitfield, a postdoc in the professor's group, covering Byzantine fault tolerance. (owner: Speaker 1)
+- The FLP proof will not be on the exam — only the statement of FLP and what it implies, so the bivalent configuration argument is not required. (owner: Speaker 1 (lecturer))
+- Snapshots and log compaction are skipped in today's lecture and deferred to a later lecture (homework 6 territory). (owner: Speaker 1 (lecturer))
+- Today's lecture plan is fixed as: election, replication, safety, a worked example, partitions, a little on membership changes, and comparison to Paxos and real systems. (owner: Speaker 1 (lecturer))
+- For homework 4, students should use randomized election timeouts rather than hardcoded values. (owner: students)
+- For the homework use a bigger election timeout (roughly 400-800 ms) instead of the paper's 150-300 ms, because the tester limits heartbeats to 10/sec.
+- Recommend 400-800ms election timeouts for the homework (distinct from the paper's 150-300ms) because of the tester's heartbeat limit.
+- Use randomized election timeouts rather than hardcoding a fixed value like 500.
+- Homework 4 is moved from Friday to Monday, October 12th at 11:59pm. (owner: Speaker 1)
+- Late-day clock for Homework 4 now starts from the new Monday deadline, not Friday. (owner: Speaker 1)
+- The midterm now covers lectures 1 through 9, adding today's lecture to Kofi's stated lectures 1 through 8. (owner: Speaker 1)
+- Homework 5 release (Tuesday October 13th) and its due date are unchanged for now. (owner: Speaker 1)
+- The midterm now covers lectures 1 through 9, including today's material, overriding Kofi's earlier statement of lectures 1 through 8. (owner: Professor Castellanos)
+- The log compaction part at the end of today's lecture is excluded — snapshots are not on the midterm. (owner: Professor Castellanos)
+- Thursday's guest lecture on Byzantine fault tolerance (lecture 10) is not on the midterm and will be on the final instead. (owner: Professor Castellanos)
+- Midterm logistics unchanged: same date Thursday October 22, during class time, in Larkin Hall 150 rather than the usual room. (owner: Professor Castellanos)
+- Students may bring only one letter-size sheet of notes, both sides, handwritten or typed; laptops and phones are not allowed — Devin's request for two sheets was denied. (owner: Professor Castellanos)
+- The practice midterm will be posted by Ana rather than Kofi, because she wrote most of the questions; it is still due to go up this Friday on Ed. (owner: Kofi)
+- The Thursday reading is set: Castro and Liskov, 'Practical Byzantine Fault Tolerance' (1999), sections 1 through 4 before Thursday's lecture. (owner: Professor Castellanos)
+
+#### Open questions (structured)
+- Is the guest lecture on Byzantine fault tolerance (lecture 10) going to be on the midterm? [open]
+- Will there be a review session for the midterm, and when? [open]
+- Who decides that a primary is dead, given that a non-responding primary looks identical whether it crashed, the network is broken, or it is just slow? [open]
+- What happens if the replicated state machine is not deterministic — for example, if a command calls random or reads the clock? [open]
+- Why does everyone use odd numbers of servers — is it just convention? The lecturer deferred this, saying he has a story about it later. [open]
+- Why are lastLogIndex and lastLogTerm included in RequestVote if voting is first-come, first-served — what restriction will the safety section add? [open]
+- What happens if all five servers pick really close random timeouts again? [open]
+- Why would anyone ever run a 4-node cluster? [open]
+- What is the difference between committed and applied? [open]
+- What happens to B's entry at index 6 (the term 3 entry only A and B had) once C becomes leader? [open]
+- Can a new leader commit an old entry that is already on a majority? (Answered no — it never commits previous-term entries by counting replicas.) [open]
+- Why does a new leader commit a no-op entry right away? (Answered: to get a current-term entry committed as soon as possible, which commits everything before it and reveals what is committed.) [open]
+- Does a server forget what is committed when commitIndex is not persisted? (Answered: it forgets briefly, but the leader relearns it via leaderCommit and by committing an entry from its new term.) [open]
+- Is having two leaders at the same time a split-brain safety violation? (Answered: no, they must be in different terms and the older-term leader cannot commit anything.) [open]
+- Is it split brain / a safety violation for a term-7 leader (B) and a term-8 leader (E) to both believe they are leaders with different entries at index 21? [open]
+- What happens to client 1's write (set x to 7) after the conflict is resolved — is it silently lost from the client's point of view? [open]
+- Does pre-vote fully fix the disruption problem, or are there still cases where a node can cause a pointless election? [open]
+- Why can you not switch cluster configurations directly? [open]
+- Could Homework 5 be due after the midterm instead of right before it, given it will be tight with studying? [open]
+- Is Raft strictly better than Paxos, and why would anyone still use Paxos? [open]
+- Could Homework 5 be due after the midterm instead of right before it, to leave more study time? [open]
+- Why does Byzantine fault tolerance need 3f+1 servers instead of Raft's 2f+1 — why the extra f? [open]
+- Will the midterm review session be recorded, given students with Sunday shifts? [open]
+- Does pre-vote fully fix disruptive servers? (to be picked up next Tuesday) [open]
+
+#### Risks (structured)
+- [low] The official lecture capture has been flaky, so students may lose the recording of lecture 9.
+- [high] If a backup promoting itself guesses wrong, you get split brain: two primaries both accepting writes, diverging data that cannot be reconciled.
+- [high] VMware FT's external test-and-set arbiter is itself a single point of failure, and replicating the arbiter recreates the same agreement problem.
+- [high] Two-phase commit tolerates zero coordinator failures without blocking: if the coordinator crashes after participants voted yes but before sending the decision, participants are stuck holding locks and can neither commit nor abort.
+- [medium] A nondeterministic state machine breaks the replicated state machine approach; consensus does not save you from it.
+- [high] The failure detector problem is fundamental: you cannot distinguish a crashed server from a merely slow one, because 'no message yet' is consistent with both.
+- [high] FLP impossibility: in a fully asynchronous system, no deterministic consensus algorithm can guarantee termination if even one process can crash.
+- [medium] Raft gives up liveness when the network is bad: under partitions and crazy message delays it may stall, even though it never violates safety.
+- [medium] A unanimity quorum (n out of n) is extremely safe but has zero fault tolerance — one stubborn or sick juror destroys liveness (hung jury).
+- [medium] FLP is commonly misquoted, so the precise statement (termination cannot be guaranteed in a purely asynchronous model) needs care.
+- [high] Without something extra, split votes could repeat forever — a liveness problem Raft solves with randomized timeouts.
+- [medium] If the election timeout range is too narrow (e.g. 150-151 ms), split votes pile up and elections can take seconds.
+- [medium] Using the paper's 150-300 ms timeout with 100 ms heartbeats under the homework tester's 10 heartbeats/sec limit causes spurious elections.
+- [high] Resetting the election timer on every RequestVote (including rejected ones) lets a server with a bad log block progress — the number two homework-4 bug.
+- [high] Holding a lock while sending an RPC is the number one homework-4 bug per Kofi's spreadsheet.
+- [high] Resetting the election timer on every RequestVote (including rejected ones) lets a server with a bad log keep everyone from timing out and block progress — described as a top homework bug.
+- [high] A 4-node cluster split across two sites (2+2) cannot elect a leader or commit when the inter-site link flaps, making the whole store unavailable rather than degraded.
+- [medium] Going from 3 to 4 nodes adds zero fault tolerance and makes the quorum bigger, so more servers must be up and responding.
+- [high] If a server missing committed entries (like D) wins an election and forces everyone's logs to match its own, it would erase committed entries — a safety violation.
+- [medium] The tester has a test (the "backup" test) that will time out if the leader does not implement the term-skipping backup optimization.
+- [high] If a leader marks an old-term entry committed because it is on a majority, applies it, and replies success to a client, the entry can later be overwritten and safety is violated.
+- [high] Forgetting to persist votedFor causes two leaders in the same term and fails the "figure 8 unreliable" test in homework 5, since the tester crashes and restarts servers constantly.
+- [medium] A third of the class writes "committed once it's on a majority" on the exam and loses points, because the commitment rule is on the exam every year.
+- [medium] On the minority side of a partition, a client command blocks indefinitely because the leader cannot reach a majority and never replies.
+- [high] Retries after a lost response can cause double execution of non-idempotent commands like 'withdraw 100 dollars'.
+- [high] A partitioned leader answering reads from its local state machine returns stale data and breaks linearizability.
+- [medium] An isolated flaky server can inflate its term and force a healthy cluster's leader to step down, causing an unnecessary election.
+- [high] Directly switching membership between configurations can produce two disjoint majorities and therefore two leaders in the same term.
+- [medium] Lease-based reads depend on bounded clock drift, giving up the 'safety never depends on timing' purity.
+- [high] The autograder was down over the weekend and is still flaky, with the queue backed up and some submissions taking forty minutes to grade.
+- [high] etcd's lock API does not automatically make a critical section safe: a client pause (e.g. long GC pause) can let its lease expire while it still thinks it holds the lock, so fencing tokens are needed.
+- [medium] "Uses Raft" only means the replication core is probably sound, not that the whole system is correct.
+- [medium] Real implementations add pre-vote, check-quorum, leader leases, batching, pipelining, and snapshots, each of which is a place for bugs.
+- [medium] An ever-growing log wastes disk and makes restart slow, since millions of entries must be replayed to rebuild the state machine.
+- [medium] Homework 5 due right before the midterm creates a tight study schedule for students.
+- [medium] The review session recording may not happen if the room capture system is not working that day.
+- [medium] Students who rely on the moved Homework 5 due date are exposed to uncertainty, since the change is explicitly not guaranteed.
+
+#### Follow-up draft
+Hi,
+
+Quick recap: Lecture 9 was consensus and Raft, picking up from primary-backup — you can't tell a crashed primary from a slow one, so a wrong promotion gives split brain, and the replicated state machine pattern reduces everything to keeping one log identical across servers (2PC is the wrong tool because it needs all participants, not a majority). Worth memorizing: FLP (1985: no deterministic consensus algorithm in a fully asynchronous system can guarantee termination with even one crash), the safety/liveness split (Raft is always safe, only live when timing behaves), quorums as floor(n/2)+1 = 2f+1, the log matching property (same index and same term means every entry up through that index is identical), and the commitment rule — majority plus current term means committed, majority plus old term means nothing yet, wait for something from your own term on top of it. Logistics: HW4 moved to Monday October 12 at 11:59pm, and the midterm now covers lectures 1 through 9 in Larkin Hall 150, with snapshots and the BFT lecture excluded.
+
+That's the recap.
+
+---
+
+# Summary D
+
+_(run1)_
+
+### Title: Consensus and Raft Logistics
+
+#### Overview
+The lecture introduced consensus and replicated state machines as solutions to primary-failure coordination, contrasted consensus with two-phase commit, and stated the FLP impossibility result. The lecture explains FLP impossibility, safety versus liveness, majority quorums, and Raft’s design, roles, and term structure. The lecture explained Raft terms, leader election, randomized timeouts, timing requirements, and homework-specific heartbeat and election-timeout settings. The lecture clarified election-timer behavior and split votes, corrected the fault tolerance of four-node clusters, explained why odd-sized deployments are preferable, and introduced Raft log replication, AppendEntries consistency checks, and nextIndex backtracking. The lecture explained Raft log repair, commitment and application, the election restriction, and a worked example showing why committed entries survive leadership changes. The lecture explained leader completeness, the current-term-only commitment rule using Figure 8, Raft persistence requirements, and why a partitioned minority leader cannot commit entries. The lecture explained why Raft preserves safety during partitions, how retries and deduplication provide exactly-once client semantics, how reads require leadership checks, how pre-vote limits disruption, why membership changes need joint consensus, and how Paxos uses the same majority-overlap principle. The lecture compared Raft with Multi-Paxos, explained real-system caveats and snapshotting, and changed Homework 4's deadline while expanding the midterm coverage to lectures 1–9. The instructor confirmed the midterm logistics and expanded its coverage to lectures 1–9 while excluding snapshots and BFT, and announced review, reading, office-hour, and posting plans. Key decisions: Homework 4 covers Raft leader election and heartbeats only; log replication and persistence are deferred to homework 5.; Kofi's office hours move from Wednesdays 2–4pm to Thursdays 3–5pm in Whitaker 214 starting this week.; The midterm will take place during normal class time on Thursday, October 22, in Larkin Hall room 150 and cover lectures 1 through 8.. Study summary: The lecture motivated consensus by showing that primary-backup replication needs a safe way to decide who is primary without creating split brain.
+
+#### Summary
+- The lecture covered consensus, replicated state machines, Raft leader election and replication, two-phase commit, and the FLP impossibility result, emphasizing quorum safety and split-brain prevention.
+- Homework 4 covers Raft leader election and heartbeats only, uses randomized election timeouts, and is due Monday, October 12; late days are counted from that deadline.
+- Kofi's office hours move to Thursdays in Whitaker 214, and the midterm is Thursday, October 22, during class in Larkin Hall 150, covering lectures 1–9 including Raft but excluding snapshots and Byzantine fault tolerance; students may bring one two-sided letter-size sheet of notes but no laptops or phones.
+
+#### Core concepts
+- Consensus lets a group of machines agree on decisions without making any single machine the special authority, while continuing to work when some machines fail.
+- Primary-backup replication requires solving the failure-detection problem because silence could mean a crash, a network failure, or extreme slowness.
+- A replicated state machine makes a service fault tolerant by running identical copies that apply the same deterministic command sequence.
+- The central implementation problem for replicated state machines is keeping the replicated command log identical across servers.
+- Consensus is intended to make progress when a majority of servers are available, unlike two-phase commit, which requires all participants.
+- The FLP impossibility result states that in a fully asynchronous system with unbounded message and process delays, no deterministic consensus algorithm can guarantee termination if even one process may crash.
+- FLP limits guaranteed termination in every execution of a purely asynchronous model; it does not claim that practical consensus is impossible.
+- Practical algorithms such as Paxos and Raft preserve safety unconditionally but guarantee progress only when messages eventually arrive within reasonable timing assumptions.
+- Raft's central safety mechanism is quorum intersection: any two majorities overlap in at least one server that can carry previously decided information forward.
+- Raft was designed primarily for understandability while retaining the same basic fault-tolerance and performance goals as Paxos.
+- Raft decomposes consensus into leader election, log replication, and safety restrictions, with membership changes and log compaction treated as additional components.
+- Raft uses a strong leader model in which client requests and log entries flow through the leader toward followers, not in the reverse direction.
+- Raft organizes time into consecutive numbered terms, each beginning with an election that may produce one leader or end in a split vote.
+- Raft organizes time into consecutively numbered terms, with each term beginning with a leader election.
+- A term can have at most one leader, although a split vote can leave a term without any leader.
+- In normal operation, one leader handles client requests and replicates the log while all other servers are followers.
+- A server receiving a higher-term message updates its term and steps down from candidate or leader to follower.
+- Election safety follows from the combination of majority voting and the rule that each server votes for at most one candidate per term.
+- Raft separates safety from liveness: safety does not depend on timing, but liveness requires suitable timing relationships.
+- Election timers should be randomized, and the homework recommendation is 400–800 milliseconds because the tester limits heartbeats to 10 per second, whereas the paper specifies 150–300 milliseconds.
+- A server resets its election timer when it receives valid AppendEntries from the current leader or when it grants a vote, but not when it rejects a RequestVote.
+- A split vote can leave a term without a leader, after which a later randomized election can advance to a higher term and elect a leader.
+- Repeated split votes are possible and termination is probabilistic rather than guaranteed, although the probability of repeated collisions decreases extremely quickly.
+- Raft prefers odd-sized clusters because increasing from an odd size to the next even size does not increase the number of failures tolerated but does increase the quorum required.
+- To tolerate loss of an entire data center, quorum sizing must be applied across sites, requiring three sites in the example deployment.
+- The leader replicates client commands by appending them locally, sending AppendEntries in parallel, and applying the command once it is safely replicated.
+- AppendEntries uses a previous-index and previous-term consistency check to ensure that follower logs share the leader's matching prefix.
+- The leader repairs an inconsistent follower by decreasing that follower's nextIndex until the logs share a matching prefix, then deleting conflicting suffix entries and appending the leader's entries.
+- The leader uses matchIndex values to determine the highest log position known to be replicated on each follower and to reason about commitment.
+- An entry is initially understood as committed when the leader that created it has replicated it on a majority, although the precise rule has a current-term caveat.
+- The election restriction prevents a voter from supporting a candidate whose log is less up-to-date than its own, protecting committed entries during leadership changes.
+- Leader completeness guarantees that an entry committed in one term appears in every leader's log for all higher-numbered terms.
+- Leader completeness means that if a log entry is committed in one term, it appears in the logs of leaders for every higher-numbered term.
+- Committed entries survive leadership changes because any election majority overlaps with the majority that stored the committed entry.
+- The election up-to-date restriction prevents a candidate missing a committed entry from obtaining enough votes to become leader.
+- Raft commits entries from a leader's current term by counting replicas, while earlier-term entries become committed indirectly when a later current-term entry is committed after them.
+- A new leader can append a no-op entry in its current term to commit prior entries and discover the cluster's committed state.
+- During a network partition, only the side containing a majority can elect a leader that makes progress and commits new entries.
+- Two leaders can coexist during a partition only in different terms, and the leader in the older term cannot commit because it cannot reach a majority.
+- Raft safety depends on majority overlap: a partitioned leader can reach only itself and one other server, while commitment requires three acknowledgments in the five-server example.
+- When a server receives a higher term, it steps down to follower and updates its term before accepting the newer leader's log.
+- A log entry that was neither committed nor acknowledged may be removed during conflict repair without violating Raft's guarantees.
+- Client retry provides liveness, while deduplication protects safety when responses are lost.
+- Read linearizability requires a leader to verify that it still holds leadership rather than blindly serving its local state.
+- Pre-vote improves liveness by preventing an isolated server from increasing its term unless a majority would support its candidacy.
+- Membership changes require a transition protocol because majorities from different configurations may not overlap.
+- Paxos and Raft share the same core safety mechanism: overlapping majorities preserve information across decisions.
+- Raft is characterized as a strong-leader, well-specified flavor of Multi-Paxos rather than a fundamentally unrelated consensus algorithm.
+- The central safety mechanism in Paxos is the overlap between the prepare majority and any earlier accept majority.
+- Multi-Paxos replicates a whole log by running many Paxos instances, one per log slot, while a stable leader can skip Phase 1 most of the time.
+- Raft logs have no holes and followers maintain prefix-matching copies of the leader's log, whereas Multi-Paxos slots can be decided independently and out of order.
+- Raft's election restriction ensures that a new leader already contains all committed entries, so entries flow only from leaders to followers.
+- Raft and Paxos both tolerate f crash failures with 2f+1 servers, are safe under asynchrony, and require partial synchrony for liveness.
+- Raft's practical advantage is specification completeness and teachability, not an automatic advantage in speed or availability.
+- Raft normally provides one round of messages to a majority per command, but leaderless or multi-leader Paxos variants can be better for geo-distributed workloads with low conflict rates.
+- Using Raft in a system establishes a replication core but does not establish correctness of the entire system.
+- The midterm scope was expanded from lectures 1–8 to lectures 1–9 by including the current lecture.
+- The included current-lecture concepts are election, replication, the election restriction, the commitment rule, partitions, and the danger of direct membership changes.
+- Raft is included on the midterm, while snapshots and Byzantine fault tolerance are excluded.
+- Byzantine fault tolerance is deferred to the final rather than included on the midterm.
+- The instructor framed the one-sheet note limit as part of studying because selecting material forces prioritization.
+- The upcoming lecture will address the difference between leases and ReadIndex for reads and whether pre-vote fully fixes disruptive servers.
+
+#### Definitions
+- A replicated state machine is a service model in which each replica maintains state, accepts commands, and deterministically changes state and produces output.
+- Determinism means that starting from the same state and applying the same commands in the same order always produces the same final state.
+- Split brain is the condition in which two primaries accept writes simultaneously, causing their data to diverge.
+- Two-phase commit is an atomic-commitment protocol in which every participant votes yes before all participants commit.
+- FLP refers to the Fischer, Lynch, and Paterson impossibility result from 1985.
+- A fully asynchronous system has no bound on message delays and no bound on process slowness.
+- A fully asynchronous system has no bound on message delays and no bound on how slowly a process may operate.
+- Safety means that nothing bad ever happens; if safety is violated, a finite point in the execution can identify where the violation occurred.
+- For consensus, safety includes preventing two servers from deciding different values for the same log slot and preventing application of an unagreed command.
+- Liveness means that something good eventually happens, and no finite point can conclusively prove a liveness violation because the desired event may still occur later.
+- For consensus, liveness means that eventually a value is decided and the client eventually receives a response.
+- Election safety is the guarantee that there is at most one leader in any given term.
+- A quorum is a subset of servers large enough that every two quorums overlap in at least one server.
+- A Raft majority quorum is a majority of the servers in the cluster.
+- Raft servers have exactly one of three states: follower, candidate, or leader.
+- A split vote occurs when no candidate wins an election, causing the term to end without a leader and a new election to begin in a new term.
+- A term is a monotonically increasing logical-clock value stored by every server and included in every message.
+- A heartbeat is an empty AppendEntries RPC periodically sent by a leader to indicate that it is still active.
+- The election timeout is the period a follower can go without a valid leader heartbeat or granted vote before starting an election.
+- A split vote occurs when multiple candidates fail to obtain a majority in the same term.
+- broadcastTime is the average time to send RPCs to every server and receive replies, while MTBF is the mean time between failures of one server.
+- RequestVote carries term, candidateId, lastLogIndex, and lastLogTerm, and its reply carries the voter's term and a voteGranted boolean.
+- A log entry contains the command, the term in which the leader received it, and its index, with indexes starting at 1.
+- The AppendEntries request contains term, leaderId, prevLogIndex, prevLogTerm, entries, and leaderCommit.
+- The entries field is the list of log entries to store and is empty when the RPC is being used as a heartbeat.
+- An AppendEntries reply contains the follower's term and a success flag that is true when the follower has an entry matching prevLogIndex and prevLogTerm.
+- The log matching property states that if two logs contain entries with the same index and term, their entries are identical through that index.
+- nextIndex for a follower is the index of the next log entry the leader will send to that follower.
+- For a cluster of four, the majority is floor(4/2)+1 = 3, so the cluster tolerates 4−3 = 1 failure.
+- When a leader first takes office, it initializes every follower's nextIndex to one past the end of the leader's own log.
+- matchIndex for a follower is the highest index that the leader knows has been replicated on that follower.
+- The commit index is the highest log index a server knows to be committed; it starts at zero and only increases.
+- lastApplied is the highest log index a server has actually executed against its local state machine.
+- Committed means an entry is durable cluster-wide and will not be lost or changed, whereas applied means one particular server has executed the entry locally.
+- A log is more up-to-date when its last-entry term is higher, or, if the terms are equal, when its length is greater.
+- A committed entry is initially described as an entry stored on a majority, but the precise rule restricts direct commitment to entries from the current term.
+- The election up-to-date comparison checks the candidate's last term first and log length second.
+- Leader completeness is the property that committed entries are present in every future leader's log.
+- Persistent state consists of currentTerm, votedFor, and the log.
+- Volatile state consists of commitIndex and lastApplied on every server plus nextIndex and matchIndex on the leader.
+- In the basic version, the state machine is volatile and is reconstructed by replaying the log after restart.
+- A stale read is a response from an isolated former leader that reflects an older state even though a newer value has already been committed by the majority side.
+- ReadIndex is the etcd approach in which a leader confirms leadership through majority communication before serving a read.
+- A lease-based read allows a leader to serve locally after a majority recently acknowledged a heartbeat, but it depends on bounded clock drift.
+- Pre-vote is a preliminary vote solicitation in which a server asks whether peers would vote for it before increasing its term.
+- Joint consensus is Raft's two-phase membership transition using a configuration that includes both the old and new configurations.
+- A learner is a non-voting new server that catches up on the log before participating in voting or commitments.
+- Basic Paxos, or single-decree Paxos, reaches agreement on one value using proposers, acceptors, and learners.
+- Multi-Paxos replicates a whole log by running multiple Paxos instances, one per log slot, usually with a stable leader.
+- Multi-Paxos is the practical pattern of using many Paxos instances, one per log slot, with a stable leader that usually skips Phase 1.
+- A Raft log is a no-hole, ordered log whose follower copies prefix-match the leader's log.
+- A snapshot is a server's persisted representation of its current state-machine state that replaces earlier log entries.
+- The last included index identifies the final log entry replaced by a snapshot, and the last included term is the term of that entry.
+- InstallSnapshot is the third Raft RPC used when a leader no longer has the log entries needed by a lagging follower.
+- Multi-Raft means partitioning data into many ranges, with each range replicated by its own Raft group.
+- Fencing tokens protect a distributed critical section when a client's lock lease may expire during a pause.
+- Consul's stale read mode allows any server to answer, while its strictly consistent mode costs an extra round trip.
+- Raft is described here as tolerating f crash failures with 2f + 1 servers.
+- Byzantine fault tolerance is characterized here as handling servers that can lie and requiring 3f + 1 servers to tolerate f failures.
+- The election restriction, commitment rule, partitions, and direct membership changes were named as distinct topics from the current lecture.
+- Snapshots are treated as part of log compaction but are explicitly excluded from the midterm.
+- The reading assigned for Thursday is Castro and Liskov's 1999 paper Practical Byzantine Fault Tolerance.
+
+#### Examples
+- The VMware primary-backup system uses an external test-and-set service on shared storage to choose the primary.
+- A key-value store, lock service, or configuration database can be modeled as a replicated state machine.
+- With five servers applying the same command sequence, all replicas reach the same state and surviving servers can answer clients after some crashes.
+- A nondeterministic command such as setting a value to the current time must be converted into a log entry containing the concrete value.
+- The broken espresso machine was used as an analogy for a single-node system with no replicas or failover.
+- The absence of a message from another machine is consistent with both a crashed server and a merely slow server, illustrating the failure-detection problem.
+- A system that never decides anything is perfectly safe because it cannot decide incorrectly, but it has zero liveness.
+- A system that immediately decides arbitrary values is highly live but completely unsafe.
+- For five servers, a majority quorum is three servers, so two servers can fail while a quorum remains available.
+- For three servers, a majority quorum is two servers, so one server can fail.
+- The Twelve Angry Men jury is used as an analogy for an n-out-of-n consensus protocol: unanimity is very safe but loses liveness if one juror is unavailable or refuses to agree.
+- A majority is described as the smallest quorum in which any two quorums still overlap, making it a practical sweet spot between safety and fault tolerance.
+- In a five-server cluster, a candidate needs three votes, including its own, to win an election.
+- If two candidates both obtained majorities in one term, their majorities would overlap, requiring one server to vote twice, which is forbidden.
+- A server that votes for candidate A, crashes, and forgets that vote could later vote for candidate B in the same term and violate election safety.
+- With synchronized timeouts, several followers can become candidates simultaneously and split the votes.
+- A timeout range of 150–151 milliseconds is too narrow and can cause repeated split votes lasting seconds.
+- In a five-server cluster where A crashes in term 6, B and D can both time out almost simultaneously in term 7 and split the votes into B–C and D–E, leaving no leader.
+- In the same example, D's shorter next timeout advances the cluster to term 8 and allows D to win three votes.
+- At Ledgerline, a four-node etcd configuration store split two nodes in Virginia and two in Ohio, so a link flap left neither side with the three-node majority.
+- The Ledgerline outage preserved safety and lost no data, but it prevented payment routing for 47 minutes and queued approximately 38,000 authorizations.
+- A five-node, three-site arrangement with two nodes in Virginia, two in Ohio, and one in a third region leaves three of five nodes after losing any one site.
+- A client command such as set x to 5 becomes a new local log entry before the leader replicates it.
+- An entry at index 7 could have term 3 and the command set x to 5.
+- In the five-server example, A and B had logs 1,1,2,3,3,3; C and E had 1,1,2,3,3; and D had only 1,1,2.
+- Index 5 was committed because it existed on A, B, C, and E, while index 6 was not committed because it existed only on A and B.
+- When A crashed, D timed out first at 155 milliseconds but could not win because its last log term was 2 while B, C, and E each had last term 3.
+- C became leader in term 5 with votes from C, D, and E even though B had the longest log.
+- When C appended a term-5 command at index 6, B deleted its uncommitted term-3 entry at index 6 and replaced it with C's term-5 entry.
+- A seven-entry log ending in term 2 is less up-to-date than a five-entry log ending in term 3, demonstrating that the longest log does not necessarily win.
+- In the leader-completeness example, index 5 is stored on A, B, C, and E, while D lacks it; D cannot win because it can obtain only its own vote.
+- In Figure 8, A replicates index 2 term 2 only to B, E later writes a different index 2 term 3 entry, and A subsequently gets its old entry onto A, B, and C.
+- E can later win term 5 because its last term 3 is newer than B and C's last term 2, allowing it to overwrite the majority-held term 2 entry.
+- If A instead appends index 3 term 4 and replicates it with index 2 to B and C, index 3 becomes a current-term committed entry and prevents E from winning later.
+- In the partition example, B's index 21 term 7 reaches only A and B, while E's index 21 term 8 reaches C, D, and E and is committed.
+- In the five-server partition example, B remains a term-7 leader with an uncommitted 'set x to 7' at index 21, while E commits 'set y to 3' at the same index in term 8.
+- After the partition heals, E's AppendEntries matches through index 20, detects the index-21 conflict, and causes A and B to replace 'set x to 7' with 'set y to 3'.
+- A retry of 'set x to 7' is harmless if executed twice because the operation is idempotent, whereas retrying 'withdraw 100 dollars' can cause an incorrect double effect.
+- During the partition, B may answer a query for y using its old local state even though E's side has already committed y = 3.
+- An isolated D repeatedly times out and advances through terms 9, 10, 11, and 12 without receiving votes, then disrupts E when it reconnects with term 12.
+- Switching from A-B-C to A-B-C-D-E with A and B on the old configuration and C-D-E on the new configuration could elect A and E simultaneously using disjoint majorities.
+- In joint consensus, a decision in the combined configuration requires a separate majority from the old configuration and a separate majority from the new configuration.
+- etcd is a Raft-backed key-value store used as the backing store for Kubernetes cluster state.
+- etcd recommends three or five members and discourages much larger clusters because writes must reach a majority.
+- etcd's stated defaults are a 100-millisecond heartbeat interval and a 1000-millisecond election timeout, compared with the paper's 150–300 range.
+- Consul uses Raft for its server nodes, while client agents use a separate gossip protocol for their membership.
+- CockroachDB runs thousands of Raft groups concurrently, usually using three replicas per data range.
+- CockroachDB coalesces heartbeats between the same pair of nodes to manage the overhead of many Raft groups.
+- Chubby and Spanner use Paxos, while ZooKeeper uses its own similar-but-not-identical protocol called Zab.
+- The homework tester acts like a small Jepsen-style test by partitioning servers, dropping and reordering messages, and checking results.
+- Copy-on-write, such as forking a Linux process, allows a large snapshot to be written while the parent continues serving requests.
+- The instructor used the contrast between Raft's 2f + 1 and BFT's 3f + 1 server requirements as a question for students to analyze.
+- The instructor gave the concrete example that direct membership changes can be unsafe, making that topic part of the midterm.
+- Optional further-reading examples include section 6 of the Raft paper on membership changes and section 7 on log compaction.
+- An additional optional example for students interested in single-server membership changes is chapter 4 of Ongaro's dissertation.
+
+#### Formulas / steps
+- To use a replicated state machine, model the service as state plus commands that deterministically transform the state and produce outputs.
+- Replicas remain consistent by applying the same commands in exactly the same order.
+- Consensus establishes agreement for each log position—slot 1, slot 2, slot 3, and continuing onward.
+- For nondeterministic operations, the leader evaluates the nondeterministic part once and records the resulting concrete value in the log.
+- To analyze consensus assumptions, account for crashes, memory loss with disk survival, delayed or dropped messages, duplication, reordering, partitions, and indistinguishable slowness.
+- Compute a majority quorum for n servers as floor(n/2) + 1.
+- For n = 5, calculate floor(5/2) + 1 = 3, so three servers are required for a quorum.
+- The number of server failures tolerated while retaining a quorum is n minus the quorum size.
+- To tolerate f failures, provision 2f + 1 servers.
+- The examples for the fault-tolerance formula are f = 1 requiring 3 servers, f = 2 requiring 5 servers, and f = 3 requiring 7 servers.
+- To establish quorum intersection, assume two majorities are disjoint; because each contains more than half the servers, their combined size would exceed the total cluster size, which is impossible.
+- In Raft, a candidate starts an election, becomes leader if it wins, and otherwise the term can end in a split vote followed by a new election.
+- When a follower starts an election, it increments its term, becomes a candidate, votes for itself, and sends RequestVote RPCs in parallel to every other server.
+- A candidate wins by receiving votes from a majority of the full cluster for the same term, not merely a majority of responding servers.
+- A candidate receiving AppendEntries from a server with a term at least as large as its own accepts that server as leader and becomes a follower.
+- A candidate rejects AppendEntries from a smaller-term server and continues campaigning.
+- On a split vote, candidates wait for another timeout, increment the term, and retry the election with freshly randomized timers.
+- Reset the election timer after receiving a valid AppendEntries from the current leader or after granting a vote, but not after rejecting a RequestVote.
+- Persist currentTerm and votedFor before responding to a vote-related request so a crash cannot cause a second vote in the same term.
+- To calculate majority and tolerated failures, use majority = floor(n/2)+1 and tolerated failures = n−majority.
+- When a follower receives AppendEntries, it checks whether its entry at prevLogIndex exists and has term prevLogTerm.
+- If the previous entry is missing or has a different term, the follower rejects AppendEntries with success=false.
+- If the previous entry matches, the follower deletes conflicting entries after that point and appends the leader's entries.
+- The log matching proof starts with the empty log as a trivial base case and uses each successful AppendEntries as an induction step that extends a matching prefix.
+- When a leader first becomes leader, it initializes every follower's nextIndex to one past the end of the leader's log.
+- After a consistency-check failure, the leader decrements that follower's nextIndex and retries until a matching prefix is found.
+- On an AppendEntries consistency failure, decrement the relevant follower's nextIndex and retry.
+- A follower updates its commit index using min(leaderCommit, index of its last new entry).
+- The leader sends its commit index in the leaderCommit field of every AppendEntries message, including heartbeats.
+- When commitIndex exceeds lastApplied, a server increments lastApplied and applies entries sequentially, one at a time.
+- To compare candidate logs during voting, compare lastLogTerm first and compare lastLogIndex only when the terms are equal.
+- To establish leader completeness, use majority intersection: a majority containing a committed entry overlaps every majority required to elect a new leader.
+- To test leader completeness, identify the majority holding the committed entry, identify the majority needed for election, and use their overlap to find a voter whose log contains the entry.
+- A server grants its vote only when the candidate's log is at least as up-to-date as its own, using last term before length.
+- To commit safely, the leader must replicate an entry from its current term to a majority.
+- Once a current-term entry is committed, apply the log matching property to treat all preceding entries as committed as well.
+- Before responding to any RPC, write currentTerm, votedFor, and the log to stable storage.
+- After restart, rebuild volatile state, receive commit information through leaderCommit, and replay the log to reconstruct the state machine.
+- In a partition, compare the reachable replica count with the cluster majority before committing or acknowledging a client command.
+- When an isolated leader receives a reply carrying a higher term, it should reject its own leadership, become a follower, and update its term.
+- Log repair backs up the consistency check to the last matching index, deletes conflicting suffix entries, and installs the newer leader's entries.
+- A client that receives no success should time out, locate the new leader, and resend the command through the normal replication path.
+- Deduplication records each client's latest executed serial number and the corresponding response, returning the saved response instead of rerunning a duplicate command.
+- Before serving a read, a leader can exchange heartbeats with a majority to confirm it is still the leader.
+- With pre-vote, a server first asks peers whether they would vote for it and increments its term only after a majority says yes.
+- Joint consensus first commits the combined old-and-new configuration and then commits the new-only configuration.
+- Basic Paxos uses prepare-and-promise followed by accept-and-accepted, with a majority acceptance making the value chosen.
+- In Paxos Phase 2, the proposer asks acceptors to accept a value and must use the value from the highest-numbered proposal already accepted by any of them, if one exists.
+- A Paxos value becomes chosen when a majority of acceptors accepts it.
+- To replicate a full log with Multi-Paxos, run one Paxos instance per log slot and use a stable leader to avoid repeating Phase 1.
+- To compact a log, a server snapshots its current committed state to stable storage and discards log entries through the last entry included in that snapshot.
+- Each server takes snapshots independently, generally after a log-size threshold, and only committed, applied entries may be included.
+- A snapshot must retain last included index and term so AppendEntries can still perform the prevLogIndex and prevLogTerm consistency check.
+- A snapshot must also include the latest cluster configuration for membership changes.
+- When a leader lacks the entries needed by a slow or new follower, it sends InstallSnapshot; the follower either replaces its whole log or removes only the covered prefix.
+- Copy-on-write or process forking lets snapshot generation proceed concurrently with request serving.
+- For the stated crash-failure model, remember the server threshold 2f + 1 for tolerating f failures in Raft.
+- For the stated Byzantine model, remember the server threshold 3f + 1 for tolerating f failures.
+- The assigned preparation workflow is to read PBFT sections 1–4 before Thursday's lecture.
+- The recommended practice workflow is to attempt the practice-midterm problems before consulting the solutions.
+- The midterm preparation workflow includes creating a single two-sided letter-size note sheet rather than bringing multiple sheets.
+
+#### Things to memorize
+- Homework 4 implements Raft leader election and heartbeats, not log replication or persistence.
+- The key distinction is that two-phase commit is all-or-nothing across participants, whereas consensus can make progress with a majority.
+- Consensus does not correct a nondeterministic state machine; nondeterministic inputs must be resolved before or within the logged command.
+- FLP states that fully asynchronous deterministic consensus cannot guarantee termination when even one process may crash.
+- Two-phase commit can block if its coordinator crashes after participants vote yes but before the decision is delivered.
+- FLP is named after Fischer, Lynch, and Paterson and was introduced in 1985.
+- The exam requires the FLP statement and its practical implication, but not the bivalent-configuration proof.
+- Safety means nothing bad ever happens, whereas liveness means something good eventually happens.
+- Raft guarantees safety even during partitions and extreme message delays, but it may sacrifice liveness and stall.
+- The majority quorum formula is floor(n/2) + 1.
+- The relationship between tolerated failures and cluster size is 2f + 1 servers to tolerate f failures.
+- Raft has three server states: follower, candidate, and leader.
+- Raft terms are consecutive integers and each term begins with an election.
+- Raft's two basic RPCs are RequestVote for elections and AppendEntries for log replication and heartbeats.
+- InstallSnapshot is a third RPC used for log compaction and is outside the material covered here.
+- Each server votes for at most one candidate per term.
+- The paper's randomized election-timeout interval is 150–300 milliseconds.
+- The timing relationship to remember is broadcastTime much less than electionTimeout much less than MTBF.
+- For Homework 4, the tester allows at most 10 heartbeats per second per server and requires a new leader within 5 seconds after failure.
+- Memorize the distinction between the paper's 150–300 millisecond election timeout and the homework's recommended 400–800 millisecond timeout.
+- Memorize that election timers reset only on valid AppendEntries from the current leader or on granting a vote.
+- Memorize the tolerance sequence: three nodes tolerate one failure, four tolerate one, five tolerate two, six tolerate two, and seven tolerate three.
+- Memorize that an AppendEntries heartbeat has an empty entries list.
+- Memorize the log matching property exactly: equal index and term imply identical logs through that index.
+- Memorize that a leader creates at most one entry at a given index in a given term and that entries do not change positions.
+- nextIndex starts at one past the leader's log end for every follower.
+- matchIndex records the highest follower index known to be replicated.
+- commitIndex starts at 0 and never decreases.
+- The follower commit-index rule is min(leaderCommit, last new entry index).
+- Election log freshness is ordered by last term first and log length second.
+- Committed entries are never lost during a leadership change because every election majority overlaps the majority that stored the committed entry.
+- Memorize leader completeness: a committed entry in one term appears in every leader's log for higher-numbered terms.
+- Memorize that election log comparison uses last term first and length second.
+- Memorize the precise rule: a leader directly commits only current-term entries replicated to a majority.
+- Memorize that a previous-term entry on a majority is not automatically committed.
+- Memorize the three persistent fields: currentTerm, votedFor, and log.
+- Memorize that commitIndex, lastApplied, nextIndex, and matchIndex are volatile and rebuilt after restart.
+- Only one leader can make progress across a partition because the side without a majority cannot commit.
+- A client command must be identified by a unique client ID and a per-client serial number for deduplication.
+- Retry plus deduplication provides linearizable exactly-once command semantics.
+- A leader cannot safely serve local reads during a partition unless it first verifies leadership or uses an appropriately bounded lease.
+- Pre-vote is an implementation described in Ongaro's dissertation and used by etcd and some other systems.
+- Direct configuration switching is unsafe because a majority of the old configuration and a majority of the new configuration can be disjoint.
+- Joint consensus requires both old and new majorities during the transition, after which only the new configuration matters.
+- Basic Paxos has prepare/promise and accept/accepted phases, and Multi-Paxos applies repeated instances to individual log slots.
+- For the exam, know the disjoint-majorities reason direct membership switching is unsafe; reproducing joint consensus step by step is not required.
+- Both Raft and Paxos require 2f+1 servers to tolerate f crash failures.
+- Raft's log is ordered and hole-free, unlike the potentially gapped and out-of-order slots of Multi-Paxos.
+- Paxos and Raft tolerate crash failures but do not handle malicious servers.
+- Snapshots must contain last included index, last included term, and the latest membership configuration.
+- Only committed and applied entries may be included in snapshots.
+- Raft does not automatically provide cross-range transactions in a Multi-Raft database.
+- Consul's consistency depends on the selected read mode, with strict consistency costing an extra round trip.
+- The CockroachDB range-size figures of 64 MB and approximately 512 MB refer to different versions, and the lecture explicitly says not to memorize the number.
+- Memorize that the midterm is Thursday, October 22, during class time in Larkin Hall 150.
+- Memorize that the midterm covers lectures 1–9 but not snapshots or BFT.
+- Memorize the permitted exam aid: one letter-size sheet, both sides, handwritten or typed, with no laptop or phone.
+- Memorize the Raft and BFT thresholds 2f + 1 and 3f + 1, respectively, as stated in the lecture.
+- Memorize that the review session is Sunday, October 18, from 4–6 p.m. in Whitaker 120.
+- Memorize that the Thursday reading is Castro and Liskov's 1999 Practical Byzantine Fault Tolerance, sections 1–4.
+
+#### Confusing points
+- A missing response cannot by itself identify a crash because the same observation can result from a partition, message delay, or a slow server.
+- Replicating the external arbiter does not eliminate the coordination problem because the arbiter replicas would themselves need to agree.
+- Consensus and two-phase commit should not be conflated: 2PC coordinates atomic transaction commitment, while consensus coordinates agreement despite failures.
+- The FLP result concerns guaranteed termination in a fully asynchronous model, not the claim that no practical consensus system can ever decide.
+- FLP is often misquoted as saying consensus is impossible, but the precise claim concerns guaranteed termination in every execution of a fully asynchronous model.
+- The absence of a message cannot by itself distinguish a crashed process from a slow process.
+- Safety and liveness are independent dimensions: a system can be completely safe but make no progress, or make immediate progress while being unsafe.
+- The statement that four servers can tolerate two failures appears inconsistent with the earlier quorum arithmetic, which gives a quorum of three for four servers and therefore leaves only one server able to fail while retaining a quorum.
+- The reason for preferring odd cluster sizes was deferred rather than fully explained in this chunk.
+- The paper's 150–300 millisecond timeout recommendation must not be confused with the homework recommendation of 400–800 milliseconds.
+- A term can end without a leader when a split vote occurs, so term number and leader existence are separate concepts.
+- Randomized timeouts are preferred over ranking not because ranking is impossible, but because ranking introduces difficult availability and corner-case behavior.
+- A RequestVote message can be received without resetting the timer; only granting the vote should reset it.
+- The purpose of lastLogIndex and lastLogTerm in RequestVote is not yet explained in this chunk and is deferred to the safety section.
+- The paper's election-timeout range and the homework tester's recommended range are different and should not be conflated.
+- A term can exist without a leader, and terms may be skipped during the subsequent successful election.
+- Adding a fourth server may look more robust but does not improve failure tolerance over three servers and can make partition availability worse.
+- The lecture's example says that overwriting follower entries is safe, but the detailed election-restriction justification was deferred.
+- The log matching property is stronger than merely saying that one entry is equal: matching index and term imply equality of the entire preceding prefix.
+- Repeated split votes are not impossible even with randomized timeouts; randomization only makes repeated collisions rapidly unlikely.
+- Commitment and application are different: an entry can be committed cluster-wide while a particular server has not yet applied it.
+- The longest log does not automatically win an election because a shorter log with a higher final term is more up-to-date.
+- The most up-to-date server is not guaranteed to win; any candidate at least as up-to-date as the voters who grant a majority can win if its timer fires first.
+- An uncommitted entry may be overwritten after a leadership change, whereas a committed entry must already exist in the new leader's log.
+- Receiving a higher-term RequestVote request causes a server to update its term, but a server does not reset its election timer unless it grants the vote.
+- An entry can be present on a majority without being safely committed when the entry belongs to an earlier term.
+- A leader should not directly commit an old entry, but committing a later current-term entry causes earlier matching entries to become committed indirectly.
+- commitIndex is volatile even though committed status is a cluster property, because leaders can retransmit the value after restart.
+- Two apparent leaders are not automatically a safety violation when they are in different terms and the older-term leader lacks a majority.
+- A minority-side leader may continue receiving heartbeats and believe it is healthy while being unable to commit any new command.
+- A write can appear to be silently lost from the client's perspective even though Raft considers the behavior correct when no success response was returned.
+- Exactly-once behavior is not supplied by Raft replication alone; it requires client IDs, command serial numbers, and saved responses in the state machine.
+- A command can be safely retried only when duplicate execution is prevented or the operation itself is idempotent.
+- Lease-based reads improve availability but weaken the claim that safety is independent of timing because they depend on bounded clock drift.
+- Pre-vote mostly prevents term inflation but does not eliminate every possible pointless election because interactions with check-quorum and membership changes remain subtle.
+- Changing one server at a time can preserve majority overlap, but the single-server membership method still had a discovered bug involving commitment in the new leader's term.
+- Raft is not fundamentally unrelated to Paxos; it is close to a particular, well-specified Multi-Paxos variant with a strong leader.
+- Different election timeout values are context-dependent: the lecture cited 150–300 from the paper and etcd defaults of 1000 milliseconds.
+- The statement that a system uses Raft does not imply that every component participates in Raft or that the entire system is correct.
+- A Raft-backed lock can still be unsafe for a paused client because lease expiration is a client-side usage issue rather than a Raft-log failure.
+- Follower-local snapshotting may seem inconsistent with the strong-leader principle, but followers are only reorganizing data they already possess.
+- CockroachDB's range-size value differs across versions, with the slide's 64 MB figure described as outdated relative to the lecturer's approximate 512 MB current figure.
+- Raft's simplicity should not be confused with superior performance or availability because strong leadership can bottleneck writes.
+- The due date of Homework 5 is unresolved because the instructor has not decided whether to move it until after the midterm.
+- The review session's recording status is uncertain because it depends on room-capture functionality.
+- Students must distinguish the included Raft material from the excluded log-compaction and snapshot material.
+- The reason for the extra f in the BFT requirement was posed but deliberately not answered in this lecture segment.
+- The distinction between leases and ReadIndex and the effectiveness of pre-vote remain topics for next Tuesday rather than being resolved here.
+
+#### Questions to review
+- Why does promoting a backup based only on missing messages risk split brain?
+- Why does two-phase commit require all participants rather than only a majority?
+- How does a replicated state machine ensure that five replicas converge to the same state?
+- How should a system handle commands that read the clock or use randomness?
+- What exactly does FLP rule out when one process can crash in a fully asynchronous system?
+- State the FLP impossibility result precisely in one or two sentences.
+- Explain how practical algorithms such as Paxos and Raft work around the practical impact of FLP.
+- Distinguish safety from liveness and give the consensus meaning of each.
+- Which property does Raft guarantee unconditionally, and what may it give up during bad network conditions?
+- Why must any two majority quorums overlap?
+- Given n servers, compute the majority quorum and the number of failures that can be tolerated.
+- Why are odd cluster sizes commonly used, and what changes when the cluster has an even number of servers?
+- What are the three Raft server states, and what does each state do?
+- What happens to a Raft term when no candidate wins the election?
+- Why do majority voting and one-vote-per-term together guarantee at most one leader per term?
+- What happens to a candidate when it receives AppendEntries from a server with a larger, equal, or smaller term?
+- Why must votedFor be persisted before a server replies to a vote request?
+- Why do randomized election timeouts reduce repeated split votes?
+- Why must election timeout be much larger than broadcastTime and much smaller than MTBF?
+- Which RequestVote fields are used to enforce the log-freshness restriction?
+- Why must a rejected RequestVote not reset the election timer, and how could doing so block progress?
+- Why can a split vote produce a term with no leader, and how does a later election resolve it?
+- Using majority = floor(n/2)+1, how many failures can clusters of 3, 4, 5, 6, and 7 nodes tolerate?
+- Why does a four-node cluster split across two data centers lose availability during a two-and-two partition?
+- What are all the AppendEntries request and reply fields, and which two fields perform the consistency check?
+- Prove the log matching property using the leader uniqueness fact and the induction step supplied by successful AppendEntries.
+- Why does the leader decrement nextIndex after an AppendEntries consistency failure, and when does replication succeed?
+- What is the difference between an entry being committed and being applied?
+- Given the five logs in the worked example, why is index 5 committed but index 6 uncommitted?
+- How does the election restriction compare two candidate logs when their last terms differ versus when their last terms are equal?
+- Why could C win the election even though B had the longest log?
+- Why does majority intersection imply that every future leader contains a previously committed entry?
+- Given five logs and a committed entry, which servers can become leader under the majority-overlap and up-to-date-log rules?
+- Reconstruct Figure 8 and explain how E overwrites the majority-held index 2 term 2 entry.
+- Why does replicating a current-term entry at index 3 prevent E from winning the later election?
+- Which Raft variables must be persisted before responding to an RPC, and which variables can be rebuilt after restart?
+- How does a restarted follower recover its commit information if commitIndex was not persisted?
+- In the partition scenario, why can B not commit index 21 while E can commit its different index 21?
+- Why can two leaders exist during a partition without violating Raft safety?
+- Why is an unacknowledged write allowed to disappear when the partition heals, and what should the client do afterward?
+- How does the deduplication table prevent a retried withdrawal or other non-idempotent command from executing twice?
+- Why can an isolated former leader return a stale read even though it has not committed an incorrect write?
+- What is the difference between ReadIndex-style leadership confirmation and lease-based reads?
+- Why does a disconnected server's rising term disrupt the cluster when it reconnects, and how does pre-vote prevent that?
+- Why can direct configuration switching create two leaders in the same term?
+- How does joint consensus ensure that old and new configurations cannot make independent decisions?
+- What are the prepare/promise and accept/accepted phases of Basic Paxos, and where does majority overlap provide safety?
+- Why does the overlap between a prepare majority and an earlier accept majority preserve Paxos safety?
+- What are the main differences between Raft's ordered prefix log and Multi-Paxos's independently decided slots?
+- Why does Raft's election restriction mean a new leader already has all committed entries?
+- Why can a strong leader be a performance bottleneck, and when might EPaxos be preferable?
+- Why are fencing tokens needed when using an etcd lease or lock?
+- Which Consul components participate in Raft, and how does that differ from the gossip-managed client agents?
+- Why do snapshots need both last included index and last included term?
+- What should a follower do when an InstallSnapshot covers its entire log versus only a prefix?
+- Why does Raft replication within a range not automatically provide transactions spanning multiple CockroachDB ranges?
+- Why does BFT require 3f + 1 servers when Raft requires 2f + 1 for the stated failure tolerance?
+- What are the election restriction and commitment rule, and how do they relate to Raft safety?
+- Why are direct membership changes unsafe, and how do the optional membership-change readings address the issue?
+- What is the difference between leases and ReadIndex for reads?
+- Does pre-vote fully fix disruptive servers?
+- Which parts of lectures 1–9 are represented by election, replication, partitions, and membership changes, and which log-compaction content is excluded?
+
+#### Study summary
+- The lecture motivated consensus by showing that primary-backup replication needs a safe way to decide who is primary without creating split brain.
+- Consensus supports replicated state machines by agreeing on the ordered command log so deterministic replicas reach identical states.
+- Two-phase commit is not a substitute for consensus because it requires every participant and can block on coordinator failure.
+- Distributed systems must handle ordinary failures such as crashes, arbitrary message behavior, partitions, and the inability to distinguish slowness from failure.
+- The key theoretical limitation is FLP: under full asynchrony, deterministic consensus cannot guarantee termination with even one possible crash.
+- FLP says that deterministic consensus cannot guarantee termination in a fully asynchronous system if even one process may crash, although practical algorithms can make progress under reasonable timing conditions.
+- Safety forbids bad outcomes and is preserved by Raft even during severe network problems, while liveness concerns eventual progress and may be lost when the network is unreliable.
+- Raft relies on majority quorums because every two majorities overlap, allowing information about prior decisions to carry forward.
+- The key quorum calculations are majority size floor(n/2) + 1 and cluster size 2f + 1 to tolerate f failures.
+- Raft was designed for understandability by separating leader election, log replication, and safety, and by enforcing one-way leader-to-follower log flow.
+- Raft has followers, candidates, and leaders; terms are numbered periods beginning with elections, and a failed election produces a split vote and a later term.
+- Raft terms are logical-clock epochs with at most one leader, and servers update or reject messages based on term comparisons.
+- Leader election uses RequestVote, majority voting, one vote per server per term, persisted vote state, and randomized election timeouts.
+- AppendEntries serves both log replication and empty heartbeat purposes, keeping followers from starting unnecessary elections.
+- Randomization improves liveness because it prevents synchronized candidates from repeatedly splitting votes, whereas ranking can stall around an unavailable high-priority server.
+- For implementation, remember the timing inequality broadcastTime ≪ electionTimeout ≪ MTBF and the homework-specific 400–800 millisecond timeout recommendation.
+- Reset election timers only for valid leader heartbeats or granted votes, and avoid holding locks while sending RPCs.
+- Election timers must be randomized, reset only for valid leader communication or granted votes, and configured differently for the paper versus the homework tester.
+- A split vote can leave a term leaderless, but a later randomized timeout can advance the term and elect a leader; repeated collisions are unlikely but not impossible.
+- For quorum fault tolerance, four nodes tolerate only one failure, just like three nodes, so odd-sized clusters are preferable in steady state.
+- Surviving a site failure requires distributing quorum across three sites, illustrated by a five-node two-two-one deployment.
+- Raft log replication uses indexed, term-tagged entries and parallel AppendEntries RPCs, with commitment occurring after safe replication.
+- AppendEntries repairs follower logs by checking prevLogIndex and prevLogTerm, deleting conflicts after a matching prefix, and appending the leader's entries.
+- The log matching property follows inductively from the previous-entry consistency check, while nextIndex backtracking finds the matching prefix after divergence.
+- Leaders track nextIndex for replication position and matchIndex for confirmed follower replication, backing up until AppendEntries finds a matching prefix.
+- commitIndex records the highest known committed entry, while lastApplied records the highest entry executed by an individual server.
+- A committed entry requires majority replication under the precise current-term rule, and all entries before a committed index are committed as well.
+- Raft's election restriction compares last-log term before length, so a shorter but newer-term log can defeat a longer older-term log.
+- In the example, C became the term-5 leader and safely replaced B's uncommitted term-3 index-6 entry while preserving committed index 5.
+- Leader completeness follows because the majority storing a committed entry intersects every election majority, and the voting rule forces the elected candidate to contain that entry.
+- Leader completeness follows from the overlap of the majority that stored a committed entry and the majority required to elect a leader.
+- The crucial commitment rule is current-term majority replication; a previous-term entry on a majority is not enough by itself.
+- Figure 8 demonstrates that violating the current-term rule can allow a later leader to overwrite an entry that appeared on a majority.
+- A current-term no-op lets a new leader commit preceding entries and determine what is committed.
+- Only currentTerm, votedFor, and the log are persistent; other listed indexes and the basic state machine are reconstructed after restart.
+- Under partition, a minority leader can remain active but cannot commit, whereas a majority-side leader can commit and respond successfully to clients.
+- Partition safety comes from majority overlap: an old-term isolated leader may exist but cannot commit, and a higher-term leader repairs conflicting uncommitted log entries after reconnection.
+- Clients must treat missing success responses as uncertain outcomes, retry through the current leader, and use deduplication to prevent duplicate execution.
+- Linearizable reads require leadership confirmation through majority heartbeats or a timing-dependent lease; an isolated leader must not answer locally.
+- Pre-vote prevents most term-inflation disruptions by requiring evidence that a majority would support an election before a node increases its term.
+- Membership changes cannot switch directly between configurations because old and new majorities may be disjoint; joint consensus requires both majorities during the transition.
+- Paxos uses two phases and overlapping majorities, while Multi-Paxos repeats the protocol across log slots under a stable leader; Raft is close to a strongly led, well-specified Multi-Paxos variant.
+- Raft is best understood as a complete, strong-leader form of Multi-Paxos with ordered, hole-free logs and leader-only log flow.
+- Raft and Paxos have comparable crash-fault tolerance and normal-case performance, so Raft's major advantage is implementability rather than universal performance superiority.
+- etcd, Consul, and CockroachDB illustrate that Raft usually handles only a replication layer while surrounding APIs, membership, reads, and transactions add separate semantics and risks.
+- Log compaction uses independent per-server snapshots of committed applied state, with metadata sufficient to continue AppendEntries consistency checks.
+- InstallSnapshot repairs followers whose missing log entries have already been discarded by the leader.
+- For course preparation, snapshots and InstallSnapshot are part of Homework 6, and the midterm now covers lectures 1 through 9.
+- Prepare for a midterm on October 22 in Larkin Hall 150 covering lectures 1–9, including today's Raft material but excluding snapshots and BFT.
+- Focus review on election, replication, the election restriction, the commitment rule, partitions, and unsafe direct membership changes.
+- Use one two-sided letter-size note sheet as the only permitted exam aid, with no laptops or phones.
+- Attend or seek the recording of the October 18 review session, while recognizing that recording is not guaranteed.
+- Read PBFT sections 1–4 before Thursday and be ready to explain the difference between the 2f + 1 Raft threshold and the 3f + 1 BFT threshold.
+- The next Tuesday follow-up will cover leases versus ReadIndex and whether pre-vote fully addresses disruptive servers.
+
+#### Action items (structured)
+- Kofi: Kofi will post the midterm practice exam on Ed by Friday. (deadline: Friday)
+- Kofi: Kofi will put the updated office-hours information on Ed.
+- Speaker 1: The instructor will hold replacement office hours on Wednesday, October 7, from 3:00 to 4:30pm in Whitaker 318. (deadline: Wednesday, October 7, 3:00–4:30pm)
+- Homework 4 is due Friday, October 9 at 11:59pm. [inferred]
+- The midterm is Thursday, October 22 during normal class time. [inferred]
+- The practice midterm will be posted by Friday. [inferred]
+- Homework 4 students: Implement randomized election timeouts for Homework 4.
+- Homework 4 students: Use an election timeout of approximately 400–800 milliseconds in the homework implementation while still electing a new leader within 5 seconds of failure.
+- A new leader must be elected within 5 seconds after the old leader fails. [inferred]
+- Students should correct their notes to state that a four-node cluster tolerates only one failure, not two.
+- Implement a backup optimization in which a follower returns its conflicting term and the first index for that term so the leader can skip back by a whole term. [inferred]
+- Practice determining which servers can become leader from sets of five logs using the up-to-date comparison. [inferred]
+- Write down the precise current-term-only commitment rule word for word for exam preparation.
+- Implement the client deduplication table in the key-value portion of homework 5.
+- Speaker 1 and Kofi: Speaker 1 and Kofi will discuss whether Homework 5 should be moved to after the midterm; any change will be announced on Ed.
+- Speaker 1: Speaker 1 will fix the outdated slide showing the older 64-megabyte default range size.
+- Homework 4 due Monday, October 12th at 11:59pm. [inferred]
+- Homework 5 scheduled for release Tuesday, October 13th. [inferred]
+- Midterm on Thursday, October 22nd during class time in Larkin Hall 150. [inferred]
+- Speaker 4: Try to record the midterm review session if the room-capture system is working.
+- Ana: Post the practice midterm on Ed by Friday. (deadline: Friday)
+- Speaker 1: Post the practice-midterm solutions a few days after the practice midterm.
+- Students: Read sections 1 through 4 of Castro and Liskov's Practical Byzantine Fault Tolerance before Thursday's lecture. (deadline: Before Thursday's lecture)
+- Speaker 1: Post today's slides, the FLP paper link, and the range-size slide on Ed. (deadline: The FLP link is planned for tonight; timing for the slides and range-size slide)
+- Jordan: Post the recording in the class Discord if the official room capture does not work.
+
+#### Decisions (structured)
+- Homework 4 covers Raft leader election and heartbeats only; log replication and persistence are deferred to homework 5.
+- Kofi's office hours move from Wednesdays 2–4pm to Thursdays 3–5pm in Whitaker 214 starting this week.
+- The midterm will take place during normal class time on Thursday, October 22, in Larkin Hall room 150 and cover lectures 1 through 8.
+- Thursday's lecture will be given by Dr. Joanne Whitfield and will cover Byzantine fault tolerance.
+- For Homework 4, use randomized election timeouts rather than a fixed timeout or fixed server ranking.
+- For Homework 4, use an election timeout around 400–800 milliseconds because the tester limits heartbeats to 10 per second.
+- Homework 4 is due Monday, October 12th at 11:59pm instead of Friday.
+- Late days for Homework 4 are counted from the new Monday-night deadline.
+- Homework 5 remains scheduled for release on Tuesday, October 13th, and its due date was not changed during the lecture.
+- The midterm remains on Thursday, October 22nd during class time in Larkin Hall 150.
+- The midterm coverage expands from lectures 1–8 to lectures 1–9, including the current lecture.
+- Homework 5 remains scheduled for release on Tuesday, October 13, and its due date is not being changed today.
+- The midterm covers lectures 1 through 9, including today's material on election, replication, the election restriction, the commitment rule, partitions, and unsafe direct membership changes, but excluding log compaction and snapshots.
+- The midterm includes Raft but excludes snapshots and Byzantine fault tolerance; BFT will be assessed on the final.
+- Students may bring one letter-size sheet of notes, using both sides and either handwriting or typing, but may not bring laptops or phones.
+- The midterm review session is scheduled for Sunday, October 18, from 4 to 6 p.m. in Whitaker 120.
+
+#### Open questions (structured)
+- What time and room will the midterm review session use? [open]
+- Will the guest lecture on Byzantine fault tolerance be included on the midterm? [open]
+- How can a system distinguish a crashed server from one that is merely slow? [open]
+- Why do systems commonly use odd numbers of servers rather than even numbers? [open]
+- Why use randomized timeouts instead of assigning fixed priorities to servers? [answered]
+- Should a server reset its election timer whenever it receives a RequestVote RPC? [answered]
+- How should the additional last-log-index and last-log-term restrictions affect voting? [open]
+- How does the election restriction ensure that overwriting follower log entries cannot overwrite a committed entry? [open]
+- What exactly determines when a replicated log entry is safely replicated and therefore committed? [open]
+- Why is an entry from an earlier term not considered committed merely because it appears on a majority? [open]
+- Why can two servers simultaneously believe they are leaders without that necessarily being a safety violation? [open]
+- Does pre-vote completely prevent a disconnected or flaky node from causing a pointless election? [open]
+- How do pre-vote, check-quorum, and membership changes interact in the subtle cases? [open]
+- What are the detailed tradeoffs between majority-confirmed read checks such as ReadIndex and lease-based reads? [open]
+- Will Homework 5's due date move to after the midterm? [open]
+- How should the homework implement snapshotting and InstallSnapshot for Homework 6? [open]
+- Will Homework 5 be due after the midterm instead of immediately before it? [open]
+- Will the midterm review session be recorded? [open]
+- Why does Byzantine fault tolerance require 3f + 1 servers while Raft requires 2f + 1 to tolerate f failures? [open]
+
+#### Risks (structured)
+- [medium] The official lecture capture is unreliable, so a locally recorded copy may be needed.
+- [high] An external test-and-set arbiter is a single point of failure: if it dies, nobody can become primary.
+- [high] Incorrectly promoting a backup while the original primary is still active can create split brain and divergent data.
+- [high] In a fully asynchronous system, deterministic consensus cannot guarantee termination if even one process may crash.
+- [high] In a fully asynchronous system, a server crash cannot be distinguished from a server that is merely slow based only on the absence of a message.
+- [medium] Under network partitions or extreme message delays, Raft may stop making progress even though it preserves safety.
+- [medium] A unanimity quorum has zero fault tolerance for liveness because one unavailable or dissenting member prevents a decision.
+- [high] A split vote can recur indefinitely if servers use synchronized election timeouts, creating a liveness problem.
+- [high] A fixed ranking scheme can reduce availability when the highest-priority server is flaky, partitioned, or unable to win because its log is behind.
+- [high] Using the paper's 150–300 millisecond election timeout with 100-millisecond heartbeats violates the homework tester's heartbeat constraints and can cause spurious elections.
+- [high] Resetting the election timer for rejected RequestVote messages can let a server with a bad log prevent timeouts and block progress.
+- [high] Holding a lock while sending an RPC was identified as a major Homework 4 bug.
+- [high] An even-sized four-node deployment split across two sites became unavailable during a network partition because neither side had the three-node majority.
+- [high] The two-site deployment caused 47 minutes of configuration-store unavailability and queued about 38,000 payment authorizations.
+- [medium] A five-node, three-site design improves site-failure tolerance but can increase write latency because commits may wait for a cross-region round trip.
+- [medium] Backing up nextIndex one index at a time can be slow enough for the tester to time out when a follower is far behind.
+- [high] Allowing a server such as D, which lacks committed entries, to become leader could overwrite and erase committed entries, violating safety.
+- [high] Counting a previous-term entry as committed solely because it is on a majority can violate safety because a later leader may overwrite it.
+- [high] Failing to persist votedFor can allow two leaders in the same term and fail the Figure 8 unreliable test.
+- [medium] A leader isolated on a minority partition can accept a client command locally but cannot commit or acknowledge it.
+- [medium] A leader isolated from a majority cannot commit new entries, so writes sent to it may never receive success and may disappear during log repair.
+- [high] Retrying a command after a lost response can execute it twice unless the state machine deduplicates client commands.
+- [medium] An isolated node can inflate its term and force a healthy leader to step down, causing an unnecessary election and a liveness disruption.
+- [high] A leader that answers reads locally without confirming leadership can return stale data and violate linearizability.
+- [high] Directly switching configurations can create two leaders in the same term because old and new majorities may be disjoint.
+- [medium] A strong Raft leader can become a write bottleneck because every write goes through one machine.
+- [high] A client can continue believing it holds an etcd lock after a pause causes its lease to expire, so fencing tokens are required.
+- [high] Real systems can contain consistency bugs in features surrounding Raft or Paxos, including pre-vote, check-quorum, leases, batching, pipelining, and snapshots.
+- [medium] The homework autograder was flaky and its queue caused some submissions to take forty minutes to grade.
+- [medium] Homework 5 may create a tight study schedule if it remains due immediately before the midterm.
+- [medium] Recording of the review session is uncertain because it depends on whether room capture works.
+- [low] The official lecture recording may fail, requiring Jordan's backup recording.
+
+#### Follow-up draft
+Quick recap: The session covered consensus, replicated state machines, FLP, and Raft election, replication, safety, partitions, and membership changes. Remember that safety forbids bad outcomes while liveness requires eventual progress; FLP says deterministic consensus cannot guarantee termination in a fully asynchronous system with even one possible crash, whereas Raft preserves safety but needs timing assumptions for progress. Memorize majority = floor(n/2) + 1, 2f + 1 servers to tolerate f crash failures, broadcastTime ≪ electionTimeout ≪ MTBF, current-term majority replication for direct commitment, and persistent state currentTerm, votedFor, and log; Homework 4 uses randomized 400–800 ms election timeouts and covers election and heartbeats only. The midterm is October 22 in Larkin Hall 150, covers lectures 1–9 including Raft but excluding snapshots and BFT, and allows one two-sided letter-size notes sheet without laptops or phones. That's the recap.
+
+---
+
+# Summary E
+
+_(run1)_
+
+### Title: Consensus and Raft Explained
+
+#### Overview
+Course logistics were announced (homework 4 on Raft leader election due Friday Oct 9 11:59pm, midterm Oct 22 in Larkin 150 covering lectures 1-8) and Lecture 9 on consensus and Raft began by recapping primary-backup replication, motivating replicated state machines, and stating the FLP impossibility result. Lecture covered the FLP impossibility result and its exam scope, the definitions of safety and liveness, majority quorums with the floor(n/2)+1 and 2f+1 formulas, and introduced Raft's origins, design goals, server states, and the term concept. The lecture covered Raft terms as logical clocks, the two core RPCs (RequestVote and AppendEntries/heartbeat), leader election mechanics including randomized election timeouts, the timing requirement broadcastTime << electionTimeout << MTBF, and homework 4 constraints of max 10 heartbeats/second and a new leader within 5 seconds. The lecture covered Raft election timer reset rules, a split vote walkthrough with skipped terms, a war story about even-sized clusters, and the AppendEntries log replication mechanism including the log matching property and nextIndex. The lecturer explains Raft's nextIndex/matchIndex mechanism, commit index and lastApplied, then works through a detailed five-server election example (A–E, term 3→term 5) showing that the longest log does not win and ending on the leader completeness property. The lecture explains the leader completeness property and the precise commitment rule (current-term-only commitment) via the Figure 8 scenario, details which Raft state must be persisted versus volatile, and walks through a network partition example showing two simultaneous leaders in different terms with only one able to commit. The lecture resolves how safety holds with two leaders in different terms, covers client retry plus deduplication and read linearizability, single-server disruption and pre-vote, membership changes via joint consensus, and compares Raft with Paxos and Multi-Paxos. The lecture compares Raft to Multi-Paxos, profiles three real Raft systems (etcd, Consul, CockroachDB), introduces log compaction via snapshots and InstallSnapshot, and announces logistics changes: homework 4 moves to Monday Oct 12 11:59pm and the midterm now covers lectures 1-9. Professor Castellanos finalized midterm logistics (Oct 22, Larkin Hall 150, covering lectures 1-9 with snapshots and BFT excluded), allowed one sheet of notes, and assigned Castro-Liskov sections 1-4 with a 3f+1 vs 2f+1 thinking question for Thursday's guest lecture. Key decisions: FLP proof will NOT be on the exam; only the statement and its implications are examinable.; Safety versus liveness definitions, and which one Raft guarantees unconditionally, will be on the exam.; The quorum formula and the 2f+1 relationship will be on the
+
+#### Summary
+- Lecture 9 is 'Consensus, and the Raft algorithm', building directly on lecture 8's primary-backup replication.
+- Course logistics were announced (homework 4 on Raft leader election due Friday Oct 9 11:59pm, midterm Oct 22 in Larkin 150 covering lectures 1-8) and Lecture 9 on consensus and Raft began by recapping primary-backup replication, motivating 
+- FLP proof will NOT be on the exam; only the statement and its implications are examinable.
+- Safety versus liveness definitions, and which one Raft guarantees unconditionally, will be on the exam.
+- If a backup wrongly promotes itself while the primary is still alive, split brain causes diverging data that cannot be reconciled
+
+#### Core concepts
+- Consensus is needed so a group of machines can agree on something with no special machine and keep working despite some failures.
+- Consensus should make progress as long as a majority of servers are up.
+- Consensus is used in real systems via the replicated state machine approach.
+- In a replicated state machine, if all replicas apply the exact same sequence of commands in the same order, they all end up in the same state and any can answer a client.
+- The whole problem reduces to keeping a replicated log identical across servers—the log is the sequence of commands, and the consensus algorithm decides what goes in each slot.
+- Primary-backup replication (lecture 8, VMware fault tolerance paper) uses a primary handling all client requests and a backup replaying a log so it can take over invisibly.
+- Deciding who declares the primary dead is hard because a non-responding primary is indistinguishable from a crashed primary, a broken network, or a slow primary.
+- The VMware paper solved split brain with an external arbiter—a test-and-set service on shared storage—but this arbiter is itself a single point of failure.
+- FLP impossibility shows consensus is fundamentally hard, not just an engineering difficulty.
+- FLP impossibility: in a fully asynchronous system with no bound on message delays or process speed, no deterministic consensus algorithm can guarantee termination if even one process can crash.
+- FLP does not say consensus is impossible in practice — only that termination cannot be guaranteed in every execution of a purely asynchronous model.
+- Practical algorithms like Paxos and Raft always guarantee safety (nothing bad happens) and only guarantee progress when the network behaves reasonably, e.g. messages arrive within some timeout.
+- Safety means nothing bad ever happens and a violation can be pinpointed to a finite moment; for consensus, two servers never decide different values for the same log slot.
+- Liveness means something good eventually happens; it cannot be pinpointed to a finite moment because it might still happen later — for consensus, eventually a value is decided and the client gets a response.
+- Raft, like Paxos, never gives up safety even under partitions; it will never have two servers apply different commands at the same index, but it can stall (sacrifice liveness) under bad networks.
+- A quorum is a subset of servers big enough that any two quorums overlap in at least one server; the overlap server carries the decision information forward.
+- Raft's main understandability move is decomposition into relatively independent pieces: leader election, log replication, and safety (plus membership changes and log compaction as add-ons).
+- Raft's other big design choice is the strong leader: at most one leader at a time, all client requests go through the leader, and log entries only flow leader-to-follower, never the reverse.
+- Every Raft server is in exactly one of three states — follower, candidate, or leader — with exactly one leader and the rest followers in normal operation.
+- Raft divides time into terms numbered with consecutive integers; each term begins with an election, and if a candidate wins it leads for the rest of that term.
+- A split vote — where no candidate wins — ends the term with no leader, and a new term with a new election starts shortly after.
+- The leader handles all client requests and replicates the log; followers redirect client requests to the leader.
+- In normal operation there is exactly one leader and all other servers are followers.
+- Raft divides time into terms, numbered with consecutive integers (term 1, term 2, term 3).
+- Each term begins with an election; if a candidate wins, it is leader for the rest of that term.
+- Raft guarantees at most one leader in any given term, called election safety.
+- Every server stores its current term number and includes that term in every message it sends.
+- If a server sees a message with a term bigger than its own, it updates its term and steps down to follower if it was leader or candidate.
+- The basic Raft algorithm needs only two RPCs: RequestVote and AppendEntries; a third, InstallSnapshot, is only for log compaction.
+- AppendEntries replicates log entries and doubles as a heartbeat when empty.
+- Raft's liveness (but not its safety) depends on timing, governed by broadcastTime << electionTimeout << MTBF.
+- Election timeout reset rule: reset timer only when granting a vote or receiving a valid AppendEntries from the current leader, not when rejecting a vote.
+- Raft terms can be skipped without a leader; a leaderless term is fine and expected.
+- The probability of repeated split votes drops off extremely fast, so termination is not guaranteed but highly probable.
+- Even-sized clusters never help in steady state; they only appear during adding/removing servers or by accident.
+- To survive losing a whole data center, use three sites with 2f+1 applied to data centers (e.g., 2 nodes in Virginia, 2 in Ohio, 1 in a third region), but this adds latency on writes.
+- Leader log replication: client sends command, leader appends to its log, sends AppendEntries RPCs in parallel to followers, retries indefinitely until replicated, then applies to state machine and returns result (entry committed).
+- AppendEntries consistency check uses prevLogIndex and prevLogTerm: follower refuses (success=false) if no entry at prevLogIndex or term mismatch; deletes conflicting entries after a match and appends leader's entries.
+- Log matching property is fundamental: if two logs contain an entry with the same index and term, all preceding entries are identical.
+- Log matching property holds because: (1) a leader creates at most one entry per index per term and entries never change position; (2) by induction, each AppendEntries extends a matching prefix.
+- Inconsistent logs are repaired by the leader forcing followers' logs to match its own, but committed entries are never overwritten due to the election restriction.
+- Mechanism for repair: nextIndex per follower initialized to leader's last log index + 1; on rejection, leader decrements nextIndex and retries until match, then follower appends and stays consistent.
+- The leader keeps a nextIndex for each follower: the index of the next log entry it will send to that follower.
+- When a leader first comes to power, it initializes nextIndex for every follower to one past the end of its own log (optimistically assuming everyone is caught up).
+- If the AppendEntries consistency check fails, the follower returns false and the leader decrements nextIndex and retries until the logs match.
+- The leader keeps matchIndex per follower: the highest index known to be replicated on that follower, used to decide commitment.
+- First approximation of commitment: an entry is committed once the leader that created it has replicated it on a majority of the servers.
+- The leader tells followers its commit index via the leaderCommit field of every AppendEntries, including heartbeats.
+- The election restriction is the rule that prevents a candidate like D from winning and erasing committed entries.
+- Even with correct comparison, the most up-to-date server is not guaranteed to win; any server whose log is at least as up-to-date as a majority of voters can win, and whoever times out first among eligible ones usually wins.
+- Leader completeness: committed entries are never lost when leadership changes because any future leader already has them.
+- Leader completeness property: if a log entry is committed in a given term, that entry will be present in the logs of leaders for all higher-numbered terms, so committed entries are never lost on leadership change.
+- The proof of leader completeness uses the majority-overlap argument: the majority that stored a committed index must overlap with any election-winning majority.
+- A voter grants its vote only if the candidate's log is at least as up-to-date as its own, so the overlap voter forces the new leader to carry committed entries.
+- A leader only commits entries from its current term by counting replicas; it never commits an entry from a previous term merely because it is on a majority.
+- Entries from earlier terms are committed indirectly: once a current-term entry is committed, the log matching property commits all preceding entries too.
+- A new leader appends a blank no-op entry at the start of its term so a current-term entry commits as soon as possible, which also commits everything before it and reveals what is committed.
+- Persistent state on every server is exactly three things: currentTerm, votedFor, and the log, written to stable storage before responding to any RPC.
+- Volatile state includes commitIndex and lastApplied on all servers, and nextIndex and matchIndex on the leader; these reset to initial values on reboot.
+- Committed is a property of the cluster, so a restarted server relearns commitIndex from the leader's leaderCommit in AppendEntries, and a restarted leader rediscovers it by committing an entry from its new term.
+- During a network partition, two servers can simultaneously believe they are leaders (B in term 7, E in term 8), but only in different terms and only the one that can reach a majority can commit, so safety holds.
+- The minority side containing the old leader cannot commit: B needs 3 acks but can only reach A and itself, so nothing B does becomes committed.
+- Two leaders can coexist simultaneously but only in different terms; the leader in the older term cannot commit anything because it cannot reach a majority, so only one can make progress and safety holds.
+- The overlap argument is stated as the core of the lecture: a partitioned leader B can only reach A and itself, so nothing it does can ever become committed.
+- On partition heal, B's stale heartbeat with term 7 is rejected by E (term 8) and the reply carries term 8, so B immediately steps down, becomes a follower, and updates its term to 8.
+- Client-side correctness relies on retry plus state-machine deduplication to give linearizable, exactly-once semantics.
+- Reads are a second safety problem in the same scenario: a partitioned leader answering from its local state machine returns a stale value for y and breaks linearizability even without writing anything wrong.
+- A self-isolated server repeatedly times out and inflates its term (up to term 12) while the real cluster stays at term 8; when it rejoins, its high term forces the healthy leader E to step down and triggers an unnecessary election — a liven
+- Raft's original membership-change answer is a two-phase joint consensus in which any decision during the joint config requires a separate majority from the old config and from the new config.
+- Basic (single-decree) Paxos agrees on one value using proposers, acceptors, and learners, and does the work through majorities and the overlap between the prepare majority and any earlier accept majority — the same core idea as Raft.
+- Raft is characterized as very close to a particular, well-specified flavor of Multi-Paxos with a strong leader.
+- Phase 2 of Paxos has acceptors accept a value, and it must use the value from the highest-numbered proposal any of them already accepted, if there was one.
+- The correctness of Paxos depends on majorities and the overlap between the prepare majority and any earlier accept majority.
+- To replicate a whole log you run many instances of Paxos, one per log slot, and in practice elect a stable leader to skip phase 1 most of the time, which is called Multi-Paxos.
+- In Raft the log has no holes and committed entries are in order, while Multi-Paxos slots can be decided independently and out of order, allowing gaps.
+- Raft bundles leader election, log management, and membership into one specification referencing exactly which state is persistent, which is its biggest practical difference.
+- Raft's strong leader is also a bottleneck since every write goes through one machine, and Paxos-family variants like EPaxos are leaderless or multi-leader and can do better for geo-distributed workloads with low conflict rates.
+- etc d is a key-value store originally from CoreOS, now part of the CNCF, and it is the backing store for all Kubernetes cluster state as a Raft cluster.
+- Consul from HashiCorp runs Raft on its server nodes using HashiCorp's own Raft library, with 3 or 5 servers recommended, while client agents are not voting members.
+- CockroachDB is a distributed SQL database that does not run one Raft group for the whole database, but splits data into ranges, each its own Raft group usually with 3 replicas, sometimes called Multi-Raft.
+- Google's Chubby lock service and Spanner use Paxos, and ZooKeeper uses its own protocol called Zab, which is similar in spirit but not the same.
+- Snapshots solve the problem of the log growing forever; each server independently snapshots its state machine for fast reboot and recovery instead of replaying the entire log.
+- Raft's core mechanics for the midterm include election, replication, the election restriction, the commitment rule, partitions, and why direct membership changes are unsafe.
+- Raft requires 2f+1 servers to tolerate f crash failures, while Byzantine fault tolerance (servers can lie) requires 3f+1.
+- Byzantine fault tolerance is covered by a guest lecture (lecture 10) on Thursday and will be tested on the final rather than the midterm.
+- Topics deferred to next Tuesday include leases versus ReadIndex for reads and whether pre-vote fully fixes disruptive servers.
+
+#### Definitions
+- Split brain is two primaries both accepting writes and both thinking they're in charge, causing data to diverge irreconcilably.
+- A state machine has state, takes commands, and each command deterministically changes the state and produces an output.
+- Determinism means that starting from the same state and applying the same commands in the same order yields the same end state every time.
+- The replicated log is the sequence of commands that consensus keeps identical across servers, slot by slot.
+- FLP is Fischer, Lynch, and Paterson, from 1985.
+- FLP states that in a fully asynchronous system (no bound on message delays and no bound on process slowness), no deterministic consensus algorithm can guarantee it always terminates if even one process can crash.
+- Two-phase commit is about atomic commitment: every participant has to vote yes, then everyone commits, so it needs all participants, not most.
+- FLP = Fischer, Lynch, and Paterson, 1985; it states that in a fully asynchronous system no deterministic consensus algorithm can guarantee termination with even one crash failure.
+- Safety property: nothing bad ever happens; formally a violation can be pointed to at a finite moment in the execution.
+- Liveness property: something good eventually happens; you can never point to a finite moment where it was violated because it might still happen later.
+- Quorum: a subset of servers big enough that any two quorums must overlap in at least one server.
+- Majority quorum: a quorum consisting of just a majority of the servers in the cluster; in Raft this is the quorum used.
+- Follower: a passive server that only responds to requests from leaders and candidates and does not initiate anything.
+- Candidate: a server that is trying to become leader and is in the middle of running an election.
+- Leader: handles all client requests and replicates the log; a client talking to a follower gets redirected to the leader.
+- Term: Raft's division of time into consecutive-integer-numbered periods, each beginning with an election.
+- Election safety: 'at most one leader per term' is a safety property because a violation has a specific moment — when the second leader got elected.
+- A term is a monotonically increasing number that acts as a logical clock; each term has at most one leader and some terms have no leader.
+- A split vote is when no candidate wins, so the term ends with no leader and a new election follows.
+- The election timeout is a per-follower timer; if a follower goes a whole election timeout without hearing from a leader or granting a vote, it starts an election.
+- broadcastTime is the average time for a server to send RPCs to every server and get replies.
+- MTBF is the mean time between failures for a single server.
+- Persistent state includes currentTerm and votedFor; votedFor is the field recording which candidate the server voted for.
+- Paper's election timeout: 150-300 ms; homework recommendation: 400-800 ms (different due to tester's heartbeat limit).
+- Fault tolerance formula: majority quorum = floor(n/2)+1, tolerable failures = n - quorum.
+- Log matching property definition: If two logs contain an entry with the same index and the same term, then the logs are identical in all entries up through that index.
+- Each log entry has three components: command, term, and index (starting at 1).
+- AppendEntries arguments: term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit.
+- AppendEntries reply: term, success.
+- nextIndex: the index of the next log entry the leader will send to a given follower.
+- matchIndex: the highest index known to be replicated on a given follower.
+- commit index: the highest log index that a server knows to be committed; every server tracks it, it starts at 0, and only increases.
+- When a follower learns the leader's commit index, it sets its own commit index to the minimum of leaderCommit and the index of its last new entry.
+- lastApplied: the highest index a server has actually applied to its state machine; whenever commitIndex > lastApplied you increment lastApplied and apply that entry, in order, one at a time.
+- Committed is a fact about the cluster (entry is durable, never lost or changed); applied is a fact about one server (it has executed the entry against its local state machine).
+- "More up-to-date" is defined in a specific order: compare terms of the last entries first (higher term wins, regardless of length); only if terms are equal do you compare length (longer log wins).
+- Leader completeness property: if a log entry is committed in a given term, then that entry will be present in the logs of the leaders for all higher-numbered terms.
+- Up-to-date comparison: compare last term first, then log length — term takes priority over length.
+- Precise commitment rule: a leader commits log entries only from its current term by counting replicas, never an old-term entry just for being on a majority.
+- Parallel formulation of the commitment rule: majority plus current term means committed; majority plus old term means nothing yet — wait until something from your own term lands on top of it.
+- Persistent state is defined as currentTerm, votedFor, and the log; volatile state is everything else that can be rebuilt after restart.
+- The state machine is volatile in the basic version and is reconstructed by replaying the log from the beginning on restart.
+- State machine dedup: clients assign themselves a unique ID and a serial number to every command, and the state machine tracks the latest executed serial number per client along with the saved response.
+- ReadIndex (used by etcd) is the fix requiring the leader to confirm it is still leader, via heartbeats with a majority, before answering a read-only request.
+- A lease is an alternative read approach where the leader assumes no one else could have been elected within roughly one election timeout if a majority acknowledged a heartbeat recently, allowing local reads but depending on bounded clock dr
+- Pre-vote: before incrementing its term, a server asks whether others would vote for it, and only bumps its term and runs if a majority says yes; it is in Ongaro's PhD dissertation (not the original conference paper) and implemented by etcd
+- Joint consensus config notation: the leader first commits a special entry C old,new representing both configurations, then commits an entry with just C new; after C new commits the old configuration is irrelevant.
+- Learners / non-voting members are new servers that join first to catch up on the log without slowing down commits.
+- Basic Paxos aka single-decree Paxos runs in two phases: Phase 1 prepare/promise (proposer picks a proposal number and a majority of acceptors promise not to accept a lower number and report any already accepted value) and Phase 2 accept/acc
+- Multi-Paxos is replicating a whole log by running many instances of Paxos, one per log slot, in practice with a stable elected leader so Phase 1 can usually be skipped.
+- Multi-Raft refers to a big cluster running thousands of Raft groups at once, as in CockroachDB.
+- InstallSnapshot is the third RPC used by the leader to send a snapshot to a follower when the leader has discarded needed entries.
+- A snapshot in Raft includes the last included index (index of the last entry the snapshot replaces) and the last included term (term of that entry).
+- The snapshot also includes the latest configuration for membership changes.
+- Fencing tokens are needed to make a critical section safe when a client pauses and its lock lease expires.
+- Consul provides read consistency modes: stale (any server answers), default (relies on leader leasing, can briefly return stale data), and a strictly consistent mode costing an extra round trip.
+- Zab is a protocol similar in spirit to Raft but not the same, used by ZooKeeper.
+- The election restriction, the commitment rule, and partitions are named Raft concepts covered by the midterm.
+- Byzantine fault tolerance is characterized as the setting where 'servers can lie', in contrast to Raft's crash-failure model.
+
+#### Examples
+- The broken second-floor espresso machine is described as a single node with no replicas and no failover, so when it goes down the whole faculty loses liveness.
+- The coffee cart outside Larkin is called a Byzantine failure—it claims to be coffee and is not coffee.
+- Examples of services that could be made fault tolerant as replicated state machines include a key-value store, a lock service, and a configuration database.
+- The replicated state machine example uses five servers each running a copy of the state machine and applying the same command sequence.
+- The self-recording by a student is called a 'replicated recording', foreshadowing why replication is good.
+- Majority overlap proof example: two disjoint groups each with more than half the servers would sum to more than all servers, which is impossible — so any two majorities must share a server.
+- n=5 example: quorum is 3 out of 5; you can lose 2 servers (5 servers, quorum of 3).
+- n=3 example: floor of 1.5 is 1, plus 1 is 2, so you need 2 out of 3 and can tolerate 1 failure.
+- n=4 example: 4 servers have a majority quorum of 3, so 4 nodes tolerate 2 failures — adding the fourth node buys something.
+- Twelve Angry Men as a jury analogy: a jury is a consensus protocol with a quorum of 12 out of 12, where one stubborn or sick juror loses liveness entirely (hung jury) but it stays very safe.
+- Animation analogy for safety vs liveness: a system that does nothing is perfectly safe with zero liveness, and one that immediately decides anything is very live and completely unsafe.
+- Raft user study at Stanford and Berkeley taught both Paxos and Raft and gave quizzes; students did better on the Raft quiz.
+- In a 5-server cluster, a candidate needs 3 votes: its own plus 2 more (a majority of the whole cluster, not just responders).
+- Two candidates both needing a majority in the same term would have overlapping majorities, and the overlap server cannot have voted twice.
+- If a server votes for A, crashes, reboots, and forgets its vote, it could vote for B in the same term and produce two leaders, which is why votedFor must be persisted.
+- Making the timeout range too narrow, like 150 to 151 ms, causes split votes to pile up and elections to take seconds.
+- The Raft authors first tried a ranking system where a lower-ranked candidate defers to a higher-ranked one, but it had corner cases as fixes created new issues.
+- A permanently slow server naturally tends not to win elections under randomization.
+- Split vote example: 5 servers (A-E) in term 6; leader A crashes; B and D time out nearly simultaneously (212ms and 213ms), both become candidates in term 7; B gets votes from C, D gets votes from E; no majority; term 7 leaderless.
+- Resolution of split vote: B picks 290ms, D picks 160ms; D times out first, wins term 8 with votes from B, C, E (3 votes); terms 7 had no leader, term 8 has leader D.
+- War story: at Ledgerline in 2017, a coordination service built on etcd ran on 3 nodes in one data center; to be more robust they added a 4th node, splitting 2+2 across Virginia and Ohio; when the link between sites flapped, neither side had
+- Log X has 7 entries with last entry from term 2; log Y has only 5 entries with last entry from term 3 — Y is more up-to-date even though it is shorter.
+- Worked example: five servers A–E in term 3 with A as leader; A's log is 1,1,2,3,3,3; B identical; C is 1,1,2,3,3 (missing index 6); D is 1,1,2; E same as C.
+- Index 5 (term 3) is on A, B, C, E — 4 of 5, a majority — so index 5 is committed; index 6 (term 3) is only on A and B, not a majority, so it is not committed, giving A a commit index of 5.
+- After A crashes, random timeouts are B 280ms, C 170ms, D 155ms, E 240ms, so D times out first.
+- D (term 4, lastLogTerm 2, lastLogIndex 3) is rejected by B, C, and E because their last term is 3 > 2, so D gets only its own vote and cannot win.
+- C (term 5, lastLogTerm 3, lastLogIndex 5) gets votes from D and E; B rejects because same term 3 but B has 6 entries vs C's 5, so C becomes leader in term 5 with 3 of 5 votes.
+- B had the longest log in the cluster yet did not win; B could have won if its timer fired first, getting votes from C, D, and E, but it was not guaranteed.
+- When C appends a new term-5 command at index 6, B accepts via matching prevLogIndex 5 / prevLogTerm 3, sees the term conflict at index 6, deletes its old term-3 entry, and replaces it — the uncommitted entry is safely gone.
+- Index 5 committed on servers A, B, C, and E; a candidate D lacking index 5 can only get votes from itself, never a majority, so D can never win while index 5 is committed.
+- Figure 8 walk-through step one: term 2, leader A appends an entry at index 2 and replicates it only to B before crashing, so A and B have index 2 term 2 while C, D, E have only index 1.
+- Figure 8 step two: E elected leader for term 3 with votes from C, D, and itself, and puts a different entry at index 2 term 3 only on its own log before crashing.
+- Figure 8 step three: A returns and is elected leader for term 4 with votes from B, C, and itself, then replicates index 2 term 2 onto C, making it a majority on A, B, and C.
+- Figure 8 step four: E returns, wins term 5 with votes from B, C, and D because its last term 3 beats their terms 2 and 1, and forces index 2 term 3 onto everyone, erasing the majority-stored index 2 term 2.
+- Correct fix in the scenario: A in term 4 should append index 3 with term 4 and replicate indices 2 and 3 to B and C, committing index 3 (and index 2 with it) and raising A, B, C's last term to 4 so E (last term 3) can no longer win.
+- Network partition example: five servers A–E, leader B in term 7, commit index 20 everywhere; partition splits A,B (minority, with old leader) from C,D,E (majority, no leader).
+- Client 1 sends 'set x to 7' to B, which appends it at index 21 term 7; it reaches only 2 of 5 servers, so B cannot commit, does not apply, and never replies to client 1.
+- On the majority side, E's election timer fires first at 210 milliseconds, it goes to term 8 and wins with 3 votes from C and D.
+- Client 2 sends 'set y to 3' to E, which appends it at index 21 term 8 and replicates to C and D — 3 of 5, a majority, from E's current term, so it commits and E tells client 2 'success'.
+- After the heal, the consistency check backs up to index 20 (which matches), and at index 21 B and A have 'set x to 7' term 7 while E sends 'set y to 3' term 8, so B and A delete their index 21 and take E's entry; 'set x to 7' is gone from e
+- The lost x=7 write is not a loss from Raft's perspective because client 1 never got a success response; a correct client times out on B, retries, finds the new leader E (possibly via a redirect), and resends 'set x to 7', which commits in t
+- Idempotency example: re-executing 'set x to 7' on retry is harmless, but re-executing 'withdraw 100 dollars' is very much not harmless.
+- Stale-read example: during the partition a client asks B for y, and if B answers from local state it returns the old y, while on the majority side y was already set to 3 and committed.
+- Single-isolated-server example: D cut off from everyone climbs from term 9 to term 12 while the real cluster stays at term 8, then returns and forces E to step down with its term-12 RequestVote even though D's log is behind and D can't win.
+- Membership-change example: going from 3 servers (A, B, C) to 5 (A, B, C, D, E), if A and B have the old config (majority 2 of 3) and C, D, E have the new config (majority 3 of 5), A can be elected by A+B and E by C+D+E simultaneously — two
+- Historical example: Paxos is Leslie Lamport's algorithm, original paper 'The Part-Time Parliament' written around 1990 and published in 1998 as an allegory about a fictional parliament on a Greek island; 'Paxos Made Simple' followed in 2001
+- 'Paxos Made Live' is a well-known Google paper about building Chubby that says the gap between the paper and a real system is enormous.
+- etc d's defaults are a 100 millisecond heartbeat interval and a 1000 millisecond election timeout, longer than the paper's 150-300ms because real data center networks are messier.
+- CockroachDB's thousands of heartbeats per second are handled by coalescing heartbeats between the same pair of nodes.
+- CockroachDB reads are usually served by a leaseholder for the range rather than going through the Raft log every time, and multi-range transactions need their own commit protocol on top of Raft.
+- CockroachDB's default range size changed across versions; the slides say 64 megabytes but the lecture says newer versions use 512 megabytes, so students shouldn't rely on a lecture slide.
+- Jepsen analyses by Kyle Kingsbury found real consistency bugs in systems using Raft or Paxos, with bugs almost always in the surrounding engineering rather than the base algorithm.
+- The homework tester is described as a baby Jepsen that partitions servers, drops and reorders messages, and checks results.
+- A common snapshot trick is copy-on-write, like forking the process on Linux so the child writes the snapshot while the parent keeps serving.
+- A context with different election timeouts was noted: the paper's 150-300ms, etc d's 1000ms, and others, each right for its context.
+- Homework 5 is used as an example of a tight schedule: a student asks whether it could be due after the midterm instead of right before it.
+- Snapshots/log compaction is used as the concrete example of a Raft topic excluded from the midterm.
+
+#### Formulas / steps
+- Replicated state machine workflow: ensure all replicas apply the same command sequence in the same order, then any replica can serve the client and survivors retain state after crashes.
+- Standard fix for nondeterminism: the leader evaluates the nondeterministic part once and puts the actual concrete value into the log entry (e.g. 'set x to 10:42 and 17 seconds' rather than 'set x to the current time').
+- In the VMware primary-backup approach, the client request goes to the primary, the primary logs it to the backup, and on primary failure the backup takes over.
+- Majority quorum formula: for a cluster of n servers, quorum size = floor(n/2) + 1.
+- Fault tolerance from quorum: number of servers that can fail = n minus the quorum size.
+- Inverted formula: to tolerate f failures, you need 2f + 1 servers — f=1 gives 3 servers, f=2 gives 5, f=3 gives 7.
+- Raft's lecture plan sequence: election, replication, safety, a worked example, partitions, a bit on membership changes, and a comparison to Paxos and real systems.
+- How practical systems circumvent FLP: guarantee safety always, and guarantee progress only when messages eventually arrive within some timeout.
+- Rule: a message with a larger term causes the receiver to update its term and step down to follower; a message with a smaller term is rejected.
+- To start an election, a follower: increments its current term, becomes a candidate, votes for itself, and sends RequestVote RPCs in parallel to every other server.
+- After starting an election, one of three outcomes occurs: the candidate wins, another server becomes leader, or a timeout passes with no winner.
+- RequestVote arguments are: term, candidateId, lastLogIndex, and lastLogTerm.
+- RequestVote reply has two fields: term (the voter's current term) and voteGranted (true or false).
+- Each server picks its election timeout randomly from a fixed interval (150 to 300 ms in the paper), choosing a fresh random value each time the timer resets.
+- Timing requirement: broadcastTime << electionTimeout << MTBF; broadcast time an order of magnitude less than election timeout, and election timeout a few orders of magnitude less than MTBF.
+- Typical values: broadcast time ~0.5 to 20 ms (depending on disk writes), election timeout ~10 to 500 ms, MTBF measured in months.
+- Reset the election timer only on receiving a valid AppendEntries from the current leader or when granting a vote, not on every RequestVote heard.
+- Fault tolerance: n=3 -> tolerate 1 failure; n=4 -> tolerate 1; n=5 -> tolerate 2; n=6 -> tolerate 2; n=7 -> tolerate 3.
+- Log replication steps: client sends command to leader -> leader appends as new entry (command, term, index) -> sends AppendEntries to followers -> once safely replicated, leader applies to state machine and returns result -> retries until a
+- AppendEntries consistency check procedure: follower checks own log at prevLogIndex; if no entry or term mismatch, reply success=false; else accept; if existing entries conflict (same index, different term), delete conflicting entry and all
+- Leader repair procedure for inconsistent follower: on receiving success=false, decrement nextIndex for that follower and retry; repeat until match, then AppendEntries succeeds and follower is consistent for the rest of the term.
+- Leader catch-up procedure: initialize nextIndex past own log end; on AppendEntries failure decrement nextIndex and retry; once logs match at a point, follower deletes conflicting entries after that point and appends leader's entries.
+- Applying entries: while commitIndex > lastApplied, increment lastApplied and apply that entry, in order, one at a time.
+- Up-to-date comparison procedure: first compare last-entry terms (higher wins); if equal, compare log lengths (longer wins); candidate gets a vote only if its log is at least as up-to-date as the voter's.
+- Backup optimization step: the follower returns the conflicting term and the first index it stores for that term so the leader can skip a whole term at a time.
+- Faster overlap proof of leader completeness: committed means on a majority, winning means votes from a majority, the two majorities overlap, and the overlap voter won't vote for a candidate missing its committed entries — so every new leade
+- Election restriction step: a candidate must contain the committed index because the overlap voter only grants its vote to a candidate whose log is at least as up-to-date.
+- Commitment procedure: when a leader in a new term needs to commit an old entry, it appends a new current-term entry on top and replicates so that entry reaches a majority, committing it and the old entries beneath it.
+- Up-to-date comparison procedure: compare last term first, then compare length, with term taking priority.
+- Dedup procedure: if the state machine sees a command with a serial number it has already executed, it does not run it again and just returns the saved response.
+- Read-only request procedure (majority-heartbeat approach): before answering a read-only request the leader must check it is still the leader by exchanging heartbeats with a majority of the cluster; a leader that cannot reach a majority cann
+- Pre-vote procedure: a server asks 'would you vote for me if I ran?' and only if a majority says yes does it actually bump its term and run for election.
+- Joint consensus two-phase steps: (1) commit C old,new requiring separate majorities of both configs; (2) commit C new, after which the old configuration is irrelevant and servers not in the new configuration can be shut down.
+- Single-server change approach: many real implementations add or remove one server at a time instead of full joint consensus because any majority of the old config and any majority of the new config still overlap when changing by only one.
+- Paxos phase 2: the proposer asks acceptors to accept a value, using the highest-numbered accepted value from any acceptor if one exists; if a majority accepts, the value is chosen.
+- To snapshot, a server takes a snapshot of its current state machine state, writes it to stable storage, then discards all log entries up through the last entry included in the snapshot.
+- The snapshot's last included index and term are needed because the first entry after the snapshot needs a prevLogIndex and prevLogTerm for the AppendEntries consistency check, and those entries are gone.
+- When a follower receives an InstallSnapshot, if the snapshot covers everything in its log it discards its whole log and replaces its state; if it covers only a prefix it deletes that prefix and keeps later entries.
+- Both Raft and Paxos need 2f + 1 servers to tolerate f crash failures.
+- Both Raft and Paxos are safe under asynchrony and live only under partial synchrony; neither handles malicious servers.
+- In the normal case both Raft and Paxos perform basically the same: one round of messages to a majority per command.
+- Snapshots are taken independently by each server, usually when the log hits a size threshold, and only committed, applied entries can go into a snapshot.
+- Raft tolerance formula: 2f+1 servers tolerate f crash failures.
+- BFT tolerance formula: 3f+1 servers are needed when servers can lie.
+
+#### Things to memorize
+- Homework 4 (Raft leader election, not log replication) is due Friday, October 9th, 11:59pm, and AppendEntries is used only as a heartbeat with empty entries.
+- Log replication and persistence are homework 5, not homework 4.
+- Students have 5 late days for the whole semester and may use at most 2 on any single assignment.
+- Kofi's office hours move to Thursdays 3 to 5pm in Whitaker 214 (the lab room), starting this week.
+- The midterm is Thursday, October 22nd, during normal class time, in Larkin Hall room 150, covering lectures 1 through 8 (up through primary-backup replication).
+- Speaker 1's Thursday office hours are cancelled (traveling Wednesday night for a program committee meeting), replaced by extra office hours Wednesday October 7th, 3 to 4:30pm, in Whitaker 318.
+- Thursday's lecture 10 will be given by Dr. Joanne Whitfield, a postdoc in Speaker 1's group, covering Byzantine fault tolerance.
+- Two-phase commit tolerates zero coordinator failures without blocking, whereas consensus tolerates a majority of failures.
+- FLP's precise statement must be memorizable in one or two sentences: fully asynchronous, deterministic consensus, no guaranteed termination, even one crash failure.
+- FLP is not about impossibility in practice; the adversary must schedule messages in the most annoying way forever, which real networks do not do.
+- Safety vs liveness definitions and which one Raft guarantees unconditionally must be memorized (Raft guarantees safety unconditionally, liveness only when the network is reasonable).
+- Majority quorum formula floor(n/2)+1 and the 2f+1 relationship must be known cold (do it in your sleep).
+- The number of failures tolerated: 5 servers/quorum 3 lose 2; 3 servers/quorum 2 lose 1; 4 servers/quorum 3 lose 2.
+- Raft's provenance: a 2014 paper by Diego Ongaro and John Ousterhout at Stanford, 'In Search of an Understandable Consensus Algorithm,' best paper at USENIX ATC.
+- The three Raft server states — follower, candidate, leader — are exhaustive: every server is in exactly one of them.
+- There is at most one leader in any given term (election safety).
+- Each server votes for at most one candidate per term, on a first-come, first-served basis.
+- A candidate wins by getting votes from a majority of the full cluster for the same term, including itself.
+- The vote must be persisted to disk before responding; currentTerm and votedFor are persistent state.
+- The paper's randomized election timeout range is 150 to 300 milliseconds.
+- A candidate that receives an AppendEntries with a term at least as large as its own accepts the leader and reverts to follower; if smaller, it rejects and keeps campaigning.
+- For homework 4, the tester allows at most 10 heartbeats per second per server and requires a new leader within 5 seconds of the old leader failing.
+- For homework 4, use a 400 to 800 ms election timeout instead of the paper's 150 to 300 ms due to the heartbeat limit.
+- Recommended election timeout for homework: 400-800 ms (not the paper's 150-300 ms).
+- Reset election timer only when granting a vote or receiving valid AppendEntries from current leader.
+- Fault tolerance: 4 nodes tolerate 1 failure, same as 3 nodes; even numbers never help.
+- Log matching property: same index and same term at one position means entire prefix is identical.
+- nextIndex is initialized to leader's last log index + 1 for each follower.
+- An entry is committed once the leader that created it has replicated it on a majority of servers (with the precise rule on old terms coming later).
+- commitIndex starts at 0 and only increases.
+- Voter denial rule: a voter denies its vote if its own log is more up-to-date than the candidate's log.
+- Election up-to-date order to memorize: last term first, then length.
+- Once an index is committed, every index before it is committed as well, by log matching.
+- Followers that see term 4 but do not grant a vote bump their current term to 4 but do not reset their election timers.
+- The exam will cover the election restriction, the up-to-date comparison (last term first then length), and leader completeness.
+- Practice the exam format giving five logs and asking which servers can become leader — like the example in class but with different numbers.
+- The precise commitment rule (current term only) and the Figure 8 scenario that explains it appear on the exam every year.
+- Persistent state to memorize for every server: currentTerm, votedFor, and the log, written to stable storage before responding to any RPC.
+- Volatile state to memorize: commitIndex and lastApplied on every server, and nextIndex and matchIndex on the leader.
+- The precise commitment rule should be written word for word: a leader only commits log entries from its current term by counting replicas, never committing an old-term entry just because it is on a majority.
+- For the exam, know why configurations can't be switched directly: the two disjoint majorities problem; reproducing joint consensus step by step is explicitly not required.
+- The load-bearing principle across Raft and Paxos is always the overlap between majorities (prepare majority vs. any earlier accept majority).
+- A correct client must time out and retry, and the dedup table is what makes the retry safe — retry plus deduplication together yield liveness plus safety.
+- New servers join as non-voting learners first, and if the leader is not part of the new configuration it steps down once C new is committed.
+- Paxos authorship and dates to know: Leslie Lamport, 'The Part-Time Parliament' ~1990/1998, 'Paxos Made Simple' 2001.
+- Raft's log has no holes and committed entries are in order, while Multi-Paxos allows independent, out-of-order slot decisions with gaps.
+- Raft's election restriction means a new leader already has all committed entries, so log entries only flow from leader to followers.
+- Fault tolerance is the same for Raft and Paxos: both need 2f + 1 servers to tolerate f crash failures.
+- etc d recommends clusters of 3 or 5 members and discourages going much beyond 7 because every write must reach a majority.
+- etc d's default heartbeat interval is 100ms and election timeout is 1000ms.
+- Consul's server nodes run Raft (3 or 5 servers recommended), while client agents are not voting members and cluster membership uses a separate gossip protocol.
+- CockroachDB splits data into ranges, each its own Raft group usually with 3 replicas, running thousands of Raft groups at once.
+- Google Chubby and Spanner use Paxos, while ZooKeeper uses Zab, a similar-spirited but different protocol.
+- A Raft snapshot must record the last included index and term plus the latest configuration for membership changes.
+- Homework 4 is due Monday, October 12th at 11:59pm, and homework 5 is still scheduled for release Tuesday October 13th.
+- The midterm is Thursday, October 22nd during class time in Larkin Hall 150, covering lectures 1 through 9.
+- Midterm logistics: Thursday October 22nd, during class time, in Larkin Hall 150 (not the usual room).
+- Midterm scope: lectures 1 through 9, Raft in, snapshots out, BFT out.
+- Note policy: one letter-size sheet, both sides, handwritten or typed; no laptops, no phones.
+- Homework 5 releases Tuesday October 13th; its due date is unchanged for now.
+- Required reading for Thursday: Castro and Liskov, 'Practical Byzantine Fault Tolerance' (1999), sections 1 through 4.
+- Optional deeper reading: Raft paper section 6 (membership changes), section 7 (log compaction), and chapter 4 of Ongaro's dissertation on single-server membership changes.
+
+#### Confusing points
+- 2PC is all-or-nothing on participants requiring all of them, while consensus needs only a majority—a distinction students should review.
+- The FLP result is commonly misquoted, so students should be careful stating exactly what it claims (no deterministic consensus algorithm can guarantee termination in a fully asynchronous system with even one crash failure).
+- You cannot distinguish a crashed server from a slow one, because the only way to learn about another machine is by getting a message, and 'no message yet' is consistent with both.
+- Replicating the test-and-set arbiter does not solve the problem—it just shifts it, since the arbiter replicas would then need to agree on who won.
+- FLP is commonly misquoted; the correct scope is a purely asynchronous model where termination cannot be guaranteed in every possible execution, not that consensus is practically impossible.
+- FLP is widely misread as 'consensus is impossible in practice,' which it explicitly is not — it only rules out guaranteed termination in the asynchronous model.
+- Liveness cannot be falsified by pointing to a finite moment, unlike safety, because the good thing might still happen later — an asymmetry easy to miss.
+- Why odd numbers of servers are used is not simply convention; Speaker 1 deferred the full reason to a story later in the lecture.
+- The jury analogy is explicitly flagged as a bad analogy by the speaker even as it is used to explain unanimity quorums.
+- lastLogIndex and lastLogTerm are included in RequestVote even though voting is currently described as first-come, first-served; the restriction is deferred to the safety section.
+- There are two different election-timeout numbers: the paper's 150-300 ms versus the homework recommendation of 400-800 ms, and they should not be mixed up.
+- The difference between paper's timeout (150-300 ms) and homework's (400-800 ms) can be confusing; must not mix them up.
+- When to reset election timer: only on granting vote or valid AppendEntries, not on every RequestVote.
+- Common mistake: thinking 4 nodes tolerate 2 failures; correct is 1 failure.
+- Subtle point on log matching: same index and term means the entire prefix is identical, not just that entry.
+- The common misconception that the server with the longest log always wins the election is wrong; length alone is not the rule.
+- Even with the correct comparison, it is not true that the most up-to-date server always wins — eligibility only requires being at least as up-to-date as a majority of voters.
+- Committed and applied are distinct: a server can know something is committed without having applied it yet, since applying takes time.
+- The follower sets its commit index to the minimum of leaderCommit and its last new entry index (not simply leaderCommit) because it might not have all those entries yet.
+- The common mistake — writing 'committed once it's on a majority' — loses points and is the exact confusion the Figure 8 counterexample is meant to dispel.
+- The confusion that commitIndex must be persisted: it is not, and a server temporarily forgets what is committed but the cluster rediscovers it.
+- The apparent split brain (two leaders at once) is clarified as safe because the old-term leader cannot reach a majority to commit anything.
+- The precise commitment rule is described as the part of Raft that trips up basically everyone, including people who have implemented it.
+- The apparent contradiction of two leaders at once is resolved only by the term distinction and one leader's inability to commit — the older-term leader cannot reach a majority.
+- A write that disappears from the log can look lost from the client's perspective, but Raft regards nothing as lost because nothing was ever promised (no success response was sent).
+- The subtle retry hazard: if the entry had actually committed and only the response was lost, the retry causes the command to execute twice — harmless only for idempotent commands.
+- Leases keep reads fast but depend on bounded clock drift, which trades away some of the 'safety never depends on timing' purity — a tradeoff to be discussed next week.
+- Pre-vote only mostly fixes disruption: there are still subtle interactions with check-quorum and with membership changes, deliberately deferred to office hours / next week.
+- A bug in the single-server membership-change version was fixed by requiring the new leader to commit an entry in its own term before changing membership — the same flavor as the commitment rule.
+- Students may ask whether Raft is strictly better than Paxos; it is not, because Raft's strong leader is a bottleneck and Paxos leaderless or multi-leader variants suit some workloads.
+- Do not equate ease of understanding with better performance or availability, as the lecture warns.
+- The lecture had out-of-date slide material on CockroachDB's default range size and told students not to memorize it.
+- Followers taking snapshots independently is a slight departure from the strong leader principle, though data still only flows from the leader.
+- etcd's lock API does not automatically make a critical section safe, because a paused client can lose its lease while believing it still holds the lock.
+- The midterm coverage was previously stated as lectures 1-8 by Kofi but the instructor changed it to include today, so coverage is now lectures 1-9.
+- Office hours changed: the instructor's extra office hours are Wednesday 3-4:30 in Whitaker 318 with no Thursday office hours, while Kofi's are now Thursdays 3-5 in Whitaker 214 (not Wednesdays).
+- The core conceptual puzzle of why BFT needs an extra f beyond Raft's tolerance is deliberately left unanswered until Thursday.
+
+#### Questions to review
+- Who decides that the primary is dead, and what is the risk of guessing wrong?
+- Why can't two-phase commit be used as the consensus mechanism here?
+- What happens if the state machine isn't deterministic (e.g. calls random or reads the clock)?
+- Is the guest lecture on Byzantine fault tolerance on the midterm?
+- When and where will the midterm review session be held?
+- Can you state what FLP says in one or two sentences and explain how practical systems get around it?
+- Is 'at most one leader' a safety property — and can you justify it via the moment the second leader was elected?
+- Why does everyone use odd numbers of servers — is it just convention?
+- Which property does Raft guarantee unconditionally — safety or liveness — and under what conditions does it guarantee the other?
+- Why randomize election timeouts rather than giving each server a fixed priority (e.g., lowest ID times out first)?
+- Do you reset the election timer when you receive a RequestVote? (Answer: only if you grant the vote.)
+- Why do we use odd numbers of nodes? Because even numbers never provide additional fault tolerance.
+- What if all nodes pick close timeouts repeatedly? Another split vote; retry until success, but termination not guaranteed (FLP).
+- Why would anyone run 4 nodes? Only by accident or temporarily during server addition/removal.
+- What is the difference between committed and applied?
+- Given a set of logs, how do you compute the leader's commit index by counting replication per index against a majority?
+- Which candidate is more up-to-date when one log is longer but has a lower last term?
+- What happens to an uncommitted entry (B's index 6, term 3) when a new leader overwrites it?
+- Given five logs, which servers can become leader? (Exam-style question to practice — like the index-5 example but with different numbers.)
+- If a new leader sees an old entry from an earlier term already on a majority, can it just mark it committed? (Answer: no.)
+- Is two simultaneous leaders a safety violation? (Answer: no, since the old-term leader can't commit.)
+- Why does a new leader commit a no-op entry right away? (Answer: to commit a current-term entry as soon as possible, committing everything before it and discovering what's committed.)
+- Is having two servers that both believe they are leaders (B in term 7, E in term 8) with different entries at index 21 split brain — is it a safety violation?
+- What happens to client 1's 'set x to 7' write — is it silently lost, given the client sent a write and it disappeared?
+- Does pre-vote fully fix the disruption problem, or are there remaining cases where a node can still cause a pointless election?
+- Exam prep: be able to explain why you cannot switch cluster configurations directly (the two disjoint majorities problem).
+- What is the practical difference between Raft's log (no holes, in order) and Multi-Paxos's independent slot decisions with possible gaps?
+- Why would anyone still use Paxos if Raft exists?
+- What happens when a follower receives InstallSnapshot and the snapshot covers only a prefix of its log?
+- Why do snapshots need the last included index and term?
+- Could homework 5 be due after the midterm instead of right before it? This is unresolved and may be answered on Ed.
+- Why does Byzantine fault tolerance require 3f+1 servers to tolerate f failures while Raft only requires 2f+1 — what does the extra f buy?
+- Should homework 5 be moved to be due after the midterm rather than right before it? (To be discussed by the instructor and Kofi, with any change posted on Ed.)
+- Devin's question about whether pre-vote fully fixes disruptive servers remains open for next Tuesday.
+
+#### Study summary
+- Lecture 9 is 'Consensus, and the Raft algorithm', building directly on lecture 8's primary-backup replication.
+- Consensus is important because it enables the replicated state machine approach, which underlies fault-tolerant real systems.
+- The central reduction is: make a replicated log identical across servers, and the servers can all reach the same state and serve clients.
+- Failure modes to keep in mind are all normal: crashes with loss of in-memory (but not disk) state, delayed/dropped/duplicated/out-of-order messages, and network partitions.
+- FLP impossibility is the fundamental result showing that deterministic consensus cannot always terminate under asynchrony with even one crash failure, motivating practical protocols like Raft.
+- Core exam targets from this chunk: state FLP in one or two sentences, explain how practical systems sidestep it, define safety vs liveness, and say which Raft guarantees unconditionally.
+- Master the quorum math: quorum = floor(n/2)+1; tolerable failures = n minus quorum; to survive f failures use 2f+1 servers.
+- Remember that quorum overlap is the single mechanism underpinning every Raft safety argument.
+- Raft's design centers on understandability via decomposition (election, replication, safety) and a strong leader with strictly leader-to-follower log flow.
+- Know the three server states, that terms are consecutive integers each starting with an election, and that a split vote ends a term with no leader.
+- Snapshots/log compaction are not in scope for this lecture — deferred to a later lecture tied to homework 6.
+- Terms act as a logical clock; at most one leader per term, and the overlap-majority argument is why two leaders per term cannot occur.
+- Leader election relies on periodic heartbeat AppendEntries, an election timeout per follower, and randomized timeouts (150-300 ms in the paper) to avoid split-vote livelock.
+- The timing requirement broadcastTime << electionTimeout << MTBF governs liveness, not safety, in Raft.
+- For homework 4, respect the 10 heartbeats/sec limit and 5-second new-leader requirement by using 400-800 ms randomized timeouts, and avoid the common bugs of resetting the timer on all RequestVotes and holding locks during RPCs.
+- Election timer reset rule is critical to avoid blocking progress; reset only on vote grant or valid AppendEntries.
+- Split votes are resolved by randomized timeouts; terms without a leader are normal.
+- Even-sized clusters never improve fault tolerance; use 2f+1 and consider cross-data-center quorums to survive site failures.
+- Log replication: leader appends client command, sends AppendEntries with prevLogIndex/prevLogTerm, retries until replicated, then commits and applies.
+- Log matching property ensures consistency: same index+term implies identical prefix; holds by induction from consistency check.
+- nextIndex is decremented on failure to repair inconsistent follower logs; committed entries are never overwritten.
+- Leader mechanics center on nextIndex (next entry to send, initialized past own log end) and matchIndex (highest known replicated index used for commitment).
+- commitIndex is the highest known-committed index (starts at 0, only grows); lastApplied is the highest index applied to the state machine; apply while commitIndex > lastApplied.
+- The election restriction uses lastLogIndex and lastLogTerm: higher last term wins before any length comparison, which prevents candidates with shorter, stale logs from erasing committed entries.
+- The five-server walkthrough demonstrates the full cycle of election restriction rejection, a valid win by C in term 5, and safe overwrite of an uncommitted entry.
+- Leader completeness (committed entries persist across higher-term leaders) is explained by the majority-overlap argument: any election majority overlaps the majority that stored the committed entry and grants a vote only to an at-least-as-u
+- Master the three exam-critical items: the election restriction, the up-to-date comparison (last term first, then length), and leader completeness — plus the current-term-only commitment rule and Figure 8.
+- Internalize the one-line commitment rule: majority plus current term means committed; majority plus old term means nothing yet.
+- Know exactly which state is persisted (currentTerm, votedFor, log) versus volatile (commitIndex, lastApplied, nextIndex, matchIndex) since this drives homework 5 bugs.
+- Understand that two leaders in different terms do not violate safety because the older-term leader cannot reach a majority to commit.
+- The overlap argument underlies the whole lecture: committed majorities and election-winning majorities must overlap, so any new leader carries all committed entries.
+- Two simultaneous leaders in different terms are safe because the older-term leader cannot reach a majority and so cannot commit; on heal, term comparison forces the stale leader to step down and its uncommitted entries are truncated.
+- Client correctness = retry plus deduplication: clients get unique IDs and per-command serial numbers, the state machine stores the latest executed serial and its response and replays the saved response for duplicates, giving exactly-once li
+- Read linearizability needs either leader-confirmation via majority heartbeats (ReadIndex, used by etcd) or leases, which trade timing-purity for local reads.
+- Single-server disruption is a liveness-only problem fixed mainly by pre-vote (from Ongaro's dissertation, implemented in etcd), which only mostly solves it.
+- Membership changes must go through joint consensus (or one-at-a-time changes) because directly switching configs produces two non-overlapping majorities and two same-term leaders.
+- Raft sits very close to a well-specified Multi-Paxos with a strong leader; both rest on the same majority-overlap principle, and Multi-Paxos's lack of a single full specification is the historic gap highlighted by 'Paxos Made Live'.
+- Raft is essentially a well-specified, strong-leader flavor of Multi-Paxos; the practical difference is its complete specification rather than its fault tolerance or normal-case performance.
+- Raft's strong leader simplifies implementation but creates a write bottleneck; leaderless variants like EPaxos can outperform it for geo-distributed low-conflict workloads.
+- Three real Raft systems and their caveats: etc d (Kubernetes backing store, 3-5 members, lock API needs fencing tokens), Consul (servers only, read consistency modes), and CockroachDB (range-per-Raft-group, leaseholder reads, cross-range tr
+- "Uses Raft" only means the replication core is probably sound, not that the whole system is correct, since bugs are usually in surrounding features like pre-vote, check-quorum, leases, batching, and snapshots.
+- Log compaction via snapshots reduces disk usage and restart time; each server snapshots independently, and the leader uses InstallSnapshot to catch up a lagging follower.
+- Snapshots and InstallSnapshot are homework 6, and this lecture gives the motivating version to make it less scary.
+- Logistics: homework 4 moved to Monday October 12th 11:59pm, homework 5 release still Tuesday October 13th, and midterm now covers lectures 1-9.
+- For the midterm, prioritize Raft (election, replication, election restriction, commitment rule, partitions, membership-change safety) across lectures 1-9, skipping snapshots and BFT.
+- Prepare one sheet of notes carefully since the instructor considers that act 'half the studying'.
+- Complete the Castro-Liskov reading (sections 1-4) and prepare a guess on the extra f for Thursday's guest lecture, which Dr. Whitfield assumes was done.
+- Use the practice midterm (posted by Ana by Friday) to try problems before reviewing solutions, which follow a few days later.
+- Remember not to hold locks while sending RPCs, as reinforced at the close of class.
+
+#### Action items (structured)
+- Kofi: Kofi will post the changes to his office hours on Ed
+- Kofi: Kofi will post a practice midterm on Ed by Friday
+- Kofi: Kofi will announce the midterm review session time at the end of class once the room is confirmed
+- Students who are recording on their own laptops should keep recording because the official lecture capture has been flaky
+- Homework 4 (Raft leader election) due Friday, October 9th at 11:59pm [inferred]
+- Put a star next to the safety vs liveness material as exam-relevant.
+- Be able to state what FLP says in one or two sentences and explain how practical systems get around it.
+- Use randomized timeouts (e.g., 400 to 800 ms) rather than hardcoding 500 to pass the split vote test.
+- Recommended timeout range for the homework is 400 to 800 milliseconds due to the tester's heartbeat limit.
+- Reset election timer only when granting a vote or receiving a valid AppendEntries from the current leader, not on every RequestVote.
+- Fix the earlier error in notes: 4 nodes tolerate 1 failure, not 2.
+- Memorize the log matching property word for word.
+- For homework 5, implement the backup optimization where the follower returns the conflicting term and first index of that term so the leader can skip a whole term at a time, since the tester has a timing-out backup test. [inferred]
+- Prepare for the 'backup' test, which everyone reportedly fails the first time. [inferred]
+- Devin: Devin should come to office hours tomorrow (or remind the professor) so the pre-vote / check-quorum / membership-change interactions can be picked up, since the professor chose not to rush it today. (deadline: tomorrow)
+- Speaker 1: Fix the lecture slide showing the CockroachDB default range size of 64 megabytes, which is out of date.
+- Speaker 1, Kofi: Kofi and Speaker 1 will talk about possibly moving homework 5's due date to after the midterm, and if it moves it will be posted on Ed.
+- Homework 4 due Monday, October 12th at 11:59pm [inferred]
+- Homework 5 scheduled to be released Tuesday, October 13th [inferred]
+- Midterm on Thursday, October 22nd during class time in Larkin Hall 150 [inferred]
+- class: Remind the professor to post today's slides.
+- Professor Castellanos: Post the FLP paper link on Ed tonight.
+- Professor Castellanos: Post the range size slide.
+- Jordan: Post the class recording in the class Discord in case official capture didn't work.
+- students: Read Castro and Liskov 'Practical Byzantine Fault Tolerance' (1999) sections 1 through 4 before Thursday's lecture. (deadline: before Thursday's lecture)
+- students: Come to Thursday's lecture with a guess as to why BFT needs 3f+1 servers versus Raft's 2f+1. (deadline: Thursday)
+- Homework 5 released Tuesday October 13th; due date unchanged as of today. [inferred]
+- Practice midterm posted on Ed by this Friday. [inferred]
+- Review session: Sunday October 18th, 4-6pm, Whitaker 120. [inferred]
+
+#### Decisions (structured)
+- FLP proof will NOT be on the exam; only the statement and its implications are examinable.
+- Safety versus liveness definitions, and which one Raft guarantees unconditionally, will be on the exam.
+- The quorum formula and the 2f+1 relationship will be on the exam.
+- Snapshots and log compaction will be skipped today and covered in a later lecture (homework 6 territory).
+- Homework 4 is moved from Friday to Monday, October 12th at 11:59pm, with the late-day clock starting from the new deadline.
+- The midterm will now cover lectures 1 through 9, adding today's lecture, instead of the previously stated lectures 1 through 8.
+- The midterm covers lectures 1 through 9 (including today's lecture), changing from the previously stated lectures 1 through 8. (owner: Professor Castellanos)
+- Snapshots/log compaction are excluded from the midterm. (owner: Professor Castellanos)
+- Byzantine fault tolerance (lecture 10, Thursday's guest lecture) is not on the midterm and will be on the final instead. (owner: Professor Castellanos)
+- Students may bring one letter-size sheet of notes (both sides, handwritten or typed) to the midterm; laptops and phones are not allowed. (owner: Professor Castellanos)
+- Ana, not the instructor, will post the practice midterm on Ed by this Friday, with solutions posted a few days afterward.
+- The midterm review session is scheduled for Sunday, October 18th, 4-6pm in Whitaker 120.
+
+#### Open questions (structured)
+- Is the guest lecture on Byzantine fault tolerance (lecture 10) on the midterm? [open]
+- What exactly will be on the midterm? [open]
+- Will there be a review session for the midterm, and when? [open]
+- Why does everyone use odd numbers of servers — is it just convention? (Speaker 1 deferred the answer to a story later in the lecture.) [open]
+- What if all five servers pick really close random timeouts again after a split vote? [open]
+- What is the difference between committed and applied — isn't committed enough? [open]
+- Are indexes 1 through 4 committed too, because they are before index 5? [open]
+- What happens to B's uncommitted term 3 entry at index 6 that only A and B had? [open]
+- If a new leader sees an old entry from an earlier term already on a majority, can't it just mark it committed? [answered]
+- Why does a new leader usually commit a no-op entry right away? [answered]
+- Isn't commitIndex persisted? Doesn't the server forget what's committed after restart? [answered]
+- When two leaders exist in different terms (B term 7, E term 8) with different entries at index 21, is that split brain or a safety violation? [answered]
+- Does pre-vote fully fix the disruption problem, or are there still cases where a node can cause a pointless election? [open]
+- What happens to client 1's write (set x to 7) after it is truncated — is it silently lost from the client's perspective? [open]
+- Could homework 5 be due after the midterm instead of right before it, since it will be tight with studying? [open]
+- Should homework 5's due date be moved to after the midterm instead of right before it? [open]
+- Why does Byzantine fault tolerance require 3f+1 servers to tolerate f failures while Raft requires only 2f+1? [open]
+- Will the review session be recorded, given students with Sunday shifts cannot attend? [open]
+
+#### Risks (structured)
+- [low] The official lecture capture has been flaky, so its recording may fail
+- [high] If a backup wrongly promotes itself while the primary is still alive, split brain causes diverging data that cannot be reconciled
+- [medium] An external arbiter (test-and-set service) used by the VMware paper is itself a single point of failure; replicating it just moves the agreement problem
+- [high] 2PC blocks: if the coordinator crashes after participants voted yes but before sending the decision, participants are stuck holding locks and cannot commit or abort
+- [medium] A nondeterministic state machine (e.g. random or clock reads) breaks replication correctness
+- [high] A slow server is indistinguishable from a crashed server, because the only way to learn about another machine is receiving a message from it — 'no message yet' fits both cases.
+- [medium] Under bad network conditions Raft gives up liveness — it may stall — though it never gives up safety.
+- [medium] A unanimous quorum of n out of n means one stubborn juror or one ill juror loses liveness completely (hung jury / hung cluster).
+- [medium] Without randomization, synchronized election timeouts cause split votes that could repeat forever, a liveness problem.
+- [medium] Ranking-based leader election (lower ID times out first) has subtle availability issues, e.g. a flaky or partitioned high-priority server blocks progress.
+- [high] Using the paper's 150-300ms election timeout with the homework's 10 heartbeat/sec limit (heartbeats every 100ms) produces spurious elections.
+- [high] Hardcoding a 500ms election timeout causes the split vote test to hang.
+- [high] Resetting the election timer on every RequestVote (including rejected ones) lets a server with a bad log block progress; it is described as a very common homework 4 bug.
+- [high] Holding a lock while sending an RPC is reported as the number one homework 4 bug.
+- [high] Resetting the election timer on every RequestVote (even rejected ones) is the number two homework 4 bug and can block progress.
+- [high] Even-sized clusters provide no additional fault tolerance and increase quorum, risking unavailability during network partitions.
+- [medium] Backing up one index at a time is slow if a follower is far behind, and the tester's backup test will time out without the term-skipping optimization.
+- [high] If a server missing committed entries (e.g., D) became leader and forced logs to match its own, it would erase committed entries — a safety violation.
+- [high] If a leader marks an old-term entry on a majority as committed, applies it, and confirms success to a client, safety can be violated when that entry is later overwritten.
+- [high] Forgetting to persist votedFor in homework 5 leads to two leaders in the same term and failure of the 'figure 8 unreliable' test.
+- [medium] A third of the class writes 'committed once it's on a majority' on the exam question about the commitment rule and loses points.
+- [low] State machine replay from the log on restart is slow, which is part of the motivation for snapshots.
+- [high] Without deduplication, a retried command can execute twice — harmless for an idempotent write like 'set x to 7' but very harmful for a non-idempotent one like 'withdraw 100 dollars'.
+- [high] A leader serving reads from its local state machine during a partition can return a stale read, which breaks linearizability even though it never wrote anything wrong.
+- [medium] Lease-based reads depend on bounded clock drift, giving up some of the 'safety never depends on timing' purity.
+- [medium] A single isolated server repeatedly times out and inflates its term, and when it rejoins its high term forces the healthy leader to step down, causing an unnecessary election (a liveness hiccup, not a safety violation).
+- [high] Switching configurations by directly updating and restarting servers is unsafe: mismatched configs let two leaders be elected in the same term because the majorities of the old and new configurations do not overlap.
+- [medium] A bug was found in the single-server membership-change version about a year after publication; the fix requires the new leader to commit an entry in its own term before changing membership.
+- [medium] Multi-Paxos was never fully specified in one place, so implementations filled in the gaps differently — a large paper-to-real-system gap (per the 'Paxos Made Live' / Chubby paper).
+- [medium] Using etcd's lock API does not automatically make a critical section safe because a paused client's lease can expire while it still thinks it holds the lock; fencing tokens are needed.
+- [medium] Real implementations add pre-vote, check-quorum, leader leases, batching, pipelining, and snapshots, and each is a place for bugs; Jepsen analyses found real consistency bugs, almost always in the stuff around the algorithm.
+- [medium] Writing a snapshot of a big state machine takes time and you don't want to stop serving requests while doing it, motivating copy-on-write or Linux process forking.
+- [medium] Review session recording is uncertain — depends on whether the room capture is working that day.
+- [low] Some students may miss the review session due to a Sunday work shift.
+
+#### Follow-up draft
+Quick recap: Lecture 9 covered consensus and Raft, building on lecture 8's primary-backup replication.
+
+The key idea is the replicated state machine: if all replicas apply the same command sequence in the same order, they all reach the same state and any can answer a client, so the whole problem reduces to keeping a replicated log identical across servers. FLP (Fischer, Lynch, Paterson 1985) says no deterministic consensus algorithm can guarantee termination in a fully asynchronous system with even one crash failure; the proof won't be on the exam, only the statement and its implications. Practical systems like Raft and Paxos always guarantee safety (nothing bad ever happens; a violation can be pinned to a finite moment) and only guarantee liveness when the network behaves reasonably (Raft never gives up safety, but it can stall).
+
+Memorize the quorum math: majority quorum = floor(n/2)+1, tolerable failures = n minus quorum, and to survive f failures you need 2f+1 servers (so 3 tolerates 1, 5 tolerates 2, and 4 tolerates only 1, same as 3). A quorum is big enough that any two quorums overlap in at least one server, and that overlap carries every Raft safety argument. Raft's other rules to know cold: three server states (follower, candidate, leader) with at most one leader per term (election safety); two RPCs, RequestVote and AppendEntries (which doubles as a heartbeat); reset the election timer only when granting a vote or receiving valid AppendEntries; up-to-date comparison goes last term first, then length; nextIndex is initialized to leader's last log index + 1 and decremented on rejection; commitIndex starts at 0 and only increases, lastApplied is what's actually applied, and you apply while commitIndex > lastApplied. Commit only current-term entries by counting replicas, never an old-term entry just because it sits on a majority (Figure 8) — committed entries then persist across leaders via the overlap of the committing majority with any election-winning majority (leader completeness). Persistent state is exactly currentTerm, votedFor, and the log; volatile is commitIndex, lastApplied, and the leader's nextIndex/matchIndex.
+
+Logistics: homework 4 now due Monday Oct 12 11:59pm, homework 5 releases Tuesday Oct 13; midterm Thursday Oct 22 in Larkin 150 covering lectures 1-9, with snapshots and BFT excluded, one sheet of notes allowed, and the review session Sunday Oct 18, 4-6pm in Whitaker 120. That's the recap.
+
+---
+
+# Summary F
+
+_(run1)_
+
+### Title: Raft Consensus and Course Logistics
+
+#### Overview
+The class confirmed Homework 4 and midterm logistics, then introduced consensus and replicated state machines as the approach to identical logs under failure, contrasting them with primary-backup, two-phase commit, and FLP. The lecture explained FLP's termination limit and the safety/liveness tradeoff, derived majority-quorum fault tolerance, and introduced Raft's decomposed strong-leader architecture and term elections, while explicitly excluding the FLP proof from the exam. The lecture defined Raft terms and election safety, explained randomized leader elections and timing requirements, and gave Homework 4 settings and election-timer implementation rules. The lecturer corrected the four-node fault-tolerance claim, used split-vote and multi-site failures to explain randomized elections and odd quorums, and introduced Raft log replication with AppendEntries consistency and nextIndex repair. The lecture traced follower log repair and commitment, then used a five-server election to show that the election restriction preserves committed index 5 while replacing B's uncommitted index-6 entry. The lecture proved leader completeness, showed with Figure 8 why only current-term entries can be directly committed, specified crash-persistent state, and analyzed a partition where only the majority-side leader commits. The lecture used partition, retry, read, reconfiguration, and Paxos examples to show how quorum overlap preserves safety while clients and implementations handle liveness and duplicate effects. The lecture compared Raft with Multi-Paxos, explained log compaction through snapshots and InstallSnapshot, and changed Homework 4's deadline and midterm coverage while leaving Homework 5's due date unresolved. The instructor kept Homework 5's October 13 release and the October 22 midterm schedule, expanded the midterm to lectures 1–9 while excluding snapshots and BFT, and announced review, study, and posting logistics. Key decisions: Homework 4 is limited to Raft leader election and heartbeats: AppendEntries uses empty entries, while log replication and persistence belong to Homework 5.; Kofi's office hours move from Wednesdays 2–4pm to Thursdays 3–5pm in Whitaker 214 starting this week.; The midterm is scheduled for Thursday, October 22 during normal class time in Larkin Hall 150 and covers lectures 1–8 through primary-backup replication.. Study summary: For course logistics, Homework 4 is a leader-election and heartbeat assignment due October 9 at 11:59pm, and the midterm covers lectures 1–8 through primary-backup replication.
+
+#### Summary
+- For course logistics, Homework 4 is a leader-election and heartbeat assignment due October 9 at 11:59pm, and the midterm covers lectures 1–8 through primary-backup replication.
+- The class confirmed Homework 4 and midterm logistics, then introduced consensus and replicated state machines as the approach to identical logs under failure, contrasting them with primary-backup, two-phase commit, and FLP.
+- Homework 4 is limited to Raft leader election and heartbeats: AppendEntries uses empty entries, while log replication and persistence belong to Homework 5.
+- Kofi's office hours move from Wednesdays 2–4pm to Thursdays 3–5pm in Whitaker 214 starting this week.
+- Promoting a backup when the primary is only slow or network-isolated can create split brain, with two primaries accepting writes and divergent data.
+
+#### Core concepts
+- Consensus is introduced as agreement among a group of machines with no single special machine while continuing to work when some machines fail.
+- The central weakness of primary-backup replication is that a missing response cannot distinguish a crashed primary from a broken network or a merely slow primary.
+- A mistaken backup promotion creates split brain, in which two primaries accept writes and the data diverges.
+- A shared-storage test-and-set arbiter can choose a primary, but it introduces a single point of failure and does not eliminate the agreement problem if replicated.
+- Two-phase commit solves atomic commitment with all participants, whereas the desired consensus protocol should make progress while a majority of servers remains available.
+- Consensus is used in real systems through replicated state machines, where a fault-tolerant service is modeled as state plus commands with deterministic state transitions and outputs.
+- Determinism lets replicas converge because the same initial state and the same commands in the same order always produce the same final state.
+- The replicated-state-machine problem reduces to keeping an identical command log across servers, with consensus deciding the value of every log slot.
+- Nondeterminism is an application-level responsibility: the leader must evaluate random or time-based behavior once and place the concrete result in the log.
+- The failure model includes crashes, loss of in-memory state, arbitrary message delay or loss, duplication, reordering, network partitions, and inability to distinguish crashes from slowness.
+- FLP states that fully asynchronous systems cannot guarantee termination for deterministic consensus when even one process may crash.
+- Primary-backup failure detection is fundamentally ambiguous because no message can mean either a crash or slowness.
+- FLP states that in a fully asynchronous system with no bounds on message delay or process speed, one possible crash prevents deterministic consensus from guaranteeing termination in every execution.
+- FLP is a limitation on universal termination guarantees in a model, not a claim that consensus is impossible in practical systems.
+- Practical protocols such as Paxos and Raft guarantee safety unconditionally and seek progress only when the network behaves reasonably.
+- Safety prevents bad events, while liveness requires a good event to occur eventually.
+- Raft preserves safety during partitions and extreme delays, accepting possible stalls as the corresponding liveness failure.
+- Quorum intersection carries information from an earlier decision into a later decision through a shared server.
+- Majority is presented as the smallest quorum that guarantees pairwise intersection and therefore as the practical sweet spot.
+- Raft's design goal was understandability while retaining the same basic fault tolerance and performance as Paxos.
+- Raft achieves understandability by decomposing consensus into leader election, log replication, and safety restrictions, with membership changes and log compaction treated as add-ons.
+- Raft uses a strong leader so client requests enter through the leader and log entries flow only from the leader to followers.
+- Raft divides time into consecutive-numbered terms, each beginning with an election that may produce a leader or a split vote with no leader.
+- In normal operation, Raft has exactly one leader, the other servers are followers, and a follower redirects client requests to the leader.
+- Raft divides time into consecutively numbered terms, and each term starts with an election whose winner leads for the rest of that term.
+- A split vote can leave a term with no leader, while election safety guarantees at most one leader in any term.
+- The current term acts as a logical clock: a server adopts a larger observed term and steps down if it was a leader or candidate, while rejecting requests carrying smaller terms.
+- Raft's basic algorithm uses RequestVote for elections and AppendEntries for replication, with empty AppendEntries also serving as heartbeats.
+- Heartbeats preserve leadership while election timeouts trigger a follower to become a candidate when it hears neither from a leader nor from a granted vote.
+- An election requires a majority of the full cluster, and the one-vote-per-server-per-term rule makes two simultaneous majorities impossible because the majorities must overlap.
+- Persisting currentTerm and votedFor is part of election safety because forgetting a prior vote after a crash could allow two leaders in one term.
+- Randomized election timeouts improve liveness by reducing repeated split votes without depending on a special-ranked server.
+- Raft separates safety from liveness: safety is independent of timing, while liveness depends on broadcastTime being much smaller than electionTimeout and electionTimeout being much smaller than MTBF.
+- Homework 4 needs different timing from the paper because the tester limits heartbeats to 10 per second, so the lecture recommends roughly 400–800 millisecond election timeouts instead of 150–300 milliseconds.
+- Election timers should be reset only by valid leader AppendEntries or a granted vote, because rejected RequestVote traffic can otherwise block progress.
+- Election timing in the homework is constrained to at most 10 heartbeats per second and a new leader within 5 seconds, so timeouts should be randomized rather than hardcoded.
+- An election timer is reset only after granting a vote or receiving valid AppendEntries from the current leader, not after receiving a rejected RequestVote.
+- Two nearly simultaneous candidates can split a term's votes, leave it leaderless, and let a later higher-term election succeed.
+- Repeated election collisions are probabilistically unlikely but are not guaranteed to terminate because of FLP.
+- Majority arithmetic makes odd-sized clusters more useful: 3 and 4 tolerate 1 failure, 5 and 6 tolerate 2, and 7 tolerates 3.
+- A four-node 2/2 deployment can lose availability entirely under a site-link partition because each side lacks the majority of three.
+- To survive loss of one data center, the lecture applies 2f+1 to sites and uses a five-node 2/2/1 placement that leaves 3 of 5 after any one site fails.
+- Multi-site resilience trades off write latency because commits may wait for a cross-region round trip.
+- A Raft leader replicates each client command by appending it locally and sending AppendEntries in parallel to followers, then applies and returns the result after safe replication.
+- AppendEntries uses prevLogIndex and prevLogTerm as a prefix-consistency check before accepting new entries and truncating conflicting follower suffixes.
+- The log matching property is a prefix property: matching index and term at one position imply identical entries through that position.
+- Per-follower nextIndex lets a leader backtrack to a matching prefix and repair divergent follower logs, while election restriction protects committed entries.
+- A leader repairs an inconsistent follower by decrementing that follower's nextIndex until a matching prefix is found, then deleting the follower's conflicting suffix and appending the leader's entries.
+- When a leader first takes office, it initializes each follower's nextIndex one past the end of its own log, optimistically assuming followers are caught up.
+- The leader uses matchIndex, the highest index known to be replicated on each follower, to determine commitment.
+- The majority-replication rule is presented as the initial commitment intuition, but the precise rule has a caveat for entries from old terms.
+- commitIndex is each server's highest known committed log index, begins at zero, and only increases.
+- The leader derives its commitIndex from matchIndex and sends that value in leaderCommit on every AppendEntries, including heartbeats.
+- Commitment is a cluster-wide durability fact, whereas application is local state-machine execution that may lag behind commitment.
+- The election restriction protects committed entries by denying votes to candidates whose logs are less up-to-date than the voter's log.
+- Log freshness is ordered by last-entry term first and log length only when the last terms are equal.
+- Election outcome depends on eligibility relative to voters and which eligible server times out first, not simply on which server has the longest log.
+- Leader completeness states that an entry committed in one term appears in the logs of all leaders in higher-numbered terms.
+- Leader completeness is justified by the overlap between the majority storing a committed entry and the majority required to win any later election.
+- Leader completeness requires that an entry committed in one term appear in the logs of leaders for every higher-numbered term.
+- The leader-completeness proof uses majority overlap because the majority storing a committed entry intersects the majority needed to elect a future leader.
+- The election up-to-date restriction protects the overlap argument because an overlapping voter refuses a candidate whose log lacks the committed entry.
+- In the index-5 example, D cannot become leader because it lacks the committed entry and can obtain votes only from servers that also lack it.
+- A previous-term entry can be present on a majority and still be overwritten, so majority replication alone is not a commitment guarantee.
+- Direct commitment requires a current-term entry replicated to a majority, while earlier entries become committed indirectly through log matching.
+- A new leader can append a blank no-op to create a current-term entry that commits prior entries and helps establish what is committed.
+- Raft separates persistent safety state from volatile progress state: currentTerm, votedFor, and the log persist, while commitIndex, lastApplied, nextIndex, and matchIndex can be rebuilt.
+- A restarted server may briefly forget commitIndex because the leader resends leaderCommit and the cluster can rediscover committed status.
+- A network partition preserves safety by allowing the majority side to elect a leader and commit while the minority-side old leader cannot reach a majority.
+- Raft's safety argument is quorum overlap: an isolated leader B can believe it is leader but, with access only to A and itself, cannot assemble the three acknowledgments needed in a five-server cluster.
+- Two leaders may coexist safely across different terms when the older-term leader cannot commit, so only one side makes progress.
+- After a partition heals, the node receiving a higher term steps down and the higher-term leader overwrites conflicting uncommitted suffix entries.
+- Raft treats an unacknowledged write removed during repair as never promised rather than as a lost committed operation.
+- Client retry and state-machine deduplication divide responsibilities: retry restores liveness, whereas deduplication prevents unsafe duplicate execution.
+- A leader's local state can be stale during a partition, so linearizable reads require validating leadership rather than simply reading the local state machine.
+- ReadIndex validates leadership with a majority heartbeat, while leases allow local reads by assuming timing bounds such as bounded clock drift.
+- Pre-vote prevents an isolated server from inflating its term unless a majority would support it, reducing unnecessary elections without completely removing every subtle case.
+- Membership changes must prevent old and new configurations from making independent decisions because their majorities may be disjoint.
+- Joint consensus enforces transition safety by requiring a separate old-configuration majority and new-configuration majority for each election or commit.
+- Raft and Paxos share majority overlap as the core safety mechanism, and Raft is characterized as a well-specified strong-leader form of Multi-Paxos.
+- Paxos Phase 2 requires the proposer to reuse the value from the highest-numbered proposal already accepted by any acceptor, when such a value exists, and a majority acceptance chooses the value.
+- Paxos safety comes from quorum overlap between the prepare majority and every earlier accept majority, the same overlap idea emphasized for Raft.
+- Multi-Paxos replicates a log by running one Paxos instance per log slot and using a stable leader to skip Phase 1 most of the time.
+- Raft is presented as close to a well-specified strong-leader flavor of Multi-Paxos rather than as a fundamentally different fault-tolerance family.
+- Raft enforces a hole-free, in-order log whose follower logs prefix-match the leader, whereas Multi-Paxos can decide slots independently and out of order.
+- Raft's election restriction lets a new leader already contain all committed entries, while many Paxos variants learn missing entries from other servers during their first phase.
+- Raft's practical advantage is completeness because it specifies leader election, log management, membership, and exactly which state persists in one place.
+- Raft and Paxos share the stated crash-fault model, asynchronous safety, partial-synchrony liveness, lack of malicious-server handling, and roughly one majority round per normal command.
+- Raft's single strong leader can bottleneck writes, while leaderless or multi-leader Paxos variants such as EPaxos target geo-distributed workloads with low conflict rates.
+- Raft's stated win is that it can be taught in about 90 minutes and implemented correctly by a team, but understandability is not equivalent to speed or availability.
+- Real systems add pre-vote, check-quorum, leader leases, batching, pipelining, and snapshots around the core algorithm, so using Raft does not establish whole-system correctness.
+- Log compaction uses snapshots to bound disk usage and restart replay time while preserving enough metadata to continue log consistency checks.
+- Homework 5's release date is fixed for Tuesday, October 13, but its due-date question remains open because the instructor and Kofi will discuss whether it should move after the midterm.
+- The midterm date and room are unchanged, but its scope expanded from lectures 1–8 to lectures 1–9 by including the current lecture.
+- The added lecture material includes election, replication, election restriction, the commitment rule, partitions, and the hazards of direct membership changes.
+- The exam boundary is summarized as Raft in, snapshots and log compaction out, and Byzantine fault tolerance out of the midterm but on the final.
+- Exam preparation is deliberately constrained to one double-sided letter sheet, and choosing what to include is treated as part of studying.
+- Assessment support is staged through a practice midterm, later solutions, a Sunday review session, and office hours, although recording availability is uncertain.
+- The stated server-count contrast is 2f+1 for f crash failures versus 3f+1 when servers can lie, and explaining the extra f is an assigned question.
+- Required PBFT preparation comes before Thursday's guest lecture, while additional Raft membership and log-compaction readings are optional.
+- Leases versus ReadIndex and pre-vote's effect on disruptive servers are deferred to next Tuesday, while holding locks during RPCs is explicitly discouraged.
+
+#### Definitions
+- In primary-backup replication, the primary handles client requests and the backup receives and replays a log of the primary's actions.
+- Split brain means that two primaries both believe they are in charge and accept writes concurrently.
+- An external arbiter is a test-and-set service on shared storage in which the winner is allowed to become primary.
+- Consensus is the problem of getting a group of machines to agree on something without relying on one special machine.
+- Two-phase commit is an atomic-commitment protocol in which every participant votes yes before everyone commits.
+- A replicated state machine is a service modeled as state, commands, and deterministic state transitions that is run identically on multiple servers.
+- A deterministic state machine produces the same final state whenever it starts from the same state and applies the same commands in the same order.
+- A replicated log is the ordered sequence of commands that all state-machine replicas must apply identically.
+- A fully asynchronous system has no bound on message delays and no bound on how slowly a process can run.
+- FLP refers to Fischer, Lynch, and Paterson's 1985 impossibility result about deterministic consensus termination under asynchrony and crash failures.
+- For Homework 4, a heartbeat is an AppendEntries message with empty entries rather than actual log replication.
+- FLP refers to Fischer, Lynch, and Paterson and was introduced in 1985.
+- A safety property means that nothing bad ever happens, and any violation can be identified at a finite moment in the execution.
+- Consensus safety means that two servers never decide different values for the same log slot and that no unagreed command is applied.
+- A liveness property means that something good eventually happens, so no finite point can prove that it will never happen later.
+- Consensus liveness means that eventually a value is decided and the client eventually receives a response.
+- A quorum is a subset of servers large enough that any two quorums overlap in at least one server.
+- A Raft majority quorum is a majority of the cluster, with size equal to the floor of n divided by 2 plus 1.
+- Election safety is the guarantee that there is at most one leader in any given term.
+- A follower is passive and responds to requests, a candidate is trying to become leader, and a leader handles client requests and log replication.
+- A Raft term is a consecutive-integer time period beginning with an election; if no candidate wins, the result is a split vote and the term ends without a leader.
+- A term is a monotonically increasing number that acts as a logical clock, and every server stores its current term and includes it in messages.
+- A split vote occurs when candidates divide the votes so that no candidate reaches a majority, leaving the term without a leader.
+- A heartbeat is an empty AppendEntries message sent periodically by the leader to tell followers that it is still the leader.
+- An election timeout is a follower's timer, and expiration without leader contact or a granted vote causes the follower to start an election.
+- A majority is a majority of the full cluster, including the candidate itself, rather than a majority of the servers that respond.
+- A RequestVote RPC carries term, candidateId, lastLogIndex, and lastLogTerm, and its reply carries the voter's term and voteGranted.
+- AppendEntries is the leader RPC for log replication and becomes a heartbeat when it carries no entries.
+- broadcastTime is the average time for a server to send RPCs to every server and receive replies, while MTBF is the mean time between failures for one server.
+- currentTerm and votedFor are persistent state that must survive a server restart.
+- A randomized election timeout is freshly selected from a fixed interval whenever the timer is reset; the paper uses 150–300 milliseconds.
+- A liveness problem occurs when synchronized split votes can repeat indefinitely without producing a leader.
+- The paper's election-timeout range is 150–300 ms, while the homework recommendation is 400–800 ms because of the tester's heartbeat limit.
+- A split vote is an election in which no candidate reaches the required majority, leaving that term without a leader.
+- For n servers, the majority formula introduced is floor(n/2)+1.
+- In the n=4 calculation, tolerated failures equal the number of servers minus the majority, so 4−3=1.
+- A log entry contains the command, the term in which the leader received it, and its index, with indexes starting at 1.
+- In the described workflow, an entry is committed after safe replication, when the leader applies it to its state machine and returns the result to the client.
+- An AppendEntries request contains term, leaderId, prevLogIndex, prevLogTerm, entries, and leaderCommit.
+- An AppendEntries heartbeat is a request whose entries list is empty.
+- The AppendEntries reply contains term and success, with success true when the follower has an entry matching prevLogIndex and prevLogTerm.
+- The AppendEntries consistency check rejects a follower when prevLogIndex is absent or its term differs from prevLogTerm.
+- The log matching property states that if two logs contain an entry with the same index and term, their entries through that index are identical.
+- nextIndex is the per-follower index of the next log entry the leader will send, initially set to one past the end of the leader's log.
+- nextIndex is the index of the next log entry that the leader will send to a particular follower.
+- matchIndex is the highest log index that the leader knows to be replicated on a particular follower.
+- An entry is initially described as committed when its creating leader has replicated it on a majority, with a later precision required for old-term entries.
+- commitIndex is the highest log index that a server knows to be committed.
+- leaderCommit is the AppendEntries field through which the leader communicates its commit index to followers.
+- lastApplied is the highest log index that a server has actually applied to its local state machine.
+- Committed means the entry is a durable cluster fact that will not be lost or changed.
+- Applied means that one particular server has executed the entry against its local state machine.
+- The election restriction is the rule that a voter denies its vote when the voter's own log is more up-to-date than the candidate's log.
+- A log is more up-to-date when its last-entry term is higher, or when the last terms tie and its length is greater.
+- Leader completeness is the property that a committed entry remains present in every leader's log for all higher-numbered terms.
+- Leader completeness is the property that a committed entry is contained in every later-term leader's log.
+- A candidate is at least as up-to-date as a voter by comparing the last term first and the log length second.
+- The direct commitment rule is that a leader counts replicas only for entries from its current term.
+- Indirect commitment means an earlier-term entry becomes committed when a later current-term entry after it is committed under the log matching property.
+- Persistent state consists of currentTerm, votedFor, and the log, and must be written before a server responds to any RPC.
+- Volatile state consists of commitIndex and lastApplied on each server plus nextIndex and matchIndex on the leader.
+- A no-op entry is a blank entry appended by a new leader at the start of its term.
+- In the five-server partition example, the minority side has two servers and the majority side has three servers.
+- commitIndex is per-server volatile commitment knowledge rather than durable state, because the leader can resend it through leaderCommit.
+- In the basic version, the state machine is volatile and is rebuilt by replaying the log from the beginning after restart.
+- In the five-server example, a majority is 3 of 5, and E's index-21 entry in term 8 becomes committed after replication to C and D.
+- An idempotent command can be safely repeated, whereas withdrawing 100 dollars is explicitly presented as non-idempotent in the retry scenario.
+- A client command is identified by a unique client ID and a serial number assigned to the command.
+- Deduplication state tracks the latest serial number executed for each client together with the corresponding response.
+- A duplicate command is one whose serial number was already executed, so the state machine returns the saved response instead of running it again.
+- ReadIndex is etcd's name for validating leadership through the majority-heartbeat approach before serving a read.
+- A lease lets a leader serve local reads after a recent majority heartbeat acknowledgment, assuming no competing election occurred during an election-timeout window and relying on bounded clock drift.
+- Pre-vote is a preliminary majority poll asking whether a server would receive votes before it increments its term.
+- The joint configuration C old comma new is a transition configuration in which elections and commits require separate majorities from both configurations.
+- A learner is a non-voting new server that catches up on the log before participating in decisions.
+- Basic or single-decree Paxos has proposers, acceptors, and learners and uses prepare/promise followed by accept/accepted.
+- In Basic Paxos, a majority accepting the value makes it chosen, and the proposer must use the highest-numbered previously accepted value if one exists.
+- Multi-Paxos replicates a whole log by running one Paxos instance per log slot and using a stable leader to skip phase 1 most of the time.
+- In Paxos Phase 2, the proposer must use the highest-numbered value previously accepted by any acceptor if such a prior acceptance exists.
+- Multi-Paxos is the use of many independent Paxos instances, one for each replicated log slot, usually coordinated by a stable leader.
+- A Raft no-holes log commits entries in order and gives followers a prefix-matching copy of the leader, unlike Multi-Paxos's independently decidable slots.
+- A strong leader is a design in which every write goes through one machine.
+- The stated crash-failure requirement is 2f+1 servers to tolerate f crash failures, with safety under asynchrony and liveness only under partial synchrony.
+- Fencing tokens are an additional mechanism needed when a client-held lock lease might expire during a client pause.
+- Consul's stale mode allows any server to answer, its default mode relies on leader leasing and can be briefly stale, and its strictly consistent mode costs an extra round trip.
+- Multi-Raft is the arrangement in which many independent Raft groups run concurrently, such as one group per CockroachDB data range.
+- A snapshot's last included index is the last log entry it replaces, and its last included term is the term of that entry.
+- A snapshot also contains the latest membership configuration so membership changes survive log compaction.
+- InstallSnapshot is the third RPC used by a leader to send a compacted state to a follower that needs entries the leader has already discarded.
+- ZooKeeper's Zab is its own replication protocol that is similar in spirit to Raft or Paxos but is not the same protocol.
+- For this midterm, the tested lecture range is lectures 1 through 9, including the current lecture.
+- The current lecture's in-scope topics are election, replication, election restriction, the commitment rule, partitions, and unsafe direct membership changes.
+- Log compaction and snapshots are excluded from the midterm, while lecture 10 on Byzantine fault tolerance is reserved for the final.
+- The permitted exam reference is one letter-size sheet using both sides, either handwritten or typed, with laptops and phones prohibited.
+- Under the stated Raft crash-failure model, tolerating f crash failures requires 2f+1 servers.
+- Under the stated Byzantine model, servers may lie and the required server count is 3f+1.
+- The required reading is Castro and Liskov's 1999 Practical Byzantine Fault Tolerance, sections 1 through 4, while Raft sections 6 and 7 and Ongaro chapter 4 are optional.
+- Leases and ReadIndex are named as alternative approaches for reads, and pre-vote is framed around whether it fully fixes disruptive servers.
+
+#### Examples
+- The VMware fault-tolerance example replicates an entire virtual machine by having a primary process client requests and a backup replay the primary's log.
+- A false failure suspicion in primary-backup can result in one live primary and one promoted backup both accepting writes.
+- The VMware paper's shared-storage test-and-set service illustrates how an arbiter can choose one primary while remaining a single point of failure.
+- The coordinator-crash example for two-phase commit has participants vote yes, then become stuck holding locks because they cannot commit or abort alone.
+- The lecture lists key-value stores, lock services, and configuration databases as services that can be modeled as replicated state machines.
+- With five servers running the same state machine and applying the same command sequence, all five reach the same state and surviving servers can answer clients after crashes.
+- The nondeterminism example replaces a command that reads the current time with a command containing the concrete value 10:42 and 17 seconds.
+- The broken espresso machine was used as a playful single-node, no-replica, no-failover analogy, while the coffee cart was jokingly called a Byzantine failure.
+- The primary-backup example treats a silent server as observationally identical to either a crashed server or a delayed server.
+- The FLP proof uses an adversary that schedules messages in the most annoying way forever, whereas the lecturer notes that real networks are not adversarial forever.
+- A system that does nothing is perfectly safe but has zero liveness because it never makes a decision.
+- A system that immediately decides arbitrary values is very live but completely unsafe.
+- Under a partition or extreme message delay, Raft may stall while still preventing different commands from being applied at the same index.
+- For five servers, the majority calculation gives a quorum of three out of five.
+- The failure-tolerance examples map one failure to three servers, two failures to five servers, and three failures to seven servers.
+- The 12-person jury in the Twelve Angry Men analogy represents a consensus protocol requiring a 12-out-of-12 quorum.
+- A single stubborn or absent juror can produce a hung jury, illustrating that unanimity is safe but has no liveness under one unavailable participant.
+- A user study involving Stanford and Berkeley students is reported as showing better quiz performance for Raft than Paxos, although exact numbers were not given.
+- A split vote is an election in which no candidate wins, so the current term ends without a leader and a new election begins shortly afterward.
+- When a client contacts a follower instead of the leader, the follower redirects the client to the leader.
+- In a five-server cluster, a candidate needs three votes, consisting of its own vote plus two additional votes.
+- If several followers time out simultaneously, they can all become candidates and split the votes so that nobody wins.
+- If a server votes for candidate A, crashes, reboots, and forgets that vote, it could vote for candidate B in the same term and permit two leaders.
+- A fixed ranking scheme becomes problematic if the highest-priority server is flaky, partitioned, or too far behind in its log to win.
+- The paper's 150–300 millisecond random range is contrasted with a 150–151 millisecond range, where split votes pile up and elections can take seconds.
+- The lecture gives typical values of roughly 0.5–20 milliseconds for broadcast time, 10–500 milliseconds for election timeout, and months for MTBF.
+- Using 100 millisecond heartbeats with the paper's 150–300 millisecond timeout under the homework tester would produce spurious elections.
+- A server with a bad log that resets its timer whenever it hears a rejected RequestVote can prevent other servers from timing out.
+- Hardcoding a 500 millisecond timeout is given as an example of a configuration that can make the split-vote test hang.
+- An empty AppendEntries demonstrates how the same RPC can communicate leader liveness without carrying a new log entry.
+- In the five-server A–E example, A crashes in term 6, B and D time out at 212 and 213 ms, and each receives only two votes in term 7.
+- On the retry, B chooses 290 ms and D chooses 160 ms, so D enters term 8 and wins with three votes.
+- If all five servers choose close timeouts again, the example produces another split vote and retries the election.
+- Ledgerline's etcd coordination service stored merchant payment-processor routing, so losing the store prevented payment routing.
+- When the Virginia–Ohio link flapped, the four-node 2/2 deployment had no side with three nodes, leaving the configuration store unavailable for 47 minutes.
+- The incident queued about 38,000 payment authorizations without losing data because safety held even though payment routing was unavailable.
+- The proposed site-level repair used two nodes in Virginia, two in Ohio, and one in a third region, so losing any one site left three of five nodes.
+- A concrete log-entry example is index 7 with term 3 and command set x to 5.
+- After an old leader crashes, a follower may be missing entries or have extra uncommitted entries, and nextIndex backtracking repairs it by finding a matching prefix and replacing the conflicting suffix.
+- The backup optimization example has a far-behind follower return its conflicting term and the first index for that term so the leader can skip an entire term.
+- In the five-server example, A and B have logs 1, 1, 2, 3, 3, 3; C and E have 1, 1, 2, 3, 3; and D has 1, 1, 2.
+- Index 5 in term 3 is present on A, B, C, and E, giving four of five replicas and therefore a majority of three.
+- Index 6 in term 3 is present only on A and B, so its two-of-five replication is not a majority and it is not committed.
+- Once index 5 is committed in the example, indexes 1 through 4 are also committed because they precede it under log matching.
+- D times out first at 155 milliseconds, enters term 4, and requests votes with lastLogIndex 3 and lastLogTerm 2.
+- A seven-entry log ending in term 2 loses the freshness comparison to a five-entry log ending in term 3 because the higher last term wins before length is considered.
+- C becomes leader in term 5 with votes from C, D, and E even though B has the longest log.
+- After C appends a term-5 command at index 6, B accepts it after matching index 5 and deletes its conflicting term-3 entry at index 6.
+- The leader-completeness example uses committed index 5 stored on A, B, C, and E, then observes that every later election majority must overlap that storing majority.
+- For committed index 5 stored on A, B, C, and E, any election majority overlaps that set, so D alone cannot obtain enough votes.
+- Figure 8 step 1 leaves index 2 term 2 only on A and B after A crashes.
+- In term 3, E wins with C, D, and itself and writes a different index 2 term 3 entry only on its own log before crashing.
+- In term 4, A wins with B, C, and itself and places its old index 2 term 2 entry on A, B, and C, which is a majority.
+- In term 5, E's higher last term causes B, C, and D to vote for it, after which E overwrites index 2 term 2 with term 3.
+- The repair is for A to append index 3 term 4 and replicate indices 2 and 3 to B and C, allowing index 3 to commit and carry index 2 with it.
+- A new leader's blank no-op is a concrete way to create a current-term commitment quickly.
+- After restart, a follower may forget commitIndex temporarily but receives leaderCommit in a later AppendEntries.
+- After the partition, B stores client 1's set-x-to-7 command at index 21 term 7 only on B and A, so it cannot commit, apply, or acknowledge it.
+- On the majority side, E becomes term-8 leader and commits client 2's set-y-to-3 command at index 21 on E, C, and D.
+- At the partition's peak, B and E both believe they are leaders and hold different index-21 entries, but only E can commit.
+- E appends client 2's set y to 3 at index 21 in term 8, replicates it to C and D for 3 of 5, applies it, and returns success.
+- During the partition, B believes it is leader in term 7 with set x to 7 at index 21 while E believes it is leader in term 8 with a different index-21 entry.
+- When the partition heals, the consistency check matches through index 20, then B and A delete set x to 7 at index 21 and accept E's set y to 3.
+- Client 1's unacknowledged set x to 7 disappears during repair, times out, is resent to E, and is then committed in term 8.
+- A retry is harmless for set x to 7 because it is idempotent but dangerous for a withdrawal of 100 dollars because the latter can execute twice.
+- During the partition, a client asking B for y receives B's old local value even though E's majority side already committed y equal to 3.
+- An isolated D repeatedly times out and advances through terms 9, 10, 11, and 12 while the healthy cluster remains in term 8.
+- In the 3-to-5 reconfiguration example, A and B can elect A with the old 2-of-3 majority while C, D, and E can elect E with the new 3-of-5 majority.
+- Joint consensus first commits C old comma new and then commits C new, after which the old configuration is irrelevant and servers outside the new configuration can shut down.
+- A simpler practical reconfiguration changes one server at a time, but a later bug fix requires a new leader to commit an entry in its own term before changing membership.
+- Lamport's original Paxos paper, The Part-Time Parliament, used a fictional Greek-island parliament allegory, followed by Paxos Made Simple in 2001.
+- Google's Paxos Made Live case study about building Chubby illustrates the large gap between an algorithm paper and a production system.
+- The Google paper "Paxos Made Live" uses Chubby to illustrate how large the gap can be between the Paxos paper and a production system.
+- etcd is a Raft-backed key-value store that serves as the backing store for Kubernetes cluster state.
+- etcd recommends three- or five-member clusters and strongly discourages going much beyond seven members.
+- etcd's stated defaults are a 100-millisecond heartbeat interval and a 1000-millisecond election timeout, compared with the paper's 150-to-300 range.
+- An etcd lock can become unsafe when a client pauses for garbage collection, its lease expires, and it still believes it owns the lock.
+- In Consul, server nodes participate in Raft while the many client agents use a separate gossip protocol for their membership.
+- Consul's read behavior varies by mode: stale reads can come from any server, default reads use leader leasing, and strict reads pay an extra round trip.
+- CockroachDB splits data into ranges, with each range usually replicated by its own three-replica Raft group.
+- A large CockroachDB cluster may run thousands of Raft groups, and it coalesces heartbeats between the same node pairs to reduce overhead.
+- CockroachDB commonly serves reads through a range leaseholder instead of appending every read to the Raft log, while cross-range transactions use an additional commit protocol.
+- The lecture contrasts Chubby and Spanner, which use Paxos, with ZooKeeper, which uses Zab.
+- The homework tester acts like a small Jepsen test by partitioning servers, dropping and reordering messages, and checking results.
+- For a follower that has been down for an hour or is brand new, the leader may send a snapshot because the needed log entries have already been discarded.
+- The instructor gave the compact scope example: Raft is included, snapshots are excluded, and BFT is excluded.
+- A concrete scope example is that election, replication, the election restriction, the commitment rule, partitions, and unsafe direct membership changes from today are examinable.
+- The midterm location is a concrete change from the current room to Larkin Hall 150.
+- The notes-sheet example allows either typed or handwritten notes and both sides of the sheet, but not laptops or phones.
+- The review-session example is Sunday, October 18, from 4:00 to 6:00 p.m. in Whitaker 120, with recording dependent on room capture.
+- The practice-exam example assigns Ana to post the questions by Friday, followed by solutions a few days later.
+- The office-hours example contrasts Speaker 1's Wednesday slot in Whitaker 318 with Kofi's Thursday slot in Whitaker 214.
+- The quantitative example contrasts 2f+1 servers for crash failures with 3f+1 servers when Byzantine servers can lie.
+
+#### Formulas / steps
+- Primary-backup workflow: the primary accepts client requests, the backup receives and replays the primary's log, and the backup takes over if the primary dies.
+- Arbiter-based election workflow: both contenders use shared-storage test-and-set, and the winner becomes primary.
+- Replicated-state-machine construction workflow: model the service as state plus commands, define deterministic state transitions and outputs, and run the same model on each server.
+- The convergence condition is: same initial state plus the same commands in the same order produces the same final state on every replica.
+- Consensus workflow for a replicated log: agree on the command in slot 1, then slot 2, then slot 3, and continue for every slot.
+- Nondeterminism-handling workflow: the leader evaluates the random or time-dependent part once, records the concrete result in the log, and lets every replica apply that fixed value.
+- Two-phase-commit sequence: all participants vote yes, the coordinator sends the decision, and a coordinator crash before that decision leaves participants blocked.
+- The FLP condition can be summarized as: fully asynchronous system plus deterministic consensus plus even one possible crash means termination cannot be guaranteed.
+- Compute a majority quorum as the floor of n divided by 2 plus 1.
+- For n equal to 5, floor(5 divided by 2) plus 1 gives 3, so three servers are required.
+- Derive the number of tolerable failures by subtracting the quorum size from the total number of servers.
+- Using the stated rule, five servers with a quorum of three tolerate two failures, while three servers with a quorum of two tolerate one failure.
+- To tolerate f failures, provision 2f plus 1 servers.
+- Apply the 2f plus 1 relationship as f equal to 1 gives 3 servers, f equal to 2 gives 5, and f equal to 3 gives 7.
+- Prove majority intersection by assuming two majorities are disjoint, observing that each has more than half the servers, and deriving a total greater than the whole cluster.
+- Work around FLP in practice by preserving safety always and relying on eventual reasonable message delivery for progress.
+- Reason about Raft through the decomposition sequence of leader election, log replication, and safety restrictions, with membership changes and log compaction treated separately.
+- Route a client request to the leader, have the leader replicate the log entry to followers, and do not send log entries from followers back to the leader.
+- Trace a term by starting an election, making the winning candidate leader for the rest of the term, or starting a new term after a split vote.
+- When a server sees a higher term, it updates currentTerm and becomes a follower if it was a leader or candidate.
+- When a server receives a request with a lower term, it rejects the request as stale.
+- To start an election, a follower increments its term, becomes a candidate, votes for itself, and sends RequestVote RPCs in parallel to every other server.
+- After starting an election, a candidate can win, accept another server as leader, or time out without a winner.
+- A candidate wins only after receiving votes from a majority of the full cluster for the same term; in a five-server cluster, that means three votes.
+- Election safety follows because two candidates would need overlapping majorities, but the overlap server cannot vote for both candidates in the same term.
+- A candidate receiving AppendEntries with a term at least as large as its own accepts the sender as leader and becomes a follower, whereas a smaller-term AppendEntries is rejected.
+- After a split vote, candidates time out again, increment the term, and retry the election with newly randomized timers.
+- For randomized election timeouts, each server selects a value from a fixed interval and selects a fresh value whenever its timer is reset.
+- Construct RequestVote with term, candidateId, lastLogIndex, and lastLogTerm, then interpret the reply's term and voteGranted fields.
+- Choose timing so that broadcastTime is much less than electionTimeout, which is much less than MTBF.
+- Reset the election timer only on valid AppendEntries from the current leader or after granting a vote.
+- For homework elections, use randomized timeouts in the 400–800 ms range rather than the paper's 150–300 ms range, while respecting the tester's heartbeat and leader-election limits.
+- When a RequestVote arrives, reset the election timer only if the vote is granted; also reset it after valid AppendEntries from the current leader.
+- After a split vote, have candidates choose new random timeouts, let the first timeout advance its term, and allow servers seeing the higher term to update and vote.
+- Calculate a majority as floor(n/2)+1; for n=4 this gives floor(4/2)+1=3.
+- Calculate tolerated failures as n minus the majority, which gives one failure for four nodes and the same one-failure tolerance as three nodes.
+- Compare cluster sizes using the sequence 3→1, 4→1, 5→2, 6→2, and 7→3 tolerated failures to see why adding an even-numbered server gives no gain.
+- To survive loss of one data center, distribute five nodes across three sites as 2 in Virginia, 2 in Ohio, and 1 in a third region.
+- Replicate a client command by appending it to the leader's log, sending AppendEntries to all followers in parallel, and applying it to the state machine after safe replication.
+- Construct AppendEntries with the leader's term and ID, the previous index and term, the entries list, and leaderCommit; use an empty entries list for a heartbeat.
+- On receipt, a follower checks prevLogIndex and prevLogTerm, rejects on absence or term mismatch, and otherwise deletes conflicting entries after the match before appending the leader's entries.
+- Prove log matching by starting with the trivially matching empty log and showing that every successful AppendEntries preserves and extends the matching prefix.
+- Initialize each follower's nextIndex one past the leader's log end, decrement it after a failed consistency check, and retry until a matching point is found.
+- Continue retrying AppendEntries when followers crash, run slowly, or packets are dropped until the followers eventually store the entries.
+- Initialize every follower's nextIndex to one past the end of the leader's own log when the leader first comes to power.
+- If the AppendEntries consistency check fails, treat the follower's response as false, decrement that follower's nextIndex, and retry.
+- When a matching prefix is found, accept AppendEntries, delete conflicting entries after the match, and append the leader's entries.
+- For a far-behind follower, use its conflicting term and first stored index for that term to skip a whole term rather than retrying every index.
+- Derive the leader's commit index from matchIndex and, in the worked example, commit a current-term entry once it appears on at least three of five servers.
+- Include the leader's commit index in the leaderCommit field of every AppendEntries, including heartbeats.
+- When a follower receives leaderCommit, set its commitIndex to the minimum of leaderCommit and the index of its last new entry.
+- While commitIndex exceeds lastApplied, increment lastApplied and apply the next entry in order one at a time.
+- Evaluate log freshness by comparing lastLogTerm first and comparing lastLogIndex only when the last terms are equal.
+- D's term-4 RequestVote with lastLogTerm 2 and lastLogIndex 3 is rejected by B, C, and E because each has a last entry in term 3, leaving D with only its own vote.
+- C's term-5 RequestVote is rejected by B because B has six entries versus C's five at the same last term, but accepted by D and E, giving C three votes.
+- To establish leader completeness, show that the later election majority overlaps the majority holding the committed entry and that the overlapping voter can vote only for a candidate at least as up-to-date as itself.
+- To test leader eligibility, identify the majority holding a committed entry, identify the majority needed for election, use their overlap, and apply the last-term-first then length up-to-date rule.
+- The commitment formula is: majority plus current term means committed, while majority plus an old term is not enough.
+- Figure 8 step 1 is that term-2 leader A replicates index 2 only to B and then crashes.
+- Figure 8 step 2 is that E wins term 3 with C, D, and itself, appends a different term-3 index-2 entry only locally, and crashes.
+- Figure 8 step 3 is that A wins term 4 and replicates its term-2 index-2 entry to C, placing it on a majority without directly committing it.
+- Figure 8 step 4 is that E wins term 5 because its last term 3 beats the term 2 last entries of B and C, then overwrites their old entry.
+- The safe repair is to append a current-term index-3 entry, replicate indices 2 and 3 to a majority, commit index 3, and then treat index 2 as committed through log matching.
+- The persistence workflow is to write currentTerm, votedFor, and the log before any RPC response, while resetting volatile progress state to initial values after reboot.
+- The recovery workflow is for a follower to receive leaderCommit in a later AppendEntries, for a restarted leader to commit a new-term entry, and for the basic state machine to replay the log.
+- The partition workflow is that B can reach only A and itself and therefore cannot commit, while E reaches C and D, wins term 8, and commits on three servers.
+- To commit E's command, count E plus the two replicas C and D as 3 of 5, then apply the entry and acknowledge the client.
+- To see why B cannot commit, compare B's required 3 acknowledgments with its reachable set of only B and A.
+- After healing, reject B's term-7 heartbeat with term 8, make B step down, back up the AppendEntries consistency check to index 20, and replace the conflicting index-21 suffix.
+- When a client receives no success from B, it should time out, locate the new leader E, resend the command, and let the normal replication path commit it.
+- For deduplication, assign each client a unique ID, number each command serially, record the latest executed serial and response, and return the saved response when a serial repeats.
+- For a read-only request, exchange heartbeats with a majority before answering; if the leader cannot reach a majority, it must not serve the read.
+- With a lease, use a recent majority heartbeat acknowledgment to serve the read locally, but only under the bounded-clock-drift assumption.
+- Before incrementing its term, an isolated server runs pre-vote by asking whether a majority would vote for it; only a positive majority response permits the term bump and election.
+- For joint consensus, first commit the combined old-and-new configuration using both majorities, then commit only the new configuration and retire the old members.
+- For the single-server membership variant, add or remove one server at a time so quorums overlap, and require the new leader to commit an entry in its own term before changing membership.
+- In Basic Paxos, run phase 1 prepare/promise, then phase 2 accept/accepted using the highest-numbered already accepted value if one exists; a majority accepting chooses the value.
+- To build Multi-Paxos, run many Paxos instances, one per log slot, and use a stable leader to avoid phase 1 most of the time.
+- Paxos Phase 2 proceeds by selecting the highest-numbered value previously accepted by any acceptor when available, asking acceptors to accept it, and treating majority acceptance as a chosen value.
+- The quorum-overlap argument compares the prepare majority with each earlier accept majority and relies on their intersection to preserve safety.
+- To build a replicated log with Multi-Paxos, run a Paxos instance for each slot, then use a stable leader to avoid repeating Phase 1 for most commands.
+- The stated server-count formula is N = 2f + 1 to tolerate f crash failures.
+- In the normal case, both protocols use approximately one round of messages to a majority for each command.
+- For compaction, each server independently snapshots its current state machine to stable storage and discards log entries through the last entry represented in the snapshot.
+- A valid snapshot must contain the last included index and term because the next post-snapshot AppendEntries consistency check needs the missing prevLogIndex and prevLogTerm.
+- For Consul reads, choose stale mode for any-server responses, default mode for leader-lease behavior with a narrow stale window, or strict mode when the extra round trip is acceptable.
+- When a leader sends InstallSnapshot, a follower replaces its whole log if the snapshot covers its log, but otherwise deletes only the covered prefix and keeps later entries.
+- Followers may create snapshots independently without coordination, while new replicated data still flows only from the leader.
+- To avoid stopping service during a large snapshot, use copy-on-write such as forking so a child writes the snapshot while the parent continues serving.
+- A distributed lock based on an etcd lease should be paired with fencing tokens so a paused client cannot continue acting after its lease expires.
+- For f crash failures in the stated Raft model, use the server-count formula 2f+1.
+- For the stated Byzantine model in which servers can lie, use the server-count formula 3f+1.
+- To use the practice midterm effectively, attempt the problems first and consult the solutions only when they appear a few days later.
+- For Thursday's guest lecture, read PBFT sections 1 through 4 beforehand because Dr. Whitfield will assume the reading is complete.
+- If Homework 5's due date changes, the instructor and Kofi will discuss it and announce the change on Ed.
+- For the midterm reference sheet, choose one letter-size sheet, use both sides, select handwritten or typed notes, and leave laptops and phones at home.
+- The optional Raft study path is section 6 on membership changes, section 7 on log compaction, and chapter 4 of Ongaro's dissertation for single-server membership changes.
+- The next discussion step is to compare leases with ReadIndex for reads and then address whether pre-vote fully fixes disruptive servers.
+
+#### Things to memorize
+- Homework 4 is due Friday, October 9 at 11:59pm and covers leader election and heartbeats, not log replication or persistence.
+- The late-day policy is five late days for the semester total, with at most two late days usable on one assignment.
+- Kofi's office hours are Thursdays 3–5pm in Whitaker 214 rather than Wednesdays 2–4pm.
+- The midterm is Thursday, October 22 in Larkin Hall 150 during normal class time and covers lectures 1–8 through primary-backup replication.
+- Two-phase commit is all-or-nothing across participants, while consensus is intended to make progress with a majority.
+- The replicated-state-machine invariant is that identical starting state plus identical ordered commands yields identical final state.
+- Consensus maintains agreement on each successive replicated-log slot rather than merely agreeing on an unordered collection of commands.
+- Nondeterministic values such as random choices or clock readings must be evaluated once and written as concrete values into the log.
+- The stated failure model includes crashes, volatile-memory loss, delayed, dropped, duplicated, and reordered messages, and network partitions.
+- FLP means Fischer, Lynch, and Paterson, dates to 1985, and rules out guaranteed termination for deterministic consensus in a fully asynchronous system with even one crash possibility.
+- The target consensus protocol is expected to make progress as long as a majority of servers are up.
+- Memorize the precise FLP statement: with no bounds on message delays or process speed, one possible crash prevents a deterministic consensus algorithm from guaranteeing termination in every execution.
+- Memorize that FLP does not say consensus is impossible in practice; it denies a universal termination guarantee in the purely asynchronous model.
+- Memorize that the FLP proof itself is excluded from the exam and only the statement and implications are required.
+- Memorize the safety definition: nothing bad ever happens, and a violation has a finite point where it occurred.
+- Memorize the liveness definition: something good eventually happens, so failure cannot be certified at a finite point.
+- Memorize that Raft guarantees safety under partitions and extreme delays but may give up liveness by stalling.
+- Memorize election safety as at most one leader per term.
+- Memorize the majority-quorum formula as floor(n divided by 2) plus 1.
+- Memorize that tolerating f failures requires 2f plus 1 servers.
+- Memorize Raft's three server states: follower, candidate, and leader.
+- Memorize that clients use the leader and log entries flow only from leader to followers, with followers redirecting clients.
+- Memorize that each term begins with an election, a winning candidate leads for the term, and a split vote ends the term without a leader.
+- A term is a monotonically increasing logical-clock value, and a term can have at most one leader or no leader.
+- A server adopts a larger term and steps down if necessary, while rejecting requests with smaller terms.
+- The two basic Raft RPCs are RequestVote for elections and AppendEntries for replication and heartbeats.
+- The four election-start steps are incrementing the term, becoming a candidate, voting for oneself, and sending parallel RequestVote RPCs.
+- A candidate needs a majority of the entire cluster, including itself; five servers therefore require three votes.
+- Each server votes for at most one candidate per term, and currentTerm plus votedFor must be persistent.
+- A candidate steps down when it receives AppendEntries from a server with a term at least as large as its own, but rejects smaller-term AppendEntries.
+- RequestVote contains term, candidateId, lastLogIndex, and lastLogTerm, while its reply contains the voter's term and voteGranted.
+- The paper's randomized election-timeout range is 150–300 milliseconds, with a fresh random value selected after each reset.
+- The timing relationship to memorize is broadcastTime much less than electionTimeout much less than MTBF.
+- For Homework 4, remember the 10-heartbeats-per-second cap, the recommended 400–800 millisecond election timeout, and the 5-second leader-election limit.
+- Reset the election timer after a granted vote or valid leader AppendEntries, but not after a rejected RequestVote.
+- Memorize the homework timing limits: at most 10 heartbeats per second and a new leader within 5 seconds.
+- Memorize the distinction between the paper's 150–300 ms timeout range and the homework's 400–800 ms recommendation.
+- Memorize that the election timer resets only on a granted vote or valid AppendEntries from the current leader.
+- Memorize that holding a lock while sending an RPC was identified as the number-one homework 4 bug.
+- Memorize the split-election outcome: term 7 can have no leader, followed by a successful leader election in term 8.
+- Memorize that randomized elections are probabilistic and FLP prevents a guarantee of termination.
+- Memorize majority=floor(n/2)+1 and the tolerance sequence 3→1, 4→1, 5→2, 6→2, 7→3, which explains why even sizes never help.
+- Memorize the site-level 2f+1 rule and the five-node 2/2/1 placement for surviving one data-center loss.
+- Memorize that each log entry has a command, a receiving term, and an index beginning at 1.
+- Memorize the six AppendEntries request fields and that an empty entries list represents a heartbeat.
+- Memorize the log matching property exactly: same index and same term imply identical log entries through that index.
+- Memorize that nextIndex starts one past the leader's log end and is decremented after failed consistency checks until AppendEntries succeeds.
+- nextIndex identifies the next entry to send to a follower and begins one past the leader's log end when leadership starts.
+- matchIndex is the highest index known to be replicated on each follower and is used for commitment decisions.
+- commitIndex starts at zero and can only increase.
+- The leader sends leaderCommit in every AppendEntries, including heartbeats.
+- A follower updates commitIndex to min(leaderCommit, the index of its last new entry).
+- Application must advance lastApplied sequentially whenever commitIndex is greater than lastApplied.
+- Committed means durable for the cluster, while applied means executed by one server's local state machine.
+- The majority-replication intuition has an old-term caveat, so the precise commitment rule must be distinguished from the introductory approximation.
+- Election freshness compares last term before length, so a shorter log with a higher last term can be more up-to-date.
+- The longest log does not automatically win, and the first eligible server to time out can win the election.
+- In the five-server example, index 5 is committed but index 6 is not, allowing C later to replace B's old term-3 index 6 with a term-5 entry.
+- Leader completeness means that a committed entry in one term appears in every leader's log for all higher-numbered terms.
+- The election proof depends on the fact that a committed entry is on a majority and a winning candidate must also receive a majority of votes.
+- Compare candidate logs by last term first and log length second when applying the up-to-date election restriction.
+- The rule to memorize is that a majority plus a current-term entry commits, but a majority plus an old-term entry does not.
+- Earlier-term entries are committed indirectly after a current-term entry commits, rather than by counting their replicas directly.
+- The three persistent fields are currentTerm, votedFor, and the log, and they must be durable before any RPC response.
+- The volatile fields are commitIndex, lastApplied, nextIndex, and matchIndex, which restart from initial values.
+- A new leader commonly appends a blank no-op at the beginning of its term to establish a current-term commitment.
+- During a partition, the older-term leader cannot commit anything if it can reach only a minority.
+- The exam focus includes election restriction, up-to-date comparison, leader completeness, current-term-only commitment, and Figure 8.
+- Two leaders can coexist only in different terms in this scenario, and the older-term leader cannot commit anything without a majority.
+- In a five-server cluster, a majority is 3, so B's access to only itself and A is insufficient for commitment.
+- When the partition heals, B observes term 8, steps down, and its uncommitted term-7 entry at index 21 is replaced by E's term-8 entry.
+- An unacknowledged write that is removed was never committed, applied, or acknowledged, so the client must retry rather than assume success.
+- Retry provides client-side liveness, while deduplication provides safety against repeated execution.
+- The deduplication table must associate each client with its latest executed serial number and the saved response.
+- A repeated serial number returns the saved response instead of executing the command again, supporting the stated linearizable exactly-once effect.
+- A partitioned leader must validate leadership with a majority before serving a read; etcd calls this ReadIndex approach.
+- Leases trade the no-timing-dependence purity of the first approach for an assumption about bounded clock drift.
+- Pre-vote asks for majority support before a term increment, mostly preventing an isolated server from inflating its term but not fully resolving every interaction.
+- Direct configuration switching is unsafe because old and new majorities can be disjoint; joint consensus requires both during the transition, and the exam focuses on this reason rather than protocol reproduction.
+- Paxos also depends on quorum overlap: Basic Paxos uses prepare/promise and accept/accepted, while Multi-Paxos runs one instance per log slot under a stable leader.
+- Remember the Paxos Phase 2 rule: use the highest-numbered value already accepted by an acceptor when one exists, and a majority acceptance chooses the value.
+- Remember that quorum overlap between the prepare majority and prior accept majorities is the central safety mechanism.
+- Remember the log distinction: Raft has no holes and commits in order, while Multi-Paxos can decide independent slots out of order.
+- Remember N = 2f + 1 for tolerating f crash failures, plus the distinction between safety under asynchrony and liveness only under partial synchrony.
+- Remember that normal-case command processing takes one message round to a majority in both systems.
+- Remember that etcd and Consul recommend three- or five-server configurations, while etcd discourages going much beyond seven.
+- Remember the contextual timeout values: etcd defaults to a 100 ms heartbeat and 1000 ms election timeout, whereas the paper cited 150–300 ms.
+- Remember that only committed and applied entries may enter a snapshot, which must record the last included index and term.
+- Remember that snapshots also include the latest membership configuration.
+- Remember that InstallSnapshot is used when the leader no longer has the log entries needed by a lagging follower, with whole-log replacement or prefix deletion depending on coverage.
+- Do not memorize one CockroachDB range-size number: the lecturer said the 64 MB slide is old and newer versions are larger.
+- Remember that Raft handles replication within a CockroachDB range but does not provide cross-range transactions, and that using Raft does not guarantee whole-system correctness.
+- Remember the updated logistics: Homework 4 is due October 12 at 11:59pm, Homework 5 releases October 13, and the October 22 midterm covers lectures 1–9 in Larkin Hall 150.
+- Memorize that Homework 5 is scheduled for release Tuesday, October 13, while its due date remains undecided.
+- Memorize that the midterm is Thursday, October 22, during class time in Larkin Hall 150.
+- Memorize that the midterm covers lectures 1 through 9, including today's election and replication material.
+- Memorize that snapshots, log compaction, and lecture 10 BFT are not on the midterm, with BFT moved to the final.
+- Memorize the exam reference policy: one letter-size sheet, both sides allowed, handwritten or typed, with no laptops or phones.
+- Memorize the server-count pair 2f+1 for f crash failures and 3f+1 when Byzantine servers can lie.
+- Memorize that PBFT sections 1 through 4 are required before Thursday, while Raft sections 6 and 7 and Ongaro chapter 4 are optional.
+- Memorize the review session time and place: Sunday, October 18, 4:00–6:00 p.m., Whitaker 120.
+- Remember the implementation warning not to hold locks while sending RPCs.
+
+#### Confusing points
+- Silence from a server is ambiguous because it can represent a crash, a network failure, or extreme slowness rather than one definite cause.
+- The test-and-set arbiter appears to solve primary election but only moves the single-point-of-failure problem to the arbiter itself.
+- Two-phase commit and consensus both involve agreement, but 2PC requires every participant while the desired consensus protocol relies on majority availability.
+- Two-phase commit's blocking problem occurs even after every participant votes yes if the coordinator crashes before distributing the decision.
+- Replicated-state-machine correctness depends on applying commands in the same order, not merely applying the same set of commands.
+- Consensus does not itself make a nondeterministic application deterministic; the application must convert random or time-dependent behavior into a logged concrete value.
+- FLP's precise limitation concerns guaranteed termination under full asynchrony, while the lecture also states a majority-progress goal whose relationship to the impossibility result is not yet explained here.
+- Homework 4's empty AppendEntries heartbeats should not be confused with the actual log replication and persistence assigned to Homework 5.
+- The coffee cart's Byzantine label is a joke and should not be confused with the actual Byzantine fault-tolerance topic of the guest lecture.
+- The crash-versus-slow distinction is easy to miss because both states produce the same observable absence of a message.
+- FLP must not be paraphrased as consensus being impossible; its claim concerns guaranteed termination in every execution of a purely asynchronous model.
+- Safety and liveness differ in how violations are observed: safety has a finite bad moment, while liveness may still occur later.
+- The examples deliberately separate the properties: doing nothing is safe but not live, while deciding arbitrary values immediately is live but unsafe.
+- At most one leader per term is an unconditional safety property, whereas normal operation is described as exactly one leader and a split vote can produce no leader.
+- The reason for preferring odd cluster sizes is left incomplete in this chunk because the lecturer only says that the numbers work out nicely and promises to return to it.
+- The claim that four nodes with a quorum of three tolerate two failures conflicts with the earlier stated failure formula and needs clarification.
+- The contrast between FLP's unbounded-delay model and practical progress after messages arrive within a timeout must be stated as a model limitation versus a practical network assumption.
+- Exactly one leader describes normal operation, but it does not mean every term has a leader because split votes can leave a term leaderless.
+- Election majority is measured against the full cluster rather than only the servers that respond.
+- The initial first-come, first-served voting description is incomplete because lastLogIndex and lastLogTerm add a further safety restriction later.
+- Ranking is not impossible to implement, but the lecture says it is harder to reason about and can create availability corner cases.
+- Terms are similar in spirit to Lamport clocks for detecting stale information, but Raft terms also govern leadership and stepping down.
+- Raft safety does not depend on timing, but successful leader election and continued operation do depend on timing.
+- The paper's 150–300 millisecond timeout and the homework's recommended 400–800 millisecond timeout are different settings and should not be mixed.
+- Receiving any RequestVote does not reset the election timer; only granting the vote does, along with receiving valid AppendEntries.
+- AppendEntries is both a log-replication RPC and a heartbeat when it is empty.
+- The paper's 150–300 ms timeout range and the homework's 400–800 ms recommendation are deliberately different numbers and should not be conflated.
+- Receiving a RequestVote does not automatically reset the election timer; rejection is specifically excluded.
+- The homework-bug ranking is briefly inconsistent: the timer bug is first called possibly number one, then holding a lock during an RPC is identified as number one and the timer bug as number two.
+- A term can end without a leader and a later term can succeed, so skipped terms are not themselves an error.
+- Randomized retries make repeated collisions rapidly unlikely but do not provide a termination guarantee because FLP still applies.
+- The earlier statement that four nodes tolerate two failures was explicitly corrected to one failure.
+- Adding a fourth node can make a two-site partition worse rather than better because a 2/2 split satisfies neither side of the three-node quorum.
+- The 2f+1 principle must be applied to failure domains such as data centers, not only to the number of machines.
+- The exact criterion for an entry being safely replicated is deferred in this chunk even though commitment depends on it.
+- A failed AppendEntries consistency check can cause the follower to delete the conflicting entry and its entire suffix, not merely one bad entry.
+- The log matching property concerns the entire prefix before and including the matching position, not just the single matching entry.
+- Leader overwrite of follower logs seems unsafe at first, but the lecture links its safety to election restriction and uses nextIndex to find a valid matching prefix.
+- Overwriting follower log entries can look unsafe, but the election restriction is what prevents a leader from overwriting a committed entry.
+- The statement that majority replication means commitment is only an initial approximation because old-term entries introduce a subtle exception.
+- A server may know an entry is committed while still not having applied it, so commitment and application must not be treated as the same event.
+- The longest-log-wins heuristic is wrong because a higher last term outranks greater length.
+- The globally most up-to-date server is not guaranteed to win because any candidate sufficiently up-to-date for a majority of voters may win first.
+- B's six-entry log does not defeat C's five-entry log when the election is evaluated voter by voter, because C is acceptable to D and E while B's timer did not fire first.
+- Servers that reject a RequestVote still update their term after seeing a higher term but do not reset their election timers because they did not grant a vote.
+- The final leader-completeness implication that the candidate must contain index 5 is asserted as a result proved in the paper and deserves a careful review.
+- Being on a majority is not sufficient for an entry from an old term to be committed, even though that entry may look replicated enough.
+- The Figure 8 entry at index 2 term 2 is on A, B, and C, yet it can still be erased because A never directly committed it under the current-term rule.
+- E is considered more up-to-date than B and C because term 3 beats term 2, even though E's entry conflicts with their index-2 entry.
+- commitIndex is not persisted, so a restarted server briefly forgets its local commitment knowledge even though the cluster's committed status remains recoverable.
+- Two leaders existing simultaneously is not automatically a safety violation when they are in different terms and the older-term leader cannot reach a majority.
+- Earlier-term entries are not directly committed by their own majority count, but they become committed indirectly once a later current-term entry commits.
+- A no-op appears to carry no client operation, but it is useful because it creates the current-term entry needed to commit the earlier prefix.
+- Volatile progress state restarting from initial values is different from losing persistent log safety, because the progress state can be rebuilt.
+- Review why B and E being leaders simultaneously is not a safety violation when they are in different terms and only E can make progress.
+- The apparent loss of client 1's write is not a lost committed operation because the client never received a success response and Raft never promised the entry.
+- A retry is necessary for liveness but can duplicate a command if the original committed and only its response was lost, which is why idempotence alone is insufficient.
+- A leader can avoid writing incorrect data yet still violate linearizability by answering from stale local state during a partition.
+- The difference between ReadIndex and leases is that the former checks a current majority while the latter relies on recent timing assumptions.
+- Pre-vote reduces term inflation but is not a complete guarantee against pointless elections because check-quorum and membership changes interact subtly.
+- The isolated-server term-inflation example is a liveness problem rather than a safety problem, even though it forces the healthy leader to step down.
+- The direct membership-switch failure differs from the earlier partition case because the disjoint majorities belong to different configurations yet can elect leaders in the same term.
+- The practical relationship between fully specified Raft and historically underspecified Multi-Paxos requires review because both use the same overlap idea but differ in specification clarity and presentation.
+- Raft is close to a strong-leader Multi-Paxos flavor, but its no-holes, ordered log differs from Multi-Paxos's independently decided slots and possible gaps.
+- The phrase that Raft is well specified should not be confused with the claim that it is strictly better than Paxos.
+- Safety under asynchrony does not mean availability under asynchrony because the lecture separately states that liveness requires partial synchrony.
+- The different election-timeout values are not contradictory: the lecture presents them as context-dependent values for etcd, the paper, and real networks.
+- An etcd lock API does not by itself make a client critical section safe because a client can pause after its lease has expired.
+- The statement that Consul uses Raft applies to its voting servers, not to its non-voting client agents or their gossip-based membership.
+- Consul's default read mode is not equivalent to strict consistency because leader leasing can allow a narrow stale-data window, while strict mode costs an extra round trip.
+- The CockroachDB range-size figures conflict because the 64 MB slide is from an older version and the lecturer only tentatively cited about 512 MB for newer versions.
+- Followers taking snapshots independently may seem to contradict Raft's strong-leader principle, but the lecture says followers only reorganize data they already have and new data still flows from the leader.
+- The claim that a system uses Raft should not be read as a guarantee of linearizability or correctness for client APIs, read paths, transactions, and implementation extensions.
+- Homework 5's release date is fixed, but the due date after the midterm is unresolved and carries no promise of changing.
+- The scope boundary requires care because today's lecture is included while its log-compaction portion and snapshots are excluded.
+- The guest BFT lecture is closely related to the Raft material but is excluded from the midterm and assigned to the final instead.
+- The reason for the additional f in the 3f+1 Byzantine requirement was intentionally left unanswered.
+- The review-session recording is uncertain because it depends on room capture rather than being guaranteed.
+- The practice midterm should be attempted before solutions appear a few days later, so the posting sequence matters.
+- The office-hour schedule can be confused because Speaker 1 has no Thursday hours while Kofi's hours are specifically on Thursday.
+- Leases versus ReadIndex and the effectiveness of pre-vote were named but deferred, so no explanation was provided in this chunk.
+
+#### Questions to review
+- Why can a backup not safely infer that the primary crashed merely because no message has arrived?
+- How does an incorrect backup promotion produce split brain and divergent data?
+- How does the test-and-set arbiter select a primary, and why does replicating the arbiter recreate the consensus problem?
+- What are the precise differences between 2PC and consensus in participant requirements, failure behavior, blocking, and majority progress?
+- Why does applying the same ordered command sequence to identical starting states make replicated state machines converge?
+- How should a system handle commands that read the clock or use randomness?
+- Which crash, message, ordering, and partition failures are included in the lecture's distributed-systems failure model?
+- State the FLP result precisely, including the meaning of fully asynchronous and the role of one possible crash.
+- How will Raft achieve the stated majority-progress goal while avoiding split brain and agreeing on each log slot?
+- Is the Thursday guest lecture included on the midterm, and when will the review-session time be announced?
+- Can you state FLP in one or two sentences while including full asynchrony, one possible crash, determinism, and the lack of a guaranteed termination outcome?
+- Why is a crashed server indistinguishable from a slow server when the observer has received no message?
+- What does FLP not claim, and what safety-versus-conditional-liveness choice do Paxos and Raft make in practice?
+- Can you define safety formally and give the consensus examples of preventing divergent decisions and unagreed command application?
+- Can you define liveness and contrast eventual decision or client response with a finite safety violation?
+- Why does Raft retain safety but potentially lose liveness during a partition or extreme delay?
+- Can you prove that any two majority quorums overlap?
+- Can you compute the quorum and tolerated failures for five and three servers using the stated formulas?
+- Can you derive and apply the 2f plus 1 relationship for one, two, and three tolerated failures?
+- How does the 12-out-of-12 jury analogy illustrate the difference between safety and liveness?
+- Can you explain how Raft's decomposition and strong-leader design make it easier to reason about than Paxos?
+- Can you list the three Raft server states and trace a term through a successful election or a split vote?
+- Why do overlapping majorities plus the one-vote-per-term rule prove that two leaders cannot exist in the same term?
+- What exact state transition should occur when a server receives a higher-term message or a lower-term request?
+- Why must currentTerm and votedFor be persisted before a vote reply is sent?
+- What log-safety rule uses lastLogIndex and lastLogTerm when deciding whether to grant a vote?
+- Why does randomized timeout selection avoid the availability problems associated with fixed candidate rankings?
+- Why must a fresh random timeout be selected after a split vote or timer reset?
+- How does broadcastTime much less than electionTimeout much less than MTBF support liveness?
+- Why is the Homework 4 timeout recommendation 400–800 milliseconds rather than the paper's 150–300 milliseconds?
+- Which events reset the election timer, and why is resetting it for rejected RequestVote messages unsafe?
+- What are the four RequestVote arguments and the two reply fields?
+- Why does the homework use 400–800 ms instead of the paper's 150–300 ms timeout range?
+- Which incoming messages reset the election timer, and why are rejected RequestVote messages excluded?
+- How do the 212 ms and 213 ms timeouts produce a two-vote split between B and D in term 7?
+- How can a term have no leader and a later term succeed, and how does that coexist with FLP's lack of a termination guarantee?
+- Why do repeated random-election collisions become rapidly unlikely even though they are not guaranteed to stop?
+- Using floor(n/2)+1, how many failures do clusters of 3, 4, 5, 6, and 7 nodes tolerate?
+- Why does a four-node two-site deployment become unavailable during a 2/2 partition while three nodes in one site would not be affected by that inter-site link flap?
+- How does 2f+1 apply to data centers, and why does the 2/2/1 placement retain three nodes after losing one site?
+- What exact replication condition makes a log entry safely replicated and committed?
+- What are all AppendEntries arguments and what does an empty entries list signify?
+- How does a follower validate prevLogIndex and prevLogTerm, and what exact suffix does it delete after a conflict?
+- How does the induction argument prove the log matching property, and how does nextIndex backtracking repair a divergent follower?
+- How do nextIndex backtracking and the conflicting-term optimization repair a follower whose log is inconsistent or far behind?
+- Why is matchIndex needed to decide commitment in addition to nextIndex, which tracks what the leader should send?
+- What is the precise commitment rule for entries from old terms, and why is simple majority replication only an initial approximation?
+- Why can commitIndex be ahead of lastApplied, and why does the client receive the response only after the leader applies the entry?
+- Using the A-through-E logs, why is index 5 committed while index 6 is not?
+- How does the last-term-first, length-second comparison classify the seven-entry term-2 log X versus the five-entry term-3 log Y?
+- Why does D fail to win, and why do B, C, and E update their terms without resetting their election timers after rejecting D?
+- Why does C win term 5 even though B has the longest log, and which voters provide C's majority?
+- Why may C replace B's term-3 entry at index 6 but not lose committed index 5, and how does this support leader completeness?
+- Can you reproduce the majority-overlap proof and explain why an overlapping voter blocks a candidate missing a committed entry?
+- Given five logs, which servers can become leader when the up-to-date comparison checks last term before length?
+- Why does a previous-term entry on a majority fail to satisfy the commitment rule?
+- Can you trace Figure 8 through terms 2, 3, 4, and 5 and identify exactly when index 2 term 2 is overwritten?
+- How does appending index 3 term 4 prevent E from winning a later election?
+- Why does a new leader append a no-op, and how does that no-op help establish the committed prefix?
+- Which three fields must be durable before an RPC response, and which four progress fields reset after reboot?
+- How does a follower relearn commitIndex after restart, and how does a restarted leader rediscover commitment?
+- After the A-B versus C-D-E partition, which client command commits and which command remains waiting?
+- Why can B in term 7 and E in term 8 both believe they are leaders without violating safety?
+- Why are B and E not a safety-violating split brain when they believe they are leaders at the same time?
+- What happens to client 1's set x to 7 after B's uncommitted entry is overwritten, and why must the client retry?
+- How does the client ID, serial number, and saved response prevent a retry from executing an already committed command twice?
+- Why can B's local answer to what is y violate linearizability even though B did not commit a wrong write?
+- What must a leader do before serving a read under ReadIndex, and what assumption replaces that check under a lease?
+- Does pre-vote completely prevent an isolated node from causing a pointless election, and which check-quorum or membership cases remain subtle?
+- Why can directly switching from the 3-server configuration to the 5-server configuration create two leaders in one term?
+- How do the two joint-consensus configurations prevent old and new clusters from making independent decisions?
+- How do Basic Paxos's prepare and accept phases use majority overlap, and how does Multi-Paxos extend that to a replicated log?
+- Why does the highest-numbered previously accepted value rule in Paxos Phase 2 preserve safety when combined with majority acceptance?
+- How does overlap between the prepare majority and prior accept majorities prevent conflicting choices?
+- What log invariant does Raft enforce that Multi-Paxos does not, and what operational consequences do holes and out-of-order decisions have?
+- How does Raft's election restriction ensure that a new leader already has every committed entry?
+- Why do both protocols require 2f+1 servers for f crash failures, and why is liveness weaker than safety under asynchrony?
+- When would a strong Raft leader become a bottleneck, and why might EPaxos help for low-conflict geo-distributed workloads?
+- Why are fencing tokens required when an etcd lock client's lease can expire during a pause?
+- Which Consul read mode should be used for a workload requiring strict consistency, and what latency tradeoff does it impose?
+- Why does CockroachDB use many Raft groups, how are heartbeat costs reduced, and why do cross-range transactions need another protocol?
+- What snapshot metadata is required, and how does it support the AppendEntries prevLogIndex and prevLogTerm consistency check after compaction?
+- When does a leader send InstallSnapshot, and how does a follower update its log when the snapshot covers all versus only a prefix of its log?
+- What failures does the homework tester emulate from Jepsen, and why can bugs still occur around an otherwise sound consensus algorithm?
+- What changed for Homework 4 and the midterm, and which Homework 5 scheduling question remains unresolved?
+- Should Homework 5 be due after the midterm rather than immediately before it?
+- Why does BFT require 3f+1 servers when Raft requires 2f+1 for f crash failures?
+- Which parts of today's lecture are included in the midterm, and which log-compaction or snapshot material is excluded?
+- Why are direct membership changes unsafe?
+- How do leases and ReadIndex differ for reads?
+- Does pre-vote fully fix disruptive servers?
+- How do election restriction, the commitment rule, and partitions fit together in the in-scope Raft material?
+- Why should locks not be held while sending RPCs?
+
+#### Study summary
+- For course logistics, Homework 4 is a leader-election and heartbeat assignment due October 9 at 11:59pm, and the midterm covers lectures 1–8 through primary-backup replication.
+- Primary-backup replication works by replaying a primary's log on a backup, but failure detection is ambiguous because silence can mean crash, partition, or slowness.
+- Wrongly promoting a backup creates split brain, and an external arbiter avoids that only by introducing a single point of failure.
+- Consensus is needed so a group can agree without a special machine, and the lecture contrasts its majority-progress goal with 2PC's all-participant atomic commitment and blocking coordinator failure.
+- The practical use of consensus is a replicated state machine: replicas apply the same deterministic commands in the same order and therefore reach the same state.
+- Consensus maintains this invariant by agreeing on each command in the replicated log, one slot at a time.
+- Nondeterminism must be resolved before replication by logging the leader's concrete random or time-derived result.
+- The system model includes ordinary crashes, unreliable and reordered messages, partitions, and the inability to distinguish a crash from slowness.
+- FLP is the fundamental limit to remember: in a fully asynchronous system, deterministic consensus cannot guarantee termination if even one process can crash.
+- FLP formalizes why deterministic consensus cannot guarantee termination in every fully asynchronous execution when even one process may crash.
+- The practical interpretation of FLP is not that consensus is impossible, but that practical systems guarantee safety while making progress conditional on reasonable network behavior.
+- Safety is a finite-prefix bad-event property, while liveness concerns eventual decisions or client responses and can be lost without a safety violation.
+- Raft's safety arguments rely on quorum intersection, with the shared server carrying earlier decision information forward.
+- The core quorum calculations are majority size equal to floor(n divided by 2) plus 1 and cluster size equal to 2f plus 1 to tolerate f failures.
+- Unanimity is maximally restrictive, while majority is the smallest quorum with guaranteed overlap and a better fault-tolerance tradeoff.
+- Raft emphasizes understandability through separate leader-election, log-replication, and safety components, supplemented by a strong leader.
+- Every Raft server is a follower, candidate, or leader, and normal operation uses one leader with all client requests and log flow directed through it.
+- Terms are consecutive numbered periods that begin with elections, produce a leader if successful, or end in a split vote followed by a new election.
+- Raft organizes time into terms, each beginning with an election and allowing at most one leader, although a split vote can leave a term leaderless.
+- Term comparison prevents stale servers from acting: larger terms force updates and step-downs, while smaller-term requests are rejected.
+- Leader election consists of four candidate-start steps, a majority vote over the full cluster, and one vote per server per term.
+- Election safety also requires persisting currentTerm and votedFor so crashes cannot cause a server to vote twice in one term.
+- Randomized election timeouts address split-vote liveness problems more robustly than fixed rankings.
+- The key timing relationship is broadcastTime much less than electionTimeout much less than MTBF, so heartbeats arrive before followers time out while failures remain rare.
+- For Homework 4, use randomized 400–800 millisecond timeouts under the 10-heartbeats-per-second tester limit, meet the 5-second failover requirement, and reset timers only for valid heartbeats or granted votes.
+- Use randomized election timeouts and reset the timer only for a granted vote or valid AppendEntries from the current leader.
+- A split vote can leave a term leaderless, but a later randomized election can advance to a higher term and elect a leader.
+- The quorum formula floor(n/2)+1 explains why odd-sized clusters provide more fault tolerance per added server than even-sized clusters.
+- The Ledgerline incident showed that a four-node 2/2 multi-site layout can be unavailable for 47 minutes, while a three-site 2/2/1 layout survives one site loss at the cost of higher write latency.
+- Leader replication starts with a local log append, continues with parallel AppendEntries RPCs, and ends with state-machine application after safe replication.
+- AppendEntries maintains consistency through prevLogIndex and prevLogTerm, rejecting mismatches and replacing conflicting follower suffixes.
+- The log matching property says a matching index and term imply an identical prefix, with successful AppendEntries preserving that property by induction.
+- Leaders repair divergent followers by starting nextIndex optimistically, decrementing it after failures, and retrying until the logs match.
+- Log repair uses nextIndex backtracking to find a matching prefix, then removes conflicting suffix entries and appends the leader's entries.
+- matchIndex drives commitment, while commitIndex communicates the highest known committed position and lastApplied tracks local state-machine execution.
+- In the worked example, index 5 is committed on four servers, index 6 is not committed on only two, and all earlier indexes are committed once index 5 is committed.
+- The election restriction compares last terms before lengths, so a shorter term-3 log can defeat a longer term-2 log and the longest log is not guaranteed to win.
+- C's term-5 leadership safely replaces B's uncommitted term-3 index-6 entry because committed index 5 is already present in C's log.
+- Leader completeness follows because any later election majority overlaps the majority that stored a committed entry, and the voting restriction forces the winning candidate to contain that entry.
+- Leader completeness follows from the overlap between the majority storing a committed entry and the majority needed to elect a future leader.
+- The critical commitment distinction is that only current-term entries can be directly committed by counting replicas, while earlier entries commit indirectly behind them.
+- Figure 8 demonstrates that an old-term entry on a majority can be overwritten, which is why the naive majority-only rule is unsafe.
+- A new leader's no-op creates a current-term entry that commits the earlier log prefix and helps the leader discover committed state.
+- Only currentTerm, votedFor, and the log must be persisted before RPC responses; other progress and application state is volatile.
+- Restarted servers rebuild volatile state, receive commitment information again from the leader, and replay the log to rebuild the basic state machine.
+- During a partition, the majority-side leader E can commit client 2's command, while minority-side leader B cannot commit client 1's command or reply.
+- The main exam and homework risks are mishandling the up-to-date election rule, applying the old-term commitment rule, and failing to persist votedFor.
+- The central safety invariant is quorum overlap: an older isolated leader may exist but cannot commit without a majority, and a higher-term leader repairs the conflicting suffix after healing.
+- An unacknowledged write can be overwritten without violating Raft safety, but the client must retry through the new leader.
+- Unique client IDs, command serial numbers, and saved responses make retries safe by returning prior results instead of re-executing duplicates.
+- Linearizable reads require a majority-based leadership check such as ReadIndex, while lease-based reads depend on bounded clock drift.
+- Pre-vote prevents an isolated node from inflating its term in the common case, but subtle check-quorum and membership interactions remain.
+- Direct membership changes are unsafe because old and new majorities may be disjoint; joint consensus requires both majorities until the new configuration commits.
+- Single-server membership changes and non-voting learners are practical simplifications, with an own-term commitment condition for a new leader.
+- Paxos uses the same majority-overlap principle through prepare and accept phases, while Multi-Paxos applies repeated instances to log slots and Raft offers a more explicitly specified strong-leader formulation.
+- Multi-Paxos is many per-slot Paxos instances optimized by a stable leader, while Raft is a closely related but more completely specified strong-leader design.
+- The main algorithmic contrast is Raft's ordered, hole-free prefix log versus Multi-Paxos's independently decided slots that may have gaps.
+- Raft and Paxos share 2f+1 crash-failure tolerance, asynchronous safety, partial-synchrony liveness, and similar normal-case majority-round performance, but Raft's single leader can limit scalability.
+- Production examples show that consensus correctness does not automatically extend to locks, read modes, client agents, transactions, or other surrounding system components.
+- CockroachDB uses Multi-Raft with one group per range, leaseholder reads, coalesced heartbeats, and an additional protocol for cross-range transactions.
+- Snapshot compaction independently stores each server's committed state, records index, term, and configuration metadata, and discards covered log entries.
+- InstallSnapshot repairs followers whose missing log entries have already been compacted, and copy-on-write allows snapshot creation without stopping service.
+- The immediate logistics are Homework 4 due October 12 at 11:59pm, Homework 5 released October 13 with its due date undecided, and a lecture 1–9 midterm on October 22 in Larkin Hall 150.
+- Study lectures 1 through 9 for the midterm, including today's election, replication, election-restriction, commitment-rule, partition, and membership-change material.
+- Do not prioritize snapshots, log compaction, or Thursday's BFT lecture for the midterm; BFT belongs on the final.
+- Remember the exam logistics: one double-sided letter-size sheet is allowed, but laptops and phones are not.
+- Practice with the midterm when Ana posts it by Friday, solve the problems before consulting solutions, and use the Sunday review session if possible.
+- Read PBFT sections 1 through 4 before Thursday and understand the unanswered reason for the 2f+1 versus 3f+1 server-count difference.
+- Use the optional Raft membership-change and log-compaction readings for deeper preparation if time permits.
+- Plan around the different office-hour schedules and do not assume the review-session recording will be available.
+- Prepare to revisit leases versus ReadIndex and pre-vote next Tuesday, and remember not to hold locks while sending RPCs.
+
+#### Action items (structured)
+- Students: Students should keep recording lectures locally because the official lecture capture has been unreliable.
+- Me: Me will share the personal recording if the official lecture capture breaks again.
+- Students: Students must complete and submit Homework 4, implementing leader election and heartbeat-only AppendEntries in the Go skeleton. (deadline: Friday, October 9, at 11:59pm)
+- Kofi: Kofi will post the updated office-hours information on Ed.
+- Kofi: Kofi will post a practice midterm on Ed. (deadline: Friday)
+- Kofi: Kofi will announce the review-session time after confirming the room. (deadline: end of class)
+- Speaker 1: The instructor will hold the announced extra office hours on Wednesday, October 7, from 3:00–4:30pm in Whitaker 318.
+- Students: Students should attend Thursday's guest lecture on Byzantine fault tolerance.
+- Speaker 1: The instructor will clarify exactly what is on the midterm at the end of today's class. (deadline: end of today's class)
+- Course staff are expected to make the lecture capture available by tonight, although this is not reliable. (deadline: tonight) [inferred]
+- The lecture capture is expected by tonight, although it may be unreliable. [inferred]
+- Homework 4 is due Friday, October 9, at 11:59pm. [inferred]
+- The practice midterm will be posted on Ed by Friday. [inferred]
+- The midterm takes place Thursday, October 22, during normal class time. [inferred]
+- Prepare to state FLP in one or two sentences and explain how practical systems work around its limitation.
+- Study the definitions of safety and liveness and identify the property Raft guarantees unconditionally.
+- Practice the majority-quorum formula and the 2f plus 1 relationship until the calculations are automatic.
+- For Homework 4, use randomized election timeouts around 400–800 milliseconds rather than the paper's 150–300 millisecond range.
+- Keep the Homework 4 heartbeat rate at no more than 10 heartbeats per second per server.
+- Ensure Homework 4 elects a new leader within 5 seconds after the old leader fails. (deadline: within 5 seconds of the old leader failing)
+- Persist currentTerm and votedFor to disk before responding to a vote.
+- Reset the election timer only after receiving valid AppendEntries from the current leader or granting a vote, not after rejecting a RequestVote.
+- Avoid holding a lock while sending an RPC in the Homework 4 implementation.
+- The Homework 4 tester requires a new leader to be elected within 5 seconds of the old leader failing. [inferred]
+- Use randomized election timeouts instead of hardcoding 500 ms in the homework so split-vote tests do not hang.
+- Keep the homework recommendation of 400–800 ms separate from the paper's 150–300 ms election-timeout range.
+- Correct the notes to record that four nodes tolerate one failure, not two.
+- Implement all of the listed AppendEntries arguments in homework 5.
+- Write the log matching property down word for word.
+- Implement the term-skipping backup optimization for Homework 5 so a far-behind follower can report its conflicting term and first index instead of forcing one-index-at-a-time retries. [inferred]
+- Practice determining which of five logs can become leader using the last-term-first, then-length up-to-date comparison.
+- Write the current-term-only commitment rule word for word.
+- Persist currentTerm, votedFor, and the log to stable storage before responding to any RPC.
+- Implement the commitment check so a previous-term entry is not committed solely because it is on a majority and becomes committed only indirectly after a current-term entry commits. [inferred]
+- Implement the client-ID and serial-number deduplication table in the Homework 5 key-value component.
+- Devin: Devin should raise the unresolved pre-vote interactions with check-quorum and membership changes in office hours tomorrow or remind the lecturer to revisit them next week. (deadline: tomorrow, or next week if reminded)
+- Review why configurations cannot be switched directly for the exam; reproducing the joint-consensus protocol step by step is not required.
+- The pre-vote edge case was deferred to office hours tomorrow or to next week if the lecturer is reminded. [inferred]
+- Speaker 1: Correct the CockroachDB range-size slide because the 64 MB value is outdated.
+- Speaker 1 and Kofi: Discuss whether Homework 5 should be moved to after the midterm.
+
+#### Decisions (structured)
+- Homework 4 is limited to Raft leader election and heartbeats: AppendEntries uses empty entries, while log replication and persistence belong to Homework 5.
+- Kofi's office hours move from Wednesdays 2–4pm to Thursdays 3–5pm in Whitaker 214 starting this week.
+- The midterm is scheduled for Thursday, October 22 during normal class time in Larkin Hall 150 and covers lectures 1–8 through primary-backup replication.
+- The instructor's Thursday office hours are canceled and replaced by extra office hours on Wednesday, October 7, from 3:00–4:30pm in Whitaker 318.
+- Thursday's Lecture 10 will be taught by Dr. Joanne Whitfield and will cover Byzantine fault tolerance.
+- The exam will cover the FLP statement and its implications, but not the proof or the bivalent-configuration argument.
+- Safety and liveness definitions, along with which property Raft guarantees unconditionally, are designated as exam material.
+- The lecture will cover election, replication, safety, partitions, limited membership changes, and comparisons with Paxos and real systems, while deferring snapshots and log compaction to homework 6 and a later lecture.
+- Ledgerline moved its coordination service to three sites—2 nodes in Virginia, 2 in Ohio, and 1 in a third region, for 5 nodes—to survive loss of a whole data center.
+- The exam will test the election restriction, the up-to-date comparison using last term first and then length, and leader completeness.
+- The exact lecture example will not be reused on the exam; the instructor said the exam will use different numbers.
+- The exam will test the current-term-only commitment rule and the Figure 8 scenario.
+- Homework 4's deadline was moved from Friday to Monday, October 12, at 11:59pm. (owner: Speaker 1)
+- Homework 4 late days are counted from the new Monday-night deadline rather than from Friday. (owner: Speaker 1)
+- Homework 5 remains scheduled for release on Tuesday, October 13, and its due date was not changed in this discussion. (owner: Speaker 1)
+- The midterm remains on Thursday, October 22, during class time, in Larkin Hall 150. (owner: Speaker 1)
+- The midterm coverage was expanded from lectures 1–8 to lectures 1–9 by including the current lecture. (owner: Speaker 1)
+- The midterm scope was expanded to lectures 1 through 9 by adding the current lecture.
+- The midterm excludes log compaction, snapshots, and lecture 10 on Byzantine fault tolerance; BFT will instead be covered on the final.
+- Students may bring one double-sided letter-size notes sheet, handwritten or typed, but may not use laptops or phones.
+- The midterm review session is scheduled for Sunday, October 18, from 4:00 to 6:00 p.m. in Whitaker 120.
+- Ana, rather than Kofi, will post the practice midterm on Ed by this Friday.
+- Speaker 1's extra office hours are Wednesday from 3:00 to 4:30 p.m. in Whitaker 318, with no office hours from Speaker 1 on Thursday.
+- Kofi's office hours are now Thursdays from 3:00 to 5:00 p.m. in Whitaker 214 rather than Wednesdays.
+- Leases versus ReadIndex and the question of whether pre-vote fixes disruptive servers will be discussed next Tuesday.
+
+#### Open questions (structured)
+- Whether the Thursday guest lecture is included on the midterm remains unanswered in this chunk. [open]
+- The review session's time and room are still unconfirmed. [open]
+- The chunk motivates consensus as the answer to uncertain failure detection but does not yet show the concrete Raft procedure for deciding leadership. [open]
+- What is the fuller reason for using odd-sized clusters beyond the partial explanation that the numbers work out nicely? [open]
+- How should the four-node example be reconciled with the earlier rule that the number of tolerable failures equals n minus the quorum size? [open]
+- What exact safety restriction do lastLogIndex and lastLogTerm impose on granting a RequestVote? [open]
+- What exact condition makes an entry safely replicated and therefore committed? [open]
+- What is the full precise commitment rule for entries from old terms beyond the majority-replication intuition? [open]
+- How does the up-to-date comparison formally force a candidate that wins an overlapping majority to contain committed index 5? [open]
+- Which specific check-quorum and membership-change cases can still cause a pointless election despite pre-vote? [open]
+- What are the detailed tradeoffs between ReadIndex and leases for serving linearizable reads? [open]
+- Will Homework 5 be due after the midterm instead of immediately before it? [open]
+- Which CockroachDB default range size applies to the relevant version: the slide's 64 MB or the newer larger value the lecturer believes is about 512 MB? [open]
+- Will the midterm review session be recorded? [open]
+- Why does Byzantine fault tolerance require 3f+1 servers when Raft requires 2f+1 for f crash failures? [open]
+- How do leases compare with ReadIndex for reads? [open]
+- Does pre-vote fully fix disruptive servers? [open]
+- Why are direct membership changes unsafe? [open]
+- How do election restriction, the commitment rule, and partitions relate within the in-scope Raft material? [open]
+- Why should locks not be held while sending RPCs? [open]
+
+#### Risks (structured)
+- [medium] The official lecture capture may be unavailable because it has been flaky.
+- [high] Promoting a backup when the primary is only slow or network-isolated can create split brain, with two primaries accepting writes and divergent data.
+- [high] An external test-and-set arbiter is a single point of failure; if it fails, no server can become primary, and replicating it creates another agreement problem.
+- [high] Using two-phase commit for fault-tolerant consensus can block when the coordinator crashes after participants vote yes.
+- [high] A state machine that reads the clock or uses randomness can make replicas diverge unless the nondeterministic result is recorded in the log.
+- [high] Server crashes may erase in-memory state, while messages may be delayed, dropped, duplicated, or reordered.
+- [high] A network partition can leave groups of servers communicating internally but unable to communicate with the rest of the system.
+- [high] FLP limits deterministic consensus in a fully asynchronous system because even one possible crash prevents a guarantee of termination.
+- [high] A missing message leaves primary-backup unable to distinguish a crashed server from a slow server, creating a fundamental failure-detection uncertainty.
+- [high] In a fully asynchronous system with even one possible crash, a deterministic consensus algorithm cannot guarantee termination in every execution.
+- [high] Partitions and extreme message delays can cause Raft to stall and lose liveness even though its safety property remains intact.
+- [medium] Practical progress depends on the network behaving reasonably and messages eventually arriving within a timeout.
+- [medium] A unanimity quorum has zero fault tolerance for liveness because one unavailable or stubborn participant can prevent a decision.
+- [high] Without randomized election timeouts, synchronized candidates can repeatedly split votes and prevent a leader from ever being elected.
+- [high] A fixed ranking scheme can block availability when the highest-priority server is flaky, partitioned, or too far behind in its log.
+- [high] Failing to persist a vote before a crash can let a server vote for a second candidate in the same term and create two leaders.
+- [medium] A timeout range that is too narrow, such as 150–151 milliseconds, can cause repeated split votes and elections lasting seconds.
+- [high] Using the paper's 150–300 millisecond election timeout with 100 millisecond heartbeats under the Homework 4 tester can cause spurious elections.
+- [high] Resetting the election timer for rejected RequestVote messages lets a candidate with a bad log keep other servers from timing out and block progress.
+- [medium] Hardcoding a 500 millisecond timeout can cause the Homework 4 split-vote test to hang.
+- [high] Holding a lock while sending an RPC is identified as the most common Homework 4 bug.
+- [high] Hardcoding a 500 ms election timeout can make split-vote tests hang.
+- [high] Resetting the election timer for rejected RequestVote messages can let a server with a bad log block progress by preventing timeouts.
+- [medium] Repeated split votes are not guaranteed to terminate under FLP, even though the probability of repeated collisions falls rapidly.
+- [high] A four-node cluster split 2/2 across two data centers can lose both leader election and commit availability because neither side has the majority of three.
+- [medium] Adding a fourth server gives no additional fault tolerance over three servers while increasing the quorum requirement.
+- [medium] Using three regions improves site-failure resilience but can increase write latency because commits may wait for a cross-region round trip.
+- [medium] Crashes can leave followers missing entries or carrying extra uncommitted entries from an old term, requiring log repair.
+- [medium] Overwriting conflicting follower-log entries appears dangerous, although the election restriction is stated to protect committed entries.
+- [medium] Crashes, slow followers, and dropped packets can make the leader retry AppendEntries indefinitely before replication completes.
+- [high] Allowing a leader that lacks committed entries to force its log onto other servers could erase committed entries and violate safety.
+- [medium] Backing up nextIndex one entry at a time can be too slow for a far-behind follower and cause the backup test to time out.
+- [high] Marking a previous-term entry committed merely because it is on a majority can let a later leader erase it after a client has been told success, violating safety.
+- [high] Failing to persist votedFor can produce two leaders in the same term and fail the Figure 8 unreliable test.
+- [medium] During a partition, commands sent to the minority-side old leader can remain uncommitted and leave the client waiting indefinitely.
+- [medium] Replaying the entire log after a restart is safe in the basic version but can be slow.
+- [medium] A partition can create an apparent split brain with different entries at the same index, although safety holds only because the older-term leader lacks a majority.
+- [high] An isolated old leader can return stale local reads even when it does not commit incorrect writes, violating linearizability.
+- [high] If a committed command's response is lost and the client retries without deduplication, a non-idempotent operation such as withdrawing 100 dollars can execute twice.
+- [medium] A flaky isolated server can inflate its term and trigger an unnecessary election or leader step-down, creating a liveness hiccup even though safety remains intact.
+
+#### Follow-up draft
+Quick recap:
+
+This session linked primary-backup’s crash-versus-slow ambiguity and split brain to consensus and replicated state machines: consensus chooses each ordered log slot, and identical initial state plus identical commands in identical order yields identical replica state. FLP says deterministic consensus cannot guarantee termination in a fully asynchronous system with even one possible crash, so Raft preserves safety through quorum overlap but may lose liveness during partitions. Memorize majority = floor(n/2)+1, tolerating f crash failures requires N = 2f+1, election safety means at most one leader per term, log freshness compares last term before length, and only a current-term entry replicated on a majority is directly committed; Homework 4 covers only elections and empty AppendEntries heartbeats and is due October 12 at 11:59pm, while the midterm is Thursday, October 22, in Larkin Hall 150 over lectures 1–9, excluding snapshots, log compaction, and BFT.
+
+That's the recap.

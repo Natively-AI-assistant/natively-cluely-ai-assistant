@@ -1,16 +1,10 @@
 import { useEffect, useState } from 'react';
+import { applyResolvedTheme } from '../lib/themeTransition.mjs';
 
 type ResolvedTheme = 'light' | 'dark';
 
-const THEME_CACHE_KEY = 'natively_resolved_theme';
-
 const getResolvedTheme = (): ResolvedTheme =>
     document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-
-const applyResolvedTheme = (resolved: ResolvedTheme): void => {
-    document.documentElement.setAttribute('data-theme', resolved);
-    localStorage.setItem(THEME_CACHE_KEY, resolved);
-};
 
 const subscribers = new Set<(theme: ResolvedTheme) => void>();
 let unsubscribeThemeChanged: (() => void) | null = null;

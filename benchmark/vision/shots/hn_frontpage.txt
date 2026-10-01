@@ -1,0 +1,332 @@
+Hacker News
+new
+|
+past
+|
+comments
+|
+ask
+|
+show
+|
+jobs
+|
+submit
+login
+1.
+Fujitsu launches made-in-Japan next-generation CPU FUJITSU-MONAKA
+(
+global.fujitsu
+)
+343 points
+by
+my123
+5 hours ago
+|
+hide
+|
+132 comments
+2.
+hister
+(
+github.com/asciimoo
+)
+66 points
+by
+bookofjoe
+1 hour ago
+|
+hide
+|
+18 comments
+3.
+Rate limits on GitLab.com are changing
+(
+about.gitlab.com
+)
+78 points
+by
+darkwater
+2 hours ago
+|
+hide
+|
+72 comments
+4.
+CrowdSec Source Code Leak
+(
+crowdsec.net
+)
+47 points
+by
+eccgecko
+2 hours ago
+|
+hide
+|
+22 comments
+5.
+Whoisinspace.com/
+(
+whoisinspace.com
+)
+75 points
+by
+Egg-Man
+2 hours ago
+|
+hide
+|
+32 comments
+6.
+Launch HN: Skillsync (YC W26) – AI chat sessions made portable across agents
+13 points
+by
+cat-whisperer
+1 hour ago
+|
+hide
+|
+5 comments
+7.
+How GLM built its own inference infrastructure
+(
+z.ai
+)
+271 points
+by
+whiteros_e
+9 hours ago
+|
+hide
+|
+221 comments
+8.
+Zettascale (YC S24) Is Hiring ASIC/FPGA Engineers to Build Chips for ASI
+(
+zscc.ai
+)
+1 hour ago
+|
+hide
+9.
+Why I didn’t sign the Fields medallists’ letter
+(
+gowers.wordpress.com
+)
+88 points
+by
+simianwords
+7 hours ago
+|
+hide
+|
+137 comments
+10.
+Grand MS-DOS Gaming General MIDI Showdown
+(
+johnnovak.net
+)
+35 points
+by
+ibobev
+2 hours ago
+|
+hide
+|
+1 comment
+11.
+One Year of Sponsored Servo Development
+(
+servo.org
+)
+296 points
+by
+AshleysBrain
+9 hours ago
+|
+hide
+|
+125 comments
+12.
+LLM Classification Is Feature Engineering
+(
+minimallysufficient.com
+)
+45 points
+by
+minsufficient
+2 hours ago
+|
+hide
+|
+10 comments
+13.
+CCC invites all model citizens to 40C3
+(
+ccc.de
+)
+249 points
+by
+antonly
+9 hours ago
+|
+hide
+|
+102 comments
+14.
+The American Religion of Self-Storage Facilities
+(
+newyorker.com
+)
+80 points
+by
+pseudolus
+4 hours ago
+|
+hide
+|
+132 comments
+15.
+Show HN: Aclif – Agent CLI framework: one grammar, canonical names across SaaS
+(
+aclif.ai
+)
+11 points
+by
+chris_marino
+1 hour ago
+|
+hide
+|
+5 comments
+16.
+Running Ubuntu on the Lenovo IdeaPad Duet
+(
+vhaudiquet.fr
+)
+9 points
+by
+vhaudiquet
+1 hour ago
+|
+hide
+|
+1 comment
+17.
+Show HN: Share your AI Setup, Learn from others
+(
+mysetup.ai
+)
+90 points
+by
+steveybrown
+5 hours ago
+|
+hide
+|
+54 comments
+18.
+Vinix – A modern operating system written in V
+(
+vinix-os.org
+)
+42 points
+by
+hggh
+2 hours ago
+|
+hide
+|
+27 comments
+19.
+The Return of Sail Power: Cargo Ships Are Turning Back to the Wind
+(
+gcaptain.com
+)
+125 points
+by
+gumby
+13 hours ago
+|
+hide
+|
+92 comments
+20.
+Infinite-Parameter LLMs: Generating and Adapting Weights from Live Data
+(
+arxiv.org
+)
+7 points
+by
+Betelbuddy
+1 hour ago
+|
+hide
+|
+discuss
+21.
+Economic Policy for AGI
+(
+deepmind.com
+)
+4 points
+by
+alphabetatango
+49 minutes ago
+|
+hide
+|
+discuss
+22.
+Mastering Layout Engines in Graphviz: Dot vs. Neato vs. Twopi vs. Circo
+(
+visual-paradigm.com
+)
+21 points
+by
+vismit2000
+3 hours ago
+|
+hide
+|
+3 comments
+23.
+Artificial intelligence now beats some of the best human forecasters
+(
+economist.com
+)
+78 points
+by
+ddp26
+2 hours ago
+|
+hide
+|
+66 comments
+24.
+My temporary PHP fix from 2014 has nearly 20M installs. Today I'm deprecating it
+(
+jakeasmith.com
+)
+285 points
+by
+jakeasmith
+12 hours ago
+|
+hide
+|
+80 comments
+25.
+Towards Self-Driving Codebases
+(
+detail.dev
+)
+5 points
+by
+wilhelmklopp
+1 hour ago
+|
+hide
+|
+1 comment

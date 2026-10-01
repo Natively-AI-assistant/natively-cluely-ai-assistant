@@ -30,6 +30,11 @@
 // Functionally equivalent today, but do not remove the extension — it is
 // the only thing preventing a repeat of the orchestrator.mjs shadowing bug.
 import { loadState, saveState } from './persistence.ts';
+import { CARDS, msUntilCardAllowed } from '../cards/cardPolicy.mjs';
+import type { CardId, Ledger } from '../cards/cardPolicy.mjs';
+
+/** Minimum gap between one card closing and the next opening (toaster policy §3.2). */
+export const CARD_SPACING_MS = 60_000;
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -41,8 +46,12 @@ export type ToasterId =
   | 'trial_promo'
   | 'quiet_window'
   | 'support'
-  | 'ads'
-  | 'review_prompt';
+  | 'review_prompt'
+  | 'natively_api_new'
+  | 'natively_api_existing'
+  | 'profile_ad'
+  | 'jd_ad'
+  | 'max_ultra';
 
 export interface OrchestratorState {
   version: string;
@@ -72,6 +81,12 @@ export interface OrchestratorState {
   __rev?: number;
 }
 
+/** What subscribers see: the state plus which card, if any, a DEV override forced. */
+export interface OrchestratorSnapshot extends OrchestratorState {
+  forcedToasterId: ToasterId | null;
+  __rev?: number;
+}
+
 export interface UserState {
   isPremium: boolean;
   hasProfile: boolean;
@@ -80,12 +95,34 @@ export interface UserState {
   extensionConnected: boolean;
   extensionSupported: boolean;
   permsShown: boolean;
-  macTCCBlocked: boolean;
+  /** A required permission is missing and user-fixable (permissionAttentionPolicy.mjs). */
+  permissionsNeedAttention: boolean;
   seenProfileOnboarding: boolean;
   seenModesOnboarding: boolean;
   activeModeSet: boolean;
   donationShouldShow: boolean;
   isV2_8_OrNewer: boolean;
+  /** Has an AI route of its own (src/lib/trialPolicy.mjs hasOwnAiKey). */
+  hasOwnAiKey: boolean;
+  /** Licence plan: 'free' without one; 'other' for lifetime/legacy plans. */
+  planTier: 'free' | 'pro' | 'max' | 'ultra' | 'other';
+  hasJD: boolean;
+  /** Highest Natively quota use this cycle, 0–100 (0 without a Natively key). */
+  nativelyQuotaPct: number;
+  /** When the current Natively quota cycle ends (ms): Max/Ultra "acted" retires until then. */
+  nativelyQuotaResetsAt: number | null;
+  /**
+   * The premium ad components are in this build (src/premium/index.tsx). An
+   * ad stage without its component would hold the single card slot while
+   * rendering nothing, so ads only schedule when this is true.
+   */
+  adsAvailable: boolean;
+  /** A free trial was ever claimed on this device (one per device). */
+  trialClaimed: boolean;
+  /** The main-process card ledger (cards:get); null until it has loaded. */
+  cardLedger: Ledger | null;
+  /** The Trial ended card is on screen: nothing else may open. */
+  trialEndedOpen: boolean;
 }
 
 export interface Triggers {
@@ -106,6 +143,12 @@ export interface StageConfig {
   onceEver?: boolean;
   cooldownMs?: (s: UserState) => number;
   reEligibility?: (s: UserState, completed: Record<string, number>) => boolean;
+  /**
+   * Opt-in: when reEligibility turns from false to true, take the stage out of
+   * `skipped` so a persisted auto-skip cannot hide it (the permissions card).
+   * Off by default so a skipped marketing card is never re-armed this way.
+   */
+  reopensWhenReEligible?: boolean;
   customPredicate?: (ctx: Ctx) => boolean;
   /** Other stages that must be completed OR skipped before this can fire. */
   requiresStages?: ToasterId[];
@@ -116,6 +159,13 @@ export interface StageConfig {
    * triggered by separate user actions (profile_intelligence, modes_manager).
    */
   isGateOnly?: boolean;
+  /**
+   * The card-ledger entry this stage is (src/lib/cards/cardPolicy.mjs). A
+   * stage with a card also obeys the ledger (strikes, retirement), its class
+   * rules (promo: day one and the 72 h budget) and one card of its class per
+   * launch.
+   */
+  card?: CardId;
 }
 
 export interface Ctx {
@@ -141,8 +191,7 @@ export type OrchestratorEvent =
   | { type: 'usage:tick'; deltaMs: number }
   | { type: 'foreground:change'; isForeground: boolean }
   | { type: 'meeting:state'; isActive: boolean }
-  | { type: 'user-state:change'; patch: Partial<UserState> }
-  | { type: 'queue:set'; queue: ToasterId[] };
+  | { type: 'user-state:change'; patch: Partial<UserState> };
 
 type Listener = (state: OrchestratorState) => void;
 
@@ -156,12 +205,21 @@ export const DEFAULT_USER_STATE: UserState = {
   extensionConnected: false,
   extensionSupported: true,
   permsShown: false,
-  macTCCBlocked: false,
+  permissionsNeedAttention: false,
   seenProfileOnboarding: false,
   seenModesOnboarding: false,
   activeModeSet: false,
   donationShouldShow: false,
   isV2_8_OrNewer: true,
+  hasOwnAiKey: false,
+  planTier: 'free',
+  hasJD: false,
+  nativelyQuotaPct: 0,
+  nativelyQuotaResetsAt: null,
+  adsAvailable: false,
+  trialClaimed: false,
+  cardLedger: null,
+  trialEndedOpen: false,
 };
 
 // ─── Orchestrator ─────────────────────────────────────────────────
@@ -181,11 +239,16 @@ export class OnboardingOrchestrator {
   // unrelated.
   private revision = 0;
   // Toasters the user explicitly dismissed THIS session. Not persisted — a
-  // genuinely-blocked permission (macTCCBlocked) is still re-raised on the next
+  // permission that still needs attention is re-raised on the next
   // launch. This exists so an explicit dismiss (the X button) is not undone on
   // the very next RAF frame by a still-true reEligibility predicate, which is
   // what made the X appear to do nothing for a re-eligible stage.
   private dismissedThisSession = new Set<ToasterId>();
+  // Card pacing for THIS launch (not persisted; toaster policy §3.2).
+  // performance.now() when the last rendered card closed, for the spacing.
+  private lastCardClosedAt: number | null = null;
+  private onboardingShownThisLaunch = false;
+  private promoShownThisLaunch = false;
 
   constructor() {
     this.state = loadState();
@@ -200,10 +263,26 @@ export class OnboardingOrchestrator {
     // Sort configs by `order` and seed the queue
     this.stageConfigs = [...stageConfigs].sort((a, b) => a.order - b.order);
 
-    // Build queue if not already populated (e.g. cold launch with no legacy state)
-    if (this.state.queue.length === 0) {
-      this.state.queue = this.stageConfigs.map(c => c.id);
+    // A user-state push can land before start() (App.tsx starts after an async
+    // import; the permission check is an async IPC call). Replay its un-skips
+    // against the launch baseline so arrival order does not matter.
+    this.unskipOnReEligibility(DEFAULT_USER_STATE, this.userState);
+
+    // The queue always follows the catalog. It used to be built only when
+    // empty, so a queue persisted by an older build never picked up stages
+    // added since (the toaster-policy ad stages) and kept ones removed since.
+    // Completion and skips live in `completed` / `skipped`, not in the queue,
+    // so rebuilding it loses nothing.
+    this.state.queue = this.stageConfigs.map(c => c.id);
+
+    // A card's waits live in the card ledger. A skip persisted by an older
+    // build (skipWhen) or by a "Not now" would otherwise hide the card for
+    // good, long after its strike gap ran out.
+    let unskippedCard = false;
+    for (const c of this.stageConfigs) {
+      if (c.card && this.state.skipped.delete(c.id)) unskippedCard = true;
     }
+    if (unskippedCard) console.log('[Orchestrator] cleared persisted skips for card stages');
 
     // Bump startup count on first start per session
     if (!this._sessionStartTracked) {
@@ -242,12 +321,15 @@ export class OnboardingOrchestrator {
   // The bug lived in the orchestrator's own .mjs shim's comment history
   // (cf6a2f9) and was reintroduced by the round-1 revision-counter fix.
   // Cache key: revision counter (monotonically incremented by notify()).
-  private cachedSnapshot: OrchestratorState | null = null
+  private cachedSnapshot: OrchestratorSnapshot | null = null
   private cachedRevision = -1
 
-  getSnapshot(): OrchestratorState {
+  /** The card a DEV override forced into the slot (never persisted). */
+  private forcedToasterId: ToasterId | null = null;
+
+  getSnapshot(): OrchestratorSnapshot {
     if (this.cachedRevision !== this.revision || !this.cachedSnapshot) {
-      this.cachedSnapshot = { ...this.state, __rev: this.revision }
+      this.cachedSnapshot = { ...this.state, forcedToasterId: this.forcedToasterId, __rev: this.revision }
       this.cachedRevision = this.revision
     }
     return this.cachedSnapshot
@@ -330,20 +412,9 @@ export class OnboardingOrchestrator {
         break;
 
       case 'user-state:change':
-        this.userState = { ...this.userState, ...event.patch };
+        this.applyUserState(event.patch);
         break;
 
-      case 'queue:set':
-        if (this.state.activeToasterId) {
-          // Cannot mutate queue while a toaster is visible — caller must
-          // dismiss first. Silently ignore.
-          return;
-        }
-        this.state.queue = event.queue.filter(
-          id => !this.stageConfigs.some(c => c.id === id),
-        ).concat(event.queue);
-        this.persist();
-        break;
     }
     this.notify();
   }
@@ -440,6 +511,12 @@ export class OnboardingOrchestrator {
       ) continue;
 
       let delay = 0;
+      if (config.card) {
+        const wait = this.cardWaitMs(config.card, ctx);
+        if (wait === null) continue; // not this launch, or waiting for the ledger (an event re-arms)
+        delay = Math.max(delay, wait);
+      }
+      if (!config.isGateOnly) delay = Math.max(delay, this.spacingRemainingMs());
       if (triggers.requiresHomepageDuration != null) {
         delay = Math.max(delay, triggers.requiresHomepageDuration - ctx.homepageMountedFor);
       }
@@ -458,7 +535,8 @@ export class OnboardingOrchestrator {
       this.state.appInForeground &&
       this.state.homepageCurrentlyMounted &&
       !this.state.meetingActive &&
-      this.state.activeToasterId === null
+      this.state.activeToasterId === null &&
+      !this.userState.trialEndedOpen
     );
   }
 
@@ -509,6 +587,10 @@ export class OnboardingOrchestrator {
           }
           this.state.activeToasterId = id;
           this.state.lastShownTimes[id] = ctx.now;
+          if (config.card) {
+            if (CARDS[config.card]?.cls === 'onboarding') this.onboardingShownThisLaunch = true;
+            else this.promoShownThisLaunch = true;
+          }
           this.persist();
           this.notify();
           return; // single-slot invariant
@@ -554,15 +636,57 @@ export class OnboardingOrchestrator {
     // 6. Custom predicate (e.g. DonationManager fetch outcome)
     if (config.customPredicate && !config.customPredicate(ctx)) return false;
 
+    // 7. Spacing after the previous card, and the card ledger.
+    if (!config.isGateOnly && this.spacingRemainingMs() > 0) return false;
+    if (config.card) {
+      const wait = this.cardWaitMs(config.card, ctx);
+      if (wait === null || wait > 0) return false;
+    }
+
     return true;
+  }
+
+  /** ms left of the gap after the last rendered card closed (0 = none). */
+  private spacingRemainingMs(): number {
+    if (this.lastCardClosedAt === null) return 0;
+    return Math.max(0, CARD_SPACING_MS - (performance.now() - this.lastCardClosedAt));
+  }
+
+  /**
+   * ms until this card may show (0 = now), or null when it cannot this launch:
+   * the ledger has not loaded, the card is retired, or its class already had
+   * its one card this launch.
+   */
+  private cardWaitMs(card: CardId, ctx: Ctx): number | null {
+    const ledger = ctx.userState.cardLedger;
+    if (!ledger) return null;
+    const cls = CARDS[card]?.cls;
+    if (!cls) return null;
+    if (cls === 'onboarding' ? this.onboardingShownThisLaunch : this.promoShownThisLaunch) return null;
+    return msUntilCardAllowed(ledger, card, ctx.now);
   }
 
   // ─── Toaster dismissal / skip ─────────────────────────────────
 
+  /**
+   * DEV overrides only (devOverrides.ts): put a card in the slot now, whatever
+   * its rules. It is still the one card on screen (refused while another is
+   * open), and it is marked forced so the host records no ledger outcome for
+   * it (toaster policy spec §10). Not persisted: a crash leaves nothing behind.
+   */
+  forceCard(id: ToasterId): boolean {
+    if (this.state.activeToasterId) return false;
+    if (!this.stageConfigs.some(c => c.id === id && !c.isGateOnly)) return false;
+    this.state.activeToasterId = id;
+    this.forcedToasterId = id;
+    this.notify();
+    return true;
+  }
+
   markDismissed(id: ToasterId): void {
     // Record the explicit dismiss for this session so the drain loop does not
     // instantly re-raise a re-eligible stage (e.g. permissions while
-    // macTCCBlocked is genuinely true) on the next animation frame.
+    // permissionsNeedAttention is genuinely true) on the next animation frame.
     this.dismissedThisSession.add(id);
     this.completeToaster(id, false);
   }
@@ -575,9 +699,12 @@ export class OnboardingOrchestrator {
     // Gate-only stages can be "completed" without being the active toaster
     // (they're auto-completed inside evaluateAndDispatch).
     if (this.state.activeToasterId !== id && this.state.activeToasterId !== null) return;
+    if (this.forcedToasterId === id) this.forcedToasterId = null;
     const ts = Date.now();
+    const cfg = this.stageConfigs.find(c => c.id === id);
+    if (cfg && !cfg.isGateOnly) this.lastCardClosedAt = performance.now();
     this.state.completed[id] = ts;
-    if (explicitSkip) this.state.skipped.add(id);
+    if (explicitSkip && !cfg?.card) this.state.skipped.add(id);
     this.state.activeToasterId = null;
 
     // Insert quiet_window after trial_promo (the 5th stage) to gate marketing.
@@ -609,8 +736,45 @@ export class OnboardingOrchestrator {
   // ─── User state injection ─────────────────────────────────────
 
   setUserState(patch: Partial<UserState>): void {
-    this.userState = { ...this.userState, ...patch };
+    this.applyUserState(patch);
     this.notify();
+  }
+
+  /**
+   * Merge a user-state patch. A persisted auto-skip must not outlive its
+   * reason: when a stage's reEligibility turns from false to true (a
+   * permission that broke after an earlier quiet launch), the stage leaves
+   * `skipped` so the scheduler gives it a deadline again. Without this, a
+   * long-time user whose other stages are all resolved never sees the card,
+   * because nothing else keeps the drain loop running. Only a transition
+   * un-skips, so a stage skipped while its reEligibility was already true
+   * (e.g. an explicit "Not now") stays skipped.
+   */
+  private applyUserState(patch: Partial<UserState>): void {
+    const before = this.userState;
+    this.userState = { ...before, ...patch };
+    this.unskipOnReEligibility(before, this.userState);
+    // "Trial ended" is exclusive: a card already open when it arrives leaves
+    // the slot without being completed. The host then records no outcome for
+    // it (interrupted), so it costs no strike and may show on a later launch.
+    if (!before.trialEndedOpen && this.userState.trialEndedOpen && this.state.activeToasterId) {
+      console.log('[Orchestrator] Trial ended took the slot from', this.state.activeToasterId);
+      this.state.activeToasterId = null;
+      this.forcedToasterId = null;
+      this.persist();
+    }
+  }
+
+  private unskipOnReEligibility(before: UserState, after: UserState): void {
+    let unskipped = false;
+    for (const config of this.stageConfigs) {
+      if (!config.reopensWhenReEligible || !config.reEligibility || !this.state.skipped.has(config.id)) continue;
+      if (!config.reEligibility(before, this.state.completed) && config.reEligibility(after, this.state.completed)) {
+        this.state.skipped.delete(config.id);
+        unskipped = true;
+      }
+    }
+    if (unskipped) this.persist();
   }
 
   getUserState(): UserState {

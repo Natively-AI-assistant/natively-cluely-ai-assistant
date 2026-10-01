@@ -49,6 +49,8 @@ export interface Meeting {
         speaker: string;
         text: string;
         timestamp: number;
+        /** Which of the other side's voices said it (speaker_2…), when known; see speaker_id. */
+        speakerId?: string;
     }>;
     usage?: Array<{
         type: 'assist' | 'followup' | 'chat' | 'followup_questions';
@@ -58,6 +60,13 @@ export interface Meeting {
         items?: string[];
     }>;
     calendarEventId?: string;
+    /**
+     * The calendar event as it was when the meeting was linked to it
+     * (calendarSessionMatch.ts CalendarEventSnapshot): title, times, link and
+     * attendees. Kept with the meeting because the calendar API only lists
+     * events that haven't ended; a follow-up written after the call needs them.
+     */
+    calendarEvent?: import('../services/calendar/calendarSessionMatch').CalendarEventSnapshot;
     source?: 'manual' | 'calendar';
     isProcessed?: boolean;
     summaryStatus?: SummaryStatus;
@@ -69,6 +78,17 @@ export interface Meeting {
  * not hold later SCHEMA migrations (notably v29's vec0 cosine rebuild) hostage.
  */
 const PAGE_COUNT_REPAIR_PENDING_KEY = 'pending_page_count_repair';
+
+/** A stored calendar_event_json, or undefined for none or anything malformed. */
+function parseCalendarEvent(json: unknown): Meeting['calendarEvent'] {
+    if (typeof json !== 'string' || !json) return undefined;
+    try {
+        const value = JSON.parse(json);
+        return value && typeof value === 'object' && typeof value.id === 'string' && Array.isArray(value.attendees) ? value : undefined;
+    } catch {
+        return undefined;
+    }
+}
 
 export class DatabaseManager {
     private static instance: DatabaseManager;
@@ -226,18 +246,54 @@ export class DatabaseManager {
      * produced by an `npm install` that ran under a Rosetta shell).
      */
     private reportInitFailure(error: unknown): void {
-        const err = error as NodeJS.ErrnoException;
-        const msg = err?.message || String(error);
-        const isArchMismatch =
-            err?.code === 'ERR_DLOPEN_FAILED' ||
-            /incompatible architecture|ERR_DLOPEN_FAILED|mach-o/i.test(msg);
+        // better-sqlite3 loads through the `bindings` package, which SWALLOWS the
+        // real dlopen error at each candidate path and then reports
+        // "Could not locate the bindings file. Tried: …" — a message that names a
+        // MISSING file even when the file is present and merely unloadable. The
+        // previous /incompatible architecture|ERR_DLOPEN_FAILED|mach-o/i test
+        // therefore never matched the most common genuine cause, so users hit the
+        // generic branch and never saw the rebuild guidance. See
+        // electron/lib/bindingFailure.cjs for the evidence.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { diagnoseBindingFailure } = require('../lib/bindingFailure.cjs');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { binaryArch } = require('../lib/nativeArch.cjs');
 
-        if (isArchMismatch) {
+        let diagnosis: { kind: string; path?: string; actual?: string; expected?: string; tried?: string[] };
+        try {
+            diagnosis = diagnoseBindingFailure(error, {
+                exists: (p: string) => fs.existsSync(p),
+                archOf: (p: string) => binaryArch(p),
+                processArch: process.arch,
+            });
+        } catch {
+            // Diagnosis must never be the thing that breaks startup reporting.
+            diagnosis = { kind: 'other' };
+        }
+
+        if (diagnosis.kind === 'arch-mismatch') {
+            const where = diagnosis.path ? `\n  Offending binary: ${diagnosis.path}` : '';
+            const what = diagnosis.actual
+                ? ` (binary is ${diagnosis.actual}, this app is ${diagnosis.expected})`
+                : '';
             console.error(
                 '[DatabaseManager] FATAL: native module (better-sqlite3) failed to load — the compiled ' +
-                'binary architecture does not match the Electron runtime. Local database is DISABLED ' +
+                `binary architecture does not match the Electron runtime${what}. Local database is DISABLED ` +
+                '(meeting history, modes, and notes will not persist this session).' + where + '\n' +
+                '  Fix: run `npm run rebuild:native` from a native (non-Rosetta) terminal, then restart the app.\n' +
+                '  If this is an INSTALLED app (not a dev checkout), you have the wrong build for your Mac — ' +
+                'download the arm64 DMG on Apple Silicon, or the standard DMG on Intel.'
+            );
+        } else if (diagnosis.kind === 'binding-missing') {
+            // Every candidate path was genuinely absent: a packaging/installation
+            // fault, NOT something a rebuild fixes. Saying "rebuild" here would send
+            // users down the wrong path.
+            console.error(
+                '[DatabaseManager] FATAL: native module (better-sqlite3) is MISSING from this build — no ' +
+                'binary exists at any of the paths it was looked for. Local database is DISABLED ' +
                 '(meeting history, modes, and notes will not persist this session).\n' +
-                '  Fix: run `npm run rebuild:native` from a native (non-Rosetta) terminal, then restart the app.'
+                `  Searched ${diagnosis.tried?.length ?? 0} path(s); first: ${diagnosis.tried?.[0] ?? 'n/a'}\n` +
+                '  This is an installation/packaging fault — reinstall the app.'
             );
         } else {
             console.error(
@@ -419,6 +475,46 @@ export class DatabaseManager {
     // Each version is applied exactly once, in order.
     // New migrations append a new `if (version < N)` block.
     // ============================================
+
+    /**
+     * Ensure the reserved '__profile_okf__' mode row exists.
+     *
+     * APPLIED UNCONDITIONALLY ON EVERY BOOT, NOT VERSION-GATED (live defect,
+     * 2026-09-13). This INSERT used to live inside the `version < 23` block. A
+     * live profile was observed at user_version 31 carrying v23's `pii` column
+     * but NOT this row, so the gate could never run again and the row could
+     * never come back. Every profile Knowledge Pack write then failed the
+     * knowledge_sources.mode_id -> modes(id) foreign key with "FOREIGN KEY
+     * constraint failed", and because ProfilePackBuilder.generateForProfile
+     * deliberately swallows its own errors (the OKF layer must never fail an
+     * ingest), ingest kept reporting success while the profile card layer
+     * silently never persisted a single row.
+     *
+     * `INSERT OR IGNORE` is idempotent by construction — the same reasoning as
+     * the meetings.user_titled ALTER further down — so it must not depend on a
+     * counter that concurrent branches can race or that a one-shot can strand.
+     * Running it every boot also self-heals any database already in that state.
+     *
+     * Safe to call from anywhere after migration v11 created `modes`; it is
+     * invoked from runMigrations immediately after the v23 block.
+     */
+    private ensureProfileOkfSentinelMode(): void {
+        if (!this.db) return;
+        try {
+            const result = this.db.prepare(`
+                INSERT OR IGNORE INTO modes (id, name, template_type, custom_context, is_active, created_at)
+                VALUES ('__profile_okf__', 'Profile Intelligence (reserved)', '__reserved__', '', 0, CURRENT_TIMESTAMP)
+            `).run();
+            if (result.changes > 0) {
+                console.log('[DatabaseManager] Restored the reserved __profile_okf__ mode row (profile Knowledge Packs could not persist without it)');
+            }
+        } catch (e) {
+            // Never fatal: without the sentinel, profile OKF packs stay broken
+            // (the pre-fix status quo), but every other table still works, so a
+            // failure here must not take the whole boot down with it.
+            console.error('[DatabaseManager] Failed to ensure the reserved __profile_okf__ mode row:', (e as Error)?.message || e);
+        }
+    }
 
     private runMigrations() {
         if (!this.db) return;
@@ -1266,7 +1362,7 @@ export class DatabaseManager {
             // pii=1 so downstream tooling (export, UI, any future consumer) can filter
             // PII cards. Reference-file cards keep the default pii=0 — no behavior
             // change for the existing document OKF path.
-            console.log('[DatabaseManager] Applying migration v22 → v23: profile OKF (reserved mode + knowledge_cards.pii)');
+            console.log('[DatabaseManager] Applying migration v22 → v23: profile OKF (knowledge_cards.pii)');
             const addPiiColumn = () => {
                 try {
                     this.db!.exec(`ALTER TABLE knowledge_cards ADD COLUMN pii INTEGER NOT NULL DEFAULT 0`);
@@ -1277,12 +1373,13 @@ export class DatabaseManager {
                 }
             };
             addPiiColumn();
-            this.db.prepare(`
-                INSERT OR IGNORE INTO modes (id, name, template_type, custom_context, is_active, created_at)
-                VALUES ('__profile_okf__', 'Profile Intelligence (reserved)', '__reserved__', '', 0, CURRENT_TIMESTAMP)
-            `).run();
             this.db.pragma('user_version = 23');
         }
+
+        // The '__profile_okf__' sentinel row itself is ensured on EVERY boot,
+        // not inside the v23 gate where it used to live — see
+        // ensureProfileOkfSentinelMode for the live defect that forced this.
+        this.ensureProfileOkfSentinelMode();
 
         // Version 23 → 24: Context OS memory safety (docs/context-os/, Phase 9).
         // assistant_claims separates factual CLAIMS from conversational assistant
@@ -1431,6 +1528,15 @@ export class DatabaseManager {
         // construction (the try/catch absorbs "duplicate column"), so it must
         // not depend on a version counter that concurrent branches can race.
         try { this.db.exec("ALTER TABLE meetings ADD COLUMN user_titled INTEGER DEFAULT 0"); } catch (e) { /* Column already exists */ }
+        // The linked calendar event's snapshot (Meeting.calendarEvent), 2026-09-27.
+        // Additive and nullable, so applied the same unconditional way.
+        try { this.db.exec("ALTER TABLE meetings ADD COLUMN calendar_event_json TEXT"); } catch (e) { /* Column already exists */ }
+        // Which of the other side's voices said a line (speaker_2…, named in the
+        // meeting's speakerLabels): the call's speaking record (2026-09-27) puts
+        // names on group calls, whose voices share one channel. `speaker` keeps
+        // the channel, so everything that reads it is unchanged. Additive and
+        // nullable, applied the same unconditional way.
+        try { this.db.exec("ALTER TABLE transcripts ADD COLUMN speaker_id TEXT"); } catch (e) { /* Column already exists */ }
         if (version < 28) {
             this.db.pragma('user_version = 28');
         }
@@ -1715,6 +1821,43 @@ export class DatabaseManager {
                 // never applied, and `version < 30` would be false forever after.
                 // That is R-05 verbatim, and R-05 only became reachable because
                 // an earlier block was written this same way.
+                return;
+            }
+        }
+
+        if (version < 31) {
+            console.log('[DatabaseManager] Applying migration v30 → v31: screenshot description cache');
+            try {
+                // A screenshot's text transcription, keyed by the EXACT bytes of
+                // the image. Describing a screen costs a vision call with a
+                // multi-second budget, and the same screen is re-attached
+                // constantly (re-captures of one window, one slide, one error
+                // dialog), so this is a cache before it is storage.
+                //
+                // The key is a sha256 of the file, deliberately NOT
+                // ImageHashService.computeHash — that is a 16x16 grayscale
+                // average hash built for CHANGE DETECTION, and it collides
+                // across screens that merely look alike at that resolution.
+                // Serving one screen's transcription for another is a
+                // confidently wrong answer about an error code the user can see
+                // with their own eyes, which is worse than no cache at all.
+                this.db.exec(`
+                    CREATE TABLE IF NOT EXISTS screenshot_descriptions (
+                        image_sha256 TEXT PRIMARY KEY,
+                        description  TEXT NOT NULL,
+                        provider     TEXT NOT NULL DEFAULT '',
+                        model        TEXT NOT NULL DEFAULT '',
+                        created_at   INTEGER NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_screenshot_descriptions_created
+                        ON screenshot_descriptions(created_at);
+                `);
+                this.db.pragma('user_version = 31');
+            } catch (e) {
+                console.error('[DatabaseManager] v31 screenshot description cache failed (leaving version at 30 to retry next launch):', e);
+                // Same rule as v28/v29/v30 above: stop rather than fall through,
+                // so a later migration cannot stamp user_version past a v31 that
+                // never applied and make `version < 31` false forever.
                 return;
             }
         }
@@ -2841,8 +2984,8 @@ export class DatabaseManager {
         }
 
         const insertMeeting = this.db.prepare(`
-            INSERT OR REPLACE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed, summary_status, user_titled)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed, summary_status, user_titled, calendar_event_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         // RC-7 (2026-08-21): INSERT OR REPLACE rewrites the whole row, so a
         // user rename made while the row still said "Processing…" (the
@@ -2850,10 +2993,14 @@ export class DatabaseManager {
         // was clobbered by the final save's generated title AND lost its
         // user_titled stamp. Pre-read the flag and let the user's title win.
         const readUserTitle = this.db.prepare(`SELECT title, COALESCE(user_titled, 0) AS user_titled FROM meetings WHERE id = ?`);
+        // The calendar link is pre-read for the same reason: the placeholder,
+        // zero-content and recovery saves carry no metadata, and REPLACE would
+        // otherwise wipe the event a meeting was linked to.
+        const readCalendarLink = this.db.prepare(`SELECT calendar_event_id, calendar_event_json, source FROM meetings WHERE id = ?`);
 
         const insertTranscript = this.db.prepare(`
-            INSERT INTO transcripts (meeting_id, speaker, content, timestamp_ms)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO transcripts (meeting_id, speaker, content, timestamp_ms, speaker_id)
+            VALUES (?, ?, ?, ?, ?)
         `);
 
         const insertInteraction = this.db.prepare(`
@@ -2881,6 +3028,11 @@ export class DatabaseManager {
             // 1. Insert Meeting (a user-renamed row keeps its title — RC-7)
             const existing = readUserTitle.get(meeting.id) as { title: string; user_titled: number } | undefined;
             const userTitled = existing?.user_titled === 1;
+            // A save that names no event keeps the one already stored.
+            const linked = readCalendarLink.get(meeting.id) as {
+                calendar_event_id: string | null; calendar_event_json: string | null; source: string | null;
+            } | undefined;
+            const keepLink = !meeting.calendarEventId && !!linked?.calendar_event_id;
             insertMeeting.run(
                 meeting.id,
                 userTitled && existing?.title ? existing.title : meeting.title,
@@ -2888,11 +3040,14 @@ export class DatabaseManager {
                 durationMs,
                 summaryJson,
                 meeting.date, // Using the ISO string as created_at for sorting simply
-                meeting.calendarEventId || null,
-                meeting.source || 'manual',
+                keepLink ? linked!.calendar_event_id : (meeting.calendarEventId || null),
+                keepLink ? (linked!.source || 'calendar') : (meeting.source || 'manual'),
                 meeting.isProcessed ? 1 : 0,
                 meeting.summaryStatus || (meeting.isProcessed ? 'completed' : 'queued'),
-                userTitled ? 1 : 0
+                userTitled ? 1 : 0,
+                keepLink
+                    ? linked!.calendar_event_json
+                    : (meeting.calendarEvent ? JSON.stringify(meeting.calendarEvent) : (meeting.calendarEventId && linked?.calendar_event_id === meeting.calendarEventId ? linked.calendar_event_json : null)),
             );
 
             // 2. Insert Transcript
@@ -2905,7 +3060,8 @@ export class DatabaseManager {
                         meeting.id,
                         segment.speaker,
                         segment.text,
-                        segment.timestamp
+                        segment.timestamp,
+                        typeof segment.speakerId === 'string' && /^speaker_\d{1,3}$/.test(segment.speakerId) ? segment.speakerId : null
                     );
                 }
             }
@@ -2979,6 +3135,50 @@ export class DatabaseManager {
         }
     }
 
+    /**
+     * Terminal state for a post-meeting summary that threw before saveMeeting could run.
+     *
+     * On that path the placeholder row endMeeting wrote is never rewritten — saveMeeting
+     * is never reached — so the meeting kept title "Processing..." and legacySummary
+     * "Generating summary..." forever while its status said 'failed'. The stale blurb is
+     * not cosmetic: it is what pdfGenerator prints into an exported PDF, what
+     * searchGlobalMeetings offers as a result snippet, and what RAGManager indexes as the
+     * meeting's summary when no overview exists.
+     *
+     * `is_processed` is deliberately left alone — 0 is exactly what getUnprocessedMeetings
+     * and recoverUnprocessedMeetings key on to retry this meeting at the next app start,
+     * and that retry is the reason a hard failure is not permanent.
+     *
+     * A manual rename still wins, via the same user_titled guard replaceDetailedSummary
+     * uses; and because this is NOT updateMeetingTitle, the fallback name written here is
+     * not stamped as the user's, so a later successful run replaces it freely.
+     */
+    public markSummaryGenerationFailed(id: string, fallbackTitle: string): boolean {
+        if (!this.db) return false;
+        try {
+            const row = this.db.prepare('SELECT summary_json FROM meetings WHERE id = ?').get(id) as any;
+            if (!row) return false;
+            // An unreadable blob is left exactly as it is: the status and title still have
+            // to land, and rewriting JSON we could not parse would destroy more than it fixes.
+            let jsonStr: string | null = null;
+            try {
+                const existingData = JSON.parse(row.summary_json || '{}') || {};
+                if (existingData.legacySummary) jsonStr = JSON.stringify({ ...existingData, legacySummary: '' });
+            } catch { /* leave summary_json untouched */ }
+
+            const titleClause = 'title = CASE WHEN COALESCE(user_titled, 0) = 1 THEN title ELSE ? END';
+            const info = jsonStr === null
+                ? this.db.prepare(`UPDATE meetings SET summary_status = 'failed', ${titleClause} WHERE id = ?`)
+                    .run(fallbackTitle, id)
+                : this.db.prepare(`UPDATE meetings SET summary_json = ?, summary_status = 'failed', ${titleClause} WHERE id = ?`)
+                    .run(jsonStr, fallbackTitle, id);
+            return info.changes > 0;
+        } catch (error) {
+            console.error(`[DatabaseManager] Failed to mark summary generation failed for meeting ${id}:`, error);
+            return false;
+        }
+    }
+
     public getMeetingsWithSummaryStatus(status: SummaryStatus): Array<{ id: string; title: string; summaryStatus: SummaryStatus; date: string }> {
         if (!this.db) return [];
         try {
@@ -2986,6 +3186,24 @@ export class DatabaseManager {
             return rows.map(row => ({ id: row.id, title: row.title, date: row.created_at, summaryStatus: row.summary_status }));
         } catch (error) {
             console.error(`[DatabaseManager] Failed to get meetings with summary status ${status}:`, error);
+            return [];
+        }
+    }
+
+    /**
+     * Title + date for the given meeting ids, nothing else — the Launcher's memory
+     * search links a recalled memory to its meeting on every (debounced) keystroke, so
+     * it must not load summaries or transcripts. Ids match case-insensitively: Hindsight
+     * tags carry them lowercased. Unknown ids are simply absent from the result.
+     */
+    public getMeetingHeadlines(ids: string[]): Array<{ id: string; title: string; date: string }> {
+        if (!this.db || ids.length === 0) return [];
+        try {
+            const wanted = [...new Set(ids.map((id) => String(id).toLowerCase()))].slice(0, 50);
+            const rows = this.db.prepare(`SELECT id, title, created_at FROM meetings WHERE lower(id) IN (${wanted.map(() => '?').join(', ')})`).all(...wanted) as Array<{ id: string; title: string; created_at: string }>;
+            return rows.map((row) => ({ id: row.id, title: row.title, date: row.created_at }));
+        } catch (error) {
+            console.error('[DatabaseManager] Failed to get meeting headlines:', error);
             return [];
         }
     }
@@ -3037,6 +3255,19 @@ export class DatabaseManager {
      * sibling keys in summary_json (e.g. legacy fields). Also updates the title column when
      * the new summary carries one. summary_status is set to the provided value.
      */
+    /** Meetings whose saved notes contain `text` (id + raw summary_json), for
+     *  deterministic data migrations such as calendarNameMigration. */
+    public listMeetingSummariesMentioning(text: string): Array<{ id: string; summaryJson: string }> {
+        if (!this.db || !text) return [];
+        try {
+            const rows = this.db.prepare("SELECT id, summary_json FROM meetings WHERE instr(summary_json, ?) > 0").all(text) as Array<{ id: string; summary_json: string }>;
+            return rows.map((r) => ({ id: r.id, summaryJson: r.summary_json || '{}' }));
+        } catch (error) {
+            console.error('[DatabaseManager] listMeetingSummariesMentioning failed:', error);
+            return [];
+        }
+    }
+
     public replaceDetailedSummary(id: string, detailedSummary: Meeting['detailedSummary'], opts?: { title?: string; summaryStatus?: SummaryStatus }): boolean {
         if (!this.db) return false;
         try {
@@ -3069,9 +3300,65 @@ export class DatabaseManager {
 
     /**
      * Persist the per-meeting speaker rename map into detailedSummary.speakerLabels.
-     * Additive: never touches transcript rows or other summary fields.
+     * Never touches transcript rows. Other summary fields change only through
+     * `rewriteNotes`, which gets the stored detailed summary (with its PREVIOUS
+     * labels still on it) and returns the one to save — so the rename and the
+     * notes that carry it land in the same write.
      */
-    public updateSpeakerLabels(id: string, speakerLabels: Record<string, string>): boolean {
+    /**
+     * Link a meeting to a calendar event, or unlink it (`snapshot` null): the
+     * meeting notes' "which event was this" choice. Its own UPDATE, because
+     * saveMeeting keeps an existing link when a save names none, so "not a
+     * calendar meeting" could never be recorded through it. Takes the event's
+     * title too, unless the user renamed the meeting.
+     */
+    public setMeetingCalendarEvent(id: string, snapshot: NonNullable<Meeting['calendarEvent']> | null): boolean {
+        if (!this.db) return false;
+        try {
+            const info = snapshot
+                ? this.db.prepare(
+                    `UPDATE meetings SET calendar_event_id = ?, calendar_event_json = ?, source = 'calendar',
+                        title = CASE WHEN COALESCE(user_titled, 0) = 1 THEN title ELSE ? END WHERE id = ?`,
+                ).run(snapshot.id, JSON.stringify(snapshot), snapshot.title, id)
+                : this.db.prepare(
+                    `UPDATE meetings SET calendar_event_id = NULL, calendar_event_json = NULL, source = 'manual' WHERE id = ?`,
+                ).run(id);
+            return info.changes > 0;
+        } catch (error) {
+            console.error(`[DatabaseManager] Failed to set the calendar event for meeting ${id}:`, error);
+            return false;
+        }
+    }
+
+    /** When a meeting started and how long it ran, in ms; null for no such meeting. */
+    public getMeetingTimes(id: string): { startMs: number; durationMs: number } | null {
+        if (!this.db) return null;
+        try {
+            const row = this.db.prepare('SELECT start_time, duration_ms FROM meetings WHERE id = ?').get(id) as { start_time: number; duration_ms: number } | undefined;
+            return row ? { startMs: Number(row.start_time) || 0, durationMs: Number(row.duration_ms) || 0 } : null;
+        } catch {
+            return null;
+        }
+    }
+
+    /** The snapshot kept by the most recent meeting linked to this event, if any. */
+    public getCalendarEventSnapshot(eventId: string): Meeting['calendarEvent'] {
+        if (!this.db || !eventId) return undefined;
+        try {
+            const row = this.db.prepare(
+                `SELECT calendar_event_json FROM meetings WHERE calendar_event_id = ? AND calendar_event_json IS NOT NULL ORDER BY start_time DESC LIMIT 1`,
+            ).get(eventId) as { calendar_event_json: string } | undefined;
+            return parseCalendarEvent(row?.calendar_event_json);
+        } catch {
+            return undefined;
+        }
+    }
+
+    public updateSpeakerLabels(
+        id: string,
+        speakerLabels: Record<string, string>,
+        rewriteNotes?: (detailed: any) => any,
+    ): boolean {
         if (!this.db) return false;
         try {
             const row = this.db.prepare('SELECT summary_json FROM meetings WHERE id = ?').get(id) as any;
@@ -3081,7 +3368,11 @@ export class DatabaseManager {
             // absent we attach labels to a minimal object WITHOUT inventing empty
             // actionItems/keyPoints arrays that the renderer would treat as "processed but
             // empty" — labels alone is a safe additive blob a later summarize will merge into.
-            const currentDetailed = existingData.detailedSummary;
+            let currentDetailed = existingData.detailedSummary;
+            if (rewriteNotes && currentDetailed && typeof currentDetailed === 'object') {
+                try { currentDetailed = rewriteNotes(currentDetailed) ?? currentDetailed; }
+                catch (e) { console.warn(`[DatabaseManager] speaker rename not applied to notes for ${id}:`, e); }
+            }
             const newDetailed = currentDetailed && typeof currentDetailed === 'object'
                 ? { ...currentDetailed, speakerLabels }
                 : { speakerLabels };
@@ -3091,6 +3382,29 @@ export class DatabaseManager {
         } catch (error) {
             console.error(`[DatabaseManager] Failed to update speaker labels for meeting ${id}:`, error);
             return false;
+        }
+    }
+
+    /**
+     * Transcript lines that contain any of `terms` (case-insensitive substring),
+     * across every saved meeting. Backs "Search past meetings", which used to
+     * search titles and summaries only — never what was actually said — and so
+     * could never "jump to the moment". LIKE wildcards in a term are escaped, so
+     * a search for "50%" matches the text "50%" and not every line.
+     */
+    public searchTranscriptLines(terms: string[], limit: number = 2000): Array<{ meetingId: string; speaker: string; content: string; timestampMs: number }> {
+        if (!this.db) return [];
+        const clean = terms.map((t) => String(t || '').toLowerCase().trim()).filter((t) => t.length > 1).slice(0, 8);
+        if (clean.length === 0) return [];
+        const escapeLike = (t: string) => t.replace(/[\\%_]/g, (c) => `\\${c}`);
+        const where = clean.map(() => `lower(content) LIKE ? ESCAPE '\\'`).join(' OR ');
+        try {
+            return this.db.prepare(
+                `SELECT meeting_id AS meetingId, speaker, content, timestamp_ms AS timestampMs FROM transcripts WHERE ${where} LIMIT ?`,
+            ).all(...clean.map((t) => `%${escapeLike(t)}%`), Math.max(1, Math.min(limit, 10_000))) as any[];
+        } catch (error) {
+            console.error('[DatabaseManager] searchTranscriptLines failed:', error);
+            return [];
         }
     }
 
@@ -3156,7 +3470,8 @@ export class DatabaseManager {
         const transcript = transcriptRows.map(row => ({
             speaker: row.speaker,
             text: row.content,
-            timestamp: row.timestamp_ms
+            timestamp: row.timestamp_ms,
+            ...(row.speaker_id ? { speakerId: row.speaker_id as string } : {}),
         }));
 
         const usage = usageRows.map(row => {
@@ -3191,6 +3506,7 @@ export class DatabaseManager {
             summary: summaryData.legacySummary || '',
             detailedSummary: summaryData.detailedSummary,
             calendarEventId: meetingRow.calendar_event_id,
+            calendarEvent: parseCalendarEvent(meetingRow.calendar_event_json),
             source: meetingRow.source,
             summaryStatus: meetingRow.summary_status as SummaryStatus | undefined,
             transcript: transcript,

@@ -1,0 +1,166 @@
+{
+ "blind_id": "S-d8b0441e",
+ "judge_model": "gemini-3.1-pro-preview",
+ "judge_model_version": "gemini-3.1-pro-preview",
+ "judge_ms": 26894,
+ "judge_attempts": 1,
+ "judge_usage": {
+  "promptTokenCount": 9696,
+  "candidatesTokenCount": 885,
+  "totalTokenCount": 13546,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 9696
+   }
+  ],
+  "thoughtsTokenCount": 2965,
+  "serviceTier": "standard"
+ },
+ "fact_count": 28,
+ "evaluation": {
+  "factual_accuracy": 9,
+  "important_information_retention": 9,
+  "hallucination_control": 9,
+  "action_item_retention": 9,
+  "decision_retention": 10,
+  "speaker_attribution": 10,
+  "numeric_accuracy": 10,
+  "entity_retention": 9,
+  "timeline_accuracy": 9,
+  "conclusion_accuracy": 9,
+  "structure": 8,
+  "conciseness": 4,
+  "readability": 7,
+  "overall_summary_quality": 6,
+  "critical_errors": [],
+  "missing_important_information": [
+   "Joan Park in legal handles vendor contracts and usually turns reviews around in five business days.",
+   "Daniel will raise the mid-term seat pricing question today but cannot promise an answer by Thursday."
+  ],
+  "hallucinated_information": [
+   "Listed 'Does the Cartograph quote include ingest or is it metered separately?' as an open question, even though Renata answered it to the best of her knowledge and Daniel proceeded based on that assumption."
+  ],
+  "superseded_values_reported": [],
+  "not_decisions_reported_as_decided": [],
+  "distractors_included": [
+   "Mainframe retired two years ago",
+   "Tomasz coming out of a sprint review"
+  ],
+  "fact_checks": [
+   {
+    "id": "F01",
+    "status": "present"
+   },
+   {
+    "id": "F02",
+    "status": "present"
+   },
+   {
+    "id": "F03",
+    "status": "present"
+   },
+   {
+    "id": "F04",
+    "status": "present"
+   },
+   {
+    "id": "F05",
+    "status": "present"
+   },
+   {
+    "id": "F06",
+    "status": "present"
+   },
+   {
+    "id": "F07",
+    "status": "present"
+   },
+   {
+    "id": "F08",
+    "status": "present"
+   },
+   {
+    "id": "F09",
+    "status": "present"
+   },
+   {
+    "id": "F10",
+    "status": "present"
+   },
+   {
+    "id": "F11",
+    "status": "present"
+   },
+   {
+    "id": "F12",
+    "status": "present"
+   },
+   {
+    "id": "F13",
+    "status": "present"
+   },
+   {
+    "id": "F14",
+    "status": "present"
+   },
+   {
+    "id": "F15",
+    "status": "present"
+   },
+   {
+    "id": "F16",
+    "status": "present"
+   },
+   {
+    "id": "F17",
+    "status": "present"
+   },
+   {
+    "id": "F18",
+    "status": "present"
+   },
+   {
+    "id": "F19",
+    "status": "present"
+   },
+   {
+    "id": "F20",
+    "status": "partial"
+   },
+   {
+    "id": "F21",
+    "status": "present"
+   },
+   {
+    "id": "F22",
+    "status": "present"
+   },
+   {
+    "id": "F23",
+    "status": "present"
+   },
+   {
+    "id": "F24",
+    "status": "present"
+   },
+   {
+    "id": "F25",
+    "status": "present"
+   },
+   {
+    "id": "F26",
+    "status": "partial"
+   },
+   {
+    "id": "F27",
+    "status": "present"
+   },
+   {
+    "id": "F28",
+    "status": "present"
+   }
+  ],
+  "rationale": "The notes capture almost all of the facts, numbers, and decisions accurately. However, the conciseness and overall summary quality suffer significantly due to extreme repetition; the Overview and Summary sections contain identical, copy-pasted sentences. Additionally, the action items section includes redundant 'inferred' items that duplicate the explicit action items above them. A few minor details regarding legal turnaround time and deal desk timelines were omitted."
+ }
+}

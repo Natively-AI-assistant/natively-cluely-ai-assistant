@@ -36,6 +36,11 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
+// Hermetic (issue #558): Codex now also accepts the Codex CLI's `codex login`
+// from $CODEX_HOME/auth.json. Point it at an empty dir so these tests never
+// pick up — or send requests with — the developer's real CLI login.
+process.env.CODEX_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-codex-home-'));
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const dist = (p) => path.join(__dirname, '../../../dist-electron/electron', p);
@@ -301,7 +306,7 @@ function codexHelper({ localOnly = false } = {}) {
   const h = Object.create(LLMHelper.prototype);
   h.isCodexAvailable = () => true;
   h.isLocalOnlyMode = localOnly;
-  h.codexCliConfig = { path: 'codex', model: 'gpt-5.4', fastModel: 'gpt-5.3-codex', timeoutMs: 60_000 };
+  h.codexCliConfig = { path: 'codex', model: 'gpt-5.4', timeoutMs: 60_000 };
   h.currentModelId = 'codex-cli';
   return h;
 }

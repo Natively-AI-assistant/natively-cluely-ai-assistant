@@ -47,8 +47,20 @@ test('curl provider save handlers validate renderer payloads before persistence'
     assert.ok(validatorBody.includes(`typeof (provider as any).${field} !== 'string'`),
       `BUG: validator must require string ${field}.`);
   }
+  // The contract is "the validator refuses a template with no TEXT
+  // placeholder" — NOT the exact expression that enforces it. Two accepted
+  // forms: the original literal `.includes('{{TEXT}}')`, and the
+  // spacing-tolerant regex it became. The check was widened because
+  // deepVariableReplacer substitutes `{{ TEXT }}` perfectly well, so rejecting
+  // that template at the boundary told the user their cURL was invalid when the
+  // engine handles it — and pinning the literal form failed this suite for a
+  // change that made the validator strictly more correct.
+  //
+  // This stays a SOURCE pin because validateCurlProviderPayload is a closure
+  // inside registerIpcHandlers and is not exported; there is nothing to call.
   assert.ok(
-    /curlCommand[\s\S]*\.includes\(\s*['"]\{\{TEXT\}\}['"]\s*\)/.test(validatorBody),
+    /curlCommand[\s\S]*\.includes\(\s*['"]\{\{TEXT\}\}['"]\s*\)/.test(validatorBody)
+    || /TEXT[\s\S]{0,40}\.test\(\(provider as any\)\.curlCommand\)/.test(validatorBody),
     'BUG: validator must require {{TEXT}} prompt injection placeholder.',
   );
   assert.ok(

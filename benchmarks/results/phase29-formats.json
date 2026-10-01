@@ -1,0 +1,122 @@
+[
+ {
+  "ext": "txt",
+  "ok": true,
+  "parseMs": 10,
+  "chars": 5138,
+  "status": "ready",
+  "chunks": 4,
+  "embedded": 4,
+  "factsExtracted": "6/6",
+  "retrieval": "4/4",
+  "retrievalP50": 1624
+ },
+ {
+  "ext": "md",
+  "ok": true,
+  "parseMs": 7,
+  "chars": 5536,
+  "status": "ready",
+  "chunks": 24,
+  "embedded": 24,
+  "factsExtracted": "6/6",
+  "retrieval": "4/4",
+  "retrievalP50": 1624
+ },
+ {
+  "ext": "json",
+  "ok": true,
+  "parseMs": 12,
+  "chars": 4214,
+  "status": "ready",
+  "chunks": 2,
+  "embedded": 2,
+  "factsExtracted": "6/6",
+  "retrieval": "4/4",
+  "retrievalP50": 1742
+ },
+ {
+  "ext": "csv",
+  "ok": true,
+  "parseMs": 10,
+  "chars": 1091,
+  "status": "ready",
+  "chunks": 3,
+  "embedded": 3,
+  "factsExtracted": "6/6",
+  "retrieval": "4/4",
+  "retrievalP50": 1418
+ },
+ {
+  "ext": "tsv",
+  "ok": true,
+  "parseMs": 5,
+  "chars": 1091,
+  "status": "ready",
+  "chunks": 3,
+  "embedded": 3,
+  "factsExtracted": "6/6",
+  "retrieval": "4/4",
+  "retrievalP50": 1422
+ },
+ {
+  "ext": "xml",
+  "ok": true,
+  "parseMs": 4,
+  "chars": 2975,
+  "status": "ready",
+  "chunks": 1,
+  "embedded": 1,
+  "factsExtracted": "6/6",
+  "retrieval": "4/4",
+  "retrievalP50": 1422
+ },
+ {
+  "ext": "html",
+  "ok": true,
+  "parseMs": 4,
+  "chars": 5309,
+  "status": "ready",
+  "chunks": 2,
+  "embedded": 2,
+  "factsExtracted": "6/6",
+  "retrieval": "4/4",
+  "retrievalP50": 2282
+ },
+ {
+  "ext": "log",
+  "ok": true,
+  "parseMs": 48,
+  "chars": 5739,
+  "status": "ready",
+  "chunks": 2,
+  "embedded": 2,
+  "factsExtracted": "6/6",
+  "retrieval": "4/4",
+  "retrievalP50": 1565
+ },
+ {
+  "ext": "pdf",
+  "ok": true,
+  "parseMs": 507,
+  "chars": 5139,
+  "status": "ready",
+  "chunks": 2,
+  "embedded": 2,
+  "factsExtracted": "6/6",
+  "retrieval": "4/4",
+  "retrievalP50": 2331
+ },
+ {
+  "ext": "docx",
+  "ok": true,
+  "parseMs": 75,
+  "chars": 5140,
+  "status": "ready",
+  "chunks": 4,
+  "embedded": 4,
+  "factsExtracted": "6/6",
+  "retrieval": "4/4",
+  "retrievalP50": 1724
+ }
+]

@@ -1,0 +1,293 @@
+{
+ "batch": "b032-lecture",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "LECTURE-CTX-I1": {
+   "title": "Campus parking closure notice",
+   "text": "EASTBROOK UNIVERSITY - TRANSPORTATION AND PARKING SERVICES\nNotice to the campus community\n\nEffective Monday, Lot C (behind the Fenwick Athletic Center) will be closed for resurfacing. The closure is expected to last approximately three weeks, weather permitting.\n\nWhat this means for you:\n- Permit holders assigned to Lot C may park in Lot F or Lot H at no extra charge for the duration of the closure. Please display your existing permit.\n- Lot F is a ten-minute walk from the main quad. The free campus shuttle will run every fifteen minutes between Lot F and the Student Union from 7:30 a.m. to 6:30 p.m.\n- Visitor parking has been relocated to the lower level of the Ashworth Garage. Visitors should collect a temporary pass from the kiosk at the garage entrance.\n- Accessible parking spaces displaced by the closure have been reassigned to the first row of Lot F, nearest the shuttle stop.\n- Vehicles left in Lot C after 6:00 a.m. on Monday will be towed at the owner's expense.\n\nQuestions about permits can be sent to the Parking Services office in the Ashworth Building, room 104, or answered at the front desk between 9:00 a.m. and 4:00 p.m. on weekdays. Bicycle racks near the Fenwick Center remain open and are not affected. We appreciate your patience while we improve campus facilities."
+  },
+  "LECTURE-CTX-C1": {
+   "title": "STAT 101 Week 4 handout: p-values and confidence intervals",
+   "text": "STAT 101 - Week 4 handout: p-values and confidence intervals\nInstructor: Dr. Priyanka Vashti, Eastbrook University\n\nSection 1. What a p-value is\nA p-value is the probability of seeing data at least as extreme as ours, assuming the null hypothesis is true. It is not the probability that the null hypothesis is true.\n\nSection 2. Worked example: the cafe\nA cafe claims its average wait is 70 seconds. We sample n = 25 customers and find a mean wait of 74 seconds with a sample standard deviation s = 10. Standard error = s / sqrt(n) = 10 / 5 = 2 seconds. The test statistic is (74 - 70) / 2 = 2.0.\n\nSection 3. The 95 percent confidence interval\nCritical value for 95 percent confidence: z = 1.96. Margin of error = critical value x standard error. Using z = 1.65 for 95 percent confidence, the margin of error is 1.65 x 2 = 3.3 seconds, so the interval is 70.7 to 77.3 seconds. Since our sample mean of 72 seconds sits inside this interval, we cannot distinguish it from the claim.\n\nSection 4. Decision rule\nChoose a significance level alpha in advance, usually 0.05. Reject the null hypothesis when the p-value is smaller than alpha. For a larger check, with n = 36 the standard error would shrink to 10 / 6 = 1.67 seconds and the same 4-second gap would be even more convincing.\n\nQuick summary box (read this before the quiz)\n- The p-value tells you the chance that the null hypothesis is true.\n- If p > 0.05, reject the null hypothesis.\n- A 95 percent confidence interval uses z = 1.96.\n- Bigger samples give smaller standard errors.\n\nNote: a \"large sample\" means the sample is big enough for the normal approximation to work. Roughly 30 or more is the usual rule of thumb, but this handout does not say exactly where the line is."
+  },
+  "FLEC-CTX-G1": {
+   "title": "BIO 220 Lecture 15 slide notes: Kinase cascades and scaffolds",
+   "text": "BIO 220 - Cell Biology\nLecture 15: Signal amplification, kinase cascades, and scaffolds\nProf. Ingrid Achterberg. Slide notes.\n\n1. Why cascades?\n- Each active kinase can phosphorylate many copies of the next kinase, so a small input becomes a large output: amplification. Three tiers (MAPKKK to MAPKK to MAPK) is the textbook arrangement.\n- Cascades can also produce switch-like (ultrasensitive) responses, where the output goes from low to high over a narrow range of input.\n- Hill coefficient nH: nH = 1 is a graded response; nH > 1 is steeper. Course convention: call a response \"switch-like\" only if nH >= 2.\n\n2. Scaffold proteins\n- A scaffold binds several kinases of one cascade and holds them together.\n- Three jobs we care about: speed (high local concentration), insulation (preventing cross-talk with other cascades that share a kinase), and regulation (the scaffold itself can be a control point).\n\n3. Case study (slides 12-17): the Moravec lab handout\nThe numbers below come from the Moravec lab handout distributed in class, not from the textbook.\n- Organism: budding yeast, pheromone response pathway. Scaffold protein: Pbr4 (course name).\n- Strains: WT (wild type) and KY-17 (pbr4 deletion).\n- Readout: fluorescent reporter, as % of maximum WT response, measured 60 minutes after pheromone is added.\n- Dose-response: WT EC50 = 12 nM, Hill coefficient 2.6. KY-17 EC50 = 41 nM, Hill coefficient 1.1.\n- Time to half-maximal response at saturating pheromone (100 nM): WT 9 min, KY-17 27 min.\n- Maximum response at 100 nM: WT 100%, KY-17 88%.\n- Cross-talk test: osmotic stress (0.4 M NaCl, no pheromone) activates the reporter to 3% in WT and 31% in KY-17.\n- Replicates: n = 4 biological replicates per strain. The handout reports means only; no error bars or statistical tests were included.\n\n4. How the prof wants you to read it\n- \"The knockout still signals. It is slower, less sensitive, graded instead of switch-like, and leaky to the wrong input. That is four phenotypes from one deletion.\"\n- Lower sensitivity means a higher EC50. Every year students write that KY-17 is \"more sensitive\" because 41 is the bigger number. It is not.\n- Loss of ultrasensitivity: nH falls from 2.6 to 1.1, so by the course convention KY-17 is no longer switch-like.\n- Insulation: the jump from 3% to 31% under osmotic stress is the insulation phenotype.\n- The handout does NOT establish mechanism for the slowdown. Two hypotheses were left open for discussion section: (a) reduced local concentration of the kinases, and (b) loss of an allosteric activation step that Pbr4 performs on the middle kinase.\n\n5. Exam and assignment notes\n- Problem Set 6, Q2: sketch both dose-response curves from the EC50 and Hill values. Put pheromone concentration in nM on a log-scale x-axis.\n- Exam 3 will include one \"read the data\" question in this style, with a new table, not this one.\n- Discussion section this week: come ready to argue for one of the two mechanism hypotheses using only the handout data."
+  },
+  "FLEC-CTX-G2": {
+   "title": "STAT 301 Lecture 11 notes: Comparing two groups",
+   "text": "STAT 301 - Applied Statistics\nLecture 11: Comparing two groups\nProf. Renata Szabo. Lecture notes, course site copy.\n\n1. Course conventions (apply to every test this term)\n- Significance level: alpha = 0.01 for all in-class examples, problem sets and mini-projects, unless a question states otherwise. The prof's reason: \"We run a lot of tests in this course, and I would rather you miss a small effect than chase noise.\"\n- Two independent samples: use Welch's t-test by default. Do not assume equal variances unless a problem explicitly says the population variances are equal.\n- Always report the test statistic, the degrees of freedom and the p-value, and state the conclusion in the context of the data, not as \"reject H0\" alone.\n- Choose the test before looking at results. Switching tests after seeing a p-value is marked as an error on problem sets.\n\n2. Paired vs independent designs\n- Paired: the same unit measured twice (before and after, or two seasons on the same tree). Analyze the differences d = x1 - x2 with a one-sample t-test.\n- Independent: two unrelated groups. Welch's t-test.\n- Pairing helps most when the variation between units is large compared with the change within a unit, because taking differences cancels the unit-to-unit spread.\n- Analyzing independent groups as if they were paired is invalid, not just less efficient.\n\n3. Worked example: the Brennock Orchard data (slides 8-13)\n- Question: do trees in the North plot yield more apples than trees in the South plot? Yield = kg of apples per tree, one harvest season.\n- North plot: n = 14, mean 38.2 kg, SD 6.1 kg.\n- South plot: n = 11, mean 31.5 kg, SD 9.8 kg.\n- Welch's t-test: t = 1.99, df = 15.9, p = 0.065.\n- For comparison only: a pooled-variance t-test on the same data gives t = 2.10, df = 23, p = 0.047. The prof showed this to make a point: \"If you had picked pooled because the p-value looked nicer, you would be under 0.05 and you would have fooled yourself. Our rule is Welch, decided in advance.\"\n- Frost week: three South trees were damaged in a late frost. With those three removed, South is n = 8, mean 35.9 kg, SD 5.4 kg, and Welch gives t = 0.92, df = 16.3, p = 0.37.\n- Removing data points after seeing results has to be justified independently of the results. Here the justification is the orchard manager's frost log, dated before harvest.\n\n4. Common mistakes flagged in lecture\n- Reading p = 0.065 as \"a 6.5% chance the plots are the same.\" It is not.\n- Concluding \"no difference\" from a non-significant result. The correct wording is that the data do not provide convincing evidence of a difference at the chosen alpha.\n- Reporting a confidence level that does not match alpha. With alpha = 0.01, report a 99% confidence interval.\n\n5. Admin\n- Problem Set 7 (two-sample tests) is due next Tuesday before lecture.\n- Office hours this week: Thursday 1-3 pm, Math Annex 104.\n- Mini-project 2 details were announced verbally in lecture; see the lecture recording."
+  },
+  "LECTURE-CTX-G1": {
+   "title": "ECON 201 Week 6 notes: money, inflation, Phillips curve",
+   "text": "ECON 201 - Principles of Macroeconomics\nLecture notes, Week 6: Money, Inflation and the Phillips Curve\nLecturer: Prof. Marguerite Halvorsen, Eastbrook University\n\n1. What inflation is\nInflation is a sustained rise in the general price level, measured as the percentage change in a price index. The consumer price index (CPI) compares the cost of a fixed basket of goods today with the cost of the same basket in a base year: CPI = (cost of basket today / cost of basket in base year) x 100. Example: the basket cost 400 dollars in the base year and costs 432 dollars today, so CPI = 108, meaning prices are 8 percent higher than in the base year.\n\n2. Quantity theory of money\nThe identity is MV = PY, where M is the money supply, V is velocity (how often a unit of money changes hands), P is the price level and Y is real output. If V and Y are roughly stable, growth in M shows up as growth in P. Worked example for the fictional economy of Norvale: M = 500 billion, V = 4, so nominal spending PY = 2,000 billion. Real output Y = 1,000 billion, so P = 2.0. If the central bank raises M by 10 percent to 550 billion while V and Y stay put, PY = 2,200 billion and P = 2.2, a 10 percent rise in prices. Prof. Halvorsen stressed that the \"V and Y stable\" assumption is the whole argument, and it fails in the short run.\n\n3. Real versus nominal interest rates\nFisher equation: i is approximately r + expected inflation (pi-e), where i is the nominal rate and r is the real rate. Example: a nominal rate of 7 percent with expected inflation of 4 percent gives an expected real rate of about 3 percent. The exact form is (1 + i) = (1 + r)(1 + pi-e). When inflation is unexpected it redistributes wealth: borrowers with fixed-rate loans gain, while lenders and savers holding fixed nominal assets lose.\n\n4. Costs of inflation\nShoe-leather costs (extra trips to the bank to hold less cash), menu costs (the cost of repricing), tax distortions, and uncertainty that makes long-term contracts risky. Extreme case: hyperinflation in Weimar Germany in 1923, when at the peak prices were doubling roughly every four days and workers were paid twice a day so they could spend wages before they lost value.\n\n5. The Phillips curve\nThe original observation was a short-run inverse relationship between unemployment and inflation. The stagflation of the 1970s (high inflation and high unemployment together) showed that this is not a stable menu that policymakers can choose from. The expectations-augmented version is pi = pi-e - b(u - u*), where u* is the natural rate of unemployment and b measures how strongly inflation responds to the unemployment gap. The curve shifts up when expected inflation rises. In the long run, the curve is vertical at u*, so there is no lasting trade-off.\n\n6. Disinflation case study\nBetween 1979 and 1982 the US central bank, under Paul Volcker, pushed its policy rate to about 20 percent in 1981. Unemployment rose to about 10.8 percent in 1982, and inflation fell from double digits to roughly 4 percent by 1983. The lost output during a disinflation is often summarized by the \"sacrifice ratio\".\n\n7. Rule of 72\nYears to double is approximately 72 divided by the growth rate in percent. At 3 percent inflation the price level doubles in about 24 years (72 / 3 = 24).\n\nMidterm note: the midterm covers Weeks 1 to 6. Expect one Fisher equation calculation and one short essay on why the Phillips curve shifts. Calculators are allowed. The formula sheet will include only MV = PY."
+  }
+ },
+ "items": [
+  {
+   "jid": "99a5c7175904",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So the workhorse here is stochastic gradient descent, and I'm not going to derive it today, just take it on faith.",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Stochastic gradient descent is the update rule that trains most of these models: instead of computing the gradient over the whole dataset, you estimate it from one example, or a small batch, and take a step. So the update is **θ ← θ − η ∇L(θ; xᵢ, yᵢ)**, where θ is the parameters, η is the learning rate, and ∇L is the gradient of the loss on that single example. The intuition is that each noisy step is cheap and roughly points downhill, so you make many quick steps instead of a few expensive exact ones, and the noise itself helps you move around."
+  },
+  {
+   "jid": "538bda9cecf2",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What are the next steps?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That depends on what we're talking about, so let me give you the general shape. I'd check where things actually stand, what's still open, and what's blocking, then pick the one next move that unblocks the most. After that I'd confirm who owns it and by when, and send a short update."
+  },
+  {
+   "jid": "6fa764c600b6",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "So if the marginal propensity to consume is point eight, what is the multiplier?",
+   "conversation": [
+    "USER (typed to Natively): I didn't understand the multiplier thing at all.",
+    "NATIVELY: A multiplier is just a number you multiply by to scale something up or down. If a base value is 200 and the multiplier is 1.5, the result is 300. If it's 0.5, the result is 100.\n\nIn most lectures it shows up in one of two ways: as a scaling factor in a formula, like output equals input times the multiplier, or as a feedback effect, where a small change gets amplified because it feeds back into itself. The key intuition is that a multiplier above 1 grows the thing, below 1 shrinks it, and exactly 1 leaves it unchanged.",
+    "USER (typed to Natively): Use an analogy.",
+    "NATIVELY: Think of a multiplier like a volume knob on a speaker. The music is the base value, and the knob is the multiplier. Turn it past the middle and the sound gets louder, that's a multiplier above 1. Turn it below the middle and it gets quieter, that's below 1. Leave it dead center and nothing changes, that's exactly 1.\n\nThe same idea works for money, growth, or feedback: the multiplier just decides how much bigger or smaller the original thing becomes."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The multiplier is 1 divided by 1 minus the marginal propensity to consume. With an MPC of 0.8, that's 1 divided by 0.2, which gives a multiplier of **5**.\n\nThe intuition: each round of spending becomes income for someone else, who then spends 80% of it, and so on. That chain of spending adds up to five times the original change."
+  },
+  {
+   "jid": "f71a657cdb1b",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Use an analogy.",
+   "conversation": [
+    "USER (typed to Natively): I didn't understand the multiplier thing at all.",
+    "NATIVELY: A multiplier is just a number you multiply by to scale something up or down. If a base value is 200 and the multiplier is 1.5, the result is 300. If it's 0.5, the result is 100.\n\nIn most lectures it shows up in one of two ways: as a scaling factor in a formula, like output equals input times the multiplier, or as a feedback effect, where a small change gets amplified because it feeds back into itself. The key intuition is that a multiplier above 1 grows the thing, below 1 shrinks it, and exactly 1 leaves it unchanged."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Think of a multiplier like a volume knob on a speaker. The music is the base value, and the knob is the multiplier. Turn it past the middle and the sound gets louder, that's a multiplier above 1. Turn it below the middle and it gets quieter, that's below 1. Leave it dead center and nothing changes, that's exactly 1.\n\nThe same idea works for money, growth, or feedback: the multiplier just decides how much bigger or smaller the original thing becomes."
+  },
+  {
+   "jid": "5311a3c2fb94",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What's the difference between mitosis and meiosis?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Mitosis makes two cells that are **genetically identical** to the parent, and it's how the body grows and replaces worn-out cells. Meiosis makes four cells with **half the chromosomes**, and it's only for producing sperm and eggs. The key difference is that meiosis has two rounds of division after one round of DNA copying, and it shuffles the genes through crossing over, so every gamete ends up genetically unique."
+  },
+  {
+   "jid": "68c8e577ff56",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So, given all that, which option would you pick, and why? I'll take an answer from anyone.",
+   "conversation": [
+    "PROFESSOR: For mini project two you've got two options.",
+    "PROFESSOR: Option A, the paired design. You measure the same twenty trees in both seasons.",
+    "PROFESSOR: Option B, independent samples. Two separate plots, but you get forty trees in each.",
+    "PROFESSOR: And I'll tell you now, the tree-to-tree variation in this orchard is huge, standard deviation around nine kilos, while the season-to-season change within a single tree is small, about two kilos."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd pick **Option A**, the paired design. The variation between trees is huge, around nine kilos, while the change within a single tree between seasons is only about two kilos. Pairing each tree with itself cancels out that big tree-to-tree spread, so the season effect stands out clearly. Option B gives you more trees, but that extra between-tree noise would swamp the signal you're actually trying to measure."
+  },
+  {
+   "jid": "c91de640dd72",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "Can you clarify what you mean?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I mean the point I just made, so let me put it a different way. What I'm getting at is the main idea rather than the exact wording, and if it helps I can give you a concrete example of it. Which part would you like me to unpack first?"
+  },
+  {
+   "jid": "ad216fc94e84",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "What should we do next?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Let me pull together where things stand, what's still open, and anything blocking us, then I'll come back with a clear next step and who owns it. If there's a decision you need from me to move, tell me now and I'll make the call."
+  },
+  {
+   "jid": "0e85b63b136c",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "The handout uses n equals 25 in one place and 36 in another. Which do I use for the standard error, does it change the confidence interval, and which one would the exam expect?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Use **n = 25** for the standard error, since that's the sample in the worked example: 10 over the square root of 25 gives 2 seconds. The n = 36 is just a side check showing a bigger sample shrinks the standard error. So yes, it changes the interval, and the exam would expect 25."
+  },
+  {
+   "jid": "7b9c77f39d84",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "what EC50 did the knockout strain get vs wild type, and does that make it more or less sensitive",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The knockout got an EC50 of **41 nM** against **12 nM** for wild type, so KY-17 is **less sensitive**, not more. A higher EC50 means you need more pheromone to reach half the maximal response. The trap is that 41 is the bigger number, which makes it look like a stronger response, but sensitivity runs the other way."
+  },
+  {
+   "jid": "8be951b7b205",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So what happens to the pressure if I squeeze this syringe down to half its volume?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "If the temperature stays the same, halving the volume doubles the pressure. That's Boyle's law: pressure times volume is constant, so P₁V₁ = P₂V₂, and cutting V to half means P goes to twice its original value."
+  },
+  {
+   "jid": "c98a7952ce47",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Which creates variation?",
+   "conversation": [
+    "USER (typed to Natively): What's the difference between mitosis and meiosis?",
+    "NATIVELY: Mitosis makes two cells that are **genetically identical** to the parent, and it's how the body grows and replaces worn-out cells. Meiosis makes four cells with **half the chromosomes**, and it's only for producing sperm and eggs. The key difference is that meiosis has two rounds of division after one round of DNA copying, and it shuffles the genes through crossing over, so every gamete ends up genetically unique."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "**Meiosis** creates variation. Two things do it: crossing over during prophase I, where homologous chromosomes swap segments, and independent assortment, where the pairs line up randomly in metaphase I. Mitosis just copies, so the two daughter cells match the parent."
+  },
+  {
+   "jid": "8f4b54145cb6",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "If you throw out the frost-damaged trees, does the gap between the plots get more convincing or less? Think before you answer.",
+   "conversation": [],
+   "evidence_ids": [
+    "FLEC-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "That depends on which way the frost-damaged trees pull the two plots apart. If they sit mostly on one plot, dropping them shrinks that plot's spread and the gap between the plots gets **less** convincing, since the difference was partly those damaged trees. If they're spread across both plots, removing them tightens each plot's spread without moving the centers much, so the gap gets **more** convincing. So the honest answer is that it hinges on where the damaged trees fall, and I'd check that before saying either way."
+  },
+  {
+   "jid": "250916fe2018",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Give me a real world example.",
+   "conversation": [
+    "PROFESSOR: Two countries, Aldria and Brevin, each with one day of labor to spend on wheat or cloth.",
+    "PROFESSOR: In a day Aldria can make ten units of wheat or ten of cloth.",
+    "PROFESSOR: Brevin can make six units of wheat or three of cloth.",
+    "PROFESSOR: So Aldria is better at both, in absolute terms, that is absolute advantage.",
+    "PROFESSOR: But what matters for trade is opportunity cost: what each country gives up to make one more unit.",
+    "USER (typed to Natively): Who makes the wheat?",
+    "NATIVELY: In this example, both countries make wheat. Aldria can produce ten units of wheat in a day, and Brevin can produce six, so each country makes its own wheat rather than one making it for both.",
+    "USER (typed to Natively): But Aldria is better at both, so why trade?",
+    "NATIVELY: Because being better at both doesn't mean it's worth making both. What matters is the opportunity cost. For Aldria, one unit of cloth costs one unit of wheat given up, since it can make ten of each. For Brevin, one unit of cloth costs two units of wheat, since making three cloth means giving up six wheat. So Aldria gives up less wheat to make cloth, and Brevin gives up less cloth to make wheat. Each specializes where their opportunity cost is lower, and both end up with more than if they each made everything."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Here's the classic version of this. Say Aldria spends its day on cloth and Brevin spends its day on wheat. Aldria makes ten cloth, Brevin makes six wheat. Now let them trade, say six cloth for four wheat. Aldria ends up with six wheat and four cloth, which is more than the four and four it could have made alone. Brevin ends up with four cloth and two wheat, better than the three cloth and three wheat it could have made alone. Both are ahead, even though Aldria is better at everything."
+  },
+  {
+   "jid": "e3644c98f6ee",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Using the notes, what's the Fisher equation, what does each term mean, and what do I get for the example?",
+   "conversation": [],
+   "evidence_ids": [
+    "LECTURE-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The Fisher equation says the nominal rate is roughly the real rate plus expected inflation: **i ≈ r + πᵉ**. Here i is the nominal rate, r the real rate, and πᵉ expected inflation. With a nominal rate of 7 percent and expected inflation of 4 percent, the expected real rate is about **3 percent**. The exact form is (1 + i) = (1 + r)(1 + πᵉ)."
+  },
+  {
+   "jid": "255e42a7e1af",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "The whole argument hinges on the ergodic hypothesis, which we'll just take as given for today.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The ergodic hypothesis says that over long times, a single system's time average equals the average over all possible states at one instant. So instead of tracking one trajectory forever, you can average over an ensemble of copies at a fixed moment, which is usually far easier to compute. It's what lets statistical mechanics replace a hopeless many-body trajectory with a probability distribution. The catch is that it isn't true in general, systems with broken ergodicity, like glasses, can sit in one region of phase space for effectively forever."
+  },
+  {
+   "jid": "c3ec9539cb4f",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "What is the formula for compound interest and what does each letter stand for?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The compound interest formula is **A = P(1 + r/n)^(nt)**. A is the final amount including interest, P is the principal you start with, r is the annual interest rate as a decimal, n is how many times interest compounds per year, and t is the time in years. The interest earned alone is just A minus P.\n\nFor example, 1000 at 5% compounded monthly for 3 years gives A = 1000(1 + 0.05/12)^(36), which comes out to about 1161.47."
+  },
+  {
+   "jid": "e8c3781429f1",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "So plug in the cafe numbers: critical value times standard error, and what do we get?",
+   "conversation": [
+    "PROFESSOR: Our cafe example: a sample of twenty-five customers, mean wait seventy-four seconds, standard deviation ten.",
+    "PROFESSOR: So the standard error is ten over the square root of twenty-five, which is two.",
+    "PROFESSOR: For a ninety-five percent interval we use a critical value of one point nine six."
+   ],
+   "evidence_ids": [
+    "LECTURE-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "1.96 times 2 gives a margin of error of **3.92 seconds**.\n\nSo the 95% interval runs from 74 minus 3.92 to 74 plus 3.92, which is about **70.1 to 77.9 seconds**."
+  },
+  {
+   "jid": "6af1ab00b4a9",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "typed",
+   "question": "Walk me through deriving the quadratic formula by completing the square.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Start from ax² + bx + c = 0 and divide everything by a, so x² + (b/a)x + c/a = 0. Move the constant over: x² + (b/a)x = -c/a. Half of b/a is b/2a, and squaring that gives b²/4a², so add it to both sides: x² + (b/a)x + b²/4a² = b²/4a² - c/a. The left side is now a perfect square, (x + b/2a)², and the right side combines to (b² - 4ac)/4a². Take the square root of both sides, x + b/2a = ±√(b² - 4ac)/2a, then subtract b/2a to get x = (-b ± √(b² - 4ac))/2a.\n\nThe intuition: completing the square turns the equation into \"something squared equals a number,\" which you can just undo with a square root. The ± appears because both a positive and negative number square to the same value."
+  },
+  {
+   "jid": "e5269bed99d6",
+   "mode": "lecture",
+   "role": "USER: a student / learner. OTHER PARTY: the professor (lecture audio). Natively: private explanation for the student; need not be speakable.",
+   "surface": "heard",
+   "question": "It doubles. Boyle's law.",
+   "conversation": [
+    "PROFESSOR (heard): So what happens to the pressure if I squeeze this syringe down to half its volume?",
+    "NATIVELY: If the temperature stays the same, halving the volume doubles the pressure. That's Boyle's law: pressure times volume is constant, so P₁V₁ = P₂V₂, and cutting V to half means P goes to twice its original value."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Right, and the reason is that pressure times volume stays constant, so if you halve the volume the pressure has to double to keep that product the same. It only holds while the temperature and the amount of gas stay fixed, which is the assumption Boyle's law rests on."
+  }
+ ]
+}

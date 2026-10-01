@@ -152,8 +152,26 @@ export function readScreenUnderstandingMode(): ScreenUnderstandingMode {
 
 /** Providers that keep an image on the machine. Deliberately narrow: Codex CLI
  *  is NOT here — it routes to chatgpt.com/backend-api, so counting it as local
- *  (as CredentialsManager.anyLocalVisionProviderConfigured does) would ship a
- *  screenshot to a cloud service while telling the user it stayed on-device. */
-export function isLocalVisionProvider(provider: string): boolean {
-  return provider === 'ollama';
+ *  would ship a screenshot to a cloud service while telling the user it stayed
+ *  on-device.
+ *
+ *  A custom cURL provider is the one case that cannot be decided from the label
+ *  alone: the same `custom_provider` label covers an Ollama gateway on
+ *  127.0.0.1 and a public OpenRouter endpoint. The caller therefore supplies
+ *  `customProviderIsLocal`, computed from that provider's own URL/flag by
+ *  visionCapability.customProviderIsLocal. It defaults to FALSE, so a caller
+ *  that does not know keeps the old, safe answer.
+ *
+ *  This is the third consumer of that judgement (with the registry and the
+ *  credential gates) and they must agree — a boundary that refuses what the
+ *  gate just promised produces a VisionPolicyError instead of an answer. */
+export function isLocalVisionProvider(
+  provider: string,
+  opts?: { customProviderIsLocal?: boolean },
+): boolean {
+  if (provider === 'ollama') return true;
+  if (provider === 'custom_provider' || provider === 'custom_curl' || provider === 'custom') {
+    return opts?.customProviderIsLocal === true;
+  }
+  return false;
 }

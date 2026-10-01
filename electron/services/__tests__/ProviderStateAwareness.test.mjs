@@ -60,14 +60,16 @@ describe('LLMHelper key setters clear in-memory provider clients', () => {
 });
 
 describe('Codex availability uses OAuth state, not only enabled config', () => {
-  test('isCodexAvailable requires enabled config plus signedIn=true from CodexOAuthService', () => {
+  test('isCodexAvailable requires enabled config plus a usable ChatGPT sign-in', () => {
+    // Issue #558: the sign-in is Natively's own OR the Codex CLI's `codex login`
+    // (read-only), unified in getCodexAuthStatus() — no longer CodexOAuthService
+    // alone. The property is unchanged: enabled config is not enough.
     const source = read('electron/LLMHelper.ts');
     const start = source.indexOf('private isCodexAvailable(): boolean');
     assert.ok(start >= 0, 'isCodexAvailable helper must exist');
-    const block = source.slice(start, source.indexOf('\n  // ---------------------------', start));
+    const block = source.slice(start, source.indexOf('\n  }\n', start));
     assert.match(block, /if\s*\(!this\.codexCliConfig\.enabled\)\s*return false/);
-    assert.match(block, /CodexOAuthService/);
-    assert.match(block, /getStatus\(\)\.signedIn\s*===\s*true/);
+    assert.match(block, /getCodexAuthStatus\(\)\.signedIn/);
   });
 
   test('structured generation and routeWithScopeFallback consult isCodexAvailable()', () => {

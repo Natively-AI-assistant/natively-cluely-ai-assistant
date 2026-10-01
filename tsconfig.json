@@ -20,7 +20,7 @@
     //   react-syntax-highlighter -> react-syntax-highlighter@16 ships NO .d.ts of its
     //     own; the deep `dist/esm/*` imports are typed solely by the ambient
     //     `declare module` blocks inside @types/react-syntax-highlighter@15.
-    // See docs/ts7-upgrade-audit.md §4.2. Types reached through `import` (react,
+    // Types reached through `import` (react,
     // react-dom, ws, three, ...) resolve normally and do not belong here.
     "types": ["node", "react-syntax-highlighter"],
     "paths": {

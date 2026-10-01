@@ -1,0 +1,292 @@
+{
+  "mode": "looking-for-work",
+  "partition": "final-hard",
+  "contexts": [
+    {
+      "id": "FJOB-CTX-G1",
+      "kind": "grounded",
+      "title": "Portfolio case study: Saltmarsh offline field inspections",
+      "file_name": "portfolio_saltmarsh_case_study.txt",
+      "text": "PORTFOLIO CASE STUDY - SALTMARSH: OFFLINE-FIRST FIELD INSPECTIONS\nMy role: mobile and sync engineer (1 of 3 engineers). Timeline: April 2024 - January 2025.\n\nTHE PROBLEM\nFerrow County Water Authority sends inspectors out to check backflow valves, hydrants and meter vaults. Before Saltmarsh they filled in paper forms, then retyped them at the office. About a third of the sites have no cell signal at all, so an online-only app was never going to work. There were 42 inspectors when we started.\n\nWHAT WE BUILT\n- A React Native app (iOS and Android) that stores every inspection in SQLite on the device and works fully offline.\n- A small Go sync service in front of PostgreSQL.\n- A web dashboard for supervisors (built by my teammate Ines Carvalho; I only touched the export endpoint).\n\nTHE PART I OWNED: THE SYNC ENGINE\n- Every record is split into fields, and each field carries its own version stamp: a hybrid logical clock value plus the device ID.\n- When two inspectors edit the same inspection offline, the server merges field by field. If they changed different fields, both edits survive. If they changed the same field, the higher clock wins and the losing value is kept in a \"conflict shelf\" that the supervisor sees on the dashboard.\n- Photos never conflict: they are append-only and keyed by a content hash, so a re-upload after a dropped connection is a no-op.\n- Sync runs in batches of 50 records with a resumable cursor, so a sync that dies halfway through a canyon picks up where it stopped.\n- In the first 6 months after launch, 214 field-level conflicts went to the conflict shelf. Supervisors overrode the automatic winner 9 times.\n\nRESULTS\n- Average time per inspection went from 26 minutes to 11 minutes (the county's own time study, 3 weeks before and 3 weeks after).\n- Crash-free sessions went from 97.1% in the beta to 99.6% at the 1.0 release.\n- Retyping at the office went away entirely; the county reassigned one clerk position to scheduling.\n\nWHAT WENT WRONG\n- In version 1.3 I shipped on-device photo compression to cut upload size. It worked, but it ran on the main thread at full resolution and drained batteries: inspectors reported phones dying by early afternoon. I rolled it back within 4 days, then moved compression to a background worker that only runs while charging. My lesson: I tested on a new phone plugged into my desk, not on a three-year-old phone in the field in August.\n- I underestimated how long the Android permission flow for background location would take to get through review. We slipped the 1.0 date by two weeks.\n\nWHAT I WOULD DO DIFFERENTLY\n- Put a field test with real inspectors into every release, not just the big ones.\n- Write the conflict rules down as a one-page spec earlier. We argued about \"last writer wins\" for weeks before agreeing on per-field clocks.\n\nSTACK\nReact Native, TypeScript, SQLite (op-sqlite), Go, PostgreSQL, Sentry, GitHub Actions, Fastlane.",
+      "notes": null
+    },
+    {
+      "id": "FJOB-CTX-G2",
+      "kind": "grounded",
+      "title": "Brackenlight Robotics interview prep notes",
+      "file_name": "brackenlight_prep_notes.txt",
+      "text": "BRACKENLIGHT ROBOTICS - PREP NOTES FOR THE MOBILE ENGINEER LOOP\nRole: Senior Mobile Engineer, Fleet Tools. Interviews on Thursday.\n\nWHAT THEY DO\n- Brackenlight makes Wren, an autonomous mobile robot that moves totes around mid-size warehouses. About 2,600 Wren units are deployed at 70 customer sites.\n- Founded in 2020 in Pittsburgh. CEO is Adaeze Holloway; VP Engineering is Tomasz Brandt.\n- The Fleet Tools team builds the technician app that field techs use to diagnose, update and recover robots on the warehouse floor.\n\nRECENT NEWS\n- In June 2026 they issued a voluntary firmware recall affecting 1,200 Wren units after a bug in the obstacle map cache caused robots to stop and block aisles. No injuries. The fix was pushed over the air, but about 180 units at sites with locked-down networks had to be updated by technicians with a laptop and a USB cable.\n- In their July blog post, Tomasz wrote that the recall \"showed us our technicians are our update channel of last resort, and our tooling wasn't ready for that.\" They are now building offline firmware updates into the technician app.\n- They opened a second office in Columbus in 2025, mostly for customer support.\n\nTHE TEAM (from the recruiter)\n- Fleet Tools is 5 engineers: 2 mobile, 2 backend, 1 embedded liaison. The hiring manager is Rosalind Eke.\n- The technician app is React Native. Warehouses often have dead zones between steel racks.\n\nINTERVIEW LOOP\n1. Hiring manager chat with Rosalind (45 min).\n2. Mobile system design: \"design offline firmware delivery to robots through the technician app.\"\n3. Pairing session in TypeScript.\n4. Values interview. Their three values are \"Stop the line\", \"Leave the floor better\" and \"Say what you saw.\"\n\nMY ANGLE\n- Saltmarsh is almost the same shape of problem: field workers, no signal, data that must not be lost or duplicated.\n- The recall story is the obvious hook for why now.\n- \"Say what you saw\" lines up with the photo compression rollback story.\n\nQUESTIONS TO ASK\n- How do technicians find out an update failed halfway?\n- What does Rosalind want the app to do in 12 months that it can't do today?",
+      "notes": null
+    },
+    {
+      "id": "FJOB-CTX-C1",
+      "kind": "conflicting",
+      "title": "Older brag doc draft (Dashiell Marrow)",
+      "file_name": "brag_doc_draft_march_2026.txt",
+      "text": "BRAG DOC - DRAFT (written March 2026, not updated since)\nDashiell Marrow\n\nCINDERVALE SYSTEMS - SRE I (Jul 2025 - Mar 2026)\n- Built Grafana SLO dashboards for the tier-1 services. Pages dropped from about 260 a month to around 90 after we switched to burn-rate alerts.\n- Automated TLS rotation with cert-manager. Retired the long wiki runbook (40-something steps).\n- Wrote Lanternfish in Rust. It showed DNS was roughly a third of checkout p99.\n- Ran game days for node-pool upgrades, twice a year, with 2 teams.\n- Primary on-call from October 2025.\n\nHOLLOWBROOK DATA - contract (starting soon)\n- Plan: move Terraform state to a remote S3 backend.\n- Kestrel idea: a Python CLI that checks Terraform plans against about 15 OPA rules.\n- Goal: bring EKS compute spend down from $41,300 to about $31,200 a month.\n\nORRIN TELEMATICS - intern (summer 2024)\n- Containerized legacy Java services, wrote Helm charts.\n- CI went from 34 minutes to 13 minutes with Buildkite caching.\n\nEDUCATION AND CERTS\n- Puget Cascade University, B.S. Computer Engineering, 2025.\n- TA for Operating Systems, one semester.\n- CKA, 2024.\n\nSIDE STUFF\n- Tidepool Homelab: k3s on Raspberry Pis with Flux. Uptime 99.2% over 180 days, measured with Uptime Kuma.\n- Brine (capstone): Raft in Rust, 3-person team. Leader election worked, log compaction never really did.\n\nTHINGS TO REMEMBER TO SAY\n- I like reliability work because pages should mean something.\n- Alert quality is the thing I care most about; everything else follows from it.\n- Mention the DNS finding early, people remember it.\n- Don't oversell Go. I've read a lot of Go, I haven't shipped any.\n- Keep the internship short, it's the least relevant part now.",
+      "notes": "Contradicts the PI-B resume: Cindervale end date Mar 2026 vs Jan 2026; pages 260 to about 90 vs 260 to 70; Kestrel about 15 OPA rules vs 17; EKS spend target about $31,200 vs achieved $29,800; primary on-call from October 2025 vs November 2025; game days twice a year with 2 teams vs quarterly with 3 teams; TLS runbook \"40-something steps\" vs 47-step; TA one semester vs two semesters; CKA 2024 vs 2025. Hollowbrook items are written as plans, not results."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "FJOB-001",
+      "category": "difficult_project",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Walk me through the sync piece of that inspection app. What actually happens when two inspectors edit the same record while they're both offline?",
+      "context_condition": "grounded",
+      "context_ref": "FJOB-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_grounded",
+        "resume_deep_dive"
+      ],
+      "expected_answer_type": "first-person technical walkthrough from the portfolio",
+      "claim_trap": "personal_history",
+      "needles": [
+        "hybrid logical clock",
+        "conflict shelf"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FJOB-002",
+      "category": "failure",
+      "difficulty": "hard",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Biggest mistake on that project?",
+      "context_condition": "grounded",
+      "context_ref": "FJOB-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_grounded",
+        "short_turn"
+      ],
+      "expected_answer_type": "first-person failure story taken from the portfolio",
+      "claim_trap": "personal_history",
+      "needles": [
+        "4 days",
+        "photo compression"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FJOB-003",
+      "category": "achievement",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "What did the county end up paying for Saltmarsh, and did it get rolled out to any other counties after that?",
+      "context_condition": "grounded",
+      "context_ref": "FJOB-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "absent_fact"
+      ],
+      "expected_answer_type": "honest first-person answer without invented contract or rollout",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FJOB-004",
+      "category": "why_company",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "You've probably read about the recall this summer. How does that change how you'd think about this job, if at all?",
+      "context_condition": "grounded",
+      "context_ref": "FJOB-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_grounded",
+        "judgment"
+      ],
+      "expected_answer_type": "first-person informed answer drawn from prep notes",
+      "claim_trap": "company_fact",
+      "needles": [
+        "1,200",
+        "offline firmware updates"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FJOB-005",
+      "category": "why_company",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "rosalind just asked why brackenlight and why this team. give me something short that uses my notes and connects it to saltmarsh, and one question i can ask her back",
+      "context_condition": "grounded",
+      "context_ref": "FJOB-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "doc_grounded",
+        "multi_ask"
+      ],
+      "expected_answer_type": "speakable answer plus one question, grounded in notes",
+      "claim_trap": "company_fact",
+      "needles": [
+        "Fleet Tools",
+        "dead zones"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "FJOB-006",
+      "category": "achievement",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Your resume says you cut pages a lot at Cindervale. What were the numbers, and what did you actually change?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "resume_deep_dive"
+      ],
+      "expected_answer_type": "first-person answer with resume figures and mechanism",
+      "claim_trap": "personal_history",
+      "needles": [
+        "260 to 70",
+        "multi-window burn-rate"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "FJOB-007",
+      "category": "follow_up_challenge",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Quick fact check before I write this up. When exactly did you finish at Cindervale, and how many policy rules does Kestrel check?",
+      "context_condition": "conflicting",
+      "context_ref": "FJOB-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "multi_ask"
+      ],
+      "expected_answer_type": "first-person facts that resolve the resume versus draft conflict",
+      "claim_trap": "personal_history",
+      "needles": [
+        "Jan 2026",
+        "17 Open Policy Agent rules"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "FJOB-008",
+      "category": "changing_jobs",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Why did you leave Cindervale after only about seven months?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "absent_fact"
+      ],
+      "expected_answer_type": "first-person answer that does not invent a reason",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "FJOB-009",
+      "category": "prep_request",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "remind me what the take-home is and who the last conversation is with",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "prep"
+      ],
+      "expected_answer_type": "short private prep note from the job description",
+      "claim_trap": "company_fact",
+      "needles": [
+        "90-minute take-home",
+        "Oyelaran"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B-JD"
+    },
+    {
+      "local_id": "FJOB-010",
+      "category": "salary",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "And you're comfortable with the base range I mentioned at the start, right?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "So quick overview before we dig in. The team is nine people, you'd be the second mobile engineer, and we ship a build to TestFlight every Thursday."
+        },
+        {
+          "speaker": "user",
+          "text": "Got it, that's helpful. Is the other mobile engineer more on iOS or Android?"
+        },
+        {
+          "speaker": "other",
+          "text": "Mostly iOS, which is part of why we want someone who's comfortable on Android too."
+        },
+        {
+          "speaker": "other",
+          "text": "Okay, tell me about the last app you shipped."
+        },
+        {
+          "speaker": "user",
+          "text": "The last one was a field inspection app that had to work completely offline, I owned the sync engine."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "false_premise",
+        "adversarial"
+      ],
+      "expected_answer_type": "speakable answer that does not accept an unstated range",
+      "claim_trap": "meeting_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    }
+  ]
+}

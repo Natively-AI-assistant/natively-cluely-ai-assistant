@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Bell, Rocket } from 'lucide-react';
 import mainui from "../UI_comp/mainui.png";
+import { FLUXION_REFERRAL_URL, SPONSORSHIP_EMAIL, SPONSORSHIP_GMAIL_COMPOSE_URL } from '../lib/partnerLinks';
 
 // --- Types ---
 
@@ -9,7 +10,7 @@ interface FeatureSlide {
     id: string;
     headline: string;
     subtitle: string;
-    type?: 'feature' | 'support' | 'premium';
+    type?: 'feature' | 'support' | 'premium' | 'sponsor' | 'advertise';
     actionLabel?: string;
     url?: string;
     eyebrow?: string;
@@ -20,6 +21,18 @@ interface FeatureSlide {
 // --- Data ---
 
 const FEATURES: FeatureSlide[] = [
+    {
+        id: 'sponsor_fluxion',
+        headline: 'Fluxion AI',
+        subtitle: 'GPT, Claude and more through one API',
+        bullets: [
+            'Up to 70% below official API pricing',
+            '$3 in free credit when you join through Natively',
+        ],
+        type: 'sponsor',
+        actionLabel: 'Claim $3 credit',
+        url: FLUXION_REFERRAL_URL,
+    },
     {
         id: 'tailored_answers',
         headline: 'Upcoming features',
@@ -41,14 +54,87 @@ const FEATURES: FeatureSlide[] = [
         type: 'support',
         actionLabel: 'Contribute to development',
         url: 'https://buymeacoffee.com/evinjohnn'
-    }
+    },
+    {
+        id: 'advertise_natively',
+        headline: 'Advertise with Natively',
+        subtitle: 'Sponsorship and ad slots are open',
+        bullets: [SPONSORSHIP_EMAIL],
+        type: 'advertise',
+        actionLabel: 'Get in touch',
+        url: SPONSORSHIP_GMAIL_COMPOSE_URL,
+    },
 ];
+
+/**
+ * Paging arrow: a long-armed, obtuse (100°) chevron. Lucide's chevrons are a
+ * tight right angle, which read as a UI glyph rather than a quiet direction
+ * cue at the card's edge. 16-unit arms at ±50° from the horizontal.
+ */
+const ARROW_PATH = { left: 'M13.3 1.7 L3 14 L13.3 26.3', right: 'M2.7 1.7 L13 14 L2.7 26.3' } as const;
+
+/**
+ * The GLYPH is the glass — there is no plate behind it. A stroke cannot carry a
+ * backdrop-filter, so the chevron is drawn into a mask and the filter runs on the
+ * element the mask cuts: what is left is a chevron-shaped window onto a blurred,
+ * saturated copy of the artwork, with a faint white body over it for the material
+ * and a dark rim under it so the shape survives a pale background.
+ *
+ * ARROW_STROKE is the one number to move. The band has to be wide enough to hold
+ * a blur — below about 2 the refraction has nowhere to show and it collapses back
+ * into a plain white line.
+ */
+const ARROW_STROKE = 2.25;
+
+const arrowMask = (side: 'left' | 'right') =>
+    `url("data:image/svg+xml,${encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 28"><path d="${ARROW_PATH[side]}" fill="none" stroke="#fff" stroke-width="${ARROW_STROKE}" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    )}")`;
+
+const PagingArrow: React.FC<{ side: 'left' | 'right' }> = ({ side }) => {
+    const mask = arrowMask(side);
+    return (
+        <span
+            aria-hidden="true"
+            className="block h-7 w-4 opacity-90 transition-opacity duration-200 group-hover/arrow:opacity-100"
+            style={{
+                maskImage: mask,
+                WebkitMaskImage: mask,
+                maskSize: '100% 100%',
+                WebkitMaskSize: '100% 100%',
+                maskRepeat: 'no-repeat',
+                WebkitMaskRepeat: 'no-repeat',
+                backdropFilter: 'blur(4px) saturate(180%) brightness(1.35)',
+                WebkitBackdropFilter: 'blur(4px) saturate(180%) brightness(1.35)',
+                background: 'linear-gradient(150deg, rgba(255,255,255,0.55), rgba(255,255,255,0.14))',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.45)',
+            }}
+        />
+    );
+};
+
+/**
+ * Proximity reveal. The arrows used to appear together the moment the card was
+ * hovered, which put two controls on screen for a cursor that was only passing
+ * over the copy. Instead each one wakes on its own, and only once the pointer is
+ * within PROXIMITY_RADIUS of ITS centre — roughly 2cm on a typical display.
+ *
+ * Measured against the card box rather than with a hover zone, because a zone
+ * large enough to feel like a radius would sit over the headline and the CTA and
+ * swallow their clicks.
+ */
+const PROXIMITY_RADIUS = 72;
+/** left-2.5 (10px) + half of w-7 (14px): the centre of either arrow, from its own edge. */
+const ARROW_INSET = 24;
 
 // --- Component ---
 
 export const FeatureSpotlight: React.FC = () => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
+    // Which arrow the pointer is currently near, if either.
+    const [nearArrow, setNearArrow] = useState<'prev' | 'next' | null>(null);
+    const cardRef = useRef<HTMLDivElement>(null);
 
     // Interest state: map of feature ID -> boolean
     const [interestState, setInterestState] = useState<Record<string, boolean>>(() => {
@@ -64,15 +150,20 @@ export const FeatureSpotlight: React.FC = () => {
     const isInterested = interestState[currentFeature.id] || false;
     const isSupport = currentFeature.type === 'support';
     const isPremium = currentFeature.type === 'premium';
+    const isSponsor = currentFeature.type === 'sponsor';
+    const isAdvertise = currentFeature.type === 'advertise';
+    // Slides whose button leaves the app (a link or an email) rather than toggling interest.
+    const isCallout = isSupport || isSponsor || isAdvertise;
 
     // --- Auto-Advance Logic ---
 
     useEffect(() => {
         if (isPaused) return;
 
-        // Support slide has longer duration (10s), others 6-8s
-        const baseDuration = isSupport ? 10000 : 6000;
-        const randomFactor = isSupport ? 0 : Math.random() * 2000;
+        // Support and sponsor slides hold longer (10s), others 6-8s
+        const holdsLonger = isSupport || isSponsor;
+        const baseDuration = holdsLonger ? 10000 : 6000;
+        const randomFactor = holdsLonger ? 0 : Math.random() * 2000;
         const intervalDuration = baseDuration + randomFactor;
 
         const timer = setTimeout(() => {
@@ -80,15 +171,41 @@ export const FeatureSpotlight: React.FC = () => {
         }, intervalDuration);
 
         return () => clearTimeout(timer);
-    }, [currentIndex, isPaused, isSupport]);
+    }, [currentIndex, isPaused, isSupport, isSponsor]);
 
 
     // --- Interaction Handlers ---
 
+    // Manual paging. Changing currentIndex also restarts the auto-advance timer.
+    const goTo = (delta: number) => (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setCurrentIndex((prev) => (prev + delta + FEATURES.length) % FEATURES.length);
+    };
+
+    // Nearest arrow wins, so the two never light up at once. The radii do not
+    // overlap on this card anyway (593px wide against a 72px reach), but a
+    // narrower one should still reveal one arrow at a time.
+    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        const box = cardRef.current?.getBoundingClientRect();
+        if (!box) return;
+
+        const x = e.clientX - box.left;
+        const y = e.clientY - box.top;
+        const cy = box.height / 2;
+        const toPrev = Math.hypot(x - ARROW_INSET, y - cy);
+        const toNext = Math.hypot(x - (box.width - ARROW_INSET), y - cy);
+
+        const next = Math.min(toPrev, toNext) > PROXIMITY_RADIUS
+            ? null
+            : (toPrev <= toNext ? 'prev' : 'next');
+
+        setNearArrow((prev) => (prev === next ? prev : next));
+    };
+
     const handleActionClick = (e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent parent clicks
 
-        if (isSupport && currentFeature.url) {
+        if (currentFeature.url) {
             if (window.electronAPI && window.electronAPI.openExternal) {
                 window.electronAPI.openExternal(currentFeature.url);
             } else {
@@ -111,9 +228,11 @@ export const FeatureSpotlight: React.FC = () => {
 
     return (
         <div
+            ref={cardRef}
             className="relative h-full w-full overflow-hidden rounded-xl flex flex-col group select-none bg-gradient-to-br from-[#1C1C1E] to-[#151516]"
             onMouseEnter={() => setIsPaused(true)}
-            onMouseLeave={() => setIsPaused(false)}
+            onMouseLeave={() => { setIsPaused(false); setNearArrow(null); }}
+            onPointerMove={handlePointerMove}
             style={{ isolation: 'isolate' }}
         >
             {/* 1. Background (Ambient) */}
@@ -126,12 +245,36 @@ export const FeatureSpotlight: React.FC = () => {
                 <div className="absolute inset-0 bg-black/20" />
             </div>
 
+            {/* Side arrows: revealed when the pointer comes within reach of that one
+                arrow (or on keyboard focus), nudging in from their own edge */}
+            {([
+                { delta: -1, label: 'Previous card', glyph: 'left', side: 'left-2.5', rest: '-translate-x-1', which: 'prev' },
+                { delta: 1, label: 'Next card', glyph: 'right', side: 'right-2.5', rest: 'translate-x-1', which: 'next' },
+            ] as const).map(({ delta, label, glyph, side, rest, which }) => (
+                <button
+                    key={label}
+                    type="button"
+                    aria-label={label}
+                    onClick={goTo(delta)}
+                    className={`
+                        absolute top-1/2 ${side} z-30 -translate-y-1/2
+                        ${nearArrow === which ? 'opacity-100 translate-x-0 pointer-events-auto' : `opacity-0 ${rest} pointer-events-none`}
+                        group/arrow flex h-10 w-7 items-center justify-center
+                        focus-visible:opacity-100 focus-visible:translate-x-0 focus-visible:pointer-events-auto
+                        active:scale-[0.92]
+                        transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]
+                    `}
+                >
+                    <PagingArrow side={glyph} />
+                </button>
+            ))}
+
             {/* 2. Content Area (Centered) */}
             <div className="relative z-10 w-full h-full text-center">
 
                 {/* Ambient Glow for Premium Slide */}
                 <AnimatePresence>
-                    {currentFeature.type === 'premium' && (
+                    {isPremium && (
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -178,14 +321,14 @@ export const FeatureSpotlight: React.FC = () => {
 
                                 {/* Title */}
                                 <h2
-                                    className={`drop-shadow-sm tracking-tight mb-0 transition-all duration-300 group-hover:brightness-105 ${isSupport ? 'translate-y-1.5' : ''}`}
+                                    className={`drop-shadow-sm tracking-tight mb-0 transition-all duration-300 group-hover:brightness-105 ${isCallout ? 'translate-y-1.5' : ''}`}
                                     style={{
                                         fontFamily: 'var(--font-system)',
-                                        fontSize: (isPremium || isSupport) ? '30px' : '26px',
+                                        fontSize: (isPremium || isCallout) ? '30px' : '26px',
                                         fontWeight: 500,
                                         lineHeight: 1.1,
-                                        color: (isPremium || isSupport) ? '#E6C46A' : '#ffffff',
-                                        textShadow: (isPremium || isSupport) ? '0px 1px 1px rgba(0, 0, 0, 0.1)' : 'none',
+                                        color: (isPremium || isCallout) ? '#E6C46A' : '#ffffff',
+                                        textShadow: (isPremium || isCallout) ? '0px 1px 1px rgba(0, 0, 0, 0.1)' : 'none',
                                     }}
                                 >
                                     {currentFeature.headline}
@@ -193,15 +336,15 @@ export const FeatureSpotlight: React.FC = () => {
 
                                 {/* Subtitle */}
                                 <p
-                                    className={`antialiased mb-2 ${isSupport ? 'translate-y-1.5' : ''}`} // Standardized mb-2 for equal spacing
+                                    className={`antialiased mb-2 ${isCallout ? 'translate-y-1.5' : ''}`} // Standardized mb-2 for equal spacing
                                     style={{
                                         fontFamily: 'var(--font-system)',
-                                        fontSize: (isPremium || isSupport) ? '16px' : '15px',
+                                        fontSize: (isPremium || isCallout) ? '16px' : '15px',
                                         fontWeight: 400,
                                         lineHeight: 1.4,
                                         color: '#F5F7FA',
                                         opacity: 0.9,
-                                        maxWidth: isSupport ? '380px' : '360px'
+                                        maxWidth: isCallout ? '380px' : '360px'
                                     }}
                                 >
                                     {currentFeature.subtitle}
@@ -212,8 +355,8 @@ export const FeatureSpotlight: React.FC = () => {
                                         {currentFeature.bullets.map((bullet, idx) => (
                                             <div key={idx} className={`flex items-center justify-center group/item transition-transform duration-200 px-2`}>
                                                 <span
-                                                    className={`${isSupport ? 'text-[12px] leading-relaxed font-medium opacity-100' : 'text-[12.5px] leading-snug font-medium'}`}
-                                                    style={{ letterSpacing: isSupport ? '0.01em' : '-0.01em', color: '#E6C46A' }}
+                                                    className={`${isCallout ? 'text-[12px] leading-relaxed font-medium opacity-100' : 'text-[12.5px] leading-snug font-medium'}`}
+                                                    style={{ letterSpacing: isCallout ? '0.01em' : '-0.01em', color: '#E6C46A' }}
                                                 >
                                                     {bullet}
                                                 </span>
@@ -247,16 +390,16 @@ export const FeatureSpotlight: React.FC = () => {
                                             group relative
                                             flex items-center justify-center gap-3
                                             rounded-full
-                                            transition-all duration-200 ease-out
+                                            transition-[filter,transform] duration-200 ease-out
                                             hover:brightness-105
-                                            active:scale-[0.98]
+                                            active:scale-[0.97]
                                             overflow-hidden
-                                            ${isSupport
+                                            ${isCallout
                                                 ? 'mt-2 translate-y-5 px-6 py-2 text-[13px] font-medium text-[#1C1C1E]'
                                                 : `px-10 py-2.5 text-[13px] font-medium text-[#F5F7FA]`
                                             }
                                         `}
-                                        style={isSupport ? {
+                                        style={isCallout ? {
                                             background: 'linear-gradient(180deg, #F1D88B 0%, #E6C87A 100%)',
                                             boxShadow: `
                                                 0 6px 20px rgba(230, 200, 122, 0.35),
@@ -270,7 +413,7 @@ export const FeatureSpotlight: React.FC = () => {
                                         }}
                                     >
                                         {/* Gradient Border (Standard Connect Button Only) */}
-                                        {!isSupport && (
+                                        {!isCallout && (
                                             <div
                                                 className="absolute inset-0 rounded-full pointer-events-none transition-opacity duration-300 group-hover:opacity-80"
                                                 style={{
@@ -285,7 +428,7 @@ export const FeatureSpotlight: React.FC = () => {
                                         )}
 
                                         {/* Inner Highlight for Standard Button */}
-                                        {!isSupport && (
+                                        {!isCallout && (
                                             <div
                                                 className="absolute inset-0 rounded-full pointer-events-none"
                                                 style={{
@@ -303,30 +446,30 @@ export const FeatureSpotlight: React.FC = () => {
                                                 className="flex items-center gap-2.5 relative z-10"
                                             >
                                                 <span>
-                                                    {isInterested && !isSupport
+                                                    {isInterested && !isCallout
                                                         ? 'Interested'
-                                                        : (isSupport ? (
+                                                        : isSupport ? (
                                                             <span className="flex items-center gap-2">
                                                                 <Rocket size={14} className="text-[#1C1C1E]" strokeWidth={2.5} />
                                                                 Fund development
                                                             </span>
-                                                        ) : (currentFeature.actionLabel || 'Mark interest'))
+                                                        ) : (currentFeature.actionLabel || 'Mark interest')
                                                     }
                                                 </span>
 
-                                                {/* Icon: ArrowReference for Support, Bell for Features */}
+                                                {/* Icon: arrow for outbound links, bell for features */}
                                                 <motion.div
                                                     variants={{
                                                         hover: isInterested ? {
                                                             rotate: [0, -10, 10, -10, 10, 0],
                                                             transition: { duration: 0.5, repeat: Infinity, repeatDelay: 2 }
-                                                        } : (isSupport ? {
+                                                        } : (isCallout ? {
                                                             x: [0, 4, 0],
                                                             transition: { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
                                                         } : {})
                                                     }}
                                                 >
-                                                    {isSupport ? (
+                                                    {isCallout ? (
                                                         <ArrowRight
                                                             size={14}
                                                             className="text-[#1C1C1E] transition-colors duration-300"

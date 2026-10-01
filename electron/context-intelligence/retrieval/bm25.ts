@@ -20,16 +20,25 @@
 //
 // See docs/context-intelligence-v3/02_RETRIEVAL_BENCHMARK.md §6.1
 
-/** Must stay identical to the legacy tokenizer so lexical scores stay comparable
- *  across the migration (ModeHybridRetriever.wordsOf). Guarded by a parity test. */
+/** Matches the legacy tokenizer (lexicalTokens.wordsOf) so lexical scores stay
+ *  comparable across the migration — guarded by a parity test — with ONE
+ *  deliberate difference since 2026-09-19: short tokens carrying a digit are
+ *  kept, i.e. this is `wordsOf(text, { shortNumerics: true })` without the
+ *  hyphen/numeral extras. Safe here because BM25 has idf: a "2" that is in every
+ *  chunk weighs ~0, a "13" that names one section weighs a lot. The default
+ *  `wordsOf` does NOT keep them, because the legacy scorer it feeds has no idf. */
 export function tokenize(text: string): string[] {
   return String(text)
     .toLowerCase()
     .replace(/['’]s\b/g, '')
     .replace(/['’]/g, '')
-    .replace(/[^a-z0-9\s-]/g, ' ')
+    // Every script's letters, marks and digits, in lockstep with wordsOf
+    // (2026-09-22; was ASCII-only, which erased non-Latin text entirely).
+    .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, ' ')
     .split(/\s+/)
-    .filter((w) => w.length > 2);
+    // Short tokens carrying a digit are identifiers ("13", "v2", "l5"), not
+    // stopwords — kept in lockstep with lexicalTokens.keepToken.
+    .filter((w) => w.length > 2 || (w.length > 0 && /\d/.test(w)));
 }
 
 export interface Bm25Params {

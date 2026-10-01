@@ -30,9 +30,14 @@ const shellExecAsync = util.promisify(execShell);
  */
 function assertScreenRecordingPermission(): void {
   if (process.platform !== 'darwin') return;
-  // In development mode, bypass the permission check so screenshots work without
-  // needing the app to be in the TCC whitelist (same policy as the startup check in main.ts).
-  if (!app.isPackaged) return;
+  // Opt-in dev bypass ONLY — matches main.ts's isDevTccBypassEnabled() (see its
+  // B5 comment: an unconditional !app.isPackaged bypass here meant screenshot
+  // capture in every dev build silently skipped the real TCC check, so a dev
+  // could never observe the "permission denied" failure a packaged,
+  // unauthorized user actually hits). Requires BOTH !app.isPackaged and the
+  // explicit env var — set NATIVELY_DEV_BYPASS_SCREEN_TCC=1 to restore the
+  // legacy bypass for local screenshot testing.
+  if (!app.isPackaged && process.env.NATIVELY_DEV_BYPASS_SCREEN_TCC === '1') return;
   const status = systemPreferences.getMediaAccessStatus('screen');
   switch (status) {
     case 'granted':
@@ -687,18 +692,7 @@ export class ScreenshotHelper {
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
         }
 
-        this.screenshotQueue.push(screenshotPath)
-        if (this.screenshotQueue.length > this.MAX_SCREENSHOTS) {
-          const removedPath = this.screenshotQueue.shift()
-          if (removedPath) {
-            try {
-              await fs.promises.unlink(removedPath)
-              console.log(`[ScreenshotHelper] Removed old screenshot: ${removedPath}`);
-            } catch (error) {
-              console.warn(`[ScreenshotHelper] Failed to remove old screenshot: ${removedPath}`, error)
-            }
-          }
-        }
+        await this.enqueue(screenshotPath, 'queue')
       } else {
         screenshotPath = path.join(this.extraScreenshotDir, `${uuidv4()}.png`)
         console.log(`[ScreenshotHelper] Using extra screenshots directory: ${screenshotPath}`);
@@ -716,18 +710,7 @@ export class ScreenshotHelper {
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
         }
 
-        this.extraScreenshotQueue.push(screenshotPath)
-        if (this.extraScreenshotQueue.length > this.MAX_SCREENSHOTS) {
-          const removedPath = this.extraScreenshotQueue.shift()
-          if (removedPath) {
-            try {
-              await fs.promises.unlink(removedPath)
-              console.log(`[ScreenshotHelper] Removed old extra screenshot: ${removedPath}`);
-            } catch (error) {
-              console.warn(`[ScreenshotHelper] Failed to remove old extra screenshot: ${removedPath}`, error)
-            }
-          }
-        }
+        await this.enqueue(screenshotPath, 'extra')
       }
 
       console.log(`[ScreenshotHelper] Screenshot successful: ${screenshotPath}`);
@@ -778,23 +761,56 @@ export class ScreenshotHelper {
       console.log(`[ScreenshotHelper] Selective screenshot successful: ${screenshotPath}`);
 
       // Add to queue so it appears in getScreenshots() and respects the cap
-      this.screenshotQueue.push(screenshotPath);
-      if (this.screenshotQueue.length > this.MAX_SCREENSHOTS) {
-        const removedPath = this.screenshotQueue.shift();
-        if (removedPath) {
-          try {
-            await fs.promises.unlink(removedPath);
-          } catch {
-            // best-effort cleanup
-          }
-        }
-      }
+      await this.enqueue(screenshotPath, 'queue')
 
       return screenshotPath
     } catch (error) {
       console.error('[ScreenshotHelper] Failed to take selective screenshot:', error);
       throw error
     }
+  }
+
+  /**
+   * Add a saved image to its queue, dropping (and deleting) the oldest past
+   * MAX_SCREENSHOTS. The one place the cap lives, for captures and for images
+   * that arrive from elsewhere (addExternalImage).
+   */
+  private async enqueue(imagePath: string, which: 'queue' | 'extra'): Promise<void> {
+    const queue = which === 'queue' ? this.screenshotQueue : this.extraScreenshotQueue
+    queue.push(imagePath)
+    if (queue.length <= this.MAX_SCREENSHOTS) return
+    const removedPath = queue.shift()
+    if (!removedPath) return
+    try {
+      await fs.promises.unlink(removedPath)
+      console.log(`[ScreenshotHelper] Removed old ${which === 'queue' ? '' : 'extra '}screenshot: ${removedPath}`)
+    } catch (error) {
+      console.warn(`[ScreenshotHelper] Failed to remove old ${which === 'queue' ? '' : 'extra '}screenshot: ${removedPath}`, error)
+    }
+  }
+
+  /**
+   * Save an image that did not come from this machine's screen (a photo or
+   * screenshot sent from the Phone Mirror page) into the same queue a capture
+   * would join, so every path that reads screenshots can use it. The caller
+   * has already checked it is an image; the name is ours, never the sender's.
+   */
+  public async addExternalImage(
+    data: Buffer,
+    ext: 'jpg' | 'png' | 'webp',
+    opts: { namePrefix?: string } = {},
+  ): Promise<string> {
+    // A prefix marks where the image came from (e.g. PHONE_IMAGE_PREFIX, which
+    // the vision path reads). Letters, digits and dashes only: it is part of a
+    // file name, never a path.
+    const prefix = opts.namePrefix ?? ''
+    if (!/^[a-z0-9-]*$/i.test(prefix)) throw new Error(`Invalid image name prefix: ${prefix}`)
+    const which = this.view === 'queue' ? 'queue' : 'extra'
+    const dir = which === 'queue' ? this.screenshotDir : this.extraScreenshotDir
+    const imagePath = path.join(dir, `${prefix}${uuidv4()}.${ext}`)
+    await fs.promises.writeFile(imagePath, data)
+    await this.enqueue(imagePath, which)
+    return imagePath
   }
 
   public getView(): "queue" | "solutions" {

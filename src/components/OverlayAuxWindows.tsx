@@ -13,8 +13,10 @@ import { getGlassOverlayAppearance, getOverlayAppearance } from '../lib/overlayA
 //
 // State flows one way: the overlay renderer broadcasts OverlayUiState over
 // 'overlay-ui-state' (relayed + cached by the main process, replayed on
-// (re)load); user actions flow back over 'overlay-ui-action' to the overlay
-// renderer, which invokes the exact same handlers the inline components used.
+// (re)load); user actions flow back over 'overlay-ui-action'. Layout actions
+// reach the overlay renderer, which invokes the exact same handlers the inline
+// components used; Stop (end-meeting) is ended by main itself — see
+// electron/utils/overlayUiActionRouter.ts.
 
 export interface OverlayUiState {
   /** Vertical show/hide (Cmd+B) — mirrors NativelyInterface's isExpanded. */
@@ -74,6 +76,35 @@ function useDismissPopoversOnMouseDown() {
     window.addEventListener('mousedown', onMouseDown, true);
     return () => window.removeEventListener('mousedown', onMouseDown, true);
   }, []);
+}
+
+// Main un-hovers an aux window while it is hidden (clearStaleHover — Stop is
+// clicked with the cursor on it, then hidden from under it). A hidden page
+// draws nothing, so that style change and its 0.2s colour transition only run
+// once the window is shown again: measured, the next meeting opened with Stop
+// fading out of red. visibilitychange fires just before that first style pass,
+// so button transitions are off from there until two frames have been drawn
+// (index.css, [data-aux-just-shown]).
+function useNoTransitionsOnShow(rootRef: React.RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    let frame = 0;
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      el.setAttribute('data-aux-just-shown', '');
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        frame = requestAnimationFrame(() => el.removeAttribute('data-aux-just-shown'));
+      });
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      cancelAnimationFrame(frame);
+      el.removeAttribute('data-aux-just-shown');
+    };
+  }, [rootRef]);
 }
 
 // ── Managed group drag (macOS + Windows) ────────────────────────────────────
@@ -194,6 +225,7 @@ export function OverlayPillWindow() {
   const rootRef = useRef<HTMLDivElement>(null);
   const dragManaged = useManagedGroupDrag(rootRef);
   useDismissPopoversOnMouseDown();
+  useNoTransitionsOnShow(rootRef);
 
   // Report the pill's w-fit size so the main process can size + re-center the
   // OS window (same 'update-content-dimensions' channel every window uses;
@@ -253,12 +285,15 @@ export function OverlayToggleWindow() {
   const state = useOverlayUiState();
   const appearance = useOverlayAuxAppearance(state);
   const themeAttr = state.interfaceTheme ?? 'default';
+  const rootRef = useRef<HTMLDivElement>(null);
   useDismissPopoversOnMouseDown();
+  useNoTransitionsOnShow(rootRef);
 
   // The 28px button centered in the TOGGLE_WINDOW_SIZE (36px) window: 4px of
   // margin on every side absorbs the hover scale (×1.06) without clipping.
   return (
     <div
+      ref={rootRef}
       data-interface-theme={themeAttr}
       className="w-full h-full bg-transparent select-none"
       style={{

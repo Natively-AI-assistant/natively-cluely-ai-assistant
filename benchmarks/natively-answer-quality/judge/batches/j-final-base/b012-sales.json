@@ -1,0 +1,231 @@
+{
+ "batch": "b012-sales",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "FSALES-CTX-G1": {
+   "title": "Harborline Cold Chain Monitor pricing and hardware sheet",
+   "text": "Harborline Cold Chain Monitor - Pricing and Hardware Sheet 2026\nHarborline Systems | Rep and partner use | Effective 1 February 2026\n\nWHAT IT DOES\nHarborline Cold Chain Monitor watches refrigerated storage and transport for food distributors, commissaries and grocery warehouses. Wireless sensors report to a gateway, the gateway reports to the Harborline cloud, and the cloud alerts staff when a reading leaves the allowed band and builds audit-ready logs.\n\nMeasured signals: temperature, door-open events, gateway connectivity and sensor battery level. Nothing else is measured today.\n\nHARDWARE (one-time, customer owns the hardware once paid)\n- HL-T3 wireless temperature sensor: $89 each. Range -40 C to +85 C, accuracy +/-0.3 C. Each unit ships with a NIST-traceable calibration certificate valid for 24 months.\n- HL-D1 door-open sensor: $45 each.\n- HL-G2 gateway (Wi-Fi or Ethernet): $340 each. One gateway covers up to 60 sensors within about 100 m indoors.\n- HL-G2C cellular gateway for trucks and trailers: $520 each, includes 24 months of cellular data; after that $9 per gateway per month.\n- Replacement battery pack: $12. Batteries are user-replaceable.\n\nBATTERY LIFE (HL-T3)\n- 10-minute logging interval (default): about 3 years.\n- 1-minute logging interval: about 18 months.\nBattery life drops in freezers below -25 C; plan on roughly 20% shorter life there.\n\nSUBSCRIPTION (per HL-T3 sensor per month, billed annually)\n- Standard: $6 per sensor per month. Email and push alerts, dashboards, 7-year log history, PDF temperature logs.\n- Premium: $9 per sensor per month. Adds SMS and automated voice-call alerts, escalation chains and 24/7 alert support.\n- Volume pricing at 250+ sensors on one contract: Standard $5, Premium $7.50 per sensor per month.\n- Door sensors are $2 per door sensor per month on either plan. Gateways carry no subscription fee.\n\nINSTALLATION\n- Remote-guided self-install: free, with a 60-minute video session.\n- On-site installation: $1,200 per site for up to 150 sensors, plus $6 per additional sensor at that site.\n- Installation fee waivers are not pre-approved; route any request to the regional sales manager in writing.\n\nLEAD TIME AND SHIPPING\n- 3 to 4 weeks from purchase order for orders under 500 sensors; larger orders are quoted individually.\n- Ships to the United States and Canada.\n\nPILOT PROGRAM\n- 45-day pilot: up to 25 sensors and 1 gateway, $1,500 flat.\n- The $1,500 is credited in full against the first-year subscription if the customer signs within 30 days of the pilot ending.\n- Pilot hardware can be kept if the customer signs; otherwise it is returned prepaid.\n\nRULES FOR REPS\nQuote list prices only. Discounts beyond the volume tier need regional sales manager approval. Do not quote battery life beyond the figures above."
+  },
+  "SALES-CTX-I1": {
+   "title": "Fourth-floor relocation memo",
+   "text": "MEMO - FOURTH-FLOOR RELOCATION\nFrom: Facilities. Date: 14 September 2026.\n\nThe fourth-floor finance and people teams will move to the new east wing over the weekend of 24 October. Packing kits will be delivered on Monday 19 October. Please label every box with your name and the desk number from the new floor plan, which is pinned in the kitchen and attached to this memo.\n\nParking: garage level B2 will be closed from 23 to 25 October for restriping. Visitor parking moves to lot C for that week.\n\nKitchen: the fourth-floor kitchen closes on Wednesday 21 October. The east wing kitchen has two coffee machines and a water station. The old coffee machine will not be moved because it has been broken since August.\n\nDesk phones: extension numbers will not change. Headsets should be packed in your own box, not the shared bins.\n\nPlants: if you would like your plant moved, put a sticky note with your name on the pot by Friday 16 October. Unlabelled plants will be donated to the lobby.\n\nFurniture: standing desks will be moved by the vendor. Please clear the surface and remove monitors before you leave on Friday 23 October.\n\nQuestions go to the facilities desk on extension 4410. Thank you for your patience.\n"
+  }
+ },
+ "items": [
+  {
+   "jid": "2a4be8251e5a",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Do the sensors also track humidity? Our produce side really cares about that.",
+   "conversation": [],
+   "evidence_ids": [
+    "FSALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Humidity isn't one of the signals today. The monitor measures temperature, door-open events, gateway connectivity, and sensor battery level, and that's the full list. If humidity is a hard requirement for your produce side, I'd rather tell you that straight now than have you find out later. Can you tell me which rooms or trailers that would cover, so I can take it to our product team as a real request?"
+  },
+  {
+   "jid": "07d8e3a75224",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "What am I missing?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Honestly, without knowing what you're selling or who you're talking to, the thing most people miss is the **next step**. You've probably covered the value and the price, but you haven't asked for a specific commitment, a date, or a name. So what's the one thing you want them to do after this call?"
+  },
+  {
+   "jid": "347e024b899a",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "If we log every minute instead of every ten, how often are we swapping batteries? Some of these are in the blast freezer.",
+   "conversation": [],
+   "evidence_ids": [
+    "FSALES-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "At one-minute logging you're looking at about 18 months on a battery, and in the blast freezer, below minus 25, plan on roughly 20% less than that, so closer to 14 or 15 months. The batteries are user-replaceable and the packs are $12 each, so it's a maintenance task rather than a service call. How many of your sensors sit in the freezer? That tells me whether it's worth staggering replacements so you're not swapping them all at once."
+  },
+  {
+   "jid": "9c38be4d4c7f",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "typed",
+   "question": "The prospect just said they're happy with their current vendor. What do I say?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's good to hear, and honestly it's the answer I expect most of the time. I'm not here to talk you out of something that's working. What I'd want to understand is where it's working well and where it's just fine, because that gap is usually where I can help. If nothing's pressing, I'd rather stay in touch than push. Would it be worth a short conversation in a few months, or is there one thing today that your current setup doesn't quite cover?"
+  },
+  {
+   "jid": "71bb00337340",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "I'd need to get my boss on board, though.",
+   "conversation": [
+    "PROSPECT (heard): This all looks pretty good to us.",
+    "NATIVELY: That's great to hear. If it all looks right on your side, the natural next step is to get the paperwork moving so we can lock in the terms we talked through. What's your timeline for getting signatures on your end?",
+    "PROSPECT (heard): What happens next?",
+    "NATIVELY: Once you're ready, I'll send over the agreement with the terms we walked through, and you'll have it in your inbox to review and sign. From there we get you onboarded and set up. What's your timeline for getting signatures on your end?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That makes sense, and it's worth getting them comfortable before anything gets signed. Would it help if I put together a short summary of what we walked through, the terms and the value, that you can forward to your boss? And if it's useful, I'm happy to jump on a quick call with both of you to answer any questions directly. What would work better on your side?"
+  },
+  {
+   "jid": "79193568b191",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Can you explain that?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd be glad to. Which part would you like me to go deeper on, the pricing or how the rollout would work? Tell me where you want the detail and I'll walk you through it."
+  },
+  {
+   "jid": "418ce3a8bc72",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "He hates change, by the way, and he's the type to shoot things down in front of everyone.",
+   "conversation": [
+    "PROSPECT (heard): This all looks pretty good to us.",
+    "NATIVELY: That's great to hear. If it all looks right on your side, the natural next step is to get the paperwork moving so we can lock in the terms we talked through. What's your timeline for getting signatures on your end?",
+    "PROSPECT (heard): What happens next?",
+    "NATIVELY: Once you're ready, I'll send over the agreement with the terms we walked through, and you'll have it in your inbox to review and sign. From there we get you onboarded and set up. What's your timeline for getting signatures on your end?",
+    "PROSPECT (heard): I'd need to get my boss on board, though.",
+    "NATIVELY: That makes sense, and it's worth getting them comfortable before anything gets signed. Would it help if I put together a short summary of what we walked through, the terms and the value, that you can forward to your boss? And if it's useful, I'm happy to jump on a quick call with both of you to answer any questions directly. What would work better on your side?"
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's really useful to know, so thank you for telling me. It sounds like the safest path is to get him comfortable before any group setting, so nothing feels like a surprise or a decision made in front of others. Would it help if I put together a short summary you can share with him one on one first, and then we can decide whether a call with both of you makes sense?"
+  },
+  {
+   "jid": "d69409d75fd3",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "What if we sign for two years?",
+   "conversation": [
+    "USER (spoken): For the Growth plan, it's forty-eight hundred a month billed annually, plus a twelve thousand dollar implementation fee.",
+    "PROSPECT: Okay, let me write that down.",
+    "USER (spoken): Happy to walk through what's included.",
+    "PROSPECT (heard): That's more than we budgeted.",
+    "NATIVELY: That's fair, and it's a common spot to be in. Before we talk about the number, can I ask what you had set aside for this? That tells me whether we're looking at the Growth plan at all or whether the Starter tier fits better, and I'd rather get you the right fit than push something that doesn't work."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "A two-year commitment is exactly the kind of thing I can take to the table. I don't have a multi-year discount I can quote you off the top of my head, so let me confirm what we can do on term and get you a number. What budget were you working with, so I bring back something that actually fits?"
+  },
+  {
+   "jid": "9b37c3765293",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "So is it even worth us talking?",
+   "conversation": [
+    "PROSPECT: We're on Paylane right now, and we're month to month, so we can leave whenever.",
+    "USER (spoken): Good to know. How long have you been with them?",
+    "PROSPECT: Since last year. Actually, we just signed a two-year renewal in June, so we'd be locked in until 2028."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Absolutely, and here's why. A two-year lock-in means you've got a clear window to plan, not a reason to stop looking. What I'd want to understand is what happens when that renewal comes up, and whether Paylane's still earning it. What's the one thing you'd want fixed before then?"
+  },
+  {
+   "jid": "5071545af04b",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "I'm just doing some research for now.",
+   "conversation": [
+    "PROSPECT: Sorry I'm late, the parking garage was a zoo.",
+    "USER (spoken): No problem at all. How was the drive in?",
+    "PROSPECT: Fine after that. My daughter has a soccer tournament this weekend so I'm half distracted."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a smart way to start, no pressure at all. While you're looking around, what's the main thing you're trying to figure out, whether this is even worth a conversation, or how it'd fit alongside what you're already using? Either way, I'm happy to send over something short you can read on your own time."
+  },
+  {
+   "jid": "d1a864f280cd",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "How does it plug into our accounting system? We've got a lot of custom fields.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The way I'd approach it is through the API rather than a fixed connector, so your custom fields map cleanly instead of getting flattened. We'd start with a short scoping call on your chart of accounts and field structure, then build and test the sync against a sandbox before anything touches production. Can we get your finance or systems lead on that call?"
+  },
+  {
+   "jid": "f44a1dd19a6b",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Can you clarify what you mean?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Sure. What I mean is that the value here is in getting your team to a result faster, not in adding another tool to manage. Does that land, or do you want me to walk through a specific example?"
+  },
+  {
+   "jid": "d5d98e2ec5b0",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Honestly, I'm not convinced this will work in an environment as messy as ours.",
+   "conversation": [
+    "USER (spoken): Tell me a bit about how your invoices flow today.",
+    "PROSPECT: We've got three ERPs from acquisitions, a different approval chain in each, and half the vendors still send paper.",
+    "USER (spoken): That is a lot of variety."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's a fair worry, and honestly the mess is exactly where this has to prove itself. We don't ask you to standardize the three ERPs or force vendors off paper on day one. We start with one approval chain and the paper vendors you care about most, get that flowing, then expand. Which of the three would be the least painful to start with?"
+  },
+  {
+   "jid": "d4823e67b84f",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "Who on our side needs to be involved?",
+   "conversation": [
+    "PROSPECT (heard): How does implementation usually go with a company our size?",
+    "NATIVELY: For a team your size, implementation is usually pretty light. We'd start with a short kickoff to map your current setup, then run the rollout in stages so nothing disrupts your day-to-day, and I'd stay hands-on through the first few weeks until your team is comfortable. Most of the work sits on our side, not yours.\n\nWhat does your team's setup look like today, so I can tell you exactly what those stages would be for you?"
+   ],
+   "evidence_ids": [
+    "SALES-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Honestly, it's usually just one or two people. Someone who owns the day-to-day process, so they can tell us how things actually run, and whoever signs off on the change. Everyone else can stay out of it until we're ready to go live.\n\nWho would that be on your side, and are they already in the loop on this?"
+  },
+  {
+   "jid": "da14440a600a",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "What's the biggest risk?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The biggest risk is that we solve the wrong problem. If we build for what we assume you need and it misses, we've both spent time and budget for nothing. So the real question is how fast we can validate that together."
+  },
+  {
+   "jid": "697ea5e510dc",
+   "mode": "sales",
+   "role": "USER: the seller / account executive. OTHER PARTY: the prospect / customer. Natively: words the seller can say next (or private help when the seller types).",
+   "surface": "heard",
+   "question": "That's not in our budget this year.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "That's fair, and I'd rather work with your budget than against it. A few options: we can start with a smaller scope this year and expand when the next cycle opens, or look at what's driving the number and see if there's a version that fits. What figure were you working with?"
+  }
+ ]
+}

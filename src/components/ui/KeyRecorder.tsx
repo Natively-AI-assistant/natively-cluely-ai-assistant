@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Check } from 'lucide-react';
+import { isRepresentableKey } from '../../utils/keyboardUtils';
 
 interface KeyRecorderProps {
     currentKeys: string[];
@@ -46,6 +47,16 @@ export const KeyRecorder: React.FC<KeyRecorderProps> = ({ currentKeys, onSave, c
             else if (key === 'Backspace') mainKey = 'Backspace';
             else if (key.startsWith('Arrow')) mainKey = key;
             else mainKey = key.toUpperCase();
+
+            // Applied to the RESULT, not as a fallback branch: the Key*/Digit*
+            // branches above hand back the layout's character, so on a non-US
+            // layout they yield the composed glyph too (Option+4 -> "₹", and a
+            // Cyrillic KeyA -> "ф"). Anything Electron cannot turn into an
+            // accelerator is treated as if it were never pressed — recording
+            // stays open and the existing bind stands. Letting it through would
+            // collapse the combo to an empty accelerator, which is how "unbound"
+            // is spelled, silently clearing the shortcut.
+            if (!isRepresentableKey(mainKey)) mainKey = '';
         }
 
         if (mainKey) {
@@ -69,12 +80,15 @@ export const KeyRecorder: React.FC<KeyRecorderProps> = ({ currentKeys, onSave, c
                     tabIndex={0}
                     onKeyDown={handleKeyDown}
                     onBlur={() => setIsRecording(false)}
-                    className="flex items-center gap-1 bg-bg-input border border-accent-primary text-accent-primary px-2 py-1 rounded-md text-xs font-sans shadow-sm outline-none min-w-[60px] justify-center"
+                    className="settings-control-in flex items-center gap-1 bg-bg-input border border-accent-primary text-accent-primary px-2 py-1 rounded-md text-xs font-sans shadow-sm outline-none min-w-[60px] justify-center"
                 >
-                    {recordedKeys.length > 0 ? recordedKeys.join(' + ') : 'Press keys...'}
+                    {/* Grows out of the keycaps (settings-control-in) and, until a
+                        key lands, sweeps like the overlay's Thinking label so an
+                        armed recorder reads as listening (src/index.css). */}
+                    {recordedKeys.length > 0 ? recordedKeys.join(' + ') : <span className="settings-listening">Press keys...</span>}
                 </div>
             ) : (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 settings-control-in">
                     {currentKeys.map((k, i) => {
                         let displayKey = k;
                         if (k === 'ArrowUp') displayKey = '↑';

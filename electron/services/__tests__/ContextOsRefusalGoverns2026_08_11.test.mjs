@@ -63,8 +63,8 @@ describe('honest refusals are preserved — the fabrication boundary must not mo
   // collaborations SHOULD refuse. Killing that reintroduces the fabrication
   // class this subsystem exists to prevent.
   for (const sourceAuthority of STRICT) {
-    test(`${sourceAuthority}: refusal still governs (universe populated)`, () => {
-      assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority, hasReferenceFiles: true }), true);
+    test(`${sourceAuthority}: refusal no longer governs even with the universe populated (always answer, 2026-09-07)`, () => {
+      assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority, hasReferenceFiles: true }), false);
     });
   }
 
@@ -80,15 +80,16 @@ describe('honest refusals are preserved — the fabrication boundary must not mo
     });
   }
 
-  test('transcript_only never has files — authority alone still governs', () => {
-    assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority: 'transcript_only', hasReferenceFiles: false }), true);
+  test('transcript_only never has files — authority alone no longer governs (always answer, 2026-09-07)', () => {
+    assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority: 'transcript_only', hasReferenceFiles: false }), false);
   });
 
   test('omitting hasReferenceFiles keeps the old behaviour for non-file authorities only', () => {
     // Legacy callers that never pass files: transcript_only unaffected;
     // the reference trio FAILS TOWARD ANSWERING when files are unknown,
     // because refusing on an unverified universe is the whole bug class.
-    assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority: 'transcript_only' }), true);
+    // 2026-09-07: a refusal pack never governs — the app answers regardless.
+    assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority: 'transcript_only' }), false);
     assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority: 'reference_files_primary' }), false);
   });
 

@@ -68,13 +68,13 @@ describe('LocalFallbackAssets (2026-07-07)', () => {
     // `new URL('.')` is this file's own directory (__tests__), and three `..`
     // from there is the repo root on both platforms.
     const repoRoot = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..');
-    const candidate = path.join(repoRoot, 'resources', 'models', 'Xenova', 'all-MiniLM-L6-v2', 'tokenizer.json');
+    const candidate = path.join(repoRoot, 'resources', 'models', 'Xenova', 'multilingual-e5-small', 'tokenizer.json');
     if (!fs.existsSync(candidate)) {
       // CI may not have downloaded models; this test only runs when assets are present.
       return;
     }
     const { resolvePackagedModelPath } = require(ASSETS_PATH);
-    const resolved = resolvePackagedModelPath('Xenova/all-MiniLM-L6-v2/tokenizer.json');
+    const resolved = resolvePackagedModelPath('Xenova/multilingual-e5-small/tokenizer.json');
     assert.equal(typeof resolved, 'string');
     assert.ok(fs.existsSync(resolved));
   });
@@ -107,13 +107,12 @@ describe('LocalFallbackPreflight (2026-07-07)', () => {
   test('runLocalFallbackPreflight publishes provider statuses for local fallback', async () => {
     const { runLocalFallbackPreflight, ProviderStatusRegistry } = require(PREFLIGHT_PATH);
     await runLocalFallbackPreflight({ ollamaSelected: false });
-    const ic = ProviderStatusRegistry.getInstance().getStatus('intent-classifier');
+    // 2026-09-05: the intent-classifier provider is gone with the MobileBERT model.
+    // Preflight must NOT publish a status for a provider that no longer exists.
+    assert.equal(ProviderStatusRegistry.getInstance().getStatus('intent-classifier'), null, 'no intent-classifier status must be published');
     const le = ProviderStatusRegistry.getInstance().getStatus('local-embedding');
-    assert.ok(ic, 'expected intent-classifier status');
     assert.ok(le, 'expected local-embedding status');
-    assert.equal(ic.kind, 'packaged_local');
     assert.equal(le.kind, 'packaged_local');
-    assert.equal(ic.requiredForCoreFallback, true);
     assert.equal(le.requiredForCoreFallback, true);
   });
 });

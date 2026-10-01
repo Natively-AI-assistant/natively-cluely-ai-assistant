@@ -6,7 +6,9 @@ import { Trash2, AlertCircle, ExternalLink, Loader2, Check, KeyRound } from 'luc
 // src/components/settings/ EXACTLY equal its GUARDED_FILES list, so adding a file
 // here fails that suite. The resulting import cycle is safe — every reference
 // below is inside a render function, never at module-evaluation time.
-import { AipBadge, AipSwitch, AipProviderMark, AipModelList, type AipTone } from './AIProvidersSettings';
+import { AipSwitch, AipProviderMark, AipModelList, AipPassedCheck } from './AIProvidersSettings';
+import { Presence, SettingsMotionReady, SwapLabel } from './SettingsRow';
+import { isOptInModelProvider } from '../../utils/modelUtils';
 
 interface FetchedModel {
     id: string;
@@ -14,13 +16,17 @@ interface FetchedModel {
 }
 
 interface ProviderCardProps {
-    providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim';
+    providerId: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter';
     /** Provider switched off in Settings — keeps the key, hides the models. */
     isDisabled?: boolean;
     onToggleDisabled?: (enabled: boolean) => void;
     /** The provider's full model universe: presets ∪ catalog ∪ allow-listed ids. */
     selectableModels?: { id: string; label: string }[];
-    /** Allow-list of model ids; empty means all of `selectableModels` are shown. */
+    /**
+     * Allow-list of model ids. Empty means ALL of `selectableModels` for most
+     * providers — but NOTHING for an opt-in one (OpenRouter), whose catalogue is
+     * a gateway's. See isOptInModelProvider.
+     */
     enabledModels?: string[];
     onToggleModel?: (modelId: string) => void;
     /** Clears the allow-list back to "all". */
@@ -41,11 +47,26 @@ interface ProviderCardProps {
     onTestConnection: () => void;
     testStatus: 'idle' | 'testing' | 'success' | 'error';
     testError?: string;
+    /** A save/remove the main process refused (e.g. a degraded credential store). */
+    keyWriteError?: string;
     savingStatus: boolean;
     savedStatus: boolean;
     keyPlaceholder: string;
     keyUrl: string;
     onPreferredModelChange?: (modelId: string) => void;
+    /**
+     * Provider-specific settings rendered between the key row and the Test row.
+     * Exists for exactly one provider: Fluxion needs a wire-protocol choice
+     * alongside its key, because the protocol is a property of the key's group
+     * and cannot be read back from the key.
+     *
+     * A slot rather than a `fluxionProtocol` prop on purpose — this table drives
+     * eight cards, and the comment on CLOUD_PROVIDERS records that a new prop
+     * used to mean five edits with a missed one invisible. Keeping the control
+     * itself in AIProvidersSettings.tsx keeps that state where the rest of the
+     * panel's state already lives.
+     */
+    extraControls?: React.ReactNode;
 }
 
 export const ProviderCard: React.FC<ProviderCardProps> = ({
@@ -69,16 +90,21 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     onTestConnection,
     testStatus,
     testError,
+    keyWriteError,
     savingStatus,
     savedStatus,
     keyPlaceholder,
     keyUrl,
     onPreferredModelChange,
+    extraControls,
 }) => {
     const t = useT();
     const [isFetching, setIsFetching] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [selectedModel, setSelectedModel] = useState<string>(preferredModel || '');
+    // False until the panel's stored credentials have landed: a row that opens
+    // then is the card loading, not news (see the .aip-reveal--row CSS).
+    const motionReady = React.useContext(SettingsMotionReady);
 
     // Refs to avoid stale closures in the auto-save timer
     const savedRef = useRef(savedStatus);
@@ -121,7 +147,15 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 // list, so a Refresh could silently change which model answers your
                 // questions. A default that is missing from the catalog is surfaced as
                 // "Not offered" in the list instead.
-                if (result.models.length > 0) {
+                //
+                // NEVER for an opt-in provider (OpenRouter). Its catalogue is a
+                // gateway's, sorted by label, so "first" was simply the
+                // alphabetically-first vendor — `openrouter/aion-labs/aion-2.0` on
+                // 2026-09-17 — and its allow-list starts EMPTY, so that model was
+                // not even routable: the card showed "Aion-2.0 · default" beside
+                // "None selected" for a model nobody chose. Reproduced live. There
+                // the user picks with "Set default", which also allow-lists.
+                if (result.models.length > 0 && !isOptInModelProvider(providerId)) {
                     const existsInList = result.models.some((m: FetchedModel) => m.id === selectedModel);
                     if (!existsInList && !selectedModel && !preferredModel) {
                         const firstModel = result.models[0].id;
@@ -144,22 +178,20 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     };
 
 
-    // ── Status. ONE vocabulary via AipBadge; nothing else here carries a status
-    // colour. Key stored + on → ok "Connected"; key stored + off → neutral
-    // "Off"; no key → no badge at all (there is nothing to report yet).
-    // The badge carries only what NO control on the card already says.
+    // ── No status badge. Testing / Failed / Saving went first as echoes of the
+    // control you had just pressed; "Off" was the last one left, kept on the
+    // argument that nothing else stated it in words.
     //
-    // Testing / Failed / Saving were all echoes: press Test and the button reads
-    // "Testing..." with a spinner while the badge read "Testing" with a second
-    // spinner — one operation, two spinners, two words, 200px apart. The control you
-    // pressed owns its own feedback; that is where you are already looking.
-    //
-    // "Off" is the exception and the reason the badge still exists: nothing else
-    // states it in words, it persists rather than resolving on its own, and it is the
-    // explanation for why the models control vanished from the row below.
-    const statusBadge: { tone: AipTone; label: string; busy?: boolean } | null =
-        (hasStoredKey && isDisabled) ? { tone: 'neutral', label: t('Off') } : null;
+    // It is gone too: the switch sits on the same header row, reads off, and is
+    // the control that owns this state — the badge was a second rendering of it
+    // 200px away. The OAuth cards on this panel (Antigravity, OpenAI Codex)
+    // already show disabled state through their switch alone, so this is also
+    // what makes the key-backed cards consistent with them.
 
+
+    const note = keyWriteError || testError || (fetchError ? `${t('Model fetch error:')} ${fetchError}` : '');
+    const shownNote = useRef(note);
+    if (note) shownNote.current = note;
 
     return (
         // .aip-provider owns padding + an 8px flex column. No mb-* anywhere: the old
@@ -176,9 +208,6 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                     card's heading, uppercased, made an entity read as a form label. The
                     input keeps its aria-label, so nothing is lost to a screen reader. */}
                 <h4 className="aip-card-title truncate min-w-0">{providerName}</h4>
-                {statusBadge && (
-                    <AipBadge tone={statusBadge.tone} label={statusBadge.label} busy={statusBadge.busy} />
-                )}
 
                 {/* Get Key stays here permanently now that Test has moved back down to
                     the body row. Key rotation is real, so the signpost is still useful
@@ -199,13 +228,15 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                     </button>
                     {/* Only once a key is stored — nothing to switch off before that. The
                         key is never touched; this only hides the provider's models. */}
-                    {hasStoredKey && onToggleDisabled && (
-                        <AipSwitch
-                            checked={!isDisabled}
-                            onChange={() => onToggleDisabled(isDisabled)}
-                            label={`${isDisabled ? t('Enable') : t('Disable')} ${providerName}`}
-                            title={isDisabled ? t('Enable provider') : t('Disable provider (keeps your key)')}
-                        />
+                    {onToggleDisabled && (
+                        <Presence kind="control" id={hasStoredKey ? 'switch' : null}>
+                            <AipSwitch
+                                checked={!isDisabled}
+                                onChange={() => onToggleDisabled(isDisabled)}
+                                label={`${isDisabled ? t('Enable') : t('Disable')} ${providerName}`}
+                                title={isDisabled ? t('Enable provider') : t('Disable provider (keeps your key)')}
+                            />
+                        </Presence>
                     )}
                 </div>
             </div>
@@ -238,14 +269,25 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                             className="aip-field-seg"
                             data-tone={savedStatus ? 'ok' : undefined}
                         >
-                            {savingStatus
-                                ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                : savedStatus
-                                    ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                    : t('Save')}
+                            {/* Sized to its widest label, so "Saving..." no longer
+                                grows the segment into the key mid-save. */}
+                            <SwapLabel
+                                id={savingStatus ? 'saving' : savedStatus ? 'saved' : 'save'}
+                                sizers={[
+                                    <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Saving...')}</span>,
+                                    <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Saved')}</span>,
+                                    t('Save'),
+                                ]}
+                            >
+                                {savingStatus
+                                    ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{t('Saving...')}</span>
+                                    : savedStatus
+                                        ? <span className="inline-flex items-center gap-1.5"><Check size={12} strokeWidth={2} className="aip-check" />{t('Saved')}</span>
+                                        : t('Save')}
+                            </SwapLabel>
                         </button>
                     </div>
-                    {hasStoredKey && (
+                    <Presence kind="control" id={hasStoredKey ? 'remove' : null} className="shrink-0">
                         <button
                             onClick={onRemoveKey}
                             className="aip-btn shrink-0"
@@ -255,17 +297,24 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         >
                             <Trash2 size={14} strokeWidth={1.75} />
                         </button>
-                    )}
+                    </Presence>
                 </div>
 
             </div>
+
+            {extraControls}
 
             {/* Second row: Test leads, MODELS beside it — the arrangement these two had
                 before the redesign. Costs 40px against putting Test after the trash on
                 one row, and buys back the left-edge alignment that made Test read as the
                 start of an action row rather than the tail of the credential row. */}
-            <div className="aip-provider-row">
-                {hasStoredKey && (
+            {/* A saved key unlocks this row, which now opens (.aip-reveal--row)
+                instead of shoving every card below down 48px in one frame. Kept
+                mounted while closed, like every .aip-reveal: visibility keeps it
+                out of the tab order and away from screen readers. */}
+            <div className="aip-reveal aip-reveal--row" data-open={hasStoredKey ? 'true' : 'false'} data-instant={motionReady ? undefined : 'true'}>
+            <div>
+                <div className="aip-provider-row">
                     <button
                         onClick={onTestConnection}
                         disabled={testStatus === 'testing'}
@@ -273,40 +322,66 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                         data-tone={testStatus === 'success' ? 'ok' : testStatus === 'error' ? 'danger' : undefined}
                         title={testError || t('Test Connection')}
                     >
-                        {testStatus === 'testing' ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</> :
-                            testStatus === 'success' ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</> :
-                                testStatus === 'error' ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</> :
-                                    <>{t('Test Connection')}</>}
+                        {/* Sized to its widest label: "Testing..." -> "Passed"
+                            used to slide the models control beside it left and
+                            right. Passed draws its tick (AipPassedCheck), as the
+                            Codex CLI test already did. */}
+                        <SwapLabel
+                            id={testStatus}
+                            sizers={[
+                                t('Test Connection'),
+                                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Testing...')}</span>,
+                                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Passed')}</span>,
+                                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Error')}</span>,
+                            ]}
+                        >
+                            {testStatus === 'testing' ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{t('Testing...')}</span> :
+                                testStatus === 'success' ? <span className="inline-flex items-center gap-1.5"><AipPassedCheck />{t('Passed')}</span> :
+                                    testStatus === 'error' ? <span className="inline-flex items-center gap-1.5"><AlertCircle size={12} strokeWidth={1.75} />{t('Error')}</span> :
+                                        t('Test Connection')}
+                        </SwapLabel>
                     </button>
-                )}
 
-                {/* Beside the key field, not under it. >= 1, not > 1: this is the only
-                    discovery entry point, so gating it on "more than one model" left the
-                    three 1-preset providers unable to fetch anything at all. */}
-                {hasStoredKey && !isDisabled && onToggleModel && selectableModels && selectableModels.length >= 1 && (
-                    <AipModelList
-                        models={selectableModels}
-                        enabled={enabledModels || []}
-                        onToggle={onToggleModel}
-                        onReset={onResetModels || (() => {})}
-                        defaultId={selectedModel || preferredModel}
-                        onSetDefault={onSetDefaultModel}
-                        error={modelSaveError ? 'save-failed' : null}
-                        refreshing={isFetching}
-                        onRefresh={handleFetchModels}
-                        onFirstOpen={() => {
-                            if (hasStoredKey && !hasCatalog) handleFetchModels();
-                        }}
-                    />
-                )}
+                    {/* Beside the key field, not under it. >= 1, not > 1: this is the only
+                        discovery entry point, so gating it on "more than one model" left the
+                        three 1-preset providers unable to fetch anything at all. */}
+                    {!isDisabled && onToggleModel && selectableModels && selectableModels.length >= 1 && (
+                        <AipModelList
+                            // Without this every cloud card defaulted to `optIn`
+                            // false, so OpenRouter's empty allow-list would have
+                            // read as "All 444" in the summary and un-ticking the
+                            // last model would have re-enabled the whole gateway.
+                            optIn={isOptInModelProvider(providerId)}
+                            models={selectableModels}
+                            enabled={enabledModels || []}
+                            onToggle={onToggleModel}
+                            onReset={onResetModels || (() => {})}
+                            defaultId={selectedModel || preferredModel}
+                            onSetDefault={onSetDefaultModel}
+                            error={modelSaveError ? 'save-failed' : null}
+                            refreshing={isFetching}
+                            onRefresh={handleFetchModels}
+                            onFirstOpen={() => {
+                                if (hasStoredKey && !hasCatalog) handleFetchModels();
+                            }}
+                        />
+                    )}
+                </div>
+            </div>
             </div>
 
             {/* One note line, and only when something is actually wrong. */}
-            {(testError || fetchError) && (
-                <p className="aip-meta aip-danger-fg aip-provider-note">
-                    {testError || `${t('Model fetch error:')} ${fetchError}`}
+            {/* A refused key write outranks the others: it means the key the user
+                just typed was NOT stored, which every other note assumes it was.
+                Opens like the row above; the last message is held while it
+                closes so the text doesn't blank out mid-collapse. */}
+            <div className="aip-reveal aip-reveal--row" data-open={note ? 'true' : 'false'} data-instant={motionReady ? undefined : 'true'}>
+            <div>
+                <p className="aip-meta aip-danger-fg aip-provider-note" role="alert">
+                    {shownNote.current}
                 </p>
-            )}
+            </div>
+            </div>
         </div>
     );
 };

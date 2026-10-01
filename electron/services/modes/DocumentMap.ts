@@ -2,6 +2,7 @@
 //
 // Document Map for document-grounded custom modes (round-6 rebuild, 2026-06-29).
 
+import { normalizeLineEndings } from './semanticChunker';
 import { normalizeDocumentGroundedRetrievalQuery } from '../../llm/documentGroundedPrompt';
 import { includesPlannerTerm } from './retrievalTextMatch';
 //
@@ -235,6 +236,8 @@ function detectTocRegion(lines: string[]): { start: number; end: number; count: 
  * and degrades gracefully on plain text without markers.
  */
 export function buildDocumentMap(content: string): DocumentMap {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     const lines = content.split('\n');
     const toc = detectTocRegion(lines);
     const tocStart = toc ? toc.start : -1;
@@ -353,6 +356,8 @@ export function buildDocumentMap(content: string): DocumentMap {
  * consistent delimited table.
  */
 export function tabularChunks(content: string, rowsPerChunk?: number): string[] | null {
+    // CRLF → LF before any line pattern runs (semanticChunker.normalizeLineEndings).
+    content = normalizeLineEndings(content);
     const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
     if (lines.length < 3) return null; // need a header + at least a couple rows
     // Pick the delimiter from the header: comma or tab, whichever splits into >=2
@@ -549,6 +554,26 @@ export function selectTableOfContentsEntries(query: string, map: DocumentMap): s
     return scored.filter((item) => item.hits === best.hits && item.score >= best.score * 0.8).map((item) => item.entry);
 }
 
+/**
+ * The titles of a numbered section's ANCESTORS, outermost first.
+ *
+ * "4.2.1" -> ["4 Method", "4.2 Training"]. Returns [] for a top-level or
+ * unnumbered section, which correctly yields no `[context: …]` prefix: there is
+ * no ancestry to disambiguate against.
+ */
+function ancestorTitles(map: DocumentMap, num: string): string[] {
+    if (!num || !num.includes('.')) return [];
+    const parts = num.split('.');
+    const byNum = new Map(map.sections.map((s) => [s.num, s]));
+    const out: string[] = [];
+    for (let i = 1; i < parts.length; i++) {
+        const prefix = parts.slice(0, i).join('.');
+        const ancestor = byNum.get(prefix);
+        if (ancestor?.heading) out.push(`${prefix} ${ancestor.heading}`);
+    }
+    return out;
+}
+
 export function sectionAwareChunksFromMap(
     map: DocumentMap,
     chunkWords: number,
@@ -571,9 +596,26 @@ export function sectionAwareChunksFromMap(
         const tag = section.num
             ? `[Section ${section.num} | p${section.pageStart}${section.pageEnd !== section.pageStart ? '-' + section.pageEnd : ''}]`
             : `[p${section.pageStart}]`;
-        const headingLine = section.heading && section.heading !== 'Preamble'
-            ? `${tag} ${section.heading}`
-            : tag;
+        // ANCESTOR PATH (T9, 2026-08-28), appended AFTER the tag and never in
+        // place of it: five call sites parse `[Section N.N | pX]` anchored at
+        // position 0 (ModeHybridRetriever.ts:1118, :1216, :1802, :2020 and
+        // documentGroundedPrompt.ts:653, :699), so substituting the format would
+        // break section-targeted retrieval, the section-restore pass and the
+        // prompt's own SECTION-TAGGED RELEVANCE rule at once.
+        //
+        // The path is derived from the section NUMBER, which is what carries
+        // hierarchy in a numbered document: 4.2.1's ancestors are 4 and 4.2, and
+        // they are already in this map. That gives "4 Method > 4.2 Training" in
+        // front of a chunk that would otherwise say only "4.2.1 Optimizer" —
+        // the same identity fix as the flat path, expressed in the vocabulary
+        // this document shape actually uses.
+        const ancestors = ancestorTitles(map, section.num);
+        const ctx = ancestors.length ? `[context: ${ancestors.join(' > ')}]` : '';
+        const headingLine = [
+            tag,
+            ctx,
+            section.heading && section.heading !== 'Preamble' ? section.heading : '',
+        ].filter(Boolean).join(' ');
         const words = body.split(/\s+/).filter(Boolean);
         if (words.length <= chunkWords) {
             chunks.push(`${headingLine}\n${body}`);

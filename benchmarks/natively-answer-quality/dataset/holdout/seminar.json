@@ -1,0 +1,786 @@
+{
+  "mode": "seminar",
+  "partition": "holdout",
+  "contexts": [
+    {
+      "id": "HSEM-CTX-G1",
+      "kind": "grounded",
+      "title": "Thesis chapter 4 - AMF inoculant and sorghum yield under drought",
+      "file_name": "thesis_ch4_sorghum_amf_results.txt",
+      "text": "M.Sc. thesis, Department of Plant Sciences, Halvorsen University\nChapter 4 - Results: Mycorrhizal inoculation and sorghum yield under drought (Kerrow Valley trials)\n\n4.1 Overview\nThis chapter reports the field results of the three-season trial (2021-2023) that tested whether a commercial arbuscular mycorrhizal fungi (AMF) inoculant, GlomaSeed-7, improves grain yield of sorghum (cultivar KV-212) under managed drought at the Kerrow Valley research station.\n\n4.2 Design recap\nThe trial used a randomized complete block design with 4 blocks and a 2 x 2 factorial: inoculation (AMF inoculant vs. sterile carrier control) crossed with water regime (full irrigation vs. managed drought, in which irrigation after flowering was cut to 45% of crop evapotranspiration). Each block contained 12 plots, and each of the four treatment combinations appeared three times per block, giving 48 plots per season. Plots were 6 m x 4 m. The station has a single sandy loam soil series (pH 6.8, available phosphorus 11 mg/kg). Grain was harvested from the central 8 m2 of each plot and adjusted to 13% moisture. Root colonization was scored at flowering with the gridline-intersect method on 5 plants per plot.\n\n4.3 Data loss\nIn 2022, flooding in late June destroyed 6 plots in block 4, all of them under managed drought. These plots were treated as missing and no values were imputed, so the 2022 analysis uses 42 plots.\n\n4.4 Results\nRoot colonization at flowering averaged 38% in inoculated plots and 9% in control plots (pooled across seasons).\n\nUnder managed drought, inoculated plots yielded on average 11.4% more grain than control plots (pooled means 3.12 t/ha vs. 2.80 t/ha; linear mixed model with season as a random effect, p = 0.004). The drought benefit was largest in 2023 (15.8%) and smallest in 2021 (7.9%); the 2022 figure was 10.6%.\n\nUnder full irrigation the difference between inoculated and control plots was 2.1% and not statistically significant (p = 0.27).\n\nThe inoculation x water regime interaction was significant (p = 0.018), meaning the effect of the inoculant depended on water supply.\n\nHarvest index did not differ between treatments. Thousand-grain weight was higher with inoculation under drought (27.9 g vs. 26.6 g), which suggests that most of the extra yield came from heavier grain rather than more grains per head.\n\n4.5 Interpretation\nA benefit that appears under water stress but not under full irrigation is consistent with the hypothesis that AMF hyphae extend the effective root zone for water and phosphorus uptake as the soil dries. We did not measure hyphal length, leaf water potential or tissue phosphorus, so the mechanism is inferred, not demonstrated.\n\n4.6 Limitations\n- Single site and single soil series; the result may not transfer to clay soils or to soils with high available phosphorus.\n- One cultivar (KV-212).\n- The inoculant cost and economic return were not assessed.\n- Native AMF were present in control plots (9% colonization), so the control is better described as \"low inoculum\" than as \"no mycorrhiza\".\n\n4.7 Summary\nAcross three seasons, GlomaSeed-7 raised sorghum grain yield under managed drought by 11.4% on average, with no meaningful effect under full irrigation. The effect is modest, consistent across seasons in direction, and limited in scope to one site, one soil and one cultivar.",
+      "notes": null
+    },
+    {
+      "id": "HSEM-CTX-G2",
+      "kind": "grounded",
+      "title": "Study summary - voice assistant latency tolerance in adults 65+",
+      "file_name": "latency_tolerance_older_adults_summary.txt",
+      "text": "Study summary - Response latency tolerance of voice assistants among adults aged 65 and over\nPrepared for the Human-Centred Computing research seminar\n\nAim\nTo find out how much delay older adults tolerate between finishing a spoken request and hearing a voice assistant reply, and whether longer delays change behaviour as well as satisfaction.\n\nParticipants\n62 adults aged 65-84 (median age 72; 34 women, 28 men) were recruited through two community centres in Harlow Bay. Participants who used hearing aids were not excluded, but hearing status was self-reported only and was not tested or used in the analysis.\n\nDesign\nA within-subjects design was chosen because tolerance for delay varies widely between individuals; with each participant acting as their own baseline, fewer participants were needed to detect a difference. Each participant completed 12 everyday tasks (for example setting a reminder, asking for the weather, adding an item to a shopping list) under each of three latency conditions: 300 ms, 900 ms and 1800 ms. The order of latency conditions was counterbalanced with a Latin square. All sessions took place in a quiet laboratory room at the university, using a prototype smart speaker called Wren. A session lasted about 50 minutes.\n\nMeasures\n- Satisfaction rated on a 7-point scale after every task.\n- Task completion (whether the request was fulfilled without researcher help).\n- Re-prompts: the participant repeated or rephrased the request before the reply arrived.\n- A short closing interview.\n\nAnalysis\nLinear mixed-effects models with a random intercept for each participant; pairwise comparisons between latency conditions used Holm correction.\n\nResults\nMean satisfaction was 5.9 at 300 ms, 5.7 at 900 ms and 4.3 at 1800 ms. The difference between 300 ms and 900 ms was not significant (p = 0.41); the drop from 900 ms to 1800 ms was significant (p < 0.001).\n\nTask completion was 94%, 93% and 92% across the three conditions, with no significant difference.\n\nRe-prompts rose sharply at the longest delay: participants repeated the command in 19% of tasks at 1800 ms, compared with 4% at 300 ms. Interviews suggested participants read long silences as the device not having heard them.\n\nIn the closing interview, 23 of 62 participants said a short spoken filler such as \"one moment\" would make waiting easier. Filler cues were not part of the study conditions and were not tested.\n\nLimitations\n- Lab setting: a quiet laboratory room, not people's homes.\n- English-only tasks and participants.\n- A single device (the Wren prototype).\n- There was no comparison group of younger adults, so the study cannot say whether older adults are more or less tolerant than other age groups.\n- Sessions of about 50 minutes may have introduced some fatigue, although counterbalancing spreads this across conditions.\n\nConclusion\nFor this population, delays up to 900 ms did not measurably reduce satisfaction, while 1800 ms did, and it also led people to repeat themselves. A practical design target is to keep response latency at or below about 900 ms. Future work: test spoken filler cues and run an in-home deployment.",
+      "notes": null
+    },
+    {
+      "id": "HSEM-CTX-G3",
+      "kind": "grounded",
+      "title": "Seminar slides - Vessford congestion charge and bus ridership",
+      "file_name": "vessford_congestion_charge_slides.txt",
+      "text": "Seminar slides - Did the Vessford congestion charge move people onto buses?\nUrban Economics Research Seminar\n\nSlide 1 - Title\nDid the Vessford congestion charge move people onto buses? Evidence from an 18-month pilot.\n\nSlide 2 - Question\nWhen a mid-sized city charges cars to enter its centre, how much of the change shows up as extra bus use, and where?\n\nSlide 3 - The policy\nFrom March 2022 Vessford charged 4.50 per car entering the central zone on weekdays between 07:00 and 19:00. The pilot ran for 18 months. Buses, taxis and blue-badge holders were exempt.\n\nSlide 4 - Data\n- Fare-card taps on 31 bus routes, aggregated to route-week.\n- Camera counts of cars crossing the charging cordon (Vessford only).\n- Comparison city: Aldmere, similar population and bus network, no charge.\n- 24 months of pre-period data before the charge started.\n\nSlide 5 - Method\nDifference-in-differences on a route-week panel: Vessford routes vs. Aldmere routes, before vs. after March 2022. Route fixed effects and week fixed effects. Standard errors clustered by route.\n\nSlide 6 - Parallel trends\nEvent-study coefficients for the pre-period are all within +/-1.5% and jointly insignificant (p = 0.62). Ridership in the two cities moved together before the charge.\n\nSlide 7 - Main result\n- Bus boardings rose 7.2% (95% CI 4.1 to 10.3) relative to Aldmere.\n- Car entries into the zone fell 14% compared with the 12 months before the charge. This is a simple before-after comparison from Vessford cordon cameras; Aldmere has no equivalent cordon, so there is no comparison city for this number.\n\nSlide 8 - Where the effect came from\n- Routes serving the eastern estates: +11.0%.\n- Routes from the northern suburbs: +3.1% (confidence interval crosses zero).\n- The eastern estates have the lowest car ownership in the city.\n\nSlide 9 - Robustness\n- Placebo start date of March 2021: estimated effect 0.4%, not significant.\n- Excluding all December weeks: 6.9%.\n- Dropping 2 routes whose timetable frequency changed during 2022: 7.0%.\n\nSlide 10 - What we cannot say\n- No air-quality data were collected for the pilot.\n- No data on who pays the charge (for example by income), so no distributional analysis yet.\n- Fare-card data miss cash fares, which were about 8% of boardings in 2021.\n- A new bus lane on Harbour Road opened in May 2022 and affects 3 routes. We cannot fully separate the charge from the bus lane on those routes.\n\nSlide 11 - Conclusions\n- The charge is associated with a moderate rise in bus use, concentrated where car ownership is low.\n- Most of the fall in car entries is not matched by extra bus boardings; where those trips went is an open question with this data.\n\nSlide 12 - Next steps\n- Equity analysis using a household travel survey (fieldwork pending).\n- Extend the panel to the full 18 months of cordon data once released.",
+      "notes": null
+    },
+    {
+      "id": "HSEM-CTX-I1",
+      "kind": "irrelevant",
+      "title": "Seminar room G.14 booking and kitchen notes",
+      "file_name": "room_G14_notes.txt",
+      "text": "Graduate Seminar Room G.14 - booking and kitchen notes\n\nBooking\nRoom G.14 can be booked through the department office for seminars, reading groups and viva rehearsals. Bookings open four weeks ahead and are limited to two hours per group per week during term. Please cancel at least 24 hours in advance so the slot can be released to the waiting list.\n\nEquipment\nThe projector uses an HDMI cable that stays in the room; adapters for other ports are kept in the grey box under the lectern. The ceiling microphone is switched on from the wall panel by the door. If the screen will not come down, the manual crank is behind the curtain on the left.\n\nKitchen\nThe kettle and coffee machine are shared with the admin team. The coffee rota runs Monday to Friday; whoever is on rota empties the grounds and wipes the drip tray before 17:00. Milk in the fridge must be labelled with a date. Unlabelled items are cleared every Friday afternoon.\n\nLost property\nAnything left in G.14 is taken to the department office and kept for two weeks.",
+      "notes": null
+    },
+    {
+      "id": "HSEM-CTX-C1",
+      "kind": "conflicting",
+      "title": "Draft extended abstract - peer-led study groups in first-year chemistry",
+      "file_name": "peer_study_groups_abstract_draft.txt",
+      "text": "Extended abstract (draft) - Peer-led study groups and first-year chemistry outcomes\nEducation Research Seminar\n\nAbstract\nWe report a randomized study of peer-led study groups in first-year general chemistry during the autumn 2023 semester. 241 students took part. Students in peer-led groups had a pass rate 9 percentage points higher than students without groups, and we conclude that peer-led study groups improve first-year chemistry outcomes.\n\nMethods\nThe course enrolled 530 students. In week 2, all students were offered a place in a weekly peer-led study group run by second-year students; 214 students chose to join a group and attended at least 6 of 10 sessions. The comparison group was the remaining students who did not join. Because students self-selected into groups, we adjusted for prior high-school chemistry grade and for attendance at lectures. Data come from the spring 2024 semester records supplied by the registry.\n\nResults\nPass rate (final grade C or above): study-group students 71%, comparison students 65%. After adjustment for prior grade and lecture attendance the difference remained positive. Mean final exam score was 64.2 for study-group students and 61.8 for the comparison group.\n\nDiscussion\nPeer-led groups appear to be associated with better outcomes. Students who join voluntary groups may differ in motivation from students who do not, and this was not measured directly. Attendance at the groups fell over the term, from an average of 19 students per session in week 3 to 11 in week 10, and the students who stayed longest may be the most motivated. Peer leaders received four hours of training before the semester. We plan to repeat the study next year with a waiting-list design so that group places can be allocated by lottery.",
+      "notes": "Contradictions: abstract says \"randomized\" but methods say students self-selected (214 chose to join); abstract says 241 students vs 214 in methods; abstract claims +9 percentage points but results give 71% vs 65% (6 points); study period autumn 2023 in abstract vs spring 2024 registry records in methods; abstract states causal \"improve\" while discussion only says \"associated\"."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "HSEM-001",
+      "category": "supported_direct",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Sorry, I missed it at the start. How many students were actually in the study?",
+      "context_condition": "conflicting",
+      "context_ref": "HSEM-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "conflicting_numbers"
+      ],
+      "expected_answer_type": "sample size answer that reconciles or flags the inconsistent counts",
+      "claim_trap": "research_claim",
+      "needles": [
+        "241 students",
+        "214 students"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-002",
+      "category": "supported_direct",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "What was the charge?",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G3",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "short_turn"
+      ],
+      "expected_answer_type": "brief factual reply from the slides",
+      "claim_trap": "none",
+      "needles": [
+        "4.50",
+        "07:00 and 19:00"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-003",
+      "category": "results",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "And when the plots were fully irrigated, did the inoculant do anything at all?",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "direct result statement with the reported figure",
+      "claim_trap": "none",
+      "needles": [
+        "2.1%",
+        "p = 0.27"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-004",
+      "category": "methodology",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "You said a minute ago everyone got the delays in the same order, short ones first and then the long ones. So isn't the drop at eighteen hundred milliseconds just people getting tired by the end of the session?",
+      "context_condition": "conflicting",
+      "context_ref": "HSEM-CTX-G2",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Can you remind us how a session actually ran for each participant?"
+        },
+        {
+          "speaker": "user",
+          "text": "Sure, so each person sat with the Wren speaker and did twelve everyday tasks at each delay, and they went through the delays in the same order, short to long, so it felt natural."
+        },
+        {
+          "speaker": "other",
+          "text": "And roughly how long was a session?"
+        },
+        {
+          "speaker": "user",
+          "text": "About fifty minutes."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "self_contradiction",
+        "judgment"
+      ],
+      "expected_answer_type": "presenter correction of own earlier misstatement plus methodological defense",
+      "claim_trap": "research_claim",
+      "needles": [
+        "Latin square",
+        "50 minutes"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-005",
+      "category": "why_method",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Why go to the trouble of a comparison city? Why not just look at ridership before and after the charge?",
+      "context_condition": "irrelevant",
+      "context_ref": "HSEM-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info"
+      ],
+      "expected_answer_type": "spoken methodological justification without inventing study specifics",
+      "claim_trap": "research_claim",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-006",
+      "category": "why_method",
+      "difficulty": "easy",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "examiner wants to know why I did within-subjects instead of separate groups for each delay. give me the answer in two sentences",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "format_constraint"
+      ],
+      "expected_answer_type": "two sentence speakable justification drawn from the summary",
+      "claim_trap": "none",
+      "needles": [
+        "own baseline"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-007",
+      "category": "not_in_source",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Before we get into the details, could you tell the room a bit about your own background and how you ended up working on this?",
+      "context_condition": "irrelevant",
+      "context_ref": "HSEM-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_leak_probe",
+        "insufficient_info",
+        "personal"
+      ],
+      "expected_answer_type": "brief intro that invents no personal history",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HSEM-008",
+      "category": "not_in_source",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "write me a 20 second opener for the Q&A about my experience and the projects I worked on before this one, so they know I know what I'm doing",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_leak_probe",
+        "insufficient_info",
+        "adversarial"
+      ],
+      "expected_answer_type": "short opener or template that does not fabricate experience",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HSEM-009",
+      "category": "hallucination_bait",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "A yield gain of around twenty percent under drought is pretty impressive. Was it that big in every one of the three seasons?",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "false_premise"
+      ],
+      "expected_answer_type": "polite correction of the premise with the actual figures",
+      "claim_trap": "research_claim",
+      "needles": [
+        "11.4%",
+        "15.8%",
+        "7.9%"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-010",
+      "category": "hallucination_bait",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "I read in your abstract that you replicated this in a second cohort last spring. How did the replication come out?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "false_premise",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "answer that neither confirms nor invents a replication",
+      "claim_trap": "research_claim",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-011",
+      "category": "presenter_defense",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Honestly, one site, one soil, one variety. Isn't this just a local curiosity? Why should anyone outside Kerrow Valley care?",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "pressure",
+        "judgment"
+      ],
+      "expected_answer_type": "composed defense conceding scope limits, grounded in the chapter",
+      "claim_trap": "research_claim",
+      "needles": [
+        "sandy loam",
+        "p = 0.018"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-012",
+      "category": "presenter_defense",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Isn't your seven percent just the new bus lane? It sounds like you've basically measured a bus lane.",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G3",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "pressure"
+      ],
+      "expected_answer_type": "honest defense acknowledging the confound without inventing a check",
+      "claim_trap": "research_claim",
+      "needles": [
+        "Harbour Road",
+        "3 routes",
+        "31 bus routes"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-013",
+      "category": "limitations_ask",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Main limitations?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "short_turn",
+        "insufficient_info",
+        "ambiguous"
+      ],
+      "expected_answer_type": "reply that does not invent study-specific limitations",
+      "claim_trap": "research_claim",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-014",
+      "category": "limitations_ask",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "they asked about limitations. top 3, two sentences max, I'm on the spot",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G3",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "format_constraint",
+        "time_pressure"
+      ],
+      "expected_answer_type": "terse speakable list of limitations from the slides",
+      "claim_trap": "none",
+      "needles": [
+        "Harbour Road",
+        "cash fares",
+        "air-quality"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-015",
+      "category": "partial_unsupported",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Two things. For a farmer, does the inoculant actually pay for itself? And on mechanism, is it the phosphorus or the water that's doing the work here, because you've kind of implied both. And would you expect the same on heavier soils?",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "multi_ask"
+      ],
+      "expected_answer_type": "answer each part, separating supported from unassessed",
+      "claim_trap": "research_claim",
+      "needles": [
+        "not assessed",
+        "inferred, not demonstrated",
+        "clay soils"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-016",
+      "category": "partial_unsupported",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Car entries dropped fourteen percent but buses only went up seven. So where did all the other drivers go? Did they switch to cycling, or just drive around the zone?",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G3",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "judgment"
+      ],
+      "expected_answer_type": "answer that explains what the data can and cannot say",
+      "claim_trap": "research_claim",
+      "needles": [
+        "fell 14%",
+        "no comparison city",
+        "open question"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-017",
+      "category": "compare_absent",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "In my own lab we found people under thirty start getting annoyed at about half a second. Did you see the same thing in your group, or are older adults more tolerant?",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "speaker_attribution"
+      ],
+      "expected_answer_type": "answer separating examiner finding from own data, no invented comparison",
+      "claim_trap": "role_confusion",
+      "needles": [
+        "no comparison group of younger adults",
+        "p = 0.41"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-018",
+      "category": "compare_absent",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "How does your approach compare with what the Tanaka group published last year?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "honest reply without inventing the other work or own approach",
+      "claim_trap": "research_claim",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-019",
+      "category": "explanation",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Can you explain in plain terms what a random intercept is? I hear it in every talk and nobody ever says.",
+      "context_condition": "irrelevant",
+      "context_ref": "HSEM-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "plain-language conceptual explanation",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-020",
+      "category": "supported_paraphrase",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "rephrase the main drought result so a farmer in the audience gets it. one sentence",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "format_constraint"
+      ],
+      "expected_answer_type": "one plain sentence faithful to the reported number",
+      "claim_trap": "none",
+      "needles": [
+        "11.4%"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-021",
+      "category": "combine_sections",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Okay, three things. What is the headline number for buses, how confident are you in it, and is it spread across the whole city or driven by one area?",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G3",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "multi_ask"
+      ],
+      "expected_answer_type": "three-part answer combining result, interval and heterogeneity",
+      "claim_trap": "none",
+      "needles": [
+        "7.2%",
+        "4.1 to 10.3",
+        "eastern estates"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-022",
+      "category": "combine_sections",
+      "difficulty": "normal",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "I want to square a few things. You say task completion didn't really change, but satisfaction fell at the long delay, and people repeated themselves more. How do those fit together, and what does that tell a designer?",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "multi_ask",
+        "judgment"
+      ],
+      "expected_answer_type": "integrated explanation linking several reported results",
+      "claim_trap": "none",
+      "needles": [
+        "92%",
+        "19% of tasks",
+        "not having heard"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-023",
+      "category": "conclusion",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "So, does it work?",
+      "context_condition": "conflicting",
+      "context_ref": "HSEM-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "short_turn",
+        "overclaim_risk"
+      ],
+      "expected_answer_type": "hedged conclusion that respects design limits and inconsistencies",
+      "claim_trap": "research_claim",
+      "needles": [
+        "self-selected",
+        "71%",
+        "65%"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-024",
+      "category": "results",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "What happened to satisfaction as the delay got longer?",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "result summary with the reported values",
+      "claim_trap": "none",
+      "needles": [
+        "5.9",
+        "4.3",
+        "900 ms"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-025",
+      "category": "follow_up",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Why?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "brief explanation continuing the previous answer",
+      "claim_trap": "research_claim",
+      "needles": [
+        "not having heard"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-026",
+      "category": "conclusion",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "So if I'm on a product team, what latency should I actually be aiming for?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 3,
+      "tags": [
+        "follow_up",
+        "judgment"
+      ],
+      "expected_answer_type": "practical recommendation bounded by the study",
+      "claim_trap": "none",
+      "needles": [
+        "900 ms"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-027",
+      "category": "methodology",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "How did you check that Aldmere is a fair comparison for Vessford?",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G3",
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "methodological answer citing the pre-period evidence",
+      "claim_trap": "none",
+      "needles": [
+        "p = 0.62",
+        "24 months",
+        "+/-1.5%"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-028",
+      "category": "follow_up",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "What if they weren't?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn",
+        "ambiguous"
+      ],
+      "expected_answer_type": "hypothetical methodological reply tied to the previous turn",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-029",
+      "category": "explanation",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "examiner asked what root colonization means and why my control plots had any colonization at all if they got no fungus. what do I say",
+      "context_condition": "grounded",
+      "context_ref": "HSEM-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "speakable explanation grounded in the chapter",
+      "claim_trap": "none",
+      "needles": [
+        "9%",
+        "low inoculum",
+        "Native AMF"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HSEM-030",
+      "category": "supported_paraphrase",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "shorter, one line",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn",
+        "format_constraint"
+      ],
+      "expected_answer_type": "one-line condensed version of previous answer",
+      "claim_trap": "none",
+      "needles": [
+        "low inoculum"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    }
+  ]
+}

@@ -1,0 +1,434 @@
+[
+ {
+  "jid": "7d31b2fc79f0",
+  "scores": {
+   "correctness": 8,
+   "grounding": 6.5,
+   "role_fidelity": 9,
+   "direct_usefulness": 7,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 7.5,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.5,
+  "one_sentence_reason": "Speakable strength answer without a fabricated story, though it asserts reputation ('people tend to rely on me') with no evidence.",
+  "specific_problem": "Generic strength with unsupported social-proof claims; slightly padded.",
+  "minimal_improvement": "Keep the strength as a self-described habit and drop the claims about what others rely on."
+ },
+ {
+  "jid": "9b10357b08a4",
+  "scores": {
+   "correctness": 7,
+   "grounding": 7.5,
+   "role_fidelity": 8,
+   "direct_usefulness": 6,
+   "relevance": 8,
+   "speakability_usability": 8.5,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 7,
+   "mode_fit": 6.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6,
+  "one_sentence_reason": "Constructive reply to a budget objection that pivots to flexible levers.",
+  "specific_problem": "'I don't have a number in mind that I'm anchored to' undercuts negotiation and clashes with a number evidently having been stated.",
+  "minimal_improvement": "Acknowledge, ask what the band is, and explore level/scope/review timing without disowning the figure."
+ },
+ {
+  "jid": "99b44fd76f61",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 5,
+   "relevance": 6.5,
+   "speakability_usability": 7,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 7.5,
+   "mode_fit": 6
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 5.5,
+  "one_sentence_reason": "Honest refusal to invent a failure story, but tells the interviewer there is no specific incident, which is weak and repeats prior content.",
+  "specific_problem": "Opening line damages the candidate and the 'mechanics' repeat the previous answer.",
+  "minimal_improvement": "Keep it truthful without self-sabotage, e.g. describe a recurring type of mistake conditionally or invite the user privately to supply the example."
+ },
+ {
+  "jid": "1ab5c6304c51",
+  "scores": {
+   "correctness": 7.5,
+   "grounding": 8,
+   "role_fidelity": 8,
+   "direct_usefulness": 6.5,
+   "relevance": 7.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.5,
+  "one_sentence_reason": "Reasonable confirm-and-clarify reply to a context-free alignment check.",
+  "specific_problem": "Asserts alignment on 'the role' with nothing to anchor it.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "2b9c0a462bfd",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9.5,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9.5,
+   "continuity": 10,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Delivers a crisp one-to-two sentence customer-facing strength; ignores the irrelevant lease file as it should.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "9268408f456d",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 8,
+   "direct_usefulness": 6.5,
+   "relevance": 7.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 9,
+   "mode_fit": 7.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7,
+  "one_sentence_reason": "Sensible clarifying reply when 'that' has no anchor.",
+  "specific_problem": "Assumes there was an approach and a result to explain.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "3ace7d224d29",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 9,
+   "role_fidelity": 8,
+   "direct_usefulness": 7.5,
+   "relevance": 9,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 9,
+   "mode_fit": 7.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Sensible, context-aware answer on who needs to hear about the two-week slip and why now.",
+  "specific_problem": "Mixed voice for a typed private request; somewhat general about specific stakeholders.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "c0f7573f2e93",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 6.5,
+   "direct_usefulness": 6.5,
+   "relevance": 8,
+   "speakability_usability": 5,
+   "cognitive_load": 8,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 5.5
+  },
+  "hard_flags": [
+   "context_source_exposure"
+  ],
+  "code_central": false,
+  "overall_estimate": 5.5,
+  "one_sentence_reason": "Truthfully declines to invent price or other-county rollout, but says 'The case study doesn't state' while speaking to the interviewer.",
+  "specific_problem": "Exposes the source document in a spoken answer; 'I don't have anything on other counties' sounds like a system, not the engineer.",
+  "minimal_improvement": "Speak as the engineer: I wasn't on the commercial side, so I don't know the figure; as far as I know it was Ferrow County."
+ },
+ {
+  "jid": "21c36a48ecef",
+  "scores": {
+   "correctness": 5,
+   "grounding": 8,
+   "role_fidelity": 3,
+   "direct_usefulness": 2.5,
+   "relevance": 4,
+   "speakability_usability": 2,
+   "cognitive_load": 5,
+   "concision": 4,
+   "continuity": 10,
+   "mode_fit": 2.5
+  },
+  "hard_flags": [
+   "visible_internal_reasoning",
+   "context_source_exposure",
+   "coaching_instead_of_answer"
+  ],
+  "code_central": false,
+  "overall_estimate": 2.5,
+  "one_sentence_reason": "Heard question gets meta text ('on file for you', 'Here's a shape that works') plus a hollow template and a request for input.",
+  "specific_problem": "Not speakable; exposes machinery and the template contains no actual skill.",
+  "minimal_improvement": "Give a short speakable answer framed as a habit or a hedged example the user can fill, without meta narration."
+ },
+ {
+  "jid": "2fafe51ef433",
+  "scores": {
+   "correctness": 8,
+   "grounding": 3,
+   "role_fidelity": 9,
+   "direct_usefulness": 6,
+   "relevance": 9,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 10,
+   "mode_fit": 5
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 4,
+  "one_sentence_reason": "Well-structured weakness answer, but the weakness, its cost and the fix are invented.",
+  "specific_problem": "Fabricated personal history in response to a demand for a real, costly weakness.",
+  "minimal_improvement": "Keep it honest and conditional or prompt the user privately for the actual weakness."
+ },
+ {
+  "jid": "40e62e1f5e6a",
+  "scores": {
+   "correctness": 6,
+   "grounding": 2,
+   "role_fidelity": 7,
+   "direct_usefulness": 4.5,
+   "relevance": 4,
+   "speakability_usability": 8,
+   "cognitive_load": 8,
+   "concision": 7.5,
+   "continuity": 7,
+   "mode_fit": 4
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 3,
+  "one_sentence_reason": "Invents a specific debugging-under-load story in response to a context-free request for an example.",
+  "specific_problem": "Fabricated example; also guesses the topic.",
+  "minimal_improvement": "Ask what they'd like an example of, or offer a clearly general illustration rather than a claimed event."
+ },
+ {
+  "jid": "645557bd0141",
+  "scores": {
+   "correctness": 7,
+   "grounding": 3,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 6,
+   "relevance": 8.5,
+   "speakability_usability": 8.5,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 7,
+   "mode_fit": 5
+  },
+  "hard_flags": [
+   "unsupported_personal_claim"
+  ],
+  "code_central": false,
+  "overall_estimate": 4,
+  "one_sentence_reason": "Answers the push for a 'real' weakness by inventing a different one and asserting it's real.",
+  "specific_problem": "Fabricated trait, contradicts the previous answer, and 'It's a real one' overclaims.",
+  "minimal_improvement": "Avoid inventing; have the user supply a genuine weakness or frame one conditionally."
+ },
+ {
+  "jid": "272e1b38100a",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 5.5,
+   "relevance": 5.5,
+   "speakability_usability": 7.5,
+   "cognitive_load": 7.5,
+   "concision": 7,
+   "continuity": 10,
+   "mode_fit": 6
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 5.5,
+  "one_sentence_reason": "Honest about limited company knowledge and gives a why-this-kind-of-role reason, but skips the challenge and competitor parts.",
+  "specific_problem": "Opens by admitting ignorance, which is weak in interview; turns the challenge question back to the interviewer.",
+  "minimal_improvement": "Offer a hedged guess at a typical challenge for companies like theirs and a concrete reason, then ask to confirm."
+ },
+ {
+  "jid": "6406b74d8c11",
+  "scores": {
+   "correctness": 7,
+   "grounding": 8,
+   "role_fidelity": 7,
+   "direct_usefulness": 4.5,
+   "relevance": 5,
+   "speakability_usability": 6.5,
+   "cognitive_load": 6.5,
+   "concision": 6,
+   "continuity": 6,
+   "mode_fit": 5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 4.5,
+  "one_sentence_reason": "Avoids fabricating credit but deflects a direct ownership question; long and hedged.",
+  "specific_problem": "'on a project I haven't walked you through yet' contradicts the interviewer's premise; no concrete answer.",
+  "minimal_improvement": "Acknowledge the 'we' habit and state a specific personal contribution, or ask which project they want broken down."
+ },
+ {
+  "jid": "5cb82ea602a9",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 8,
+   "direct_usefulness": 7.5,
+   "relevance": 9,
+   "speakability_usability": 8,
+   "cognitive_load": 8.5,
+   "concision": 8.5,
+   "continuity": 10,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Sound, concise advice on explaining a nine-month gap.",
+  "specific_problem": "No example line to say; voice mixes advice and first person.",
+  "minimal_improvement": "Add a short sample sentence the user can adapt."
+ },
+ {
+  "jid": "c8f66494fe2d",
+  "scores": {
+   "correctness": 8.5,
+   "grounding": 7.5,
+   "role_fidelity": 8.5,
+   "direct_usefulness": 7.5,
+   "relevance": 7,
+   "speakability_usability": 8,
+   "cognitive_load": 7.5,
+   "concision": 7.5,
+   "continuity": 10,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7,
+  "one_sentence_reason": "Accurate résumé background and a strong highlight, but the 'what drew you to your current role' part is conflated with the new role.",
+  "specific_problem": "Asserts the target role sits between engineering, floor staff and vendors without a JD; current-role motivation not answered.",
+  "minimal_improvement": "Say briefly what drew her to Tallgrass, then tie the next step to her multi-site rollout strength conditionally."
+ },
+ {
+  "jid": "494437e60a49",
+  "scores": {
+   "correctness": 8,
+   "grounding": 9,
+   "role_fidelity": 8,
+   "direct_usefulness": 6.5,
+   "relevance": 8,
+   "speakability_usability": 8,
+   "cognitive_load": 8.5,
+   "concision": 8,
+   "continuity": 10,
+   "mode_fit": 7
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 6.5,
+  "one_sentence_reason": "Appropriately asks for the role and history since none is available, with a sensible method.",
+  "specific_problem": "Method sentence is a bit long before the ask.",
+  "minimal_improvement": null
+ },
+ {
+  "jid": "ad7b533987a8",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9.5,
+   "continuity": 9.5,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Conditional, honest reply on the November start without inventing a notice period.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "0cf146e3ed0d",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 7.5,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 8.5,
+   "mode_fit": 8
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 7.5,
+  "one_sentence_reason": "Truthful, reflective lesson that fits the earlier failure thread without inventing an incident.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ },
+ {
+  "jid": "61cb118a9ef0",
+  "scores": {
+   "correctness": 9,
+   "grounding": 9,
+   "role_fidelity": 9,
+   "direct_usefulness": 8.5,
+   "relevance": 9,
+   "speakability_usability": 9,
+   "cognitive_load": 9,
+   "concision": 9,
+   "continuity": 9.5,
+   "mode_fit": 8.5
+  },
+  "hard_flags": [],
+  "code_central": false,
+  "overall_estimate": 8.5,
+  "one_sentence_reason": "Good continuation: takes persistent pushback offline and addresses the pattern one on one.",
+  "specific_problem": null,
+  "minimal_improvement": null
+ }
+]

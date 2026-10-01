@@ -1,0 +1,56 @@
+{
+  "run_id": "aq-final-base",
+  "harness_version": "2.0.0",
+  "partition": "final",
+  "dataset_sha256": "c579602f9e02a4888abce39dbc84aad09c9d563f988976fe1a0d25ee2b87857f",
+  "dataset_file": "dataset/final.json",
+  "git_commit": "04333d2d26e1a9a2ab9ed37eceea11867df55504",
+  "git_branch": "HEAD",
+  "git_dirty": false,
+  "git_dirty_paths": 0,
+  "git_subject": "feat(onboarding): the demo screenshot is the screen the question is about",
+  "shared_checkout": {
+    "path": "/Users/evin/natively-cluely-ai-assistant",
+    "head": "b8a3540ad7fce88dc6c1fb7fc2b0b598f9f7001f",
+    "branch": "main",
+    "dirty_paths": 39,
+    "note": "not measured: the run used the isolated app_root above"
+  },
+  "app_version": "2.9.1",
+  "app_root": "/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/aq-baseline",
+  "started_at": "2026-09-30T01:09:19.438Z",
+  "finished_at": "2026-09-30T02:18:37.996Z",
+  "provider_model_config": {
+    "provider": "gemini",
+    "model": "deepseek-flash",
+    "modelId": "deepseek-flash",
+    "displayName": "deepseek-flash",
+    "isOllama": false
+  },
+  "llm_keys_in_profile": [
+    "deepseek"
+  ],
+  "default_config_before_keys": {
+    "provider": "gemini",
+    "model": "deepseek-flash",
+    "modelId": "deepseek-flash",
+    "displayName": "deepseek-flash",
+    "isOllama": false
+  },
+  "pro_enabled_via_e2e_hook": {
+    "success": true,
+    "pro": true
+  },
+  "os": "Darwin 27.0.0 arm64",
+  "node": "v25.9.0",
+  "warmup_requests": 3,
+  "request_timeout_ms": 90000,
+  "concurrency": 1,
+  "sessions": [
+    {
+      "started_at": "2026-09-30T01:09:19.447Z",
+      "resumed": false,
+      "finished_at": "2026-09-30T02:18:37.996Z"
+    }
+  ]
+}

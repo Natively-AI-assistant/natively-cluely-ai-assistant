@@ -33,6 +33,13 @@ export const HARD_MAX_SECONDS = 35;
 // deterministic trimmer never fires on SPOKEN_FULL (it would risk cutting a nuanced answer
 // mid-thought). Only SPOKEN_SHORT is auto-trimmed (above HARD_MAX_WORDS).
 export const SPOKEN_FULL_MAX_WORDS = 180;
+// The per-turn PROMPT cap for a fuller spoken answer (2026-09-29): about 45
+// seconds at a natural pace. The directive used to quote SPOKEN_FULL_MAX_WORDS
+// ("at most 180 words, ~60 seconds") and sat last in the user message, so a
+// plain "how do you handle conflict?" or "explain REST APIs" came back at
+// 118-141 words against a ~30-second product target. The 180 above stays the
+// telemetry / never-trim ceiling; only what the model is told changes.
+export const SPOKEN_FULL_PROMPT_MAX_WORDS = 110;
 // Average speaking rate for an interview/meeting answer (words per minute).
 const WORDS_PER_MINUTE = 140;
 

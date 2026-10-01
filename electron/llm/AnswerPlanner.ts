@@ -1,8 +1,9 @@
-import type { IntentResult } from './IntentClassifier';
+import type { IntentResult } from './PlannerDecision';
 import type { ExtractedQuestion } from './transcriptQuestionExtractor';
-import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION } from './codingContract';
+import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION, CODING_SHAPE_CONTRACTS, type CodingShape } from './codingContract';
 import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
-import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords, HARD_MAX_WORDS, SPOKEN_FULL_MAX_WORDS } from './speakability';
+import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords, HARD_MAX_WORDS, SPOKEN_FULL_PROMPT_MAX_WORDS } from './speakability';
+import { analyzeUserInstructions, getRegisteredUserInstructions, userInstructionsOverrideAppLength } from './userInstructionContract';
 import { applyModeFallback, type ActiveModeInfo } from './modeProfiles';
 import { classifyDocumentQuestionShape } from './documentGroundedPrompt';
 import { includesPlannerTerm } from '../services/modes/retrievalTextMatch';
@@ -475,7 +476,7 @@ const GENERAL_TEMPLATE = `Answer naturally and directly. Use only relevant conte
 const DOCUMENT_DEFINITION_TEMPLATE = `Answer from the uploaded document evidence only. Give a concise definition in 1-3 sentences. Prefer text that explicitly defines the term ("is", "are", "refers to", "represents") and do not drift into procedures or training details unless the question asks for them.`;
 const DOCUMENT_LIST_TEMPLATE = `Answer from the uploaded document evidence only. Return the complete list the question asks for. Scan every retrieved excerpt before answering; include all listed items, phases, questions, models, objects, or components that are literally present. Do not stop at the first matching excerpt and do not invent missing list items.`;
 const DOCUMENT_NUMERIC_TEMPLATE = `Answer from the uploaded document evidence only. Report exact values with units and the entity they belong to. If multiple related values are present (training/peak/inference, control/sampling, per-model rates), include all of them. Do not infer numbers that are not written in the evidence.`;
-const DOCUMENT_ABSENT_FACT_TEMPLATE = `Answer from the uploaded document evidence only. If the requested fact is not supported by the selected evidence after retrieval, say exactly and briefly that it is not directly mentioned in the uploaded seminar material. Do not provide a plausible estimate or use general knowledge.`;
+const DOCUMENT_ABSENT_FACT_TEMPLATE = `Answer from the uploaded document evidence first. If the requested fact is not supported by the selected evidence after retrieval, say briefly that it is not directly mentioned in the uploaded material, then still answer from general knowledge, clearly marked as general knowledge and never presented as coming from the material.`;
 const DOCUMENT_STRUCTURE_TEMPLATE = `Answer from the uploaded document's table-of-contents / heading evidence only. These are navigation questions — a chapter or section title, the page a section begins on, or how many chapters/sections/pages there are. Report the exact title or number as written in the evidence. Do not summarize the section's content and do not infer a title or page that is not literally present.`;
 const DOCUMENT_FOLLOWUP_TEMPLATE = `Answer the follow-up from the uploaded document evidence only. Resolve pronouns like "it", "that", and "they" using the immediately previous topic, but treat the prior answer only as a referent hint — facts must come from the retrieved document excerpts.`;
 
@@ -2237,6 +2238,10 @@ const SPEAKABLE_RENDERING_DIRECTIVE =
   `Cover the same substance — lead with the direct answer, ground every claim, close naturally. ` +
   `Never print "Speakable Final Answer", "Direct Answer", "The Honest Gap", "Short Fit Summary", or any other label.`;
 
+// The fuller-spoken-answer cap (STAR stories, multi-part, pressured negotiation).
+const spokenFullDirective = (): string =>
+  `LENGTH LIMIT: at most ${SPOKEN_FULL_PROMPT_MAX_WORDS} words (~45 seconds spoken) — a hard cap, not a target. This is a LIVE spoken answer: make the point completely, then stop — do not enumerate every angle. If your draft runs past ${SPOKEN_FULL_PROMPT_MAX_WORDS} words, cut whole branches, not adjectives.`;
+
 /**
  * The adaptive per-turn LENGTH directive as a bare line ('' when the plan's
  * speakability tier doesn't warrant one). Extracted (RC-5, session C
@@ -2247,6 +2252,14 @@ const SPEAKABLE_RENDERING_DIRECTIVE =
  * length line was delivered at all on V3-owned turns.
  */
 export const renderLengthDirectiveForPlan = (plan: AnswerPlan): string => {
+  // Explicit styles get no line — including the auto-detected `star` style
+  // ("tell me about a time…"), deliberately. Measured 2026-09-29 on the exact
+  // captured prompts (5 story questions × 5 seeds, no résumé): ANY length line
+  // on a story question made gemini-3.1-flash-lite invent a past event
+  // ("I once miscalculated a project timeline…") 7-9/25 times, whatever its
+  // wording; with no line it was 0/25 and shorter (66 words). DeepSeek never
+  // invented one but ran ~93 words without the line — a length cost accepted
+  // over a fabrication risk.
   if (plan.answerStyle && plan.answerStyle !== 'default') return '';
   // Coding output owns its own length (the contract's sections + code).
   if (isCodingAnswerType(plan.answerType)) return '';
@@ -2260,10 +2273,10 @@ export const renderLengthDirectiveForPlan = (plan: AnswerPlan): string => {
   if (tier === 'STRUCTURED_FULL') return '';
   if (tier === 'SPOKEN_FULL') {
     // A fuller spoken answer (STAR story, multi-part, pressured negotiation)
-    // has its own budget — SPOKEN_FULL_MAX_WORDS, the same number
-    // speakability's telemetry classifies against. Cap-first framing chosen
-    // by paired live A/B (155w -> 131w on the equivalent outer-cap test).
-    return `LENGTH LIMIT: at most ${SPOKEN_FULL_MAX_WORDS} words (~60 seconds spoken) — a hard cap, not a target. This is a LIVE spoken answer: tell the story or make the case completely, then stop — do not enumerate every angle. If your draft runs past ${SPOKEN_FULL_MAX_WORDS} words, cut whole branches, not adjectives.`;
+    // has its own budget — SPOKEN_FULL_PROMPT_MAX_WORDS (~45s), below the
+    // 180-word telemetry ceiling. Cap-first framing chosen by paired live A/B
+    // (155w -> 131w on the equivalent outer-cap test).
+    return spokenFullDirective();
   }
   const band = classifyShortBand(plan.answerType, plan.answerStyle, plan.question);
   const t = shortBandTargetWords(band);
@@ -2277,8 +2290,30 @@ export const renderLengthDirectiveForPlan = (plan: AnswerPlan): string => {
   return `LENGTH: aim for about ${t.seconds}s spoken — roughly ${t.min} to ${t.max} words (${t.guidance}). Use fewer if the question is fully answered in fewer; never pad to reach the number. Hard ceiling: never go past ${ceiling} words — if your draft runs longer, cut examples and caveats, keep the point.`;
 };
 
-export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationSpec = false): string => {
-  const verificationBlock = (includeVerificationSpec && isCodingAnswerType(plan.answerType))
+/**
+ * The STRICT RESPONSE TEMPLATE for a coding turn written to a non-`full` shape
+ * (codingShape.ts), or null to keep the plan's own template. The plan's
+ * CODING_TEMPLATE is the six-section contract, which is right only for `full`.
+ * An implementation turn asking for code keeps CODING_IMPL_TEMPLATE, which is
+ * already code-first.
+ */
+export const shapedCodingTemplate = (plan: Pick<AnswerPlan, 'answerType'>, codingShape?: CodingShape): string | null => {
+  if (!codingShape || codingShape === 'full' || !isCodingAnswerType(plan.answerType)) return null;
+  if (plan.answerType === 'coding_question_answer' && (codingShape === 'code' || codingShape === 'solve')) return null;
+  return `You are generating a live coding answer.
+
+${CODING_SHAPE_CONTRACTS[codingShape]}
+
+Additional rules:
+- Do not include resume, JD, salary, negotiation, or unrelated profile context unless explicitly asked.
+- NEVER mention "Natively", the assistant, the product, or the candidate's profile/projects anywhere in the answer. This is a pure technical answer.`;
+};
+
+export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationSpec = false, codingShape?: CodingShape): string => {
+  const shapedTemplate = shapedCodingTemplate(plan, codingShape);
+  // The hidden test block only makes sense when the answer writes new code.
+  const writesCode = !codingShape || codingShape === 'full' || codingShape === 'code' || codingShape === 'solve' || codingShape === 'optimize' || codingShape === 'debug';
+  const verificationBlock = (includeVerificationSpec && isCodingAnswerType(plan.answerType) && writesCode)
     ? `\n\n${CODING_VERIFICATION_INSTRUCTION}`
     : '';
   // Phase 2: a single explicit directive that translates the voice/policy split
@@ -2345,7 +2380,20 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
   // cue — SPOKEN_FULL / STRUCTURED_FULL and explicit styles own their own length, so emit
   // nothing for them (additive, non-conflicting). Prompt-guidance only; the deterministic
   // trimmer is unchanged.
-  const _lengthLine = renderLengthDirectiveForPlan(plan);
+  // The app's length target is a DEFAULT, here exactly as on the V3 composer
+  // (ComposeInput.defaultLengthDirective). Found 2026-09-20 by the real-wiring
+  // E2E with V3 switched OFF: the first fix split the length channel only on
+  // the V3 path, so this legacy <answer_contract> — V3's fallback, and every
+  // surface that assembles through here — still sent "roughly 40 to 60 words
+  // ... Hard ceiling: never go past 75" beside the user's own "Answer in 100
+  // words.". Same registry the coding-format resolver asks; no provider (every
+  // unit test) or a throwing one ⇒ unchanged behaviour.
+  const _userSetsLength = (() => {
+    try {
+      return userInstructionsOverrideAppLength(analyzeUserInstructions(getRegisteredUserInstructions()));
+    } catch { return false; }
+  })();
+  const _lengthLine = _userSetsLength ? '' : renderLengthDirectiveForPlan(plan);
   const lengthDirective = _lengthLine ? `\n\n${_lengthLine}` : '';
   // Speakable-by-default (manual regression 2026-06-12): scaffolded profile
   // templates become internal thinking structure; the rendered answer is
@@ -2367,6 +2415,6 @@ VOICE: ${voiceLine}
 GROUNDING: ${policyLine}
 
 STRICT RESPONSE TEMPLATE:
-${plan.responseTemplate}${renderingDirective}${styleDirective}${lengthDirective}${verificationBlock}
+${shapedTemplate ?? plan.responseTemplate}${renderingDirective}${styleDirective}${lengthDirective}${verificationBlock}
 </answer_contract>`;
 };
