@@ -44,6 +44,22 @@ interface DirectAssistError {
   code: string;
   message: string;
   retryable: boolean;
+  /** HTTP status of the failure, when the provider gave one. */
+  status?: number;
+  /** The provider's own explanation: one line, keys removed, capped in main. */
+  detail?: string;
+  /** The provider was never reached (offline, connection refused). */
+  unreachable?: boolean;
+  /** Every provider tried, when more than one was and none answered. */
+  attempts?: Array<{
+    provider: string;
+    model: string;
+    reason: string;
+    status?: number;
+    detail?: string;
+    unreachable?: boolean;
+    waitedMs: number;
+  }>;
 }
 
 type DirectAssistEvent =
@@ -57,6 +73,11 @@ type DirectAssistEvent =
       from: { provider: string; model: string };
       to: { provider: string; model: string };
       reason: string;
+      status?: number;
+      detail?: string;
+      /** How long `from` was given, retries included. */
+      waitedMs: number;
+      unreachable?: boolean;
     }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
   | { type: 'error'; requestId: string; sequence: number; partial: boolean; error: DirectAssistError }
