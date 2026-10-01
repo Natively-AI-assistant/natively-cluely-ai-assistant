@@ -1064,7 +1064,7 @@ Positive but interval includes 0 → not promoted; fix13 stays the kept build an
   suite 5,678 tests, 5,650 pass, 0 fail, 28 skipped. Build output deleted afterwards (3.3 GB free).
 * Rule 7 of the fix14 promotion rule (typed refinement still met) stays as a check, though no typed turn changes now.
 
-### One more correction to the batch, 22:45Z: a pair's two arms are judged one after the other
+### One more correction to the batch, 22:36Z: a pair's two arms are judged one after the other
 * Both arms of a pair ran in the same tier. The judge writes its cache file only after the response arrives, so a
   variant row carrying base's answer was usually sent before base's score existed: the same answer judged twice,
   two scores for one answer, exactly the noise the carried rows were meant to remove (and a second call paid for).
