@@ -146,3 +146,62 @@ describe('VisionProviderRegistry asks the same function', () => {
     assert.match(body, /storedVisionAnswer/);
   });
 });
+describe('refreshOpenRouterVisionData', () => {
+  const okFetch = (calls) => async (url) => { calls.push(url); return { ok: true, json: async () => catalogue }; };
+  const fresh = () => { const s = new VisionCapabilityStore({ filePath: null, now: () => Date.now() }); __setVisionCapabilityStore(s); return s; };
+  const ready = (state = {}) => helper({ openrouterClient: {}, openrouterApiKey: 'k', isProviderDisabled: () => false, ...state });
+
+  test('writes the parsed catalogue, once per day', async () => {
+    const s = fresh(); const calls = [];
+    const h = ready();
+    await h.refreshOpenRouterVisionData(okFetch(calls));
+    await h.refreshOpenRouterVisionData(okFetch(calls));
+    assert.equal(calls.length, 1, 'fresh data is not re-fetched');
+    assert.equal(s.answer('openrouter', '', 'deepseek/deepseek-v4-flash'), false);
+    assert.equal(s.answer('openrouter', '', 'openai/gpt-4o'), true);
+  });
+  test('concurrent callers share one request', async () => {
+    fresh(); const calls = []; const h = ready();
+    await Promise.all([h.refreshOpenRouterVisionData(okFetch(calls)), h.refreshOpenRouterVisionData(okFetch(calls))]);
+    assert.equal(calls.length, 1);
+  });
+  for (const [label, impl] of [
+    ['offline', async () => { throw new Error('ENOTFOUND'); }],
+    ['a 503', async () => ({ ok: false, status: 503, json: async () => ({}) })],
+    ['malformed JSON', async () => ({ ok: true, json: async () => { throw new SyntaxError('bad'); } })],
+    ['an empty catalogue', async () => ({ ok: true, json: async () => ({ data: [] }) })],
+  ]) {
+    test(`${label}: earlier answers stay, nothing is marked fresh, a retry waits for the backoff`, async () => {
+      const s = fresh(); const h = ready();
+      s.replaceProviderAnswers('openrouter', '', new Map([['openai/gpt-4o', true]]));
+      // Make the earlier data stale so a refresh is due.
+      s.providers.get('openrouter|').fetchedAt = 0;
+      await h.refreshOpenRouterVisionData(impl);
+      assert.equal(s.answer('openrouter', '', 'openai/gpt-4o'), true, 'earlier answers kept');
+      assert.equal(s.fetchedAt('openrouter', ''), 0, 'not marked fresh');
+      const calls = [];
+      await h.refreshOpenRouterVisionData(okFetch(calls));
+      assert.equal(calls.length, 0, 'a failed attempt backs off before retrying');
+    });
+  }
+  test('local-only mode or OpenRouter switched off: nothing is fetched', async () => {
+    fresh(); const calls = [];
+    await ready({ isLocalOnlyMode: true }).refreshOpenRouterVisionData(okFetch(calls));
+    await ready({ isProviderDisabled: (p) => p === 'openrouter' }).refreshOpenRouterVisionData(okFetch(calls));
+    assert.equal(calls.length, 0);
+  });
+  test('setModel on an OpenRouter model starts the refresh; on anything else it does not', () => {
+    const h = ready(); let started = 0;
+    h.refreshOpenRouterVisionData = () => { started += 1; return Promise.resolve(); };
+    h.setModel('gpt-5.5');
+    h.setModel('openrouter/openai/gpt-4o');
+    assert.equal(started, 1);
+  });
+  test("Settings' Refresh writes the same answers", () => {
+    const src = fs.readFileSync(path.join(__dirname, '../../utils/modelFetcher.ts'), 'utf8');
+    const start = src.indexOf('async function fetchOpenRouterModels(');
+    const body = src.slice(start, src.indexOf('\n}\n', start));
+    assert.match(body, /parseOpenRouterVision\(/);
+    assert.match(body, /replaceProviderAnswers\('openrouter'/);
+  });
+});

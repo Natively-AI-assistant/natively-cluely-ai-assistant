@@ -21,7 +21,8 @@ import {
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
 import { gatewaySeatReadsImages, readsImages, resolveVision, type VisionFacts, type VisionVerdict } from "./llm/visionResolver"
-import { storedVisionAnswer } from "./llm/visionCapabilityStore"
+import { getVisionCapabilityStore, storedVisionAnswer } from "./llm/visionCapabilityStore"
+import { parseOpenRouterVision } from "./llm/providerVisionData"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
@@ -372,6 +373,11 @@ const NINEROUTER_DEFAULT_MAX_OUTPUT_TOKENS = 64000
 const NINEROUTER_MAX_TOKENS_MIN = 256
 const NINEROUTER_MAX_TOKENS_MAX = 1048576
 const NINEROUTER_MODELS_TTL_MS = 5 * 60_000
+// OpenRouter's "which models read images" catalogue (2026-10-01): fresh for a
+// day; after a failed fetch, no retry for 10 minutes however often the user
+// switches models.
+const OPENROUTER_VISION_TTL_MS = 24 * 60 * 60 * 1000
+const OPENROUTER_VISION_RETRY_MS = 10 * 60 * 1000
 // Mirrors NINEROUTER_THINKING_LEVELS in src/utils/modelUtils.ts. electron/
 // never imports from src/, so the list is restated; the settings dropdown
 // and this validator have to agree or a picked level is silently dropped.
@@ -732,6 +738,10 @@ export class LLMHelper {
   private deepseekApiKey: string | null = null
   private nvidiaNimApiKey: string | null = null
   private openrouterApiKey: string | null = null
+  // OpenRouter vision catalogue refresh (2026-10-01): single flight, and a short
+  // backoff after a failure so model switching never hammers the endpoint.
+  private openrouterVisionFetch: Promise<void> | null = null
+  private openrouterVisionLastFailureAt = 0
   private fluxionApiKey: string | null = null
   /** Which wire protocol this key's Fluxion group speaks. Default matches the
    *  GPT/Grok/Gemini/DeepSeek/GLM/Kimi groups; Claude groups need 'anthropic'. */
@@ -2735,6 +2745,8 @@ export class LLMHelper {
     if (targetModelId === GEMINI_FLASH_MODEL) this.geminiModel = GEMINI_FLASH_MODEL;
 
     console.log(`[LLMHelper] Switched to Model: ${targetModelId}`);
+    // Keep OpenRouter's "which models read images" answers current (2026-10-01).
+    if (this.isOpenRouterModel(targetModelId)) void this.refreshOpenRouterVisionData();
   }
 
   /**
@@ -6731,6 +6743,40 @@ let isMultimodal = !!(imagePaths?.length);
    */
   private openrouterWireModel(modelId: string): string {
     return (modelId || '').replace(/^openrouter\//, '');
+  }
+
+  /**
+   * Fetch OpenRouter's catalogue and save which models read images (its
+   * input_modalities). Background only: called when an OpenRouter model is
+   * selected, never on the answer path. Fresh for a day; a failure keeps the
+   * previous answers, is not counted as fresh, and is not retried for 10 min.
+   * Nothing is fetched in local-only mode or with OpenRouter switched off.
+   */
+  public async refreshOpenRouterVisionData(fetchImpl: typeof fetch = fetch): Promise<void> {
+    if (this.isLocalOnlyMode || this.isProviderDisabled('openrouter')) return;
+    const store = getVisionCapabilityStore();
+    const now = Date.now();
+    if (now - (store.fetchedAt('openrouter', '') ?? 0) < OPENROUTER_VISION_TTL_MS) return;
+    if (now - this.openrouterVisionLastFailureAt < OPENROUTER_VISION_RETRY_MS) return;
+    if (this.openrouterVisionFetch) return this.openrouterVisionFetch;
+    this.openrouterVisionFetch = (async () => {
+      try {
+        const headers: Record<string, string> = {};
+        if (this.openrouterApiKey) headers.Authorization = `Bearer ${this.openrouterApiKey}`;
+        const resp = await fetchImpl('https://openrouter.ai/api/v1/models', { headers, signal: AbortSignal.timeout(15_000) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const answers = parseOpenRouterVision(await resp.json());
+        if (answers.size === 0) throw new Error('empty catalogue');
+        store.replaceProviderAnswers('openrouter', '', answers);
+        console.log(`[LLMHelper] OpenRouter vision catalogue: ${answers.size} model(s), ${[...answers.values()].filter(Boolean).length} read images`);
+      } catch (err: any) {
+        this.openrouterVisionLastFailureAt = Date.now();
+        console.warn('[LLMHelper] OpenRouter vision catalogue refresh failed (answers unchanged):', err?.message || err);
+      } finally {
+        this.openrouterVisionFetch = null;
+      }
+    })();
+    return this.openrouterVisionFetch;
   }
 
   /**
