@@ -23,15 +23,15 @@ import {
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
 import { gatewaySeatReadsImages, readsImages, resolveVision, type VisionFacts, type VisionVerdict } from "./llm/visionResolver"
+import { orderVisionCandidates } from "./llm/visionOrdering"
 import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from "./llm/visionCapabilityStore"
 import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/visionProbe"
 import { parseOpenRouterVision } from "./llm/providerVisionData"
-import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
+import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, claudeThinkingParam, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
 import {
   runStreamingVisionFallback,
-  orderVisionByHealth,
   DEFAULT_VISION_FALLBACK_CONFIG,
   type VisionStreamProvider,
   type VisionHealthEntry,
@@ -867,6 +867,8 @@ export class LLMHelper {
   //   - ttftEma: exponentially-weighted moving avg of time-to-first-token (alpha 0.2),
   //     used to reorder healthy providers fastest-first.
   private visionHealth: Map<string, VisionHealthEntry> = new Map();
+  /** Which selection each leading screenshot rung last ran for (see buildVisionChain). */
+  private visionLeadSelection?: Map<string, string>;
 
   // ─── Streaming TEXT fallback: per-provider health + TTFT tracking ────────
   // Twin of visionHealth for the text TTFT race (runStreamingTextFallback).
@@ -1566,8 +1568,10 @@ export class LLMHelper {
     // "API key expired" cache.create failures). Also clear the vision circuit
     // breaker for Gemini so a freshly-entered key is retried immediately.
     this.geminiPromptCache.clear();
-    this.visionHealth.delete('gemini_flash');
-    this.visionHealth.delete('gemini_pro');
+    // Every Gemini rung, the selected-model one included: since 2026-10-01 a
+    // selection whose breaker is open does not lead, so a rung left out here
+    // would keep a fresh key's selection off the front for the cooldown.
+    for (const id of ['gemini_flash_lite', 'gemini_flash', 'gemini_pro', 'gemini_selected']) this.visionHealth.delete(id);
     this.textHealth.delete('gemini_flash'); // text race uses gemini_flash — retry fresh key immediately
     if (!trimmed) {
       this.apiKey = null;
@@ -1611,6 +1615,7 @@ export class LLMHelper {
   public setOpenaiApiKey(apiKey: string) {
     const trimmed = (apiKey || '').trim();
     this.visionHealth.delete('openai'); // fresh key → retry immediately, skip auth cooldown
+    this.visionHealth.delete('openai_selected');
     this.textHealth.delete('openai');
     if (!trimmed) {
       this.openaiApiKey = null;
@@ -1626,6 +1631,7 @@ export class LLMHelper {
   public setClaudeApiKey(apiKey: string) {
     const trimmed = (apiKey || '').trim();
     this.visionHealth.delete('claude'); // fresh key → retry immediately, skip auth cooldown
+    this.visionHealth.delete('claude_selected');
     this.textHealth.delete('claude');
     if (!trimmed) {
       this.claudeApiKey = null;
@@ -1640,6 +1646,7 @@ export class LLMHelper {
 
   public setDeepseekApiKey(apiKey: string) {
     const trimmed = (apiKey || '').trim();
+    this.visionHealth.delete('deepseek'); // fresh key → its selection leads again at once
     if (!trimmed) {
       this.deepseekApiKey = null;
       this.deepseekClient = null;
@@ -1770,6 +1777,7 @@ export class LLMHelper {
    */
   public setLitellmConfig(apiKey: string, baseURL: string, maxTokens?: number) {
     const trimmedURL = (baseURL || '').trim();
+    this.visionHealth.delete('litellm'); // new config → its selection leads again at once
     if (!trimmedURL) {
       this.litellmApiKey = null;
       this.litellmClient = null;
@@ -1899,6 +1907,7 @@ export class LLMHelper {
    */
   public setNinerouterConfig(apiKey: string, baseURL: string, maxTokens?: number, thinking?: string | null) {
     const trimmedURL = (baseURL || '').trim();
+    this.visionHealth.delete('ninerouter'); // new config → its selection leads again at once
     if (!trimmedURL) {
       this.ninerouterApiKey = null;
       this.ninerouterClient = null;
@@ -2122,6 +2131,7 @@ export class LLMHelper {
 
   public setNativelyKey(key: string | null): void {
     this.nativelyKey = key || null;
+    this.visionHealth.delete('natively'); // fresh key → its selection leads again at once
     console.log(`[LLMHelper] Natively key ${key ? 'set' : 'cleared'}`);
   }
 
@@ -7441,7 +7451,10 @@ let isMultimodal = !!(imagePaths?.length);
     const request = {
       model,
       max_tokens: this.getClaudeMaxOutput(model),
-      thinking: { type: 'disabled' as const }, // extended thinking off (default, made explicit) for low TTFT
+      // Thinking off up front, for low TTFT, in the form this model accepts —
+      // Opus 5.5, Sonnet 5.5 and Fable 400 on `disabled` (claudeThinkingParam).
+      // The cast: the installed SDK's types predate `between_tools`.
+      ...(claudeThinkingParam(model) as { thinking?: { type: 'disabled' } }),
       // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
       ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
       messages: [{ role: "user" as const, content }],
@@ -8592,6 +8605,47 @@ let isMultimodal = !!(imagePaths?.length);
     req: { userContent: string; message: string; context?: string; imagePaths: string[]; systemPrompt: string },
     abortSignal?: AbortSignal,
   ): AsyncGenerator<string, void, unknown> {
+    const ordered = await this.buildVisionChain(req);
+
+    // Delegate the first-token-commit + retry + circuit-breaker state machine.
+    // hedgeEnabled:false — the Gemini cascade is strict serial (flash-lite →
+    // flash → pro), so no provider sets hedgeWith and nothing is raced.
+    yield* runStreamingVisionFallback(
+      ordered,
+      { ...DEFAULT_VISION_FALLBACK_CONFIG, hedgeEnabled: false },
+      this.visionHealth,
+      {
+        log: (m) => console.log(m),
+        warn: (m) => console.warn(m),
+        // Mirrors the non-streaming vision path's 404 handling (see the
+        // onModelError call in generateWithVisionFallback). Without this the
+        // LIVE vision path — the one users actually hit — could never tell the
+        // version manager its pinned model had been retired, so a decommissioned
+        // id stayed pinned indefinitely (Groq llama-4-scout, 2026-08-12).
+        onModelGone: (_id, name) => {
+          this.modelVersionManager.onModelError(name).catch(() => { });
+        },
+        // A real screenshot refused as image-unsupported contradicts whatever
+        // said this model reads images: test it again now (2026-10-01).
+        onNoVision: (id) => {
+          const selected = (() => { try { return this.getDirectAssistSelection().provider; } catch { return null; } })();
+          // `<provider>_selected` is the rung that ran the selected model itself.
+          if (id === selected || id === `${selected}_selected`) this.maybeProbeSelectedVision({ force: true });
+        },
+      },
+      abortSignal,
+    );
+  }
+
+  /**
+   * The rungs for one screenshot turn, in the order they will be tried
+   * (2026-10-01: split out of streamVisionWithFallback so the order can be
+   * recorded and compared; phase 5a changes who leads). Throws the "No
+   * vision-capable provider configured…" errors when nothing can read it.
+   */
+  private async buildVisionChain(
+    req: { userContent: string; message: string; context?: string; imagePaths: string[]; systemPrompt: string },
+  ): Promise<VisionStreamProvider[]> {
     const { userContent, message, context, imagePaths, systemPrompt } = req;
 
     // ── Resolve per-family model tiers (tier1→tier2→tier3 across attempts) ──
@@ -8627,15 +8681,43 @@ let isMultimodal = !!(imagePaths?.length);
     // model would be a blind answer.
     const deepseekSelected = !this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isDeepseekModel(this.currentModelId);
     const deepseekReads = deepseekSelected && readsImages(this.visionVerdict({ provider: 'deepseek', model: this.currentModelId }), false);
+    // The user's own DIRECT model (2026-10-01): it reads its own screenshot when
+    // the resolver says it reads images — the name list, provider data or a
+    // passed one-time test. Unknown and "no" get no rung of their own: the
+    // vendor's fixed vision model below answers, so nothing is sent blind.
+    // Custom, cURL and Ollama selections win in getDirectAssistSelection, so a
+    // leftover cloud model id never leads their turn.
+    const sel = (() => { try { return this.getDirectAssistSelection(); } catch { return null; } })();
+    const selReads = sel ? readsImages(this.visionVerdict(sel), false) : false;
+    const selectedDirect = (provider: DirectAssistProvider): string | null =>
+      sel && selReads && sel.provider === provider ? sel.model : null;
+    const selectedOpenai = selectedDirect('openai');
+    const selectedClaude = selectedDirect('claude');
+    // `models/gemini-…` is the same model as `gemini-…`.
+    const selectedGemini = selectedDirect('gemini')?.replace(/^models\//, '') ?? null;
+    const selectedGroq = selectedDirect('groq');
+    const fixedGemini = { lite: GEMINI_FLASH_LITE_MODEL, flash: tierModel(ModelFamily.GEMINI_FLASH, 1) || GEMINI_FLASH_MODEL, pro: tierModel(ModelFamily.GEMINI_PRO, 1) || GEMINI_PRO_MODEL };
 
     if (!localOnly) {
       if (this.openaiClient) {
         cloud.push({ id: 'openai', name: 'OpenAI', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
           open: (sig, att) => this.streamWithOpenaiMultimodal(userContent, imagePaths, systemPrompt, tierModel(ModelFamily.OPENAI, att), sig) });
+        // …and a rung for the selected model itself, to lead the turn (see
+        // `front`), unless it IS the fixed vision model — then that rung leads.
+        // The reasoning-model budget: a selected o-series or GPT-6 model takes
+        // seconds to its first token where the fixed model takes one.
+        if (selectedOpenai && selectedOpenai !== tierModel(ModelFamily.OPENAI, 1)) {
+          cloud.push({ id: 'openai_selected', name: `OpenAI (${selectedOpenai})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+            open: (sig) => this.streamWithOpenaiMultimodal(userContent, imagePaths, systemPrompt, selectedOpenai, sig) });
+        }
       }
       if (this.claudeClient) {
         cloud.push({ id: 'claude', name: 'Claude', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
           open: (sig, att) => this.streamWithClaudeMultimodal(userContent, imagePaths, systemPrompt, tierModel(ModelFamily.CLAUDE, att), sig) });
+        if (selectedClaude && selectedClaude !== tierModel(ModelFamily.CLAUDE, 1)) {
+          cloud.push({ id: 'claude_selected', name: `Claude (${selectedClaude})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+            open: (sig) => this.streamWithClaudeMultimodal(userContent, imagePaths, systemPrompt, selectedClaude, sig) });
+        }
       }
       if (this.client) {
         // Strict serial Gemini cascade (flash-lite → flash → pro), no hedge.
@@ -8647,10 +8729,17 @@ let isMultimodal = !!(imagePaths?.length);
           open: (sig, att) => this.streamWithGeminiModel(userContent, tierModel(ModelFamily.GEMINI_FLASH, att) || GEMINI_FLASH_MODEL, imagePaths, systemPrompt, sig) });
         cloud.push({ id: 'gemini_pro', name: 'Gemini Pro', isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig, att) => this.streamWithGeminiModel(userContent, tierModel(ModelFamily.GEMINI_PRO, att) || GEMINI_PRO_MODEL, imagePaths, systemPrompt, sig) });
+        // A selected Gemini model that is none of the three above.
+        if (selectedGemini && !Object.values(fixedGemini).includes(selectedGemini)) {
+          cloud.push({ id: 'gemini_selected', name: `Gemini (${selectedGemini})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+            open: (sig) => this.streamWithGeminiModel(userContent, selectedGemini, imagePaths, systemPrompt, sig) });
+        }
       }
       if (this.groqClient) {
-        cloud.push({ id: 'groq', name: `Groq (${GROQ_VISION_MODEL})`, isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
-          open: (sig) => this.streamWithGroqMultimodal(userContent, imagePaths, systemPrompt, sig) });
+        // The selected Groq model when it reads images, else Groq's vision model.
+        const groqVisionModel = selectedGroq ?? GROQ_VISION_MODEL;
+        cloud.push({ id: 'groq', name: `Groq (${groqVisionModel})`, isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
+          open: (sig) => this.streamWithGroqMultimodal(userContent, imagePaths, systemPrompt, sig, groqVisionModel) });
       }
       if (this.hasNatively()) {
         cloud.push({ id: 'natively', name: 'Natively API', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
@@ -8799,11 +8888,12 @@ let isMultimodal = !!(imagePaths?.length);
     // Honor an explicit local selection first, then health/speed-sorted cloud,
     // then any remaining local providers as a final fallback.
     const nowMs = Date.now();
-    let ordered: VisionStreamProvider[];
-    if (localOnly) {
-      ordered = orderVisionByHealth(local, this.visionHealth, nowMs);
-    } else {
-      const front: VisionStreamProvider[] = [];
+    // `front` is the selection's own rung(s). The ordering rule itself lives in
+    // visionOrdering.ts (2026-10-01), shared with the screen-reading path from
+    // phase 5b: the selection leads unless its breaker is open, then cloud by
+    // health, then local. Local-only mode ignores `front` and uses local rungs.
+    const front: VisionStreamProvider[] = [];
+    if (!localOnly) {
       if (this.useOllama) { const o = local.find(p => p.id === 'ollama'); if (o) front.push(o); }
       if (this.customProvider) { const c = local.find(p => p.id === 'custom'); if (c) front.push(c); }
       if (this.isCodexCliModel(this.currentModelId)) { const cdx = cloud.find(p => p.id === 'codex-cli'); if (cdx) front.push(cdx); }
@@ -8827,10 +8917,39 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isAgentRouterModel(this.currentModelId)) { const ar = cloud.find(p => p.id === 'agentrouter'); if (ar) front.push(ar); }
       // The selected DeepSeek model leads its own turn, like the gateways above.
       if (deepseekSelected) { const ds = cloud.find(p => p.id === 'deepseek'); if (ds) front.push(ds); }
-      const backLocal = local.filter(p => !front.includes(p));
-      const backCloud = cloud.filter(p => !front.includes(p));
-      ordered = [...front, ...orderVisionByHealth(backCloud, this.visionHealth, nowMs), ...backLocal];
+      // A selected DIRECT model leads its own turn too (2026-10-01). Before
+      // this, OpenAI (priority 0) answered a Claude, Gemini, Groq or Natively
+      // user's screenshot whenever an OpenAI key was present: the vendor the
+      // user did NOT choose won the turn. `lead` is a no-op when the rung is
+      // not seated (no key, provider switched off).
+      const lead = (id: string) => { const p = cloud.find(c => c.id === id); if (p && !front.includes(p)) front.push(p); };
+      const seated = (id: string) => cloud.some(c => c.id === id);
+      if (selectedOpenai) lead(seated('openai_selected') ? 'openai_selected' : 'openai');
+      if (selectedClaude) lead(seated('claude_selected') ? 'claude_selected' : 'claude');
+      if (selectedGemini) lead(seated('gemini_selected') ? 'gemini_selected'
+        : selectedGemini === fixedGemini.lite ? 'gemini_flash_lite'
+        : selectedGemini === fixedGemini.pro ? 'gemini_pro' : 'gemini_flash');
+      if (selectedGroq) lead('groq');
+      if (sel?.provider === 'natively') lead('natively');
+      if (sel?.provider === 'antigravity') lead('antigravity');
     }
+    // A breaker opened by a DIFFERENT selection says nothing about this one.
+    // A leading rung's id is the same for every model it can carry
+    // (`openai_selected`, `openrouter`, `groq`, …), so a retired or text-only
+    // model's demotion — up to a day — would outlive the user picking another
+    // model, and their new selection would not lead. A rung that last led for
+    // another selection starts clean; one that never led keeps its breaker (the
+    // fixed `openai` rung failing as a fallback is about the key, not the pick).
+    // (A custom provider keeps its id when its command is edited, so the
+    // command is part of what "this selection" means.)
+    const selectionKey = sel ? `${sel.provider}|${sel.model}|${this.customProvider?.curlCommand ?? ''}` : '';
+    const ledFor = (this.visionLeadSelection ??= new Map());
+    for (const p of front) {
+      const last = ledFor.get(p.id);
+      if (last !== undefined && last !== selectionKey) this.visionHealth.delete(p.id);
+      ledFor.set(p.id, selectionKey);
+    }
+    const ordered = orderVisionCandidates({ selected: front, cloud, local, localOnly, health: this.visionHealth, now: nowMs });
 
     if (ordered.length === 0) {
       // Local-only mode seats local providers only, so the cloud advice below
@@ -8873,33 +8992,7 @@ let isMultimodal = !!(imagePaths?.length);
         : 'No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings.');
     }
 
-    // Delegate the first-token-commit + retry + circuit-breaker state machine.
-    // hedgeEnabled:false — the Gemini cascade is strict serial (flash-lite →
-    // flash → pro), so no provider sets hedgeWith and nothing is raced.
-    yield* runStreamingVisionFallback(
-      ordered,
-      { ...DEFAULT_VISION_FALLBACK_CONFIG, hedgeEnabled: false },
-      this.visionHealth,
-      {
-        log: (m) => console.log(m),
-        warn: (m) => console.warn(m),
-        // Mirrors the non-streaming vision path's 404 handling (see the
-        // onModelError call in generateWithVisionFallback). Without this the
-        // LIVE vision path — the one users actually hit — could never tell the
-        // version manager its pinned model had been retired, so a decommissioned
-        // id stayed pinned indefinitely (Groq llama-4-scout, 2026-08-12).
-        onModelGone: (_id, name) => {
-          this.modelVersionManager.onModelError(name).catch(() => { });
-        },
-        // A real screenshot refused as image-unsupported contradicts whatever
-        // said this model reads images: test it again now (2026-10-01).
-        onNoVision: (id) => {
-          const selected = (() => { try { return this.getDirectAssistSelection().provider; } catch { return null; } })();
-          if (id === selected) this.maybeProbeSelectedVision({ force: true });
-        },
-      },
-      abortSignal,
-    );
+    return ordered;
   }
 
   /**
@@ -11933,7 +12026,10 @@ let isMultimodal = !!(imagePaths?.length);
       // models that still take it. Opus 4.7+ and the Claude 5 families 400 on
       // any temperature (claudeAcceptsSamplingParams), so it is left off there.
       ...(claudeAcceptsSamplingParams(model) ? { temperature: INTERACTIVE_TEMPERATURE } : {}),
-      thinking: { type: 'disabled' as const }, // extended thinking off (default, made explicit) for low TTFT
+      // Thinking off up front, for low TTFT, in the form this model accepts —
+      // Opus 5.5, Sonnet 5.5 and Fable 400 on `disabled` (claudeThinkingParam).
+      // The cast: the installed SDK's types predate `between_tools`.
+      ...(claudeThinkingParam(model) as { thinking?: { type: 'disabled' } }),
       // CACHE BOUNDARY: system blocks are static; dynamic content lives in `messages` only.
       ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
       messages: [{ role: "user" as const, content: userMessage }],
@@ -12262,7 +12358,10 @@ let isMultimodal = !!(imagePaths?.length);
     const request = {
       model,
       max_tokens: this.getClaudeMaxOutput(model),
-      thinking: { type: 'disabled' as const }, // extended thinking off (default, made explicit) for low TTFT
+      // Thinking off up front, for low TTFT, in the form this model accepts —
+      // Opus 5.5, Sonnet 5.5 and Fable 400 on `disabled` (claudeThinkingParam).
+      // The cast: the installed SDK's types predate `between_tools`.
+      ...(claudeThinkingParam(model) as { thinking?: { type: 'disabled' } }),
       // CACHE BOUNDARY: system blocks are static; image bytes + user text stay in `messages`.
       ...(systemPrompt ? { system: this.buildClaudeSystemBlocks(systemPrompt, model) } : {}),
       messages: [{

@@ -1,0 +1,1252 @@
+{
+ "written": "2026-10-01",
+ "note": "order at the buildVisionChain extraction commit, before phase 5a",
+ "orders": {
+  "[] gpt-5.4": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] gpt-5.5": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] o3": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] gpt-3.5-turbo": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] claude-sonnet-4-6": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] claude-opus-5": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] gemini-3.1-flash-lite": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] gemini-3.8-flash": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] gemini-3.1-pro-preview": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] gemini-2.5-flash": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] qwen/qwen3.8-27b": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] llama-3.3-70b-versatile": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] natively": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] deepseek-v4-flash": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] deepseek-v4-pro": [
+   "THROWS: No vision-capable provider configured. The selected DeepSeek model (deepseek-v4-pro) can't read screenshots — DeepSeek Flash can"
+  ],
+  "[] openrouter/openai/gpt-4o": [
+   "THROWS: No vision-capable provider configured. The selected OpenRouter gateway model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
+  ],
+  "[] fluxion/claude-opus-5": [
+   "THROWS: No vision-capable provider configured. The selected Fluxion AI gateway model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
+  ],
+  "[] agentrouter/gpt-6-astra": [
+   "THROWS: No vision-capable provider configured. The selected AgentRouter model (gpt-6-astra) can't read screenshots — pick an AgentRouter model that can, or add another vision provider in Settings"
+  ],
+  "[] litellm/internal-model": [
+   "THROWS: No vision-capable provider configured. The selected LiteLLM proxy model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
+  ],
+  "[] nvidia_nim/meta/llama-3.2-90b-vision-instruct": [
+   "THROWS: No vision-capable provider configured. The selected NVIDIA NIM endpoint model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
+  ],
+  "[] ninerouter/openai/gpt-5": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] codex-cli": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] antigravity:claude-opus-5": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[] ollama llava": [
+   "ollama"
+  ],
+  "[] custom with an image placeholder": [
+   "custom"
+  ],
+  "[gemini] gpt-5.4": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] gpt-5.5": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] o3": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] gpt-3.5-turbo": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] claude-sonnet-4-6": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] claude-opus-5": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] gemini-3.1-flash-lite": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] gemini-3.8-flash": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] gemini-3.1-pro-preview": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] gemini-2.5-flash": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] qwen/qwen3.8-27b": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] llama-3.3-70b-versatile": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] natively": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] deepseek-v4-flash": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] deepseek-v4-pro": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] openrouter/openai/gpt-4o": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] fluxion/claude-opus-5": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] agentrouter/gpt-6-astra": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] litellm/internal-model": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] nvidia_nim/meta/llama-3.2-90b-vision-instruct": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] ninerouter/openai/gpt-5": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] codex-cli": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] antigravity:claude-opus-5": [
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] ollama llava": [
+   "ollama",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[gemini] custom with an image placeholder": [
+   "custom",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai] gpt-5.4": [
+   "openai"
+  ],
+  "[openai] gpt-5.5": [
+   "openai"
+  ],
+  "[openai] o3": [
+   "openai"
+  ],
+  "[openai] gpt-3.5-turbo": [
+   "openai"
+  ],
+  "[openai] claude-sonnet-4-6": [
+   "openai"
+  ],
+  "[openai] claude-opus-5": [
+   "openai"
+  ],
+  "[openai] gemini-3.1-flash-lite": [
+   "openai"
+  ],
+  "[openai] gemini-3.8-flash": [
+   "openai"
+  ],
+  "[openai] gemini-3.1-pro-preview": [
+   "openai"
+  ],
+  "[openai] gemini-2.5-flash": [
+   "openai"
+  ],
+  "[openai] qwen/qwen3.8-27b": [
+   "openai"
+  ],
+  "[openai] llama-3.3-70b-versatile": [
+   "openai"
+  ],
+  "[openai] natively": [
+   "openai"
+  ],
+  "[openai] deepseek-v4-flash": [
+   "openai"
+  ],
+  "[openai] deepseek-v4-pro": [
+   "openai"
+  ],
+  "[openai] openrouter/openai/gpt-4o": [
+   "openai"
+  ],
+  "[openai] fluxion/claude-opus-5": [
+   "openai"
+  ],
+  "[openai] agentrouter/gpt-6-astra": [
+   "openai"
+  ],
+  "[openai] litellm/internal-model": [
+   "openai"
+  ],
+  "[openai] nvidia_nim/meta/llama-3.2-90b-vision-instruct": [
+   "openai"
+  ],
+  "[openai] ninerouter/openai/gpt-5": [
+   "openai"
+  ],
+  "[openai] codex-cli": [
+   "openai"
+  ],
+  "[openai] antigravity:claude-opus-5": [
+   "openai"
+  ],
+  "[openai] ollama llava": [
+   "ollama",
+   "openai"
+  ],
+  "[openai] custom with an image placeholder": [
+   "custom",
+   "openai"
+  ],
+  "[claude] gpt-5.4": [
+   "claude"
+  ],
+  "[claude] gpt-5.5": [
+   "claude"
+  ],
+  "[claude] o3": [
+   "claude"
+  ],
+  "[claude] gpt-3.5-turbo": [
+   "claude"
+  ],
+  "[claude] claude-sonnet-4-6": [
+   "claude"
+  ],
+  "[claude] claude-opus-5": [
+   "claude"
+  ],
+  "[claude] gemini-3.1-flash-lite": [
+   "claude"
+  ],
+  "[claude] gemini-3.8-flash": [
+   "claude"
+  ],
+  "[claude] gemini-3.1-pro-preview": [
+   "claude"
+  ],
+  "[claude] gemini-2.5-flash": [
+   "claude"
+  ],
+  "[claude] qwen/qwen3.8-27b": [
+   "claude"
+  ],
+  "[claude] llama-3.3-70b-versatile": [
+   "claude"
+  ],
+  "[claude] natively": [
+   "claude"
+  ],
+  "[claude] deepseek-v4-flash": [
+   "claude"
+  ],
+  "[claude] deepseek-v4-pro": [
+   "claude"
+  ],
+  "[claude] openrouter/openai/gpt-4o": [
+   "claude"
+  ],
+  "[claude] fluxion/claude-opus-5": [
+   "claude"
+  ],
+  "[claude] agentrouter/gpt-6-astra": [
+   "claude"
+  ],
+  "[claude] litellm/internal-model": [
+   "claude"
+  ],
+  "[claude] nvidia_nim/meta/llama-3.2-90b-vision-instruct": [
+   "claude"
+  ],
+  "[claude] ninerouter/openai/gpt-5": [
+   "claude"
+  ],
+  "[claude] codex-cli": [
+   "claude"
+  ],
+  "[claude] antigravity:claude-opus-5": [
+   "claude"
+  ],
+  "[claude] ollama llava": [
+   "ollama",
+   "claude"
+  ],
+  "[claude] custom with an image placeholder": [
+   "custom",
+   "claude"
+  ],
+  "[deepseek] gpt-5.4": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] gpt-5.5": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] o3": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] gpt-3.5-turbo": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] claude-sonnet-4-6": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] claude-opus-5": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] gemini-3.1-flash-lite": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] gemini-3.8-flash": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] gemini-3.1-pro-preview": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] gemini-2.5-flash": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] qwen/qwen3.8-27b": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] llama-3.3-70b-versatile": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] natively": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] deepseek-v4-flash": [
+   "deepseek"
+  ],
+  "[deepseek] deepseek-v4-pro": [
+   "THROWS: No vision-capable provider configured. The selected DeepSeek model (deepseek-v4-pro) can't read screenshots — DeepSeek Flash can"
+  ],
+  "[deepseek] openrouter/openai/gpt-4o": [
+   "THROWS: No vision-capable provider configured. The selected OpenRouter gateway model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
+  ],
+  "[deepseek] fluxion/claude-opus-5": [
+   "THROWS: No vision-capable provider configured. The selected Fluxion AI gateway model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
+  ],
+  "[deepseek] agentrouter/gpt-6-astra": [
+   "THROWS: No vision-capable provider configured. The selected AgentRouter model (gpt-6-astra) can't read screenshots — pick an AgentRouter model that can, or add another vision provider in Settings"
+  ],
+  "[deepseek] litellm/internal-model": [
+   "THROWS: No vision-capable provider configured. The selected LiteLLM proxy model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
+  ],
+  "[deepseek] nvidia_nim/meta/llama-3.2-90b-vision-instruct": [
+   "THROWS: No vision-capable provider configured. The selected NVIDIA NIM endpoint model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
+  ],
+  "[deepseek] ninerouter/openai/gpt-5": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] codex-cli": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] antigravity:claude-opus-5": [
+   "THROWS: No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings"
+  ],
+  "[deepseek] ollama llava": [
+   "ollama"
+  ],
+  "[deepseek] custom with an image placeholder": [
+   "custom"
+  ],
+  "[openai,gemini] gpt-5.4": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] gpt-5.5": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] o3": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] gpt-3.5-turbo": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] claude-sonnet-4-6": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] claude-opus-5": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] gemini-3.1-flash-lite": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] gemini-3.8-flash": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] gemini-3.1-pro-preview": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] gemini-2.5-flash": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] qwen/qwen3.8-27b": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] llama-3.3-70b-versatile": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] natively": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] deepseek-v4-flash": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] deepseek-v4-pro": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] openrouter/openai/gpt-4o": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] fluxion/claude-opus-5": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] agentrouter/gpt-6-astra": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] litellm/internal-model": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] nvidia_nim/meta/llama-3.2-90b-vision-instruct": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] ninerouter/openai/gpt-5": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] codex-cli": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] antigravity:claude-opus-5": [
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] ollama llava": [
+   "ollama",
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,gemini] custom with an image placeholder": [
+   "custom",
+   "openai",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] gpt-5.4": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] gpt-5.5": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] o3": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] gpt-3.5-turbo": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] claude-sonnet-4-6": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] claude-opus-5": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] gemini-3.1-flash-lite": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] gemini-3.8-flash": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] gemini-3.1-pro-preview": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] gemini-2.5-flash": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] qwen/qwen3.8-27b": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] llama-3.3-70b-versatile": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] natively": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] deepseek-v4-flash": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] deepseek-v4-pro": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] openrouter/openai/gpt-4o": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] fluxion/claude-opus-5": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] agentrouter/gpt-6-astra": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] litellm/internal-model": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] nvidia_nim/meta/llama-3.2-90b-vision-instruct": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] ninerouter/openai/gpt-5": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] codex-cli": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] antigravity:claude-opus-5": [
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] ollama llava": [
+   "ollama",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[claude,gemini] custom with an image placeholder": [
+   "custom",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro"
+  ],
+  "[openai,claude,gemini,groq,natively] gpt-5.4": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] gpt-5.5": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] o3": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] gpt-3.5-turbo": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] claude-sonnet-4-6": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] claude-opus-5": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] gemini-3.1-flash-lite": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] gemini-3.8-flash": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] gemini-3.1-pro-preview": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] gemini-2.5-flash": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] qwen/qwen3.8-27b": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] llama-3.3-70b-versatile": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] natively": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] deepseek-v4-flash": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] deepseek-v4-pro": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] openrouter/openai/gpt-4o": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] fluxion/claude-opus-5": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] agentrouter/gpt-6-astra": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] litellm/internal-model": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] nvidia_nim/meta/llama-3.2-90b-vision-instruct": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] ninerouter/openai/gpt-5": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] codex-cli": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] antigravity:claude-opus-5": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] ollama llava": [
+   "ollama",
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively] custom with an image placeholder": [
+   "custom",
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] gpt-5.4": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] gpt-5.5": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] o3": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] gpt-3.5-turbo": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] claude-sonnet-4-6": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] claude-opus-5": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] gemini-3.1-flash-lite": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] gemini-3.8-flash": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] gemini-3.1-pro-preview": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] gemini-2.5-flash": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] qwen/qwen3.8-27b": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] llama-3.3-70b-versatile": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] natively": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] deepseek-v4-flash": [
+   "deepseek",
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] deepseek-v4-pro": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] openrouter/openai/gpt-4o": [
+   "openrouter",
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] fluxion/claude-opus-5": [
+   "fluxion",
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] agentrouter/gpt-6-astra": [
+   "agentrouter",
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] litellm/internal-model": [
+   "litellm",
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] nvidia_nim/meta/llama-3.2-90b-vision-instruct": [
+   "nvidia_nim",
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] ninerouter/openai/gpt-5": [
+   "ninerouter",
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] codex-cli": [
+   "codex-cli",
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] antigravity:claude-opus-5": [
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] ollama llava": [
+   "ollama",
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ],
+  "[openai,claude,gemini,groq,natively,deepseek,openrouter,litellm,nvidia_nim,ninerouter,fluxion,agentrouter,codex,antigravity] custom with an image placeholder": [
+   "custom",
+   "openai",
+   "claude",
+   "gemini_flash_lite",
+   "gemini_flash",
+   "gemini_pro",
+   "groq",
+   "natively",
+   "codex-cli",
+   "antigravity"
+  ]
+ }
+}
