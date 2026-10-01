@@ -579,6 +579,9 @@ describe('DEFECT 4 — the availability probe no longer reassigns the user model
     h.ollamaUrl = 'http://127.0.0.1:11434';
     h.ollamaModel = selected;
     h.getOllamaModels = async () => models;
+    // The vision check asks the resolver since 2026-10-01 (any installed model
+    // that reads images, not the selected model's name); it keeps a cache.
+    h.ollamaVisionCache = new Map();
     return h;
   };
   beforeEach(() => { globalThis.fetch = async () => ({ ok: true }); });

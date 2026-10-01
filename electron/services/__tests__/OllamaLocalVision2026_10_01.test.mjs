@@ -41,7 +41,7 @@ const { renderDigitsPng } = require(dist('llm/visionTestImage.js'));
 // ── A fake Ollama ────────────────────────────────────────────────────────────
 
 /** `models`: name → true (reads images, per /api/show), false (text-only), or null (no capabilities reported). */
-function fakeOllama(models, { reply = 'local model reply', holdChat = false } = {}) {
+function fakeOllama(models, { reply = 'local model reply', holdChat = false, showFails = false } = {}) {
   const requests = [];
   const open = new Set();
   const server = http.createServer((req, res) => {
@@ -57,6 +57,7 @@ function fakeOllama(models, { reply = 'local model reply', holdChat = false } = 
         return res.end(JSON.stringify({ models: Object.keys(models).map((name) => ({ name })) }));
       }
       if (req.url === '/api/show') {
+        if (showFails) { res.writeHead(500); return res.end('{}'); }
         const reads = models[body?.name];
         if (reads === undefined) { res.writeHead(404); return res.end('{}'); }
         res.writeHead(200, { 'content-type': 'application/json' });
@@ -175,7 +176,7 @@ describe('"Keep screenshots on this device": the screenshot goes to the Ollama m
 
 describe('screenshots scope denied, Ollama selected', () => {
   let ollama; let url;
-  afterEach(async () => { await ollama?.stop(); ollama = null; });
+  afterEach(async () => { await ollama?.stop(); ollama = null; setScopes({}); });
   beforeEach(() => { fakeCredentials(); setMode('vision_first'); });
 
   test('a screenshot turn goes to the installed vision model, not the selected text model', async () => {
@@ -194,7 +195,8 @@ describe('screenshots scope denied, Ollama selected', () => {
 describe('the Privacy panel\'s "local vision available" indicator', () => {
   let ollama;
   afterEach(async () => { await ollama?.stop(); ollama = null; });
-  beforeEach(() => fakeCredentials());
+  // Scopes and mode persist in the settings file: reset what the previous block denied.
+  beforeEach(() => { fakeCredentials(); setScopes({}); setMode('vision_first'); });
 
   test('true when ANY installed model reads images; false when none does; never rewrites the selection', async () => {
     ollama = fakeOllama({ 'qwen2.5:4b': false, 'llava:7b': true });
@@ -213,6 +215,27 @@ describe('the Privacy panel\'s "local vision available" indicator', () => {
     const h = Object.assign(helper(await ollama.start(), 'llava:7b'), { useOllama: false });
     assert.equal(await h.scopeFallbackAvailable(true), false);
     assert.equal(ollama.requests.length, 0);
+  });
+  test('fails CLOSED: a daemon that lists models but cannot describe them is not "local vision available"', async () => {
+    // With /api/show failing the resolver falls back to the model's NAME, and
+    // `llava` looks like a vision model. A guess must not light the indicator
+    // or admit a screenshot: the answer has to be confirmed by the daemon.
+    ollama = fakeOllama({ 'llava:7b': true }, { showFails: true });
+    const h = helper(await ollama.start(), 'llava:7b');
+    assert.equal(await h.scopeFallbackAvailable(true), false);
+    setMode('private_vision');
+    assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE);
+    assert.equal(ollama.chats().length, 0);
+  });
+  test('the remembered vision model was uninstalled: refused once, forgotten, and the next check finds the new one', async () => {
+    const models = { 'qwen2.5:4b': false, 'llava:7b': true };
+    ollama = fakeOllama(models);
+    const h = helper(await ollama.start(), 'qwen2.5:4b');
+    assert.equal(await h.scopeFallbackAvailable(true), true);
+    delete models['llava:7b']; models['bakllava:latest'] = true;       // `ollama rm llava:7b && ollama pull bakllava`
+    assert.equal(await h.scopeFallbackAvailable(true), false, 'the remembered model is gone: not available');
+    assert.equal(await h.scopeFallbackAvailable(true), true, 'and it is looked up again, not remembered as gone');
+    assert.equal(h.getOllamaRecordTarget().model, 'bakllava:latest');
   });
 });
 

@@ -3459,7 +3459,22 @@ export class LLMHelper {
         // sites that dispatch on this answer send to the model it names
         // (localVisionOverride), never to `model`.
         const visionModel = await this.resolveLocalVisionModel();
-        return visionModel ? { ok: true, model, visionModel } : { ok: false, model };
+        if (!visionModel) return { ok: false, model };
+        // Fail CLOSED, as the text branch below does: the daemon must confirm
+        // the model right now. The resolver falls back to the model's NAME
+        // when /api/show fails, and it remembers its answer — neither a guess
+        // nor a memory may admit a screenshot or light the Privacy panel's
+        // "on-device" indicator.
+        const confirmed = await fetch(`${this.ollamaUrl}/api/show`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: visionModel }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        // Gone since it was resolved (uninstalled): forget it so the next
+        // check looks again instead of refusing until the app restarts.
+        if (!confirmed.ok && this.ollamaVisionModel === visionModel) this.ollamaVisionModel = null;
+        return { ok: confirmed.ok, model, ...(confirmed.ok ? { visionModel } : {}) };
       }
       const response = await fetch(`${this.ollamaUrl}/api/show`, {
         method: 'POST',
