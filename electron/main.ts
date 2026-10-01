@@ -1240,6 +1240,7 @@ import { NativelyProSTT } from "./audio/NativelyProSTT"
 import { NvidiaNimStreamingSTT } from "./audio/NvidiaNimStreamingSTT"
 import { AppleSpeechSTT } from "./audio/AppleSpeechSTT"
 import { punctuationSourceFor } from "./llm/punctuationProvenance"
+import { configureVisionCapabilityStore } from "./llm/visionCapabilityStore"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
@@ -1639,6 +1640,10 @@ export class AppState {
 
     // 3. Initialize other helpers
     this.screenshotHelper = new ScreenshotHelper(this.view)
+    // Saved provider vision answers (2026-10-01). Before ProcessingHelper,
+    // because its setModel at startup may refresh OpenRouter's catalogue, and
+    // after dev:agent's userData override (module load, above whenReady).
+    configureVisionCapabilityStore(path.join(app.getPath('userData'), 'vision-capabilities.json'))
     this.processingHelper = new ProcessingHelper(this)
 
     this.windowHelper.setContentProtection(this.isUndetectable);
