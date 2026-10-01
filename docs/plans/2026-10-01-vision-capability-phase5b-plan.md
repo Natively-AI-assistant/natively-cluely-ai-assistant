@@ -15,6 +15,9 @@
 1. **"Local selection leads; cloud stays fast."** The pre-pass does NOT put a cloud selection first. Measured full pre-pass reply on a real screenshot (4 runs each): Flash-Lite ~1.5 s, Flash ~2.2 s, Pro ~4.0 s, against a first-rung slot of 3.6 s inside a 6 s total budget. Since phase 5a the selected model reads the screenshot in the answer itself.
 2. **"No cloud pre-pass for a local selection."** With Ollama, a local custom endpoint or a local cURL provider selected, the pre-pass uses local rungs only. A local custom or cURL endpoint that reads images runs it. Ollama gets no pre-pass: it reads the screenshot in the answer itself, as it already does in "Keep screenshots on this device" mode.
 
+3. **The after-the-answer record** (added after the final review found the consequence): "if user has selected keep it on device [it stays there]; if not, send it to cloud if available, else send it to the Ollama model and keep the response stored for later turns." Built here: record calls (`userAction: 'transcribe'`) are exempt from decision 2. The Ollama part is phase 5c.
+4. **Codex and Antigravity pre-pass rungs:** "Add them in 5c after measuring."
+
 ## Facts found during orientation
 
 - **The pre-pass has never used Ollama.** `ollama()` reads `ollamaBaseUrl` / `ollamaModel` from the credential store; nothing in the app writes either field, so the rung is never configured. `codex()` reads `codexCliPath` from the same store; that setting lives in `SettingsManager`. Both rungs are dead.

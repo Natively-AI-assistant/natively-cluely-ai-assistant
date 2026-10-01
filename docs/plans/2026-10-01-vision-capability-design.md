@@ -276,6 +276,15 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
    - **No cloud pre-pass for a local selection.** With Ollama, a local custom
      endpoint or a local cURL provider selected, only local rungs remain. A
      local endpoint that reads images runs the pre-pass; Ollama gets none.
+   - **The after-the-answer record is exempt** (Evin, 2026-10-01, after the
+     review showed the consequence). After each screenshot answer Natively
+     stores the screen's text so a later turn can quote it
+     (`transcribeScreenForMemory`, the same registry, `userAction:
+     'transcribe'`). Evin's rule: in "Keep screenshots on this device" mode it
+     stays on the device; otherwise it goes to a cloud provider when one is
+     available, else to the Ollama model; the text is kept for later turns.
+     Built in 5b: the cloud part (the registry gets `purpose: 'record'` and
+     does not apply the local-selection rule to it). The Ollama part is 5c.
    What was built:
    - Defect 9: the OpenAI and Claude rungs name the vendor's fixed vision
      model. Before, the screenshot went to the SELECTED model of that vendor,
@@ -298,7 +307,16 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
      image paths `generateWithVisionFallback`, `chatWithGemini` with images
      (no renderer caller) and `streamChatWithGemini` (RAG passes no images).
 
-   **Phase 5c** (not built): a cURL rung in the chat screenshot chain
+   **Phase 5c** (not built), in this order:
+   - The Ollama model makes the after-the-answer record when no cloud provider
+     is available, and in "Keep screenshots on this device" mode (Evin's rule
+     above). Needs a working Ollama rung fed by the live helper (today's reads
+     dead credential fields) and a longer time limit for record calls than the
+     pre-pass's 6 s. Cannot be measured on the development machine (no Ollama).
+   - Codex and Antigravity pre-pass rungs, each only if a measurement in the
+     signed-in app shows it answers comfortably inside the 6 s budget (Evin:
+     "add them in 5c after measuring").
+   - a cURL rung in the chat screenshot chain
    (defect 6); "Keep screenshots on this device" reading `/api/show` and any
    installed vision model in `probeOllama` (defect 4); the on-the-spot test
    when a screenshot arrives, the selected model is still unknown and nothing

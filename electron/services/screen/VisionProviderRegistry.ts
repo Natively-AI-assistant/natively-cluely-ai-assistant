@@ -36,6 +36,12 @@ export interface VisionProviderBuildInputs {
   mode: VisionMode;
   localOnly: boolean;
   scopeAllowsScreenshots: boolean;
+  /**
+   * What the description is for (2026-10-01). `prepass` (the default) runs
+   * BEFORE the answer and feeds it. `record` runs AFTER the answer and only
+   * stores the screen's text so a later turn can quote it.
+   */
+  purpose?: 'prepass' | 'record';
 }
 
 /**
@@ -60,7 +66,12 @@ export function buildVisionProviders(
   // on this device" was on. Only local rungs remain: a local custom or cURL
   // endpoint that reads images runs the pre-pass; Ollama gets none and reads
   // the screenshot in the answer itself.
-  const cloudAllowed = inputs.mode !== 'private_vision' && !selectionIsLocal();
+  //
+  // The RECORD is exempt (Evin, 2026-10-01): it goes to a cloud provider when
+  // one is available, so an Ollama user can still ask about an earlier screen,
+  // unless "Keep screenshots on this device" is on.
+  const cloudAllowed = inputs.mode !== 'private_vision'
+    && (inputs.purpose === 'record' || !selectionIsLocal());
 
   if (cloudAllowed) {
     providers.push(natively(credentials, inputs));

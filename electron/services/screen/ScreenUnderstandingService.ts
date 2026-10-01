@@ -368,6 +368,9 @@ export class ScreenUnderstandingService {
       mode,
       localOnly: policy.localOnly === true || mode === 'private_vision',
       scopeAllowsScreenshots: policy.allowScreenshots !== false,
+      // `transcribe` is the after-the-answer record (screenTranscription.ts);
+      // every other action describes the screen for the answer being built.
+      purpose: request.userAction === 'transcribe' ? 'record' : 'prepass',
     };
   }
 

@@ -100,10 +100,10 @@ function installHelper(label, over = {}) {
 }
 
 /** What the chain would try, in order: `id=modelId` for every rung it would not skip. */
-function eligible(keySet, label, mode, over) {
+function eligible(keySet, label, mode, over, purpose) {
   installHelper(label, over);
   const providers = buildVisionProviders(
-    { mode, localOnly: mode === 'private_vision', scopeAllowsScreenshots: true },
+    { mode, localOnly: mode === 'private_vision', scopeAllowsScreenshots: true, ...(purpose ? { purpose } : {}) },
     credentials(KEY_SETS[keySet]),
   );
   return providers
@@ -129,12 +129,13 @@ function matrix() {
 }
 
 /** What `before` must have become. One named rule per allowed difference. */
-function expected(name, before) {
+function expected(name, before, purpose = 'prepass') {
   let rungs = [...before];
   const label = name.split(' | ')[2];
-  // (a) Evin, 2026-10-01: with a local model selected, the pre-pass stays off
+  // (a) Evin, 2026-10-01: with a local model selected, the PRE-PASS stays off
   //     cloud providers. Only rungs that keep the screenshot on the machine remain.
-  if (LOCAL_SELECTIONS.has(label)) rungs = rungs.filter((r) => r.endsWith(' (local)'));
+  //     The after-the-answer RECORD is exempt (rule e below).
+  if (purpose === 'prepass' && LOCAL_SELECTIONS.has(label)) rungs = rungs.filter((r) => r.endsWith(' (local)'));
   const [mode, keys] = [name.split(' | ')[0], name.split(' | ')[1].replace('keys: ', '')];
   // (b) A selected DeepSeek Flash can run the pre-pass (cloud, last). Pro cannot read images.
   if (label === 'deepseek-v4-flash' && KEY_SETS[keys].includes('deepseek') && mode === 'vision_first') rungs.push('deepseek=deepseek-v4-flash');
@@ -159,6 +160,28 @@ test('the pre-pass tries what it tried before, except where a named rule says ot
   for (const [name, was] of Object.entries(before)) {
     assert.deepEqual(now[name], expected(name, was), `${name}\n  was: ${was.join(' > ') || '(nothing)'}\n  now: ${now[name].join(' > ') || '(nothing)'}`);
   }
+});
+
+test('the after-the-answer record tries what it tried before 5b: a local selection does not keep it off the cloud', () => {
+  // (e) Evin, 2026-10-01: the text record made AFTER a screenshot answer (so a
+  //     later turn can quote the screen) goes to a cloud provider when one is
+  //     available, unless "Keep screenshots on this device" is on. Only the
+  //     pre-pass, which runs before the answer, stays off the cloud for a
+  //     local selection.
+  const before = JSON.parse(fs.readFileSync(FIXTURE, 'utf8')).rungs;
+  for (const [name, was] of Object.entries(before)) {
+    const [mode, keys, label] = [name.split(' | ')[0], name.split(' | ')[1].replace('keys: ', ''), name.split(' | ')[2]];
+    __setVisionCapabilityStore(new VisionCapabilityStore({ filePath: null }));
+    const now = eligible(keys, label, mode, undefined, 'record');
+    assert.deepEqual(now, expected(name, was, 'record'), `record: ${name}\n  was: ${was.join(' > ') || '(nothing)'}\n  now: ${now.join(' > ') || '(nothing)'}`);
+  }
+});
+test('the record, with Ollama selected and a cloud key saved: the cloud makes it; in "keep on this device" mode nothing does', () => {
+  const ids = (list) => list.map((r) => r.split('=')[0]);
+  assert.deepEqual(ids(eligible('gemini', 'ollama selected', 'vision_first', undefined, 'record')), ['gemini_flash_lite', 'gemini_flash', 'gemini_pro']);
+  assert.deepEqual(eligible('gemini', 'ollama selected', 'private_vision', undefined, 'record'), []);
+  assert.deepEqual(eligible('gemini', 'ollama selected', 'vision_first', undefined, 'prepass'), [], 'the pre-pass still stays off the cloud');
+  assert.deepEqual(eligible('gemini', 'ollama selected', 'vision_first'), [], 'and no purpose given means the pre-pass rule');
 });
 
 export { eligible, all, expected, matrix, KEY_SETS, SELECTIONS, LOCAL_SELECTIONS, MODES, FIXED, FIXTURE, installHelper, credentials };
@@ -435,5 +458,14 @@ test('the fake credential store offers only getters the real one has', () => {
   const { CredentialsManager } = require(dist('services/CredentialsManager.js'));
   for (const name of Object.keys(credentials([]))) {
     assert.equal(typeof CredentialsManager.prototype[name], 'function', `CredentialsManager.${name} no longer exists`);
+  }
+});
+test('the service tells the registry which call is the record: only `transcribe`', () => {
+  const { getScreenUnderstandingService } = require(dist('services/screen/ScreenUnderstandingService.js'));
+  const svc = getScreenUnderstandingService();
+  const purpose = (userAction) => svc.collectBuildInputs({ userAction }, 'vision_first', {}).purpose;
+  assert.equal(purpose('transcribe'), 'record');
+  for (const action of ['what_to_say', 'what_to_answer', 'manual_use_screen', 'code_hint', 'brainstorm', undefined]) {
+    assert.equal(purpose(action), 'prepass', String(action));
   }
 });
