@@ -19,44 +19,31 @@ const C = String(opt('concurrency', '8'));
 const has = (r) => fs.existsSync(path.join(ROOT, r));
 const I8_MODES = 'looking-for-work,sales,call-center,technical-interview,seminar,general';
 
-// Tier 1: the current candidate on dev + the generator-ceiling read, pro AND its flash control on the SAME 15 items per
-//         mode (astra/sample.mjs) — the ceiling question does not need 2 × 360, and both halves land in one batch.
-// Tier 2: the claim verifier in isolation (fix4 on its modes, 25 per mode).
-// Tier 3: I16 — the narrowed verifier hand-back replayed on fix6's drafts (gated rows only).
-// Tier 4: generalisation (holdout, supp-behavior) + the baseline remainder.
-// Tier 5: blind pairwise baseline vs candidate.
-// Tier 6: the full replay / fix4 sets (cached, so only the items outside the samples are new calls).
-// Pool arithmetic (2026-09-30 11:00Z batch ≈ 850 calls): tiers 1–3 ≈ 360 + 270 + 150 + 140 = 920.
+// 2026-10-01 11:00Z plan. Candidate = fix9 (I18 + language rail + I21 General spoken + I22 Seminar).
+// Tier 1: the candidate on dev and on holdout (the two reads the keep decision needs).
+// Tier 2: supp-behavior + blind pairwise baseline vs candidate on dev.
+// Tier 3: the blind final set, the same 40 items per mode for the baseline run and the candidate.
+// Tier 4: attribution and leftovers (I18 alone = fix8; supp-quant; the fix6 pairwise remainder; full replay sets).
+// The 02:00Z batch gave ~2,160 judgments before the 402; tiers 1-3 need ~360 + 270 + 72 + 360 + 720.
 const TIERS = [
   [
     ['calibrate', ['astra/calibrate.mjs']],
   ],
   [
-    ['abs-dev-fix6', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix6', '--concurrency', C], 'results/aq2-dev-fix6'],
-    ['replay-pro-s15', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-pro.jsonl', '--run', 'results/aq2-dev-fix2', '--sample', '15', '--concurrency', C], 'results/replay/dev-fix2-pro.jsonl'],
-    ['replay-flash-s15', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-flash.jsonl', '--run', 'results/aq2-dev-fix2', '--sample', '15', '--concurrency', C], 'results/replay/dev-fix2-flash.jsonl'],
+    ['abs-dev-fix9', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix9', '--concurrency', C], 'results/aq2-dev-fix9'],
+    ['abs-holdout-fix9', ['astra/judge.mjs', '--set', 'abs-holdout', '--runs', 'results/aq2-holdout-fix9', '--concurrency', C], 'results/aq2-holdout-fix9'],
   ],
   [
-    ['abs-dev-fix4-s25', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix4', '--mode', I8_MODES, '--sample', '25', '--concurrency', C], 'results/aq2-dev-fix4'],
+    ['abs-sb-fix9', ['astra/judge.mjs', '--set', 'abs-sb', '--runs', 'results/aq2-sb-fix9', '--concurrency', C], 'results/aq2-sb-fix9'],
+    ['ab-dev-cur-vs-fix9', ['astra/ab.mjs', '--set', 'ab-dev-cur-vs-fix9', '--a', 'results/aq2-dev-cur', '--b', 'results/aq2-dev-fix9', '--concurrency', C], 'results/aq2-dev-fix9'],
   ],
   [
-    // I16 (verifier hand-back narrowed): the new wording on fix6's own drafts, gated rows only; its control is fix6's
-    // in-app answers (the same drafts through the old wording), judged in tier 1.
-    ['replay-cv-handback-v1', ['astra/judge-replay.mjs', '--replay', 'results/replay/f6raw-cv-handback-v1.gated.jsonl', '--run', 'results/aq2-dev-fix6', '--concurrency', C], 'results/replay/f6raw-cv-handback-v1.gated.jsonl'],
+    ['abs-final-s40', ['astra/judge.mjs', '--set', 'abs-final', '--runs', 'results/aq2-final-fix9,results/aq-final-fix2', '--sample', '40', '--concurrency', C], 'results/aq2-final-fix9'],
   ],
   [
-    ['abs-holdout', ['astra/judge.mjs', '--set', 'abs-holdout', '--runs', 'results/aq2-holdout-fix6,results/aq2-holdout-fix2', '--concurrency', C], 'results/aq2-holdout-fix6'],
-    ['abs-sb', ['astra/judge.mjs', '--set', 'abs-sb', '--runs', 'results/aq2-sb-fix6,results/aq2-sb-fix2', '--concurrency', C], 'results/aq2-sb-fix6'],
-    ['abs-dev-cur', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-cur', '--concurrency', C], 'results/aq2-dev-cur'],
-  ],
-  [
+    ['abs-dev-fix8', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix8', '--concurrency', C], 'results/aq2-dev-fix8'],
+    ['abs-sq', ['astra/judge.mjs', '--set', 'abs-sq', '--runs', 'results/aq2-sq-fix9,results/aq2-sq-cur', '--concurrency', C], 'results/aq2-sq-fix9'],
     ['ab-dev-cur-vs-fix6', ['astra/ab.mjs', '--set', 'ab-dev-cur-vs-fix6', '--a', 'results/aq2-dev-cur', '--b', 'results/aq2-dev-fix6', '--concurrency', C], 'results/aq2-dev-fix6'],
-  ],
-  [
-    ['abs-dev-fix7', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix7', '--concurrency', C], 'results/aq2-dev-fix7'],
-    ['abs-dev-fix4', ['astra/judge.mjs', '--set', 'abs-dev', '--runs', 'results/aq2-dev-fix4', '--mode', I8_MODES, '--concurrency', C], 'results/aq2-dev-fix4'],
-    ['replay-pro', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-pro.jsonl', '--run', 'results/aq2-dev-fix2', '--concurrency', C], 'results/replay/dev-fix2-pro.jsonl'],
-    ['replay-flash', ['astra/judge-replay.mjs', '--replay', 'results/replay/dev-fix2-flash.jsonl', '--run', 'results/aq2-dev-fix2', '--concurrency', C], 'results/replay/dev-fix2-flash.jsonl'],
   ],
 ];
 

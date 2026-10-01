@@ -34,5 +34,5 @@ console.log(`${new Date().toISOString()} waiting for the batch`);
 const w = await run(['astra/wait-for-batch.mjs', String(opt('wait-ms', '20000000'))]);
 if (w === 0) await run(['astra/queue3.mjs', '--concurrency', String(opt('concurrency', '8'))]);
 else console.log(`${new Date().toISOString()} judge still unavailable (exit ${w}) — queue not run`);
-await run(['astra/report.mjs', '--abs', 'abs-dev,abs-sb,abs-holdout', '--ab', 'ab-dev-cur-vs-fix6', '--worst', '12', '--json', `astra/out/logs/report-after-${tag}.json`], path.join(HERE, 'out', 'logs', `report-after-${tag}.md`));
+await run(['astra/report.mjs', '--abs', 'abs-dev,abs-sb,abs-holdout,abs-final', '--ab', 'ab-dev-cur-vs-fix9,ab-dev-cur-vs-fix6', '--worst', '12', '--json', `astra/out/logs/report-after-${tag}.json`], path.join(HERE, 'out', 'logs', `report-after-${tag}.md`));
 console.log(`${new Date().toISOString()} chain ${tag} finished`);
