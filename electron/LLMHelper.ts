@@ -50,6 +50,7 @@ import {
   resolveOllamaVision,
   customProviderSupportsVision,
   customProviderIsLocal,
+  isLegacyRemoteOllamaVisionName,
 } from "./llm/visionCapability"
 import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE, isProviderFamilyDisabled, ProviderDisabledError, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
 // Outbound-scope vocabulary shared with Context Intelligence V3. ONE mapping of
@@ -3528,7 +3529,7 @@ export class LLMHelper {
       // The user's own answer for that selected model (Settings, phase 4)
       // comes first, as everywhere: Off refuses it, On admits it. It is still
       // the selected model only.
-      if (needsVision && !(this.userVisionOverride('ollama', model) ?? getModelCapabilities(model, true).supportsImages)) return { ok: false, model };
+      if (needsVision && !(this.userVisionOverride('ollama', model) ?? isLegacyRemoteOllamaVisionName(model))) return { ok: false, model };
       const response = await fetch(`${this.ollamaUrl}/api/show`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

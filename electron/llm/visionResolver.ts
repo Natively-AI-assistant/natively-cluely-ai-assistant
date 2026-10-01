@@ -79,6 +79,18 @@ export function resolveVision(q: VisionQuery, facts: VisionFacts = {}): VisionVe
   return auto;
 }
 
+/**
+ * A catalogue's "yes" does not outrank a FAILED image test (2026-10-01). A
+ * catalogue-listed model is only ever tested after it refused a real
+ * screenshot (or the user asked for a test), so a saved "no" there is the
+ * model itself contradicting its listing. With the catalogue ranked first the
+ * model was seated again, refused again and was re-tested every ten minutes,
+ * forever. The saved result stops counting after 30 days, like any other.
+ */
+function failedTest(q: VisionQuery, facts: VisionFacts): boolean {
+  return facts.testedVision?.(q.provider, q.model || '') === false;
+}
+
 /** What Natively itself can tell — the answer on Auto. */
 export function resolveVisionAuto(q: VisionQuery, facts: VisionFacts = {}): VisionVerdict {
   const model = q.model || '';
@@ -99,19 +111,23 @@ export function resolveVisionAuto(q: VisionQuery, facts: VisionFacts = {}): Visi
     }
     case 'ninerouter': {
       const catalogue = facts.ninerouterVisionModels ?? [];
-      if (catalogue.length > 0) return answer(catalogue.includes(model.replace(/^ninerouter\//, '')), 'provider');
+      if (catalogue.length > 0) {
+        const listed = catalogue.includes(model.replace(/^ninerouter\//, ''));
+        return listed && failedTest(q, facts) ? answer(false, 'test') : answer(listed, 'provider');
+      }
       return fromTestThenNames(q, facts);
     }
     // OpenRouter publishes input_modalities per model and refuses images to the
     // ones it lists as text-only, so its answer is trusted both ways (2026-10-01).
     case 'openrouter': {
       const reported = facts.providerReportsVision?.('openrouter', model);
+      if (reported === true && failedTest(q, facts)) return answer(false, 'test');
       if (reported !== undefined) return answer(reported, 'provider');
       return fromTestThenNames(q, facts);
     }
     // LiteLLM's /model/info can say `supports_vision: true`; nothing there means "no".
     case 'litellm': {
-      if (facts.providerReportsVision?.('litellm', model) === true) return answer(true, 'provider');
+      if (facts.providerReportsVision?.('litellm', model) === true) return failedTest(q, facts) ? answer(false, 'test') : answer(true, 'provider');
       return fromTestThenNames(q, facts);
     }
     default:

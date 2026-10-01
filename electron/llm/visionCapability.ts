@@ -28,6 +28,22 @@ import curl2Json from '@bany/curl-to-json';
 const OLLAMA_VISION_NAME_RE =
   /(llava|bakllava|moondream|llama-?3\.2-vision|llama3\.2-vision|gemma3|minicpm-v|qwen[0-9.]*-?vl|pixtral|llama-?4|granite3\.2-vision|mistral-small3\.1|llama-?guard3-vision)/i;
 
+/**
+ * The names the remote-Ollama rule knew BEFORE 2026-10-01, frozen. A daemon on
+ * another machine may take a keep-on-device screenshot only in the states it
+ * could before (Evin: "keep the old behaviour"), and that rule judged the
+ * selected model by this older, shorter list. The consolidated list above has
+ * more names (llama4, qwen2.5vl, mistral-small3.1, granite3.2-vision,
+ * llama-guard3-vision); through this rule each would be a new state in which a
+ * screenshot leaves the machine. A user who wants one of those on a remote
+ * daemon says so: "Reads images: On" for that model. Do not add names here.
+ */
+const LEGACY_REMOTE_OLLAMA_VISION_NAME_RE = /llava|bakllava|moondream|llama3\.2-vision|llama-3\.2-vision|gemma3|minicpm-v|qwen2\.5-vl|qwen2-vl|pixtral/;
+
+export function isLegacyRemoteOllamaVisionName(modelId: string): boolean {
+  return !!modelId && LEGACY_REMOTE_OLLAMA_VISION_NAME_RE.test(modelId.toLowerCase());
+}
+
 export function isOllamaVisionModelByName(modelId: string): boolean {
   return !!modelId && OLLAMA_VISION_NAME_RE.test(modelId.toLowerCase());
 }

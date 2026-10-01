@@ -1650,7 +1650,7 @@ export class IntelligenceEngine extends EventEmitter {
         try {
             const { recordAnswerSummary, attachScreenToAnsweredTurn } =
                 require('./context-intelligence/question/conversation-state-store');
-            const { SCREEN_NOT_TRANSCRIBED, composeScreenDescription: compose } =
+            const { SCREEN_NOT_TRANSCRIBED, SCREEN_BEING_READ, composeScreenDescription: compose } =
                 require('./services/screen/screenDescription');
             // Captured now: the awaited transcription below can outlive a
             // session switch, and its text belongs to the turn recorded here.
@@ -1673,7 +1673,10 @@ export class IntelligenceEngine extends EventEmitter {
             // was assembled without this answer — the assistant had forgotten
             // what it said ten seconds earlier. The turn is written now and
             // the screen's text is attached to it when it is ready.
-            const placeholder = fallbackText || ((imageCount > 0 || screenContext) ? SCREEN_NOT_TRANSCRIBED : undefined);
+            // …and while its text is on the way the turn says "still being
+            // read", not "could not be transcribed": nothing has failed yet.
+            const placeholder = fallbackText
+                || (imagePaths?.length ? SCREEN_BEING_READ : (imageCount > 0 || screenContext) ? SCREEN_NOT_TRANSCRIBED : undefined);
             const turn = recordAnswerSummary(
                 sessionId,
                 answer,
@@ -1701,11 +1704,13 @@ export class IntelligenceEngine extends EventEmitter {
             // user nothing and holds nothing up.
             if (imagePaths?.length) {
                 const { transcribeScreenForMemory } = require('./services/screen/screenTranscription');
-                const screenText = await transcribeScreenForMemory(imagePaths, question);
-                // To THIS turn: by the turn object, else the newest turn with
-                // this answer that is still waiting. By the answer alone, a later
+                // A read that throws is a read that failed: the turn must not be
+                // left saying "still being read" for the rest of the session.
+                const screenText = await Promise.resolve(transcribeScreenForMemory(imagePaths, question)).catch((): string => '');
+                // To THIS turn, by the turn object. By the answer alone, a later
                 // turn that happened to give the same answer took the text.
                 if (screenText) attachScreenToAnsweredTurn(sessionId, answer, screenText, { turn, placeholder });
+                else if (placeholder === SCREEN_BEING_READ) attachScreenToAnsweredTurn(sessionId, answer, SCREEN_NOT_TRANSCRIBED, { turn, placeholder });
             }
         } catch (error: any) {
             // NEVER silent: a lost turn leaves the next follow-up with no

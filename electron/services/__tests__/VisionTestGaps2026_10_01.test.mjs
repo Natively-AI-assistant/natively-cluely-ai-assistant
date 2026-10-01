@@ -232,3 +232,34 @@ describe('the pre-pass gateway seats obey saved answers (run, not grepped)', () 
     assert.equal(seated('deepseek-v4-pro', 'deepseek', 'deepseek'), true);
   });
 });
+
+describe('a model that FAILED a real image test is not seated because a catalogue lists it', () => {
+  const { resolveVision } = require(dist('llm/visionResolver.js'));
+  test('the resolver: a saved "no" beats a catalogue "yes" (OpenRouter, 9Router, LiteLLM); a catalogue "no" is unchanged', () => {
+    const failed = { testedVision: () => false };
+    assert.deepEqual(resolveVision({ provider: 'openrouter', model: 'openrouter/a/b' }, { ...failed, providerReportsVision: () => true }), { reads: 'no', source: 'test' });
+    assert.deepEqual(resolveVision({ provider: 'litellm', model: 'litellm/m' }, { ...failed, providerReportsVision: () => true }), { reads: 'no', source: 'test' });
+    assert.deepEqual(resolveVision({ provider: 'ninerouter', model: 'ninerouter/a/b' }, { ...failed, ninerouterVisionModels: ['a/b'] }), { reads: 'no', source: 'test' });
+    assert.deepEqual(resolveVision({ provider: 'openrouter', model: 'openrouter/a/b' }, { testedVision: () => true, providerReportsVision: () => false }), { reads: 'no', source: 'provider' });
+    assert.deepEqual(resolveVision({ provider: 'openrouter', model: 'openrouter/a/b' }, { providerReportsVision: () => true }), { reads: 'yes', source: 'provider' });
+  });
+  test('through the chain: OpenRouter lists the model as reading images, it refuses a real screenshot — it is not sent the next one', async () => {
+    // Before: the catalogue's "yes" outranked the failed test, so the model was
+    // seated again, refused again, and was re-tested every ten minutes forever.
+    const seen = [];
+    store.replaceProviderAnswers('openrouter', '', new Map([['x-ai/grok-4.7', true]]));
+    const h = helper({ currentModelId: 'openrouter/x-ai/grok-4.7', openrouterClient: {}, client: {} });
+    h.streamWithOpenRouter = async function* (_u, _s, imagePaths) {
+      seen.push(isTestImage(imagePaths[0]) ? 'test' : 'screenshot');
+      throw Object.assign(new Error('404 No endpoints found that support image input'), { status: 404 });
+    };
+    h.streamWithGeminiModel = async function* () { yield 'gemini read it'; };
+    assert.deepEqual(await run(h), ['gemini read it']);
+    await settle();
+    assert.deepEqual(seen, ['screenshot', 'test'], 'one refusal, then one test');
+    // Not seated at all — asserted on the chain itself: a rung that is merely
+    // cooling after the refusal would also keep the next screenshot away for
+    // a while, and then come back.
+    assert.ok(!(await h.buildVisionChain(REQ)).some((p) => p.id === 'openrouter'), 'the catalogue\'s "yes" seated it again');
+  });
+});

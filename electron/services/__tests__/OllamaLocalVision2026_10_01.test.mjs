@@ -26,6 +26,7 @@ import {
 
 const { PRIVATE_VISION_NO_LOCAL_MESSAGE } = require(dist('llm/visionPolicy.js'));
 const { renderDigitsPng } = require(dist('llm/visionTestImage.js'));
+const { VisionCapabilityStore, __setVisionCapabilityStore } = require(dist('llm/visionCapabilityStore.js'));
 isolateSingletons();
 
 // ── 1. Keep on device, and a denied screenshots scope ────────────────────────
@@ -121,6 +122,47 @@ describe('an Ollama on ANOTHER machine (OLLAMA_URL)', () => {
     const h = await remoteHelper({ 'acme-sight:latest': true }, 'acme-sight:latest');
     assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE, 'a name on no list was refused before; a remote daemon gets nothing new');
     assert.equal(ollama.chats().length, 0);
+  });
+  // "Exactly as before" includes the LIST (2026-10-01): the old remote rule used
+  // an older, shorter name list. Phase 1's consolidated list added names, and
+  // through this rule each one was a new state in which a keep-on-device
+  // screenshot left the machine.
+  for (const name of ['llama4:latest', 'qwen2.5vl:7b', 'mistral-small3.1:24b', 'granite3.2-vision:2b', 'llama-guard3-vision:11b']) {
+    test(`a name the old rule did not know (${name}) is refused on a remote daemon, as it was`, async () => {
+      setMode('private_vision');
+      const h = await remoteHelper({ [name]: true }, name);
+      assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE);
+      assert.equal(ollama.chats().length, 0);
+    });
+  }
+  test('…unless the user says so themselves: "Reads images: On" for that selected model admits it', async () => {
+    setMode('private_vision');
+    const h = await remoteHelper({ 'llama4:latest': true }, 'llama4:latest');
+    const store = new VisionCapabilityStore({ filePath: null });
+    store.setOverride('ollama', '', 'llama4:latest', true);
+    __setVisionCapabilityStore(store);
+    try {
+      assert.equal(await ask(h, 'what is on my screen?', [png]), 'local model reply');
+      assert.equal(ollama.chats()[0].body.model, 'llama4:latest');
+    } finally { __setVisionCapabilityStore(new VisionCapabilityStore({ filePath: null })); }
+  });
+  test('…and "Off" refuses a model the old rule admitted', async () => {
+    setMode('private_vision');
+    const h = await remoteHelper({ 'llava:7b': true }, 'llava:7b');
+    const store = new VisionCapabilityStore({ filePath: null });
+    store.setOverride('ollama', '', 'llava:7b', false);
+    __setVisionCapabilityStore(store);
+    try {
+      assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE);
+      assert.equal(ollama.chats().length, 0);
+    } finally { __setVisionCapabilityStore(new VisionCapabilityStore({ filePath: null })); }
+  });
+  test('on THIS machine those names are read as before phase 4 (the daemon\'s own answer decides)', async () => {
+    setMode('private_vision');
+    if (realFetch) globalThis.fetch = realFetch;
+    ollama = fakeOllama({ 'llama4:latest': true });
+    const h = helper(await ollama.start(), 'llama4:latest');
+    assert.equal(await ask(h, 'what is on my screen?', [png]), 'local model reply');
   });
   test('text fallback is unaffected', async () => {
     const h = await remoteHelper({ 'qwen2.5:4b': false }, 'qwen2.5:4b');

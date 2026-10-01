@@ -40,6 +40,19 @@ export const SCREEN_NOT_TRANSCRIBED =
   + 'its contents are NOT available here. Say that it cannot be read back rather '
   + 'than denying a screenshot was sent, and never guess what it showed.]';
 
+/**
+ * While a turn's screen is STILL BEING READ (2026-10-01). The turn is recorded
+ * the moment its answer exists; the screen's text follows, and a local model
+ * can take 45 seconds over it. A follow-up asked inside that window used to be
+ * told the screenshot "could not be transcribed" — a verdict, before anything
+ * had failed. It is replaced by the text when it arrives, or by
+ * SCREEN_NOT_TRANSCRIBED when the read really fails.
+ */
+export const SCREEN_BEING_READ =
+  '[a screenshot was attached on this turn and is still being read — its '
+  + 'contents are not available yet. Say that it is still being read rather '
+  + 'than denying a screenshot was sent, and never guess what it showed.]';
+
 /** Section labels, exported so tests and the truncation notice can name them. */
 export const SCREEN_DESCRIPTION_SECTIONS = Object.freeze({
   errors: 'Errors on screen',

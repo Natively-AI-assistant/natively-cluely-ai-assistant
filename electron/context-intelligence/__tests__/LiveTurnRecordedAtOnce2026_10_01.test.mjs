@@ -20,7 +20,7 @@ const { IntelligenceEngine } = require(dist('IntelligenceEngine.js'));
 const {
   getConversationState, clearConversationState, recordAnswerSummary, attachScreenToAnsweredTurn,
 } = require(dist('context-intelligence/question/conversation-state-store.js'));
-const { SCREEN_NOT_TRANSCRIBED } = require(dist('services/screen/screenDescription.js'));
+const { SCREEN_NOT_TRANSCRIBED, SCREEN_BEING_READ } = require(dist('services/screen/screenDescription.js'));
 const { renderDigitsPng } = require(dist('llm/visionTestImage.js'));
 const { getScreenUnderstandingService } = require(dist('services/screen/ScreenUnderstandingService.js'));
 
@@ -76,12 +76,13 @@ describe('recordLiveTurn', () => {
     engine().recordLiveTurn('Your disk is full; free some space.', undefined, 'what is this error?', 1, [shot()]);
     assert.equal(await until(() => turns().length === 1, 500), true, 'the turn was not recorded until the screen record finished');
     assert.equal(turns()[0].a, 'Your disk is full; free some space.');
-    assert.equal(turns()[0].screen, SCREEN_NOT_TRANSCRIBED, 'until the record arrives, the turn says a screen was there');
+    assert.equal(turns()[0].screen, SCREEN_BEING_READ, 'until the record arrives, the turn says a screen was there and is still being read');
+    assert.notEqual(SCREEN_BEING_READ, SCREEN_NOT_TRANSCRIBED, '"could not be transcribed" is a verdict; nothing has failed yet');
     // …and the record really is still being written: its request reaches the
     // daemon and is held open, with the turn already in history. (`<= 1` was
     // true for 0, so "in flight" was never observed.)
     assert.equal(await until(() => ollama.chats().length === 1, 2000), true, 'the record request never reached the daemon');
-    assert.equal(turns()[0].screen, SCREEN_NOT_TRANSCRIBED, 'still pending while the request is held');
+    assert.equal(turns()[0].screen, SCREEN_BEING_READ, 'still pending while the request is held');
     // The slow model finishes: its text lands on that same turn. (Also ends
     // the request inside this test — one left in flight fails when the daemon
     // stops, and that failure cools the Ollama rung for the test that follows.)
@@ -104,5 +105,14 @@ describe('recordLiveTurn', () => {
     engine().recordLiveTurn('Just an answer.', undefined, 'a question', 0, undefined);
     assert.equal(await until(() => turns().length === 1, 500), true);
     assert.equal(turns()[0].screen, undefined);
+  });
+  // LAST in this group: a failed read cools the Ollama rung for a while (as in
+  // the app), which would make a later test's record be skipped.
+  test('the read FAILS: the turn then says it could not be transcribed, not that it is still being read', async () => {
+    ollama = fakeOllama({ 'llava:7b': true }, { reply: '' });               // the local model answers nothing
+    const h = helper(await ollama.start(), 'llava:7b');
+    globalThis.__nativelyGetLLMHelper = () => h;
+    engine().recordLiveTurn('Your disk is full; free some space.', undefined, 'what is this error?', 1, [shot()]);
+    assert.equal(await until(() => turns()[0]?.screen === SCREEN_NOT_TRANSCRIBED, 4000), true, `left as: ${JSON.stringify(turns()[0]?.screen)}`);
   });
 });
