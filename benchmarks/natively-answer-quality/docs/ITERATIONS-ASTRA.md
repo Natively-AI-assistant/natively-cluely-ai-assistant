@@ -918,3 +918,24 @@ recurring, rule-shaped defect left in the clean answers.
 30 dev Technical interview + Lecture prompts, same messages, deepseek-flash: reasoning off 783 ms p50 / 1004 ms p95;
 reasoning on (effort low) 2220 ms p50 / 6551 ms p95 (one Technical interview turn took 18.8 s). Total 1.6 s → 3.0 s
 at the median. So the lever costs about 1.4 s to the first word at the median and has a long tail.
+
+### Prepared for the judge — the Looking-for-work fallback reworded after the judge's own expected behaviour (15:55Z)
+* The 13 dev Looking-for-work answers in the "no stored answer" class average 5.70 (the other 27: about 9.2). The
+  dataset lists these facts as deliberately absent (reason for leaving, the gap, a weakness), so the ceiling here is
+  the quality of the truthful fallback, not an answer bank.
+* The judge's `expected_behavior` and `minimal_improvement` on all of them describe one recipe: the documented facts
+  closest to the question, then one sentence that carries the answer forward without claiming a past event or a wish
+  — "connect the settlement work to this role's payments and ledger ownership", "describe it as an approach you
+  would take, not as documented events", "a natural next step rather than an established ambition", "acknowledge
+  the gap and bridge to the documented work since". Today's rule 4 produces a holding line ("I'll come back to you on
+  that", 6.2) or a bare restatement ("I finished at Cindervale in January and started at Hollowbrook in June", 8.1).
+* Two wordings of rule 4 for this mode only, replayed on the same 40 drafts (results/replay/lfw-base, -bridge-v1,
+  -bridge-v2): holding lines 6 → 0 (v1) / 1 (v2); edits 29 → 29 / 27; cut to under half 4 → 1 / 1; replies ending in a
+  question 7 in all three. v1's quoted example ("the way I'd handle that is…") was copied into 8 replies, also where
+  it makes no sense; v2 has no template phrase and names a gap as a gap ("…started at Hollowbrook in June, so there
+  is a gap there. Since then I've been on the Hollowbrook contract, moving 23 Terraform root modules…").
+* Different from I23 (rejected under charter v1): that reframed the motive as a desire ("what draws me to this
+  role") and was capped; this states a comparison with the role or a conditional approach.
+* Not built. All three sets are queued for the 02:00Z judge batch (tier 2). Rule, written now: build v2 (or v1) as a
+  Looking-for-work-only change if its paired gain over lfw-base on these 40 drafts is at least +0.3 with the interval
+  excluding 0 and its hard fails are not up; then it needs its own app runs (that mode only) and a holdout read.

@@ -43,6 +43,12 @@ const TIERS = [
     J('holdout-c2-fix13', 'abs-holdout-c2', 'aq2-holdout-fix13'),
     // Reasoning on vs off for the generator (replay of the dev Technical interview + Lecture prompts, 80 rows each):
     // the app sends thinking: disabled on every turn. Measures blocker 2's lever before anyone builds it.
+    // Looking for work, a question the material cannot answer: the verifier's fallback rule reworded after the
+    // judge's own expected behaviour (facts nearest the question, then one forward-looking or conditional sentence;
+    // no holding line). Same 40 dev drafts through the fix12 verifier and two wordings.
+    R('lfw-base', 'lfw-base', 'aq2-dev-fix11'),
+    R('lfw-bridge-v1', 'lfw-bridge-v1', 'aq2-dev-fix11'),
+    R('lfw-bridge-v2', 'lfw-bridge-v2', 'aq2-dev-fix11'),
     R('think-off-til', 'think-off-til', 'aq2-dev-fix11'),
     R('think-low-til', 'think-low-til', 'aq2-dev-fix11'),
     J('sb-c2-fix11', 'abs-sb-c2', 'aq2-sb-fix11'),
