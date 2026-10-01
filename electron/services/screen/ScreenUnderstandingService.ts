@@ -448,6 +448,12 @@ export class ScreenUnderstandingService {
     // An answer is not a transcription. Serving one for the other is what made
     // the conversation record a paraphrase of the screen instead of its text.
     if (this.lastResultKind !== resultKind) return null;
+    // A record that FAILED is not an answer to remember (2026-10-01). Remembering
+    // it meant a screen whose record was cancelled — which any Ollama answer
+    // does to a record in flight — was never recorded, however often the same
+    // screen was captured again. The pre-pass still remembers a failure:
+    // retrying it would add its wait to every answer about that screen.
+    if (resultKind === 'transcribe' && this.lastResult.status !== 'available') return null;
     const age = Date.now() - this.lastResult.capturedAt;
     if (age < this.STALE_THRESHOLD_MS) return { ...this.lastResult };
     return null;

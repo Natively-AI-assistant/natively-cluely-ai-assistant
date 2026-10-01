@@ -313,6 +313,38 @@ describe('the screen record through the service', () => {
       await ollama.stop(); ollama = null; svc.rungHealth.clear();
     }
   });
+  test('a record that failed or was cancelled is tried again for the same screen; a failed PRE-PASS is still remembered', async () => {
+    // The service remembers its last result per image for 5 minutes. A failure
+    // remembered for the RECORD meant a screen whose record was cancelled by a
+    // quick follow-up was never recorded, however often it was captured again.
+    await boot({ 'llava:7b': true }, { reply: 'FATAL E4012' }, 'llava:7b');
+    const shot = path.join(userData, 'same-screen.png');
+    fs.writeFileSync(shot, renderDigitsPng('7777'));
+    const ask = (userAction) => svc.understand({ imagePaths: [shot], userAction, transcript: 'q', screenUnderstandingMode: 'vision_first', providerPolicy: { allowScreenshots: true } });
+    const real = h.runVisionRequest;
+    h.runVisionRequest = () => Promise.reject(new Error('The screen record was cancelled'));
+    assert.notEqual((await ask('transcribe')).status, 'available');
+    h.runVisionRequest = real; svc.rungHealth.clear();
+    const again = await ask('transcribe');
+    assert.equal(again.status, 'available', 'the failed record was served from memory instead of being tried again');
+    assert.match(composeScreenDescription(again), /E4012/);
+    const chatsAfterRecord = ollama.chats().length;
+    assert.equal((await ask('transcribe')).status, 'available');
+    assert.equal(ollama.chats().length, chatsAfterRecord, 'a record that SUCCEEDED is remembered: no second request for the same screen');
+    // The pre-pass keeps remembering a failure: retrying it would add its wait to every answer.
+    cloudKeys(['gemini']);
+    let cloudCalls = 0;
+    h.runVisionRequest = function (id, ...rest) { if (id === 'ollama') return real.call(this, id, ...rest); cloudCalls++; return Promise.reject(Object.assign(new Error('503'), { status: 503 })); };
+    const pre = path.join(userData, 'prepass-screen.png');
+    fs.writeFileSync(pre, renderDigitsPng('8888'));
+    h.useOllama = false;                                              // a cloud selection, so the pre-pass has cloud rungs
+    const prepass = () => svc.understand({ imagePaths: [pre], userAction: 'what_to_say', transcript: 'q', screenUnderstandingMode: 'vision_first', providerPolicy: { allowScreenshots: true } });
+    await prepass();
+    const after = cloudCalls;
+    assert.ok(after > 0, 'the pre-pass really tried a cloud rung');
+    await prepass();
+    assert.equal(cloudCalls, after, 'a failed pre-pass is not retried for the same screen');
+  });
   test('the record gets its own time limit, far longer than the pre-pass', () => {
     assert.ok(OLLAMA_RECORD_BUDGET_MS >= 30_000 && OLLAMA_RECORD_BUDGET_MS <= 60_000, String(OLLAMA_RECORD_BUDGET_MS));
   });

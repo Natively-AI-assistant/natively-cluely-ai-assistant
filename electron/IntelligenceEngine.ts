@@ -1706,7 +1706,9 @@ export class IntelligenceEngine extends EventEmitter {
         } catch (error: any) {
             // NEVER silent: a lost turn leaves the next follow-up with no
             // antecedent, which is indistinguishable from a bad answer.
-            console.warn('[Intelligence] conversation ring write failed — this turn will not be in history:',
+            // (Since the turn is written before its screen record, a failure
+            // here can also be the record alone — the turn may well be there.)
+            console.warn('[Intelligence] conversation ring write or screen record failed — this turn may be missing from history, or have no screen text:',
                 error?.message ?? error);
         }
         })();
