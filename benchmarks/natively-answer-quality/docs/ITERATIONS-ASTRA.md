@@ -456,3 +456,46 @@ promotion; replay gains are evidence, not a verdict.
 * Technical interview: verified code execution exists (`electron/llm/codeVerification`, sandboxed subprocess, 3 s)
   but `isCodeVerificationEnabled` defaults OFF ("temporarily disabled"), so no benchmark run ever executed a code
   answer. Measured next with NATIVELY_CODE_VERIFY=on on a TI-only run; the production default is Evin's decision.
+
+### fix10 in-app (aq-fix2 497c9ba9) — objective read (judge at 11:00Z, charter v2)
+| | fix6 | fix8 | fix10 |
+|---|---:|---:|---:|
+| dev validators | 8/9 | 8/9 | 8/9 |
+| dev edits by the verifier | 86 | 149 | 115 |
+| … turned into a question | 15 | 36 | 3 |
+| … lost a decision or ownership | 1 | 26 | 13 |
+| dev spoken turns whose text is replaced (of 245) | – | 117 | 95 |
+| dev total p50 / p95 ms | 1555 / 2761 | 1907 / 3447 | 2065 / 3432 |
+| holdout validators | 2/2 | – | 2/2 |
+| holdout total p50 ms | 1485 | – | 2048 |
+| supp-behavior validators | 8/9 | – | 9/9 |
+
+* Verifier in fix10: runs on 74% of turns (dev 268/360, holdout 201/270), replaces the text on 32% of dev and 27%
+  of holdout turns. TTFT p50 880 ms (fix6 854).
+* DTEAM-034's validator ("surfaces the 28 October customer date") fails in fix4 and later and passes on the baseline:
+  not a code regression — the notes hold several conflicts and the answers surface another real one (two freeze
+  dates); pass/fail follows the sample (cur pass, fix2 fail, fix3 pass).
+* Defects read off the edits: the pass says its prompt's word aloud ("The material gives both…", "The material I have
+  on Project Tern records…", 3 of 61 edits) and gives motive questions an awkward holding line.
+* INCIDENT 05:40Z: the disk filled (other sessions' build output), the app died, and the supervisor's restart REBUILT
+  dist-electron from the working tree, which held the unbuilt fix10 edits: the last 15 rows of aq2-holdout-fix9 ran
+  fix10 code. Removed (kept in removed_fix10_build_rows.jsonl); the clean fix9 holdout is 207 rows without Seminar
+  and Call Center. Source is never edited while a run chain is alive.
+
+### fix11 (aq-fix2 ab264bb3) — source-word rail; the candidate for the 11:00Z batch
+* `SOURCE_WORD_RE` rail (`source_exposed`): an edit that introduces "the material", "my résumé says", "on record"…
+  is never shipped. Rules 3 and 4 no longer make "the material" the subject of a spoken sentence. Replay: introduced
+  source words 4 → 0.
+* A broader rewording of rule 4 ("then stop: no promise to come back, no question") was NOT taken: it cut more
+  replies to under half (15 → 26) and still produced "Why I'm looking, I'll confirm and come back to you on".
+  Motive questions are documented as an architectural blocker (docs/BLOCKERS-ASTRA.md) instead.
+* Runs: aq2-dev-fix11, aq2-holdout-fix11, aq2-sb-fix11 (started 08:28Z).
+
+### Verified code execution (Technical interview) — cannot change the judged answer as built
+* `maybeVerifyCoding` runs in the BACKGROUND after the answer is shown ("strictly additive, fire-and-forget"): a
+  pass adds a badge, a failed-then-fixed run adds a separate `code_correction` message. The answer text the user
+  first reads — and the benchmark records — is never changed by it. It is also off by default.
+* A TI-only run with NATIVELY_CODE_VERIFY=on (aq2-dev-fix10-cv) produced the same 9 code answers, no
+  verification_spec in any V3 prompt and no verification line in the app log; whether the switch reached the app was
+  not confirmed. To count for answer quality the check would have to gate or replace the shown answer — an
+  architecture change (docs/BLOCKERS-ASTRA.md §2), not a setting.
