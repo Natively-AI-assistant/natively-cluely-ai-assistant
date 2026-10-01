@@ -24,7 +24,8 @@ const PROVIDER_NOTICE_RE = /quota|credit|billing|rate.?limit|too many requests|t
  * Judge the model's reply to "what number is shown?". Separators between digits
  * are ignored ("7 3 9 2", "7,392"); the number must stand alone, so "173920"
  * does not contain 7392. An empty or one-word reply is unknown, not "no": some
- * gateways return an empty stream when a channel misbehaves.
+ * gateways return an empty stream when a channel misbehaves. A reply containing
+ * a DIFFERENT number is a miss even when short.
  */
 export function judgeProbeReply(reply: string, number: string): ProbeOutcome {
   const text = String(reply || '');
@@ -35,7 +36,12 @@ export function judgeProbeReply(reply: string, number: string): ProbeOutcome {
   // Some gateways answer HTTP 200 with the failure in the body. That is the
   // provider talking, not the model: unknown, to be retried later.
   if (PROVIDER_NOTICE_RE.test(text)) return 'unknown';
-  return text.replace(/[^\p{L}\p{N}]/gu, '').length >= 6 ? 'no' : 'unknown';
+  // A different number IS an answer, however short: a blind model told to
+  // "answer with the number only" replies "42" (deepseek-v4-pro, measured
+  // 2026-10-01). By length alone that was "unknown", so a blind model was never
+  // marked text-only.
+  const digits = (text.match(/\d/g) ?? []).length;
+  return digits >= 2 || text.replace(/[^\p{L}\p{N}]/gu, '').length >= 6 ? 'no' : 'unknown';
 }
 
 /** An error is a "no" only when it is a recognised image refusal. */

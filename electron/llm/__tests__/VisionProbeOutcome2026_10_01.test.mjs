@@ -76,6 +76,13 @@ describe('judgeProbeReply', () => {
   test('an empty or near-empty reply is unknown, never a no', () => {
     for (const reply of ['', '   ', '\n', '.', 'ok']) assert.equal(judgeProbeReply(reply, '7392'), 'unknown', JSON.stringify(reply));
   });
+  test('a blind model that answers with a different number is a miss, however short (phase 3b)', () => {
+    // Measured 2026-10-01: direct deepseek-v4-pro answered "42" to an image
+    // showing 7392. Too short to count as "a real reply" by length alone, so a
+    // blind model stayed unknown forever and was never marked text-only.
+    for (const reply of ['42', '1234', '12', 'It is 4816.', '7391']) assert.equal(judgeProbeReply(reply, '7392'), 'no', reply);
+    for (const reply of ['', '4', 'ok', '.']) assert.equal(judgeProbeReply(reply, '7392'), 'unknown', JSON.stringify(reply));
+  });
   test('the number inside a longer number does not count', () => {
     assert.equal(judgeProbeReply('173920', '7392'), 'no');
   });
