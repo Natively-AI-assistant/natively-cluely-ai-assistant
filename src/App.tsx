@@ -649,6 +649,12 @@ const App: React.FC = () => {
             // 4. permsShown
             if (flags.permsShown) {
               try { localStorage.setItem('natively_perms_shown_v1', '1'); } catch {}
+              // The orchestrator was told what localStorage said, before this
+              // read landed. localStorage is per origin, so it can be empty
+              // while the profile knows better: `npm run dev:agent` serves the
+              // renderer on a new port every launch. Without this the card
+              // opened on each such launch and said "You're all set".
+              setOrchestratorUserState({ permsShown: true });
             } else {
               try {
                 const localSeen = localStorage.getItem('natively_perms_shown_v1') === '1';
@@ -800,23 +806,23 @@ const App: React.FC = () => {
       const seenModes = localStorage.getItem('natively_seen_modes_onboarding_v5') === 'true';
       const seenProfile = localStorage.getItem('natively_seen_profile_onboarding_v1') === 'true';
 
+      // Pushed now, not after the check: on macOS the check can take seconds
+      // (the Screen Recording probe races a 5 s deadline) and the card fires
+      // 2 s after the launcher mounts. Waiting left the orchestrator on its
+      // default permsShown=false, so a Mac with everything granted got the
+      // card, which then read the grants itself and said "You're all set".
+      setOrchestratorUserState({ permsShown, seenModesOnboarding: seenModes, seenProfileOnboarding: seenProfile });
+
       const maybeCheck = window.electronAPI?.checkPermissions;
       if (maybeCheck) {
         maybeCheck()
           .then((p) => {
             setOrchestratorUserState({
-              permsShown,
               permissionsNeedAttention: permissionsNeedAttention(p),
-              seenModesOnboarding: seenModes,
-              seenProfileOnboarding: seenProfile,
               extensionSupported: true, // updated by phoneMirrorGetInfo below
             });
           })
-          .catch(() => {
-            setOrchestratorUserState({ permsShown, seenModesOnboarding: seenModes, seenProfileOnboarding: seenProfile });
-          });
-      } else {
-        setOrchestratorUserState({ permsShown, seenModesOnboarding: seenModes, seenProfileOnboarding: seenProfile });
+          .catch(() => {});
       }
 
       // Donation status (support toaster gate)

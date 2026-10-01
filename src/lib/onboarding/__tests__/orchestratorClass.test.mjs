@@ -562,3 +562,41 @@ test('deadline scheduler re-evaluates completed cooldown stages in an otherwise 
     'the elapsed-cooldown stage must dispatch without waiting for an unrelated event',
   );
 });
+
+// App.tsx learns permsShown from localStorage at once, but the permission check
+// is an IPC call that can take seconds on macOS (the Screen Recording probe
+// races a 5 s deadline). The card fires 2 s after the launcher mounts, so
+// permsShown has to arrive before the check does, and the check's answer on
+// its own must still be able to bring the card back (2026-10-01).
+function launchWithSlowCheck() {
+  localStorage.clear();
+  timerQueue = [];
+  mockNow = 0;
+  const orch = new OnboardingOrchestrator();
+  orch.start(STAGES);
+  // What App.tsx knows without waiting: the card has been seen before.
+  orch.setUserState({ permsShown: true, extensionConnected: true });
+  orch.emit({ type: 'launcher:mounted' });
+  orch.emit({ type: 'foreground:change', isForeground: true });
+  mockNow += 3_000; // past the 2 s trigger, the check still out
+  flushOneFrame();
+  return orch;
+}
+
+test('a slow permission check does not open the card for a returning user', () => {
+  const orch = launchWithSlowCheck();
+  assert.notEqual(orch.getSnapshot().activeToasterId, 'permissions', 'nothing is known to be wrong yet');
+
+  orch.setUserState({ permissionsNeedAttention: false }); // the check lands: all granted
+  flushOneFrame();
+  assert.notEqual(orch.getSnapshot().activeToasterId, 'permissions');
+});
+
+test('a slow permission check that finds a broken permission still opens the card', () => {
+  const orch = launchWithSlowCheck();
+  assert.notEqual(orch.getSnapshot().activeToasterId, 'permissions');
+
+  orch.setUserState({ permissionsNeedAttention: true }); // the check lands: something is missing
+  flushOneFrame();
+  assert.equal(orch.getSnapshot().activeToasterId, 'permissions');
+});
