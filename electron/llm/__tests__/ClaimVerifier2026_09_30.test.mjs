@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import {
   claimVerifierKind, claimVerifierSystemPrompt, claimVerifierDraftMessage, claimVerifierStandaloneMessage,
   acceptVerifiedAnswer, splitGistTrailer, runClaimVerifier, materialHasNoDocuments, CLAIM_VERIFIER_BUDGET_MS,
-  splitVerifierScratch, nonLatinShare,
+  splitVerifierScratch, nonLatinShare, SOURCE_WORD_RE,
 } from '../../../dist-electron/electron/llm/claimVerifier.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -233,6 +233,27 @@ describe('claim kinds: what the list may contain, and what is never a claim (202
       assert.doesNotMatch(claimVerifierSystemPrompt(m), /acknowledge and ask the one thing about the other side/);
       assert.doesNotMatch(claimVerifierSystemPrompt(m), /an "it works for me" or "sounds manageable"/);
     }
+  });
+});
+
+describe('the reply never names the copilot\'s own sources (2026-10-01)', () => {
+  const original = 'The notes say GA moved to November 4th, but the same notes have code freeze on October 16th and on October 9th, so those two do not line up.';
+  test('an edit that introduces "the material" is not shipped', () => {
+    const v = acceptVerifiedAnswer({ original, material: '<evidence>notes</evidence>', edited: `UNSUPPORTED: none\nCONFLICT: 16 October vs 9 October\n---\n${original} The material gives both, so let us confirm which one holds.` });
+    assert.equal(v.reason, 'source_exposed');
+    assert.equal(v.text, original);
+    assert.equal(acceptVerifiedAnswer({ original: 'The pushback was mostly about sequencing, and I kept the Rails service running while we cut over.', material: '<evidence>resume</evidence>', edited: 'The material I have on Project Tern records the scope and my role: I was the tech lead for seven months.' }).reason, 'source_exposed');
+  });
+  test('a source word the draft already used is not introduced by the edit', () => {
+    const o = 'My résumé lists Larkspur since 2023, and I took that time deliberately before joining.';
+    assert.equal(acceptVerifiedAnswer({ original: o, material: '<evidence>resume</evidence>', edited: 'My résumé lists Larkspur since 2023, where I lead the settlement rewrite.' }).reason, 'edited');
+  });
+  test('the rules themselves no longer make "the material" the subject of a spoken sentence', () => {
+    const p = claimVerifierSystemPrompt('team-meet');
+    assert.doesNotMatch(p, /one sentence says the material gives both/);
+    assert.match(p, /one sentence says it is given two ways, names both values/);
+    assert.match(p, /it never says "the material", "the record" or where a fact comes from/);
+    assert.ok(SOURCE_WORD_RE.test('The material gives both.') && !SOURCE_WORD_RE.test('The notes give both.'));
   });
 });
 

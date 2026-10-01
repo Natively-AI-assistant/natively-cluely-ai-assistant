@@ -187,8 +187,9 @@ Then one line starting "CONFLICT:" — if the material itself gives two differen
 Step 2, after a line containing only "---" — the revised reply, built by these rules in order:
 1. Every phrase you listed is gone: none of them appears, in any wording.
 2. Everything you did not list stays word for word, decisions, ownership, recommendations and small commitments included.
-3. If CONFLICT is not "none", the reply asserts neither value. Where the draft asserted one, one sentence says the material gives both, names them, and says it needs confirming before anyone relies on it.
-4. If removing the listed phrases leaves what was asked without an answer, do not hand the question back to the other person. For a preference, a willingness or their availability: one short sentence, in their own voice, that they will confirm it and come back on it, with a day if the draft implied one. For a reason, a motive or an event in their own past: what the material does record about it (the dates, the role, the project, and for a question about a job what the job description says that job is), stated plainly, and nothing invented after it.
+3. If CONFLICT is not "none", the reply asserts neither value. Where the draft asserted one, one sentence says it is given two ways, names both values, and says it needs confirming before anyone relies on it. If the draft already says so, leave it.
+4. If removing the listed phrases leaves what was asked without an answer, do not hand the question back to the other person. For a preference, a willingness or their availability: one short sentence, in their own voice, that they will confirm it and come back on it, with a day if the draft implied one. For a reason, a motive or an event in their own past: the plain facts about it that are stated (the dates, the role, the project; for a question about a job, what that job is), said as their own facts, and nothing invented after it.
+The reply is spoken by them: it never says "the material", "the record" or where a fact comes from.
 If nothing was listed and there is no conflict, the revised reply is the draft unchanged.`;
 
 /**
@@ -273,6 +274,13 @@ export function nonLatinShare(text: string): number {
   return letters.filter((c) => !/\p{Script=Latin}/u.test(c)).length / letters.length;
 }
 
+/**
+ * Words for the copilot's own sources. The pass is told about "the material", and in the app it said so aloud: "The
+ * material gives both, so let's confirm which one holds", "The material I have on Project Tern records the scope"
+ * (3 of 61 edits, 2026-10-01). An edit that introduces one is never shipped.
+ */
+export const SOURCE_WORD_RE = /\b(?:the material|material (?:I have|gives|says|records|states)|(?:the|my) (?:r[eé]sum[eé]|profile|job description) (?:says|lists|shows|records|states|has)|on record|the record (?:shows|says))\b/i;
+
 const formatInsensitive = (t: string): string => String(t ?? '')
   .replace(/\*\*/g, '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim();
 
@@ -317,6 +325,7 @@ export function acceptVerifiedAnswer(input: { original: string; edited: string |
   if (EPISTEMIC_RE.test(edited) && !EPISTEMIC_RE.test(body)) return keep('epistemic_introduced');
   if (DENIAL_RE.test(edited) && !DENIAL_RE.test(body)) return keep('denial_introduced');
   if (FRESHNESS_RE.test(body) && !FRESHNESS_RE.test(edited)) return keep('freshness_dropped');
+  if (SOURCE_WORD_RE.test(edited) && !SOURCE_WORD_RE.test(body)) return keep('source_exposed');
   // A changed body drops the old [[GIST]] chip: it summarised the removed claims too.
   return { accepted: true, changed: true, reason: 'edited', text: edited };
 }
