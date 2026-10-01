@@ -975,3 +975,59 @@ at the median. So the lever costs about 1.4 s to the first word at the median an
   the judge rewards a short reply that names the ask and says exactly what will be confirmed (or, for a personal
   question, the nearest documented facts plus one conditional sentence) — and penalises both the invented detail and
   the long deflection. If they hold on dev they would be built together as one change and read on holdout once.
+
+### The 02:00Z batch reordered: decisions first, one whole pair per tier (2026-10-01 22:15Z, no row of it judged yet)
+* The old tier 2 started fifteen steps at once. On a short budget (the 11:00Z batch ended on the account quota after
+  80 minutes) every pair would be half judged and none of the three written rules could be applied. New order in
+  `astra/queue3.mjs`: calibration → fix13's 27 rows (+ the 2 fix12 Seminar rows) → lfw-base + lfw-bridge-v2 →
+  ccfin-base + ccfin-nopolicy-v1c → salesfin-base + salesfin-shape-v1c → the Starting-column gaps → reasoning on/off
+  and supp-behavior → pairwise → fix10 → the rest. The trade is stated: the Starting column may stay partial (it is
+  already reported as partial); a half-judged pair would be worth nothing.
+* lfw-bridge-v1 moved to the last tier: its copied opening phrase is a known defect and v2 is the candidate.
+* Design correction, made before any score: in the Call Center and Sales pairs 16 of 40 rows do not get the notice,
+  yet both arms had been regenerated and verified separately, so 39 of 40 answers differed by sampling alone. The
+  judge would have scored two samples of one prompt on those rows: noise against a rule only 24 rows can move.
+  `tools/replay-carry.mjs` re-applies the variant's transform to the recorded messages and, where it changes
+  nothing, carries base's answer into the variant (`ccfin-nopolicy-v1c`, `salesfin-shape-v1c`: 24 touched, 16
+  carried each). Those pairs now differ by exactly 0 and cost no judge call (the cache is keyed by answer text). The
+  rule is unchanged and stays on all 40 rows. Looking for work is left alone: the verifier prompt changes on every
+  row and 14 of 40 outputs are already byte-identical.
+* `astra/decide.mjs` applies the written rules mechanically after the tiers (gain ≥ +0.3, interval excludes 0, hard
+  fails not up; a pair with any row unjudged gets no verdict) and compares fix13's re-run rows with fix12's. Output:
+  `astra/out/logs/decide.md`.
+
+### fix14 candidate built ahead of the verdict (aq-fix2 99bedc65 on `fix/aq-astra-i6`, 22:45Z) — NOT a kept build
+* Built now so that a BUILD verdict at about 02:20Z can go straight to app runs instead of waiting a batch. One
+  mechanism per layer, no new rule family: the claim pass's "left unanswered" rule becomes a per-mode entry (Looking
+  for work gets the v2 wording); the composer gets one per-mode notice for a turn with no reference file among the
+  evidence (Call Center, Sales). A part whose pair does not say BUILD is deleted from the branch before any app run.
+* Identity, checked offline against the replayed variants: the verifier prompt equals `_cv-lfw-bridge-v2` for 10
+  modes × 2 surfaces × with / without documents (40 of 40) and differs from fix12 only in the 4 Looking-for-work
+  prompts; both notices equal the variants' strings; a reference file, another mode or a custom mode adds nothing.
+* `npm run typecheck:electron` clean. llm suite 5,678 tests, 5,650 pass, 0 fail, 28 skipped. Intelligence suite 2,817
+  tests, 2,805 pass, 1 fail (2 skipped, 9 todo): `HindsightRetainQueue — enqueue returns immediately`, a timing test
+  unrelated to this change; alone it passes 3 of 3 (machine load 9 during the full run).
+* Not yet run in the app. Seen in the replay and left for the judge: a typed question from the agent themselves
+  ("when am I supposed to escalate this to tier 2?") now gets a customer-facing line ("Let me check how escalation
+  to tier 2 is handled and get back to you"); multi-part typed Sales asks ("give me 3 discovery questions…") keep
+  their parts. Untested interaction: the replay wires pre-date fix13, so a typed "shorter" in Sales has never carried
+  both the refinement notice and the shape notice — `tools/refine-check.mjs` on the app rows decides that.
+
+### Promotion rule for fix14, written 22:45Z before any of its rows or its replay pairs has a score
+fix14 = fix13 (e000db4a) + the parts with a BUILD verdict. Each part changes only its own mode, so only those modes
+are re-run (dev and holdout) and compared by item with the kept build's rows (the fix13c composites).
+fix14 is promoted over fix13 only if ALL hold (charter v2, paired):
+1. holdout, pooled over the built modes: the gain is positive and its 95% interval excludes 0. (No latency or text
+   swap is added by these parts, so the +0.25 price bar of the fix11 rule does not apply; a real effect still has to
+   show.)
+2. holdout hard fails on those modes are not up in total.
+3. no built mode is down by more than 0.4 with its interval excluding 0 on holdout. A mode that fails this alone is
+   removed and the pooled test is recomputed once on the remaining modes — the parts are independent by mode, so the
+   other rows stay valid; nothing is re-worded after a holdout read.
+4. the dev app rows, pooled, agree in sign.
+5. objective validators on those modes are not worse than fix13 (dev and holdout).
+6. `important_question_unanswered` (judge flag) is not up on those modes.
+7. typed refinement requests are still met (`tools/refine-check.mjs`: dev 8 of 8, holdout 4 of 4 in fix13).
+Positive but interval includes 0 → not promoted; fix13 stays the kept build and fix14 is reported as a candidate.
+* App runs need a quiet machine (one app), and free disk: at 22:45Z the volume had 2.9 GB free after I deleted my own
+  1.3 GB build output; other sessions took about 1.5 GB in 40 minutes. No run starts under 4 GB free.
