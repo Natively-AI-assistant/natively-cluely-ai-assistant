@@ -3,6 +3,8 @@ import Groq from "groq-sdk"
 import OpenAI from "openai"
 import Anthropic from "@anthropic-ai/sdk"
 import fs from "fs"
+import os from "os"
+import path from "path"
 import { createHash, randomUUID } from "crypto"
 import sharp from "sharp"
 import { ModelVersionManager, ModelFamily, TextModelFamily } from './services/ModelVersionManager'
@@ -21,7 +23,8 @@ import {
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
 import { gatewaySeatReadsImages, readsImages, resolveVision, type VisionFacts, type VisionVerdict } from "./llm/visionResolver"
-import { getVisionCapabilityStore, storedVisionAnswer } from "./llm/visionCapabilityStore"
+import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from "./llm/visionCapabilityStore"
+import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/visionProbe"
 import { parseOpenRouterVision } from "./llm/providerVisionData"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
@@ -742,6 +745,11 @@ export class LLMHelper {
   // backoff after a failure so model switching never hammers the endpoint.
   private openrouterVisionFetch: Promise<void> | null = null
   private openrouterVisionLastFailureAt = 0
+  // The one-time image test (2026-10-01). Off until enableVisionProbing():
+  // ProcessingHelper turns it on at startup, so a test or benchmark that builds
+  // an LLMHelper never sends a probe by accident.
+  private visionProbingEnabled = false
+  private visionProbe: VisionProbe | null = null
   private fluxionApiKey: string | null = null
   /** Which wire protocol this key's Fluxion group speaks. Default matches the
    *  GPT/Grok/Gemini/DeepSeek/GLM/Kimi groups; Claude groups need 'anthropic'. */
@@ -2747,6 +2755,8 @@ export class LLMHelper {
     console.log(`[LLMHelper] Switched to Model: ${targetModelId}`);
     // Keep OpenRouter's "which models read images" answers current (2026-10-01).
     if (this.isOpenRouterModel(targetModelId)) void this.refreshOpenRouterVisionData();
+    // …and, when nothing says whether this model reads images, test it once.
+    this.maybeProbeSelectedVision();
   }
 
   /**
@@ -13877,8 +13887,77 @@ let isMultimodal = !!(imagePaths?.length);
       ollamaReportsVision: (m) => this.ollamaVisionCache.get(m),
       ninerouterVisionModels: selection.provider === 'ninerouter' ? [...this.ninerouterVisionModels] : undefined,
       customProvider: selection.provider === 'curl' ? curl : custom,
-      providerReportsVision: (provider, routed) => storedVisionAnswer(provider, routed),
+      providerReportsVision: (provider, routed) => storedVisionAnswer(provider, routed, this.visionStoreBaseURL(provider)),
+      testedVision: (provider, routed) => storedVisionTest(provider, routed, this.visionStoreBaseURL(provider))?.reads,
     };
+  }
+
+  /** Providers the one-time test can ask. The rest are decided by their route, their own table, or /api/show. */
+  private static readonly VISION_TESTABLE: ReadonlySet<string> = new Set(
+    ['openai', 'claude', 'gemini', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'litellm', 'ninerouter'],
+  );
+
+  public enableVisionProbing(): void { this.visionProbingEnabled = true; }
+
+  /** The address a self-hosted provider's answers are saved under; '' for hosted services. */
+  private visionStoreBaseURL(provider: string): string {
+    if (provider === 'litellm') return normalizeVisionBaseURL(this.litellmBaseURL);
+    if (provider === 'ninerouter') return normalizeVisionBaseURL(this.ninerouterBaseURL);
+    return '';
+  }
+
+  private getVisionProbe(): VisionProbe {
+    if (this.visionProbe) return this.visionProbe;
+    const wire = (s: { provider: string; model: string }) => s.model.startsWith(`${s.provider}/`) ? s.model.slice(s.provider.length + 1) : s.model;
+    this.visionProbe = new VisionProbe({
+      // Through Direct Assist's own boundary: its provider, private-vision and
+      // screenshots-scope gates all run, then the exact adapter for this
+      // provider and model. Below the layers that write usage, latency, vision
+      // health or model discovery, so a test leaves no trace in any of them.
+      ask: (selection, imagePath, signal) => this.streamDirectAssistFrozen(
+        {
+          requestId: `vision-probe-${randomUUID()}`,
+          selection: { provider: selection.provider, model: selection.model },
+          systemPrompt: VISION_PROBE_SYSTEM, userPrompt: VISION_PROBE_QUESTION, imagePaths: [imagePath],
+        },
+        null, null, signal, undefined, { visionProbe: true },
+      ),
+      // os.tmpdir() with a unique name, removed when the stream ends: Windows
+      // keeps a file locked while an adapter is still reading it.
+      writeImage: (png) => {
+        const file = path.join(os.tmpdir(), `natively-vision-test-${randomUUID()}.png`);
+        fs.writeFileSync(file, png);
+        return file;
+      },
+      removeImage: (file) => { fs.rmSync(file, { force: true }); },
+      recorded: (s) => getVisionCapabilityStore().tested(s.provider, this.visionStoreBaseURL(s.provider), wire(s)),
+      record: (s, reads) => getVisionCapabilityStore().recordTest(s.provider, this.visionStoreBaseURL(s.provider), wire(s), reads),
+      keyOf: (s) => `${s.provider}|${this.visionStoreBaseURL(s.provider)}|${wire(s)}`,
+      log: (m) => console.log(m),
+    });
+    return this.visionProbe;
+  }
+
+  /**
+   * Test the selected model once, in the background, when nothing yet says
+   * whether it reads images (or its saved test is over 30 days old — the probe
+   * decides freshness). Never awaited: the answer path does not wait on it.
+   */
+  private maybeProbeSelectedVision(opts: { force?: boolean } = {}): void {
+    if (!this.visionProbingEnabled) return;
+    let selection: DirectAssistSelection;
+    try { selection = this.getDirectAssistSelection(); } catch { return; }
+    if (!LLMHelper.VISION_TESTABLE.has(selection.provider)) return;
+    if (!this.directProviderHasCredential(selection.provider) || this.isProviderDisabled(selection.provider)) return;
+    const verdict = this.visionVerdict(selection);
+    if (!opts.force && verdict.reads !== 'unknown' && verdict.source !== 'test') return;
+    // Nothing is sent when screenshots may not leave this device; the boundary
+    // would refuse anyway, and there is no point drawing an image first.
+    try {
+      this.assertOutboundImagesAllowed(selection.provider, true);
+      if (this.getDeniedOutboundScopes(VISION_PROBE_QUESTION, ['probe.png'], []).includes('screenshots')) return;
+    } catch { return; }
+    void this.getVisionProbe().ensure(selection, opts).catch(() => { /* a probe never surfaces an error */ });
   }
 
   /** The vision resolver's answer for a selection. See electron/llm/visionResolver.ts. */
@@ -13942,6 +14021,11 @@ let isMultimodal = !!(imagePaths?.length);
     curl: CurlProvider | null,
     abortSignal?: AbortSignal,
     rung?: DirectAssistRung,
+    // The one-time vision test (2026-10-01) asks through this exact boundary,
+    // so a passed test means a real screenshot takes the same path. It skips
+    // ONE check — "does this model read images", which is the question the test
+    // exists to answer. Every privacy and provider gate below still applies.
+    opts?: { visionProbe?: boolean },
   ): AsyncGenerator<string, void, unknown> {
     if (abortSignal?.aborted) return;
 
@@ -13980,7 +14064,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isProviderDisabled(disabledFamily)) {
       throw new ProviderDisabledError(provider);
     }
-    if (!this.directSelectionSupportsImages({ provider, model }, custom, curl)) {
+    if (!opts?.visionProbe && !this.directSelectionSupportsImages({ provider, model }, custom, curl)) {
       // Cleared BEFORE the throw below so a text-only turn on a text-only model
       // still answers instead of failing on an image the user did not attach.
       carriedImagePaths = [];
