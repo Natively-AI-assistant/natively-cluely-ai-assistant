@@ -4,7 +4,7 @@ import { ToastProvider, ToastViewport } from "./components/ui/toast"
 import NativelyInterface from "./components/NativelyInterface"
 import HindsightStatusBanner from "./components/HindsightStatusBanner"
 import SettingsPopup from "./components/SettingsPopup" // Keeping for legacy/specific window support if needed
-import Launcher from "./components/Launcher"
+import Launcher, { type LauncherRequest } from "./components/Launcher"
 import ModelSelectorWindow from "./components/ModelSelectorWindow"
 import { OverlayPillWindow, OverlayToggleWindow } from "./components/OverlayAuxWindows"
 import SettingsOverlay from "./components/SettingsOverlay"
@@ -289,6 +289,18 @@ const App: React.FC = () => {
     setIsSettingsOpen(false);
     setActiveManagerPanel('profile');
   }, [activeManagerPanel, rememberManagerOpener]);
+
+  // Settings › About's Search and Demo meeting: close Settings and ask the
+  // Launcher to open its search bar / that meeting.
+  const [launcherRequest, setLauncherRequest] = useState<LauncherRequest | null>(null);
+  const openLauncherSearch = useCallback(() => {
+    setIsSettingsOpen(false);
+    setLauncherRequest({ kind: 'search', seq: Date.now() });
+  }, []);
+  const openLauncherMeeting = useCallback((id: string) => {
+    setIsSettingsOpen(false);
+    setLauncherRequest({ kind: 'meeting', id, seq: Date.now() });
+  }, []);
 
   const openModesExclusive = useCallback(() => {
     if (!activeManagerPanel) rememberManagerOpener();
@@ -1306,6 +1318,7 @@ const App: React.FC = () => {
               <ToastProvider>
                 <div id="launcher-container" className="h-full w-full relative">
                   <Launcher
+                    request={launcherRequest}
                     onStartMeeting={handleStartMeeting}
                     onOpenSettings={(tab = 'general') => openSettingsExclusive(tab)}
                     onOpenProfile={() => openProfileExclusive()}
@@ -1328,6 +1341,8 @@ const App: React.FC = () => {
                   closeInstantly={isManagerOpen}
                   onOpenModes={openModesExclusive}
                   onOpenProfile={openProfileExclusive}
+                  onOpenSearch={openLauncherSearch}
+                  onOpenMeeting={openLauncherMeeting}
                 />
                 {/* Modes and Profile Intelligence share one card, which pours out
                     of and back into the bottom of the window like every other

@@ -7,6 +7,7 @@ import mainui from "../UI_comp/mainui.png";
 import UpcomingCalendarCard from './ui/UpcomingCalendarCard';
 import { useToggleInit } from './settings/useToggleInit';
 import { noteUpcomingEvents, warmCalendarSnapshot } from '../lib/calendarSnapshot.mjs';
+import { plainMeetingTitle } from '../lib/codingAnswer.mjs';
 import MeetingDetails from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
@@ -21,7 +22,6 @@ import { APP_FEATURE_VERSION } from '../utils/appVersion';
 import WindowControls from './WindowControls';
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import { emitOrchestratorEvent, setUserState as setOrchestratorUserState } from './onboarding/OrchestratedToasterHost';
-import { plainMeetingTitle } from '../lib/codingAnswer.mjs';
 
 interface Meeting {
     id: string;
@@ -49,7 +49,16 @@ interface Meeting {
     time?: string; // Optional for compatibility
 }
 
+/**
+ * Something outside the Launcher asking it to open its search bar or a meeting
+ * (Settings › About). A new `seq` is a new request, so asking twice works.
+ */
+export type LauncherRequest =
+    | { kind: 'search'; seq: number }
+    | { kind: 'meeting'; id: string; seq: number };
+
 interface LauncherProps {
+    request?: LauncherRequest | null;
     onStartMeeting: () => void;
     onOpenSettings: (tab?: string) => void;
     onOpenProfile?: () => void;
@@ -85,7 +94,7 @@ const formatTime = (dateStr: string) => {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
 };
 
-const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onOpenProfile, onOpenModes, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
+const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSettings, onOpenProfile, onOpenModes, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
     const t = useT();
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [isDetectable, setIsDetectable] = useState(false);
@@ -449,6 +458,20 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         }
     };
 
+    // Requests from outside (Settings › About). A meeting is fetched by id, as a
+    // search hit is; one that no longer exists (the demo meeting deleted, say)
+    // leaves the Launcher where it is.
+    const [searchOpenRequest, setSearchOpenRequest] = useState(0);
+    const handledRequest = useRef(request?.seq ?? 0);
+    useEffect(() => {
+        if (!request || request.seq === handledRequest.current) return;
+        handledRequest.current = request.seq;
+        if (request.kind === 'search') setSearchOpenRequest(request.seq);
+        else void openMeetingAtMoment(request.id);
+        // openMeetingAtMoment only reads setters and the IPC bridge.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [request]);
+
     // Helper to format duration to mm:ss or mmm:ss
     // Helper to format duration to mm:ss or mmm:ss
     const formatDurationPill = (durationStr: string) => {
@@ -610,6 +633,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                 {/* Center: Spotlight-style Search Pill */}
                 <TopSearchPill
                     meetings={meetings}
+                    openRequest={searchOpenRequest}
                     onAIQuery={(query) => {
                         analytics.trackCommandExecuted('ai_query_search');
                         emitOrchestratorEvent({ type: 'turn:done', surface: 'chat' });
