@@ -27,7 +27,7 @@ import {
 } from '../../llm/visionCapability';
 import { readActiveCustomProvider, readActiveModelId } from '../../llm/activeCustomProvider';
 import { gatewaySeatReadsImages } from '../../llm/visionResolver';
-import { storedVisionAnswer } from '../../llm/visionCapabilityStore';
+import { normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from '../../llm/visionCapabilityStore';
 import { agentRouterWireModel, isAgentRouterModelId } from '../../llm/agentRouter';
 
 export interface VisionProviderBuildInputs {
@@ -319,7 +319,10 @@ function litellm(creds: CredentialsManager, _inputs: VisionProviderBuildInputs):
     modelId,
     isLocal: false,
     isConfigured: !!baseURL && isSelected,
-    supportsVision: !!baseURL && isSelected,
+    // A model tested as text-only is not seated; untested seats as before.
+    // The rule LLMHelper's streaming chain uses (2026-10-01).
+    supportsVision: !!baseURL && isSelected
+      && gatewaySeatReadsImages('litellm', modelId, registryVisionFacts(normalizeVisionBaseURL(baseURL))),
     scopeAllowsScreenshots: true,
     hint: 'generic',
     invoke: async (p) => callLLMHelperVision('litellm', p),
@@ -354,7 +357,8 @@ function ninerouter(creds: CredentialsManager, _inputs: VisionProviderBuildInput
   const modelId = isSelected ? activeModelId : '';
   const wireId = modelId.replace(/^ninerouter\//i, '');
   // The same rule LLMHelper's streaming chain seats this rung by (2026-10-01).
-  const supportsImages = gatewaySeatReadsImages('ninerouter', modelId, { ninerouterVisionModels: creds.getNinerouterVisionModels?.() || [] });
+  const supportsImages = gatewaySeatReadsImages('ninerouter', modelId,
+    registryVisionFacts(normalizeVisionBaseURL(baseURL), { ninerouterVisionModels: creds.getNinerouterVisionModels?.() || [] }));
   return {
     id: 'ninerouter',
     displayName: modelId ? `9Router (${wireId})` : '9Router',
@@ -380,7 +384,7 @@ function nvidiaNim(creds: CredentialsManager, _inputs: VisionProviderBuildInputs
     modelId,
     isLocal: false,
     isConfigured: !!apiKey && isSelected,
-    supportsVision: !!apiKey && isSelected,
+    supportsVision: !!apiKey && isSelected && gatewaySeatReadsImages('nvidia_nim', modelId, registryVisionFacts()),
     scopeAllowsScreenshots: true,
     hint: 'generic',
     invoke: async (p) => callLLMHelperVision('nvidia_nim', p),
@@ -412,7 +416,7 @@ function openrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInput
     // The rule LLMHelper's streaming chain seats this rung by (2026-10-01):
     // OpenRouter's own catalogue, when fetched, decides.
     supportsVision: !!apiKey && isSelected
-      && gatewaySeatReadsImages('openrouter', modelId, { providerReportsVision: (p, m) => storedVisionAnswer(p, m) }),
+      && gatewaySeatReadsImages('openrouter', modelId, registryVisionFacts()),
     scopeAllowsScreenshots: true,
     hint: 'generic',
     invoke: async (p) => callLLMHelperVision('openrouter', p),
@@ -442,7 +446,7 @@ function fluxion(creds: CredentialsManager, _inputs: VisionProviderBuildInputs):
     modelId,
     isLocal: false,
     isConfigured: !!apiKey && isSelected,
-    supportsVision: !!apiKey && isSelected,
+    supportsVision: !!apiKey && isSelected && gatewaySeatReadsImages('fluxion', modelId, registryVisionFacts()),
     scopeAllowsScreenshots: true,
     hint: 'generic',
     invoke: async (p) => callLLMHelperVision('fluxion', p),
@@ -463,7 +467,7 @@ function agentrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInpu
   const activeModelId = readActiveModelId();
   const isSelected = isAgentRouterModelId(activeModelId);
   const modelId = isSelected ? activeModelId : '';
-  const readsImages = isSelected && gatewaySeatReadsImages('agentrouter', activeModelId);
+  const readsImages = isSelected && gatewaySeatReadsImages('agentrouter', activeModelId, registryVisionFacts());
   return {
     id: 'agentrouter',
     displayName: modelId ? `AgentRouter (${agentRouterWireModel(modelId)})` : 'AgentRouter',
@@ -478,6 +482,17 @@ function agentrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInpu
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
+
+// The saved facts both screenshot paths read: provider catalogues and one-time
+// test results (visionCapabilityStore). `baseURL` is the normalised address of a
+// self-hosted provider, '' for hosted services — the key LLMHelper writes under.
+function registryVisionFacts(baseURL = '', extra: { ninerouterVisionModels?: readonly string[] } = {}) {
+  return {
+    ...extra,
+    providerReportsVision: (p: string, m: string) => storedVisionAnswer(p, m, baseURL),
+    testedVision: (p: string, m: string) => storedVisionTest(p, m, baseURL)?.reads,
+  };
+}
 
 // Single definition, re-exported. The local copy this replaces had drifted:
 // it was missing llama-4, granite3.2-vision, mistral-small3.1 and

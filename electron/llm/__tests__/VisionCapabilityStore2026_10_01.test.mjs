@@ -107,3 +107,69 @@ test('main configures the store before LLMHelper exists, under the dev:agent use
   assert.ok(configure > 0 && helper > 0 && configure < helper, 'configure must run before the first setModel');
   assert.match(main.slice(configure - 200, configure + 200), /app\.getPath\('userData'\)/);
 });
+describe('disk writes', () => {
+  test('an unchanged catalogue refreshed again within the hour is not rewritten (review fix)', () => {
+    // LiteLLM's /model/info refresh runs every 5 minutes while LiteLLM is in use.
+    const file = tmpFile(); let clock = 1_000_000;
+    const s = new S.VisionCapabilityStore({ filePath: file, now: () => clock });
+    s.replaceProviderAnswers('litellm', 'http://h', answers({ a: true }));
+    const first = fs.statSync(file).mtimeMs; const firstBytes = fs.readFileSync(file, 'utf8');
+    clock += 5 * 60_000;
+    s.replaceProviderAnswers('litellm', 'http://h', answers({ a: true }));
+    assert.equal(fs.readFileSync(file, 'utf8'), firstBytes, 'same answers, minutes later: no rewrite');
+    assert.equal(s.fetchedAt('litellm', 'http://h'), clock, 'but the refresh time moves on in memory');
+    clock += 5 * 60_000;
+    s.replaceProviderAnswers('litellm', 'http://h', answers({ a: true, b: true }));
+    assert.notEqual(fs.readFileSync(file, 'utf8'), firstBytes, 'changed answers are written at once');
+    const changed = fs.readFileSync(file, 'utf8');
+    clock += 61 * 60_000;
+    s.replaceProviderAnswers('litellm', 'http://h', answers({ a: true, b: true }));
+    assert.notEqual(fs.readFileSync(file, 'utf8'), changed, 'and an unchanged one is written once the saved time is over an hour old');
+    void first;
+  });
+});
+
+describe('test results (phase 3)', () => {
+  test('a recorded test is returned with its time, for that provider, base URL and model only', () => {
+    const s = new S.VisionCapabilityStore({ filePath: null, now: () => 500 });
+    s.recordTest('fluxion', '', 'glm-5.3', false);
+    assert.deepEqual(s.tested('fluxion', '', 'glm-5.3'), { reads: false, at: 500 });
+    assert.equal(s.tested('fluxion', '', 'other'), undefined);
+    assert.equal(s.tested('agentrouter', '', 'glm-5.3'), undefined);
+    assert.equal(s.tested('fluxion', 'http://x', 'glm-5.3'), undefined);
+  });
+  test('tests and catalogues do not disturb each other, and both round-trip', () => {
+    const file = tmpFile();
+    const a = new S.VisionCapabilityStore({ filePath: file, now: () => 7 });
+    a.replaceProviderAnswers('openrouter', '', answers({ 'openai/gpt-4o': true }));
+    a.recordTest('openrouter', '', 'new/model', true);
+    a.replaceProviderAnswers('openrouter', '', answers({ 'openai/gpt-4o': true, 'b/c': false }));
+    const b = new S.VisionCapabilityStore({ filePath: file });
+    assert.deepEqual(b.tested('openrouter', '', 'new/model'), { reads: true, at: 7 }, 'a catalogue refresh keeps test results');
+    assert.equal(b.answer('openrouter', '', 'b/c'), false);
+  });
+  test('a phase-2 file (no tests section) loads with its catalogue intact', () => {
+    const file = tmpFile();
+    fs.writeFileSync(file, JSON.stringify({ version: 1, providers: { 'openrouter|': { fetchedAt: 9, models: { 'openai/gpt-4o': true } } } }));
+    const s = new S.VisionCapabilityStore({ filePath: file });
+    assert.equal(s.answer('openrouter', '', 'openai/gpt-4o'), true);
+    assert.equal(s.fetchedAt('openrouter', ''), 9);
+    assert.equal(s.tested('openrouter', '', 'openai/gpt-4o'), undefined);
+  });
+  test('a malformed tests section is ignored without losing the catalogue', () => {
+    const file = tmpFile();
+    fs.writeFileSync(file, JSON.stringify({ version: 1, providers: { 'openrouter|': { fetchedAt: 9, models: { 'a/b': true } } }, tests: { 'x|': { m: { reads: 'yes', at: 'never' } }, bad: 5 } }));
+    const s = new S.VisionCapabilityStore({ filePath: file });
+    assert.equal(s.answer('openrouter', '', 'a/b'), true);
+    assert.equal(s.tested('x', '', 'm'), undefined);
+  });
+  test('storedVisionTest strips the routing prefix; normalizeVisionBaseURL makes writer and reader agree', () => {
+    const s = new S.VisionCapabilityStore({ filePath: null, now: () => 1 });
+    s.recordTest('litellm', S.normalizeVisionBaseURL('http://localhost:4000/v1/'), 'my-model', true);
+    S.__setVisionCapabilityStore(s);
+    assert.deepEqual(S.storedVisionTest('litellm', 'litellm/my-model', S.normalizeVisionBaseURL('http://localhost:4000')), { reads: true, at: 1 });
+    assert.equal(S.normalizeVisionBaseURL(' http://h:1/v1// '), 'http://h:1');
+    assert.equal(S.normalizeVisionBaseURL(undefined), '');
+    S.__setVisionCapabilityStore(null);
+  });
+});

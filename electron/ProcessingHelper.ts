@@ -177,6 +177,10 @@ export class ProcessingHelper {
 
     // NEW: Load Default Model Config
     const defaultModel = credManager.getDefaultModel();
+    // The one-time image test may run from here on (2026-10-01): keys are
+    // hydrated above, and main configured the capability store before this
+    // helper existed. Before the `if`, so a later selection is tested too.
+    this.llmHelper.enableVisionProbing();
     if (defaultModel) {
       console.log(`[ProcessingHelper] Loading stored Default Model: ${defaultModel}`);
       const customProviders = credManager.getCustomProviders();
