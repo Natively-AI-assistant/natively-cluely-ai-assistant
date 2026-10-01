@@ -1604,7 +1604,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         });
 
         // Log Usage
-        intelligenceManager.logUsage('chat', message, result);
+        intelligenceManager.logUsage('chat', message, result, imagePaths);
 
         return result;
       } catch (error: any) {
@@ -2595,9 +2595,10 @@ export function initializeIpcHandlers(appState: AppState): void {
                     answer: finalText,
                     source: 'manual_chat',
                     synthetic: true,
+                    imagePaths,
                   });
                 } else {
-                  im?.logUsage?.('chat', String(message || ''), finalText);
+                  im?.logUsage?.('chat', String(message || ''), finalText, imagePaths);
                 }
               } catch { /* session transcript only */ }
             }
@@ -2703,7 +2704,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               /* noop */
             }
             intelligenceManager.addAssistantMessage(identityHit, undefined, 'manual_chat');
-            intelligenceManager.logUsage('chat', message, identityHit);
+            intelligenceManager.logUsage('chat', message, identityHit, imagePaths);
             // Observe-only trace for the app-identity canned reply (common path). The
             // hoisted iTrace is still the NOOP here (real trace is created post-planAnswer),
             // so begin a dedicated one. Zero-cost when the flag is off.
@@ -3394,7 +3395,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarification); } catch (_) { /* noop */ }
           try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarification); } catch (_) { /* noop */ }
           intelligenceManager.addAssistantMessage(clarification, undefined, 'manual_chat');
-          intelligenceManager.logUsage('chat', message, clarification);
+          intelligenceManager.logUsage('chat', message, clarification, imagePaths);
           chatTrace.markFirstUseful({ via: 'context_free_clarification' });
           chatTrace.mark('response_completed', { chars: clarification.length, deterministic: true });
           chatTrace.finish({ chars: clarification.length });
@@ -3480,7 +3481,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
             const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
             intelligenceManager.addAssistantMessage(clarify, clarifyWrite, 'manual_chat');
-            intelligenceManager.logUsage('chat', message, clarify);
+            intelligenceManager.logUsage('chat', message, clarify, imagePaths);
             chatTrace.markFirstUseful({ via: 'context_os_clarification' });
             chatTrace.mark('response_completed', { chars: clarify.length, deterministic: true, finalGenerationMode: 'source_safe_refusal' });
             chatTrace.finish({ chars: clarify.length });
@@ -3717,7 +3718,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
             const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
             intelligenceManager.addAssistantMessage(clarify, clarifyWrite, 'manual_chat');
-            intelligenceManager.logUsage('chat', message, clarify);
+            intelligenceManager.logUsage('chat', message, clarify, imagePaths);
             chatTrace.markFirstUseful({ via: 'source_switch_clarification' });
             chatTrace.mark('response_completed', { chars: clarify.length, deterministic: false, finalGenerationMode: 'source_safe_refusal' });
             chatTrace.finish({ chars: clarify.length });
@@ -6510,7 +6511,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 && !contextChangedSinceAsk()) {
               intelligenceManager.addAssistantMessage(fullResponse, sessionWriteDecision, 'manual_chat');
               // Log Usage for streaming chat
-              intelligenceManager.logUsage('chat', message, fullResponse);
+              intelligenceManager.logUsage('chat', message, fullResponse, imagePaths);
               // CONTEXT OS memory safety (Phase 9, 2026-07-10): persist the
               // answer's factual CLAIMS separately from the conversational
               // message, default validation_status='unverified'. Only VERIFIED

@@ -4,6 +4,7 @@
 
 import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
+import { makeUsagePreviews } from './services/meeting/usagePreviews';
 import type { AttemptId, TurnIdentity } from './llm/turnIdentity';
 import { stripGistTrailer } from '../src/lib/displayMarkup';
 
@@ -785,25 +786,39 @@ export class SessionTracker {
     /**
      * Public method to log usage from external sources (e.g. IPC direct chat)
      */
-    logUsage(type: string, question: string, answer: string): void {
-        this.fullUsage.push({
+    logUsage(type: string, question: string, answer: string, imagePaths?: readonly string[]): void {
+        this.pushUsage({
             type,
             timestamp: Date.now(),
             question,
             answer: typeof answer === 'string' ? stripGistTrailer(answer) : answer,
             source: type === 'chat' ? 'manual_chat' : 'external',
+            imagePaths,
         });
-        this.capUsageArray();
     }
 
+    /**
+     * `imagePaths`: the screenshots the answer used. They are not stored; their
+     * previews are made in the background (usagePreviews.ts) and land on the same
+     * entry object as `images`, which is what DatabaseManager.saveMeeting persists.
+     * The screenshot files are temporary (ScreenshotHelper deletes them), so this
+     * has to happen now rather than at save time.
+     */
     pushUsage(entry: any): void {
+        // The same object stays in the log (callers may hold it); only the file
+        // paths come off it, so they are never persisted.
+        const imagePaths = entry?.imagePaths;
+        if (entry && 'imagePaths' in entry) delete entry.imagePaths;
         // Same rule as logUsage: the usage log (ai_interactions) stores the
-        // answer without its [[GIST]] display line.
-        const stored = entry && typeof entry.answer === 'string'
-            ? { ...entry, answer: stripGistTrailer(entry.answer) }
-            : entry;
-        this.fullUsage.push(stored);
+        // answer without its [[GIST]] display line. In place, for the same reason.
+        if (entry && typeof entry.answer === 'string') entry.answer = stripGistTrailer(entry.answer);
+        this.fullUsage.push(entry);
         this.capUsageArray();
+        if (Array.isArray(imagePaths) && imagePaths.length > 0) {
+            makeUsagePreviews(imagePaths)
+                .then((images) => { if (images.length > 0) entry.images = images; })
+                .catch((err) => console.warn('[SessionTracker] Screenshot previews for usage failed:', err?.message ?? err));
+        }
     }
 
     // ============================================

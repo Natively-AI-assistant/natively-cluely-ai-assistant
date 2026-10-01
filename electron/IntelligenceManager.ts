@@ -173,8 +173,9 @@ export class IntelligenceManager extends EventEmitter {
         return this.session.getFullTranscript().map(s => ({ speaker: s.speaker, text: s.text, timestamp: s.timestamp, ...(s.origin ? { origin: s.origin } : {}) }));
     }
 
-    logUsage(type: string, question: string, answer: string): void {
-        this.session.logUsage(type, question, answer);
+    /** `imagePaths`: the screenshots the answer used; the Usage tab shows previews of them. */
+    logUsage(type: string, question: string, answer: string, imagePaths?: readonly string[]): void {
+        this.session.logUsage(type, question, answer, imagePaths);
     }
 
     /**

@@ -6669,7 +6669,9 @@ export class IntelligenceEngine extends EventEmitter {
                     type: 'assist',
                     timestamp: Date.now(),
                     question: question || 'What to Answer',
-                    answer: finalWtaAnswer
+                    answer: finalWtaAnswer,
+                    // Previews of these land in the Meeting Notes Usage tab.
+                    imagePaths,
                 });
             }
 
@@ -7845,7 +7847,8 @@ export class IntelligenceEngine extends EventEmitter {
                 type: 'assist',
                 timestamp: Date.now(),
                 question: 'Code Hint',
-                answer: fullHint
+                answer: fullHint,
+                imagePaths,
             });
 
             this.emit('suggested_answer', fullHint, 'Code Hint', 1.0);
@@ -7924,7 +7927,8 @@ export class IntelligenceEngine extends EventEmitter {
                 type: 'assist',
                 timestamp: Date.now(),
                 question: 'Brainstorm',
-                answer: fullResult
+                answer: fullResult,
+                imagePaths,
             });
 
             this.emit('suggested_answer', fullResult, 'Brainstorming Approaches', 1.0);
