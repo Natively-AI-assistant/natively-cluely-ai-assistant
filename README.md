@@ -69,6 +69,16 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 
 <br/>
 
+**macOS — install with [Homebrew](https://brew.sh):**
+
+```bash
+brew install --cask Natively-AI-assistant/tap/natively
+```
+
+<small>Upgrades arrive through Natively's own updater; `brew upgrade --cask --greedy natively` forces one via Homebrew.</small>
+
+<br/>
+
 **<span style="color: #ef4444">👥 9,000+ Users</span>** &nbsp;·&nbsp; **<span style="color: #f97316">🔥 700+ DAU</span>** &nbsp;·&nbsp; **<span style="color: #22c55e">💸 $0 vs $149/mo rivals</span>** &nbsp;·&nbsp; **<span style="color: #3b82f6">⚡ <500ms latency</span>** &nbsp;·&nbsp; **<span style="color: #a855f7">🛡️ 0 data breaches</span>**
 
 </div>

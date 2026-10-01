@@ -17,9 +17,12 @@
 
 // Name heuristic (fallback only). Ollama's /api/show `capabilities` array is the
 // authoritative source; this regex is used when capabilities are absent (older
-// Ollama servers) or the probe failed.
+// Ollama servers) or the probe failed. The ONLY Ollama list (2026-10-01):
+// modelCapabilities.ts had a second, drifted copy. `qwen[0-9.]*-?vl` because
+// Ollama publishes the family as `qwen2.5vl` (no dash); `qwen2.5-vl`,
+// `qwen3-vl` and Hugging Face names keep theirs.
 const OLLAMA_VISION_NAME_RE =
-  /(llava|bakllava|moondream|llama-?3\.2-vision|llama3\.2-vision|gemma3|minicpm-v|qwen[0-9.]*-vl|qwen-vl|pixtral|llama-?4|granite3\.2-vision|mistral-small3\.1|llama-?guard3-vision)/i;
+  /(llava|bakllava|moondream|llama-?3\.2-vision|llama3\.2-vision|gemma3|minicpm-v|qwen[0-9.]*-?vl|pixtral|llama-?4|granite3\.2-vision|mistral-small3\.1|llama-?guard3-vision)/i;
 
 export function isOllamaVisionModelByName(modelId: string): boolean {
   return !!modelId && OLLAMA_VISION_NAME_RE.test(modelId.toLowerCase());

@@ -171,7 +171,13 @@ export function wordsOf(text: string, options: WordsOfOptions = {}): string[] {
     // Remaining in-word apostrophes (contractions): drop them so the word stays
     // one token ("dont", "cant") rather than splitting into a dropped fragment.
     .replace(/['’]/g, '')
-    .replace(/[^a-z0-9\s-]/g, ' ')
+    // Keep letters, combining marks and digits of EVERY script (2026-09-22).
+    // This was `[^a-z0-9\s-]`, which turned a pure Hindi or Malayalam question
+    // into zero tokens, so ModeHybridRetriever.retrieve() short-circuited to its
+    // fallback before the (multilingual) embedder ever saw the query. Marks
+    // (\p{M}) must stay: Devanagari vowel signs and virama are combining marks,
+    // and dropping them splits a word mid-syllable. ASCII input is unchanged.
+    .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, ' ')
     .split(/\s+/)
     .filter(shortNumerics ? keepToken : (word) => word.length > 2);
 
@@ -414,4 +420,94 @@ export function anchoringChunkIndexes(question: string, stats: LexicalStats, lim
     if (coOccurrenceAllowed && distinctive.filter((w) => set.has(w)).length >= PROBE_MIN_ANCHORS) out.push(i);
   }
   return out;
+}
+
+// ── Corpus arbitration for SMALL pools (2026-09-30) ─────────────────────────
+//
+// buildLexicalStats() returns null below IDF_MIN_POOL chunks, and probeAnchors
+// returned false whenever it did — so arbitration could never fire for an
+// ordinary upload (a few pages is 1–8 semantic chunks). Measured: a Lecture
+// "oxygen is the final electron acceptor…" statement and Seminar examiner
+// challenges took the FAST path with the matching slides/thesis attached.
+//
+// Without document frequencies there is no rarity signal, so the question is
+// asked the other way round: how much of what the QUESTION says does one chunk
+// hold? With one to three chunks "two terms in one chunk" is nearly "two terms
+// anywhere in the file", so co-occurrence alone would fire on any long question;
+// the SHARE of the question's content words matched carries the decision.
+//
+//   • content words only — PROBE_FUNCTION_WORDS plus the generic verbs, nouns
+//     and adjectives below, which idf would have discounted in a large pool but
+//     which carry no subject here ("know", "think", "better", "people");
+//   • at least SMALL_POOL_MIN_MATCHES distinct content words in ONE chunk;
+//   • and they are at least SMALL_POOL_MIN_SHARE of the question's content
+//     words, so a long unrelated question that happens to share two common
+//     words with the file stays general.
+//
+// A plural/-s form matches its singular ("gains" ~ "gain") because a paraphrase
+// of a paper nearly always shifts number; nothing heavier than that, so the
+// probe stays synchronous and cheap (pool < 12 chunks by construction).
+
+const SMALL_POOL_GENERIC_WORDS = new Set(('know knew known think thought mean means meant want wanted need needs needed '
+  + 'make makes made use uses used using see seen look looks looking find found work works worked working '
+  + 'good better best bad worse worst big bigger small smaller new old different same other another '
+  + 'way ways time times people person thing year years day days part point question questions answer answers '
+  + 'reason reasons example examples case cases fact idea ideas sure true false able important real really '
+  + 'first last next take takes took come comes came going goes went call called try tried keep let seems seem '
+  + 'explain describe talk tell told surely maybe perhaps probably quite pretty rather enough else even still '
+  + 'why because since while though although whether without within between through during before after').split(' ').filter(Boolean));
+
+export const SMALL_POOL_MIN_MATCHES = 2;
+export const SMALL_POOL_MIN_SHARE = 0.5;
+
+/** "gains" → "gain", "runs" → "run"; words that merely end in s ("thesis", "bias", "class") keep theirs. */
+function singular(w: string): string {
+  return w.length > 4 && w.endsWith('s') && !/(ss|is|us)$/.test(w) ? w.slice(0, -1) : w;
+}
+
+/**
+ * Content words of a question for the small-pool probe (singularised).
+ *
+ * A hyphenated compound is ONE word here. wordsOf() adds a compound's parts as
+ * extra tokens ("learning-rate" → learning-rate, learning, rate), which is right
+ * for ranking but would let one shared compound count as three matches and
+ * clear both the match count and the share on its own — "What is a
+ * learning-rate warmup?" anchored against a thesis that merely mentions its
+ * learning-rate schedule. The parts are dropped from the question; the compound
+ * still matches a chunk that writes it as two words (see smallPoolAnchorsQuestion).
+ */
+export function smallPoolContentWords(question: string): Set<string> {
+  const words = [...questionContentWords(question)];
+  const partsOfCompounds = new Set(words.filter((w) => w.includes('-')).flatMap((w) => w.split('-')));
+  const out = new Set<string>();
+  for (const w of words) {
+    if (SMALL_POOL_GENERIC_WORDS.has(w) || /^\d+$/.test(w) && w.length < 3) continue;
+    if (!w.includes('-') && partsOfCompounds.has(w)) continue;
+    out.add(w.includes('-') ? w : singular(w));
+  }
+  return out;
+}
+
+/**
+ * Corpus arbitration for a pool under IDF_MIN_POOL chunks: does one chunk hold
+ * enough of the question's content words that the question is about it?
+ * `texts` are the pool's chunk texts. Pure and synchronous.
+ */
+export function smallPoolAnchorsQuestion(question: string, texts: readonly string[]): boolean {
+  const words = smallPoolContentWords(question);
+  if (words.size < SMALL_POOL_MIN_MATCHES) return false;
+  for (const text of texts) {
+    const chunk = new Set(wordsOf(text, { shortNumerics: true }).map(singular));
+    let hit = 0;
+    for (const w of words) {
+      if (chunk.has(w)) { hit++; continue; }
+      // A compound the chunk writes as separate words ("learning rate").
+      if (w.includes('-')) {
+        const parts = w.split('-').filter((x) => keepToken(x));
+        if (parts.length > 0 && parts.every((x) => chunk.has(singular(x)))) hit++;
+      }
+    }
+    if (hit >= SMALL_POOL_MIN_MATCHES && hit / words.size >= SMALL_POOL_MIN_SHARE) return true;
+  }
+  return false;
 }

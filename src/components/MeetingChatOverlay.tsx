@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStreamBuffer } from '../hooks/useStreamBuffer';
-import { X, Copy, Check } from 'lucide-react';
+import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
 import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
@@ -8,6 +8,9 @@ import { registerPrismLanguages } from '../utils/registerPrismLanguages';
 import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { splitGistLineStreaming } from '../lib/displayMarkup';
+// .lg-bubble (your questions), imported here so the chat does not depend on
+// MeetingDetails having loaded the stylesheet first.
+import '../ui-components/LiquidGlassButton.css';
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -86,27 +89,21 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
         transition={{ duration: 0.15 }}
         className="flex justify-end mb-6"
     >
-        <div className="bg-accent-primary text-white px-5 py-3 rounded-2xl rounded-tr-md max-w-[70%] text-[15px] leading-relaxed">
+        {/* The same subtle Liquid Glass as the Usage tab's question bubble
+            (.lg-bubble, ui-components): fill and white text from
+            --bubble-user-*, so a question reads the same in both places. The
+            box and radius stay this chat's own. */}
+        <div className="lg-bubble px-5 py-3 rounded-2xl rounded-tr-md max-w-[70%] text-[15px] leading-relaxed">
             {content}
         </div>
     </motion.div>
 );
 
-const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({ content, isStreaming }) => {
-    const [copied, setCopied] = useState(false);
-    // Teleprompter gist: persisted answers can end with a [[GIST]] line —
-    // split it into a bottom summary chip instead of showing the marker.
-    const { body: gistBody, gist: gistLine } = splitGistLineStreaming(content);
-
-    const handleCopy = async () => {
-        try {
-            await navigator.clipboard.writeText(gistBody);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            console.error('Failed to copy:', err);
-        }
-    };
+const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({ content }) => {
+    // Teleprompter gist: answers can end with a [[GIST]] line. The marker line
+    // is still split off so it never shows as text, but this chat does not
+    // render it — no gist chip here, and no copy button, by owner request.
+    const { body: gistBody } = splitGistLineStreaming(content);
 
     return (
         <motion.div
@@ -116,19 +113,6 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
             className="flex flex-col items-start mb-6"
         >
             <div className="text-text-primary text-[15px] leading-relaxed max-w-[85%]">
-                {/* Minimal Copy Button (no AI response header) */}
-                {!isStreaming && content && (
-                    <div className="flex justify-end mb-2 select-none w-full">
-                        <button
-                            onClick={handleCopy}
-                            className="flex items-center gap-1.5 text-[11px] text-text-tertiary hover:text-text-secondary transition-colors"
-                        >
-                            {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
-                            {copied ? 'Copied' : 'Copy'}
-                        </button>
-                    </div>
-                )}
-
                 {/* Markdown Content with tight line height and spacing */}
                 <div className="markdown-content">
                     <ReactMarkdown
@@ -189,7 +173,6 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                     >
                         {gistBody}
                     </ReactMarkdown>
-                    {gistLine && <div className="overlay-gist-chip">{gistLine}</div>}
                 </div>
             </div>
         </motion.div>
@@ -258,15 +241,21 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
     }, [isOpen]);
 
     // Click outside handler
-    const handleBackdropClick = useCallback((e: React.MouseEvent) => {
-        if (e.target === e.currentTarget) {
-            handleClose();
-        }
-    }, []);
-
     const handleClose = useCallback(() => {
         onClose();
     }, [onClose]);
+
+    // A click outside the card closes the chat, as a click on the dim behind
+    // Settings and the Modes Manager does. The dim is a child that covers this
+    // whole layer, so an outside click lands on IT: checking only for the layer
+    // itself (as this used to) never fired, and the chat could not be dismissed
+    // by clicking away. The card and the ask bar sit above the dim, so clicks
+    // on them never reach it.
+    const handleBackdropClick = useCallback((e: React.MouseEvent) => {
+        if (e.target === e.currentTarget || (e.target as HTMLElement).dataset?.chatScrim !== undefined) {
+            handleClose();
+        }
+    }, [handleClose]);
 
     // Build context string for LLM
     const buildContextString = useCallback((): string => {
@@ -568,11 +557,14 @@ ${contextString}`;
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.16 }}
-                    className="absolute inset-0 z-40 flex flex-col justify-end"
+                    className="fixed inset-0 z-[300] flex flex-col justify-end"
                     onClick={handleBackdropClick}
                 >
-                    {/* Backdrop — dims only; the parent's opacity fade brings it in */}
-                    <div className="absolute inset-0 bg-black/40" />
+                    {/* Backdrop — dims only; the parent's opacity fade brings it in. The
+                        same dim as Settings and the Modes Manager (GenieModal's
+                        backdropClassName in SettingsOverlay / App): 6% in light, 60%
+                        in dark, no blur. */}
+                    <div data-chat-scrim="" className={`absolute inset-0 ${isLightTheme ? 'bg-black/[0.06]' : 'bg-black/60'}`} />
 
                     {/* Chat Window - extends to bottom, leaves room for input */}
                     <motion.div
@@ -584,14 +576,17 @@ ${contextString}`;
                             height: { type: "spring", stiffness: 300, damping: 30, mass: 0.8 },
                             opacity: { duration: 0.2 }
                         }}
-                        className="relative mx-auto w-full max-w-[680px] mb-0 rounded-t-[24px] border-t border-x border-border-subtle shadow-2xl overflow-hidden flex flex-col"
+                        className={`relative mx-auto w-full max-w-[680px] mb-0 rounded-t-[24px] border-t border-x border-border-subtle ${isLightTheme ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_-20px_48px_-12px_rgba(0,0,0,0.16)]' : 'shadow-2xl'} overflow-hidden flex flex-col`}
                         style={{ backgroundColor: chatWindowBg }}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Header with close button */}
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle shrink-0">
-                            <div className="flex items-center gap-2 text-text-tertiary">
-                                <img src={nativelyIcon} className="w-3.5 h-3.5 force-black-icon opacity-50" alt="logo" />
+                        {/* Header with close button. No divider under it, by owner request:
+                            the messages run straight up to the title. */}
+                        <div className="flex items-center justify-between px-4 py-3 shrink-0">
+                            {/* One step darker than it was (tertiary -> secondary, logo
+                                50% -> 70%), by owner request. */}
+                            <div className="flex items-center gap-2 text-text-secondary">
+                                <img src={nativelyIcon} className="w-3.5 h-3.5 force-black-icon opacity-70" alt="logo" />
                                 <span className="text-[13px] font-medium">Search this meeting</span>
                             </div>
                             <button

@@ -262,20 +262,64 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   // file, and 10 items / 3000 tokens added only noise. Confined to turns with
   // two or more mode files because that is the only case with a measured
   // benefit, and it costs evidence tokens on every grounded turn it applies to.
-  const multiFile = (req.attachedSourceCount ?? 0) >= 2 && cls.shouldRetrieve;
+  // SOURCE-PRIMARY MODES (2026-09-30). Seminar's paper and Lecture's slides are
+  // what the conversation is ABOUT (policy.attachedMaterialIsPrimary), so a
+  // turn the classifier would answer from general knowledge still reads them.
+  // Reproduced live: a Seminar examiner's "Five runs is not many. How do you
+  // know the gains are not just noise?" classified GENERAL_TECHNICAL → FAST →
+  // planned [MEETING_TRANSCRIPT]; the mode port found the thesis's "five runs …
+  // paired bootstrap p < 0.01" chunk and the planned-type filter threw it away.
+  // Same shape as the live-meeting rule below: no claim is added and the turn
+  // stays FAST, so there is no absence notice and answerability is unchanged —
+  // the evidence gate decides what is admitted. META_REQUEST is refused before
+  // retrieval as always, and only the MODE's own files count (a profile-only
+  // turn has none).
+  const sourcePrimaryTurn = cls.path === 'FAST' && !cls.shouldRetrieve
+    && policy.attachedMaterialIsPrimary === true
+    && req.hasAttachedDocuments === true && req.profileOnlyDocuments !== true
+    && !cls.questionTypes.includes('META_REQUEST')
+    && policy.retrievalPolicy.enabled
+    && policy.allowedSourceTypes.includes('REFERENCE_FILE');
+  const retrieves = cls.shouldRetrieve || sourcePrimaryTurn;
+  const multiFile = (req.attachedSourceCount ?? 0) >= 2 && retrieves;
+
+  // A GENERAL question in a LIVE MEETING still reads the meeting (2026-09-24).
+  // "How would you design the retry policy?" needs no private source, so it
+  // took the fast path and retrieved nothing — and the interviewer's own
+  // requirements, set minutes earlier ("retries for up to twenty four hours",
+  // "ordering per merchant"), existed only in speech the prompt no longer
+  // held. Measured in a live mock interview: the answer capped retries at "a
+  // few minutes"; in the injected design round, 2 of 4 constraint-dependent
+  // questions missed a constraint said 26 minutes back that the meeting index
+  // held. Only the MEETING pool is added, and no claim: the turn stays FAST,
+  // so a meeting that never mentioned the subject costs nothing but the
+  // lookup — answerability stays FULL and no absence notice is written — and
+  // the meeting ports' relevance floors keep unrelated talk out.
+  const meetingContextForGeneralTurn = cls.path === 'FAST' && !cls.shouldRetrieve
+    && Boolean(req.inLiveMeeting)
+    && !cls.questionTypes.includes('META_REQUEST')
+    && policy.retrievalPolicy.enabled
+    && policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT');
   const acceptedBase = multiFile
     ? Math.max(policy.retrievalPolicy.maximumAcceptedEvidence, MULTI_FILE_EVIDENCE.accepted)
     : policy.retrievalPolicy.maximumAcceptedEvidence;
 
+  // A source-primary turn reads the reference files, plus the meeting when one
+  // is live (the meeting rule above would otherwise have been the whole plan).
+  const fastTurnSources: SourceType[] = [
+    ...(sourcePrimaryTurn ? ['REFERENCE_FILE' as SourceType] : []),
+    ...(meetingContextForGeneralTurn ? ['MEETING_TRANSCRIPT' as SourceType] : []),
+  ];
+
   const retrievalPlan: RetrievalPlan = {
     path: cls.path,
-    shouldRetrieve: cls.shouldRetrieve,
+    shouldRetrieve: cls.shouldRetrieve || fastTurnSources.length > 0,
     // When no claim named a source, retrieval used to fan out to EVERY allowed
     // type — "Reverse a linked list in Python" retrieved six résumé/JD chunks
     // (deep-run 2, issue 5). An unclaimed retrieval consults document pools
     // only; identity pools (résumé/JD/profile) are reachable solely through
     // claims that name them.
-    sourceTypes: cls.shouldRetrieve
+    sourceTypes: fastTurnSources.length ? fastTurnSources : cls.shouldRetrieve
       ? (cls.requiredSourceTypes.length
         ? cls.requiredSourceTypes
         : policy.allowedSourceTypes.filter((s) =>
@@ -913,12 +957,23 @@ export async function orchestrate(
   // regional failover runbook?" took the no-retrieval path at every file size
   // with the handbook attached. Lexical and synchronous; a probe that throws
   // leaves the first decision standing.
-  if (!decision.retrievalPlan.shouldRetrieve && effectiveReq.hasAttachedDocuments && retrieval?.probeAnchors) {
+  //
+  // Gated on the CLASSIFIER's FAST verdict, not on `shouldRetrieve` (2026-09-30).
+  // In a live meeting decide() turns a FAST turn into a meeting-only lookup, and
+  // a source-primary mode into a reference-file read — both set shouldRetrieve,
+  // so the old `!shouldRetrieve` gate never asked the port on exactly the turns
+  // the what-to-answer hotkey produces (planned [MEETING_TRANSCRIPT], the file's
+  // chunks retrieved and then dropped by the planned-type filter). Typed chat
+  // outside a meeting reached the probe; the hotkey in a meeting never did. The
+  // re-decision is adopted only when it actually became a document lookup.
+  const classifierDeclined = decision.retrievalPlan.path === 'FAST'
+    && !decision.questionTypes.includes('META_REQUEST');
+  if (classifierDeclined && effectiveReq.hasAttachedDocuments && retrieval?.probeAnchors) {
     try {
       const probeQ = (effectiveReq.manualQuestion ?? effectiveReq.transcriptQuestion ?? '').trim();
       if (probeQ && retrieval.probeAnchors(probeQ)) {
         const again = decide({ ...effectiveReq, corpusAnchored: true });
-        if (again.retrievalPlan.shouldRetrieve) decision = again;
+        if (again.retrievalPlan.shouldRetrieve && again.retrievalPlan.path !== 'FAST') decision = again;
       }
     } catch { /* arbitration must never break a turn */ }
   }

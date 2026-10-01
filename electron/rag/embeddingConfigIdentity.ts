@@ -11,6 +11,7 @@
 // drift by default, which is how a Natively key would reach the resolver from
 // some entry points and not others.
 
+import { isBundledLocalModelId } from './bundledLocalEmbedding';
 import type { AppAPIConfig } from './EmbeddingProviderResolver';
 import { TRIAL_SENTINEL_KEY } from '../config/constants';
 import { findEmbeddingCatalogModel } from './embeddingModelCatalog';
@@ -250,13 +251,18 @@ export function buildEmbeddingConfig(overrides: Partial<EmbeddingConfigSources> 
   // is resolve()'s terminal fallback), so selecting it there resolved to MiniLM —
   // the user asked for a 768-d nomic index and silently got the 384-d
   // lightweight model this whole panel exists to steer them away from.
-  const BUNDLED_LOCAL_MODEL = 'Xenova/all-MiniLM-L6-v2';
+  //
+  // "Bundled" is a SET, not one literal (2026-09-22). Settings persists the
+  // model id, so an install that selected the previous bundled model has
+  // 'Xenova/all-MiniLM-L6-v2' saved. Comparing against the new id alone would
+  // declare that user Ollama-backed and route them to Ollama asking for a model
+  // it does not serve — a silent break on the first launch after the swap.
   // A curated-catalog id (embedding:use-local-model saves it as `model`) is
-  // served by LocalEmbeddingProvider itself, not by Ollama.
+  // likewise served by LocalEmbeddingProvider itself, not by Ollama.
   const localIsOllamaBacked = chosen?.mode === 'manual'
     && chosen?.provider === 'local'
     && !!chosen?.model
-    && chosen.model !== BUNDLED_LOCAL_MODEL
+    && !isBundledLocalModelId(chosen.model)
     && !findEmbeddingCatalogModel(chosen.model);
   const effectiveProvider = localIsOllamaBacked ? 'ollama' : chosen?.provider;
   const localViaOllama = localIsOllamaBacked

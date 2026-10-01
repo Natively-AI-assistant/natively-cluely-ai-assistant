@@ -17,7 +17,7 @@
 // both. Pure + dependency-light (only the shared CODING_CONTRACT text), so it is fully
 // unit-testable and importable without cycle risk.
 
-import { CODING_CONTRACT } from './codingContract';
+import { CODING_CONTRACT, CODING_SHAPE_CONTRACTS, type CodingShape } from './codingContract';
 
 /**
  * An EXPLICIT coding format constraint the user stated. `null` = no explicit
@@ -48,9 +48,13 @@ const lc = (s?: string) => (s || '').toLowerCase().trim();
 const CODE_ONLY_RE =
   /\b(?:just|only)\s+(?:the\s+|me\s+the\s+)?code\b|\bcode[- ]?only\b|\bonly\s+(?:give|write|show)\s+(?:me\s+)?(?:the\s+)?code\b|\bno\s+explanation,?\s+just\b|\bgive\s+me\s+(?:only\s+)?the\s+code\b|\bcode\s+(?:and\s+)?nothing\s+else\b/i;
 
-// "dry run" / "trace through" / "walk through the code".
+// "dry run" / "trace through" / "walk through the execution".
+// "Walk me through the solution / the code" is NOT a trace (2026-09-29): it asks
+// for a spoken walkthrough of the idea, which codingShape.ts resolves to the
+// `walkthrough` shape. Treating it as dry_run_only answered "walk me through
+// your solution" with a variable-by-variable trace.
 const DRY_RUN_RE =
-  /\bdry[- ]?run\b|\btrace\s+(?:through|it|the\s+code|the\s+solution|this)\b|\bwalk\s+(?:me\s+)?through\s+(?:the|your)\s+(?:code|solution|execution)\b|\bstep\s+through\s+(?:the|your|this)\b/i;
+  /\bdry[- ]?run\b|\btrace\s+(?:through|it|the\s+code|the\s+solution|this)\b|\bwalk\s+(?:me\s+)?through\s+(?:the|your)\s+execution\b|\bstep\s+through\s+(?:the|your|this)\b/i;
 
 // "time and space complexity" / "what's the complexity" / "big-O".
 const COMPLEXITY_RE =
@@ -126,6 +130,13 @@ const CONTINUATION_STRONG_RE =
 const CONTINUATION_LOOSE_RE =
   /\b(optimi[sz]e|optimal|improve|make\s+it|refactor|rewrite|convert|faster|more\s+efficient|walk\s+through)\b/i;
 
+// "Walk me through the solution / your code" (2026-09-29). This reached
+// isCodingContinuation only through DRY_RUN_RE, which no longer treats a
+// walkthrough as a trace. Kept to EXACTLY the old coverage: a bare "walk me
+// through it / that" is as likely to follow a behavioural answer ("walk me
+// through that decision") as a coding one.
+const WALKTHROUGH_CONTINUATION_RE = /\bwalk\s+(?:me\s+|us\s+)?through\s+(?:the|your)\s+(?:code|solution)\b/i;
+
 /**
  * Is `question` a coding CONTINUATION — a short follow-up that only makes sense
  * relative to a prior coding solution ("give time and space complexity", "dry run
@@ -185,12 +196,59 @@ export function isBareCodeRequest(question: string): boolean {
   return tokens.every((t) => BARE_CODE_TOKENS.has(t));
 }
 
+// Issue #539: "show in python", "show the solution in python", "show me how you
+// would implement in python" — a request to present the CURRENT solution in a
+// named language. Live (Windows 2.8.8) all three routed general_meeting_answer
+// and the model invented an unrelated count_ways(n) problem.
+//
+// Token-set, like isBareCodeRequest: an imperative verb, a trailing language,
+// and nothing between them but filler. A content word ("write a web server in
+// go") gives the message its own subject, and an experience question ("tell me
+// about your experience with python", "have you worked in go?") never opens
+// with one of these verbs — both fall through.
+const LANGUAGE_TOKENS = new Set([
+  'python', 'py', 'java', 'javascript', 'js', 'typescript', 'ts', 'cpp', 'csharp',
+  'c', 'go', 'golang', 'rust', 'kotlin', 'swift', 'ruby', 'scala', 'php', 'sql',
+]);
+const LANGUAGE_REQUEST_VERBS = new Set([
+  'show', 'write', 'give', 'do', 'implement', 'code', 'convert', 'rewrite', 'redo', 'translate', 'port', 'solve',
+]);
+const LANGUAGE_REQUEST_LEAD = new Set(['ok', 'okay', 'so', 'now', 'and', 'then', 'please', 'can', 'could', 'would', 'will', 'you']);
+const LANGUAGE_REQUEST_FILLER = new Set([
+  ...BARE_CODE_TOKENS, ...LANGUAGE_REQUEST_VERBS,
+  'how', 'would', 'will', 'could', 'same', 'again', 'instead', 'one', 'version', 'using', 'into', 'to',
+]);
+
+function isLanguageRequest(question: string): boolean {
+  const tokens = (question || '')
+    .toLowerCase()
+    .replace(/c\+\+/g, 'cpp')
+    .replace(/c#/g, 'csharp')
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length < 2 || tokens.length > 10) return false;
+  if (!LANGUAGE_TOKENS.has(tokens[tokens.length - 1])) return false;
+  if (!['in', 'using', 'into', 'to'].includes(tokens[tokens.length - 2])) return false;
+  let i = 0;
+  while (i < tokens.length && LANGUAGE_REQUEST_LEAD.has(tokens[i])) i++;
+  if (!LANGUAGE_REQUEST_VERBS.has(tokens[i])) return false;
+  return tokens.slice(i, -1).every((t) => LANGUAGE_REQUEST_FILLER.has(t));
+}
+
+// "implement this", "write it", "solve that" — an action on the current problem
+// with nothing else in the message (issue #539).
+const DIRECT_ACTION_RE =
+  /^(?:(?:ok(?:ay)?|so|now|and|please)[,.!]?\s+)*(?:(?:can|could)\s+you\s+)?(?:implement|write|code|solve)\s+(?:this|it|that|the\s+(?:solution|same|above))(?:\s+(?:now|please|again))?\s*[?.!]*$/i;
+
 export function isCodingContinuation(question: string): boolean {
   const q = lc(question);
   if (!q) return false;
   // A bare code request is ALWAYS a continuation — it has no subject of its own.
   if (isBareCodeRequest(q)) return true;
+  if (isLanguageRequest(q) || DIRECT_ACTION_RE.test(q)) return true;
   if (detectExplicitCodingContract(q)) return true; // code_only/complexity/dry-run/explain are all continuations-or-constraints
+  if (WALKTHROUGH_CONTINUATION_RE.test(q)) return true;
   const words = q.split(/\s+/).filter(Boolean).length;
   // STRONG coding signal: a SHORT message is a follow-up on its own; a LONG one needs a
   // back-reference ("Optimize the merge step of a 200-line service…" is NOT a follow-up).
@@ -257,8 +315,23 @@ const NO_LEAK_RULES = `Additional rules:
  */
 export function buildCodingContractPrompt(
   explicitContract: ExplicitCodingContract,
-  opts?: { includeVerification?: boolean; verificationInstruction?: string },
+  opts?: { includeVerification?: boolean; verificationInstruction?: string; codingShape?: CodingShape },
 ): string {
+  // No explicit format, but the question asked for one specific thing
+  // (codingShape.ts): that shape's contract, not the six sections.
+  const shape = opts?.codingShape;
+  if (!explicitContract && shape && shape !== 'full') {
+    const writesCode = shape === 'code' || shape === 'solve' || shape === 'optimize' || shape === 'debug';
+    const verification = writesCode && opts?.includeVerification && opts.verificationInstruction
+      ? `\n\n${opts.verificationInstruction}`
+      : '';
+    return `<answer_contract>
+answerType: coding (shape: ${shape})
+${CODING_SHAPE_CONTRACTS[shape]}
+
+${NO_LEAK_RULES}${verification}
+</answer_contract>`;
+  }
   if (!explicitContract) {
     const verification = opts?.includeVerification && opts.verificationInstruction
       ? `\n\n${opts.verificationInstruction}`
@@ -303,7 +376,7 @@ Reference the SAME problem/solution from the prior turn. Do NOT restate the prob
       case 'dry_run_only':
         return `The user asked ONLY for a DRY RUN / trace of the solution already in the conversation, on the input they gave. Output ONLY the step-by-step trace (state at each step → final output). Do NOT re-output the code, the approach, or the complexity unless it falls out of the trace.`;
       case 'custom_format':
-        return `The user's standing instructions for this mode define the answer FORMAT for coding turns. Follow THEIR structure exactly — their sections, their order, their headings, their language. Do NOT add the default sections ("## Approach", "## Technique / Data Structure / Algorithm Used", "## Dry Run", "## Complexity", "## Interviewer Follow-up Points") unless their format asks for them. Still put every piece of code in a fenced block tagged with the language you actually wrote.`;
+        return `The user's standing instructions for this mode define the answer FORMAT for coding turns. Follow THEIR structure exactly — their sections, their order, their headings, their language. Do NOT add the default sections ("## Approach", "## Technique", "## Dry Run", "## Complexity", "## Interviewer Follow-up Points") unless their format asks for them. Still put every piece of code in a fenced block tagged with the language you actually wrote.`;
       case 'explain_only':
         return `The user asked for an EXPLANATION with NO CODE. Output a clear, speakable explanation in prose (and short bullets if helpful). Do NOT output any code block. No "## Code" section.`;
     }

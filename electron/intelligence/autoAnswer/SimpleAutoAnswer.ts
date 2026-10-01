@@ -38,7 +38,7 @@ import { systemClock } from './AutoAnswerClock';
 import {
     JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, parseJudgeVerdict, routeForVerdict, type JudgeRequest,
 } from './AutoAnswerJudge';
-import { isMidWordCut, joinTranscriptParts, normalizeForCompare } from './AutoAnswerText';
+import { isMidWordCut, joinTranscriptParts, normalizeForCompare, tokenContainment } from './AutoAnswerText';
 import type { AutoAnswerThresholds } from './AutoAnswerPolicy';
 import { DEFAULT_THRESHOLDS } from './AutoAnswerPolicy';
 import type { AutoAnswerQuestion, AutoAnswerTelemetryEvent } from './AutoAnswerTypes';
@@ -99,8 +99,68 @@ export const FALLBACK_INTERROGATIVE = /^(?:(?:ok(?:ay)?|so|and|now|alright|well)
  * the one case that never benefited. Now the ration is TIME, not shape — at
  * most one prefetch per window, so a long meeting cannot spend more than a
  * bounded number of generations no matter how it is phrased.
+ *
+ * 2026-09-22: the time ration is the FLOOR, not the only gate. Live telemetry
+ * (9 automatic answers, Deepgram + gpt-5.6-luna) showed the judge (1.2-2.5 s)
+ * and the answer's first token (0.7-2.7 s) running back to back, because an
+ * interview asks faster than once per 25 s and the ration let the head start
+ * fire for one question in several. A candidate that is question-SHAPED — a
+ * trailing '?' or an interrogative lead ("tell me", "walk me through", "how
+ * would you") — is the high-prior case: those are the asks the judge
+ * overwhelmingly said 'answer' to, so a rejected prefetch is rare there and
+ * the shape now bypasses the ration. Statements and bare declarative tasks
+ * keep it: their prior is low, and the ration is what bounds the spend.
+ * (The engine's own guards — never over a live stream or an existing
+ * speculation — still apply on top, so bypassing cannot stack generations.)
  */
 export const PREFETCH_MIN_INTERVAL_MS = 25_000;
+/**
+ * STT providers whose transcript can be trusted to be caught up when the local
+ * VAD reports the interviewer stopped: they stream interims, so a dangling
+ * interim tells the controller the last words' final is still in flight (see
+ * onLocalSpeechEnd). The rest produce their FINAL from the end of the segment
+ * itself — REST uploads (groq, azure, ibmwatson), OpenAI's whisper-1 REST
+ * fallback, and the local models (their own VAD closes the segment, then
+ * inference runs) — so the stop always precedes the text and would judge the
+ * turn without its last words.
+ */
+export function acceptsLocalSpeechEndHint(sttProvider: string): boolean {
+    return !['none', 'groq', 'azure', 'ibmwatson', 'openai', 'local-whisper'].includes(sttProvider);
+}
+/** A transcript stretch split after . ? ! — the unit a question's shape lives in. */
+export function sentencesOf(text: string): string[] {
+    return text.split(/(?<=[.?!])\s+/).map(s => s.trim()).filter(Boolean);
+}
+/**
+ * The shape that earns an unrationed prefetch: a sentence that ends in '?' or
+ * opens with an interrogative lead. Per SENTENCE, not per candidate: a
+ * candidate usually opens with the lead-in the judge already ruled silent
+ * ("Great. So I'm Sarah, I lead the platform team…"), and a whole-candidate
+ * test read THAT as the lead — live 2026-09-26 "…Let's start with you. Tell me
+ * a little bit about yourself" got no head start.
+ */
+export function isQuestionShaped(candidate: string): boolean {
+    return sentencesOf(candidate).some(s => /\?\s*$/.test(s) || FALLBACK_INTERROGATIVE.test(s));
+}
+/**
+ * The asks that carry no question at all (2026-09-27). In sales, support and
+ * seminar sessions the ask is often a REPORT: a pain point ("our biggest pain
+ * is that escalations get lost over the weekend"), a symptom ("now it says
+ * license limit reached"), or an observation about the user's work ("I
+ * noticed the baseline numbers are lower than the paper's"). Across 343 live
+ * judged candidates these were the only 4 answered asks that were not
+ * question-shaped, and the prefetch ration made one of them (sales, 19.8 s
+ * after the last prefetch) wait the whole judge before its answer started.
+ * This pattern matched all 4 and 10 others (mostly that same pain point on
+ * runs where the judge ruled it "either" way), so it rides the question-shape
+ * bypass. A fragment that stops on a hanging word is still unfinished.
+ */
+export const REPORT_SHAPED = /\b(?:i (?:just )?noticed|i see that|our (?:biggest |main |real )?(?:pain|problem|issue|challenge|concern|bottleneck)s? (?:is|are)|(?:can'?t|cannot|couldn'?t|won'?t|doesn'?t|isn'?t|aren'?t|not able to) (?:log|work|load|connect|sign|access|see|find|open|get)|error|it says|now says|keeps? (?:failing|crashing|timing out)|stopped working|(?:is|are) broken|went down)\b/i;
+const HANGING_END = /\b(?:that|and|but|so|because|is|are|was|the|a|an|to|of|with|when|if|which)\s*[,.-]*\s*$/i;
+export function isReportShaped(candidate: string): boolean {
+    const t = candidate.trim();
+    return REPORT_SHAPED.test(t) && !HANGING_END.test(t);
+}
 /**
  * How long after an automatic answer a manual press still counts as "that
  * answer was not good enough". Long enough for the user to read it and
@@ -150,6 +210,44 @@ export const RETRY_TTL_MS = 8000;
  * was drafted against two thirds of the spec. Unfitted placeholder.
  */
 export const PENDING_MAX_AGE_MS = 90_000;
+/**
+ * STT stall cap (2026-09-27). The interviewer stopped (the local voice
+ * detector says so), their words are on screen as an interim, and the final
+ * never comes: the provider has stalled. Live runs showed "…with Z" sitting
+ * there for 3.5, 8.7 and 12 s before the final landed with no new speech, and
+ * nothing is judged until it does. After this long with the interim frozen
+ * (counted from the later of the last interim and the voice detector's stop),
+ * the interim stands in for its final.
+ *
+ * Why 2 s: across 517 recorded live turns the final landed p50 0.75 s, p90
+ * 1.1 s, p99 2.2 s after the speaker stopped, so 2 s past the stop cap reaches
+ * about 1% of turns, and those are mostly the stalls themselves.
+ *
+ * What it cannot fix: a relay backlog where not even an interim has arrived
+ * (live L14: the first interim came 5.3 s after the speech ended). There is
+ * nothing to promote, so that turn waits exactly as before.
+ */
+export const STALL_PROMOTE_MS = 2000;
+/**
+ * The late final of a promoted interim is the SAME utterance when its words,
+ * minus the interim's last (often clipped) one, are this contained in it and it
+ * adds at most STALL_TAIL_WORDS more.
+ */
+const STALL_SAME_CONTAINMENT = 0.9;
+const STALL_TAIL_WORDS = 2;
+/** A promoted interim was answered: its late final within this long is not a new question. */
+export const STALL_ANSWERED_TTL_MS = 30_000;
+
+/** Whether `final` is the late final of the stalled `interim` rather than new speech. */
+export function isSameUtterance(interim: string, final: string): boolean {
+    const i = normalizeForCompare(interim).split(' ').filter(Boolean);
+    const f = normalizeForCompare(final).split(' ').filter(Boolean);
+    if (i.length === 0 || f.length === 0) return false;
+    if (f.length > i.length + STALL_TAIL_WORDS) return false;
+    // The interim's last word is where a stall cuts ("…with Z" of ZooKeeper).
+    const head = i.length > 1 ? i.slice(0, -1).join(' ') : i.join(' ');
+    return tokenContainment(head, final) >= STALL_SAME_CONTAINMENT;
+}
 
 export interface SimpleAutoAnswerHost {
     isEnabled(): boolean;
@@ -172,14 +270,28 @@ export interface SimpleAutoAnswerHost {
     /** See answerStreamActive: retired 2026-09-03, supplied but never called. */
     cancelAutomaticAnswer?(reason: 'user_barge_in'): boolean;
     /** The judge call (same hook as V3): raw model reply, parsed here. */
-    judgeCandidate?(req: JudgeRequest): Promise<string | null>;
+    /**
+     * The judge call. `signal` aborts when the controller supersedes the verdict
+     * (more interviewer speech, meeting ended) — the answer would be discarded
+     * anyway, so the provider request should stop costing money and quota.
+     */
+    judgeCandidate?(req: JudgeRequest, signal?: AbortSignal): Promise<string | null>;
     /** Key the engine's speculative cache to this candidate. */
     noteCandidate?(questionId: string, candidateGeneration: number): void;
     /** What the engine currently holds speculatively, for keyed reuse. */
     speculativeSnapshot?(): { questionId: string | null; text: string | null };
     /** Start the answer WHILE the judge decides (see PREFETCH_MIN_ANSWERABILITY). */
     prefetchAnswer?(questionId: string, text: string): void;
+    /**
+     * The interviewer just stopped and this is the question the next candidate
+     * will carry (the finals so far plus the words still in flight as an
+     * interim). The host may start work that only needs the text, such as the
+     * retrieval query's embedding, before the final transcript lands.
+     */
+    warmQuery?(text: string): void;
     modeName?(): string | null;
+    /** The USER's name, so the judge can tell an ask to them from one to a teammate. */
+    userName?(): string | null;
     telemetry?(event: AutoAnswerTelemetryEvent): void;
     log?(line: string): void;
     /**
@@ -196,10 +308,40 @@ export interface SimpleAutoAnswerHost {
     logContent?(label: string, text: string): void;
 }
 
+/** Share of a picked ask's words that must come from ruled-out finals for it to count as resurfaced. */
+export const RULED_OUT_CONTAINMENT = 0.9;
+
 export class SimpleAutoAnswerEngine {
-    private pending: Array<{ text: string; at: number; speaker?: string; glueNext?: boolean }> = [];
+    /** `provisional`: a stalled interim standing in for its final (STALL_PROMOTE_MS); only ever the LAST part. */
+    private pending: Array<{ text: string; at: number; speaker?: string; glueNext?: boolean; provisional?: boolean }> = [];
+    /**
+     * How many leading `pending` finals a verdict has already ruled NOT an ask
+     * (a statement, a rhetorical question, logistics). They stay in the
+     * candidate — the judge needs them as context — but a question's SHAPE is
+     * only read from the finals after them: otherwise "Great. So I'm Sarah…"
+     * is the lead of every later candidate, the prefetch never gets its head
+     * start, and a judge failure has no question to fall back on.
+     */
+    private judgedParts = 0;
     /** Latest interviewer interim — the evidence for whether a final cut a word in half. */
     private lastInterviewerInterim = '';
+    /** When the latest utterance's first interim arrived: a voice-detector stop before it belongs to an earlier pause. */
+    private utteranceStartAt = 0;
+    /** When the local voice detector last saw the interviewer stop; 0 once they speak again. */
+    private localStopAt = 0;
+    /** Fires STALL_PROMOTE_MS after the interim froze. */
+    private stallTimer: ClockTimer | null = null;
+    /** A promoted interim that was answered, so its late final is not answered twice. */
+    private stallAnswered: { text: string; at: number } | null = null;
+    /** The interim last promoted: one stand-in per frozen interim, however many stops follow. */
+    private promotedInterim: string | null = null;
+    /**
+     * Whether the voice detector's speech STARTS reach this engine (main wires
+     * the native speech_edge). With them, a stop stays current until the next
+     * start. Without them, only a stop after the utterance's first interim
+     * counts, so a stale stop from an earlier pause never promotes mid-speech.
+     */
+    private speechStartsSeen = false;
     /** speakerId per interviewer final, when the STT diarizes. Keyed by normalized text. */
     private speakerByTurn = new Map<string, string>();
     private timer: ClockTimer | null = null;
@@ -209,6 +351,8 @@ export class SimpleAutoAnswerEngine {
     private lastInterviewerAt = 0;
     private retryTimer: ClockTimer | null = null;
     private judgeSeq = 0;
+    /** Aborts the judge call in flight; nulled when it settles or is superseded. */
+    private judgeAbort: AbortController | null = null;
     private sequence = 0;
     private lastJudgedKey = '';
     private lastAnsweredText: string | null = null;
@@ -244,6 +388,8 @@ export class SimpleAutoAnswerEngine {
     private bumpJudgeSeq(cause: NonNullable<AutoAnswerTelemetryEvent['supersededBy']>): void {
         this.judgeSeq++;
         this.judgeSeqCause = cause;
+        // The in-flight verdict is superseded — stop paying for it.
+        if (this.judgeAbort) { try { this.judgeAbort.abort(); } catch { /* never break ingest */ } this.judgeAbort = null; }
     }
 
     onMeetingStart(): void { this.reset(); }
@@ -266,6 +412,40 @@ export class SimpleAutoAnswerEngine {
         this.arm(ENDPOINT_CONFIRM_MS);
     }
 
+    /**
+     * The LOCAL VAD (native capture, 150-200 ms hangover) saw the interviewer
+     * stop. Only four STT providers emit their own end-of-turn event; the rest
+     * waited the full STABILITY_MS after the last final even though the
+     * capture layer already knew. Treat the local stop like a provider
+     * endpoint — with one guard: a dangling interim means the final for the
+     * last words has not landed yet, and committing now would judge half a
+     * turn. That final re-arms the window itself when it arrives.
+     */
+    onLocalSpeechEnd(): void {
+        if (!this.host.isEnabled()) return;
+        this.localStopAt = this.clock.now();
+        this.host.log?.(`[AutoAnswer:simple] voice stop (${this.lastInterviewerInterim ? 'words in flight' : 'transcript caught up'}, ${this.pending.length} pending)`);
+        // The dangling interim IS the stall case: start its clock from here.
+        if (this.lastInterviewerInterim) {
+            this.armStallCap();
+            this.warmNextCandidate();
+            return;
+        }
+        if (this.pending.length === 0) return;
+        this.arm(ENDPOINT_CONFIRM_MS);
+    }
+
+    /**
+     * The local voice detector saw the interviewer start talking again. A stop
+     * the stall cap was counting on is over: frozen text now means a slow
+     * transcriber mid-speech, not a finished speaker. Only the stall cap reads this.
+     */
+    onLocalSpeechStart(): void {
+        this.speechStartsSeen = true;
+        this.localStopAt = 0;
+        this.clearStallCap();
+    }
+
     ingest(segment: TranscriptSegment & { speaker: string; final: boolean }): void {
         if (!this.host.isEnabled() || !this.host.isMeetingActive()) return;
         const text = (segment.text ?? '').trim();
@@ -279,9 +459,14 @@ export class SimpleAutoAnswerEngine {
                 // dispatch mid-sentence; the next stoppage re-judges).
                 if (this.pending.length > 0 || text) {
                     if (text) {
+                        // The transcript moved again: a promoted stand-in is stale.
+                        this.dropProvisional();
+                        this.promotedInterim = null;
                         this.bumpJudgeSeq('interim');
+                        if (!this.lastInterviewerInterim) this.utteranceStartAt = now;
                         this.lastInterviewerAt = now;
                         this.lastInterviewerInterim = text;
+                        this.armStallCap();
                     }
                     this.arm(STABILITY_MS);
                 }
@@ -298,6 +483,9 @@ export class SimpleAutoAnswerEngine {
                     if (oldest !== undefined) this.speakerByTurn.delete(oldest);
                 }
             }
+            this.clearStallCap();
+            this.promotedInterim = null;
+            if (this.absorbStalledFinal(text, now, speaker)) return;
             // Decide the seam NOW: the interim this final was cut from is still
             // in hand, and it is gone as soon as the next one arrives.
             const glueNext = isMidWordCut(text, this.lastInterviewerInterim);
@@ -335,7 +523,10 @@ export class SimpleAutoAnswerEngine {
     private onStoppage(early: boolean): void {
         if (!this.host.isEnabled() || !this.host.isMeetingActive()) return;
         const now = this.clock.now();
+        const before = this.pending.length;
         this.pending = this.pending.filter(p => now - p.at <= PENDING_MAX_AGE_MS);
+        // Finals arrive in time order, so aged-out ones are always a prefix.
+        this.judgedParts = Math.max(0, this.judgedParts - (before - this.pending.length));
         if (this.pending.length === 0) return;
         const candidate = joinTranscriptParts(this.pending);
         const key = normalizeForCompare(candidate);
@@ -382,15 +573,22 @@ export class SimpleAutoAnswerEngine {
         const id = `${this.host.meetingGeneration()}-q${++this.sequence}`;
         this.emit({
             name: 'auto_answer_candidate', questionId: id,
-            candidateWordCount: words, endpointSource: 'quiet_window',
+            candidateWordCount: words, endpointSource: this.pending.some(p => p.provisional) ? 'stt_stall' : 'quiet_window',
         });
         this.lastJudgedKey = key;
-        this.host.logContent?.(`judging ${id} (${words}w)`, candidate);
+        // Whether the judge can tell an ask to the USER from one to a named
+        // teammate. Known/unknown only: the trace never prints the name.
+        this.host.logContent?.(`judging ${id} (${words}w, user name ${this.host.userName?.() ? 'known' : 'unknown'})`, candidate);
         // Key any speculation the engine starts on its own interims to THIS
         // candidate, so the dispatch below can claim it by id.
         this.host.noteCandidate?.(id, this.sequence);
-        this.maybePrefetch(id, candidate, now);
+        this.maybePrefetch(id, candidate, this.unjudgedText(), now);
         void this.consult(id, candidate, now, early);
+    }
+
+    /** The finals no verdict has ruled on yet — where a new ask's shape is read. */
+    private unjudgedText(): string {
+        return joinTranscriptParts(this.pending.slice(Math.min(this.judgedParts, this.pending.length)));
     }
 
     /**
@@ -414,9 +612,14 @@ export class SimpleAutoAnswerEngine {
      * only, never over a live stream or an existing speculation), so this can
      * be optimistic without stacking generations.
      */
-    private maybePrefetch(id: string, candidate: string, now: number): void {
+    private maybePrefetch(id: string, candidate: string, unjudged: string, now: number): void {
         if (!this.host.prefetchAnswer) return;
-        if (this.lastPrefetchAt !== null && now - this.lastPrefetchAt < PREFETCH_MIN_INTERVAL_MS) return;
+        // Question-shaped asks, and report-shaped ones (isReportShaped), always
+        // get the head start; everything else is
+        // rationed by time. See PREFETCH_MIN_INTERVAL_MS for why both exist.
+        // The shape is read from the unjudged finals only (see judgedParts).
+        const rationed = this.lastPrefetchAt !== null && now - this.lastPrefetchAt < PREFETCH_MIN_INTERVAL_MS;
+        if (rationed && !isQuestionShaped(unjudged) && !isReportShaped(unjudged)) return;
         this.lastPrefetchAt = now;
         try {
             this.host.prefetchAnswer(id, candidate);
@@ -430,11 +633,24 @@ export class SimpleAutoAnswerEngine {
         let timedOut = false;
         const turns = this.turnsBefore(committedAt);
         const parts = this.pending.map(p => ({ speaker: p.speaker, text: p.text }));
+        const partsAtConsult = this.pending.length;
+        const unjudged = this.unjudgedText();
+        const ruledOut = joinTranscriptParts(this.pending.slice(0, Math.min(this.judgedParts, this.pending.length)));
+        // Judged on a promoted interim. If its real final replaces it while
+        // this call is out and the verdict then says "unfinished" or fails,
+        // the real words must still be judged: nothing else will re-arm.
+        const onStandIn = this.pending.some(p => p.provisional);
+        const standInReplaced = () => onStandIn && !this.pending.some(p => p.provisional);
         let raw: string | null = null;
         let outcome: 'verdict' | 'timeout' | 'error' | 'unparseable' | 'absent' = 'verdict';
         if (!this.host.judgeCandidate) {
             outcome = 'absent';
         } else {
+            // One controller per consult. bumpJudgeSeq() aborts it when newer
+            // speech supersedes this verdict; a deadline also aborts it — the
+            // controller has stopped waiting, so the provider may stop working.
+            const abort = new AbortController();
+            this.judgeAbort = abort;
             try {
                 raw = await Promise.race([
                     this.host.judgeCandidate({
@@ -445,16 +661,19 @@ export class SimpleAutoAnswerEngine {
                         modeName: this.host.modeName?.() ?? null,
                         questionId: id,
                         lastAnsweredText: this.lastAnsweredText,
-                    }),
+                        userName: this.host.userName?.() ?? null,
+                        ...(this.pending.some(p => p.provisional) ? { transcriptLagging: true } : {}),
+                    }, abort.signal),
                     new Promise<null>((resolve) => {
                         timer = this.clock.setTimeout(() => { timedOut = true; resolve(null); }, JUDGE_DEADLINE_MS);
                     }),
                 ]);
-                if (timedOut) outcome = 'timeout';
+                if (timedOut) { outcome = 'timeout'; try { abort.abort(); } catch { /* noop */ } }
             } catch {
                 outcome = 'error';
             } finally {
                 if (timer !== null) this.clock.clearTimeout(timer);
+                if (this.judgeAbort === abort) this.judgeAbort = null;
             }
         }
         const judgeMs = this.clock.now() - committedAt;
@@ -501,10 +720,15 @@ export class SimpleAutoAnswerEngine {
             // A transient judge failure must not silence the question forever
             // (review 2026-08-25): clear the key so the next stoppage retries.
             this.lastJudgedKey = '';
-            // Near-legacy fallback: a trailing '?', or — on providers that
-            // never guarantee punctuation — an interrogative-led utterance.
-            const interrogative = FALLBACK_INTERROGATIVE.test(candidate);
-            if (/\?\s*$/.test(candidate) || (!this.punctuationGuaranteed && interrogative)) {
+            if (standInReplaced()) { this.arm(ENDPOINT_CONFIRM_MS); return; }
+            // Near-legacy fallback: a question mark, or — on providers that
+            // never guarantee punctuation — an interrogative-led utterance,
+            // read per sentence from the finals no verdict has ruled on (the
+            // lead-in a verdict already called a statement is not the ask).
+            const fresh = sentencesOf(unjudged);
+            const asked = /\?\s*$/.test(candidate) || fresh.some(s => /\?\s*$/.test(s));
+            const interrogative = fresh.some(s => FALLBACK_INTERROGATIVE.test(s));
+            if (asked || (!this.punctuationGuaranteed && interrogative)) {
                 this.host.log?.(`[AutoAnswer:simple] judge ${outcome} — fallback dispatch`);
                 this.deliver(id, candidate, 0.9, 'general_question', committedAt);
             }
@@ -523,7 +747,29 @@ export class SimpleAutoAnswerEngine {
         if (route.route !== 'evaluate') {
             const reason = route.route === 'wait_incomplete' ? 'incomplete' : route.reason;
             this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: reason, dialogueAct: verdict.act, answerability: verdict.answerability });
-            if (route.route === 'wait_incomplete') this.lastJudgedKey = '';   // more speech may finish it → re-judge then
+            if (route.route === 'wait_incomplete') {
+                this.lastJudgedKey = '';   // more speech may finish it → re-judge then
+                if (standInReplaced()) this.arm(ENDPOINT_CONFIRM_MS);   // …or its real final already has
+            }
+            // Ruled not an ask: these finals stay as context, but a later
+            // ask's shape is read after them. An INCOMPLETE ask stays open.
+            else this.judgedParts = partsAtConsult;
+            return;
+        }
+        // The ask the judge picked lies wholly in finals an EARLIER verdict
+        // ruled not an ask, and not in the new speech: someone replied to it,
+        // and the reply made it look open. Live 2026-09-27 (team meet): "Raj,
+        // can you make sure support knows…" was ruled silent (a request to a
+        // teammate), then Raj's "Yes, I'll post in their channel" arrived, the
+        // merged candidate was judged again, and the Raj request got answered.
+        // An incomplete ask never counts as ruled out (judgedParts does not
+        // advance on it), so speech that FINISHES a question is unaffected.
+        if (route.action === 'answer' && route.questionText && ruledOut
+            && tokenContainment(route.questionText, ruledOut) >= RULED_OUT_CONTAINMENT
+            && tokenContainment(route.questionText, unjudged) < RULED_OUT_CONTAINMENT) {
+            this.host.logContent?.(`ruled-out ask resurfaced ${id}`, route.questionText);
+            this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: 'already_ruled_out', answerability: route.answerability });
+            this.judgedParts = partsAtConsult;
             return;
         }
         const text = route.questionText ?? candidate;
@@ -538,13 +784,22 @@ export class SimpleAutoAnswerEngine {
             // verdict — the commit timer is already armed and will apply it —
             // rather than answering into a breath. Usually the ~1.3 s judge has
             // outlasted the window on its own and this commits immediately.
-            if (early && this.clock.now() - this.lastInterviewerAt < STABILITY_MS) {
+            //
+            // Only while that commit is still PENDING. A provider endpoint or the
+            // local VAD can confirm the stop early (ENDPOINT_CONFIRM_MS), and that
+            // commit runs while the judge is still out — it finds the key already
+            // judged and returns. Holding after it has fired waited for a timer
+            // that would never fire again: live 2026-09-27 (DeepSeek judge,
+            // 0.66 s) an 'answer, a=0.9' verdict sat unapplied until the next
+            // interviewer speech replaced the question.
+            if (early && this.timer !== null && this.clock.now() - this.lastInterviewerAt < STABILITY_MS) {
                 this.held = { id, key: normalizeForCompare(candidate), text, answerability: route.answerability, act: route.act, at: this.clock.now() };
                 return;
             }
             this.deliver(id, text, route.answerability, route.act, committedAt);
         } else {
             this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: 'low_answerability', answerability: route.answerability });
+            this.judgedParts = partsAtConsult;
         }
     }
 
@@ -592,7 +847,10 @@ export class SimpleAutoAnswerEngine {
             const snapshot = this.host.speculativeSnapshot?.();
             const reuseSpeculative = Boolean(snapshot && snapshot.questionId === id && snapshot.text);
             this.lastAnsweredText = text;
+            const promoted = this.pending.find(p => p.provisional);
+            this.stallAnswered = promoted ? { text: promoted.text, at: this.clock.now() } : null;
             this.pending = [];
+            this.judgedParts = 0;
             this.lastJudgedKey = '';
             this.emit({ name: 'auto_answer_decision', questionId: id, action: 'auto', answerability });
             if (reuseSpeculative) this.host.log?.(`[AutoAnswer:simple] reusing the prefetched answer for ${id}`);
@@ -668,13 +926,108 @@ export class SimpleAutoAnswerEngine {
 
     private dropParked(): void { this.parkedAttempt = null; this.clearRetry(); }
 
+    /**
+     * Hand the host the candidate-to-be: the pending finals plus the interim
+     * whose final is still in flight. The final usually adds one word to it, so
+     * work keyed on this text (the query embedding) is reusable ~0.7 s early.
+     */
+    private warmNextCandidate(): void {
+        if (!this.host.warmQuery || !this.host.isMeetingActive()) return;
+        try {
+            const parts = [...this.pending.filter(p => !p.provisional), { text: this.lastInterviewerInterim }];
+            this.host.warmQuery(joinTranscriptParts(parts));
+        } catch { /* an optimisation; never break the pipeline */ }
+    }
+
+    // ── the stall cap (STALL_PROMOTE_MS) ─────────────────────────────────
+
+    private clearStallCap(): void {
+        if (this.stallTimer !== null) { this.clock.clearTimeout(this.stallTimer); this.stallTimer = null; }
+    }
+
+    private armStallCap(): void {
+        this.clearStallCap();
+        const from = Math.max(this.lastInterviewerAt, this.localStopAt);
+        const wait = Math.max(0, from + STALL_PROMOTE_MS - this.clock.now());
+        this.stallTimer = this.clock.setTimeout(() => { this.stallTimer = null; this.promoteStalledInterim(); }, wait);
+    }
+
+    /**
+     * The interim has been frozen STALL_PROMOTE_MS after the speaker stopped:
+     * judge it as if it were the final. Never while they are still talking
+     * (no voice-detector stop since this utterance began, or a start after it).
+     */
+    private promoteStalledInterim(): void {
+        if (!this.host.isEnabled() || !this.host.isMeetingActive()) return;
+        const interim = this.lastInterviewerInterim;
+        if (!interim || interim === this.promotedInterim || this.pending.some(p => p.provisional)) return;
+        if (this.localStopAt === 0) return;
+        if (!this.speechStartsSeen && this.localStopAt < this.utteranceStartAt) return;
+        const now = this.clock.now();
+        const frozenFor = now - Math.max(this.lastInterviewerAt, this.localStopAt);
+        if (frozenFor < STALL_PROMOTE_MS) { this.armStallCap(); return; }
+        this.pending.push({ text: interim, at: this.lastInterviewerAt, provisional: true });
+        this.promotedInterim = interim;
+        this.host.log?.(`[AutoAnswer:simple] transcript stalled ${now - this.lastInterviewerAt}ms after the speaker stopped: judging the last interim`);
+        this.host.logContent?.('stalled interim promoted', interim);
+        this.disarm();
+        this.onStoppage(false);
+    }
+
+    /** Take the stand-in out of the candidate (the transcript moved, or the final said something else). */
+    private dropProvisional(): void {
+        const i = this.pending.findIndex(p => p.provisional);
+        if (i < 0) return;
+        this.pending.splice(i, 1);
+        this.judgedParts = Math.min(this.judgedParts, this.pending.length);
+    }
+
+    /**
+     * A final arrived after its interim was promoted. If it is the same
+     * utterance, it takes the stand-in's place without superseding the verdict
+     * already given or in flight (that verdict was about these words), and if
+     * the stand-in was already answered, it is not answered twice. Returns true
+     * when the final was absorbed.
+     */
+    private absorbStalledFinal(text: string, now: number, speaker: string | undefined): boolean {
+        const answered = this.stallAnswered;
+        this.stallAnswered = null;
+        const i = this.pending.findIndex(p => p.provisional);
+        if (i >= 0) {
+            if (!isSameUtterance(this.pending[i].text, text)) { this.dropProvisional(); return false; }
+            const before = normalizeForCompare(joinTranscriptParts(this.pending));
+            this.pending[i] = { text, at: this.pending[i].at, speaker };
+            const after = normalizeForCompare(joinTranscriptParts(this.pending));
+            this.lastInterviewerInterim = '';
+            if (this.held?.key === before) this.held.key = after;
+            if (this.lastJudgedKey === before) this.lastJudgedKey = after;
+            // Not judged (or its judge failed, or it was incomplete): judge the real words now.
+            else this.arm(ENDPOINT_CONFIRM_MS);
+            this.host.log?.('[AutoAnswer:simple] the stalled final arrived: it replaces the promoted interim');
+            return true;
+        }
+        if (answered && now - answered.at <= STALL_ANSWERED_TTL_MS && isSameUtterance(answered.text, text)) {
+            this.lastInterviewerInterim = '';
+            this.host.log?.('[AutoAnswer:simple] the stalled final arrived after its interim was answered: not answering it again');
+            return true;
+        }
+        return false;
+    }
+
     private reset(): void {
         this.disarm();
         this.dropParked();
         this.clearFeedback();
         this.pending = [];
+        this.judgedParts = 0;
         this.lastInterviewerInterim = '';
         this.lastInterviewerAt = 0;
+        this.utteranceStartAt = 0;
+        this.localStopAt = 0;
+        this.clearStallCap();
+        this.stallAnswered = null;
+        this.promotedInterim = null;
+        this.speechStartsSeen = false;
         this.speakerByTurn.clear();
         this.lastJudgedKey = '';
         this.lastAnsweredText = null;

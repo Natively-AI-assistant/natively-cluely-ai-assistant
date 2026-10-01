@@ -4,6 +4,7 @@ import { RU_GENERATED2 } from './i18n.ru.generated2';
 import { ZH_GENERATED } from './i18n.zh.generated';
 import { JA_GENERATED } from './i18n.ja.generated';
 import { ES_GENERATED } from './i18n.es.generated';
+import { ONBOARDING_RU, ONBOARDING_ZH, ONBOARDING_JA, ONBOARDING_ES } from './i18n.onboarding';
 
 // ─── Lightweight in-house i18n ────────────────────────────────────────────────
 // No external dependency. `t(englishText)` returns the translation for the
@@ -22,6 +23,17 @@ export type Lang = 'en' | 'ru' | 'zh' | 'ja' | 'es';
 const STORAGE_KEY = 'natively_lang';
 const SUPPORTED_LANGS: Lang[] = ['en', 'ru', 'zh', 'ja', 'es'];
 
+// Each language named in itself, never passed through t(): a language picker
+// must read the same in every interface language, or someone who switched to
+// Russian by mistake has to find "English" spelled as «Английский».
+export const LANG_NATIVE_NAMES: Record<Lang, string> = {
+    en: 'English',
+    ru: 'Русский',
+    zh: '中文',
+    ja: '日本語',
+    es: 'Español',
+};
+
 function isSupportedLang(v: string | null): v is Lang {
     return v !== null && (SUPPORTED_LANGS as string[]).includes(v);
 }
@@ -34,6 +46,7 @@ function isSupportedLang(v: string | null): v is Lang {
 const RU: Record<string, string> = {
     ...RU_GENERATED,
     ...RU_GENERATED2,
+    ...ONBOARDING_RU,
     // ── Settings sidebar / navigation ──
     'General': 'Основные',
     'AI Providers': 'AI-провайдеры',
@@ -153,6 +166,7 @@ const RU: Record<string, string> = {
     'Transcript': 'Транскрипт',
     'Risks / Blockers': 'Риски / Блокеры',
     'Follow-up draft': 'Черновик письма',
+    'Follow-up email': 'Письмо по итогам встречи',
     'Follow-up Draft': 'Черновик письма',
     'Next Steps': 'Следующие шаги',
     'Coaching': 'Коучинг',
@@ -259,7 +273,7 @@ const RU: Record<string, string> = {
     'When enabled, live assistance works but transcripts, summaries, and history are discarded when the meeting ends':
         'Когда включено, живая помощь работает, но транскрипты, резюме и история удаляются по завершении встречи',
     'Do not save meetings': 'Не сохранять встречи',
-    'Verbose debug logging': 'Подробное журналирование',
+    'Debug logging': 'Отладочное журналирование',
     'Print detailed audio, STT, and pipeline diagnostics': 'Выводить подробную диагностику звука, STT и пайплайна',
     'Interviewer Transcript': 'Транскрипт интервьюера',
     'Show real-time transcription of the interviewer': 'Показывать транскрипцию интервьюера в реальном времени',
@@ -271,6 +285,7 @@ const RU: Record<string, string> = {
 // Chinese — ZH_GENERATED spread first, then hand-authored overrides on any collision.
 const ZH: Record<string, string> = {
     ...ZH_GENERATED,
+    ...ONBOARDING_ZH,
     'Language': '语言',
     'English': '英语',
     'Russian': '俄语',
@@ -298,6 +313,7 @@ const ZH: Record<string, string> = {
 // overrides win on any key collision.
 const JA: Record<string, string> = {
     ...JA_GENERATED,
+    ...ONBOARDING_JA,
     'Language': '言語',
     'English': '英語',
     'Russian': 'ロシア語',
@@ -324,6 +340,7 @@ const JA: Record<string, string> = {
 // Spanish — ES_GENERATED spread first, then hand-authored overrides on any collision.
 const ES: Record<string, string> = {
     ...ES_GENERATED,
+    ...ONBOARDING_ES,
     'Language': 'Idioma',
     'English': 'Inglés',
     'Russian': 'Ruso',

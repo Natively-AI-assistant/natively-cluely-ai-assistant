@@ -85,12 +85,14 @@ export class LongTermMemoryService {
   async recallRelevantMemory(
     query: string,
     scope: MemoryScope,
-    options: { timeoutMs?: number; maxResults?: number } = {},
+    options: { timeoutMs?: number; maxResults?: number; includeProvenance?: boolean } = {},
   ): Promise<RecalledMemory[]> {
     try {
       return await this.provider.recall(query, scope, {
         timeoutMs: options.timeoutMs ?? 800,
         maxResults: options.maxResults ?? 8,
+        // Only when asked — existing callers send exactly the options they always did.
+        ...(options.includeProvenance ? { includeProvenance: true } : {}),
       });
     } catch {
       return [];

@@ -171,6 +171,11 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly Codex
   ['gpt-5.2',          ['none', 'low', 'medium', 'high', 'xhigh']],
   ['gpt-5.4',          ['none', 'low', 'medium', 'high', 'xhigh']],
   ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
+  // gpt-5.6 (sol/terra/luna) and gpt-6 (astra). Without these, 'gpt-5.6-terra'
+  // longest-matched bare 'gpt-5' and an xhigh pick was silently sent as low
+  // (issue #573). `none` is left out until a live request proves it.
+  ['gpt-5.6',          ['low', 'medium', 'high', 'xhigh']],
+  ['gpt-6',            ['low', 'medium', 'high', 'xhigh']],
   // codex variants — `none` not supported; `xhigh` only on 5.2-codex+.
   ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
   ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],
@@ -226,7 +231,6 @@ export interface CodexCliConfig {
    */
   path: string;
   model: string;
-  fastModel: string;
   timeoutMs: number;
   /** @deprecated Ignored — Codex CLI sandbox flags don't apply to HTTP. */
   sandboxMode: CodexSandboxMode;
@@ -260,14 +264,13 @@ export interface CodexCliRunOptions {
 
 // Defaults must work with a ChatGPT sign-in (issue #558: the previous
 // gpt-5.4 / gpt-5.3-codex pair is now rejected — see
-// CHATGPT_UNSUPPORTED_CODEX_MODELS). gpt-5.5 for both: live on 2026-09-11 it had
+// CHATGPT_UNSUPPORTED_CODEX_MODELS). gpt-5.5: live on 2026-09-11 it had
 // the lowest and steadiest time-to-first-token of the models that work
 // (~1.7-2.0s vs 3-10s for gpt-5.6-terra / gpt-5.6-luna).
 export const DEFAULT_CODEX_CLI_CONFIG: CodexCliConfig = {
   enabled: false,
   path: 'codex', // deprecated — kept so older settings round-trip without resetting
   model: 'gpt-5.5',
-  fastModel: 'gpt-5.5',
   timeoutMs: 60_000,
   sandboxMode: 'read-only', // deprecated
   serviceTier: 'default',
@@ -374,7 +377,6 @@ export class CodexCliService {
       // may still display it). New HTTP-direct code does not use it.
       path: (config.path || DEFAULT_CODEX_CLI_CONFIG.path).trim() || DEFAULT_CODEX_CLI_CONFIG.path,
       model: modelName,
-      fastModel: chatGptCompatibleModel(config.fastModel, DEFAULT_CODEX_CLI_CONFIG.fastModel),
       timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_CODEX_CLI_CONFIG.timeoutMs,
       sandboxMode,
       serviceTier,

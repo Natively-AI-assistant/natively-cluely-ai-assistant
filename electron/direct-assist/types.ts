@@ -14,6 +14,7 @@ export const DIRECT_ASSIST_PROVIDERS = [
   'nvidia_nim',
   'openrouter',
   'fluxion',
+  'agentrouter',
   'litellm',
   'ninerouter',
   'ollama',

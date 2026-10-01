@@ -1,0 +1,53 @@
+{
+  "natively": {
+    "google-islands.json": {
+      "n": 12,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "google-mock-interview.json": {
+      "n": 44,
+      "fp": 1,
+      "fn": 0,
+      "precision": 0.75,
+      "recall": 1.0
+    },
+    "live-tech-interview-followups.json": {
+      "n": 19,
+      "fp": 1,
+      "fn": 0,
+      "precision": 0.857,
+      "recall": 1.0
+    },
+    "senior-swe-strings.json": {
+      "n": 15,
+      "fp": 1,
+      "fn": 0,
+      "precision": 0.75,
+      "recall": 1.0
+    },
+    "system-design-leetcode.json": {
+      "n": 21,
+      "fp": 1,
+      "fn": 0,
+      "precision": 0.8,
+      "recall": 1.0
+    },
+    "team-meet-lecture-named.json": {
+      "n": 22,
+      "fp": 1,
+      "fn": 0,
+      "precision": 0.917,
+      "recall": 1.0
+    },
+    "wordle-coding-round.json": {
+      "n": 54,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    }
+  }
+}

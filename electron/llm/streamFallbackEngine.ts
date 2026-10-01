@@ -153,11 +153,33 @@ export interface FallbackHooks {
    * ModelVersionManager.
    */
   onModelGone?: (providerId: string, providerName: string, err: any) => void;
+  /** A provider refused the image as unsupported. Notification only. */
+  onNoVision?: (providerId: string, providerName: string, err: any) => void;
   /** Called immediately before a rung is opened, with its 1-based attempt.
    *  Lets a caller narrate the walk (Direct Assist turns the first open of a
    *  NEW rung into a provider_switch event) without the engine knowing what an
    *  event is. */
   onRungOpen?: (providerId: string, attempt: number) => void;
+}
+
+// Image-specific refusals: "this model cannot see images", from a real provider
+// or in Natively's own wording. Nothing generic ("does not support", "404")
+// belongs here: `does not support streaming` and a retired-model 404 are not
+// about images. Defined in this file because the engine takes no imports; the
+// one-time vision test (visionProbeOutcome.ts) reads the same list from here.
+const IMAGE_REFUSAL_PATTERNS: readonly RegExp[] = [
+  /support(?:s)? image input/,                                   // OpenRouter: "No endpoints found that support image input"
+  /does(?: not|n't) support (?:image|vision)/,                   // "does not support image input", "doesn't support vision"
+  /image_url is only supported/,                                 // OpenAI
+  /images?(?: input| inputs)? (?:is|are)(?: not|n't) supported/, // "images are not supported", "image input is not supported"
+  /images? not supported/,
+  /\bno vision\b/,
+  /vision is not/,
+];
+
+export function isImageRefusalMessage(message: string): boolean {
+  const m = String(message || '').toLowerCase();
+  return m.length > 0 && IMAGE_REFUSAL_PATTERNS.some((re) => re.test(m));
 }
 
 /**
@@ -174,6 +196,21 @@ export function classifyStreamError(err: any, timedOut: boolean): StreamErrorCla
     msg.includes('api key') || msg.includes('api_key') || msg.includes('invalid_api') ||
     msg.includes('expired') || msg.includes('quota') || msg.includes('insufficient_quota')
   ) return 'auth';
+  // Billing / credit exhaustion. OpenAI now says "429 You have no credits
+  // remaining" (no "quota"), which read as a rate limit: a key with no credits
+  // was retried three times with backoff before the chain moved on, ~13 s on
+  // the first screenshot or photo of a session and again after every cooldown
+  // (2026-09-27). It will not self-heal. This engine stays import-free, so this
+  // is a copy of the billing branch of providerErrorClassifier's
+  // isPermanentKeyError; NoCreditsIsNotARateLimit2026_09_27 keeps them agreeing.
+  if (
+    status === 402 || /\b402\b/.test(msg) ||
+    /billing|insufficient[_ ]?(?:credit|quota|funds)|no credits?|out of credits?|payment required|account.*(?:suspend|disabled|deactivat)|failed_precondition.*billing/.test(msg)
+  ) return 'auth';
+  // An image-specific refusal means "this model can't see", whatever status
+  // carries it (2026-10-01). OpenRouter sends it as a 404, which the block
+  // below read as a retired model: demoted for 24 h and discovery triggered.
+  if (isImageRefusalMessage(msg)) return 'no_vision';
   // AFTER auth, deliberately: a 403 that also happens to mention a model name
   // is a credentials problem, and demoting the provider for 24h would be the
   // wrong remedy. The observed Groq body carries none of the auth tokens
@@ -471,6 +508,7 @@ export async function* runStreamingFallback(
   const log = hooks.log ?? (() => { });
   const warn = hooks.warn ?? (() => { });
   const onModelGone = hooks.onModelGone ?? (() => { });
+  const onNoVision = hooks.onNoVision ?? (() => { });
   const onRungOpen = hooks.onRungOpen ?? (() => { });
   const sleep = hooks.sleep ?? ((ms: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
     const t = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
@@ -657,6 +695,7 @@ export async function* runStreamingFallback(
           markUnhealthy(health, provider.id, cfg.authCooldownMs, now());
           providerFatal = true;
         } else if (cls === 'no_vision' || cls === 'payload') {
+          if (cls === 'no_vision') { try { onNoVision(provider.id, provider.name, err); } catch { /* notification only */ } }
           // Structurally incompatible with this image — retrying won't help, and
           // demote it so it isn't tried first on the next request either.
           markUnhealthy(health, provider.id, cfg.incompatibleCooldownMs, now());

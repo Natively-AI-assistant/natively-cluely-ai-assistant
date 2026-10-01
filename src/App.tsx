@@ -16,7 +16,6 @@ import { FreeTrialBanner }      from "./components/trial/FreeTrialBanner"
 import type { TrialUsage, TrialLimits } from './types/nativelyUsage';
 import { FreeTrialModal }       from "./components/trial/FreeTrialModal"
 import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrchestratorUserState, emitOrchestratorEvent } from "./components/onboarding/OrchestratedToasterHost"
-import ReviewPromptHost from "./components/ReviewPromptHost"
 // NOTE: explicit `.ts` extension is load-bearing. Vite's default resolver
 // tries `.mjs` before `.ts` (see DEFAULT_EXTENSIONS in vite/dist/node/constants.js),
 // and this directory also has an `orchestrator.mjs` companion (kept for
@@ -31,50 +30,31 @@ import ReviewPromptHost from "./components/ReviewPromptHost"
 // the extension.
 import { getOrchestrator } from "./lib/onboarding/orchestrator.ts"
 import { isInternalCaptureDevice } from "../electron/audio/audioDeviceSelection.mjs"
-import { AlertCircle, RefreshCw } from "lucide-react"
+import { ProviderChangeNotice, type EmbeddingDegradedNotice } from "./components/ProviderChangeNotice"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
+import { permissionsNeedAttention } from './lib/permissionAttentionPolicy.mjs'
+import { collectRendererLegacy } from './lib/cards/rendererLegacy.mjs'
+import { resetRendererTrialClaim } from './lib/trialCampaign.mjs'
+import { cardInputsFromSources } from './lib/cards/cardInputs.mjs'
+import { forcedCardFromQuery } from './lib/onboarding/devOverrides.ts'
 import { isMac } from "./utils/platformUtils"
 import { trackAppOpen } from "./lib/toasterGating"
-import {
-  JDAwarenessToaster,
-  ProfileFeatureToaster,
-  PremiumPromoToaster,
-  RemoteCampaignToaster,
-  PremiumUpgradeModal,
-  NativelyApiPromoToaster,
-  MaxUltraUpgradeToaster,
-  useAdCampaigns
-} from './premium'
+import { PREMIUM_ADS_AVAILABLE } from './premium'
 import { analytics } from "./lib/analytics/analytics.service"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import ModesSettings from "./components/settings/ModesSettings"
+import { GenieModal } from "./components/ui/GenieModal"
+import { GENIE_CLOSE_MS } from "./components/onboarding/useGenieCard"
 import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
+import { useResolvedTheme } from "./hooks/useResolvedTheme"
+import { WelcomeFlow } from "./components/onboarding/WelcomeFlow"
+import { shouldShowWelcome, hasOnboardingHistory, WELCOME_SEEN_KEY, LEGACY_PERMS_SHOWN_KEY, ONBOARDING_STATE_KEY } from "./lib/onboarding/welcomeGate.mjs"
 
+// How often the launcher may re-read the card inputs when it regains focus
+// (main caches /usage for 60 s; toaster policy §6 row 18).
+const CARD_INPUTS_FOCUS_REFRESH_MS = 5 * 60_000;
 
-// DEV-ONLY: should the launcher mount an uncontrolled ReviewPromptHost?
-// Mirrors ReviewPromptHost.tsx's isDevForceShow() so a developer running
-// the real onboarding funnel is not forced into the review modal every
-// reload. Production builds are unconditionally false.
-function shouldMountDevReviewHost(): boolean {
-  try {
-    if (typeof window === 'undefined') return false
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dev: boolean = !!(import.meta as any)?.env?.DEV
-    if (!dev) return false
-    const params = new URLSearchParams(window.location?.search || '')
-    const explicit = params.get('review')
-    if (explicit === 'off') return false
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any
-    if (w.__reviewForceShow === false) return false
-    // Dev default ON. Developers who want to test the real funnel append
-    // ?review=off or set window.__reviewForceShow = false.
-    return true
-  } catch {
-    return false
-  }
-}
 
 const queryClient = new QueryClient()
 const CropperWindow = React.lazy(() => import('./components/Cropper'))
@@ -85,6 +65,10 @@ type ManagerPanel = 'modes' | 'profile' | null
 type ManagerPanelDirection = 'forward' | 'backward'
 
 const MANAGER_EASE = [0.22, 0.61, 0.36, 1] as const
+// The manager card's drop shadow (.manager-panel-shell in index.css), carried
+// by GenieModal's stand-in while the card is mid-genie.
+const MANAGER_SHADOW_DARK = '0 24px 64px -24px rgba(0,0,0,0.72), 0 8px 24px -16px rgba(0,0,0,0.5)'
+const MANAGER_SHADOW_LIGHT = '0 24px 64px -24px rgba(0,0,0,0.18), 0 8px 24px -16px rgba(0,0,0,0.1)'
 const MANAGER_SHELL_EASE = [0.16, 1, 0.3, 1] as const
 const MANAGER_OPEN_EASE = [0.16, 1, 0.3, 1] as const
 const MANAGER_CLOSE_EASE = [0.3, 0.9, 0.2, 1] as const
@@ -109,6 +93,7 @@ function getLauncherIsolation(): LauncherIsolation {
 }
 
 const App: React.FC = () => {
+  const isLight = useResolvedTheme() === 'light';
   const isSettingsWindow = new URLSearchParams(window.location.search).get('window') === 'settings';
   const isLauncherWindow = new URLSearchParams(window.location.search).get('window') === 'launcher';
   const isOverlayWindow = new URLSearchParams(window.location.search).get('window') === 'overlay';
@@ -184,6 +169,44 @@ const App: React.FC = () => {
   // Memoizing to [] makes the splash timers arm exactly once.
   const dismissStartup = useCallback(() => setShowStartup(false), []);
 
+  // First-launch welcome, shown after the splash and before the launcher on a
+  // fresh install only (src/lib/onboarding/welcomeGate.mjs). null = not decided
+  // yet: the splash holds until it is, because showing the launcher first let
+  // it mount and start the orchestrator's clock, so the permissions card opened
+  // on top of the welcome when the flag read landed after the 2.2s splash (a
+  // busy first boot). WELCOME_DECIDE_TIMEOUT_MS below bounds the wait.
+  const [showWelcome, setShowWelcome] = useState<boolean | null>(null);
+  const readWelcomeLocal = useCallback(() => {
+    try {
+      return {
+        welcomeSeen: localStorage.getItem(WELCOME_SEEN_KEY) === '1',
+        permsShown: localStorage.getItem(LEGACY_PERMS_SHOWN_KEY) === '1',
+        onboarded: hasOnboardingHistory(localStorage.getItem(ONBOARDING_STATE_KEY)),
+      };
+    } catch {
+      // No storage: treat as seen rather than risk showing it every launch.
+      return { welcomeSeen: true, permsShown: false, onboarded: false };
+    }
+  }, []);
+  // Welcome, then the shortcut tour (WelcomeFlow owns the step). Marked seen
+  // only when the tour ends (finished or skipped), so quitting halfway brings
+  // the welcome back.
+  const finishWelcome = useCallback(() => {
+    try { localStorage.setItem(WELCOME_SEEN_KEY, '1'); } catch {}
+    window.electronAPI?.onboardingSetFlag?.('seenStartup', true).catch(() => {});
+    setShowWelcome(false);
+  }, []);
+  // A hung flag read must never trap the user on the splash: decide from the
+  // local mirrors alone. Functional update, so a real answer that already
+  // landed is kept.
+  useEffect(() => {
+    const WELCOME_DECIDE_TIMEOUT_MS = 4000;
+    const t = setTimeout(() => {
+      setShowWelcome(prev => prev ?? shouldShowWelcome(null, readWelcomeLocal()));
+    }, WELCOME_DECIDE_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [readWelcomeLocal]);
+
   /**
    * Tell main the boot reveal has landed, so it can restore background
    * throttling on this window.
@@ -219,10 +242,10 @@ const App: React.FC = () => {
   // during the startup animation or while the main UI is still settling.
   const [showHindsightBanner, setShowHindsightBanner] = useState(false);
   useEffect(() => {
-    if (showStartup) return; // never schedule while startup is up
+    if (showStartup || showWelcome !== false) return; // never schedule while startup or the welcome is up
     const t = setTimeout(() => setShowHindsightBanner(true), 3000);
     return () => clearTimeout(t);
-  }, [showStartup]);
+  }, [showStartup, showWelcome]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   /* Settings deep-link target, plus a sequence number that increments on EVERY
      request even when the tab is unchanged.
@@ -236,6 +259,8 @@ const App: React.FC = () => {
      2026-09-15 before this fix. */
   const [settingsNav, setSettingsNav] = useState<{ tab: string; seq: number }>({ tab: 'general', seq: 0 });
   const [activeManagerPanel, setActiveManagerPanel] = useState<ManagerPanel>(null);
+  const lastManagerPanelRef = useRef<Exclude<ManagerPanel, null>>('modes');
+  if (activeManagerPanel) lastManagerPanelRef.current = activeManagerPanel;
   const [managerPanelDirection, setManagerPanelDirection] = useState<ManagerPanelDirection>('forward');
   const managerDialogRef = useRef<HTMLDivElement>(null);
   const managerOpenerRef = useRef<HTMLElement | null>(null);
@@ -282,35 +307,31 @@ const App: React.FC = () => {
     return () => cancelAnimationFrame(frame);
   }, [activeManagerPanel]);
 
-  useEffect(() => {
-    if (!activeManagerPanel) return;
-    const dialog = managerDialogRef.current;
-    if (!dialog) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return;
-      const focusable = getFocusableElements(dialog);
-      if (focusable.length === 0) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (document.activeElement === dialog) {
-        event.preventDefault();
-        (event.shiftKey ? last : first).focus();
-      } else if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    dialog.addEventListener('keydown', onKeyDown);
-    return () => dialog.removeEventListener('keydown', onKeyDown);
-  }, [activeManagerPanel]);
-  const [showPremiumModal, setShowPremiumModal] = useState(false);
+  // Tab stays inside the manager. A handler on the card rather than an effect
+  // keyed on the panel: the card now mounts a render after the panel is set
+  // (it pours out through GenieModal), so an effect would find no dialog yet.
+  const handleManagerKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab') return;
+    const dialog = event.currentTarget;
+    const focusable = getFocusableElements(dialog);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (document.activeElement === dialog) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }, []);
   const [isPremiumActive, setIsPremiumActive] = useState(false);
   const [hasLoadedLicense, setHasLoadedLicense] = useState(false);
   const [planDetails, setPlanDetails] = useState<{ isPremium: boolean; plan?: string; provider?: string }>({ isPremium: false });
@@ -345,7 +366,14 @@ const App: React.FC = () => {
   const [incompatibleWarning, setIncompatibleWarning] = useState<{count: number; oldProvider: string; newProvider: string} | null>(null);
   // Automatic background re-index progress (fired after an embedding-model upgrade).
   const [reindexProgress, setReindexProgress] = useState<{done: number; total: number} | null>(null);
-  
+  // Re-index was asked for and its first progress event has not arrived yet:
+  // the card shows 0 of the warning's count meanwhile instead of closing.
+  const [reindexPending, setReindexPending] = useState<number | null>(null);
+  const reindexShown = reindexProgress ?? (reindexPending != null ? { done: 0, total: reindexPending } : null);
+  // Semantic search fell back to another embedding provider, or its space
+  // could not be saved. Shown for a few seconds in the corner notice.
+  const [embeddingNotice, setEmbeddingNotice] = useState<EmbeddingDegradedNotice | null>(null);
+
   // API check
   const [hasNativelyApi, setHasNativelyApi] = useState<boolean>(false);
 
@@ -359,32 +387,23 @@ const App: React.FC = () => {
     /** Carried from /v1/trial/status so the banner does not hardcode allowances. */
     limits?: TrialLimits;
   } | null>(null);
-  const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(false);
+  // Dev-only: `?forceTrialEnded=1` opens the end-of-trial card for a design check.
+  const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(() =>
+    import.meta.env.DEV && new URLSearchParams(window.location.search).has('forceTrialEnded')
+  );
+  // The card is due (expired at launch) but still inside its 10 s delay: it
+  // already owns the card slot, so no other card can open under it.
+  const [trialEndedDue, setTrialEndedDue] = useState(false);
+  // 0:00 on the banner: settle the expiry from the LOCAL clock and open the
+  // card at once, offline included, instead of waiting for the next poll
+  // (toaster policy §5 row 2).
+  const handleTrialClockExpired = useCallback(() => {
+    window.electronAPI?.getLocalTrial?.().then((local: any) => {
+      if (local?.showEndedCard) { setActiveTrial(null); setShowTrialExpiredModal(true); }
+    }).catch(() => {});
+  }, []);
 
   const isManagerOpen = activeManagerPanel !== null;
-  const managerBackdropVariants = {
-    initial: { opacity: 0 },
-    animate: reduceManagerMotion
-      ? { opacity: 1, transition: { duration: 0 } }
-      : { opacity: 1, transition: { duration: 0.34, ease: MANAGER_EASE } },
-    exit: reduceManagerMotion
-      ? { opacity: 0, transition: { duration: 0 } }
-      : { opacity: 0, transition: { duration: 0.18, ease: MANAGER_EASE } },
-  };
-  const managerCardTransition = reduceManagerMotion
-    ? { duration: 0 }
-    : { type: 'spring' as const, stiffness: 260, damping: 28, mass: 1 };
-  const managerCardVariants = {
-    initial: reduceManagerMotion
-      ? { opacity: 0 }
-      : { opacity: 0, scale: 0.92, y: 28 },
-    animate: reduceManagerMotion
-      ? { opacity: 1, transition: { duration: 0 } }
-      : { opacity: 1, scale: 1, y: 0, transition: managerCardTransition },
-    exit: reduceManagerMotion
-      ? { opacity: 0, transition: { duration: 0 } }
-      : { opacity: 0, scale: 0.96, y: 12, transition: { duration: 0.16, ease: MANAGER_EASE } },
-  };
   const managerContentVariants = {
     initial: reduceManagerMotion ? { opacity: 0 } : { opacity: 0, x: 10 },
     animate: reduceManagerMotion
@@ -394,13 +413,8 @@ const App: React.FC = () => {
       ? { opacity: 0, transition: { duration: 0 } }
       : { opacity: 0, x: -6, transition: { duration: 0.14, ease: MANAGER_EASE } },
   };
-  const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && !isSettingsOpen && !isManagerOpen && isLauncherMainView;
+  const isAppReady = !isSettingsWindow && !isOverlayWindow && !isModelSelectorWindow && !showStartup && showWelcome === false && !isSettingsOpen && !isManagerOpen && isLauncherMainView;
 
-  // Gate useAdCampaigns behind orchestrator eligibility. Ads only self-schedule
-  // when (a) the orchestrator is ready (no other toaster active) and (b) the
-  // `ads` stage's prerequisites have been met. We approximate (b) with the
-  // simple "no orchestrated toaster is active" gate — useAdCampaigns has its
-  // own eligibility logic for which ad to show.
   const orch = (isLauncherWindow || isDefault) ? getOrchestrator() : null;
   // Stable subscribe/snapshot refs for useSyncExternalStore — without these,
   // .bind() creates a new function on every render, causing the store to
@@ -414,20 +428,87 @@ const App: React.FC = () => {
     [orch],
   );
   const orchState = useSyncExternalStore(orchSubscribe, orchSnapshot);
-  const orchestratorAllowsAds = orchState
-    ? orchState.activeToasterId === null
-    : false;
+  // ── Card scheduler inputs (toaster policy) ──────────────────────────────
+  // What decides which card is relevant (keys, plan, profile, JD, trial,
+  // extension, quota) is read live and re-read whenever it can have changed;
+  // the card ledger arrives from main and follows every cards:changed.
+  const refreshCardInputsRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!isLauncherWindow && !isDefault) return;
+    const api = window.electronAPI;
+    let disposed = false;
+    // Refreshes overlap (focus, credentials, licence, extension); one carrying
+    // the /usage network call can land after a newer one. Only the latest writes.
+    let refreshSeq = 0;
+    const refresh = async () => {
+      const mine = ++refreshSeq;
+      const [creds, licence, profile, trialLocal, extension] = await Promise.all([
+        api?.getStoredCredentials?.().catch(() => undefined),
+        api?.licenseGetDetails?.().catch(() => undefined),
+        api?.profileGetStatus?.().catch(() => undefined),
+        api?.getLocalTrial?.().catch(() => undefined),
+        api?.phoneMirrorGetInfo?.().catch(() => undefined),
+      ]);
+      const usage = creds?.hasNativelyKey ? await api?.getNativelyUsage?.().catch(() => undefined) : undefined;
+      if (disposed || mine !== refreshSeq) return;
+      setOrchestratorUserState({
+        ...cardInputsFromSources({ creds, licence, profile, trialLocal, extension, usage }),
+        adsAvailable: PREMIUM_ADS_AVAILABLE,
+      });
+    };
+    refreshCardInputsRef.current = () => { void refresh(); };
+    const applyLedger = (ledger: unknown) => {
+      if (!disposed && ledger) setOrchestratorUserState({ cardLedger: ledger as never });
+    };
+    // Hand main this window's pre-ledger card history first (main ignores
+    // every import after the first), then load the ledger. Until it loads, no
+    // card stage shows.
+    let legacy = {};
+    // The trial campaign first: a stale claimed flag would retire the trial promo again.
+    try { resetRendererTrialClaim(localStorage); } catch { /* storage unavailable */ }
+    try { legacy = collectRendererLegacy(localStorage); } catch { /* storage unavailable */ }
+    Promise.resolve(api?.cardsImportLegacy?.(legacy))
+      .catch(() => undefined)
+      .then(() => api?.cardsGet?.())
+      .then((res) => { if (res?.ok) applyLedger(res.ledger); })
+      .catch(() => {});
+    void refresh();
+    const offs = [
+      api?.onCardsChanged?.(applyLedger),
+      api?.onCredentialsChanged?.(() => { void refresh(); }),
+      // Trial start, end and expiry all broadcast credentials-changed too
+      // (syncNativelyModelRuntime), so they need no subscription of their own.
+      api?.onLicenseStatusChanged?.(() => { void refresh(); }),
+      api?.onPhoneMirrorStatus?.(() => { void refresh(); }),
+    ];
+    // Quota climbs during the day: re-read on focus, at most every 5 minutes,
+    // so Max/Ultra can meet a Pro user who crossed 80 % without a relaunch.
+    let lastFocusRefresh = Date.now();
+    const onFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusRefresh < CARD_INPUTS_FOCUS_REFRESH_MS) return;
+      lastFocusRefresh = now;
+      void refresh();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      disposed = true;
+      window.removeEventListener('focus', onFocus);
+      offs.forEach((off) => { try { off?.(); } catch { /* already gone */ } });
+    };
+  }, [isLauncherWindow, isDefault]);
 
-  const { activeAd, dismissAd } = useAdCampaigns(
-    planDetails,
-    hasProfile,
-    isAppReady,
-    appStartTime,
-    lastMeetingEndTime,
-    isProcessingMeeting,
-    hasNativelyApi,
-    orchestratorAllowsAds
-  );
+  // Profile / JD edits happen in the managers and keys in Settings: re-read
+  // the inputs when either closes.
+  useEffect(() => {
+    if (!isSettingsOpen && !isManagerOpen) refreshCardInputsRef.current();
+  }, [isSettingsOpen, isManagerOpen]);
+
+  // The Trial ended card owns the screen while it is open.
+  useEffect(() => {
+    if (!isLauncherWindow && !isDefault) return;
+    setOrchestratorUserState({ trialEndedOpen: showTrialExpiredModal || trialEndedDue });
+  }, [showTrialExpiredModal, trialEndedDue, isLauncherWindow, isDefault]);
 
   // Start the onboarding orchestrator (launcher window only). Stages are
   // registered lazily; the drain loop only runs while foreground + homepage
@@ -439,7 +520,7 @@ const App: React.FC = () => {
     // entirely — no drain loop, no toasters. Lets the same build A/B the
     // orchestrator ON vs OFF to confirm/deny the 2026-07-04 native-leak
     // regression in the field. Remove once the leak fix is field-verified.
-    if (new URLSearchParams(window.location.search).get('noorch') === '1' || isolateOnboarding) {
+    if ((import.meta.env.DEV && new URLSearchParams(window.location.search).get('noorch') === '1') || isolateOnboarding) {
       console.warn(`[LeakTest] onboarding orchestrator disabled (${isolateOnboarding ? 'launcher isolation' : '?noorch=1'})`);
       return;
     }
@@ -460,15 +541,11 @@ const App: React.FC = () => {
       const orch = getOrchestrator();
       orch.start([...STAGES, QUIET_WINDOW_STAGE]);
       stopFn = () => orch.stop();
-      // DEV-ONLY: opt-in flag for review-prompt force-show. We do NOT
-      // mutate orchestrator state on boot — the host file
-      // (ReviewPromptHost.tsx) mounts an uncontrolled <ReviewPromptHost />
-      // whenever `isDevForceShow()` returns true (URL ?review=force, dev
-      // build default, or window.__reviewForceShow toggle). Clobbering
-      // markDismissed() here would silently rewrite every dev user's
-      // persisted onboarding ledger on every reload — defeating the point
-      // of testing the real funnel. Production builds are unaffected
-      // because isDevForceShow() defaults to false.
+      // DEV-only card overrides (?forceCard, ?forceAd, ?review=force,
+      // ?extToaster=force): the card goes through the orchestrator, takes the
+      // one slot like any card, and records no ledger outcome (spec §10).
+      const forced = import.meta.env.DEV ? forcedCardFromQuery(window.location.search, { adsAvailable: PREMIUM_ADS_AVAILABLE }) : null;
+      if (forced) orch.forceCard(forced);
     });
     return () => {
       cancelled = true;
@@ -487,14 +564,24 @@ const App: React.FC = () => {
   }, [isPremiumActive, hasProfile, hasNativelyApi, activeTrial]);
 
   // Pause the orchestrator while a foreground settings surface is open so
-  // toasters never appear over the user's settings interaction.
+  // toasters never appear over the user's settings interaction. On the way
+  // out, resume only once the card has poured back into the slot: a toaster
+  // pouring out of it at the same moment reads as a tangle.
+  const surfaceWasOpenRef = useRef(false);
   useEffect(() => {
     if (!isLauncherWindow && !isDefault) return;
     if (isSettingsOpen || isManagerOpen) {
+      surfaceWasOpenRef.current = true;
       emitOrchestratorEvent({ type: 'launcher:unmounted' });
-    } else {
-      emitOrchestratorEvent({ type: 'launcher:mounted' });
+      return;
     }
+    if (!surfaceWasOpenRef.current) {
+      emitOrchestratorEvent({ type: 'launcher:mounted' });
+      return;
+    }
+    surfaceWasOpenRef.current = false;
+    const t = setTimeout(() => emitOrchestratorEvent({ type: 'launcher:mounted' }), GENIE_CLOSE_MS);
+    return () => clearTimeout(t);
   }, [isSettingsOpen, isManagerOpen, isLauncherWindow, isDefault]);
 
   // Settings keeps priority; the shared manager owns a single Escape path for
@@ -523,14 +610,17 @@ const App: React.FC = () => {
     const fallbackLocal = () => {
       // The classic launch animation is intentionally shown on every launcher
       // startup, matching the older app behavior from 93ee4a21.
+      setShowWelcome(shouldShowWelcome(null, readWelcomeLocal()));
     };
 
     if (window.electronAPI?.onboardingGetFlags) {
       window.electronAPI.onboardingGetFlags()
         .then((flags) => {
           if (flags) {
-            // 1. seenStartup intentionally no longer suppresses the classic
-            // black-logo launch animation; the old app played it every launch.
+            // 1. seenStartup no longer suppresses the classic black-logo launch
+            // animation (the old app played it every launch); it now marks the
+            // first-launch welcome as seen.
+            setShowWelcome(shouldShowWelcome(flags, readWelcomeLocal()));
 
             // 2. seenModesOnboarding
             if (flags.seenModesOnboarding) {
@@ -559,6 +649,12 @@ const App: React.FC = () => {
             // 4. permsShown
             if (flags.permsShown) {
               try { localStorage.setItem('natively_perms_shown_v1', '1'); } catch {}
+              // The orchestrator was told what localStorage said, before this
+              // read landed. localStorage is per origin, so it can be empty
+              // while the profile knows better: `npm run dev:agent` serves the
+              // renderer on a new port every launch. Without this the card
+              // opened on each such launch and said "You're all set".
+              setOrchestratorUserState({ permsShown: true });
             } else {
               try {
                 const localSeen = localStorage.getItem('natively_perms_shown_v1') === '1';
@@ -607,21 +703,21 @@ const App: React.FC = () => {
       .catch(() => {});
 
     // ── Trial: check stored token and start polling if active ──
+    // Only the launcher keeps the trial clock (toaster policy §7.5): App also
+    // mounts in the overlay, and every poll there could settle the expiry too.
+    const ownsTrialClock = isLauncherWindow || isDefault;
     let trialPollId: ReturnType<typeof setInterval> | null = null;
-    let profileWiped = false; // guard: only wipe once per session
+    let trialEndedTimer: ReturnType<typeof setTimeout> | null = null;
     const checkTrial = async () => {
       try {
         const res = await window.electronAPI?.getTrialStatus?.();
         if (!res?.ok) return;
         if (res.expired) {
           setActiveTrial(null);
-          // Auto-wipe profile data the first time expiry is detected so that
-          // resume/JD data doesn't linger in SQLite beyond the trial window.
-          if (!profileWiped) {
-            profileWiped = true;
-            window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
-          }
-          setShowTrialExpiredModal(true);
+          // Main settles the expiry: the profile wipe runs there, once per trial
+          // and never for a licensed user, and main says whether the user still
+          // has to choose (toaster policy Phase 0, settleExpiredTrial).
+          if (res.showEndedCard) setShowTrialExpiredModal(true);
           if (trialPollId) { clearInterval(trialPollId); trialPollId = null; }
         } else {
           setActiveTrial({
@@ -632,16 +728,16 @@ const App: React.FC = () => {
         }
       } catch { /* ignore — non-critical */ }
     };
-    window.electronAPI?.getLocalTrial?.().then((local: any) => {
+    if (ownsTrialClock) window.electronAPI?.getLocalTrial?.().then((local: any) => {
       if (!local?.hasToken) return;
       if (local.expired) {
-        // (expiry branch below)
-        // Already expired at launch — wipe immediately then show modal after a brief delay
-        if (!profileWiped) {
-          profileWiped = true;
-          window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
+        // Already expired at launch. Main has settled it (wiped once if due) and
+        // says whether the user still has to choose; a licence or key replaced
+        // the trial otherwise, and the token is already gone.
+        if (local.showEndedCard) {
+          setTrialEndedDue(true);
+          trialEndedTimer = setTimeout(() => { trialEndedTimer = null; setShowTrialExpiredModal(true); }, 10_000);
         }
-        setTimeout(() => setShowTrialExpiredModal(true), 10_000);
         return;
       }
       // Seed the banner from the LOCAL token before the first poll answers.
@@ -665,38 +761,68 @@ const App: React.FC = () => {
     }).catch(() => {});
 
     // Listen for trial-ended event (emitted by trial:end-byok IPC)
-    const removeTrialListener = window.electronAPI?.onTrialEnded?.(() => {
+    const removeTrialListener = window.electronAPI?.onTrialEnded?.((data) => {
       setActiveTrial(null);
+      // The BYOK exit is announced while its card is still Cleaning up; that
+      // card closes itself once the user leaves "All set". Every other ending
+      // (a licence or key superseded the trial) takes the card away.
+      if (data?.choice !== 'byok') {
+        setShowTrialExpiredModal(false);
+        setTrialEndedDue(false);
+      }
+      if (trialEndedTimer) { clearTimeout(trialEndedTimer); trialEndedTimer = null; }
+      if (trialPollId) { clearInterval(trialPollId); trialPollId = null; }
+    });
+
+    // …and for a trial STARTED mid-session (trial:start IPC). Until this existed
+    // the trial state above was read exactly once, on mount, so pressing Start
+    // anywhere — the settings card or the promo toaster — left this component
+    // believing there was no trial: no countdown banner, and both Pro managers
+    // (Modes, Profile Intelligence) still showing their gate, until a relaunch.
+    const removeTrialStartedListener = window.electronAPI?.onTrialStarted?.((data) => {
+      setActiveTrial({
+        expiresAt: data?.expiresAt ?? '',
+        usage: data?.usage ?? { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
+        limits: data?.limits as TrialLimits | undefined,
+      });
       setShowTrialExpiredModal(false);
+      setTrialEndedDue(false);
+      // Start the status poll if the mount path did not (it only starts one when
+      // a token already existed). Guarded so a re-issue of the same trial — the
+      // API is idempotent per hardware id — cannot leak a second interval, which
+      // would also be the only thing that ever notices this trial expiring.
+      if (ownsTrialClock && !trialPollId) {
+        checkTrial();
+        trialPollId = setInterval(checkTrial, 30_000);
+      }
     });
 
     // ── Onboarding orchestrator — push user-state patches ─────
     // The orchestrator owns scheduling; we just feed it the latest user state.
     if (isLauncherWindow || isDefault) {
-      // Permissions state — first launch vs returning mac with revoked TCC.
+      // Permissions state — first launch, then only when a required permission
+      // needs attention (mac: mic/screen; Windows: mic). See permissionAttentionPolicy.mjs.
       const permsShown = localStorage.getItem('natively_perms_shown_v1') === '1';
       const seenModes = localStorage.getItem('natively_seen_modes_onboarding_v5') === 'true';
       const seenProfile = localStorage.getItem('natively_seen_profile_onboarding_v1') === 'true';
+
+      // Pushed now, not after the check: on macOS the check can take seconds
+      // (the Screen Recording probe races a 5 s deadline) and the card fires
+      // 2 s after the launcher mounts. Waiting left the orchestrator on its
+      // default permsShown=false, so a Mac with everything granted got the
+      // card, which then read the grants itself and said "You're all set".
+      setOrchestratorUserState({ permsShown, seenModesOnboarding: seenModes, seenProfileOnboarding: seenProfile });
 
       const maybeCheck = window.electronAPI?.checkPermissions;
       if (maybeCheck) {
         maybeCheck()
           .then((p) => {
-            const blocked = (s?: string) => s === 'denied' || s === 'restricted';
-            const macTCCBlocked = p?.platform === 'darwin' && (blocked(p.microphone) || blocked(p.screen));
             setOrchestratorUserState({
-              permsShown,
-              macTCCBlocked,
-              seenModesOnboarding: seenModes,
-              seenProfileOnboarding: seenProfile,
+              permissionsNeedAttention: permissionsNeedAttention(p),
               extensionSupported: true, // updated by phoneMirrorGetInfo below
             });
           })
-          .catch(() => {
-            setOrchestratorUserState({ permsShown, seenModesOnboarding: seenModes, seenProfileOnboarding: seenProfile });
-          });
-      } else {
-        setOrchestratorUserState({ permsShown, seenModesOnboarding: seenModes, seenProfileOnboarding: seenProfile });
+          .catch(() => {});
       }
 
       // Donation status (support toaster gate)
@@ -749,9 +875,9 @@ const App: React.FC = () => {
     // 'ollama-error'; nothing consumed them, so the user saw a silent hang
     // (F-119). Reuses the pull-status banner's 'failed' state — declared in
     // the union since day one but never set.
-    // Shared reset timer for the two transient failure notices below. Held in
-    // the effect scope so it can be cleared on unmount and re-armed on a second
-    // notice, rather than leaking one uncancellable timer per event.
+    // Reset timer for the transient failure notice below. Held in the effect
+    // scope so it can be cleared on unmount and re-armed on a second notice,
+    // rather than leaking one uncancellable timer per event.
     let bannerResetTimer: ReturnType<typeof setTimeout> | undefined;
     const showTransientBannerFailure = (message: string) => {
       setOllamaPullStatus('failed');
@@ -780,16 +906,18 @@ const App: React.FC = () => {
     }
 
     // Embedding degradation notices (F-120): a fallback embedding provider or
-    // a failed space persist silently degrades semantic search. Surface via
-    // the same generic status banner the Ollama failure path uses.
+    // a failed space persist silently degrades semantic search. Surfaced in
+    // the corner notice beside the re-index progress, not the launcher's
+    // centre pill: that pill never wraps, so this long a line pushed the
+    // Start Natively button aside. Fallback fires once per meeting, so a burst
+    // re-arms one timer rather than stacking notices.
+    let embeddingNoticeTimer: ReturnType<typeof setTimeout> | undefined;
     let removeEmbeddingDegraded: (() => void) | undefined;
     if (window.electronAPI?.onEmbeddingDegraded) {
       removeEmbeddingDegraded = window.electronAPI.onEmbeddingDegraded((data) => {
-        showTransientBannerFailure(
-          data.kind === 'fallback'
-            ? `Semantic search degraded: switched to fallback embeddings (${data.fallbackProvider ?? 'local'}).`
-            : 'Semantic search may need a re-index: embedding space could not be saved.'
-        );
+        setEmbeddingNotice({ kind: data.kind, fallbackProvider: data.fallbackProvider });
+        if (embeddingNoticeTimer) clearTimeout(embeddingNoticeTimer);
+        embeddingNoticeTimer = setTimeout(() => setEmbeddingNotice(null), 8000);
       });
     }
 
@@ -829,10 +957,13 @@ const App: React.FC = () => {
       // Without this the pending reset can fire after unmount/remount and
       // clobber the banner state of the next mount.
       if (bannerResetTimer) clearTimeout(bannerResetTimer);
+      if (embeddingNoticeTimer) clearTimeout(embeddingNoticeTimer);
       if (removeReindexProgress) removeReindexProgress();
       if (removeLicenseListener) removeLicenseListener();
       if (trialPollId) clearInterval(trialPollId);
+      if (trialEndedTimer) clearTimeout(trialEndedTimer);
       if (removeTrialListener) removeTrialListener();
+      if (removeTrialStartedListener) removeTrialStartedListener();
       if (removeOpenSettingsTab) removeOpenSettingsTab();
     }
   }, []);
@@ -886,14 +1017,25 @@ const App: React.FC = () => {
   // Handlers
   const handleReindex = async () => {
     if (window.electronAPI?.reindexIncompatibleMeetings) {
+      setReindexPending(incompatibleWarning?.count ?? 0);
       setIncompatibleWarning(null);
-      await window.electronAPI.reindexIncompatibleMeetings();
+      try {
+        await window.electronAPI.reindexIncompatibleMeetings();
+      } finally {
+        // Resolves once the re-index is over (or failed to start): from here
+        // the progress events alone keep the card open.
+        setReindexPending(null);
+      }
     }
   };
 
-  const handleStartMeeting = async () => {
+  // `calendar`: a start asked for from a calendar event (Settings › Calendar's
+  // Start Natively), so the session is linked to that event from the first
+  // second rather than matched by time. Guarded because a click handler could
+  // hand this an event object.
+  const handleStartMeeting = async (calendar?: { title: string; calendarEventId: string }) => {
+    const linked = calendar && typeof calendar === 'object' && typeof calendar.calendarEventId === 'string' ? calendar : undefined;
     try {
-      localStorage.setItem('natively_last_meeting_start', Date.now().toString());
       // Self-heal a poisoned preference. Until the picker started filtering
       // them, Natively's own system-audio tap aggregate could be enumerated as
       // an input device (private CoreAudio aggregates are hidden from other
@@ -930,7 +1072,8 @@ const App: React.FC = () => {
       const meetingRetention = await window.electronAPI.getMeetingRetention?.().catch(() => 'forever');
       const result = await window.electronAPI.startMeeting({
         audio: { inputDeviceId, outputDeviceId },
-        doNotPersist: meetingRetention === 'never'
+        doNotPersist: meetingRetention === 'never',
+        ...(linked ? { title: linked.title, calendarEventId: linked.calendarEventId, source: 'calendar' } : {}),
       });
       if (result.success) {
         analytics.trackMeetingStarted();
@@ -946,9 +1089,9 @@ const App: React.FC = () => {
         // deep-links to System Settings. This is the recoverable surface for
         // the "I press Start Natively and nothing happens" report.
         if (result.code === 'mic-permission-denied') {
-          // Route through the orchestrator: mark mac TCC as blocked so the
-          // permissions stage becomes re-eligible.
-          setOrchestratorUserState({ macTCCBlocked: true });
+          // Route through the orchestrator: mark permissions as needing
+          // attention so the permissions stage becomes re-eligible.
+          setOrchestratorUserState({ permissionsNeedAttention: true });
         }
       }
     } catch (err) {
@@ -959,41 +1102,51 @@ const App: React.FC = () => {
       // serialized error .code across ipcRenderer.invoke — keep the recovery
       // working so the denial never regresses to a silent failure.
       if ((err as { code?: string })?.code === 'mic-permission-denied') {
-        setOrchestratorUserState({ macTCCBlocked: true });
+        setOrchestratorUserState({ permissionsNeedAttention: true });
       }
     }
   };
 
-  const handleEndMeeting = () => {
-    console.log("[App.tsx] handleEndMeeting triggered");
+  // Settings › Calendar's "Start Natively" on a meeting: close Settings and
+  // start through the same path as the Launcher's button (saved devices,
+  // retention, the mic-permission recovery), linked to that event. Settings
+  // lives in this renderer, so a DOM event carries it; a running meeting is
+  // left alone, as the Launcher's button does.
+  const startMeetingRef = useRef(handleStartMeeting);
+  startMeetingRef.current = handleStartMeeting;
+  // A notification's Start (a detected call, the calendar reminder) arrives from
+  // main the same way and takes the same path; it may name no event.
+  useEffect(() => {
+    const start = async (req: { title?: string; calendarEventId?: string }, from: string) => {
+      if (await window.electronAPI?.getMeetingActive?.().catch(() => false)) return;
+      setIsSettingsOpen(false);
+      // What the Launcher's button does before it starts one (Launcher.tsx CTA).
+      emitOrchestratorEvent({ type: 'turn:done', surface: 'meeting' });
+      void startMeetingRef.current(typeof req.calendarEventId === 'string' ? { title: String(req.title || ''), calendarEventId: req.calendarEventId } : undefined);
+      analytics.trackCommandExecuted(from);
+    };
+    const onStartForEvent = (e: Event) => {
+      const detail = (e as CustomEvent<{ title?: string; calendarEventId?: string }>).detail;
+      if (!detail || typeof detail.calendarEventId !== 'string') return;
+      void start(detail, 'start_natively_from_calendar');
+    };
+    window.addEventListener('natively:start-meeting-for-event', onStartForEvent);
+    const offRequest = window.electronAPI?.onMeetingStartRequest?.((req) => {
+      void start(req, req.via === 'reminder' ? 'start_natively_from_reminder' : 'start_natively_from_detection');
+    });
+    return () => {
+      window.removeEventListener('natively:start-meeting-for-event', onStartForEvent);
+      offRequest?.();
+    };
+  }, []);
+
+  // The pill's Stop is ended in main (it used to round-trip through this
+  // renderer, so a busy or reloading overlay delayed or dropped it); main then
+  // tells this window the meeting ended. Only the local bookkeeping runs here.
+  const handleMeetingEnded = () => {
+    console.log("[App.tsx] meeting ended from the pill");
     analytics.trackMeetingEnded();
     setIsProcessingMeeting(true);
-
-    // Local bookkeeping that does not depend on the main process.
-    const startStr = localStorage.getItem('natively_last_meeting_start');
-    if (startStr) {
-      const duration = Date.now() - parseInt(startStr, 10);
-      const threshold = import.meta.env.DEV ? 10000 : 180000;
-      if (duration >= threshold) {
-        localStorage.setItem('natively_show_profile_toaster', 'true');
-      }
-      localStorage.removeItem('natively_last_meeting_start');
-    }
-
-    // Fire-and-forget: main's endMeeting() handler now performs the
-    // launcher swap synchronously at the top, BEFORE any blocking audio
-    // teardown. Awaiting here would stall the overlay's React render
-    // loop for the IPC round-trip while libuv-blocking setImmediate
-    // native stops fire on the main process — which is the lag the user
-    // was seeing. The launcher window receives a 'meetings-updated'
-    // event after the BG teardown so its list refreshes on its own.
-    window.electronAPI.endMeeting().catch(err => {
-      console.error("Failed to end meeting:", err);
-      // Belt-and-suspenders: if the IPC itself rejected, the swap may
-      // not have happened — request it manually so the user isn't
-      // stranded on a dead overlay.
-      window.electronAPI.setWindowMode('launcher');
-    });
   };
 
   const interfaceThemeAttribute = meetingInterfaceTheme === 'default' ? undefined : meetingInterfaceTheme;
@@ -1074,7 +1227,7 @@ const App: React.FC = () => {
               >
                 <HindsightStatusBanner />
                 <NativelyInterface
-                  onEndMeeting={handleEndMeeting}
+                  onMeetingEnded={handleMeetingEnded}
                   overlayOpacity={overlayOpacity}
                   interfaceTheme={meetingInterfaceTheme}
                 />
@@ -1105,7 +1258,7 @@ const App: React.FC = () => {
         </div>
       )}
       <AnimatePresence>
-        {showStartup ? (
+        {showStartup || showWelcome === null ? (
           <motion.div
             key="startup"
             className="h-full w-full"
@@ -1114,6 +1267,16 @@ const App: React.FC = () => {
             exit={{ opacity: 0, scale: 1.04, pointerEvents: "none", transition: { duration: 0.55, ease: [0.4, 0, 0.2, 1] } }}
           >
             <StartupSequence onComplete={dismissStartup} />
+          </motion.div>
+        ) : showWelcome ? (
+          <motion.div
+            key="welcome"
+            className="h-full w-full"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } }}
+            exit={{ opacity: 0, scale: 0.99, pointerEvents: "none", transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } }}
+          >
+            <WelcomeFlow onDone={finishWelcome} />
           </motion.div>
         ) : (
           <motion.div
@@ -1150,66 +1313,73 @@ const App: React.FC = () => {
                   initialTabSeq={settingsNav.seq}
                   initialIsPremium={hasLoadedLicense ? isPremiumActive : null}
                   initialHasNativelyKey={hasNativelyApi}
+                  closeInstantly={isManagerOpen}
+                  onOpenModes={openModesExclusive}
+                  onOpenProfile={openProfileExclusive}
                 />
-                <AnimatePresence>
+                {/* Modes and Profile Intelligence share one card, which pours out
+                    of and back into the bottom of the window like every other
+                    popup (GenieModal). The genie is keyed on the manager being
+                    open, not on which panel it shows, so switching panels keeps
+                    its crossfade. Handing over to Settings skips the close: only
+                    the incoming card pours. */}
+                <GenieModal
+                  open={activeManagerPanel !== null}
+                  label="ManagerPanel"
+                  // One picture set per panel. On close the panel is already
+                  // null, so the last one shown names it.
+                  snapshotKey={`manager:${activeManagerPanel ?? lastManagerPanelRef.current}`}
+                  // Profile Intelligence always opens on Identity; Modes opens
+                  // on whichever mode it restores, which the genie remembers.
+                  openingView={(activeManagerPanel ?? lastManagerPanelRef.current) === 'profile' ? 'identity' : undefined}
+                  closeInstantly={isSettingsOpen}
+                  onBackdropClick={closeManagerPanel}
+                  onOpened={() => managerDialogRef.current?.focus()}
+                  backdropClassName={isLight ? 'bg-black/[0.06]' : 'bg-black/60'}
+                  wrapClassName="w-[820px] h-[600px] max-w-[95vw] max-h-[90vh]"
+                  cardRef={managerDialogRef}
+                  cardClassName={`manager-panel-shell rounded-2xl border border-border-muted bg-bg-elevated ${isLight ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_24px_48px_-12px_rgba(0,0,0,0.16),0_8px_16px_-6px_rgba(0,0,0,0.06)]' : 'shadow-2xl'}`}
+                  cardProps={{
+                    'data-testid': 'manager-panel-host',
+                    role: 'dialog',
+                    'aria-modal': true,
+                    'aria-label': activeManagerPanel === 'modes' ? 'Modes Manager' : 'Profile Intelligence',
+                    tabIndex: -1,
+                    onKeyDown: handleManagerKeyDown,
+                  }}
+                  shadow={isLight ? MANAGER_SHADOW_LIGHT : MANAGER_SHADOW_DARK}
+                  radius={16}
+                >
                   {activeManagerPanel && (
+                    <AnimatePresence mode="wait" initial={false}>
                     <motion.div
-                      key="manager-panel"
-                      variants={managerBackdropVariants}
+                      key={activeManagerPanel}
+                      data-testid={`manager-panel-${activeManagerPanel}`}
+                      variants={managerContentVariants}
                       initial="initial"
                       animate="animate"
                       exit="exit"
-                      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-                      onClick={(event) => {
-                        if (event.target !== event.currentTarget) return;
-                        closeManagerPanel();
-                      }}
+                      className="h-full w-full"
                     >
-                      <motion.div
-                        ref={managerDialogRef}
-                        data-testid="manager-panel-host"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label={activeManagerPanel === 'modes' ? 'Modes Manager' : 'Profile Intelligence'}
-                        tabIndex={-1}
-                        variants={managerCardVariants}
-                        onClick={(event) => event.stopPropagation()}
-                        style={{
-                          willChange: 'transform, opacity',
-                          transformOrigin: 'center',
-                        }}
-                        className="manager-panel-shell w-[820px] h-[600px] max-w-[95vw] max-h-[90vh] rounded-2xl overflow-hidden border border-border-muted bg-bg-elevated"
-                      >
-                        <AnimatePresence mode="wait" initial={false}>
-                        <motion.div
-                          key={activeManagerPanel}
-                          data-testid={`manager-panel-${activeManagerPanel}`}
-                          variants={managerContentVariants}
-                          initial="initial"
-                          animate="animate"
-                          exit="exit"
-                          className="h-full w-full"
-                        >
-                          {activeManagerPanel === 'modes' ? (
-                            <ModesSettings
-                              onClose={closeManagerPanel}
-                              isPremium={isPremiumActive}
-                              isLoaded={hasLoadedLicense}
-                              isTrialActive={!!activeTrial}
-                              onOpenNativelyAPI={() => openSettingsExclusive('plans')}
-                            />
-                          ) : (
-                            <ProfileIntelligenceSettings
-                              onClose={closeManagerPanel}
-                              onOpenNativelyAPI={() => openSettingsExclusive('plans')}
-                            />
-                          )}
-                        </motion.div>
-                        </AnimatePresence>
-                      </motion.div>
+                      {activeManagerPanel === 'modes' ? (
+                        <ModesSettings
+                          onClose={closeManagerPanel}
+                          isPremium={isPremiumActive}
+                          isLoaded={hasLoadedLicense}
+                          isTrialActive={!!activeTrial}
+                          onOpenNativelyAPI={() => openSettingsExclusive('plans')}
+                        />
+                      ) : (
+                        <ProfileIntelligenceSettings
+                          onClose={closeManagerPanel}
+                          isTrialActive={!!activeTrial}
+                          onOpenNativelyAPI={() => openSettingsExclusive('plans')}
+                        />
+                      )}
                     </motion.div>
+                    </AnimatePresence>
                   )}
-                </AnimatePresence>
+                </GenieModal>
                 <ToastViewport />
               </ToastProvider>
             </QueryClientProvider>
@@ -1218,97 +1388,28 @@ const App: React.FC = () => {
       </AnimatePresence>
 
 
-      <AnimatePresence>
-        {incompatibleWarning && isDefault && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed bottom-6 right-6 z-50 pointer-events-auto"
-          >
-            <div className="bg-[#1A1A1A] border border-[#ff3333]/30 shadow-2xl rounded-2xl p-5 max-w-[340px] flex flex-col gap-3">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-[#ff3333] shrink-0 mt-0.5" />
-                <div>
-                  <h3 className="text-[#E0E0E0] font-medium text-sm">Provider Changed</h3>
-                  <p className="text-[#A0A0A0] text-xs mt-1 leading-relaxed">
-                    ⚠ {incompatibleWarning.count} meetings used your previous AI provider ({incompatibleWarning.oldProvider}) and won't appear in search results under {incompatibleWarning.newProvider}.
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-2 mt-1 justify-end">
-                <button 
-                  onClick={() => setIncompatibleWarning(null)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#A0A0A0] hover:text-white hover:bg-white/5 transition-colors"
-                >
-                  Dismiss
-                </button>
-                <button 
-                  onClick={handleReindex}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#ff3333]/10 text-[#ff3333] hover:bg-[#ff3333]/20 transition-colors"
-                >
-                  Re-index automatically
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {reindexProgress && isDefault && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed bottom-6 right-6 z-50 pointer-events-auto"
-          >
-            <div className="bg-[#1A1A1A] border border-white/10 shadow-2xl rounded-2xl p-5 max-w-[340px] flex flex-col gap-3">
-              <div className="flex items-start gap-3">
-                <RefreshCw className={`w-5 h-5 text-[#A0A0A0] shrink-0 mt-0.5 ${reindexProgress.done < reindexProgress.total ? 'animate-spin' : ''}`} />
-                <div className="flex-1">
-                  <h3 className="text-[#E0E0E0] font-medium text-sm">
-                    {reindexProgress.done >= reindexProgress.total && reindexProgress.total > 0
-                      ? 'Search index updated'
-                      : 'Updating search index'}
-                  </h3>
-                  <p className="text-[#A0A0A0] text-xs mt-1 leading-relaxed">
-                    {reindexProgress.done >= reindexProgress.total && reindexProgress.total > 0
-                      ? 'Your past conversations are searchable again.'
-                      : `Re-indexing your past conversations for the upgraded AI model… ${reindexProgress.done}/${reindexProgress.total}`}
-                  </p>
-                  {reindexProgress.total > 0 && (
-                    <div className="mt-2 h-1 w-full rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full bg-[#E0E0E0] transition-all duration-500"
-                        style={{ width: `${Math.min(100, Math.round((reindexProgress.done / reindexProgress.total) * 100))}%` }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Provider change, re-index and degraded search: one notice in the bottom-right corner. */}
+      <ProviderChangeNotice
+        open={isDefault && (!!incompatibleWarning || !!reindexShown || !!embeddingNotice)}
+        warning={incompatibleWarning}
+        progress={reindexShown}
+        degraded={embeddingNotice}
+        onDismiss={() => setIncompatibleWarning(null)}
+        onReindex={handleReindex}
+      />
 
       <div data-opacity-preview-surface="">
         {!isolateGlobalSurfaces && <UpdateBanner />}
         {!isolateGlobalSurfaces && <NativelyQuotaBanner />}
 
         {/* Orchestrated onboarding toasters (single-slot, controlled by OnboardingOrchestrator) */}
-        {!isolateOnboarding && (
+        {/* Not under the first-launch welcome: its cards follow Get started. */}
+        {!isolateOnboarding && showWelcome === false && (
           <OrchestratorProvider>
-            <OrchestratedToasterHost />
+            <OrchestratedToasterHost onOpenSettings={openSettingsExclusive} onOpenProfile={openProfileExclusive} />
           </OrchestratorProvider>
         )}
 
-        {/* DEV-ONLY: direct ReviewPromptHost mount for iterating on the modal UX.
-            Gated on import.meta.env.DEV plus the same opt-in flags the host
-            already respects (?review=force, window.__reviewForceShow). When
-            active, this bypasses the orchestrator entirely so the persisted
-            onboarding ledger is not modified. */}
-        {!isolateGlobalSurfaces && shouldMountDevReviewHost() && <ReviewPromptHost />}
 
         {/* Free trial countdown banner — only in launcher window while trial is active */}
         {!isolateGlobalSurfaces && (isLauncherWindow || isDefault) && activeTrial && (
@@ -1317,6 +1418,7 @@ const App: React.FC = () => {
             usage={activeTrial.usage}
             limits={activeTrial.limits}
             onUpgrade={() => openSettingsExclusive('plans')}
+            onExpired={handleTrialClockExpired}
           />
         )}
 
@@ -1324,88 +1426,29 @@ const App: React.FC = () => {
         {!isolateModals && (isLauncherWindow || isDefault) && showTrialExpiredModal && (
           <FreeTrialModal
             usage={activeTrial?.usage ?? { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 }}
-            onByok={async () => {
-              await window.electronAPI?.endTrialByok?.();
+            onByok={async (opts) => {
+              // A wipe that did not finish must not read as "All set": the card
+              // shows the error with Try again (toaster policy §5 row 5). After
+              // repeated failures it may end the trial anyway (opts.force).
+              const res = await window.electronAPI?.endTrialByok?.(opts);
+              if (!res?.success) throw new Error('wipe_failed');
+              return { wipeIncomplete: !!res.wipeIncomplete };
             }}
             onStandard={async () => {
-              // Wipe resume + JD (orchestrator caches + SQLite) before checkout opens
-              await window.electronAPI?.wipeTrialProfileData?.().catch(() => {});
-              // Revert active mode to none — Standard plan has no modes access
+              // The profile wipe already ran once, at expiry (main,
+              // settleExpiredTrial). Standard has no modes access.
               await window.electronAPI?.modesSetActive?.(null).catch(() => {});
             }}
-            onDone={() => {
+            onDone={(reason) => {
               setShowTrialExpiredModal(false);
+              setTrialEndedDue(false);
               setActiveTrial(null);
+              // "Add my keys" after a finished BYOK exit.
+              if (reason === 'byok') openSettingsExclusive('ai-providers');
             }}
           />
         )}
 
-        {/* Ad toasters */}
-        {!isolateModals && isLauncherMainView && !isSettingsOpen && (
-          <NativelyApiPromoToaster
-            isOpen={activeAd === 'natively_api'}
-            onDismiss={() => dismissAd('natively_api')}
-            onOpenSettings={(tab: string) => openSettingsExclusive(tab)}
-          />
-        )}
-        {!isolateModals && isLauncherMainView && (
-          <>
-            <ProfileFeatureToaster
-              isOpen={activeAd === 'profile'}
-              onDismiss={dismissAd}
-              onSetupProfile={() => openProfileExclusive()}
-            />
-            <JDAwarenessToaster
-              isOpen={activeAd === 'jd'}
-              onDismiss={dismissAd}
-              onSetupJD={() => openProfileExclusive()}
-            />
-            <PremiumPromoToaster
-              isOpen={activeAd === 'promo'}
-              onDismiss={dismissAd}
-              onUpgrade={() => {
-                setShowPremiumModal(true);
-              }}
-            />
-            <MaxUltraUpgradeToaster
-              isOpen={activeAd === 'max_ultra_upgrade'}
-              onDismiss={dismissAd}
-              onUpgrade={() => {
-                setShowPremiumModal(true);
-              }}
-            />
-
-            {/* Remote Campaigns Render Logic (Commented out)
-            <RemoteCampaignToaster
-              isOpen={typeof activeAd === 'object' && activeAd !== null}
-              campaign={typeof activeAd === 'object' && activeAd !== null ? activeAd : undefined as any}
-              onDismiss={dismissAd}
-            />
-            */}
-          </>
-        )}
-
-        {!isolateModals && <PremiumUpgradeModal
-          isOpen={showPremiumModal}
-          onClose={() => setShowPremiumModal(false)}
-          isPremium={isPremiumActive}
-          onActivated={() => {
-            setIsPremiumActive(true);
-            // Refresh full plan details after activation so ad targeting reflects the new plan
-            window.electronAPI?.licenseGetDetails?.()
-              .then(d => setPlanDetails(d ?? { isPremium: true }))
-              .catch(() => setPlanDetails({ isPremium: true }));
-            setShowPremiumModal(false);
-            // If user activated during post-trial modal, close it — they have a plan now
-            setShowTrialExpiredModal(false);
-            setActiveTrial(null);
-            // After activation, open settings to Profile Intelligence
-            setTimeout(() => {
-              openProfileExclusive();
-            }, 300);
-          }}
-          onDeactivated={() => { setIsPremiumActive(false); setPlanDetails({ isPremium: false }); }}
-        />}
       </div>
     </div>
     </ErrorBoundary>

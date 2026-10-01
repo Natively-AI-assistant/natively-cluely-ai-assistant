@@ -24,7 +24,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import Module from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const COMPILED = path.resolve(__dirname, '../../../dist-electron/electron/CropperWindowHelper.js');
@@ -59,7 +59,7 @@ Module._load = function patched(request) {
   return origLoad.apply(this, arguments);
 };
 
-const { CropperWindowHelper, buildCropperWindowSettings } = await import(COMPILED);
+const { CropperWindowHelper, buildCropperWindowSettings } = await import(pathToFileURL(COMPILED).href);
 
 // --- platform gate on enableLargerThanScreen -------------------------------
 
@@ -72,8 +72,9 @@ test('darwin gets enableLargerThanScreen (macOS clamps a window to one screen wi
   );
   assert.equal(
     settings.type,
-    'toolbar',
-    'type:toolbar is load-bearing for the macOS NSPanel stealth path and must survive the platform-gate fix',
+    'panel',
+    "macOS cropper must be an NSPanel: Electron ignores 'toolbar' on macOS, and a plain NSWindow only " +
+      'covered fullscreen apps via the activation-policy flip that left duplicate Dock tiles (2026-09-23)',
   );
 });
 

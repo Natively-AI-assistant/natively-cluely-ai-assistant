@@ -1,0 +1,56 @@
+{
+  "run_id": "aq-dev-it6sub",
+  "harness_version": "2.0.0",
+  "partition": "dev",
+  "dataset_sha256": "691eb0063cd66a9c5dc5273b0490241505f79010b330af18a2cbaf9bbb13a707",
+  "dataset_file": "dataset/dev.json",
+  "git_commit": "bb41b031ea8e98da574034bbf4211c169f0c3757",
+  "git_branch": "fix/answer-quality-9modes",
+  "git_dirty": false,
+  "git_dirty_paths": 0,
+  "git_subject": "fix(answers): no narrated ask before the answer (role nouns in the preamble gate; recruiting says only the words)",
+  "shared_checkout": {
+    "path": "/Users/evin/natively-cluely-ai-assistant",
+    "head": "c2a9092c17c894007aa92d40528d616c02e44a52",
+    "branch": "main",
+    "dirty_paths": 39,
+    "note": "not measured: the run used the isolated app_root above"
+  },
+  "app_version": "2.9.1",
+  "app_root": "/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/answer-quality",
+  "started_at": "2026-09-30T05:08:42.082Z",
+  "finished_at": "2026-09-30T05:24:56.845Z",
+  "provider_model_config": {
+    "provider": "gemini",
+    "model": "deepseek-flash",
+    "modelId": "deepseek-flash",
+    "displayName": "deepseek-flash",
+    "isOllama": false
+  },
+  "llm_keys_in_profile": [
+    "deepseek"
+  ],
+  "default_config_before_keys": {
+    "provider": "gemini",
+    "model": "deepseek-flash",
+    "modelId": "deepseek-flash",
+    "displayName": "deepseek-flash",
+    "isOllama": false
+  },
+  "pro_enabled_via_e2e_hook": {
+    "success": true,
+    "pro": true
+  },
+  "os": "Darwin 27.0.0 arm64",
+  "node": "v25.9.0",
+  "warmup_requests": 3,
+  "request_timeout_ms": 90000,
+  "concurrency": 1,
+  "sessions": [
+    {
+      "started_at": "2026-09-30T05:08:42.083Z",
+      "resumed": false,
+      "finished_at": "2026-09-30T05:24:56.845Z"
+    }
+  ]
+}

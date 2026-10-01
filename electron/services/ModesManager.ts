@@ -1,8 +1,9 @@
 import * as crypto from 'crypto';
 import { DatabaseManager } from '../db/DatabaseManager';
 import { isRetrievalFixEnabled } from '../context-intelligence/contracts/retrieval-flags';
+import { isProfileIntelligenceAllowed } from '../context-intelligence/policies/mode-policy-registry';
 import type { EmbeddingPipeline } from '../rag/EmbeddingPipeline';
-import { ModeContextRetriever, type ModeRetrievalOptions, type RetrieveOptions } from './ModeContextRetriever';
+import { ModeContextRetriever, RETRY_ELIGIBLE_INDEX_STATUSES, type ModeRetrievalOptions, type RetrieveOptions } from './ModeContextRetriever';
 import type { ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
 import type { AnswerType } from '../llm/AnswerPlanner';
 import type { ActiveModeInfo } from '../llm/modeProfiles';
@@ -594,16 +595,38 @@ export class ModesManager {
     ]);
 
     /**
+     * May this turn see Profile Intelligence (the user's résumé + target JD)?
+     *
+     * The legacy/fallback answer paths' view of the ONE eligibility rule in
+     * mode-policy-registry (`isProfileIntelligenceAllowed`): true only when the
+     * mode's TEMPLATE opts into profile hydration (looking-for-work,
+     * technical-interview, and custom modes built from them). No active mode →
+     * false. `pinnedModeId` reads the mode the request was planned against,
+     * exactly like the other pinned readers here.
+     */
+    public isProfileIntelligenceAllowedForMode(pinnedModeId?: string): boolean {
+        const mode = this.resolveMode(pinnedModeId);
+        return isProfileIntelligenceAllowed(mode?.templateType ?? null);
+    }
+
+    /**
      * True when the premium knowledge intercept (negotiation coaching, intro
      * shortcut, premium system-prompt/context injection) is contextually
-     * appropriate for the active mode. False for technical-interview, team-
-     * meet, and lecture — modes where premium-flavored interjections overwrite
-     * the user's expected answer. Defaults to true when no mode is active.
+     * appropriate for the active mode.
+     *
+     * Everything the intercept injects is built from the résumé and JD, so it
+     * is first bounded by Profile Intelligence eligibility (2026-09-30): no
+     * active mode, General, Sales, Recruiting and every other mode without
+     * profile hydration are now OUT. This was a blocklist that defaulted open,
+     * which is how a General mode, a phone chat with no mode selected and the
+     * follow-up email received the candidate persona. Within the eligible
+     * modes the blocklist still removes technical-interview, whose answers are
+     * coding/system design (issue #272).
      */
     public isPremiumKnowledgeInterceptAllowed(): boolean {
         const mode = this.getActiveMode();
-        if (!mode) return true;
-        return !ModesManager.PREMIUM_INTERCEPT_INCOMPATIBLE_TEMPLATES.has(mode.templateType);
+        if (!isProfileIntelligenceAllowed(mode?.templateType ?? null)) return false;
+        return !ModesManager.PREMIUM_INTERCEPT_INCOMPATIBLE_TEMPLATES.has(mode!.templateType);
     }
 
     /**
@@ -1216,14 +1239,13 @@ export class ModesManager {
      *  retry-eligible state, so a user with many fully-indexed modes doesn't pay
      *  an O(modes × files) re-scan + per-file indexFile entry on every kick. */
     public async retryAllLexicalOnlyFiles(): Promise<void> {
-        const RETRY_ELIGIBLE = new Set(['lexical_only', 'failed', 'pending']);
         for (const mode of this.getModes()) {
             const files = this.getReferenceFiles(mode.id);
             if (files.length === 0) continue;
             // Cheap status read (no embedding work) gates the expensive retry.
             const hasEligible = files.some(f => {
                 try {
-                    return RETRY_ELIGIBLE.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
+                    return RETRY_ELIGIBLE_INDEX_STATUSES.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
                 } catch {
                     return true; // status lookup failed → let the retry decide
                 }
@@ -1237,14 +1259,13 @@ export class ModesManager {
      *  main process to broadcast 'done' only for modes that were actually
      *  re-indexed (LOW #8), instead of spamming every mode on every kick. */
     public getModesWithRetryEligibleFiles(): string[] {
-        const RETRY_ELIGIBLE = new Set(['lexical_only', 'failed', 'pending']);
         const out: string[] = [];
         for (const mode of this.getModes()) {
             const files = this.getReferenceFiles(mode.id);
             if (files.length === 0) continue;
             const hasEligible = files.some(f => {
                 try {
-                    return RETRY_ELIGIBLE.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
+                    return RETRY_ELIGIBLE_INDEX_STATUSES.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
                 } catch {
                     return true;
                 }
@@ -1374,7 +1395,7 @@ export class ModesManager {
         void (async () => {
             try {
                 const llmHelper = ModesManager.llmHelperForCompiler;
-                if (!llmHelper) return; // compiler not available in this context
+                if (!llmHelper || !llmHelper.hasAnyConfiguredProvider?.()) return; // compiler not available or no provider configured
                 // Scope gate: never call a cloud LLM for prompt compilation when post_call_summary
                 // is denied (the deterministic fallback covers it at summary time).
                 try {
@@ -1405,8 +1426,15 @@ export class ModesManager {
     public compileAllSectionsAsync(modeId: string): void {
         void (async () => {
             try {
+                // Yield one macrotask before reading provider state. Built-in seeding runs inside
+                // AppState.getInstance(), BEFORE loadStoredCredentials() in the same synchronous
+                // stretch of initializeApp, so a packaged build has no keys loaded yet. Checking
+                // now would permanently skip every seeded section for users who DO have keys
+                // (a release that adds a built-in template, an upgrade from before built-ins
+                // existed, or a rebuilt DB whose stored keys survived).
+                await new Promise<void>(resolve => setImmediate(resolve));
                 const llmHelper = ModesManager.llmHelperForCompiler;
-                if (!llmHelper) return;
+                if (!llmHelper || !llmHelper.hasAnyConfiguredProvider?.()) return;
                 try {
                     const { SettingsManager } = require('./SettingsManager');
                     if (SettingsManager.getInstance().get('providerDataScopes')?.post_call_summary === false) return;

@@ -4,8 +4,10 @@ import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, 
 import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
+import { Presence, SettingsMenu, SettingsMotionReady, SwapLabel, useMotionReadyAfter } from './SettingsRow';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToggleInit } from './useToggleInit';
+import { PICKER_LABEL_MAX_CHARS, PICKER_MENU_WIDTH, capPickerLabel } from './SettingsRow';
 import { motion, useReducedMotion } from 'framer-motion';
 
 // Official provider marks, vendored from @lobehub/icons-static-svg v1.94.0 (MIT).
@@ -28,6 +30,8 @@ import {
     WHITE_ON_TRANSPARENT_MARKS,
 } from '../ui/aiProviderMarks';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { AGENTROUTER_REFERRAL_URL, FLUXION_REFERRAL_URL } from '../../lib/partnerLinks';
+import { isKnownFastModel } from '../../lib/fastModelHint.mjs';
 import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -94,21 +98,18 @@ import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
    bring the sheet with it or every .aip-* class silently resolves to nothing.
    Duplicate <style> elements are harmless: identical rules, same cascade. */
 /**
- * The container class for an "Active <thing>" model selector — the control on
- * the right of a hero card.
+ * The container class for a selector on the right of a hero card (Active Model,
+ * Background Model, AI Response Language here; Active Embedding Model, Active
+ * Reranker and the embedding width picker in Retrieval).
  *
- * Defined ONCE because it has to be identical across panels: Retrieval stacks
- * Active Embedding Model directly above Active Reranker, and the two had
- * drifted to 179px and 192px, so their left edges did not line up. The wider
- * of the two is kept — reranker labels ("Voyage Rerank 2.5 Lite") and embedding
- * ids ("lfm-2.5-embedding-350m:free") are both long enough that narrowing would
- * start truncating names that fit today.
- *
- * A selector holding a VALUE rather than a name (the embedding width picker,
- * "3072d") overrides this with its own narrow width — this is the default for
- * the model selectors only.
+ * It fits its content: the picker grows with its label. Active Model and
+ * Background Model fit theirs, never narrower than "Gemini 3.8 Flash"
+ * (ModelSelect minLabel); the others cap theirs at PICKER_LABEL_MAX_CHARS.
+ * shrink-0 keeps the label whole when the
+ * text beside it runs long (Background Model's warning line). The trigger fills
+ * this box, since .aip-select-trigger is width:100%.
  */
-export const AIP_ACTIVE_SELECT_CONTAINER = 'relative min-w-[150px] max-w-[240px] w-full sm:w-48';
+export const AIP_ACTIVE_SELECT_CONTAINER = 'relative shrink-0';
 
 export const AIP_CSS = `
 .aip-root {
@@ -225,6 +226,10 @@ export const AIP_CSS = `
     --aip-dur-travel: 220ms;
 
     --aip-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Codex action buttons (transitions.dev 17 Tooltip) — softer muted tones */
+    --codex-refresh-hover-color: #82b997;
+    --codex-logout-hover-color:  #cc7e7e;
 }
 
 .aip-root[data-theme='light'] {
@@ -294,6 +299,9 @@ export const AIP_CSS = `
     --aip-warn-border:   rgba(161,98,7,0.20);
     --aip-danger-bg:     rgba(239,68,68,0.08);
     --aip-danger-border: rgba(185,28,28,0.20);
+
+    --codex-refresh-hover-color: #3b7754;
+    --codex-logout-hover-color:  #a54848;
 }
 
 /* ── Motion. Two easings: ease-out for everything, spring ONLY for the switch
@@ -303,11 +311,70 @@ export const AIP_CSS = `
 @keyframes aip-check-in { from { opacity:0; transform:scale(0.6); } to { opacity:1; transform:scale(1); } }
 @keyframes aip-shimmer  { 0%,100% { opacity:0.55; } 50% { opacity:1; } }
 
-.aip-panel-fade { animation: aip-fade-up var(--aip-dur-state) var(--aip-ease-out) both; }
+.aip-panel-fade { animation: aip-fade-up var(--aip-dur-state) var(--aip-ease-out) backwards; }
 .aip-spinner    { animation: aip-spin 0.65s linear infinite; }
 .aip-check      { animation: aip-check-in 200ms var(--aip-ease-spring) both; }
 .aip-skeleton   { background: var(--aip-btn-bg); border-radius: var(--aip-r-sm);
                   animation: aip-shimmer 1.4s ease-in-out infinite; }
+
+/* ── Success check (transitions.dev #10) for a Test button's "Passed" tick:
+      fade + rotate upright + blur-in + Y-bob, while the tick's stroke draws.
+      The snippet's 40px bob and 10px blur are tuned for a ~48px icon; this is
+      a 12px glyph inside a 32px button, so both are scaled down or it would
+      fly out of the button. The wrapper mounts with the success render, so the
+      keyframes play once per pass — no reflow trick needed. */
+.aip-root {
+    --check-opacity-dur: 500ms;
+    --check-rotate-dur: 500ms;
+    --check-rotate-from: 80deg;
+    --check-bob-dur: 500ms;
+    --check-y-amount: 6px;
+    --check-blur-dur: 500ms;
+    --check-blur-from: 3px;
+    --check-path-dur: 500ms;
+    --check-path-delay: 80ms;
+    --check-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --check-ease-opacity: cubic-bezier(0.22, 1, 0.36, 1);
+    --check-ease-rotate: cubic-bezier(0.22, 1, 0.36, 1);
+    --check-ease-bob: cubic-bezier(0.34, 1.35, 0.64, 1);
+    --check-ease-path: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.t-success-check {
+    display: inline-block;
+    transform-origin: center;
+    opacity: 0;
+    will-change: transform, opacity, filter;
+}
+.t-success-check svg { display: block; overflow: visible; }
+/* 24 = lucide Check's "M20 6 9 17l-5-5" (15.56 + 7.07 = 22.63), rounded up. */
+.t-success-check svg path {
+    stroke-dasharray: 24;
+    stroke-dashoffset: 24;
+}
+.t-success-check[data-state="in"] {
+    animation:
+        t-check-fade   var(--check-opacity-dur) var(--check-ease-opacity) forwards,
+        t-check-rotate var(--check-rotate-dur)  var(--check-ease-rotate)  forwards,
+        t-check-blur   var(--check-blur-dur)    var(--check-ease-out)     forwards,
+        t-check-bob    var(--check-bob-dur)     var(--check-ease-bob)     forwards;
+}
+.t-success-check[data-state="in"] svg path {
+    animation: t-check-draw var(--check-path-dur) var(--check-ease-path) var(--check-path-delay, 0ms) forwards;
+}
+@keyframes t-check-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes t-check-rotate {
+    from { transform: rotate(var(--check-rotate-from)); }
+    to   { transform: rotate(0deg); }
+}
+@keyframes t-check-blur {
+    from { filter: blur(var(--check-blur-from)); }
+    to   { filter: blur(0); }
+}
+@keyframes t-check-bob {
+    from { translate: 0 var(--check-y-amount); }
+    to   { translate: 0 0; }
+}
+@keyframes t-check-draw { to { stroke-dashoffset: 0; } }
 
 /* ── Dismissal. A one-shot card that disappears on click, without the rest of
       the panel snapping up into the hole it left.
@@ -381,8 +448,12 @@ export const AIP_CSS = `
     border: 1px solid var(--aip-card-border);
     border-radius: var(--aip-r-lg);
     background: var(--aip-card-bg);
+    /* opacity + filter: Fast Response's unavailable dim (opacity-50 grayscale)
+       lifts when a Groq key is saved, instead of snapping to full colour. */
     transition: border-color var(--aip-dur-travel) var(--aip-ease-out),
-                background   var(--aip-dur-travel) var(--aip-ease-out);
+                background   var(--aip-dur-travel) var(--aip-ease-out),
+                opacity      var(--aip-dur-travel) var(--aip-ease-out),
+                filter       var(--aip-dur-travel) var(--aip-ease-out);
 }
 /* NOTE: do not re-add a ".aip-card + .aip-card { margin-top }" rule. Every card stack
    in this file also carries a Tailwind "space-y-*", whose
@@ -452,17 +523,14 @@ export const AIP_CSS = `
    .aip-switch::after, both of which already have a nearer positioned ancestor. */
 .aip-card:has(.aip-float) { position: relative; z-index: 40; }
 
-/* Focus. NOTE: the spec's version also set border-radius here; dropped, because
-   at specificity 0,2,0 it outranks Tailwind's .rounded-* (0,1,0) and every
-   focused control visibly snapped its corners. Chromium's outline already
-   follows the element's own border-radius, so it bought nothing. */
-.aip-root :focus-visible { outline: 2px solid var(--aip-accent); outline-offset: 2px; }
 .aip-root :focus:not(:focus-visible) { outline: none; }
 
 .aip-press, .aip-btn, .aip-chip, .aip-tab {
     transition: background var(--aip-dur-state) var(--aip-ease-out),
                 color var(--aip-dur-state) ease,
                 border-color var(--aip-dur-state) ease,
+                opacity var(--aip-dur-state) var(--aip-ease-out),
+                filter var(--aip-dur-state) var(--aip-ease-out),
                 transform var(--aip-dur-press) var(--aip-ease-out);
 }
 .aip-press:active:not(:disabled),
@@ -566,6 +634,48 @@ export const AIP_CSS = `
 .aip-btn[data-tone='info']:hover:not(:disabled),
 .aip-btn[data-tone='danger']:hover:not(:disabled) { filter: brightness(1.08); }
 
+/* ── Codex action buttons (transitions.dev 17 Tooltip + custom soft colors) ── */
+.aip-btn.aip-codex-action-btn {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    /* transform: the shared press would otherwise snap (this list replaces it). */
+    transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+                transform var(--aip-dur-press) var(--aip-ease-out);
+}
+.aip-btn.aip-codex-action-btn:hover:not(:disabled),
+.aip-btn.aip-codex-action-btn:focus-visible:not(:disabled),
+.aip-btn.aip-codex-action-btn:active:not(:disabled) {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+.t-tt-wrap:hover .aip-codex-refresh-btn:not(:disabled),
+.aip-codex-refresh-btn:focus-visible:not(:disabled) {
+    color: var(--codex-refresh-hover-color) !important;
+}
+.t-tt-wrap:hover .aip-codex-logout-btn:not(:disabled),
+.aip-codex-logout-btn:focus-visible:not(:disabled) {
+    color: var(--codex-logout-hover-color) !important;
+}
+/* Tooltip below the button with muted, understated styling */
+.t-tt-wrap .t-tt {
+    top: calc(100% + 5px);
+    bottom: auto;
+    transform-origin: 50% 0%;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: var(--tt-bg);
+    color: var(--tt-fg);
+    font-size: 10.5px;
+    font-weight: 450;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+    border: 1px solid var(--tt-border);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
 /* ── Chips: DUAL encoding — dashed border off / solid + tinted on — so the
       state survives colour-blindness and greyscale. ───────────────────── */
 /* ── Provider card ───────────────────────────────────────────────────────────
@@ -631,7 +741,8 @@ export const AIP_CSS = `
     font-family:inherit; font-size:12px; font-weight:500; line-height:1;
     white-space:nowrap; cursor:pointer;
     transition: background var(--aip-dur-state) var(--aip-ease-out),
-                color      var(--aip-dur-state) var(--aip-ease-out);
+                color      var(--aip-dur-state) var(--aip-ease-out),
+                opacity    var(--aip-dur-state) var(--aip-ease-out);
 }
 .aip-field-seg:hover:not(:disabled)  { background: var(--aip-btn-bg-hover); }
 .aip-field-seg:active:not(:disabled) { background: var(--aip-item-active); }
@@ -668,7 +779,8 @@ export const AIP_CSS = `
     color: var(--aip-secondary); cursor:pointer; font-family:inherit; text-align:left;
     transition: background var(--aip-dur-state) var(--aip-ease-out),
                 border-color var(--aip-dur-state) var(--aip-ease-out),
-                color var(--aip-dur-state) var(--aip-ease-out);
+                color var(--aip-dur-state) var(--aip-ease-out),
+                transform var(--aip-dur-press) var(--aip-ease-out);
 }
 .aip-models-summary:hover {
     background: var(--aip-item-hover); border-color: var(--aip-border-strong);
@@ -759,6 +871,19 @@ export const AIP_CSS = `
                     visibility:hidden; transition: visibility 0s linear var(--aip-dur-state); }
 .aip-reveal[data-open='true'] > div { visibility:visible; transition-delay:0s; }
 
+/* A card row that appears once there is something for it to do: the Test + Models
+   row a saved key unlocks, and the error note (ProviderCard). The card is a flex
+   column, so its row gap moves INSIDE the clip: the margin cancels the gap while
+   closed and the content's padding restores it, so a closed row costs 0px and an
+   open one exactly the gap it always had. Its content settles like the model list's. */
+.aip-reveal--row { margin-top: calc(-1 * var(--aip-gap-row)); }
+.aip-reveal--row > div > * { padding-top: var(--aip-gap-row); }
+/* Until the panel's stored credentials have loaded, a row that opens is the card
+   loading, not news: it lands without a transition (SettingsMotionReady). */
+.aip-reveal[data-instant='true'],
+.aip-reveal[data-instant='true'] > div,
+.aip-reveal[data-instant='true'] > div > * { transition: none !important; }
+
 /* Content motion, scoped to the model list — AipSelect's listbox is a menu and keeps
    the bare clip. The transform CANNOT go on ".aip-reveal > div": that element carries
    the overflow:hidden, so transforming it would move the clip box with the content and
@@ -768,12 +893,14 @@ export const AIP_CSS = `
    Open: box starts, content follows 60ms later, both land at 220ms — one arrival, not
    two events. Close: content leads and is gone at 110ms, so the descending edge never
    chops through solid rows. */
-.aip-reveal--models > div > * {
+.aip-reveal--models > div > *,
+.aip-reveal--row > div > * {
     opacity:0; transform: translateY(-4px);
     transition: opacity   var(--aip-dur-press) var(--aip-ease-out),
                 transform var(--aip-dur-press) var(--aip-ease-out);
 }
-.aip-reveal--models[data-open='true'] > div > * {
+.aip-reveal--models[data-open='true'] > div > *,
+.aip-reveal--row[data-open='true'] > div > * {
     opacity:1; transform:none;
     transition: opacity   var(--aip-dur-state) var(--aip-ease-out) 60ms,
                 transform var(--aip-dur-state) var(--aip-ease-out) 60ms;
@@ -929,7 +1056,8 @@ select.aip-input { cursor:pointer; }
     border:1px solid var(--aip-btn-border); color: var(--aip-primary);
     font-size:12px; line-height:1; text-align:left; cursor:pointer;
     transition: background var(--aip-dur-state) var(--aip-ease-out),
-                border-color var(--aip-dur-state) var(--aip-ease-out);
+                border-color var(--aip-dur-state) var(--aip-ease-out),
+                opacity var(--aip-dur-state) var(--aip-ease-out);
 }
 .aip-select-trigger:hover { background: var(--aip-btn-bg-hover); }
 .aip-select-trigger[aria-disabled='true'] { cursor:default; }
@@ -937,6 +1065,22 @@ select.aip-input { cursor:pointer; }
 .aip-select-chevron { color: var(--aip-secondary); flex-shrink:0;
                       transition: transform var(--aip-dur-state) var(--aip-ease-out); }
 .aip-select-trigger[aria-expanded='true'] .aip-select-chevron { transform: rotate(180deg); }
+/* A trigger that fits its label (ModelSelect minLabel). The label slot is given
+   the measured width of a hidden copy of the label stacked on the minLabel text in
+   one grid cell (.aip-select-fit-measure: never narrower than minLabel in the font
+   this platform renders, capped at 15rem, past which the label ellipsizes), and
+   eases to it: a resize, so --duration-fast (250ms) on --ease-smooth-out. The
+   button is width:auto, so it follows the slot frame by frame. The ease is only
+   switched on once the panel is ready (SettingsMotionReady), so the saved pick
+   landing from IPC does not grow the picker in on every visit. */
+.aip-select-trigger.aip-select-trigger--fit { position:relative; width:auto; }
+.aip-select-fit-slot { display:flex; align-items:center; flex:none; min-width:0;
+                       box-sizing:border-box; padding-right:8px; }
+.aip-select-fit-slot[data-animate='true'] { transition: width 250ms cubic-bezier(0.22, 1, 0.36, 1); }
+.aip-select-fit-measure { position:absolute; left:0; top:0; visibility:hidden; pointer-events:none;
+                          white-space:nowrap; overflow:hidden; box-sizing:content-box;
+                          padding-right:8px; max-width:15rem; display:grid; }
+.aip-select-fit-measure > * { grid-area: 1 / 1; justify-self:start; }
 /* The models trigger is not an .aip-select-trigger, so it never matched the rule
    above. It was passing an "is-open" class that has no rule anywhere — the chevron
    has never rotated. Use the ARIA state already on the button.
@@ -954,6 +1098,13 @@ select.aip-input { cursor:pointer; }
 .aip-select-option:hover,
 .aip-select-option[data-active='true'] { background: var(--aip-item-hover); color: var(--aip-primary); }
 .aip-select-option[aria-selected='true'] { background: var(--aip-item-active); color: var(--aip-primary); }
+/* A fitted picker's menu rows (ModelSelect minLabel): one line each, left-aligned,
+   cut with an ellipsis when too long. Only the picked row gives up room for its
+   check, and the 6px gap keeps that at 19px, so a name that fits the trigger fits
+   its own row uncut (the trigger's label column is 50px short of the menu, the
+   picked row's is 45px short). The check used to take 29px and broke the picked
+   name in two. */
+.aip-select-option.aip-select-option--fit { gap:6px; }
 .aip-select-empty { padding:6px 8px; font-size:12px; color: var(--aip-tertiary); }
 
 /* ── Segmented control. Architecture unchanged — still ONE absolutely-positioned
@@ -975,7 +1126,8 @@ select.aip-input { cursor:pointer; }
    transition-duration to 0.01ms !important on every descendant, and a
    non-important shorthand here would lose to it anyway. */
 .aip-tab { color: var(--aip-secondary); background:transparent; cursor:pointer;
-           transition: color 200ms var(--aip-ease-out); }
+           transition: color 200ms var(--aip-ease-out),
+                       transform var(--aip-dur-press) var(--aip-ease-out); }
 /* Inset focus ring. This started as a workaround for the tablist's
    overflow:hidden (which the selection pill's spring overshoot has since forced
    off, see the tablist JSX) and is kept as the deliberate look: the tabs sit
@@ -1041,8 +1193,12 @@ select.aip-input { cursor:pointer; }
     .aip-root .aip-tab:active { transform: none; }
     /* Remove the 4px displacement outright rather than trusting a 0.01ms transition
        to land it. Opacity is left alone: it aids comprehension and carries no motion. */
-    .aip-root .aip-reveal--models > div > * { transform: none !important; }
+    .aip-root .aip-reveal--models > div > *,
+    .aip-root .aip-reveal--row > div > * { transform: none !important; }
     .aip-root .aip-skeleton { animation: none; opacity: 0.55; }
+    /* The success check's own guard: show the finished tick outright. */
+    .aip-root .t-success-check { animation: none !important; opacity: 1; }
+    .aip-root .t-success-check svg path { animation: none !important; stroke-dashoffset: 0 !important; }
 }
 `;
 
@@ -1177,7 +1333,12 @@ export const CLOUD_PROVIDERS = [
     // Also a gateway, but NOT opt-in: 36 models, and its catalogue endpoint is
     // scoped to the key's group. The one provider here with a second required
     // setting — see the protocol selector passed as `extraControls` below.
-    { id: 'fluxion' as const, name: 'Fluxion AI', placeholder: 'sk-...', url: 'https://fluxionai.world' },
+    // Natively's partner link (sponsor): new sign-ups get $3 in API credit.
+    { id: 'fluxion' as const, name: 'Fluxion AI', placeholder: 'sk-...', url: FLUXION_REFERRAL_URL },
+    // A gateway like Fluxion: four models, key-scoped catalogue, NOT opt-in.
+    // Nothing extra to configure — its protocol is chosen per model. "Get API
+    // key" is Natively's own AgentRouter referral link.
+    { id: 'agentrouter' as const, name: 'AgentRouter', placeholder: 'sk-...', url: AGENTROUTER_REFERRAL_URL },
     { id: 'groq'     as const, name: 'Groq',     placeholder: 'gsk_...',    url: 'https://console.groq.com/keys' },
     { id: 'openai'   as const, name: 'OpenAI',   placeholder: 'sk-...',     url: 'https://platform.openai.com/api-keys' },
     { id: 'claude'   as const, name: 'Claude',   placeholder: 'sk-ant-...', url: 'https://console.anthropic.com/settings/keys' },
@@ -1191,6 +1352,79 @@ export const CLOUD_PROVIDERS = [
 export type CloudProviderId = (typeof CLOUD_PROVIDERS)[number]['id'];
 
 export const AIP_PROVIDER_BRANDS = AI_PROVIDER_BRANDS;
+
+/** A note line that opens and closes in place (.aip-reveal) rather than
+    shoving every card below it by a line in one frame. Holds its last text
+    while it closes, so the words don't blank out mid-collapse. Lands without a
+    transition until the panel's credentials have loaded (SettingsMotionReady),
+    since a requirement note resolving then is the panel loading, not news. */
+export const AipRevealNote: React.FC<{ text: string; className: string; role?: 'alert' | 'status' }> = ({ text, className, role }) => {
+    const ready = React.useContext(SettingsMotionReady);
+    const shown = React.useRef(text);
+    if (text) shown.current = text;
+    return (
+        <div className="aip-reveal" data-open={text ? 'true' : 'false'} data-instant={ready ? undefined : 'true'}>
+            <div>
+                <p className={className} role={role}>{shown.current}</p>
+            </div>
+        </div>
+    );
+};
+
+/** A gateway Save button's label: Save / Saving… / Saved swap in place, and the
+    button keeps the widest one's width (SwapLabel), so the Test and Remove
+    buttons beside it no longer shift as it changes. */
+export const AipSaveLabel: React.FC<{ saving: boolean; saved: boolean; dots?: boolean }> = ({ saving, saved, dots }) => {
+    const t = useT();
+    // Two spellings exist as separate i18n keys; `dots` keeps a caller's own.
+    const savingText = dots ? t('Saving...') : t('Saving…');
+    return (
+        <SwapLabel
+            id={saving ? 'saving' : saved ? 'saved' : 'save'}
+            sizers={[
+                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{savingText}</span>,
+                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Saved')}</span>,
+                t('Save'),
+            ]}
+        >
+            {saving
+                ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{savingText}</span>
+                : saved
+                    ? <span className="inline-flex items-center gap-1.5"><Check size={12} strokeWidth={2} className="aip-check" />{t('Saved')}</span>
+                    : t('Save')}
+        </SwapLabel>
+    );
+};
+
+/** A Test Connection label: the four states swap in place, the button keeps
+    the widest one's width (SwapLabel), and Passed draws its tick. */
+export const AipTestLabel: React.FC<{ status: 'idle' | 'testing' | 'success' | 'error' }> = ({ status }) => {
+    const t = useT();
+    return (
+        <SwapLabel
+            id={status}
+            sizers={[
+                t('Test Connection'),
+                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Testing...')}</span>,
+                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Passed')}</span>,
+                <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Error')}</span>,
+            ]}
+        >
+            {status === 'testing' ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{t('Testing...')}</span> :
+                status === 'success' ? <span className="inline-flex items-center gap-1.5"><AipPassedCheck />{t('Passed')}</span> :
+                    status === 'error' ? <span className="inline-flex items-center gap-1.5"><AlertCircle size={12} strokeWidth={1.75} />{t('Error')}</span> :
+                        t('Test Connection')}
+        </SwapLabel>
+    );
+};
+
+/** A Test button's "Passed" tick with the success-check animation. Render it
+    only in the success branch: each mount is one play. */
+export const AipPassedCheck: React.FC = () => (
+    <span className="t-success-check" data-state="in" aria-hidden="true">
+        <Check size={12} strokeWidth={2} />
+    </span>
+);
 
 interface AipMonogramProps {
     /** Two letters. Longer strings are clipped to two. */
@@ -1288,7 +1522,12 @@ export const AipProviderMark: React.FC<AipProviderMarkProps> = ({ provider, name
     );
 };
 
-export interface AipModelEntry { id: string; label: string }
+export interface AipModelEntry {
+    id: string;
+    label: string;
+    /** A short line shown in place of the raw id (speech models: "Fastest"). */
+    description?: string;
+}
 
 interface AipModelListProps {
     /** Presets ∪ persisted catalog. The full universe for this provider. */
@@ -1336,6 +1575,14 @@ interface AipModelListProps {
      * here rather than behind a separate button elsewhere in the card.
      */
     onFirstOpen?: () => void;
+    /**
+     * A provider that runs ONE model at a time (Settings > Audio's speech
+     * providers). There is no allow-list, so a row's tick marks the model in
+     * use and clicking the row — or its Set default — picks it; the count is
+     * just the number of models and the bulk / reset controls are not offered.
+     * Everything else (the summary, the reveal, the row actions) is unchanged.
+     */
+    pickOnly?: boolean;
 }
 
 /** Above this many models, a filter field appears. */
@@ -1360,7 +1607,7 @@ const AIP_MODEL_FILTER_THRESHOLD = 12;
 export const AipModelList: React.FC<AipModelListProps> = ({
     models, enabled, onToggle, onReset, defaultId, onSetDefault, staleIds = [], error,
     onRefresh, refreshing, onFirstOpen, optIn = false, onBulkToggle,
-    catalogIsComplete = false,
+    catalogIsComplete = false, pickOnly = false,
 }) => {
     const t = useT();
     const [open, setOpen] = useState(false);
@@ -1373,7 +1620,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
     const panelId = `${idRef.current}-panel`;
 
     // Opt-in inverts the empty case: nothing is on until it is listed.
-    const isOn = (id: string) => optIn ? enabled.includes(id) : (enabled.length === 0 || enabled.includes(id));
+    const isOn = (id: string) => pickOnly ? id === defaultId : optIn ? enabled.includes(id) : (enabled.length === 0 || enabled.includes(id));
     const enabledCount = (!optIn && enabled.length === 0) ? models.length : enabled.length;
 
     // Threshold keys off the UNFILTERED count. Keying it off visible rows would
@@ -1452,7 +1699,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                 {error
                     ? <AipBadge tone="danger" label={t('Not saved')} />
                     : <span className="aip-count shrink-0" aria-live="polite">
-                        {enabled.length === 0
+                        {pickOnly ? `${models.length}` : enabled.length === 0
                             ? (optIn ? `${t('None selected')} · ${models.length}` : `${t('All')} ${models.length}`)
                             : `${enabledCount} / ${models.length}`}
                       </span>}
@@ -1464,7 +1711,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                 after the trigger it belongs to. */}
             <div className="aip-reveal aip-reveal--models w-full basis-full order-4" data-open={open ? 'true' : 'false'}>
                 <div>
-                    <div id={panelId} role="group" aria-label={t('Models shown in the picker')} className="pt-2" onKeyDown={onListKeyDown}>
+                    <div id={panelId} role="group" aria-label={pickOnly ? t('Models') : t('Models shown in the picker')} className="pt-2" onKeyDown={onListKeyDown}>
                         <div className="flex items-center gap-2 mb-2">
                         {showFilterBar && (
                             <>
@@ -1562,7 +1809,11 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                             tabIndex={i === activeIndex ? 0 : -1}
                                             aria-pressed={on}
                                             aria-disabled={inert || undefined}
-                                            onClick={() => { if (!inert) onToggle(m.id); }}
+                                            onClick={() => {
+                                                if (inert) return;
+                                                if (pickOnly) { if (m.id !== defaultId) onSetDefault?.(m.id); return; }
+                                                onToggle(m.id);
+                                            }}
                                             onFocus={() => setActiveIndex(i)}
                                             title={inert
                                                 ? t('At least one model must stay on. Turn the provider off to hide it entirely.')
@@ -1571,7 +1822,9 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                         >
                                             <Check size={11} strokeWidth={2.5} className="aip-model-check" aria-hidden="true" />
                                             <span className="aip-model-name truncate">{m.label}</span>
-                                            {m.label !== m.id && (
+                                            {m.description ? (
+                                                <span className="aip-model-id truncate">{m.description}</span>
+                                            ) : m.label !== m.id && (
                                                 <span className="aip-model-id aip-mono truncate">{m.id}</span>
                                             )}
                                         </button>
@@ -1826,6 +2079,8 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly strin
     ['gpt-5.2',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.4',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
+    ['gpt-5.6',          ['low', 'medium', 'high', 'xhigh']],
+    ['gpt-6',            ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.3-codex-spark', ['low', 'medium', 'high']],
@@ -1880,12 +2135,86 @@ interface ModelSelectProps {
     onChange: (value: string) => void;
     placeholder?: string;
     className?: string;
+    /** Sizes the picker. The trigger fills this box (.aip-select-trigger is width:100%). */
+    containerClassName?: string;
+    /** Caps the trigger's label at this many characters (see capPickerLabel). */
+    maxLabelChars?: number;
+    /** Sizes the open menu. Defaults to the trigger's width. */
+    menuClassName?: string;
+    /** Makes the trigger fit its label, never narrower than this text renders,
+        growing and shrinking with an ease as the pick changes
+        (.aip-select-trigger--fit). Without it the trigger is a fixed w-40. Pair
+        it with the default menuClassName: the menu is then the trigger's width
+        and a name too long for a row is cut with an ellipsis. */
+    minLabel?: string;
 }
 
-const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, placeholder, className = "" }) => {
+/** The Active Model and Background Model pickers: at least wide enough for this
+    name. Measured, not a ch count: SF Pro and Segoe UI set it at different widths. */
+const HERO_MODEL_PICKER_MIN_LABEL = 'Gemini 3.8 Flash';
+
+/** A fitted picker's label is centred only when it is narrower than the picker's
+    floor by at least this much, in em of its font (30px at 12px). Short of that, a
+    centred name sits a few px in from the left edge and reads as misaligned. */
+const FIT_LABEL_CENTRE_MIN_SPARE_EM = 2.5;
+
+/** A fitted menu row whose name is cut shows the whole name as its tooltip. Set as
+    the pointer arrives: only a laid-out row knows whether it is cut. */
+const showFullNameIfCut = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const row = event.currentTarget;
+    const name = row.firstElementChild;
+    if (!(name instanceof HTMLElement)) return;
+    row.title = name.scrollWidth > name.clientWidth ? name.textContent ?? '' : '';
+};
+
+const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, placeholder, className = "", containerClassName = "relative", maxLabelChars, menuClassName = "w-full", minLabel }) => {
     const t = useT();
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = React.useRef<HTMLDivElement>(null);
+    const fit = minLabel !== undefined;
+    const measureRef = useRef<HTMLSpanElement>(null);
+    const [fitWidth, setFitWidth] = useState<number | null>(null);
+    const [fitTruncated, setFitTruncated] = useState(false);
+    const [fitCentred, setFitCentred] = useState(false);
+    const [fitAnimate, setFitAnimate] = useState(false);
+
+    // The hidden copy re-measures whenever its text or font changes (a new pick,
+    // a language switch, a late webfont). offsetWidth, not a rect: layout px,
+    // whatever transform the settings panel's own entrance applies. A hidden
+    // ancestor reads 0: keeping the last real width stops an ease in from 0.
+    // offsetWidth is a whole number and rounds DOWN for a label 140.2px wide,
+    // which left the slot 0.2px short: "OpenAI Codex (GPT-5.5)" ellipsized in
+    // the trigger and was cut in its own menu row. One spare px covers it.
+    // The label's own copy is watched too: two names both narrower than the
+    // floor leave the box the same size, but can differ on whether they centre.
+    React.useLayoutEffect(() => {
+        const el = measureRef.current;
+        const label = el?.firstElementChild;
+        const floor = el?.lastElementChild;
+        if (!fit || !el || !(label instanceof HTMLElement) || !(floor instanceof HTMLElement)) return;
+        const measure = () => {
+            if (el.offsetWidth === 0) return;
+            setFitWidth(el.offsetWidth + 1);
+            setFitTruncated(el.scrollWidth > el.clientWidth);
+            const spare = floor.offsetWidth - label.offsetWidth;
+            setFitCentred(spare >= FIT_LABEL_CENTRE_MIN_SPARE_EM * parseFloat(getComputedStyle(el).fontSize));
+        };
+        measure();
+        if (typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        ro.observe(label);
+        return () => ro.disconnect();
+    }, [fit]);
+    // The saved pick arrives over IPC after mount. It is loading, not news, so the
+    // ease waits for the panel's ready flag (SettingsMotionReady) plus a frame for
+    // the width that value set to land.
+    const motionReady = React.useContext(SettingsMotionReady);
+    useEffect(() => {
+        if (!fit || !motionReady) return;
+        const frame = requestAnimationFrame(() => setFitAnimate(true));
+        return () => cancelAnimationFrame(frame);
+    }, [fit, motionReady]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -1899,25 +2228,65 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
 
     const selectedOption = options.find(o => o.id === value);
     const resolvedPlaceholder = placeholder ?? t('Select model');
+    const fullLabel = selectedOption ? selectedOption.name : resolvedPlaceholder;
+    const shownLabel = maxLabelChars ? capPickerLabel(fullLabel, maxLabelChars) : fullLabel;
 
     return (
-        <div className="relative" ref={containerRef}>
+        <div className={containerClassName} ref={containerRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 aria-expanded={isOpen}
                 aria-haspopup="listbox"
-                className={`aip-select-trigger w-40 ${className}`}
+                className={`aip-select-trigger ${fit ? 'aip-select-trigger--fit' : 'w-40'} ${className}`}
+                title={shownLabel !== fullLabel || (fit && fitTruncated) ? fullLabel : undefined}
                 type="button"
             >
-                <span className="truncate pr-2">{selectedOption ? selectedOption.name : resolvedPlaceholder}</span>
+                {fit ? (
+                    <>
+                        <span
+                            className="aip-select-fit-slot"
+                            data-animate={fitAnimate ? 'true' : undefined}
+                            style={fitWidth === null ? undefined : { width: fitWidth }}
+                        >
+                            {/* The label leaves and the new one arrives (Presence
+                                "text") while the slot eases to the new width. A
+                                name well short of the slot is centred (mx-auto in
+                                the flex slot, fitCentred); one close to its width
+                                stays at the left edge. The class rides on each
+                                label, so the one leaving keeps its own alignment
+                                through its fade instead of jumping. */}
+                            <Presence
+                                kind="text"
+                                id={shownLabel}
+                                className={`max-w-full truncate ${fitCentred ? 'mx-auto' : ''}`}
+                            >
+                                {shownLabel}
+                            </Presence>
+                        </span>
+                        <span
+                            ref={measureRef}
+                            aria-hidden="true"
+                            className="aip-select-fit-measure"
+                        >
+                            <span>{shownLabel}</span>
+                            <span>{minLabel}</span>
+                        </span>
+                    </>
+                ) : (
+                    <span className="truncate pr-2">{shownLabel}</span>
+                )}
                 <ChevronDown size={14} strokeWidth={1.75} className="aip-select-chevron" aria-hidden="true" />
             </button>
 
-            {isOpen && (
-                <div
-                    role="listbox"
-                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1 w-full z-50 max-h-60 p-1 custom-scrollbar"
-                >
+            {/* Settings' menu move (SettingsMenu): grows from the trigger's corner
+                and eases out on close, where it used to vanish. It stays an
+                .aip-float while it leaves, so its card stays lifted until gone. */}
+            <SettingsMenu
+                open={isOpen}
+                origin="top right"
+                role="listbox"
+                className={`aip-float aip-scroll-y absolute top-full right-0 mt-1 ${menuClassName} z-50 max-h-60 p-1 custom-scrollbar`}
+            >
                     {options.map((option) => (
                         <button
                             key={option.id}
@@ -1927,55 +2296,25 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
                             }}
                             role="option"
                             aria-selected={value === option.id}
-                            className="aip-select-option"
+                            className={`aip-select-option ${fit ? 'aip-select-option--fit' : ''}`}
+                            onMouseEnter={fit ? showFullNameIfCut : undefined}
                             type="button"
                         >
-                            <span className="truncate">{option.name}</span>
-                            {value === option.id && <Check size={13} strokeWidth={1.75} className="aip-accent-fg shrink-0 ml-2" aria-hidden="true" />}
+                            {/* A fitted picker's menu is exactly the trigger's width, and
+                                a row is one line: a name too long for it is cut with
+                                an ellipsis (as many characters as fit, less the one
+                                the ellipsis takes), and the row's tooltip then carries
+                                the whole name, since "OpenAI Codex: GPT-5.6-Terra" and
+                                "…-Luna" cut to the same text. */}
+                            <span className={fit ? 'min-w-0 truncate' : 'truncate'}>{option.name}</span>
+                            {value === option.id && <Check size={13} strokeWidth={1.75} className={`aip-accent-fg shrink-0 ${fit ? '' : 'ml-2'}`} aria-hidden="true" />}
                         </button>
                     ))}
                     {options.length === 0 && (
                         <div className="aip-select-empty">{t('No models available')}</div>
                     )}
-                </div>
-            )}
+            </SettingsMenu>
         </div>
-    );
-};
-
-/**
- * Codex model picker. Was a free-text input beside a narrow "Preset" dropdown,
- * which showed the same id twice — once as editable text, once as the dropdown's
- * value. The dropdown is now the whole control.
- *
- * `options` is the installed Codex CLI's catalogue when one exists, otherwise
- * the built-in presets (codexModelOptions). A model already persisted from
- * elsewhere still renders and stays selected (it is prepended), so no existing
- * configuration breaks. When the list came from the CLI, such a value is marked
- * as not in it — the CLI dropping a model is the best signal we have that the
- * backend no longer offers it. Without a CLI list there is nothing to compare
- * against, so no marker.
- */
-const CodexCliModelField: React.FC<{
-    label: string;
-    value: string;
-    options: { id: string; name: string }[];
-    fromCodexCli: boolean;
-    onSelect: (value: string) => void;
-}> = ({ label, value, options, fromCodexCli, onSelect }) => {
-    const t = useT();
-    return (
-    <label className="space-y-1 block min-w-0">
-        <span className="aip-label">{label}</span>
-        <ModelSelect
-            value={value}
-            options={value && !options.some(option => option.id === value)
-                ? [{ id: value, name: fromCodexCli ? `${prettifyModelId(value)} (${t('not in your Codex CLI list')})` : prettifyModelId(value) }, ...options]
-                : options}
-            onChange={onSelect}
-            placeholder={t("Select a model")}
-        />
-    </label>
     );
 };
 
@@ -2074,7 +2413,7 @@ const AmbiguousStoresCard: React.FC = () => {
             </div>
             <div className="flex flex-wrap gap-2 pl-6">
                 <button
-                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
                     style={{ borderColor: 'var(--aip-warn-border)' }}
                     disabled={busy !== null}
                     onClick={() => resolve('keyring')}
@@ -2082,7 +2421,7 @@ const AmbiguousStoresCard: React.FC = () => {
                     {busy === 'keyring' ? t('Applying…') : t('Keep system keychain')}
                 </button>
                 <button
-                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
                     style={{ borderColor: 'var(--aip-warn-border)' }}
                     disabled={busy !== null}
                     onClick={() => resolve('fallback')}
@@ -2090,7 +2429,7 @@ const AmbiguousStoresCard: React.FC = () => {
                     {busy === 'fallback' ? t('Applying…') : t('Keep app backup')}
                 </button>
                 <button
-                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    className="aip-press px-3 py-1.5 rounded-md border text-xs font-medium hover:bg-[color:var(--aip-item-hover)] disabled:opacity-50"
                     style={{ borderColor: 'var(--aip-warn-border)' }}
                     disabled={busy !== null}
                     onClick={() => resolve('merge')}
@@ -2299,6 +2638,11 @@ const readCodexSignInStatus = async (): Promise<CodexSignInStatus | null> => {
     return { signedIn: !!status.signedIn, source: status.source ?? null, cliLogin: status.cliLogin, email: status.email, expiresAt: status.expiresAt };
 };
 
+/** Key-backed vendors among LLMHelper's AUTO_FAST_TIERS (Groq, DeepSeek Flash,
+    Gemini Flash-Lite, GPT-5.5, Claude Haiku). Natively and Codex, the other two
+    candidates, are checked by their own sign-in state. */
+const AUTO_FAST_VENDORS = ['groq', 'deepseek', 'gemini', 'openai', 'claude'] as const;
+
 export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     aiResponseLanguage,
     availableAiLanguages,
@@ -2321,6 +2665,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [nvidiaNimApiKey, setNvidiaNimApiKey] = useState('');
     const [openrouterApiKey, setOpenrouterApiKey] = useState('');
     const [fluxionApiKey, setFluxionApiKey] = useState('');
+    const [agentrouterApiKey, setAgentrouterApiKey] = useState('');
     /**
      * Which wire protocol the user's Fluxion key speaks, which is a property
      * of the KEY'S GROUP and is not discoverable from the key itself. Held in
@@ -2382,6 +2727,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         nvidia_nim: [nvidiaNimApiKey, setNvidiaNimApiKey],
         openrouter: [openrouterApiKey, setOpenrouterApiKey],
         fluxion: [fluxionApiKey, setFluxionApiKey],
+        agentrouter: [agentrouterApiKey, setAgentrouterApiKey],
     };
 
     // --- LiteLLM proxy (OpenAI-compatible gateway: baseURL + optional virtual key) ---
@@ -2495,9 +2841,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     };
 
     // --- Local (Codex CLI) ---
-    const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: 'gpt-5.5', fastModel: 'gpt-5.5', timeoutMs: 60000, sandboxMode: 'read-only' as string, serviceTier: 'default', modelReasoningEffort: undefined as string | undefined });
+    const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: 'gpt-5.5', timeoutMs: 60000, sandboxMode: 'read-only' as string, serviceTier: 'default', modelReasoningEffort: undefined as string | undefined });
     // The installed Codex CLI's model list (models_cache.json); null until read.
     const [codexModelCatalog, setCodexModelCatalog] = useState<CodexModelCatalogResult | null>(null);
+    const [codexModelsRefreshing, setCodexModelsRefreshing] = useState(false);
     const codexModels = codexModelOptions(codexModelCatalog);
     const codexModelsFromCli = codexModelCatalog?.source === 'codex-cli' && codexModelCatalog.models.length > 0;
     const [codexCliStatus, setCodexCliStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
@@ -2561,12 +2908,66 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // 2026-09-03), so the model default takes the branch side; the three
     // Direct Assist states are main's and are additive.
     const [defaultModel, setDefaultModel] = useState<string>('gemini-3.8-flash');
+    // 'auto' means unset: use the measured per-provider ladder, not a slow default.
+    const [fastModel, setFastModel] = useState<string>('auto');
+    // Only the ids the fast path can actually dispatch. Main owns the provider
+    // classifiers, so we ASK it rather than re-deriving them here - a second copy
+    // would drift, and drift here means offering a pick that silently does nothing.
+    // null = not answered yet.
+    const [fastModelDispatchable, setFastModelDispatchable] = useState<string[] | null>(null);
     const [directAssistEnabled, setDirectAssistEnabled] = useState(false);
     const [directAssistBusy, setDirectAssistBusy] = useState(false);
     const [directAssistError, setDirectAssistError] = useState('');
     const [fastResponseMode, setFastResponseMode] = useState(false);
     const [credentialsLoaded, setCredentialsLoaded] = useState(false);
-    const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || (codexCliConfig.enabled && codexOauthStatus.signedIn));
+    // Card rows that open on a saved key stay still while the stored ones load.
+    const motionReady = useMotionReadyAfter(credentialsLoaded);
+    // Fast Response Mode answers with the Background Model when one is picked
+    // (LLMHelper.openFastModelStream). On Auto it is the fastest connected
+    // candidate by this computer's own measurements (LLMHelper.autoFastPick) —
+    // Groq, DeepSeek, Gemini, Natively, OpenAI, Codex or Claude — so no
+    // particular provider is required.
+    // `disabledProviders`, not isProviderEnabled(): that is declared further down.
+    // Availability reads the PICK, not fastModelDispatchable: that list arrives
+    // asynchronously after credentials load, and the enforcement effect below
+    // would persist the switch OFF in the gap.
+    const hasFastModelPick = fastModel !== 'auto';
+    // AVAILABILITY is key-based, ignoring the provider on/off switches: it drives
+    // the effect below that saves Fast Response OFF, and switching Groq off for a
+    // moment must not wipe the user's Fast Response setting for good. Whether it
+    // APPLIES right now (switches included) is the mirror further down.
+    const hasAutoFastKey = AUTO_FAST_VENDORS.some((p) => !!hasStoredKey[p]);
+    const canUseFastMode = !!(hasFastModelPick || hasAutoFastKey || hasStoredKey.groq || hasStoredKey.natively || (codexCliConfig.enabled && codexOauthStatus.signedIn));
+    // A candidate Auto can use NOW — LLMHelper.fastFamilyReady(): key or sign-in
+    // AND switched on (Codex: isCodexAvailable() reads its switch too).
+    const hasAutoCandidate = AUTO_FAST_VENDORS.some((p) => hasStoredKey[p] && !disabledProviders.includes(p))
+        || (!!hasStoredKey.natively && !disabledProviders.includes('natively'))
+        || (codexCliConfig.enabled && codexOauthStatus.signedIn && !disabledProviders.includes('codex-cli'));
+    // Mirror of LLMHelper.activeIsSelfHosted(): on Auto, a turn for the user's
+    // own endpoint never goes to another vendor.
+    const activeIsSelfHosted = defaultModel.startsWith('litellm/') || defaultModel.startsWith('ninerouter/')
+        || customProviders.some((p) => p.id === defaultModel);
+    // Mirror of LLMHelper's fast gates. A dispatchable pick applies to any
+    // Active Model except a local one. Auto applies to any Active Model except a
+    // local one, an explicitly chosen Codex model (issue #315) or the user's own
+    // endpoint. Antigravity answers before either. Availability
+    // (canUseFastMode) is about keys and the pick; this is about the MODEL, and
+    // it is what the inline hint below tells the user.
+    // An unanswered dispatchable list (null) is not "unavailable" — it is still
+    // loading, and saying otherwise flashes the warning on every open.
+    const fastModelPickApplies = hasFastModelPick
+        && (fastModelDispatchable === null || fastModelDispatchable.includes(fastModel))
+        && !defaultModel.startsWith('ollama-');
+    // Only a gateway-only (or keyless) install lands here: gateways have no fast
+    // tier of their own, so the user names one in Background Model. With nothing
+    // to pick yet — no key, or an opt-in gateway (OpenRouter, LiteLLM) with no
+    // model ticked — the fix is in the provider cards below.
+    const fastModeUnavailableNote = fastModelDispatchable?.length
+        ? t('Pick a Background Model to turn this on.')
+        : t('Add a cloud model below, then pick it as the Background Model.');
+    const autoFastTierApplies = !hasFastModelPick && hasAutoCandidate && !activeIsSelfHosted
+        && !defaultModel.startsWith('ollama-') && !defaultModel.startsWith('codex-cli');
+    const fastModeAppliesToActiveModel = !defaultModel.startsWith('antigravity:') && (fastModelPickApplies || autoFastTierApplies);
 
     // --- Dynamic Model Discovery ---
     const [preferredModels, setPreferredModels] = useState<Record<string, string>>({});
@@ -2576,6 +2977,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [technicalInterviewVisionFirst, setTechnicalInterviewVisionFirst] = useState<boolean>(true);
 
     // --- Cloud Provider Data Scopes (fail-closed cloud share controls) ---
+    // The scope badges below pop in when a row is switched off, but not while
+    // the saved scopes are still arriving (their own read, not credentials').
+    const [scopesLoaded, setScopesLoaded] = useState(false);
+    const scopesMotionReady = useMotionReadyAfter(scopesLoaded);
     const [providerDataScopes, setProviderDataScopes] = useState<{ transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }>({});
 
     // `screenUnderstandingMode` is one enum with three values, but it answers two
@@ -2681,8 +3086,19 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 // If we set fastResponseMode before hasStoredKey is populated, the enforcement
                 // effect below fires with canUseFastMode=false and immediately resets fast mode
                 // to false — writing that reset back to SettingsManager on every startup.
-                // @ts-ignore
-                const creds = await window.electronAPI?.getStoredCredentials?.();
+                //
+                // The persisted default model is read in the SAME round trip, not after
+                // the Codex / Antigravity / custom-provider loads below. Read last, the
+                // `useState` initial value stayed on screen for that whole chain, and
+                // once hasStoredKey made it a real option (any Gemini key does) the
+                // Active Model picker showed Gemini for a beat before switching to the
+                // actual default, e.g. Natively API. Both setters now land in one render.
+                const [creds, persistedDefault] = await Promise.all([
+                    // @ts-ignore
+                    window.electronAPI?.getStoredCredentials?.(),
+                    window.electronAPI?.getDefaultModel?.().catch(() => null),
+                ]);
+                if (persistedDefault?.model) setDefaultModel(persistedDefault.model);
                 if (creds) {
                     setHasStoredKey({
                         gemini: creds.hasGeminiKey,
@@ -2693,6 +3109,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         nvidia_nim: creds.hasNvidiaNimKey || false,
                         openrouter: (creds as any).hasOpenrouterKey || false,
                         fluxion: (creds as any).hasFluxionKey || false,
+                        agentrouter: (creds as any).hasAgentRouterKey || false,
                         litellm: creds.hasLitellmBaseURL || false,
                         // Base URL, not key: a stock 9Router runs keyless.
                         ninerouter: (creds as any).hasNinerouterBaseURL || false,
@@ -2721,6 +3138,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     if ((creds as any).openrouterPreferredModel) pm.openrouter = (creds as any).openrouterPreferredModel;
                     // Already prefixed on disk (`fluxion/<model>`), same rule as above.
                     if ((creds as any).fluxionPreferredModel) pm.fluxion = (creds as any).fluxionPreferredModel;
+                    // Already prefixed on disk (`agentrouter/<model>`), same rule.
+                    if ((creds as any).agentrouterPreferredModel) pm.agentrouter = (creds as any).agentrouterPreferredModel;
                     // Only adopt the stored protocol when a key actually exists.
                     // loadCredentials re-runs on EVERY credentials-changed broadcast —
                     // saving a Gemini key on another card fires one — and an
@@ -2787,12 +3206,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     setCustomProviders(custom);
                 }
 
-                // Load persisted default model
+                // Load the persisted fast model. null on disk means "Auto".
                 // @ts-ignore
-                const result = await window.electronAPI?.getDefaultModel();
-                if (result && result.model) {
-                    setDefaultModel(result.model);
-                }
+                const fastResult = await window.electronAPI?.getFastModel?.();
+                setFastModel(fastResult?.model || 'auto');
 
                 const directEnabled = await window.electronAPI?.getDirectAssistEnabled?.();
                 setDirectAssistEnabled(directEnabled === true);
@@ -2890,6 +3307,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // Prefixed, because `antigravity:<id>` is the form the allow-list, the picker
         // and modelAvailable() in ipcHandlers.ts all compare against.
         if (provider === 'antigravity') antigravityModels.forEach(m => push(`antigravity:${m.id}`, m.label || m.id));
+        // Codex: same shape again, prefixed `codex-cli:<id>` like the picker and
+        // modelAvailable(). The Codex default keeps a row even when the installed
+        // CLI's catalogue dropped it, so it stays visible and can be moved.
+        if (provider === 'codex-cli') {
+            codexModels.forEach(m => push(codexCliSelectorId(m.id), m.name));
+            push(codexCliSelectorId(codexCliConfig.model), codexModelsFromCli
+                ? `${prettifyModelId(codexCliConfig.model)} (${t('not in your Codex CLI list')})`
+                : prettifyModelId(codexCliConfig.model));
+            // Ticked models the catalogue has since dropped, named without the prefix.
+            (cloudEnabledModels[provider] || []).forEach(id => push(id, prettifyModelId(id.replace(/^codex-cli:/, ''))));
+        }
         (cloudFetchedModels[provider] || []).forEach(m => push(m.id, m.label || m.id));
         // Allow-listed ids with no catalog entry still get a row, labelled as best we can.
         // LiteLLM ids are proxy literals, so they take the segment label rather than
@@ -2898,8 +3326,18 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         (cloudEnabledModels[provider] || []).forEach(id =>
             push(id, (provider === 'litellm' || provider === 'ninerouter') ? gatewayModelLabel(id) : prettifyModelId(id)));
         return out;
-    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, ninerouterModels, antigravityModels]);
+    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, ninerouterModels, antigravityModels, codexModelCatalog, codexCliConfig.model, t]);
 
+    /**
+     * The Background Model picker's options: Auto, plus only the models the fast
+     * path can actually run.
+     *
+     * Until main answers the filter IPC we offer ONLY Auto (plus whatever is
+     * already saved), so the full unfiltered list never flashes up as selectable.
+     * A saved-but-unsupported pick stays visible and labelled rather than being
+     * silently dropped - dropping it would render an empty control while the id
+     * is still persisted, and rewriting it would change a setting the user chose.
+     */
     const buildAvailableModelOptions = (): { id: string; name: string }[] => {
         const opts: { id: string; name: string }[] = [];
 
@@ -2925,12 +3363,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 opts.push({ id: pm, name: prettifyModelId(pm) });
             }
         }
+        // Same allow-list gate as every cloud card. The bare entry runs the Codex
+        // default, so it is listed exactly when that model is ticked
+        // (modelAvailable in ipcHandlers.ts reads it the same way).
         if (isCodexReady && isProviderEnabled('codex-cli')) {
             const configuredName = codexModels.find(model => model.id === codexCliConfig.model)?.name || prettifyModelId(codexCliConfig.model);
-            opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${configuredName})` });
+            if (isModelEnabled('codex-cli', codexCliSelectorId(codexCliConfig.model))) {
+                opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${configuredName})` });
+            }
             codexModels.forEach(model => {
                 const id = codexCliSelectorId(model.id);
-                if (!opts.find(o => o.id === id)) {
+                if (isModelEnabled('codex-cli', id) && !opts.find(o => o.id === id)) {
                     opts.push({ id, name: `${CODEX_CLI_MODEL.name}: ${model.name}` });
                 }
             });
@@ -2971,6 +3414,30 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         return opts;
     };
 
+    const fastModelCandidateKey = buildAvailableModelOptions().map((o) => o.id).join(',');
+    useEffect(() => {
+        let cancelled = false;
+        const ids = fastModelCandidateKey ? fastModelCandidateKey.split(',') : [];
+        window.electronAPI?.filterFastModelCandidates?.(ids)
+            .then((r) => { if (!cancelled) setFastModelDispatchable(r?.ids ?? []); })
+            .catch(() => { if (!cancelled) setFastModelDispatchable([]); });
+        return () => { cancelled = true; };
+    }, [fastModelCandidateKey]);
+
+    const buildFastModelOptions = (): { id: string; name: string }[] => {
+        const all = buildAvailableModelOptions();
+        const allowed = fastModelDispatchable === null
+            ? []
+            : all.filter((o) => fastModelDispatchable.includes(o.id));
+        const opts = [{ id: 'auto', name: t('Auto') }, ...allowed];
+        if (fastModel !== 'auto' && !allowed.some((o) => o.id === fastModel)) {
+            const saved = all.find((o) => o.id === fastModel);
+            opts.push({ id: fastModel, name: `${saved?.name ?? fastModel} ${t('(not supported)')}` });
+        }
+        return opts;
+    };
+
+
     // Keep the persisted default model from pointing at a provider the user just
     // removed/signed out of. This turns credential changes into immediate routing
     // changes instead of waiting for a failing request to discover stale state.
@@ -2980,12 +3447,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         const opts = buildAvailableModelOptions();
         if (!defaultModel || opts.some(o => o.id === defaultModel) || opts.length === 0) return;
         // A Codex model that is no longer offered (the CLI catalogue dropped it,
-        // or it was a preset the ChatGPT backend now rejects) falls back to the
-        // Codex entry itself — never to whichever provider happens to be first.
+        // or it was a preset the ChatGPT backend now rejects, or it was un-ticked
+        // in the Codex card) falls back to the Codex entry itself, then to any
+        // Codex model still ticked — never to whichever provider happens to be first.
         const next = (defaultModel.startsWith('antigravity:')
             ? opts.find(option => option.id.startsWith('antigravity:'))?.id : undefined)
-            || (defaultModel.startsWith(`${CODEX_CLI_MODEL.id}:`)
-                ? opts.find(option => option.id === CODEX_CLI_MODEL.id)?.id : undefined)
+            || (defaultModel.startsWith(CODEX_CLI_MODEL.id)
+                ? (opts.find(option => option.id === CODEX_CLI_MODEL.id)
+                    ?? opts.find(option => option.id.startsWith(`${CODEX_CLI_MODEL.id}:`)))?.id : undefined)
             || opts[0].id;
         setDefaultModel(next);
         window.electronAPI?.setDefaultModel?.(next).catch(console.error);
@@ -3049,6 +3518,19 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // "all" — so un-checking the last remaining model re-enables all of them
     // rather than leaving the provider silently empty. Use the provider toggle to
     // hide a provider outright.
+    // Codex keeps its default in codexCliConfig.model, not preferredModels, so the
+    // default-moving above never reached it: un-ticking the Codex default left
+    // the "default" badge on an un-ticked row, and the bare Codex entry (which
+    // runs that model) vanished from every picker. Same rule as the others:
+    // move it to the first model still ticked.
+    const moveCodexDefaultIfUnticked = (allowList: string[]) => {
+        const current = codexCliSelectorId(codexCliConfig.model);
+        if (allowList.length === 0 || isModelAllowed(CODEX_CLI_MODEL.id, current, allowList)) return;
+        const moved = allowList[0].slice(`${CODEX_CLI_MODEL.id}:`.length);
+        void saveCodexCliConfig({ ...codexCliConfig, model: moved })
+            .catch((e: unknown) => console.error('Failed to move the Codex default model:', e));
+    };
+
     const handleToggleModel = async (provider: string, modelId: string) => {
         const universe = effectiveModels(provider).map(m => m.id);
         const current = cloudEnabledModels[provider] || [];
@@ -3087,6 +3569,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             window.electronAPI?.setProviderPreferredModel?.(provider as any, moved)
                 .catch((e: unknown) => console.error('Failed to move default model:', e));
         }
+        if (provider === CODEX_CLI_MODEL.id) moveCodexDefaultIfUnticked(normalised);
         try {
             const res = await window.electronAPI?.setCloudEnabledModels?.(provider, normalised);
             if (res && res.success === false) throw new Error(res.error || 'save failed');
@@ -3139,6 +3622,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             window.electronAPI?.setProviderPreferredModel?.(provider as any, moved)
                 .catch((e: unknown) => console.error('Failed to move default model:', e));
         }
+        if (provider === CODEX_CLI_MODEL.id) moveCodexDefaultIfUnticked(normalised);
         try {
             const res = await window.electronAPI?.setCloudEnabledModels?.(provider, normalised);
             if (res && res.success === false) throw new Error(res.error || 'save failed');
@@ -3378,7 +3862,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
     // Load Cloud Provider Data Scopes and subscribe to cross-window changes
     useEffect(() => {
-        window.electronAPI?.getProviderDataScopes?.().then(setProviderDataScopes).catch(() => { });
+        window.electronAPI?.getProviderDataScopes?.().then(setProviderDataScopes).catch(() => { }).finally(() => setScopesLoaded(true));
     }, []);
 
     useEffect(() => {
@@ -3504,6 +3988,50 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         const result = await window.electronAPI?.setCodexCliConfig?.(normalized);
         if (result?.config) setCodexCliConfig(result.config as typeof codexCliConfig);
         return result;
+    };
+
+    // "Set default" in the Codex model list is the Model dropdown it replaced: it
+    // moves the Codex default (codexCliConfig.model), which the bare Codex entry,
+    // structured calls and the Auto fast ladder run. Like every card's, it also
+    // allow-lists the model, or it would be a default the picker hides.
+    const handleSetCodexDefault = async (selectorId: string) => {
+        const model = selectorId.slice(`${CODEX_CLI_MODEL.id}:`.length);
+        const prevEnabled = cloudEnabledModels;
+        const prevConfig = codexCliConfig;
+        const current = cloudEnabledModels['codex-cli'] || [];
+        // An empty allow-list already means "all", so there is nothing to add.
+        const needsAllow = current.length > 0 && !current.includes(selectorId);
+        const nextList = needsAllow ? [...current, selectorId] : current;
+
+        if (needsAllow) setCloudEnabledModelsState(p => ({ ...p, 'codex-cli': nextList }));
+        try {
+            if (needsAllow) {
+                const r = await window.electronAPI?.setCloudEnabledModels?.('codex-cli', nextList);
+                if (r && r.success === false) throw new Error(r.error || 'allow-list write failed');
+            }
+            const saved = await saveCodexCliConfig({ ...codexCliConfig, model });
+            if (!saved?.success) throw new Error(saved?.error || 'Codex config write failed');
+        } catch (e) {
+            console.error('Failed to set Codex default model:', e);
+            setCloudEnabledModelsState(prevEnabled);
+            setCodexCliConfig(prevConfig);
+            setModelSaveError(p => ({ ...p, 'codex-cli': true }));
+            setTimeout(() => setModelSaveError(p => ({ ...p, 'codex-cli': false })), 4000);
+        }
+    };
+
+    // Re-reads the installed Codex CLI's catalogue (main reads its models cache
+    // on every call), picking up models the CLI has learned since Settings opened.
+    const handleRefreshCodexModels = async () => {
+        setCodexModelsRefreshing(true);
+        try {
+            const catalog = await window.electronAPI?.getCodexCliModels?.();
+            if (catalog) setCodexModelCatalog(catalog);
+        } catch (e) {
+            console.error('Failed to refresh Codex models:', e);
+        } finally {
+            setCodexModelsRefreshing(false);
+        }
     };
 
     const handleTestCodexCli = async () => {
@@ -3647,6 +4175,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 const detected = (result as { protocol?: 'openai' | 'anthropic' })?.protocol;
                 if (detected) setFluxionProtocol(detected);
             }
+            if (provider === 'agentrouter') result = await window.electronAPI.setAgentRouterApiKey(key);
 
             if (result && result.success) {
                 // The save may have just switched OpenRouter reranking on; the
@@ -3853,6 +4382,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             if (provider === 'nvidia_nim') result = await window.electronAPI.setNvidiaNimApiKey('');
             if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey('');
             if (provider === 'fluxion') result = await window.electronAPI.setFluxionConfig({ apiKey: '' });
+            if (provider === 'agentrouter') result = await window.electronAPI.setAgentRouterApiKey('');
 
             if (result && result.success) {
                 setHasStoredKey(prev => ({ ...prev, [provider]: false }));
@@ -4071,6 +4601,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // would apply to THAT animation and put a 175ms stall in front of every
         // in-tab panel switch. `.aip-root`'s own reduced-motion guard (~line 841)
         // already neutralises both.
+        <SettingsMotionReady.Provider value={motionReady}>
         <div className="aip-root space-y-5 pb-10" data-theme={theme} data-settings-stagger>
             <AmbiguousStoresCard />
             {confirmCopy && (
@@ -4108,12 +4639,52 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         <p className="text-[10px] aip-muted mt-0.5">{t('Applies to new chats instantly.')}</p>
                     </div>
                     <ModelSelect
+                        containerClassName={AIP_ACTIVE_SELECT_CONTAINER}
+                        minLabel={HERO_MODEL_PICKER_MIN_LABEL}
                         value={defaultModel}
                         options={buildAvailableModelOptions()}
                         onChange={(val) => {
                             setDefaultModel(val);
                             // @ts-ignore - persist as default + update runtime + broadcast
                             window.electronAPI?.setDefaultModel(val).catch(console.error);
+                        }}
+                    />
+                </div>
+
+            <div className="aip-card p-5 flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Background Model')}</label>
+                        <p className="text-[10px] aip-muted mt-0.5">{t('Runs Auto Answer, quick decisions and Fast Response Mode.')}</p>
+                        {/* Advisory only: a big pick silently re-creates the latency
+                            problem the measured judge ladder exists to avoid, but a
+                            hard filter would need a hand-maintained list that goes
+                            stale on every model retirement. */}
+                        {!isKnownFastModel(fastModel) && (
+                            <p className="text-[10px] aip-warn-fg mt-0.5 font-medium">{t('Large models make Auto Answer slower. Pick a small tier for the best results.')}</p>
+                        )}
+                    </div>
+                    <ModelSelect
+                        containerClassName={AIP_ACTIVE_SELECT_CONTAINER}
+                        minLabel={HERO_MODEL_PICKER_MIN_LABEL}
+                        value={fastModel}
+                        options={buildFastModelOptions()}
+                        onChange={async (val) => {
+                            const previous = fastModel;
+                            setFastModel(val);
+                            try {
+                                // @ts-ignore - null clears it, which means "use the measured ladder"
+                                const res = await window.electronAPI?.setFastModel?.(val === 'auto' ? null : val);
+                                // A resolved { success:false } is invisible to .catch(), and a
+                                // missing preload method resolves undefined. Either way the write
+                                // did not land, so the row must not keep showing the new value.
+                                if (!res?.success) {
+                                    setFastModel(previous);
+                                    console.error('[Settings] Fast Model not saved:', res?.error ?? 'unavailable');
+                                }
+                            } catch (e) {
+                                setFastModel(previous);
+                                console.error('[Settings] Fast Model not saved:', e);
+                            }
                         }}
                     />
                 </div>
@@ -4128,23 +4699,25 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             }
                         </p>
                     </div>
-                    <div className="relative" ref={aiLangDropdownRef}>
+                    <div className={AIP_ACTIVE_SELECT_CONTAINER} ref={aiLangDropdownRef}>
                         <button
+                            type="button"
                             onClick={onToggleAiLangDropdown}
                             aria-expanded={isAiLangDropdownOpen}
-                            className="aip-btn min-w-[110px] justify-between"
+                            className="aip-select-trigger"
                         >
-                            <span className="capitalize text-ellipsis overflow-hidden whitespace-nowrap flex items-center gap-1">
-                                {aiResponseLanguage === 'auto' ? t('Auto') : aiResponseLanguage}
+                            <span className="capitalize truncate pr-2">
+                                {capPickerLabel(aiResponseLanguage === 'auto' ? t('Auto') : aiResponseLanguage)}
                             </span>
-                            <ChevronDown size={12} strokeWidth={1.75} className={`shrink-0 transition-transform ${isAiLangDropdownOpen ? 'rotate-180' : ''}`} />
+                            <ChevronDown size={14} strokeWidth={1.75} className="aip-select-chevron" aria-hidden="true" />
                         </button>
 
-                        {isAiLangDropdownOpen && (
-                            <div
+                        <SettingsMenu
+                                open={isAiLangDropdownOpen}
+                                origin="top right"
                                 role="listbox"
-                                aria-label={t('AI Response Language')}
-                                className="aip-float aip-scroll-y aip-panel-fade absolute right-0 top-full mt-1 min-w-full w-max z-20 p-1 select-none max-h-60 custom-scrollbar"
+                                ariaLabel={t('AI Response Language')}
+                                className="aip-float aip-scroll-y absolute right-0 top-full mt-1 min-w-full w-max z-20 p-1 select-none max-h-60 custom-scrollbar"
                             >
                                 {availableAiLanguages.map((option) => (
                                     <button
@@ -4161,8 +4734,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                         )}
                                     </button>
                                 ))}
-                            </div>
-                        )}
+                        </SettingsMenu>
                     </div>
                 </div>
 
@@ -4189,9 +4761,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         <p className="text-[10px] aip-muted mt-0.5">
                             {t('Sends your typed, spoken, screenshot, and page input straight to the model, unprocessed.')}
                         </p>
-                        {directAssistError && (
-                            <p className="text-[10px] aip-danger-fg mt-1" role="alert">{directAssistError}</p>
-                        )}
+                        <AipRevealNote text={directAssistError} className="text-[10px] aip-danger-fg mt-1" role="alert" />
                     </div>
                     <AipSwitch
                         checked={directAssistEnabled}
@@ -4224,35 +4794,52 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
 <div
                     className={`aip-card p-5 flex items-center justify-between gap-4 ${!canUseFastMode ? 'opacity-50 grayscale' : ''}`}
-                    title={!canUseFastMode ? t("Requires Groq, Natively API, or Codex CLI to be configured") : ""}
+                    title={!canUseFastMode ? fastModeUnavailableNote : ""}
                 >
                     <div className="flex-1 min-w-0">
-                        {/* No "Needs Groq" badge. It named ONE of the three
-                            providers that satisfy canUseFastMode (Groq, Natively
-                            API, Codex CLI), so it read as a hard Groq dependency
+                        {/* No "Needs Groq" badge. It named ONE of the things that
+                            satisfy canUseFastMode (a Background Model pick, any
+                            connected vendor's fast tier, Natively API, Codex), so it read as a hard Groq dependency
                             that does not exist — and the line below already
                             states the real requirement in full, as does the
                             card's title. A badge carries only what no other
                             control already says. */}
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Response Mode')}</label>
-                        <p className="text-[10px] aip-muted mt-0.5">{t('Uses the fastest available provider instead of your selected model.')}</p>
-                        {!canUseFastMode && (
-                            <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Requires Groq, Natively API, or Codex CLI to be configured.')}</p>
-                        )}
+                        {/* Says which model will answer: the Background Model when one
+                            is picked, otherwise Auto's fastest connected model. */}
+                        <p className="text-[10px] aip-muted mt-0.5">{hasFastModelPick
+                            ? t('Answers with the Background Model, not the Active Model.')
+                            : t('Uses the fastest available provider instead of your selected model.')}</p>
+                        <AipRevealNote
+                            text={!canUseFastMode ? fastModeUnavailableNote : ''}
+                            className="text-xs aip-warn-fg mt-0.5 font-medium"
+                        />
+                        <AipRevealNote
+                            text={canUseFastMode && fastResponseMode && !fastModeAppliesToActiveModel
+                                ? (defaultModel.startsWith('antigravity:') || defaultModel.startsWith('ollama-')
+                                    ? t('Not applied while the Active Model is a local or Antigravity model.')
+                                    : hasFastModelPick
+                                        ? t('Your Background Model isn\'t available — pick another or choose Auto.')
+                                        : activeIsSelfHosted
+                                            ? t('On Auto this stays on your own endpoint — pick a Background Model to use another.')
+                                            : !hasAutoCandidate
+                                                ? t('Not applied: the providers it can use are switched off.')
+                                                : t('Not applied to the current Active Model — pick a Background Model above for this to take effect.'))
+                                : ''}
+                            className="text-xs aip-warn-fg mt-0.5 font-medium"
+                        />
                     </div>
-                    {/* aria-disabled, not disabled: the onClick guard below is the
-                        only thing that explains WHY the toggle is unavailable, and
-                        Stage 3 owns replacing that alert() with an inline hint.
-                        Hard-disabling here would make it unreachable dead code. */}
+                    {/* When unavailable, the click does nothing: the reason is
+                        already spelled out inline by the AipRevealNote above. It
+                        used to also alert() it, but a native alert is its own OS
+                        window outside content protection, so it showed up in
+                        screen shares while Undetectable was on. */}
                     <AipSwitch
                         checked={fastResponseMode}
                         disabled={!canUseFastMode}
                         label={t('Fast Response Mode')}
                         onChange={async () => {
-                            if (!canUseFastMode) {
-                                alert(t("Please configure Groq, Natively API, or Codex CLI first to enable Fast Response Mode."));
-                                return;
-                            }
+                            if (!canUseFastMode) return;
                             const newState = !fastResponseMode;
                             setFastResponseMode(newState);
                             localStorage.setItem('natively_groq_fast_text', String(newState));
@@ -4467,29 +5054,34 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     Reusing it keeps the two card families spaced identically instead of
                     close enough to look like a mistake. */}
                 <div className="aip-provider-row">
-                    {antigravityStatus.inProgress ? (
+                    {/* ONE bar through the round-trip: its label swaps to the wait
+                        and Cancel fades in beside it, where the two used to be
+                        different buttons that cut from one to the other. */}
+                    {antigravityStatus.inProgress || !antigravityStatus.signedIn ? (
                         <>
-                            <button type="button" className="aip-btn flex-1" data-size="row" disabled>
-                                <Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}
-                            </button>
                             <button
                                 type="button"
-                                className="aip-btn shrink-0"
+                                className="aip-btn flex-1"
                                 data-size="row"
-                                data-variant="ghost"
-                                onClick={() => window.electronAPI.antigravityCancelLogin().catch(() => setAntigravityError(t('Could not cancel sign-in. Try again.')))}
-                            >{t('Cancel')}</button>
+                                disabled={antigravityStatus.inProgress || antigravityBusy}
+                                onClick={() => void runAntigravityAction('login')}
+                            >
+                                <SwapLabel id={antigravityStatus.inProgress ? 'waiting' : 'signin'} sizers={[]}>
+                                    {antigravityStatus.inProgress
+                                        ? <span className="inline-flex items-center gap-1.5"><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" />{t('Waiting for browser…')}</span>
+                                        : <span className="inline-flex items-center gap-1.5"><ExternalLink size={13} strokeWidth={1.75} />{t('Sign in with Google')}</span>}
+                                </SwapLabel>
+                            </button>
+                            <Presence kind="control" id={antigravityStatus.inProgress ? 'cancel' : null} className="shrink-0">
+                                <button
+                                    type="button"
+                                    className="aip-btn shrink-0"
+                                    data-size="row"
+                                    data-variant="ghost"
+                                    onClick={() => window.electronAPI.antigravityCancelLogin().catch(() => setAntigravityError(t('Could not cancel sign-in. Try again.')))}
+                                >{t('Cancel')}</button>
+                            </Presence>
                         </>
-                    ) : !antigravityStatus.signedIn ? (
-                        <button
-                            type="button"
-                            className="aip-btn flex-1"
-                            data-size="row"
-                            disabled={antigravityBusy}
-                            onClick={() => void runAntigravityAction('login')}
-                        >
-                            <ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with Google')}
-                        </button>
                     ) : (<>
                         {/* "Reload models" is gone from this row: AipModelList owns
                            discovery, exactly as ProviderCard's comment says for the cloud
@@ -4565,12 +5157,54 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             <p className="text-xs aip-muted">{t('Use your ChatGPT Plus/Pro subscription as an AI provider.')}</p>
                         </div>
                     </div>
-                    <AipSwitch
-                        checked={!disabledProviders.includes('codex-cli')}
-                        onChange={() => handleToggleProvider('codex-cli', disabledProviders.includes('codex-cli'))}
-                        label={`${disabledProviders.includes('codex-cli') ? t('Enable') : t('Disable')} OpenAI Codex`}
-                        title={disabledProviders.includes('codex-cli') ? t('Enable provider') : t('Disable provider')}
-                    />
+                    <div className="flex items-center gap-2 shrink-0">
+                        {/* Refresh / Sign out act on Natively's own tokens only, so a
+                            `codex login` session gets the sign-in button below instead —
+                            signing in here takes precedence over the CLI login.
+                            Icon-only beside the switch with transitions.dev #17 tooltips. */}
+                        {codexOauthStatus.signedIn && codexOauthStatus.source !== 'codex-cli' && <>
+                            <span className="t-tt-wrap">
+                                <button
+                                    type="button"
+                                    onClick={handleCodexRefresh}
+                                    disabled={codexOauthInProgress}
+                                    className="aip-btn aip-codex-action-btn aip-codex-refresh-btn t-tt-trigger"
+                                    data-icon="true"
+                                    data-variant="ghost"
+                                    aria-label={t('Refresh session')}
+                                    aria-describedby="codex-tt-refresh"
+                                >
+                                    <RefreshCw size={16} strokeWidth={1.75} className={codexOauthInProgress ? 'aip-spinner' : undefined} />
+                                </button>
+                                <span className="t-tt" id="codex-tt-refresh" role="tooltip">
+                                    {t('Refresh')}
+                                </span>
+                            </span>
+                            <span className="t-tt-wrap">
+                                <button
+                                    type="button"
+                                    onClick={handleCodexSignOut}
+                                    disabled={codexOauthInProgress}
+                                    className="aip-btn aip-codex-action-btn aip-codex-logout-btn t-tt-trigger"
+                                    data-icon="true"
+                                    data-variant="ghost"
+                                    aria-label={t('Sign out')}
+                                    aria-describedby="codex-tt-logout"
+                                >
+                                    <LogOut size={16} strokeWidth={1.75} />
+                                </button>
+                                <span className="t-tt" id="codex-tt-logout" role="tooltip">
+                                    {t('Logout')}
+                                </span>
+                            </span>
+                        </>}
+                        <AipSwitch
+                            checked={!disabledProviders.includes('codex-cli')}
+                            onChange={() => handleToggleProvider('codex-cli', disabledProviders.includes('codex-cli'))}
+                            label={`${disabledProviders.includes('codex-cli') ? t('Enable') : t('Disable')} OpenAI Codex`}
+                            title={disabledProviders.includes('codex-cli') ? t('Enable provider') : t('Disable provider')}
+                        />
+                    </div>
                 </div>
 
                 {/* Mounted-but-hidden live region, same reasoning as Antigravity's. */}
@@ -4581,13 +5215,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             : ''}
                 </p>
 
-                <div className="flex flex-wrap gap-2">
-                    {/* Refresh / Sign out act on Natively's own tokens only, so a
-                        `codex login` session gets the sign-in button instead —
-                        signing in here takes precedence over the CLI login. */}
-                    {!codexOauthStatus.signedIn || codexOauthStatus.source === 'codex-cli' ? (
-                        /* Full-width row, and NEUTRAL: data-variant="accent" tints it
-                           periwinkle, which the Antigravity bar deliberately does not do. */
+                {/* Only the sign-in state has a row now — Refresh / Sign out live
+                    in the header — so it isn't mounted empty under space-y-4. */}
+                {(!codexOauthStatus.signedIn || codexOauthStatus.source === 'codex-cli') && (
+                    <div className="flex flex-wrap gap-2">
+                        {/* Full-width row, and NEUTRAL: data-variant="accent" tints it
+                           periwinkle, which the Antigravity bar deliberately does not do. */}
                         <button
                             type="button"
                             onClick={() => handleCodexAuthAction('login')}
@@ -4595,22 +5228,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             className="aip-btn flex-1"
                             data-size="row"
                         >
-                            {codexOauthInProgress || codexAuthAction === 'login'
-                                ? <><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}</>
-                                : <><ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with ChatGPT')}</>}
+                            <SwapLabel id={codexOauthInProgress || codexAuthAction === 'login' ? 'waiting' : 'signin'} sizers={[]}>
+                                {codexOauthInProgress || codexAuthAction === 'login'
+                                    ? <span className="inline-flex items-center gap-1.5"><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" />{t('Waiting for browser…')}</span>
+                                    : <span className="inline-flex items-center gap-1.5"><ExternalLink size={13} strokeWidth={1.75} />{t('Sign in with ChatGPT')}</span>}
+                            </SwapLabel>
                         </button>
-                    ) : <>
-                        {/* Plain aip-btn in a wrap row, matching Antigravity's
-                            Reload models / Disconnect pair. Glyphs kept: they cost
-                            nothing here and the two actions are easy to confuse. */}
-                        <button type="button" onClick={handleCodexRefresh} disabled={codexOauthInProgress} className="aip-btn" title={t("Refresh session")}>
-                            <RefreshCw size={13} strokeWidth={1.75} /> {t('Refresh')}
-                        </button>
-                        <button type="button" onClick={handleCodexSignOut} disabled={codexOauthInProgress} className="aip-btn">
-                            <LogOut size={13} strokeWidth={1.75} /> {t('Sign out')}
-                        </button>
-                    </>}
-                </div>
+                    </div>
+                )}
 
                 {/* The Codex CLI's `codex login` works too, read-only: Natively
                     never refreshes it (that would sign the CLI out), so an
@@ -4618,7 +5243,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 {!codexOauthStatus.signedIn && (
                     <p className="text-xs aip-muted">
                         {codexOauthStatus.cliLogin === 'expired'
-                            ? t('Your Codex CLI login has expired — run any `codex` command to refresh it, or sign in with ChatGPT here.')
+                            ? t('Codex CLI login expired — run `codex` to refresh, or sign in above.')
                             : codexOauthStatus.cliLogin === 'api-key'
                                 ? t('Your Codex CLI is logged in with an API key, which Codex here cannot use — sign in with ChatGPT here, or run `codex login` with your ChatGPT account.')
                                 : t('Or run `codex login` in a terminal — Natively can use that ChatGPT login too.')}
@@ -4639,35 +5264,32 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 {/* Model + settings — only shown once signed in */}
                 {codexOauthStatus.signedIn && (
                         <>
-                            {codexModelsFromCli && (
-                                <p className="text-xs aip-muted">
-                                    {t('Model list from your Codex CLI')}
-                                    {codexModelCatalog?.fetchedAt && !Number.isNaN(Date.parse(codexModelCatalog.fetchedAt))
-                                        ? ` · ${t('updated')} ${new Date(codexModelCatalog.fetchedAt).toLocaleDateString()}`
-                                        : ''}
-                                </p>
+                            {/* The same model list every provider card has, where two
+                                dropdowns used to be. "Set default" replaces the Model
+                                dropdown (handleSetCodexDefault). The "Fast Mode Model"
+                                dropdown is gone: Fast Response Mode answers with the
+                                Background Model, and a Codex model other than this
+                                default is picked THERE now. Direct child of
+                                .aip-provider-row for the reason Antigravity's comment gives. */}
+                            {!disabledProviders.includes('codex-cli') && (
+                                <div className="aip-provider-row">
+                                    <AipModelList
+                                        models={effectiveModels('codex-cli')}
+                                        enabled={cloudEnabledModels['codex-cli'] || []}
+                                        onToggle={(modelId) => handleToggleModel('codex-cli', modelId)}
+                                        onReset={() => handleResetModels('codex-cli')}
+                                        defaultId={codexCliSelectorId(codexCliConfig.model)}
+                                        onSetDefault={(modelId) => void handleSetCodexDefault(modelId)}
+                                        error={modelSaveError['codex-cli'] ? 'save-failed' : null}
+                                        refreshing={codexModelsRefreshing}
+                                        // Refresh re-reads the installed Codex CLI's model cache; with
+                                        // no CLI list there is nothing it could ever add.
+                                        onRefresh={codexModelsFromCli ? () => void handleRefreshCodexModels() : undefined}
+                                        catalogIsComplete={codexModelsFromCli}
+                                    />
+                                </div>
                             )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <CodexCliModelField
-                                    label={t("Model")}
-                                    value={codexCliConfig.model}
-                                    options={codexModels}
-                                    fromCodexCli={codexModelsFromCli}
-                                    onSelect={(model) => {
-                                        setCodexCliConfig(prev => ({ ...prev, model }));
-                                        saveCodexCliConfig({ ...codexCliConfig, model });
-                                    }}
-                                />
-                                <CodexCliModelField
-                                    label={t("Fast Mode Model")}
-                                    value={codexCliConfig.fastModel}
-                                    options={codexModels}
-                                    fromCodexCli={codexModelsFromCli}
-                                    onSelect={(fastModel) => {
-                                        setCodexCliConfig(prev => ({ ...prev, fastModel }));
-                                        saveCodexCliConfig({ ...codexCliConfig, fastModel });
-                                    }}
-                                />
                                 <label className="space-y-1 block min-w-0">
                                     <span className="aip-label">{t('Reasoning Effort')}</span>
                                     <ModelSelect
@@ -4714,7 +5336,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                     />
                                 </label>
                             </div>
-                            <div className="flex items-end justify-between gap-4 mt-1">
+                            {/* Same grid as the selectors above, so Test Connection is
+                                exactly one selector wide and tall. The error sits in its
+                                own full-width row so it can't push the button off the
+                                input's baseline. */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end mt-1">
                                 <label className="space-y-1 block min-w-0">
                                     <span className="aip-label">{t('Timeout (ms)')}</span>
                                     <input
@@ -4726,30 +5352,35 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                         className="aip-input"
                                         min={1000}
                                     />
-                                    {codexCliStatus === 'error' && codexCliError && (
-                                        <p className="text-[10px] aip-danger-fg mt-1">{codexCliError}</p>
-                                    )}
                                 </label>
-                                {/* Fixed min-width + centred content: a label change
+                                {/* Column-width + centred content: a label change
                                     ("Test Connection" → "Testing…") must not reflow
                                     the row it sits in. */}
                                 <button
                                     type="button"
                                     onClick={handleTestCodexCli}
                                     disabled={codexCliStatus === 'testing'}
-                                    className="aip-btn shrink-0 min-w-[124px]"
+                                    className="aip-btn w-full"
                                     data-tone={codexCliStatus === 'success' ? 'ok' : codexCliStatus === 'error' ? 'danger' : undefined}
                                 >
+                                    <SwapLabel
+                                        id={codexCliStatus}
+                                        sizers={[t('Test Connection')]}
+                                    >
                                     {codexCliStatus === 'testing' ? (
-                                        <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing…')}</>
+                                        <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{t('Testing…')}</span>
                                     ) : codexCliStatus === 'success' ? (
-                                        <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
+                                        <span className="inline-flex items-center gap-1.5"><AipPassedCheck />{t('Passed')}</span>
                                     ) : codexCliStatus === 'error' ? (
-                                        <><AlertCircle size={12} strokeWidth={1.75} /> {t('Failed')}</>
+                                        <span className="inline-flex items-center gap-1.5"><AlertCircle size={12} strokeWidth={1.75} />{t('Failed')}</span>
                                     ) : (
                                         t('Test Connection')
                                     )}
+                                    </SwapLabel>
                                 </button>
+                                {codexCliStatus === 'error' && codexCliError && (
+                                    <p className="text-[10px] aip-danger-fg md:col-span-2">{codexCliError}</p>
+                                )}
                             </div>
                         </>
                     )}
@@ -4854,13 +5485,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 className="aip-btn min-w-[92px]"
                                 data-variant="accent"
                             >
-                                {savingStatus.litellm
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving…')}</>
-                                    : savedStatus.litellm
-                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                        : t('Save')}
+                                <AipSaveLabel saving={!!savingStatus.litellm} saved={!!savedStatus.litellm} />
                             </button>
-                            {hasStoredKey.litellm && (
+                            {/* Gains a Remove once saved: it fades in rather than landing. */}
+                            <Presence kind="control" id={hasStoredKey.litellm ? 'remove' : null}>
                                 <button
                                     type="button"
                                     onClick={handleRemoveLitellm}
@@ -4869,7 +5497,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 >
                                     {t('Remove')}
                                 </button>
-                            )}
+                            </Presence>
 
                             {/* The proxy can expose dozens of models; without this the Active
                                 Model dropdown gets all of them. Reuses the cloud providers'
@@ -5033,12 +5661,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             );
                         })()}
 
-                        {ninerouterTest.message && (
-                            <p className={`text-[10px] ${ninerouterTest.ok ? 'aip-ok-fg' : 'aip-danger-fg'}`} role="status">
-                                {ninerouterTest.message}
-                            </p>
-                        )}
-
                         <div className="flex flex-wrap items-center gap-2">
                             <button
                                 type="button"
@@ -5047,11 +5669,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 className="aip-btn min-w-[92px]"
                                 data-variant="accent"
                             >
-                                {savingStatus.ninerouter
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving…')}</>
-                                    : savedStatus.ninerouter
-                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                        : t('Save')}
+                                <AipSaveLabel saving={!!savingStatus.ninerouter} saved={!!savedStatus.ninerouter} />
                             </button>
                             <button
                                 type="button"
@@ -5060,11 +5678,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 className="aip-btn"
                                 data-variant="ghost"
                             >
-                                {ninerouterTest.testing
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing…')}</>
-                                    : t('Test Connection')}
+                                <SwapLabel
+                                    id={ninerouterTest.testing ? 'testing' : 'idle'}
+                                    sizers={[t('Test Connection'), <span className="inline-flex items-center gap-1.5"><span className="w-3" />{t('Testing…')}</span>]}
+                                >
+                                    {ninerouterTest.testing
+                                        ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" />{t('Testing…')}</span>
+                                        : t('Test Connection')}
+                                </SwapLabel>
                             </button>
-                            {hasStoredKey.ninerouter && (
+                            <Presence kind="control" id={hasStoredKey.ninerouter ? 'remove' : null}>
                                 <button
                                     type="button"
                                     onClick={handleRemoveNinerouter}
@@ -5073,7 +5696,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 >
                                     {t('Remove')}
                                 </button>
-                            )}
+                            </Presence>
 
                             {hasStoredKey.ninerouter && (
                                 <AipModelList
@@ -5097,6 +5720,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 />
                             )}
                         </div>
+                        {ninerouterTest.message && (
+                            <p className={`text-[10px] ${ninerouterTest.ok ? 'aip-ok-fg' : 'aip-danger-fg'}`} role="status">
+                                {ninerouterTest.message}
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>
@@ -5298,18 +5926,20 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 <label className="block aip-label mb-1">
                                     {t('Screenshot / Vision Support')}
                                 </label>
-                                {/* A native <select> ignores every --aip-* token; swapping
-                                    it for AipSelect is Stage 5's job (the option labels
-                                    are translated keys that need re-plumbing). */}
-                                <select
+                                {/* AipSelect, never a native <select>: a native popup
+                                    is its own OS window outside content protection, so
+                                    its options showed up in screen shares while
+                                    Undetectable was on. */}
+                                <AipSelect
                                     value={customVision}
-                                    onChange={(e) => setCustomVision(e.target.value as 'auto' | 'on' | 'off')}
-                                    className="aip-input"
-                                >
-                                    <option value="auto">{t('Auto-detect (recommended)')}</option>
-                                    <option value="on">{t('Always send screenshots')}</option>
-                                    <option value="off">{t('Never send screenshots (text only)')}</option>
-                                </select>
+                                    onChange={(v) => setCustomVision(v as 'auto' | 'on' | 'off')}
+                                    label={t('Screenshot / Vision Support')}
+                                    options={[
+                                        { id: 'auto', name: t('Auto-detect (recommended)') },
+                                        { id: 'on', name: t('Always send screenshots') },
+                                        { id: 'off', name: t('Never send screenshots (text only)') },
+                                    ]}
+                                />
                                 <p className="text-[10px] aip-muted mt-1">
                                     {t('Auto-detect enables vision when your cURL uses')} <code className="aip-code-inline">{"{{IMAGE_BASE64}}"}</code> {t('or an OpenAI-style')} <code className="aip-code-inline">messages</code> {t('body. Choose “Always” only if your endpoint accepts images another way; “Never” keeps this provider out of screenshot analysis.')}
                                 </p>
@@ -5588,9 +6218,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         <p className="text-xs aip-muted">{t('What cloud AI providers are allowed to receive.')}</p>
                     </div>
                     <span className="aip-meta tabular-nums shrink-0 pb-0.5">
-                        {SCOPE_ROWS.length - disabledScopeCount}/{SCOPE_ROWS.length} {t('shared')}
+                        {/* The count swaps with the switch that changed it. */}
+                        <SettingsMotionReady.Provider value={motionReady && scopesMotionReady}>
+                            <Presence kind="text" id={String(SCOPE_ROWS.length - disabledScopeCount)}>
+                                {SCOPE_ROWS.length - disabledScopeCount}
+                            </Presence>
+                        </SettingsMotionReady.Provider>
+                        /{SCOPE_ROWS.length} {t('shared')}
                     </span>
                 </div>
+                <SettingsMotionReady.Provider value={motionReady && scopesMotionReady}>
                 <div className="aip-card p-4 flex flex-col gap-2">
                     {SCOPE_ROWS.map(({ key, labelKey, Icon }) => {
                         const allowed = providerDataScopes[key] !== false;
@@ -5600,7 +6237,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 key={key}
                                 className="flex items-center gap-3"
                             >
-                                <Icon size={13} strokeWidth={1.75} className={allowed ? 'aip-faint shrink-0' : 'aip-warn-fg shrink-0'} aria-hidden="true" />
+                                <Icon size={13} strokeWidth={1.75} className={`transition-colors duration-150 ease-out ${allowed ? 'aip-faint shrink-0' : 'aip-warn-fg shrink-0'}`} aria-hidden="true" />
                                 <span className="text-xs aip-hero min-w-0 truncate">{label}</span>
                                 {/* A disabled scope is not inert: LLMHelper reroutes it to a local
                                     model, or DROPS it when none exists. One word each, so the row
@@ -5613,10 +6250,15 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
                                     Transcripts is special-cased again below: denying it does not
                                     merely trim context, it fails the whole request. */}
-                                {!allowed && (() => {
+                                {/* A status tag: transitions.dev "notification badge" (Presence
+                                    badge), a bouncy pop in and a quiet exit, keyed on what it
+                                    says so On-device -> Omitted re-pops. */}
+                                {(() => {
                                     const rowLocal = localFallbackFor(key);
                                     const isKillSwitch = key === 'transcript' && !rowLocal;
+                                    const badgeId = allowed ? null : rowLocal ? 'local' : isKillSwitch ? 'kill' : 'omitted';
                                     return (
+                                    <Presence kind="badge" id={badgeId} className="shrink-0">
                                     <span
                                         className="aip-badge shrink-0"
                                         data-tone={rowLocal ? 'neutral' : 'warn'}
@@ -5629,6 +6271,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                         {rowLocal ? <Laptop size={9} strokeWidth={2} aria-hidden="true" /> : null}
                                         <span className="aip-badge-label">{rowLocal ? t('On-device') : isKillSwitch ? t('Blocks cloud') : t('Omitted')}</span>
                                     </span>
+                                    </Presence>
                                     );
                                 })()}
                                 <div className="ml-auto shrink-0">
@@ -5646,10 +6289,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         );
                     })}
                 </div>
+                </SettingsMotionReady.Provider>
                 {/* Only when it says something the pills do not. The old version showed a
-                    permanent restatement of the per-row text. */}
+                    permanent restatement of the per-row text. Each arrives with the
+                    panel's own fade-up (.aip-panel-fade) rather than landing. */}
                 {providerDataScopes.transcript === false && !localFallbackFor('transcript') && (
-                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                    <div className="aip-inline-warn aip-panel-fade flex items-start gap-2" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         {/* Transcripts is not a context trim. Every request carries a
                             transcript scope at the provider boundary, so denying it with
@@ -5660,7 +6305,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     </div>
                 )}
                 {disabledScopeCount > 0 && !localFallbackFor('reference_files') && providerDataScopes.transcript !== false && (
-                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                    <div className="aip-inline-warn aip-panel-fade flex items-start gap-2" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span>{t('Disabled types are dropped from context, not handled on-device — select a local model under Local & Gateways to keep them.')}</span>
                     </div>
@@ -5674,5 +6319,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 margin onto <header>. */}
             <style>{AIP_CSS}</style>
         </div>
+        </SettingsMotionReady.Provider>
     );
 };

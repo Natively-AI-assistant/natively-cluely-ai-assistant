@@ -1,0 +1,4968 @@
+{
+ "SALES-001": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-002": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-003": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-004": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-005": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-006": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-007": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-008": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-009": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-010": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "chasing approvals",
+   "fifth working day"
+  ],
+  "evidence_required": true
+ },
+ "SALES-011": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "around fifty",
+   "includes the rollout"
+  ],
+  "evidence_required": true
+ },
+ "SALES-012": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-013": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "Enterprise",
+   "Frankfurt",
+   "10 to 14 weeks"
+  ],
+  "evidence_required": true
+ },
+ "SALES-014": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-015": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "month to month",
+   "two-year renewal"
+  ],
+  "evidence_required": true
+ },
+ "SALES-016": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-017": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-018": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-019": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "Business Central connector (beta)",
+   "Up to 2,000 invoices",
+   "next fiscal year"
+  ],
+  "evidence_required": true
+ },
+ "SALES-020": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-021": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "automates accounts payable"
+  ],
+  "evidence_required": true
+ },
+ "SALES-022": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-023": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "5 to 7 business days",
+   "two-week parallel run",
+   "start of a month"
+  ],
+  "evidence_required": true
+ },
+ "SALES-024": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-025": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-026": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-027": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "two-way matching only",
+   "no EU data residency",
+   "$0.48 per invoice"
+  ],
+  "evidence_required": true
+ },
+ "SALES-028": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "three ERPs",
+   "send paper"
+  ],
+  "evidence_required": true
+ },
+ "SALES-029": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "not yet certified",
+   "Q1 2027",
+   "SOC 2 Type II"
+  ],
+  "evidence_required": true
+ },
+ "SALES-030": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-031": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-032": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-033": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-034": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "Net 60 is not offered",
+   "3 percent surcharge",
+   "Deal Desk"
+  ],
+  "evidence_required": true
+ },
+ "SALES-035": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "2-year term 12 percent",
+   "2-year term 10 percent",
+   "$12,000 fixed"
+  ],
+  "evidence_required": true
+ },
+ "SALES-036": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-037": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-038": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-039": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-040": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-041": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-042": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-043": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-044": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-045": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-046": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-047": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-048": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-049": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-050": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-051": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-052": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-053": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-054": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-055": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-056": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-057": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-058": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-059": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-060": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "$4,800 a month",
+   "up to 3 entities",
+   "SAML SSO"
+  ],
+  "evidence_required": true
+ },
+ "SALES-061": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "$4,800 a month",
+   "$12,000 fixed fee"
+  ],
+  "evidence_required": true
+ },
+ "SALES-062": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "$0.85 per invoice"
+  ],
+  "evidence_required": true
+ },
+ "SALES-063": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-064": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "SOC 2 Type II"
+  ],
+  "evidence_required": true
+ },
+ "SALES-065": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-066": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-067": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-068": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "14-day free trial",
+   "no self-serve free trial",
+   "30-day proof of value"
+  ],
+  "evidence_required": true
+ },
+ "SALES-069": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "14-day free trial",
+   "no self-serve free trial"
+  ],
+  "evidence_required": true
+ },
+ "SALES-070": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-071": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-072": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-073": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-074": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-075": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-076": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-077": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-078": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-079": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-080": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "Customer-reported medians",
+   "41 customers",
+   "not independently audited"
+  ],
+  "evidence_required": true
+ },
+ "SALES-081": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "mutual NDA",
+   "does not publish customer names"
+  ],
+  "evidence_required": true
+ },
+ "SALES-082": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "mutual NDA"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-001": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-002": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-003": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-004": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-005": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-006": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "down 41 percent",
+   "38 percent to 9 percent",
+   "14 months"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-007": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-008": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-009": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "payments rebuild",
+   "cut the failure rate"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-010": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "Tallowick",
+   "Daily batch reconciliation failures"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-011": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-012": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-013": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-014": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-015": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-016": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-017": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-018": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "Kafka",
+   "four services",
+   "message bus"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-019": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-020": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-021": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-022": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "about ten engineers",
+   "six reported to me directly",
+   "four were dotted-line"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-023": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-024": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-025": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-026": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "January 2019",
+   "Tech Lead, Ledger Team",
+   "Dec 2022"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-027": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-028": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-029": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-030": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-031": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-032": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "about a year",
+   "Kestrel for ten months",
+   "got acquired"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-033": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "38 percent to 9 percent",
+   "reorganization closed the ledger product line"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-034": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-035": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-036": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-037": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "organization of 15 people",
+   "Mar 2022 to Dec 2023",
+   "Career gap: none"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-038": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-039": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-040": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-041": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-042": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "Ravi taking over incident reviews",
+   "six-month plan"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-043": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-044": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-045": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-046": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "in 2019",
+   "about three years",
+   "early 2024"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-047": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-048": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-049": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-050": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-051": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-052": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-053": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-054": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-055": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-056": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-057": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-058": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-059": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-060": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-061": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-062": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-063": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-064": {
+  "claim_trap": "role_confusion",
+  "needles": [
+   "service migration"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-065": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-066": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-067": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-068": {
+  "claim_trap": "none",
+  "needles": [
+   "Zero issues",
+   "went perfectly"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-069": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "3 or more years managing engineers",
+   "Dec 2022 to present"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-070": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "seven direct reports",
+   "nine engineers and two contractors"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-071": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "eleven years",
+   "Dec 2022 to present"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-072": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "seven direct reports"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-073": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "seven direct reports"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-074": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-075": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-076": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-077": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-078": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-079": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-080": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-081": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "Led a team of 5 engineers",
+   "organization of 15 people"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-082": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "Senior Software Engineer",
+   "Promoted to Engineering Lead",
+   "Mar 2022"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-001": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-002": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-003": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-004": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-005": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-006": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-007": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-008": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-009": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-010": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-011": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-012": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-013": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-014": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-015": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-016": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-017": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-018": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-019": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-020": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-021": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-022": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-023": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-024": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-025": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-026": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-027": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-028": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-029": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "40 requests per second",
+   "the target is 120"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-030": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "deferred to phase 2"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-031": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "40 requests per second",
+   "the target is 120",
+   "Tomas is on leave"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-032": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "A Anita Rossi; R Marcus",
+   "readiness checklist"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-033": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "out of scope"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-034": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "Tue Oct 6",
+   "Android build",
+   "analytics event spec"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-035": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "Sunil Rao",
+   "load tests cannot run without it"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-036": {
+  "claim_trap": "role_confusion",
+  "needles": [
+   "Runbook owner: TBD",
+   "not named yet"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-037": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "on leave Oct 19 to 21",
+   "Fri Oct 23, 22:00"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-038": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "certificate step",
+   "regression suite"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-039": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "infrastructure section",
+   "look at the questions"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-040": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "October 19",
+   "October 5"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-041": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "weekly release trains",
+   "Priya's approval",
+   "tentatively drop the Thursday deploy window"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-042": {
+  "claim_trap": "none",
+  "needles": [
+   "3 percent of sessions",
+   "month-end on the 30th"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-043": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-044": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-045": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-046": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-047": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-048": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-049": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "Saturday Nov 7",
+   "Friday Nov 13",
+   "Ravi Menon runs the cutover"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-050": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "Fri Oct 23",
+   "October 30th"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-051": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-052": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-053": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-054": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-055": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-056": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-057": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-058": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-059": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-060": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-061": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-062": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-063": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-064": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-065": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "40 requests per second",
+   "Refund flow: not started",
+   "Fri Oct 23"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-066": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "Fri Nov 6",
+   "fewer than 100 requests per second"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-067": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "Oct 15 go/no-go meeting",
+   "Priya and Dana",
+   "Fri Nov 6"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-068": {
+  "claim_trap": "none",
+  "needles": [
+   "November 3rd",
+   "after the holidays"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-069": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "Ines's team"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-070": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "Kofi",
+   "Priti",
+   "October 7"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-071": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "sample date changed"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-072": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "Kofi",
+   "October 7"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-073": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-074": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-075": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-076": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-077": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-078": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "Saturday Nov 7",
+   "Friday Nov 13"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-079": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "Ravi Menon runs the cutover",
+   "Data Platform team"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-080": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "Saturday Nov 7",
+   "Friday Nov 13",
+   "on leave Nov 9 to 13"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-081": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-082": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-001": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-002": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "Tallgrass Logistics",
+   "14 regional warehouses"
+  ],
+  "evidence_required": true
+ },
+ "JOB-003": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "Kestrel Insurance",
+   "March 2018 - June 2023",
+   "Lead Analyst"
+  ],
+  "evidence_required": true
+ },
+ "JOB-004": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-005": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-006": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "14 regional warehouses"
+  ],
+  "evidence_required": true
+ },
+ "JOB-007": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-008": {
+  "claim_trap": "personal_preference",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-009": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "reverse logistics roadmap",
+   "three warehouse sites"
+  ],
+  "evidence_required": true
+ },
+ "JOB-010": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-011": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-012": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-013": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-014": {
+  "claim_trap": "personal_preference",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-015": {
+  "claim_trap": "personal_preference",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-016": {
+  "claim_trap": "personal_preference",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-017": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-018": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-019": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "three time zones",
+   "async"
+  ],
+  "evidence_required": true
+ },
+ "JOB-020": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "team of 8 analysts",
+   "12 direct reports"
+  ],
+  "evidence_required": true
+ },
+ "JOB-021": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-022": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-023": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-024": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "same-day triage rule"
+  ],
+  "evidence_required": true
+ },
+ "JOB-025": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "Python simulation of warehouse slotting",
+   "120 hours"
+  ],
+  "evidence_required": true
+ },
+ "JOB-026": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-027": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "three projects at a time"
+  ],
+  "evidence_required": true
+ },
+ "JOB-028": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-029": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-030": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-031": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-032": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-033": {
+  "claim_trap": "personal_preference",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-034": {
+  "claim_trap": "personal_preference",
+  "needles": [
+   "ninety-five",
+   "one hundred and ten thousand"
+  ],
+  "evidence_required": true
+ },
+ "JOB-035": {
+  "claim_trap": "personal_preference",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-036": {
+  "claim_trap": "personal_preference",
+  "needles": [
+   "first of November"
+  ],
+  "evidence_required": true
+ },
+ "JOB-037": {
+  "claim_trap": "personal_preference",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-038": {
+  "claim_trap": "personal_preference",
+  "needles": [
+   "Columbus",
+   "three days a week"
+  ],
+  "evidence_required": true
+ },
+ "JOB-039": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "supporting a parent",
+   "Portland to Columbus",
+   "Supply Chain Analytics Certificate"
+  ],
+  "evidence_required": true
+ },
+ "JOB-040": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-041": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-042": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-043": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-044": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-045": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-046": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-047": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-048": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-049": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-050": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-051": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "same-day triage rule",
+   "6.4 days to 4.4 days"
+  ],
+  "evidence_required": true
+ },
+ "JOB-052": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "Proposed a same-day triage rule"
+  ],
+  "evidence_required": true
+ },
+ "JOB-053": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "6.4 days to 4.4 days",
+   "Piloted at two sites"
+  ],
+  "evidence_required": true
+ },
+ "JOB-054": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-055": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-056": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-057": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-058": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "five analysts"
+  ],
+  "evidence_required": true
+ },
+ "JOB-059": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-060": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-061": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-062": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-063": {
+  "claim_trap": "personal_preference",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-064": {
+  "claim_trap": "personal_preference",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-065": {
+  "claim_trap": "personal_preference",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-066": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-067": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-068": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "14 regional warehouses",
+   "vendor API rate limits"
+  ],
+  "evidence_required": true
+ },
+ "JOB-069": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "Led the migration"
+  ],
+  "evidence_required": true
+ },
+ "JOB-070": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "team of 9",
+   "$2.4M"
+  ],
+  "evidence_required": true
+ },
+ "JOB-071": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-072": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-073": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-074": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-075": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "June 2023",
+   "2018 - present"
+  ],
+  "evidence_required": true
+ },
+ "JOB-076": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "Senior Analytics Lead",
+   "Lead Analyst"
+  ],
+  "evidence_required": true
+ },
+ "JOB-077": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "18 percent",
+   "12 percent"
+  ],
+  "evidence_required": true
+ },
+ "JOB-078": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-079": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-080": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-081": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-082": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-001": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-002": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-003": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-004": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-005": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-006": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-007": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-008": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-009": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-010": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-011": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-012": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-013": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-014": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-015": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-016": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-017": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-018": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-019": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-020": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-021": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-022": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-023": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-024": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-025": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-026": {
+  "claim_trap": "none",
+  "needles": [
+   "drowning in debt",
+   "Estates-General",
+   "National Assembly"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-027": {
+  "claim_trap": "none",
+  "needles": [
+   "own frame on the call stack",
+   "base case",
+   "stack just keeps growing"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-028": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-029": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "utilitarian",
+   "deontologist"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-030": {
+  "claim_trap": "none",
+  "needles": [
+   "thirty dice",
+   "three and a half"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-031": {
+  "claim_trap": "none",
+  "needles": [
+   "120 dollars",
+   "15 dollars a month"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-032": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-033": {
+  "claim_trap": "none",
+  "needles": [
+   "nominal rate of 7 percent",
+   "expected inflation of 4 percent",
+   "about 3 percent"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-034": {
+  "claim_trap": "none",
+  "needles": [
+   "stagflation",
+   "shifts up when expected inflation rises",
+   "vertical at u*"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-035": {
+  "claim_trap": "none",
+  "needles": [
+   "cytosol",
+   "mitochondrial matrix",
+   "inner mitochondrial membrane"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-036": {
+  "claim_trap": "none",
+  "needles": [
+   "ends up as water",
+   "the chain backs up"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-037": {
+  "claim_trap": "none",
+  "needles": [
+   "hand-powered",
+   "needed water power",
+   "start of the factory system"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-038": {
+  "claim_trap": "none",
+  "needles": [
+   "displaced rural labour",
+   "enclosure movement"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-039": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "one Fisher equation calculation",
+   "why the Phillips curve shifts"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-040": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "2.5 ATP per NADH",
+   "3 ATP per NADH",
+   "Proton leak"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-041": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-042": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-043": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-044": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-045": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-046": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-047": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-048": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-049": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-050": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "It is not the probability",
+   "The p-value tells you the chance"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-051": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "z = 1.96",
+   "z = 1.65",
+   "3.3 seconds"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-052": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "n = 25",
+   "n = 36",
+   "10 / 5 = 2"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-053": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-054": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-055": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-056": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-057": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-058": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-059": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-060": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-061": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-062": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-063": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-064": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-065": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-066": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-067": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-068": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-069": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-070": {
+  "claim_trap": "none",
+  "needles": [
+   "six units of wheat",
+   "three of cloth",
+   "ten of cloth"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-071": {
+  "claim_trap": "none",
+  "needles": [
+   "six units of wheat",
+   "three of cloth",
+   "opportunity cost"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-072": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-073": {
+  "claim_trap": "none",
+  "needles": [
+   "enclosure movement",
+   "abundant coal",
+   "separate condenser"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-074": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "energy",
+   "necessary but not sufficient",
+   "cheap, accessible coal"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-075": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-076": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-077": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "smaller than alpha",
+   "If p > 0.05, reject"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-078": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "smaller than alpha",
+   "If p > 0.05, reject"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-079": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-080": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-081": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-082": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-001": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-002": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-003": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-004": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-005": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-006": {
+  "claim_trap": "personal_history",
+  "needles": [
+   "mutex around every write",
+   "one writer goroutine"
+  ],
+  "evidence_required": true
+ },
+ "TECH-007": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-008": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-009": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-010": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-011": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "sort by end time",
+   "attend as many meetings as possible"
+  ],
+  "evidence_required": true
+ },
+ "TECH-012": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "1 <= n <= 100,000",
+   "1,000,000,000"
+  ],
+  "evidence_required": true
+ },
+ "TECH-013": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-014": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-015": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-016": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-017": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-018": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-019": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "all the values are distinct"
+  ],
+  "evidence_required": true
+ },
+ "TECH-020": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "2,000,000 records",
+   "256 MB of memory",
+   "finish in 10 seconds"
+  ],
+  "evidence_required": true
+ },
+ "TECH-021": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-022": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-023": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-024": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "get and put are O(1)",
+   "self.order.remove(key)"
+  ],
+  "evidence_required": true
+ },
+ "TECH-025": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-026": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-027": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-028": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "self.expires[key] = time.time() + self.ttl",
+   "if key in self.values:"
+  ],
+  "evidence_required": true
+ },
+ "TECH-029": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-030": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-031": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-032": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "ends exactly at the second",
+   "must not modify its input",
+   "exact duplicate records"
+  ],
+  "evidence_required": true
+ },
+ "TECH-033": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "already sorted in ascending order"
+  ],
+  "evidence_required": true
+ },
+ "TECH-034": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-035": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "O(n + m) time",
+   "1,000,000,000",
+   "one-way"
+  ],
+  "evidence_required": true
+ },
+ "TECH-036": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "rain water"
+  ],
+  "evidence_required": true
+ },
+ "TECH-037": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-038": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-039": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "first ten minutes",
+   "with the arithmetic shown",
+   "Interface and data model"
+  ],
+  "evidence_required": true
+ },
+ "TECH-040": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-041": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-042": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "five thousand requests a second"
+  ],
+  "evidence_required": true
+ },
+ "TECH-043": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-044": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-045": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-046": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "No locking",
+   "one worker thread per connection"
+  ],
+  "evidence_required": true
+ },
+ "TECH-047": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-048": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-049": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-050": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-051": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-052": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-053": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-054": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-055": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-056": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-057": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "30 million new links per month",
+   "p99 under 80 ms",
+   "roughly 100 to 1"
+  ],
+  "evidence_required": true
+ },
+ "TECH-058": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "30 million new links per month",
+   "Links are kept for five years"
+  ],
+  "evidence_required": true
+ },
+ "TECH-059": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "shorten the same long URL"
+  ],
+  "evidence_required": true
+ },
+ "TECH-060": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "30 million new links per month",
+   "roughly 100 to 1"
+  ],
+  "evidence_required": true
+ },
+ "TECH-061": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-062": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-063": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-064": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "the word's letters sorted",
+   "group the anagrams"
+  ],
+  "evidence_required": true
+ },
+ "TECH-065": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "group the anagrams",
+   "letters sorted"
+  ],
+  "evidence_required": true
+ },
+ "TECH-066": {
+  "claim_trap": "code_correctness",
+  "needles": [
+   "group the anagrams"
+  ],
+  "evidence_required": true
+ },
+ "TECH-067": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-068": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-069": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-070": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-071": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-072": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-073": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-074": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-075": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-076": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-077": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-078": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-079": {
+  "claim_trap": "code_correctness",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-080": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-081": {
+  "claim_trap": "none",
+  "needles": [
+   "mostly reads"
+  ],
+  "evidence_required": true
+ },
+ "TECH-082": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-001": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-002": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-003": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-004": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-005": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-006": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-007": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "60 villages",
+   "30 per arm"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-008": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "0.29"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-009": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "diarrhoea",
+   "under 5"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-010": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "weekly SMS reminders",
+   "diarrhoea"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-011": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "caregiver-reported",
+   "social desirability",
+   "No stool samples"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-012": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "0.05"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-013": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "60 villages",
+   "26 weeks"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-014": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "91%",
+   "could not verify"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-015": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "Cortex-A53",
+   "eMMC"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-016": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "at most 0.4",
+   "no formal significance tests"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-017": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "foreground load",
+   "tail latency"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-018": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "within 3%"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-019": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": true
+ },
+ "SEMINAR-020": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "did not evaluate NVMe",
+   "no acknowledged write lost"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-021": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "one board",
+   "tuned on W-B",
+   "no formal significance tests"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-022": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "foreground write rate",
+   "sustainable write rate"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-023": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "24"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-024": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "0.92 per 100 m",
+   "a third fewer"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-025": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "seed mix",
+   "correlational"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-026": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "did not measure foraging range"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-027": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": true
+ },
+ "SEMINAR-028": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "no evidence",
+   "exploratory",
+   "did not measure foraging range"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-029": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "landowner access",
+   "surrounding matrix"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-030": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": true
+ },
+ "SEMINAR-031": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": true
+ },
+ "SEMINAR-032": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "57%",
+   "0.048",
+   "cannot separate"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-033": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "80.3%",
+   "selective drop-out"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-034": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "too small"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-035": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "180 ms",
+   "USD 310",
+   "14 hours"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-036": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "4 weeks"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-037": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-038": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-039": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-040": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-041": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-042": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-043": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-044": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-045": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-046": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-047": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "6-month trial",
+   "30 September 2024"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-048": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "-20.9%",
+   "0.09",
+   "USD 1.86 million"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-049": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "41.2"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-050": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "48 buses",
+   "31%",
+   "0.09"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-051": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "USD 1.86 million",
+   "USD 0.31 million",
+   "under 3 years"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-052": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": true
+ },
+ "SEMINAR-053": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "1.0 litre per hour"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-054": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "47.9%"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-055": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "not contacted about their filters"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-056": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "0.61",
+   "exploratory"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-057": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "p = 0.21",
+   "not a pre-registered"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-058": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "0.7",
+   "0.3"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-059": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "grid search",
+   "W-B only"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-060": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "one board",
+   "did not evaluate NVMe"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-061": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "34%",
+   "StaticLevel"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-062": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "LazyTier",
+   "9.7"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-063": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "71 species"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-064": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "83 species",
+   "Chao2"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-065": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "floral cover was lower",
+   "Moths were not sampled"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-066": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "0.92 per 100 m",
+   "a third fewer"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-067": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "0.92"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-068": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "randomised individually within section"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-069": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "not blind to condition"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-070": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "anonymised scripts",
+   "not blind"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-071": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "57%",
+   "19%"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-072": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "57%",
+   "cannot separate"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-073": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-074": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-075": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-076": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-077": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-078": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-079": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "48 buses",
+   "42"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-080": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "120 diesel buses",
+   "48 buses"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-081": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "31%",
+   "-20.9%"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-082": {
+  "claim_trap": "research_claim",
+  "needles": [
+   "-20.9%"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-001": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-002": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-003": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-004": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-005": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-006": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-007": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-008": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-009": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-010": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-011": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-012": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-013": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-014": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-015": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-016": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-017": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-018": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-019": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-020": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-021": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "within 14 days of the charge",
+   "end of the current billing period",
+   "no partial-month refunds"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-022": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "30-day return window",
+   "10 percent restocking fee"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-023": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "$1.50 per day",
+   "longer than 24 hours"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-024": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "7 business days after dispatch",
+   "free reship or a refund"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-025": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "registered mobile number",
+   "Identity Review form"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-026": {
+  "claim_trap": "none",
+  "needles": [
+   "can't see the line"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-027": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "thirty four ninety nine"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-028": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-029": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-030": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "fifty nine ninety nine",
+   "five to seven business days"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-031": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "goodwill credit up to $25",
+   "refund over $75",
+   "third time about the same issue"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-032": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "INC-4471",
+   "15:30"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-033": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-034": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-035": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-036": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-037": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-038": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-039": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-040": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-041": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "transfer to a team lead immediately",
+   "two documented attempts"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-042": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "within 3 business days",
+   "within 7 business days"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-043": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "within 14 days of the charge",
+   "within 30 days of the charge"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-044": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-045": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-046": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-047": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-048": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-049": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-050": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-051": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "refunded in full with no fee"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-052": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "within 5 business days",
+   "2 to 3 further business days"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-053": {
+  "claim_trap": "company_fact",
+  "needles": [
+   "known fiber outage"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-054": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "three thirty this afternoon"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-055": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-056": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-057": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-058": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-059": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "within 90 days of the charge",
+   "within 5 business days"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-060": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "within 90 days of the charge"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-061": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-062": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-063": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-064": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-065": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-066": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-067": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-068": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-069": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-070": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-071": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "within 14 days of the charge",
+   "within 30 days of the charge"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-072": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "within 30 days of the charge",
+   "follow the FAQ",
+   "within 14 days of the charge"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-073": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-074": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-075": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-076": {
+  "claim_trap": "support_policy",
+  "needles": [
+   "black doorbell camera two-pack",
+   "5512"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-077": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-078": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-079": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-080": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-081": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-082": {
+  "claim_trap": "none",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-083": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-084": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-085": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-086": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-087": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-088": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-089": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-090": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-091": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-092": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-093": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-094": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-095": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-096": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-097": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-098": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-099": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-100": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-101": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-102": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SALES-103": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "SALES-104": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "SALES-105": {
+  "claim_trap": "role_confusion",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "SALES-106": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "integration slipped"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-083": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-084": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-085": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-086": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-087": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-088": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-089": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-090": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-091": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-092": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-093": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-094": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-095": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-096": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-097": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-098": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-099": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-100": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-101": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-102": {
+  "claim_trap": "company_fact",
+  "needles": [],
+  "evidence_required": false
+ },
+ "RECRUITING-103": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-104": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-105": {
+  "claim_trap": "role_confusion",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "RECRUITING-106": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "integration slipped"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-083": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-084": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-085": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-086": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-087": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-088": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-089": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-090": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-091": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-092": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-093": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-094": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-095": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-096": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-097": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-098": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-099": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-100": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-101": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-102": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TEAM-103": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-104": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-105": {
+  "claim_trap": "role_confusion",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "TEAM-106": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "integration slipped"
+  ],
+  "evidence_required": true
+ },
+ "JOB-083": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-084": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-085": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-086": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-087": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-088": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-089": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-090": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-091": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-092": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-093": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-094": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-095": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-096": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-097": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-098": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-099": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-100": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-101": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-102": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "JOB-103": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "JOB-104": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "JOB-105": {
+  "claim_trap": "role_confusion",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "JOB-106": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "integration slipped"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-083": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-084": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-085": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-086": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-087": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-088": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-089": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-090": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-091": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-092": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-093": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-094": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-095": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-096": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-097": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-098": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-099": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-100": {
+  "claim_trap": "role_confusion",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-101": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-102": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "LECTURE-103": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-104": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-105": {
+  "claim_trap": "role_confusion",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "LECTURE-106": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "integration slipped"
+  ],
+  "evidence_required": true
+ },
+ "TECH-083": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-084": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-085": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-086": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-087": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-088": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-089": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-090": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-091": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-092": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-093": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-094": {
+  "claim_trap": "personal_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-095": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-096": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-097": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-098": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-099": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-100": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-101": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-102": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "TECH-103": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "TECH-104": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "TECH-105": {
+  "claim_trap": "role_confusion",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "TECH-106": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "integration slipped"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-083": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-084": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-085": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-086": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-087": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-088": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-089": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-090": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-091": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-092": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-093": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-094": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-095": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-096": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-097": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-098": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-099": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-100": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-101": {
+  "claim_trap": "research_claim",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-102": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "SEMINAR-103": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-104": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-105": {
+  "claim_trap": "role_confusion",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "SEMINAR-106": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "integration slipped"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-083": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-084": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-085": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-086": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-087": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-088": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-089": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-090": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-091": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-092": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-093": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-094": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-095": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-096": {
+  "claim_trap": "support_policy",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-097": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-098": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-099": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-100": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-101": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-102": {
+  "claim_trap": "meeting_history",
+  "needles": [],
+  "evidence_required": false
+ },
+ "CALLCENTER-103": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-104": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-105": {
+  "claim_trap": "role_confusion",
+  "needles": [
+   "two weeks",
+   "changed their API"
+  ],
+  "evidence_required": true
+ },
+ "CALLCENTER-106": {
+  "claim_trap": "meeting_history",
+  "needles": [
+   "integration slipped"
+  ],
+  "evidence_required": true
+ }
+}

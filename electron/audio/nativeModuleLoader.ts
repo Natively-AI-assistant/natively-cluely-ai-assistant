@@ -39,6 +39,13 @@ export interface NativeModule {
   // rebuild; callers must `typeof`-check and treat a missing export as "no IME"
   // so a stale binary keeps today's behaviour.
   isImeKeyboardActive?: () => boolean;
+  // Meeting detection (native-module/src/meeting_signals.rs). Who is capturing
+  // from a microphone (macOS 14+ CoreAudio process objects; Windows the
+  // microphone consent store) and the visible windows with owner and title.
+  // Read-only: no device opened, no mic indicator, no prompt. Null where the OS
+  // can't say. Optional: a binary without them means no native signals.
+  getMicUsers?: () => Array<{ pid?: number; bundleId?: string; path?: string }> | null;
+  getVisibleWindows?: () => Array<{ pid: number; owner: string; title: string; path?: string }> | null;
   // Stealth keyboard interception. macOS: CGEventTap. Windows:
   // WH_KEYBOARD_LL low-level hook (native-module/src/keyboard_hook_windows.rs)
   // exposing this IDENTICAL surface. Engaged by StealthKeyboardManager; the

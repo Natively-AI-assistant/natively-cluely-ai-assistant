@@ -1,0 +1,1061 @@
+{
+  "mode": "technical-interview",
+  "partition": "dev",
+  "contexts": [
+    {
+      "id": "DTECH-CTX-G1",
+      "kind": "grounded",
+      "title": "Quarrystone take-home: Pager Quiet Windows (problem statement)",
+      "file_name": "quarrystone_takehome_quiet_windows.txt",
+      "text": "QUARRYSTONE ANALYTICS - PLATFORM TEAM TAKE-HOME (v3)\nProblem: Pager Quiet Windows\n\nBackground\nOur on-call tool lets engineers schedule \"quiet windows\" during which non-critical pages for a host are held back. Engineers create windows independently, so the list for one host arrives unsorted and often overlapping. Before we push windows to the pager we collapse them into the smallest equivalent list.\n\nPart 1: merge_windows(windows, grace)\nInput:\n- windows: a list of pairs [start, end], in integer minutes since the start of the quarter. A window covers minute start (inclusive) up to end (exclusive), so [10, 20] covers 10 minutes.\n- grace: an integer number of minutes.\n\nRules:\n1. If any window has end < start, raise ValueError with the message \"inverted window at index i\", where i is the index of the FIRST such window in the input list as given (before any sorting).\n2. A window with end == start covers no time and is dropped silently. A dropped window must not bridge two other windows.\n3. After sorting by start, a window merges into the current merged window when its start <= current end + grace. Windows that touch (next start == current end) therefore always merge, even with grace 0.\n4. Grace only decides whether two windows merge; it never extends a window. A merged window ends at the largest end among the windows it absorbed.\n5. Return the merged windows sorted by start, as a new list of [start, end] pairs. Do not mutate the input list or the pairs inside it.\n\nExamples\nExample 1: windows = [[10, 20], [15, 30], [40, 50]], grace = 0\nOutput: [[10, 30], [40, 50]]\n\nExample 2: windows = [[5, 10], [10, 12], [13, 20]], grace = 0\nOutput: [[5, 12], [13, 20]]\n([5, 10] and [10, 12] touch, so they merge. The gap from 12 to 13 is 1 minute, which is larger than grace 0.)\n\nExample 3: windows = [[5, 10], [10, 12], [13, 20]], grace = 1\nOutput: [[5, 20]]\n(Note the result is [5, 20], not [5, 21]: grace never extends a window.)\n\nExample 4: windows = [[30, 30], [1, 4], [2, 3]], grace = 5\nOutput: [[1, 4]]\n([30, 30] is dropped; [2, 3] lies inside [1, 4].)\n\nExample 5: windows = [[0, 10], [11, 11], [12, 20]], grace = 1\nOutput: [[0, 10], [12, 20]]\n([11, 11] is dropped before merging, so it cannot bridge the gap between 10 and 12.)\n\nExample 6: windows = [[7, 3], [1, 2], [9, 4]], grace = 0\nRaises ValueError(\"inverted window at index 0\")\n\nExample 7: windows = [], grace = 10\nOutput: []\n\nPart 2: total_quiet_minutes(windows, grace)\nReturn the total number of minutes covered by the output of merge_windows. A gap that grace bridged is counted, because the merged window spans it. For Example 1 the answer is 30, for Example 3 it is 15, and for Example 7 it is 0.\n\nConstraints\n- 0 <= len(windows) <= 200,000\n- 0 <= start, end <= 10^9\n- 0 <= grace <= 60\n- Your solution must run in O(n log n) time. Our reference solution runs in under 1 second in Python for n = 200,000.\n- Python 3.10+ or Go 1.22+. Standard library only.\n\nWhat we look at\nCorrectness on our hidden cases (including every edge case above), readability, the tests you write yourself, and a short note (under 200 words) explaining your approach and its complexity. Please do not spend more than 3 hours.\n\nLive follow-up\nIn the follow-up interview we will ask how your design changes if windows arrive one at a time from a stream and the pager needs to ask \"is minute t quiet?\" at any moment.",
+      "notes": null
+    },
+    {
+      "id": "DTECH-CTX-G2",
+      "kind": "grounded",
+      "title": "Lanternfish design notes and retrospective",
+      "file_name": "lanternfish_design_notes.txt",
+      "text": "LANTERNFISH - DESIGN NOTES AND RETROSPECTIVE\nAuthor: Dashiell Marrow, SRE I, Cindervale Systems. Written December 2025 for the SRE team wiki.\n\nProblem\nThe checkout path (cart-api -> pricing -> payments-gateway) had a p99 of about 1,380 ms against an SLO target of 900 ms. Traces showed unexplained gaps before outbound calls that no span covered. We suspected DNS but had no per-pod data. CoreDNS exposes metrics per CoreDNS replica, only for the queries that reach it, and it sees a client's search-domain expansion as several unrelated queries rather than one slow lookup.\n\nDesign\nLanternfish is a Rust sidecar built on the tokio async runtime, using the hickory-proto crate to parse DNS messages. It is injected into pods on the checkout path.\n- The pod uses dnsPolicy None with a dnsConfig whose first nameserver is 127.0.0.1. Lanternfish listens on 127.0.0.1:53 over UDP; only the sidecar container gets the NET_BIND_SERVICE capability.\n- Each query is forwarded unchanged to the cluster DNS service IP. Lanternfish times the lookup from the moment the query arrives from the application to the moment the response is written back.\n- It exports a Prometheus histogram, lanternfish_lookup_seconds, with 12 buckets from 1 ms to 2.5 s and the labels qtype, rcode and upstream. The queried name is deliberately NOT a label, to keep cardinality bounded.\n- A counter, lanternfish_search_expansions_total, counts queries for names that end in one of the pod's search suffixes and come back NXDOMAIN.\n- The existing Prometheus scrapes it every 15 seconds; no new storage was needed.\n- The second nameserver line in dnsConfig points straight at the cluster DNS IP, with options timeout:1, so a crashed sidecar costs a one-second retry rather than an outage.\n\nWhy a sidecar\nWe considered three options:\n1. CoreDNS metrics. Already existed, but aggregated per replica rather than per pod, and blind to how many expansions one application lookup triggered.\n2. An eBPF probe on each node. Per-pod data without touching pods, but our GKE nodes ran Container-Optimized OS, nobody on the team had written eBPF before, and we estimated 4 to 6 weeks.\n3. A sidecar. Per pod by construction, easy to remove, and about 2 weeks of work.\nWe chose the sidecar. The trade-off: it only sees pods it is injected into, and it adds one local hop to every lookup.\n\nRollout\nLanternfish ran on the 14 deployments of the checkout path for three weeks.\n\nFindings\n- 31% of p99 latency on the checkout path came from DNS resolution.\n- The main cause was the default ndots:5. External names such as the payment processor's API have fewer than five dots, so the resolver tried every search domain first. On GKE that meant up to 10 failed queries (A and AAAA for each of 5 search domains) before the real lookup.\n- A smaller share came from occasional 5-second stalls caused by a known conntrack race when A and AAAA queries go out in parallel over UDP.\n\nFix\n- Priya Oduya (senior SRE) reviewed the design and ran the rollout of the fix; I wrote the sidecar, the dashboards and the analysis.\n- Checkout-path pods moved to ndots:2, and the three external payment endpoints were changed to fully qualified names with a trailing dot.\n- NodeLocal DNSCache was enabled on the cluster, which also removed the conntrack stalls.\n- Checkout p99 fell from 1,380 ms to 910 ms, and DNS dropped to about 6% of p99.\n\nOverhead and limitations\n- Median added latency is about 0.3 ms per lookup; each sidecar uses about 6 MiB of memory and under 5 millicores of CPU.\n- UDP only: queries that fall back to TCP after a truncated response are passed through and not measured.\n- After the fix we removed the sidecar from 9 of the 14 deployments and kept it on 5 as a canary.\n- It was never deployed to the other two clusters, and it has not been open-sourced.",
+      "notes": null
+    },
+    {
+      "id": "DTECH-CTX-I1",
+      "kind": "irrelevant",
+      "title": "Portland onsite travel itinerary",
+      "file_name": "portland_onsite_itinerary.txt",
+      "text": "PORTLAND ONSITE - TRAVEL ITINERARY\nPrepared by the travel desk for the candidate.\n\nGetting there\nTrain 517 departs Tacoma Dome Station at 7:52 AM and arrives at Portland Union Station at 10:05 AM. Your e-ticket is attached separately; show the QR code to the conductor. If the train runs late, text the travel desk and we will move your first meeting.\n\nFrom the station\nThe office is about a 12-minute walk from Union Station. A rideshare is fine if it is raining; keep the receipt.\n\nHotel\nThe Larchmont Hotel, one night, confirmation LRX-40218. Check-in from 3 PM. Breakfast is included; parking is not.\n\nMeals\nLunch is provided on the day. For other meals the per diem is $65 per day, and receipts are required for anything over $25.\n\nGetting home\nTrain 520 departs Portland Union Station at 5:30 PM the next day and arrives at Tacoma Dome Station at 7:41 PM.\n\nExpenses\nSubmit receipts within 30 days using the reimbursement form linked in your confirmation email. Reimbursement usually takes two pay cycles. Mileage is reimbursed only if you drive instead of taking the train.",
+      "notes": null
+    },
+    {
+      "id": "DTECH-CTX-C1",
+      "kind": "conflicting",
+      "title": "Quarrystone take-home candidate FAQ",
+      "file_name": "quarrystone_takehome_faq.txt",
+      "text": "QUARRYSTONE TAKE-HOME - CANDIDATE FAQ\nForwarded by Pilar Okonkwo-Reyes, Technical Recruiter. Compiled from questions earlier candidates asked about the Pager Quiet Windows exercise. Different interviewers wrote different answers.\n\nQ: How long should I spend on it?\nA: Please keep it under 3 hours. We are not grading polish.\n\nQ: How big are the inputs?\nA: Each host has at most 200,000 windows, so an O(n log n) sort-based solution is what we expect.\n\nQ: Do windows that touch, like [5, 10] and [10, 12], merge when grace is 0?\nA: No. Ends are exclusive, so [5, 10] and [10, 12] stay separate unless grace is at least 1.\n\nQ: What languages can I use?\nA: Python 3.10+ or Go 1.22+, standard library only.\n\nQ: Can I use sortedcontainers or another package for part 2?\nA: Yes, any package on PyPI is fine as long as you pin it in requirements.txt.\n\nQ: What does the grader check first?\nA: The edge cases. Touching windows always merge, even with grace 0, and zero-length windows are dropped. Most failed submissions get one of those wrong.\n\nQ: What is the performance bar?\nA: The hidden cases go up to 2 million windows per host, and the reference solution finishes in under 1 second in Python. If yours takes a few seconds that is fine; we cut off at 5 seconds.\n\nQ: When is it due?\nA: You have 48 hours from when the link opens. Most people spend a full day on it.\n\nQ: Should part 2 count grace gaps as quiet time?\nA: No, only minutes actually inside a window count.",
+      "notes": "Contradictions: touching windows \"stay separate\" vs \"always merge\" at grace 0; max input 200,000 vs 2 million windows per host; \"standard library only\" vs \"any package on PyPI is fine\"; \"under 3 hours\" vs \"48 hours / most people spend a full day\"; part 2 says grace gaps are not counted, which clashes with merged windows spanning them; 1 s reference vs 5 s cutoff for an input 10x the stated max."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "DTECH-001",
+      "category": "fundamentals_cs",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Let's start simple. What's the difference between a process and a thread?",
+      "context_condition": "irrelevant",
+      "context_ref": "DTECH-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "irrelevant_doc"
+      ],
+      "expected_answer_type": "concise spoken conceptual explanation",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-002",
+      "category": "small_coding",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Write a function that returns true if a string is a palindrome once you ignore case and anything that isn't a letter or a digit. So 'A man, a plan, a canal: Panama' should be true and 'race a car' should be false. Talk me through it as you go.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "exact_examples"
+      ],
+      "expected_answer_type": "code with short explanation consistent with examples",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-003",
+      "category": "complexity_only",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "heapify complexity?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "short_turn",
+        "adversarial"
+      ],
+      "expected_answer_type": "one-line complexity answer, disambiguated if needed",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DTECH-004",
+      "category": "debugging",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "fix this, interviewer says the results sometimes come back as all zeros:\n\nfunc fetchAll(urls []string) []int {\n    results := make([]int, len(urls))\n    var wg sync.WaitGroup\n    for i, u := range urls {\n        go func(i int, u string) {\n            wg.Add(1)\n            defer wg.Done()\n            results[i] = fetchStatus(u)\n        }(i, u)\n    }\n    wg.Wait()\n    return results\n}",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "pasted_code",
+        "hidden_bug",
+        "adversarial",
+        "go"
+      ],
+      "expected_answer_type": "bug explanation and corrected Go code",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-005",
+      "category": "debugging",
+      "difficulty": "easy",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Here's a quick one. Someone wrote a Java method to check if two strings are anagrams. It turns both into char arrays, sorts both with Arrays.sort, and then returns first dot equals second. It returns false even for listen and silent. What's wrong, and how would you fix it?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "hidden_bug",
+        "java"
+      ],
+      "expected_answer_type": "name the bug and the one-line fix",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DTECH-006",
+      "category": "small_coding",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "code only: merge two sorted linked lists in python, return the new head",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "format_constraint",
+        "code_only"
+      ],
+      "expected_answer_type": "code only, no prose",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-007",
+      "category": "approach_only",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Don't write code yet. Count the islands in a grid of ones and zeros, except the grid is huge, millions of rows, and you can only stream it one row at a time with memory for about two rows. How would you approach it?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "ambiguous",
+        "approach_only"
+      ],
+      "expected_answer_type": "approach explanation without code, with complexity",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-008",
+      "category": "complexity_only",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "just the complexity",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Next one. Given an array of integers, return all the unique triplets that add up to zero."
+        },
+        {
+          "speaker": "user",
+          "text": "Can the array have duplicates?"
+        },
+        {
+          "speaker": "other",
+          "text": "Yes, but the output shouldn't repeat a triplet."
+        },
+        {
+          "speaker": "user",
+          "text": "Okay, I'll sort it, then for each index run two pointers on the rest and skip duplicates as I go."
+        },
+        {
+          "speaker": "other",
+          "text": "Sounds good. And what does that cost you?"
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "short_turn",
+        "ambiguous",
+        "format_constraint"
+      ],
+      "expected_answer_type": "time and space complexity only, very brief",
+      "claim_trap": "code_correctness",
+      "needles": [
+        "two pointers"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-009",
+      "category": "dry_run",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Let's trace one. Lower bound binary search: lo is zero, hi is the length, while lo is less than hi, mid is lo plus hi over two, if a of mid is less than target then lo is mid plus one, otherwise hi is mid. Walk me through it on one, two, two, two, five with target two. Tell me lo, hi and mid at every step.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "exact_examples"
+      ],
+      "expected_answer_type": "step-by-step trace with final result",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-010",
+      "category": "leetcode",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Implement an LRU cache with get and put, both in constant time. With capacity two: put one, put two, get one returns one, put three should evict two, and then get two returns minus one.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "exact_examples"
+      ],
+      "expected_answer_type": "working code with brief data-structure explanation",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B-JD"
+    },
+    {
+      "local_id": "DTECH-011",
+      "category": "api_design",
+      "difficulty": "normal",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Let's do a small API design. A URL shortener: what endpoints would you have, what does each one return, and what should happen if two people shorten the exact same long URL?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "endpoint list with responses and a design decision",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DTECH-012",
+      "category": "api_design",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "We have an endpoint that lists shipment events newest first, and new events are being inserted constantly while people page through it. How would you design the pagination so nobody sees duplicates or skips anything?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_relevant_optional"
+      ],
+      "expected_answer_type": "API pagination design with trade-offs",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "DTECH-013",
+      "category": "resume_project_deep_dive",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Tell me about Project Tern. Why split settlement into three services instead of keeping one, and how did you cut over without paying a carrier twice?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "resume_needle"
+      ],
+      "expected_answer_type": "first-person project account",
+      "claim_trap": "personal_history",
+      "needles": [
+        "Rails monolith",
+        "4 engineers and 1 QA analyst"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "DTECH-014",
+      "category": "behavioral_in_tech_round",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Which languages are you strongest in, and what have you actually shipped with each?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "profile_switch",
+        "resume_needle"
+      ],
+      "expected_answer_type": "first-person answer grounded in the resume",
+      "claim_trap": "personal_history",
+      "needles": [
+        "Lanternfish",
+        "Kestrel"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-015",
+      "category": "behavioral_in_tech_round",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Tell me about a time you made something measurably faster or cheaper. I want actual numbers.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "profile_switch",
+        "resume_needle"
+      ],
+      "expected_answer_type": "first-person story with resume numbers",
+      "claim_trap": "personal_history",
+      "needles": [
+        "$41,300 to $29,800",
+        "34 minutes to 13 minutes"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-016",
+      "category": "database_design",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Have you run Postgres in production? Say there's a table with a couple billion event rows and vacuum takes hours. Would you partition it, how, and what gets harder once you do?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "skill_not_on_resume"
+      ],
+      "expected_answer_type": "experience statement plus partitioning design",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-017",
+      "category": "fundamentals_cs",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Most of our control plane tooling is in Go. Walk me through how goroutines get scheduled onto OS threads, when you'd reach for a channel versus a mutex, and tell me honestly how much Go you've written in production.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "skill_not_on_resume"
+      ],
+      "expected_answer_type": "technical explanation plus first-person experience statement",
+      "claim_trap": "personal_history",
+      "needles": [
+        "Python, Rust, Bash, some Java"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-018",
+      "category": "approach_only",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "interviewer wants approach only: detect a cycle in a linked list and find the node where it starts. no code, 3 sentences max",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "format_constraint"
+      ],
+      "expected_answer_type": "approach only, at most three sentences",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B-RESUME"
+    },
+    {
+      "local_id": "DTECH-019",
+      "category": "leetcode",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Let's warm up. Two sum: given 2, 7, 11, 15 and a target of 9, return the indices of the two numbers that add up to it. Approach and complexity, please.",
+      "context_condition": "irrelevant",
+      "context_ref": "DTECH-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "irrelevant_doc",
+        "exact_examples"
+      ],
+      "expected_answer_type": "short approach, result for the example, complexity",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B-RESUME"
+    },
+    {
+      "local_id": "DTECH-020",
+      "category": "debugging",
+      "difficulty": "easy",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "this debounce fires on every keystroke instead of once, fix it:\n\nfunction debounce(fn, wait) {\n  let timer;\n  return function (...args) {\n    clearTimeout(timer);\n    setTimeout(() => fn.apply(this, args), wait);\n  };\n}",
+      "context_condition": "irrelevant",
+      "context_ref": "DTECH-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pasted_code",
+        "hidden_bug",
+        "irrelevant_doc",
+        "javascript"
+      ],
+      "expected_answer_type": "bug named and corrected JavaScript",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DTECH-021",
+      "category": "complexity_only",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "What's the time complexity of this: the outer loop runs i from one to n, and inside it j starts at i and doubles each time while j is less than n, doing constant work per step.",
+      "context_condition": "irrelevant",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Sorry I'm a couple of minutes late, my last meeting ran over."
+        },
+        {
+          "speaker": "user",
+          "text": "No worries at all."
+        },
+        {
+          "speaker": "other",
+          "text": "Did you get caught in the rain coming in? It's been pouring here all morning."
+        },
+        {
+          "speaker": "user",
+          "text": "A little, but the train was on time, so I can't complain."
+        },
+        {
+          "speaker": "other",
+          "text": "Nice. Okay, let's jump into something short."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "adversarial",
+        "irrelevant_transcript"
+      ],
+      "expected_answer_type": "complexity bound with brief justification",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B-JD"
+    },
+    {
+      "local_id": "DTECH-022",
+      "category": "approach_only",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "the quarrystone faq i attached, do touching windows like 5-10 and 10-12 merge at grace 0 or not? need to tell the interviewer my assumption before i code",
+      "context_condition": "conflicting",
+      "context_ref": "DTECH-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "conflicting_material"
+      ],
+      "expected_answer_type": "short direct answer the candidate can relay",
+      "claim_trap": "code_correctness",
+      "needles": [
+        "stay separate",
+        "always merge"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-023",
+      "category": "complexity_only",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "For our quiet windows exercise, what's the biggest input you're designing for, and would a sort based Python solution actually make our time cutoff?",
+      "context_condition": "conflicting",
+      "context_ref": "DTECH-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "insufficient_info",
+        "conflicting_material"
+      ],
+      "expected_answer_type": "input sizing and complexity answer",
+      "claim_trap": "code_correctness",
+      "needles": [
+        "200,000",
+        "2 million"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B-RESUME"
+    },
+    {
+      "local_id": "DTECH-024",
+      "category": "dry_run",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "So with those changes, rerun example five for me, and tell me whether your n log n approach still holds.",
+      "context_condition": "conflicting",
+      "context_ref": "DTECH-CTX-G1",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Quick heads up before we look at your take-home, we changed a couple of rules since that PDF went out."
+        },
+        {
+          "speaker": "other",
+          "text": "Grace can now be anything up to a full day, so up to 1440 minutes, and zero length windows are kept now, they act as markers."
+        },
+        {
+          "speaker": "user",
+          "text": "Okay, so a zero length window can bridge two others now?"
+        },
+        {
+          "speaker": "other",
+          "text": "Yeah, I think so."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "adversarial",
+        "conflicting_update"
+      ],
+      "expected_answer_type": "dry run of the example plus complexity check",
+      "claim_trap": "code_correctness",
+      "needles": [
+        "[[0, 10], [11, 11], [12, 20]]",
+        "1440"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DTECH-025",
+      "category": "small_coding",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "write merge_windows from the take-home in python, it has to match every rule in the spec including the edge cases",
+      "context_condition": "grounded",
+      "context_ref": "DTECH-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "spec_compliance"
+      ],
+      "expected_answer_type": "complete Python code matching the attached spec",
+      "claim_trap": "code_correctness",
+      "needles": [
+        "inverted window at index"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DTECH-026",
+      "category": "resume_project_deep_dive",
+      "difficulty": "normal",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Once you knew it was DNS, what did you actually change, who rolled the fix out, and what did checkout p99 look like afterwards?",
+      "context_condition": "grounded",
+      "context_ref": "DTECH-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "credit_attribution",
+        "doc_needle"
+      ],
+      "expected_answer_type": "first-person account grounded in the design notes",
+      "claim_trap": "personal_history",
+      "needles": [
+        "ndots:2",
+        "Priya Oduya",
+        "910 ms"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-027",
+      "category": "resume_project_deep_dive",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "he's asking what lanternfish cost to run and what it couldn't see. short answer i can say out loud",
+      "context_condition": "grounded",
+      "context_ref": "DTECH-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "format_constraint",
+        "doc_needle"
+      ],
+      "expected_answer_type": "short speakable first-person answer",
+      "claim_trap": "personal_history",
+      "needles": [
+        "0.3 ms",
+        "UDP only"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-028",
+      "category": "system_design",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "So if you joined and owned this, what would you change first, how would you know it worked, and what would you leave alone?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "So some context on our side. Right now we page on any service whose 5xx rate is over 1 percent for five minutes."
+        },
+        {
+          "speaker": "user",
+          "text": "Same threshold across every service?"
+        },
+        {
+          "speaker": "other",
+          "text": "Same threshold everywhere. On-call gets roughly 90 pages a week and people have started muting the channel."
+        },
+        {
+          "speaker": "other",
+          "text": "About half of those fire during deploys and clear on their own."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment",
+        "resume_needle",
+        "transcript_needle"
+      ],
+      "expected_answer_type": "prioritized alerting plan, first person, grounded in context",
+      "claim_trap": "personal_history",
+      "needles": [
+        "90 pages a week",
+        "multi-window burn-rate alerts"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B-RESUME"
+    },
+    {
+      "local_id": "DTECH-029",
+      "category": "leetcode",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Given an array of integers and a number k, return the k most frequent elements. For example one, one, one, two, two, three with k equal to two gives you one and two. How would you solve it?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 1,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "exact_examples"
+      ],
+      "expected_answer_type": "approach with code and complexity",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-030",
+      "category": "tradeoffs_followups",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Why a heap?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 2,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "brief justification comparing alternatives",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-031",
+      "category": "dsa_theory",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Okay, can you beat n log k? Say the array is huge and k is close to the number of distinct values.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 3,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "follow_up"
+      ],
+      "expected_answer_type": "improved approach with complexity",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-032",
+      "category": "dry_run",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Okay, let's go over your take-home. For example two and example three, walk me through what your merge returns and why the two outputs are different.",
+      "context_condition": "grounded",
+      "context_ref": "DTECH-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 1,
+      "tags": [
+        "doc_needle",
+        "exact_examples"
+      ],
+      "expected_answer_type": "trace of both examples consistent with the spec",
+      "claim_trap": "code_correctness",
+      "needles": [
+        "[[5, 12], [13, 20]]",
+        "[[5, 20]]"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B-RESUME"
+    },
+    {
+      "local_id": "DTECH-033",
+      "category": "complexity_only",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "And the complexity?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "time and space complexity with where time goes",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B-RESUME"
+    },
+    {
+      "local_id": "DTECH-034",
+      "category": "dsa_theory",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Now say windows arrive one at a time from a stream, and the pager can ask is minute t quiet at any moment. What changes in your design?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 3,
+      "tags": [
+        "follow_up",
+        "ambiguous"
+      ],
+      "expected_answer_type": "data-structure design with per-operation complexity",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B-RESUME"
+    },
+    {
+      "local_id": "DTECH-035",
+      "category": "debugging",
+      "difficulty": "normal",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "interviewer says this is wrong for some inputs, fix it:\n\ndef length_of_longest_substring(s):\n    seen = {}\n    left = 0\n    best = 0\n    for right, ch in enumerate(s):\n        if ch in seen:\n            left = seen[ch] + 1\n        seen[ch] = right\n        best = max(best, right - left + 1)\n    return best",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 1,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "pasted_code",
+        "hidden_bug",
+        "python"
+      ],
+      "expected_answer_type": "failing input, root cause, corrected code",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-036",
+      "category": "dry_run",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "walk me through abba",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 2,
+      "tags": [
+        "pi_loaded_pure_dsa",
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "step-by-step trace of the fixed code",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-037",
+      "category": "resume_project_deep_dive",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Your resume says Lanternfish showed 41 percent of p99 on checkout was DNS. How did you actually measure that, and what was Lanternfish doing under the hood?",
+      "context_condition": "grounded",
+      "context_ref": "DTECH-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": "c04",
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "false_premise",
+        "doc_needle"
+      ],
+      "expected_answer_type": "first-person technical explanation of the measurement",
+      "claim_trap": "personal_history",
+      "needles": [
+        "31% of p99 latency",
+        "lanternfish_lookup_seconds"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-038",
+      "category": "tradeoffs_followups",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Why a sidecar?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c04",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn",
+        "doc_needle"
+      ],
+      "expected_answer_type": "first-person trade-off explanation",
+      "claim_trap": "personal_history",
+      "needles": [
+        "eBPF",
+        "CoreDNS"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-B"
+    },
+    {
+      "local_id": "DTECH-039",
+      "category": "system_design",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Before we start, have you ever built a double-entry ledger? Either way, design one for grower payouts: the tables, how a payout moves money between accounts, and how you guarantee a retried payout never pays twice.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c05",
+      "turn_index": 1,
+      "tags": [
+        "profile_switch",
+        "insufficient_info",
+        "skill_not_on_resume"
+      ],
+      "expected_answer_type": "experience line plus ledger system design",
+      "claim_trap": "personal_history",
+      "needles": [
+        "reconciliation job",
+        "Sparrowhawk"
+      ],
+      "evidence_required": true,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "DTECH-040",
+      "category": "database_design",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Which isolation level?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c05",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "isolation choice with the anomaly it prevents",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    }
+  ]
+}

@@ -22,12 +22,15 @@ import type { EvidenceScope, SourceType } from '../contracts/types';
 import type { RetrievalPort } from '../orchestration/orchestrator';
 import { createLegacyRetrievalPort } from './legacy-retrieval-port';
 import { Bm25Index } from './bm25';
+import { looksLikeQuestion } from '../question/question-resolver';
 
 export interface LiveTranscriptSegment {
   speaker: string;
   text: string;
   timestamp?: number;
   final?: boolean;
+  /** SessionTracker's TranscriptOrigin. 'manual_chat' = typed into the overlay, not spoken. */
+  origin?: string;
 }
 
 export interface LiveTranscriptPortInput {
@@ -49,6 +52,14 @@ const defaultRoleOf = (speaker: string): 'interviewer' | 'user' | 'assistant' =>
   speaker === 'user' ? 'user' : speaker === 'assistant' ? 'assistant' : 'interviewer';
 
 const LABEL: Record<'interviewer' | 'user', string> = { interviewer: 'THEM', user: 'ME' };
+/**
+ * A user line that was TYPED into the overlay, not said. Typed chat is echoed
+ * into the transcript as speaker 'user', and rendered as plain "ME:" it was
+ * indistinguishable from speech — while the grounding rule differs: what the
+ * user SAID about their own experience may evidence it (the other party heard
+ * it), what they only TYPED may not (2026-09-24, owner decision).
+ */
+export const TYPED_USER_LABEL = 'ME (typed to the assistant)';
 
 /**
  * Group consecutive FINAL spoken segments into windows of roughly
@@ -69,7 +80,8 @@ export function chunkLiveTranscript(
     if (!text) continue;
     const role = roleOf(String(s.speaker ?? ''));
     if (role === 'assistant') continue;
-    lines.push(`${LABEL[role]}: ${text}`);
+    const label = role === 'user' && s.origin === 'manual_chat' ? TYPED_USER_LABEL : LABEL[role];
+    lines.push(`${label}: ${text}`);
   }
   const chunks: string[] = [];
   let current: string[] = [];
@@ -86,6 +98,32 @@ export function chunkLiveTranscript(
   }
   if (current.length) chunks.push(current.join('\n'));
   return chunks;
+}
+
+const normalizeSpeech = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+/**
+ * True when a window holds nothing but the question being answered (2026-09-29).
+ *
+ * The first question of a meeting is also the whole transcript, so it came
+ * back as its own evidence: `THEM: Why should we hire you?` packed as a
+ * MEETING_TRANSCRIPT fact under "# Evidence". That one block switched on the
+ * evidence-shaped sections ("the evidence below IS the subject at hand",
+ * "the exact value could not be retrieved") and was measured to drive the
+ * opener "I don't have the release scope in front of me" (DeepSeek, 3/3 → 0/3
+ * without the block) on questions nothing had been said about. A question is
+ * not evidence for its own answer. Any window with another line survives, and
+ * a query that does not match the line exactly (a rewritten retrieval query)
+ * keeps today's behaviour. A statement is not a question: "we've decided to
+ * drop the CSV export" is the very thing a team-meet capture records, and
+ * dropping it told DeepSeek nothing had been said (capture lines 5/5 → 0/5).
+ * EXPORTED for tests.
+ */
+export function windowOnlyRestatesQuery(window: string, query: string): boolean {
+  const q = normalizeSpeech(query);
+  if (!q || !looksLikeQuestion(query)) return false;
+  const lines = window.split('\n').map((l) => normalizeSpeech(l.replace(/^[^:\n]{1,40}:\s*/, ''))).filter(Boolean);
+  return lines.length > 0 && lines.every((l) => l === q);
 }
 
 export function createLiveTranscriptRetrievalPort(input: LiveTranscriptPortInput): RetrievalPort | null {
@@ -106,6 +144,7 @@ export function createLiveTranscriptRetrievalPort(input: LiveTranscriptPortInput
     retrieve: async (query: string, opts: { topK: number }) =>
       index.scoreNormalized(query)
         .filter((s) => s.score >= LIVE_TRANSCRIPT_MIN_NORMALIZED_SCORE)
+        .filter((s) => !windowOnlyRestatesQuery(chunks[Number(s.id)], query))
         .slice(0, Math.max(1, opts.topK))
         .map((s) => {
           const chunkIndex = Number(s.id);

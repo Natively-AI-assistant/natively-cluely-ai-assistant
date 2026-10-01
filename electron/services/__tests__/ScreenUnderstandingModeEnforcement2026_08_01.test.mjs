@@ -239,4 +239,15 @@ describe('private_vision: a screenshot never reaches a cloud provider', () => {
     setMode('vision_first');
     LLMHelper.prototype.assertOutboundScopes.call(h, 'openai', 'text', IMAGE);
   });
+
+  test('LAST BOUNDARY: DeepSeek, image-bearing since 2026-10-01, is refused under private_vision too', () => {
+    setMode('private_vision');
+    const h = Object.create(LLMHelper.prototype);
+    assert.throws(
+      () => LLMHelper.prototype.assertOutboundScopes.call(h, 'deepseek', 'text', IMAGE),
+      (e) => e?.name === 'VisionPolicyError',
+    );
+    LLMHelper.prototype.assertOutboundScopes.call(h, 'deepseek', 'text');
+    setMode('vision_first');
+  });
 });

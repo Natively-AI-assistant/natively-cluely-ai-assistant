@@ -47,10 +47,70 @@ export interface LocalEmbeddingModel {
   ggufFile?: string;
   /** Preferred pooling strategy */
   pooling?: 'mean' | 'cls' | 'last';
+  /**
+   * Prepended to QUERY text only (e5: "query: ", Arctic/BGE: a retrieval
+   * instruction, Nomic: "search_query: "). Omitted for a symmetric model.
+   * Not cosmetic: an asymmetric model fed bare text retrieves measurably worse.
+   */
+  queryPrefix?: string;
+  /** Prepended to DOCUMENT/chunk text only (e5: "passage: "). */
+  documentPrefix?: string;
+  /**
+   * Largest indexing batch this model can embed inside the worker's 30s
+   * per-call deadline on 512-token chunks. Measured (docs/local-embedding-benchmark.md
+   * §8b): every model over ~130 MiB timed out or aborted at the default 16;
+   * nomic-v1.5 SIGTRAPped inside ONNX Runtime. Omitted = the indexer's default.
+   */
+  maxBatchSize?: number;
+  /** Free memory (GB) this model needs ABOVE the shared ONNX floor before it may load. */
+  memoryHeadroomGB?: number;
+  /**
+   * Truncate inputs to this many tokens (below the tokenizer's own limit).
+   * Needed for long-context models: uncapped, a ~4 KB CSV chunk (~2400 tokens)
+   * SIGTRAPped Arctic L v2.0 and Qwen3 inside ONNX Runtime.
+   */
+  maxInputTokens?: number;
 }
 
+/** The catalog id of the model that ships inside the app (electron/rag/bundledLocalEmbedding.ts). */
+export const BUNDLED_CATALOG_ID = 'multilingual-e5-small';
+
 export const EMBEDDING_MODEL_CATALOG: LocalEmbeddingModel[] = [
-  // ── Bundled Baseline: MiniLM ───────────────────────────────────────────
+  // ── Bundled: Multilingual E5 Small (since 2026-09-22) ─────────────────
+  {
+    id: 'multilingual-e5-small',
+    name: 'Multilingual E5 Small',
+    runtime: 'onnx',
+    repo: 'Xenova/multilingual-e5-small',
+    modelId: 'Xenova/multilingual-e5-small',
+    revision: '761b726dd34fb83930e26aab4e9ac3899aa1fa78',
+    dimensions: 384,
+    supportedDimensions: [384],
+    contextLength: 512,
+    files: [
+      { repoPath: 'config.json', bytes: 658, sha256: 'cb99455288675345e1a4f411438d5d0adbba5fbd3a67ea4fb03c015433b996c1' },
+      { repoPath: 'tokenizer.json', bytes: 17082730, sha256: '0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39' },
+      { repoPath: 'tokenizer_config.json', bytes: 443, sha256: 'a1d6bc8734a6f635dc158508bef000f8e2e5a759c7d92f984b2c86e5ff53425b' },
+      { repoPath: 'special_tokens_map.json', bytes: 167, sha256: 'd05497f1da52c5e09554c0cd874037a083e1dc1b9cfd48034d1c717f1afc07a7' },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 118308185, sha256: 'f80102d3f2a1229f387d3c81909990d8945513e347b0eab049f7de3c6f98c193' },
+    ],
+    bytes: 135392183,
+    license: {
+      spdx: 'MIT',
+      url: 'https://huggingface.co/Xenova/multilingual-e5-small',
+      commercialUseRestricted: false,
+      requiresAcknowledgement: false,
+    },
+    params: '118M · q8',
+    note: "Shipped with Natively. Multilingual, including Hindi. Best dense retrieval of every model measured under 500 MB (R@10 0.334 against MiniLM 0.213), and it answers Hindi questions about English documents as well as English ones.",
+    bundled: true,
+    supported: true,
+    pooling: 'mean',
+    queryPrefix: "query: ",
+    documentPrefix: "passage: ",
+  },
+
+  // ── MiniLM L6 v2: bundled until 2026-09-21, now a download ──────────────
   {
     id: 'minilm-l6-v2',
     name: 'MiniLM L6 v2',
@@ -75,8 +135,7 @@ export const EMBEDDING_MODEL_CATALOG: LocalEmbeddingModel[] = [
       requiresAcknowledgement: false,
     },
     params: '22.7M · q8',
-    note: 'Shipped with Natively. Small and fast; weaker retrieval on large projects.',
-    bundled: true,
+    note: 'The previous built-in model. Smallest and fastest; weakest retrieval of this list (R@10 0.213). English only.',
     supported: true,
     pooling: 'mean',
   },
@@ -106,10 +165,318 @@ export const EMBEDDING_MODEL_CATALOG: LocalEmbeddingModel[] = [
       requiresAcknowledgement: false,
     },
     params: '33.4M · q8',
-    note: 'Same 384-d width and memory as MiniLM, with a longer 512-token window. English only.',
+    note: 'Same 384-d width and memory as MiniLM, with a longer 512-token window. R@10 0.302 in the Natively benchmark. English only.',
+    recommended: true,
+    supported: true,
+    // BGE v1.5 is a CLS-pooled model with a query instruction (its model card);
+    // mean pooling and bare queries were this entry's earlier recipe.
+    pooling: 'cls',
+    queryPrefix: 'Represent this sentence for searching relevant passages: ',
+    documentPrefix: '',
+  },
+
+  // ── From the 2026-09-21 local embedding benchmark (docs/local-embedding-benchmark.md) ──
+  // Recipes (pooling, prefixes) are the ones that benchmark verified; revisions
+  // and every file's sha256 are the bytes it downloaded and measured.
+  {
+    id: 'snowflake-arctic-embed-xs',
+    name: 'Snowflake Arctic Embed XS',
+    runtime: 'onnx',
+    repo: 'Snowflake/snowflake-arctic-embed-xs',
+    modelId: 'Snowflake/snowflake-arctic-embed-xs',
+    revision: 'd8c86521100d3556476a063fc2342036d45c106f',
+    dimensions: 384,
+    supportedDimensions: [384],
+    contextLength: 512,
+    files: [
+      { repoPath: 'config.json', bytes: 737, sha256: 'd7d071046ab952af96b7abad788db7ab3fc997b465e1b9914ff39707092254ec' },
+      { repoPath: 'tokenizer.json', bytes: 711649, sha256: '91f1def9b9391fdabe028cd3f3fcc4efd34e5d1f08c3bf2de513ebb5911a1854' },
+      { repoPath: 'tokenizer_config.json', bytes: 1433, sha256: '9ca59277519f6e3692c8685e26b94d4afca2d5438deff66483db495e48735810' },
+      { repoPath: 'special_tokens_map.json', bytes: 695, sha256: '5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a' },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 22972992, sha256: 'e6aa5e656466a73d7c3111e9a3378bd13e5b93af30eaac2b3f13fd56692589a1' },
+    ],
+    bytes: 23687506,
+    license: {
+      spdx: 'Apache-2.0',
+      url: 'https://huggingface.co/Snowflake/snowflake-arctic-embed-xs',
+      commercialUseRestricted: false,
+      requiresAcknowledgement: false,
+    },
+    params: '22.6M · q8',
+    note: "MiniLM-sized. In the Natively benchmark it did not beat MiniLM (R@10 0.199 against 0.213). English only.",
+    supported: true,
+    pooling: 'cls',
+    queryPrefix: "Represent this sentence for searching relevant passages: ",
+    documentPrefix: "",
+  },
+
+  {
+    id: 'snowflake-arctic-embed-s',
+    name: 'Snowflake Arctic Embed S',
+    runtime: 'onnx',
+    repo: 'Snowflake/snowflake-arctic-embed-s',
+    modelId: 'Snowflake/snowflake-arctic-embed-s',
+    revision: 'e596f507467533e48a2e17c007f0e1dacc837b33',
+    dimensions: 384,
+    supportedDimensions: [384],
+    contextLength: 512,
+    files: [
+      { repoPath: 'config.json', bytes: 703, sha256: '4e519aa92ec40943356032afe458c8829d70c5766b109e4a57490b82f72dcfb7' },
+      { repoPath: 'tokenizer.json', bytes: 711649, sha256: '91f1def9b9391fdabe028cd3f3fcc4efd34e5d1f08c3bf2de513ebb5911a1854' },
+      { repoPath: 'tokenizer_config.json', bytes: 1433, sha256: '9ca59277519f6e3692c8685e26b94d4afca2d5438deff66483db495e48735810' },
+      { repoPath: 'special_tokens_map.json', bytes: 695, sha256: '5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a' },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 34015111, sha256: 'f93ff225320628d2e88baf2a395cae791b0e3b27edf5c70bf7b312a4d3260c14' },
+    ],
+    bytes: 34729591,
+    license: {
+      spdx: 'Apache-2.0',
+      url: 'https://huggingface.co/Snowflake/snowflake-arctic-embed-s',
+      commercialUseRestricted: false,
+      requiresAcknowledgement: false,
+    },
+    params: '33.4M · q8',
+    note: "Small and fast; clearly ahead of MiniLM (R@10 0.257 against 0.213). English only.",
+    supported: true,
+    pooling: 'cls',
+    queryPrefix: "Represent this sentence for searching relevant passages: ",
+    documentPrefix: "",
+  },
+
+  {
+    id: 'snowflake-arctic-embed-m',
+    name: 'Snowflake Arctic Embed M',
+    runtime: 'onnx',
+    repo: 'Snowflake/snowflake-arctic-embed-m',
+    modelId: 'Snowflake/snowflake-arctic-embed-m',
+    revision: 'fc74610d18462d218e312aa986ec5c8a75a98152',
+    dimensions: 768,
+    supportedDimensions: [768],
+    contextLength: 512,
+    files: [
+      { repoPath: 'config.json', bytes: 738, sha256: '2e26193d0d00a8c709c379fd840bd6c41789b25add0d324d841d0788d61b7e0e' },
+      { repoPath: 'tokenizer.json', bytes: 711649, sha256: '91f1def9b9391fdabe028cd3f3fcc4efd34e5d1f08c3bf2de513ebb5911a1854' },
+      { repoPath: 'tokenizer_config.json', bytes: 1381, sha256: '0e83e9d7206b3ade43f8f2aeef523cf5d5b4a25b67af21b273de21972c0f58b7' },
+      { repoPath: 'special_tokens_map.json', bytes: 695, sha256: '5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a' },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 110084023, sha256: 'e46017484d369593d6bb830936fde2175ce21e1ba1ddf002f23e3212d87c824a' },
+    ],
+    bytes: 110798486,
+    license: {
+      spdx: 'Apache-2.0',
+      url: 'https://huggingface.co/Snowflake/snowflake-arctic-embed-m',
+      commercialUseRestricted: false,
+      requiresAcknowledgement: false,
+    },
+    params: '109M · q8',
+    note: "Wider 768-d vectors (twice the index space). R@10 0.288. English only.",
+    supported: true,
+    pooling: 'cls',
+    queryPrefix: "Represent this sentence for searching relevant passages: ",
+    documentPrefix: "",
+  },
+
+  {
+    id: 'e5-small-v2',
+    name: 'E5 Small v2',
+    runtime: 'onnx',
+    repo: 'Xenova/e5-small-v2',
+    modelId: 'Xenova/e5-small-v2',
+    revision: '02af79985278377e65c724a76275707cb0333c70',
+    dimensions: 384,
+    supportedDimensions: [384],
+    contextLength: 512,
+    files: [
+      { repoPath: 'config.json', bytes: 598, sha256: 'a45cbfdbc729148119afa0284a366fcaea47522a260790a02cd8aafba9fd5896' },
+      { repoPath: 'tokenizer.json', bytes: 711396, sha256: 'd241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66' },
+      { repoPath: 'tokenizer_config.json', bytes: 366, sha256: '9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3' },
+      { repoPath: 'special_tokens_map.json', bytes: 125, sha256: 'b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3' },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 34014367, sha256: '7d9092cb25f2bd1c023b7e8d2aa459044a02030ac880e5a59fdaf27af69f1ded' },
+    ],
+    bytes: 34726852,
+    license: {
+      spdx: 'MIT',
+      url: 'https://huggingface.co/Xenova/e5-small-v2',
+      commercialUseRestricted: false,
+      requiresAcknowledgement: false,
+    },
+    params: '33.4M · q8',
+    note: "Strongest small English-only model in the Natively benchmark (R@10 0.320) at MiniLM’s width. English only.",
     recommended: true,
     supported: true,
     pooling: 'mean',
+    queryPrefix: "query: ",
+    documentPrefix: "passage: ",
+  },
+
+  {
+    id: 'gte-small',
+    name: 'GTE Small',
+    runtime: 'onnx',
+    repo: 'Xenova/gte-small',
+    modelId: 'Xenova/gte-small',
+    revision: '5927d1727bb12db490052a1b33265ad78058de08',
+    dimensions: 384,
+    supportedDimensions: [384],
+    contextLength: 512,
+    files: [
+      { repoPath: 'config.json', bytes: 601, sha256: '73f82cfb2bab7b9b7da090b2a71dac32f7ca79b12b2824d4caf9ecf0769b44ae' },
+      { repoPath: 'tokenizer.json', bytes: 711661, sha256: 'da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0' },
+      { repoPath: 'tokenizer_config.json', bytes: 557, sha256: '73687f47b47aedc8bfa8712f7e6616450058f1f1bb3d5e5861f8a92964d6467a' },
+      { repoPath: 'special_tokens_map.json', bytes: 125, sha256: 'b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3' },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 34014426, sha256: '18dec105109b6004369799ca4761fb8fb413c64172c02147bcfac186b5c5f6cb' },
+    ],
+    bytes: 34727370,
+    license: {
+      spdx: 'MIT',
+      url: 'https://huggingface.co/Xenova/gte-small',
+      commercialUseRestricted: false,
+      requiresAcknowledgement: false,
+    },
+    params: '33.4M · q8',
+    note: "Symmetric (no query prefix). R@10 0.237, a modest gain over MiniLM. English only.",
+    supported: true,
+    pooling: 'mean',
+    queryPrefix: "",
+    documentPrefix: "",
+  },
+
+  {
+    id: 'nomic-embed-text-v1.5',
+    name: 'Nomic Embed Text v1.5',
+    runtime: 'onnx',
+    repo: 'nomic-ai/nomic-embed-text-v1.5',
+    modelId: 'nomic-ai/nomic-embed-text-v1.5',
+    revision: 'e9b6763023c676ca8431644204f50c2b100d9aab',
+    dimensions: 768,
+    supportedDimensions: [768],
+    contextLength: 2048,
+    files: [
+      { repoPath: 'config.json', bytes: 2538, sha256: '9ab00bd92cee80a569f708140b7b6c1661a65891ff3765b1519e181ba2f2c92b' },
+      { repoPath: 'tokenizer.json', bytes: 711396, sha256: 'd241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66' },
+      { repoPath: 'tokenizer_config.json', bytes: 1191, sha256: 'd7e0000bcc80134debd2222220427e6bf5fa20a669f40a0d0d1409cc18e0a9bc' },
+      { repoPath: 'special_tokens_map.json', bytes: 695, sha256: '5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a' },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 137296292, sha256: 'b4342336debaea79de872370664b0aaeb67dea4605513d00ee236ea871a81f27' },
+    ],
+    bytes: 138012112,
+    license: {
+      spdx: 'Apache-2.0',
+      url: 'https://huggingface.co/nomic-ai/nomic-embed-text-v1.5',
+      commercialUseRestricted: false,
+      requiresAcknowledgement: false,
+    },
+    params: '137M · q8',
+    note: "Long 2048-token window and 768-d vectors. R@10 0.276. English only.",
+    supported: true,
+    pooling: 'mean',
+    queryPrefix: "search_query: ",
+    documentPrefix: "search_document: ",
+    // SIGTRAP inside ONNX Runtime at batch 16 on real 512-token chunks; batch 4
+    // survives (docs/local-embedding-benchmark.md §8, nomic-v1.5).
+    maxBatchSize: 4,
+  },
+
+  // High-end tier (2026-09-22): the three below are larger than the built-in model and slower to index; measured in the Natively benchmark (docs/local-embedding-benchmark.md §18.13).
+  {
+    id: 'snowflake-arctic-embed-l-v2.0',
+    name: 'Snowflake Arctic Embed L v2.0',
+    runtime: 'onnx',
+    repo: 'Snowflake/snowflake-arctic-embed-l-v2.0',
+    modelId: 'Snowflake/snowflake-arctic-embed-l-v2.0',
+    revision: 'ac6544c8a46e00af67e330e85a9028c66b8cfd9a',
+    dimensions: 1024,
+    supportedDimensions: [1024],
+    contextLength: 512,
+    files: [
+      { repoPath: 'config.json', bytes: 818, sha256: '706f5d1eb9ddf64b5d3067c562b893b80ad1022db7f68c20eb07ff24d33b6c15' },
+      { repoPath: 'tokenizer.json', bytes: 17083074, sha256: '39feb9863a378165ab9c5c689047203d789422966c0c58721c5309fd039a8edc' },
+      { repoPath: 'tokenizer_config.json', bytes: 1339, sha256: 'cb058b4c5c0c08738eb028c2ae82ed55cd84ce8999ece76b13472af80f0f77f1' },
+      { repoPath: 'special_tokens_map.json', bytes: 964, sha256: '8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835' },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 569721975, sha256: '4b164a8bd09dd9806e035bdf3c34a2d81848b3db9642ba2e342b8367c00872d8' },
+    ],
+    bytes: 586808170,
+    license: {
+      spdx: 'Apache-2.0',
+      url: 'https://huggingface.co/Snowflake/snowflake-arctic-embed-l-v2.0',
+      commercialUseRestricted: false,
+      requiresAcknowledgement: false,
+    },
+    params: '568M · q8',
+    note: "High-end. Multilingual (74 languages). Best dense retrieval measured in the Natively benchmark (R@10 0.362 against 0.334 for the built-in model), level with it after reranking (0.454), and as good on Hindi questions. 570 MB download, about 4× slower to index than the built-in model.",
+    supported: true,
+    pooling: 'cls',
+    queryPrefix: "query: ",
+    documentPrefix: "",
+    maxBatchSize: 4,
+    memoryHeadroomGB: 0.5,
+    maxInputTokens: 512,
+  },
+
+  {
+    id: 'mxbai-embed-large-v1',
+    name: 'mxbai Embed Large v1',
+    runtime: 'onnx',
+    repo: 'mixedbread-ai/mxbai-embed-large-v1',
+    modelId: 'mixedbread-ai/mxbai-embed-large-v1',
+    revision: 'b33106f585b9ce46904ad7443a3b52b7a63e231c',
+    dimensions: 1024,
+    supportedDimensions: [1024],
+    contextLength: 512,
+    files: [
+      { repoPath: 'config.json', bytes: 677, sha256: 'ce13f118fc183c005236901d2662ced752de632ebb161e6af800aadda2d176f7' },
+      { repoPath: 'tokenizer.json', bytes: 711396, sha256: 'd241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66' },
+      { repoPath: 'tokenizer_config.json', bytes: 1242, sha256: '0b29c7bfc889e53b36d9dd3e686dd4300f6525110eaa98c76a5dafceb2029f53' },
+      { repoPath: 'special_tokens_map.json', bytes: 695, sha256: '5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a' },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 336983163, sha256: '11bda26d2ee754b20d46c90d0fae7eb5a71e0f947e74261afd6ad640ebbcfa7f' },
+    ],
+    bytes: 337697173,
+    license: {
+      spdx: 'Apache-2.0',
+      url: 'https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1',
+      commercialUseRestricted: false,
+      requiresAcknowledgement: false,
+    },
+    params: '335M · q8',
+    note: "Pro. 1024-d vectors from a 337 MB download. English only; in the Natively benchmark it trailed the built-in model (R@10 0.284, 0.412 after reranking) and handles Hindi questions poorly.",
+    supported: true,
+    pooling: 'cls',
+    queryPrefix: "Represent this sentence for searching relevant passages: ",
+    documentPrefix: "",
+    maxBatchSize: 4,
+    memoryHeadroomGB: 0.6,
+  },
+
+  {
+    id: 'qwen3-embedding-0.6b-onnx',
+    name: 'Qwen3 Embedding 0.6B (ONNX)',
+    runtime: 'onnx',
+    repo: 'onnx-community/Qwen3-Embedding-0.6B-ONNX',
+    modelId: 'onnx-community/Qwen3-Embedding-0.6B-ONNX',
+    revision: 'c25a394dd583836952667c12f008335071b3f43d',
+    dimensions: 1024,
+    supportedDimensions: [1024],
+    contextLength: 512,
+    files: [
+      { repoPath: 'config.json', bytes: 1576, sha256: '66a10929782f3c9a3cd5dec90e2a95c60e05736134a63cd54479eeae80bed175' },
+      { repoPath: 'tokenizer.json', bytes: 11423705, sha256: 'def76fb086971c7867b829c23a26261e38d9d74e02139253b38aeb9df8b4b50a' },
+      { repoPath: 'tokenizer_config.json', bytes: 9731, sha256: '977648852447cb6587327ff3205b0a84cf2fc9f05621d6c8e88a497caafab2e1' },
+      { repoPath: 'special_tokens_map.json', bytes: 613, sha256: '76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd' },
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 613527631, sha256: '87cd124e0ef1fd1f223ebc283efccbaeac386d0b08344701c46975d0657b591f' },
+    ],
+    bytes: 624963256,
+    license: {
+      spdx: 'Apache-2.0',
+      url: 'https://huggingface.co/onnx-community/Qwen3-Embedding-0.6B-ONNX',
+      commercialUseRestricted: false,
+      requiresAcknowledgement: false,
+    },
+    params: '0.6B · q8',
+    note: "Experimental. The ONNX build of Qwen3 Embedding 0.6B (the GGUF build is listed separately). In the Natively benchmark this q8 build scored below the built-in model (R@10 0.253, 0.403 after reranking) and weakly on Hindi questions despite its multilingual training. Slowest to index; embeds one text at a time.",
+    supported: true,
+    pooling: 'last',
+    queryPrefix: "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:",
+    documentPrefix: "",
+    maxBatchSize: 1,
+    memoryHeadroomGB: 0.7,
+    maxInputTokens: 512,
   },
 
   // ── Qwen3 Embedding 0.6B (GGUF) ─────────────────────────────────────────

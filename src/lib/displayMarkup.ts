@@ -75,6 +75,23 @@ export function splitGistLine(text: string): GistSplit {
 }
 
 /**
+ * The answer as TEXT: the trailing gist line removed, everything else exactly
+ * as written. The gist is display metadata (the overlay/phone chip), so every
+ * boundary where an answer leaves the display — a copy button, session
+ * history, the usage log, the phone mirror's `content` — goes through this,
+ * and a consumer that needs the essence reads it from splitGistLine().gist.
+ *
+ * Text without a marker is returned unchanged (not even end-trimmed), so
+ * running it on an answer that never had a gist is a strict no-op. Same rule
+ * as splitGistLine: a malformed marker that is not honored stays in the text.
+ */
+export function stripGistTrailer(text: string): string {
+  const t = text ?? '';
+  if (!t.includes(GIST_MARKER)) return t;
+  return splitGistLine(t).body;
+}
+
+/**
  * Streaming-aware variant: while tokens stream in, the gist marker can be
  * mid-arrival ("[[", "[[GI", "[[GIST]] fir…"). A trailing line that is a
  * partial prefix of the marker is hidden so the marker never flashes as

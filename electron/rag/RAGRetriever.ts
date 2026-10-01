@@ -22,6 +22,12 @@ export interface RetrievalOptions {
     topK?: number;                // Initial retrieval count (default: 8)
     recencyWeight?: number;       // 0-1, how much to weight recent (default: 0.3)
     intent?: QueryIntent;         // Override detected intent
+    /**
+     * The caller's budget for embedding the query (EmbeddingPipeline
+     * retryBudgetMs): attempt 1 runs, retries only when they still fit. A live
+     * answer passes its retrieval budget; absent = the full 3-attempt ladder.
+     */
+    queryEmbedRetryBudgetMs?: number;
 }
 
 export interface RetrievedContext {
@@ -72,7 +78,10 @@ export class RAGRetriever {
         // 1. Embed the query
         let queryEmbedding: number[];
         try {
-            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(query);
+            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(
+                query,
+                typeof options.queryEmbedRetryBudgetMs === 'number' ? { retryBudgetMs: options.queryEmbedRetryBudgetMs } : undefined,
+            );
         } catch (error) {
             console.error('[RAGRetriever] Failed to embed query:', error);
             // Return empty context on embedding failure
@@ -169,7 +178,10 @@ export class RAGRetriever {
         // Embed query
         let queryEmbedding: number[];
         try {
-            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(query);
+            queryEmbedding = await this.embeddingPipeline.getEmbeddingForQuery(
+                query,
+                typeof options.queryEmbedRetryBudgetMs === 'number' ? { retryBudgetMs: options.queryEmbedRetryBudgetMs } : undefined,
+            );
         } catch (error) {
             console.error('[RAGRetriever] Failed to embed query:', error);
             return {

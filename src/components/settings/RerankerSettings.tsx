@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
-import { AlertCircle, Check, ChevronDown, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Puzzle, RefreshCw, Search, Server, ShieldAlert, Trash2, X } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { AlertCircle, Check, ChevronDown, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, RefreshCw, Search, Server, ShieldAlert, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSelect, AipSwitch, type AipSelectOption, type AipTone } from './AIProvidersSettings';
+import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSaveLabel, AipSelect, AipSwitch, AipTestLabel, type AipSelectOption, type AipTone } from './AIProvidersSettings';
+import { Presence, useMotionReadyAfter } from './SettingsRow';
+import { RETRIEVAL_HERO_PICKER_ATTR, RETRIEVAL_HERO_PICKER_MIN_WIDTH, capPickerLabel } from './SettingsRow';
 import { isMac, isWindows } from '../../utils/platformUtils';
 import { candidateControlApplies, candidateControlRationale } from '../../lib/rerankCandidateControl.mjs';
 
@@ -171,6 +173,14 @@ interface ExtensionModel {
         acknowledged: boolean;
     };
 }
+
+/**
+ * Where the reranker extensions are published. The app does not fetch a
+ * catalogue or install anything over the network: this opens the repository so
+ * the source can be read, and a release downloaded and installed by hand
+ * through "Install from folder".
+ */
+const EXTENSIONS_REPO_URL = 'https://github.com/Brosski224/natively-extensions';
 
 interface InstalledExtension {
     id: string;
@@ -360,6 +370,8 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
         || (selectedOption ? (selectedOption.triggerName || selectedOption.name) : null)
         || (value && value.includes('::') ? bareModelName(value.split('::').slice(1).join('::')) : null)
         || (placeholder || t('Select reranker'));
+    const shownLabel = capPickerLabel(resolvedLabel);
+    const fullLabelHint = shownLabel !== resolvedLabel ? resolvedLabel : undefined;
 
     return (
         <div className={containerClassName} ref={containerRef}>
@@ -369,7 +381,7 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
                 aria-expanded={isOpen}
                 aria-haspopup="listbox"
                 aria-label={ariaLabel}
-                title={disabled ? disabledHint || title : title}
+                title={disabled ? disabledHint || title : title ?? fullLabelHint}
                 disabled={disabled}
                 className={`aip-select-trigger cursor-pointer flex items-center justify-between w-full ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
             >
@@ -382,14 +394,14 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
                     LIGHT theme the label stayed pure white on a light button
                     and was invisible (measured: embedding flipped to
                     rgb(55,65,81), this stayed rgb(255,255,255)). */}
-                <span className="truncate pr-2 text-xs">{resolvedLabel}</span>
+                <span className="truncate pr-2 text-xs">{shownLabel}</span>
                 <ChevronDown size={14} strokeWidth={1.75} className={`aip-select-chevron transition-transform duration-150 shrink-0 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
 
             {isOpen && (
                 <div
                     role="listbox"
-                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1.5 w-full min-w-[180px] z-50 max-h-64 p-1 custom-scrollbar shadow-2xl rounded-md border border-white/10 bg-[#161618]"
+                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1.5 w-full z-50 max-h-64 p-1 custom-scrollbar shadow-2xl rounded-md border border-white/10 bg-[#161618]"
                 >
                     {options.map((option) => (
                         <button
@@ -404,6 +416,9 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
                                 setIsOpen(false);
                             }}
                             className={`aip-select-option flex items-center justify-between w-full text-left px-3 py-2 rounded-md text-xs cursor-pointer transition-colors hover:bg-white/10 ${value === option.id ? 'aip-text font-medium bg-white/5' : ''}`}
+                            // The menu is exactly as wide as its button, so a long
+                            // name truncates; hover shows it whole.
+                            title={option.name}
                         >
                             <span className="truncate flex-1">{option.name}</span>
                             {value === option.id && (
@@ -427,40 +442,46 @@ interface CandidatesSlidingTabsProps {
 }
 
 /**
- * Tab switcher for candidate count using Framer Motion layoutId spring transition,
- * matching MeetingDetails (Summary / Transcript / Usage) 1:1.
+ * Tab switcher for candidate count. ONE pill that never unmounts, springing `x`
+ * across equal columns: the Retrieval tab pill's construction and spring. It
+ * used to be a per-button `layoutId` pill, the shared-layout projection that
+ * clamped the Settings scroller back to the top when AI Providers' tablist
+ * used one (see RetrievalSettings.tsx), and it had no reduced-motion path.
  */
 const CandidatesSlidingTabs: React.FC<CandidatesSlidingTabsProps> = ({ value, choices, onChange }) => {
-    const layoutId = React.useId();
     const theme = useResolvedTheme();
     const isLight = theme === 'light';
+    const reduceMotion = useReducedMotion();
+    const index = choices.indexOf(value);
 
     return (
-        <div className={`p-1 rounded-xl inline-flex items-center gap-0.5 border shrink-0 ${isLight ? 'bg-[#E5E5EA] border-black/[0.04]' : 'bg-[#0D0D0F] border-white/[0.08]'}`}>
-            {choices.map((n) => {
-                const isSelected = value === n;
-                return (
-                    <button
-                        key={n}
-                        type="button"
-                        onClick={() => onChange(n)}
-                        className={`
-                            relative px-3 py-1 text-xs font-medium rounded-lg transition-colors duration-200 z-10 select-none
-                            ${isSelected ? (isLight ? 'text-black' : 'text-[#E9E9E9]') : (isLight ? 'text-black/60 hover:text-black' : 'text-white/40 hover:text-white/80')}
-                        `}
-                    >
-                        {isSelected && (
-                            <motion.div
-                                layoutId={`candidatesTabActive-${layoutId}`}
-                                className={`absolute inset-0 rounded-lg -z-10 shadow-sm ${isLight ? 'bg-white' : 'bg-[#3A3A3C]'}`}
-                                initial={false}
-                                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                            />
-                        )}
-                        {n}
-                    </button>
-                );
-            })}
+        <div className={`p-1 rounded-xl inline-flex border shrink-0 ${isLight ? 'bg-[#E5E5EA] border-black/[0.04]' : 'bg-[#0D0D0F] border-white/[0.08]'}`}>
+            <div className="relative inline-grid" style={{ gridTemplateColumns: `repeat(${choices.length}, 1fr)` }}>
+                <motion.div
+                    aria-hidden="true"
+                    className={`absolute inset-y-0 left-0 rounded-lg shadow-sm will-change-transform ${isLight ? 'bg-white' : 'bg-[#3A3A3C]'}`}
+                    style={{ width: `${100 / Math.max(1, choices.length)}%` }}
+                    initial={false}
+                    animate={{ x: `${Math.max(0, index) * 100}%`, opacity: index < 0 ? 0 : 1 }}
+                    transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
+                />
+                {choices.map((n) => {
+                    const isSelected = value === n;
+                    return (
+                        <button
+                            key={n}
+                            type="button"
+                            onClick={() => onChange(n)}
+                            className={`
+                                relative z-10 px-3 py-1 text-xs font-medium rounded-lg transition-[color,transform] duration-200 active:scale-[0.97] motion-reduce:active:scale-100 select-none
+                                ${isSelected ? (isLight ? 'text-black' : 'text-[#E9E9E9]') : (isLight ? 'text-black/60 hover:text-black' : 'text-white/40 hover:text-white/80')}
+                            `}
+                        >
+                            {n}
+                        </button>
+                    );
+                })}
+            </div>
         </div>
     );
 };
@@ -584,6 +605,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
     // Model Library UI Optimization States
     const [filterTab, setFilterTab] = useState<'all' | 'installed' | 'recommended'>('all');
+    // The hosted cards mount with their key state already known; a key saved
+    // or removed after that animates its trash button in and out.
+    const hostedMotionReady = useMotionReadyAfter(hostedProviders.length > 0);
     const [modelQuery, setModelQuery] = useState('');
     const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
     const [expandedFileDrawers, setExpandedFileDrawers] = useState<Record<string, boolean>>({});
@@ -916,6 +940,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
         () => extensions.filter(e => e.type === 'reranker'),
         [extensions],
     );
+
     const enabledRerankerCount = useMemo(
         () => rerankerExtensions.filter(e => e.enabled).length,
         [rerankerExtensions],
@@ -1176,7 +1201,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                 border: installed || m.selected ? undefined : '1px solid var(--aip-border-strong)',
                             }}
                         />
-                        <span className="text-xs font-semibold text-white truncate">{m.name}</span>
+                        <span className="text-xs font-semibold aip-hero truncate">{m.name}</span>
                         {m.selected && <AipBadge tone="ok" label={t('In use')} />}
                         {installed && !m.selected && !m.supported && (
                             <AipBadge tone="warn" label={t('Downloaded · not usable yet')} />
@@ -1216,7 +1241,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                 disabled={busyCatalogId !== null}
                                 onClick={() => void useCatalogModel(m.id)}
                             >
-                                {busy ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : null}
+                                {busy ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" /> : null}
                                 <span>{t('Use')}</span>
                             </button>
                         )}
@@ -1244,7 +1269,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 </div>
 
                 {m.note && (
-                    <p className="text-[10px] aip-muted leading-relaxed pl-3.5 text-white/60">
+                    <p className="text-[10px] aip-muted leading-relaxed pl-3.5">
                         {m.note}
                     </p>
                 )}
@@ -1258,15 +1283,15 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
                 {needsExtension && (
                     <p className="text-[10px] aip-muted ml-3.5">
-                        {t('Runs through the')} <code className="px-1.5 py-0.5 rounded bg-white/10 text-[9.5px] font-mono">{m.extensionId}</code> {t('extension, which is not installed yet.')}
+                        {t('Runs through the')} <code className="px-1.5 py-0.5 rounded bg-[var(--aip-item-active)] text-[9.5px] font-mono">{m.extensionId}</code> {t('extension, which is not installed yet.')}
                         {m.requiresBinary ? ` ${t('It also needs')} ${m.requiresBinary} ${t('on your PATH.')}` : ''}
                     </p>
                 )}
 
                 {busy && prog && (
                     <div className="space-y-1 pl-3.5 pt-1">
-                        <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
-                            <div className="h-full bg-[var(--aip-accent)] transition-all duration-150" style={{ width: `${Math.round(prog.fraction * 100)}%` }} />
+                        <div className="h-1 w-full bg-[var(--aip-item-active)] rounded-full overflow-hidden">
+                            <div className="h-full w-full origin-left bg-[var(--aip-accent)] transition-transform duration-150 ease-linear" style={{ transform: `scaleX(${Math.min(1, Math.max(0, prog.fraction))})` }} />
                         </div>
                         <div className="text-[10px] aip-muted flex justify-between">
                             <span>{`${Math.round(prog.fraction * 100)}% · ${prog.file}`}</span>
@@ -1277,23 +1302,6 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
             </div>
         );
     };
-
-    /**
-     * Who the hosted fallback actually covers.
-     *
-     * The switch is wired to RerankerRegistry.resolveHostedPort, which wraps
-     * WHICHEVER hosted provider is selected — so the old label ("if OpenRouter
-     * is unavailable") was wrong the moment Jina shipped: a failed Jina rerank
-     * took the same branch while the UI said nothing about it. Built from the
-     * live provider list rather than a hardcoded pair, so a third hosted
-     * provider needs no copy change.
-     */
-    const hostedFallbackSubject = useMemo(() => {
-        const names = hostedProviders.map(p => p.name).filter(Boolean);
-        if (names.length === 0) return t('a hosted reranker');
-        if (names.length === 1) return names[0];
-        return `${names.slice(0, -1).join(', ')} ${t('or')} ${names[names.length - 1]}`;
-    }, [hostedProviders, t]);
 
     /* Active Reranker and the hosted-fallback toggle. On the combined Retrieval
        page this sits above the Embedding/Reranker switcher. */
@@ -1335,7 +1343,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         </p>
                     </div>
 
-                    <div className="shrink-0 relative">
+                    <div className="shrink-0 relative" {...{ [RETRIEVAL_HERO_PICKER_ATTR]: '' }} style={{ minWidth: RETRIEVAL_HERO_PICKER_MIN_WIDTH }}>
                         <RerankerModelSelect
                             ariaLabel={t('Active Reranker Model')}
                             value={activeOptionId}
@@ -1378,8 +1386,14 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         <span className="block text-xs font-medium uppercase tracking-wide aip-hero">
                             {t('Fall back to the local reranker')}
                         </span>
+                        {/* One line (404px of 472 in the 574px column). The switch
+                            is wired to RerankerRegistry.resolveHostedPort, which
+                            wraps WHICHEVER hosted provider is selected, so "a hosted
+                            reranker" covers them all. Naming each one ("If Natively,
+                            OpenRouter, Jina AI or Voyage AI fails…") wrapped to two
+                            lines and grew with every provider added. */}
                         <p className="text-[10px] aip-muted">
-                            {`${t('Off by default. If')} ${hostedFallbackSubject} ${t('fails, rerank locally instead of keeping the original order.')}`}
+                            {t('If a hosted reranker fails, rerank on this device instead of keeping the original order.')}
                         </p>
                     </div>
                     <div className="shrink-0">
@@ -1426,7 +1440,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                 const isSelected = status.provider === p.id;
                 // status.hasApiKey is the presence flag for the SELECTED
                 // provider. Preferring the per-provider flag but falling back
-                // to it keeps the badge honest if discovery degraded.
+                // to it keeps the key field honest if discovery degraded.
                 const hasKey = p.hasApiKey || (isSelected && status.hasApiKey);
                 const draft = keyDrafts[p.id] ?? '';
                 const saving = savingKeyFor === p.id;
@@ -1455,8 +1469,6 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                             <AipProviderMark provider={p.id} name={p.name} />
                             <h4 className="aip-card-title truncate min-w-0">{t(p.name)}</h4>
                             <div className="ml-auto flex items-center gap-2 shrink-0">
-                                <AipBadge tone={hasKey ? 'ok' : 'warn'} label={hasKey ? t('Key set') : t('No key')} />
-
                                 {byok && (
                                     <button
                                         type="button"
@@ -1513,14 +1525,10 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                         className="aip-btn-seg aip-field-seg"
                                         data-tone={saved ? 'ok' : undefined}
                                     >
-                                        {saving
-                                            ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                            : saved
-                                                ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                                : t('Save')}
+                                        <AipSaveLabel saving={!!(saving)} saved={!!(saved)} dots />
                                     </button>
                                 </div>
-                                {hasKey && (
+                                <Presence kind="control" id={hasKey ? 'remove' : null} ready={hostedMotionReady} className="shrink-0">
                                     <button
                                         type="button"
                                         onClick={() => void removeKey(p.id, p.staticCatalogue)}
@@ -1531,7 +1539,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                     >
                                         <Trash2 size={14} strokeWidth={1.75} />
                                     </button>
-                                )}
+                                </Presence>
                             </div>
                         </div>
                         )}
@@ -1550,13 +1558,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                             ? t('Pick a model from this provider first — testing sends a real request through whichever provider is selected.')
                                             : (testResult?.message || t('Test Connection'))}
                                     >
-                                        {testing && isSelected
-                                            ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
-                                            : isSelected && testResult?.success
-                                                ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
-                                                : isSelected && testResult
-                                                    ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
-                                                    : <>{t('Test Connection')}</>}
+                                        <AipTestLabel status={testing && isSelected ? 'testing' : isSelected && testResult?.success ? 'success' : isSelected && testResult ? 'error' : 'idle'} />
                                     </button>
                                 )}
 
@@ -1639,7 +1641,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                     <p className="min-w-0 flex-1">
                         {t('Runs on this device with zero data sent externally. Built-in BGE model shipped with Natively, or download open models directly from Hugging Face.')}
                     </p>
-                    <span className="shrink-0 font-medium tabular-nums text-white/70">
+                    <span className="shrink-0 font-medium tabular-nums aip-text">
                         {installedCount}/{totalCount} {t('installed')}
                         {installedBytes > 0 && <> · {humanBytes(installedBytes)}</>}
                     </span>
@@ -1652,13 +1654,17 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         </p>
                     ) : <div />}
 
-                    {/* Filter Tabs */}
-                    <div className="flex items-center gap-1 bg-white/5 p-0.5 rounded-md text-[11px]">
+                    {/* Filter Tabs. Theme tokens, not white literals: white text
+                        and a 10%-white pill vanished on the light card.
+                        --aip-pill-bg is exactly the old 10% white in dark and a
+                        raised white chip in light. */}
+                    <div className="flex items-center gap-1 bg-[var(--aip-btn-bg)] p-0.5 rounded-md text-[11px]">
                         <button
                             type="button"
-                            className="px-2 py-0.5 rounded text-white transition-colors"
+                            className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100"
                             style={{
-                                background: filterTab === 'all' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                background: filterTab === 'all' ? 'var(--aip-pill-bg)' : undefined,
+                                boxShadow: filterTab === 'all' ? 'var(--aip-pill-shadow)' : 'none',
                                 fontWeight: filterTab === 'all' ? 600 : 400,
                             }}
                             onClick={() => setFilterTab('all')}
@@ -1667,9 +1673,10 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         </button>
                         <button
                             type="button"
-                            className="px-2 py-0.5 rounded text-white transition-colors"
+                            className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100"
                             style={{
-                                background: filterTab === 'installed' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                background: filterTab === 'installed' ? 'var(--aip-pill-bg)' : undefined,
+                                boxShadow: filterTab === 'installed' ? 'var(--aip-pill-shadow)' : 'none',
                                 fontWeight: filterTab === 'installed' ? 600 : 400,
                             }}
                             onClick={() => setFilterTab('installed')}
@@ -1678,9 +1685,10 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                         </button>
                         <button
                             type="button"
-                            className="px-2 py-0.5 rounded text-white transition-colors"
+                            className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100"
                             style={{
-                                background: filterTab === 'recommended' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                background: filterTab === 'recommended' ? 'var(--aip-pill-bg)' : undefined,
+                                boxShadow: filterTab === 'recommended' ? 'var(--aip-pill-shadow)' : 'none',
                                 fontWeight: filterTab === 'recommended' ? 600 : 400,
                             }}
                             onClick={() => setFilterTab('recommended')}
@@ -1732,7 +1740,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                         className="w-1.5 h-1.5 rounded-full shrink-0"
                                         style={{ background: builtInSelected ? 'var(--aip-accent)' : 'var(--aip-tertiary)' }}
                                     />
-                                    <span className="text-xs font-semibold text-white truncate">{status.builtIn.name}</span>
+                                    <span className="text-xs font-semibold aip-hero truncate">{status.builtIn.name}</span>
                                     <AipBadge tone="neutral" label={t('Included')} />
                                     {builtInSelected && <AipBadge tone="ok" label={t('In use')} />}
                                 </div>
@@ -1843,11 +1851,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                 className="aip-field-seg"
                                 data-tone={customSaved ? 'ok' : undefined}
                             >
-                                {customSaving
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                    : customSaved
-                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                        : t('Save')}
+                                <AipSaveLabel saving={!!(customSaving)} saved={!!(customSaved)} dots />
                             </button>
                         </div>
                     </div>
@@ -1879,11 +1883,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                 className="aip-btn-seg aip-field-seg"
                                 data-tone={customSaved ? 'ok' : undefined}
                             >
-                                {customSaving
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                    : customSaved
-                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                        : t('Save')}
+                                <AipSaveLabel saving={!!(customSaving)} saved={!!(customSaved)} dots />
                             </button>
                         </div>
                     </div>
@@ -1905,13 +1905,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                             data-tone={testResult?.success ? 'ok' : testResult ? 'danger' : undefined}
                             title={t('Test Connection')}
                         >
-                            {testing
-                                ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
-                                : testResult?.success
-                                    ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
-                                    : testResult
-                                        ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
-                                        : <>{t('Test Connection')}</>}
+                            <AipTestLabel status={testing ? 'testing' : testResult?.success ? 'success' : testResult ? 'error' : 'idle'} />
                         </button>
 
                         {customModels.length > 0 && (
@@ -1958,9 +1952,17 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                     <AipProviderMark provider="natively" name={t('Reranker Extensions')} />
                     <h4 className="aip-card-title truncate min-w-0">{t('Reranker Extensions')}</h4>
                     <div className="ml-auto flex items-center gap-2 shrink-0">
-                        <span className="aip-meta inline-flex items-center gap-1.5">
-                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
-                        </span>
+                        {/* Opens the repository these are published from, so the
+                            source can be read and a release downloaded and
+                            installed by hand. */}
+                        <button
+                            type="button"
+                            className="aip-meta inline-flex items-center gap-1.5 hover:underline"
+                            title={EXTENSIONS_REPO_URL}
+                            onClick={() => { void window.electronAPI.openExternal?.(EXTENSIONS_REPO_URL); }}
+                        >
+                            <ExternalLink size={12} strokeWidth={1.75} aria-hidden="true" /> {t('GitHub')}
+                        </button>
                         <button
                             type="button"
                             className="aip-btn"
@@ -1969,7 +1971,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                             disabled={installing || !extensionsAvailable}
                             onClick={() => void installFromFolder()}
                         >
-                            {installing ? <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                            {installing ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" />
                                 : <FolderOpen size={12} strokeWidth={1.75} aria-hidden="true" />}
                             <span>{t('Install from folder')}</span>
                         </button>
@@ -1996,9 +1998,8 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
                 <div className="aip-well p-2.5 space-y-2.5">
                     {rerankerExtensions.length === 0 ? (
-                        <div className="text-center py-6 px-4 space-y-2 border border-dashed border-white/10 rounded-md">
-                            <Puzzle size={20} className="mx-auto text-white/30" aria-hidden="true" />
-                            <p className="text-xs text-white/70 font-medium">{t('No custom extensions installed')}</p>
+                        <div className="text-center py-6 px-4 space-y-2 border border-dashed border-[var(--aip-border-strong)] rounded-md">
+                            <p className="text-xs aip-text font-medium">{t('No custom extensions installed')}</p>
                             <p className="text-[10px] aip-muted max-w-xs mx-auto">
                                 {t('Install a local reranker extension from a folder to use custom scoring models.')}
                             </p>
@@ -2030,7 +2031,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                                     border: ext.enabled || ext.running ? undefined : '1px solid var(--aip-border-strong)',
                                                 }}
                                             />
-                                            <span className="text-xs font-semibold text-white truncate">{ext.name}</span>
+                                            <span className="text-xs font-semibold aip-hero truncate">{ext.name}</span>
                                             <span className="text-[10px] aip-muted font-mono">{ext.version}</span>
                                             <AipBadge
                                                 tone={ext.running ? 'ok' : ext.enabled ? 'info' : 'neutral'}
@@ -2080,13 +2081,13 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                         const pctFraction = groupProgressFraction(ext.id, group.files);
 
                                         return (
-                                            <div key={group.id} className="space-y-1.5 pl-3.5 pt-2 border-t border-white/5">
+                                            <div key={group.id} className="space-y-1.5 pl-3.5 pt-2 border-t border-[var(--aip-divider)]">
                                                 <div className="flex items-center justify-between gap-2">
                                                     <div className="min-w-0 flex-1">
                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-[11px] font-semibold text-white truncate">{group.label}</span>
+                                                            <span className="text-[11px] font-semibold aip-hero truncate">{group.label}</span>
                                                             {group.files.length > 1 && (
-                                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-white/70 font-mono shrink-0">
+                                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--aip-item-active)] aip-text font-mono shrink-0">
                                                                     {group.files.length} {t('files')}
                                                                 </span>
                                                             )}
@@ -2146,10 +2147,10 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                                 {/* Aggregate Download Progress Bar */}
                                                 {isDownloading && (
                                                     <div className="space-y-1 pt-1">
-                                                        <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+                                                        <div className="h-1 w-full bg-[var(--aip-item-active)] rounded-full overflow-hidden">
                                                             <div
-                                                                className="h-full bg-[var(--aip-accent)] transition-all duration-150"
-                                                                style={{ width: `${Math.round(pctFraction * 100)}%` }}
+                                                                className="h-full w-full origin-left bg-[var(--aip-accent)] transition-transform duration-150 ease-linear"
+                                                                style={{ transform: `scaleX(${Math.min(1, Math.max(0, pctFraction))})` }}
                                                             />
                                                         </div>
                                                         <div className="text-[10px] aip-muted flex justify-between">
@@ -2171,7 +2172,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
 
                                                 {/* License Acceptance Banner */}
                                                 {group.unacknowledgedLicense && (
-                                                    <div className="space-y-1.5 p-2 rounded bg-white/5 border border-white/5 mt-1">
+                                                    <div className="space-y-1.5 p-2 rounded bg-[var(--aip-btn-bg)] border border-[var(--aip-divider)] mt-1">
                                                         <p className="text-[10px] aip-muted">
                                                             {t('This model requires licence acceptance')} ({group.unacknowledgedLicense.spdx})
                                                             {group.unacknowledgedLicense.commercialUseRestricted ? ` — ${t('non-commercial use only')}` : ''}.
@@ -2208,17 +2209,20 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                                 )}
 
                                                 {/* Collapsible Individual Files Breakdown */}
-                                                {isExpanded && group.files.length > 1 && (
-                                                    <div className="space-y-1 mt-1 pl-2 border-l-2 border-white/10 py-1 bg-white/[0.01] rounded-r">
+                                                {group.files.length > 1 && (
+                                                    <div className="aip-reveal" data-open={isExpanded ? 'true' : 'false'}>
+                                                    <div>
+                                                    <div className="pt-1">
+                                                    <div className="space-y-1 pl-2 border-l-2 border-[var(--aip-border-strong)] py-1 bg-white/[0.01] rounded-r">
                                                         {group.files.map(m => {
                                                             const key = `${ext.id}::${m.key}`;
                                                             const pct = progress[key];
                                                             const fileDownloading = busyModel === key || m.state === 'downloading';
 
                                                             return (
-                                                                <div key={m.key} className="flex items-center justify-between text-[10px] py-1 px-1.5 rounded hover:bg-white/5">
+                                                                <div key={m.key} className="flex items-center justify-between text-[10px] py-1 px-1.5 rounded transition-colors duration-150 hover:bg-[color:var(--aip-item-hover)]">
                                                                     <div className="min-w-0 flex-1 flex items-center gap-2">
-                                                                        <span className="font-mono text-white/80 truncate">{m.key}</span>
+                                                                        <span className="font-mono aip-text truncate">{m.key}</span>
                                                                         <span className="aip-muted">{humanBytes(m.bytes ?? m.approxBytes)}</span>
                                                                     </div>
                                                                     <div className="shrink-0 flex items-center gap-1.5">
@@ -2243,6 +2247,9 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                                                                 </div>
                                                             );
                                                         })}
+                                                    </div>
+                                                    </div>
+                                                    </div>
                                                     </div>
                                                 )}
                                             </div>
@@ -2281,7 +2288,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                     />
                 </div>
 
-                <div className="pt-2 border-t border-white/5 text-[10.5px] aip-muted">
+                <div className="pt-2 border-t border-[var(--aip-divider)] text-[10.5px] aip-muted">
                     {candidateCount <= 5 && t('Fast & low latency — best for quick queries.')}
                     {candidateCount > 5 && candidateCount <= 10 && t('Balanced speed and recall.')}
                     {candidateCount > 10 && candidateCount < status.candidateCountDefault

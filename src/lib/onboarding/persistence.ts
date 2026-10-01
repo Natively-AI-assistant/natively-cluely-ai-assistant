@@ -12,6 +12,7 @@
  */
 
 import type { OrchestratorState } from './orchestrator';
+import { resetRendererTrialClaim } from '../trialCampaign.mjs';
 
 const VERSION = '1.0';
 
@@ -70,6 +71,10 @@ export function loadState(): OrchestratorState {
   const base = buildDefaultState();
 
   try {
+    // One-time trial campaign: forget that the trial promo already ran, BEFORE the
+    // orchestrator reads its persisted state (src/lib/trialCampaign.mjs).
+    resetRendererTrialClaim(localStorage);
+
     const raw = localStorage.getItem(KEYS.state);
     const version = localStorage.getItem(KEYS.version);
 

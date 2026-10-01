@@ -14,10 +14,12 @@
  */
 
 import { originPatternFromUrl } from './capture/originPattern';
-// Static, NOT a dynamic import: chrome.permissions.request must run inside the
-// popup's user-gesture window, and a dynamic import can resolve on a later
-// microtask than that window allows ("may only be called from a user gesture").
+// request*Permission are only used by the legacy grant-* handlers below. The
+// popup calls them itself: a popup click's user activation does not travel
+// through runtime.sendMessage, so chrome.permissions.request reached that way
+// throws "must be called during a user gesture" (verified live, Chrome 148).
 import { requestOriginPermission, requestAllSitesPermission, hasAllSitesPermission } from './capture/permissions';
+import { meetingTabsReport } from './meeting-tabs';
 
 const STORAGE_KEY = 'pairing';
 const PAIR_PROBE_DOM = '__pair_probe__';
@@ -780,9 +782,9 @@ export function badgeForCaptureOutcome(kind: string): { text: string; title: str
  * pull focus off the page the user is looking at (and be page-observable via
  * blur/focus) for a capture the user never initiated. The popup's own
  * "Capture" button (popup.ts `captureBtn`, which drives `case 'capture'` and
- * then `case 'grant-host'` below) already runs inside a real user gesture and
- * grants access without needing this nudge to open anything — the badge/title
- * alone is enough to point the user at the icon.
+ * then calls chrome.permissions.request itself) already runs inside a real
+ * user gesture and grants access without needing this nudge to open anything —
+ * the badge/title alone is enough to point the user at the icon.
  */
 function nudgeGrantViaAction(kind: string): void {
   const badge = badgeForCaptureOutcome(kind);
@@ -856,6 +858,58 @@ async function handleListTabs(reqId: string): Promise<void> {
   }
 }
 
+// ── Meeting tabs (desktop meeting detection) ────────────────────────────────
+// Only after the desktop asks (`meeting-tabs-subscribe`, sent on every hello
+// while its meeting detection is on): the open meeting tabs as keys, re-sent
+// when one opens, closes, navigates, starts or stops playing sound. Nothing
+// else about any tab. See meeting-tabs.ts.
+let meetingTabsOn = false;
+let meetingTabsLast = '';
+let meetingTabsTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function sendMeetingTabs(force = false): Promise<void> {
+  meetingTabsTimer = null;
+  if (!meetingTabsOn) return;
+  try {
+    const report = meetingTabsReport(await chrome.tabs.query({}));
+    const json = JSON.stringify(report);
+    if (!force && json === meetingTabsLast) return;
+    meetingTabsLast = json;
+    wsSend({ type: 'meeting-tabs', tabs: report });
+  } catch (_) { /* tabs unavailable: the next change retries */ }
+}
+
+function scheduleMeetingTabs(): void {
+  if (!meetingTabsOn) return;
+  if (meetingTabsTimer) clearTimeout(meetingTabsTimer);
+  meetingTabsTimer = setTimeout(() => { void sendMeetingTabs(); }, 300);
+}
+
+// ── The Meet reader (names on the transcript) ───────────────────────────────
+// A content script on Google Meet (meet-reader.ts) that reads who is in the
+// call and who is speaking. Registered only while the desktop's meeting
+// detection is subscribed AND the user granted meet.google.com from the popup
+// ("Read names in Google Meet"); its reports go to the desktop only then.
+const MEET_ORIGINS = ['https://meet.google.com/*'];
+const MEET_READER_ID = 'natively-meet-reader';
+
+async function syncMeetReader(): Promise<void> {
+  try {
+    const granted = await chrome.permissions.contains({ origins: MEET_ORIGINS });
+    const want = meetingTabsOn && granted;
+    const registered = await chrome.scripting.getRegisteredContentScripts({ ids: [MEET_READER_ID] });
+    if (want && registered.length === 0) {
+      await chrome.scripting.registerContentScripts([{ id: MEET_READER_ID, matches: MEET_ORIGINS, js: ['meet-reader.js'], runAt: 'document_idle', persistAcrossSessions: false }]);
+      // Meet tabs already open get it now (it guards against running twice).
+      for (const tab of await chrome.tabs.query({ url: MEET_ORIGINS })) {
+        if (tab.id != null) chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['meet-reader.js'] }).catch(() => {});
+      }
+    } else if (!want && registered.length > 0) {
+      await chrome.scripting.unregisterContentScripts({ ids: [MEET_READER_ID] });
+    }
+  } catch (_) { /* scripting unavailable: nothing to read with */ }
+}
+
 async function ensureWsConnected(): Promise<void> {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
   if (wsConnecting) return;
@@ -891,12 +945,19 @@ async function ensureWsConnected(): Promise<void> {
         });
       } else if (msg.type === 'list-tabs' && typeof msg.reqId === 'string') {
         void handleListTabs(msg.reqId);
+      } else if (msg.type === 'meeting-tabs-subscribe') {
+        meetingTabsOn = msg.on === true;
+        meetingTabsLast = '';
+        if (meetingTabsOn) void sendMeetingTabs(true);
+        void syncMeetReader();
       }
       // Ignore phone-targeted StreamEvents (history/token/etc.) — not for us.
     };
     sock.onclose = () => {
       wsConnecting = false;
       if (ws === sock) ws = null;
+      // The desktop forgets this socket's tabs; the next hello asks again.
+      meetingTabsOn = false;
       // Reconnect with backoff (only matters while the SW is alive; the alarm
       // re-attempts on the next tick if the SW was killed).
       setTimeout(() => { void ensureWsConnected(); }, wsBackoffMs);
@@ -917,6 +978,9 @@ type PopupMessage =
   | { type: 'grant-host'; value: string }
   | { type: 'grant-all-sites' }
   | { type: 'all-sites-status' }
+  | { type: 'clear-grant-nudge' }
+  | { type: 'meet-reader-status' }
+  | { type: 'meet-reader-refresh' }
   | { type: 'status' }
   | { type: 'ws-status' }
   | { type: 'unpair' };
@@ -956,10 +1020,10 @@ chrome.runtime.onMessage.addListener((msg: PopupMessage, _sender, sendResponse) 
         return;
       }
       case 'grant-host': {
-        // The popup asks for ONE origin after a capture came back
-        // needs-host-permission. chrome.permissions.request must run inside a
-        // user gesture; the popup's click handler is that gesture, and the
-        // gesture survives this round-trip because the popup awaits us.
+        // LEGACY (no longer sent by the popup): user activation does NOT cross
+        // runtime.sendMessage into a service worker, so this request always
+        // throws and resolves { granted: false }. The popup requests the origin
+        // itself from its click handler — see popup.ts `captureBtn`.
         const origin = typeof msg.value === 'string' ? msg.value : '';
         const granted = await requestOriginPermission(chrome.permissions, origin);
         if ((granted as { granted?: boolean })?.granted) clearGrantNudge();
@@ -967,9 +1031,9 @@ chrome.runtime.onMessage.addListener((msg: PopupMessage, _sender, sendResponse) 
         return;
       }
       case 'grant-all-sites': {
-        // One-time "Allow on all sites": a single prompt covering the broad
-        // optional_host_permissions patterns, so the desktop hotkey works on
-        // any site without per-site grants. Gesture comes from the popup click.
+        // LEGACY (no longer sent by the popup) — same reason as grant-host: the
+        // click's user activation never arrives here, so no prompt can show.
+        // The popup's allSitesBtn requests the broad patterns itself.
         const r = await requestAllSitesPermission(chrome.permissions);
         if (r.granted) clearGrantNudge();
         sendResponse(r);
@@ -977,6 +1041,17 @@ chrome.runtime.onMessage.addListener((msg: PopupMessage, _sender, sendResponse) 
       }
       case 'all-sites-status':
         sendResponse({ granted: await hasAllSitesPermission(chrome.permissions) });
+        return;
+      case 'clear-grant-nudge':
+        clearGrantNudge();
+        sendResponse({ kind: 'success' });
+        return;
+      case 'meet-reader-status':
+        sendResponse({ granted: await chrome.permissions.contains({ origins: MEET_ORIGINS }).catch(() => false) });
+        return;
+      case 'meet-reader-refresh':
+        await syncMeetReader();
+        sendResponse({ kind: 'success' });
         return;
       case 'status':
         sendResponse(await connectionStatus());
@@ -1042,6 +1117,26 @@ chrome.windows.onFocusChanged.addListener((winId) => {
   }
 });
 chrome.action.onClicked.addListener(() => { void ensureWsConnected(); });
+
+// The Meet reader's reports (from a Meet page, so checked: our own content
+// script, on meet.google.com), relayed only while the desktop subscribed.
+chrome.runtime.onMessage.addListener((msg: { type?: string; key?: unknown; people?: unknown }, sender) => {
+  if (msg?.type !== 'meet-people') return;
+  if (sender.id !== chrome.runtime.id || !sender.tab || !(sender.url || '').startsWith('https://meet.google.com/')) return;
+  if (!meetingTabsOn || sender.tab.incognito) return;
+  wsSend({ type: 'meeting-people', key: msg.key, people: msg.people });
+});
+chrome.permissions.onAdded.addListener(() => { void syncMeetReader(); });
+chrome.permissions.onRemoved.addListener(() => { void syncMeetReader(); });
+
+// Meeting tabs: any change that can make a tab a meeting, end one, or start or
+// stop its call audio. No-ops unless the desktop subscribed.
+chrome.tabs.onUpdated.addListener((_id, info) => {
+  if (info.url !== undefined || info.audible !== undefined || info.title !== undefined || info.status === 'complete') scheduleMeetingTabs();
+});
+chrome.tabs.onRemoved.addListener(() => scheduleMeetingTabs());
+chrome.tabs.onReplaced.addListener(() => scheduleMeetingTabs());
+chrome.tabs.onActivated.addListener(() => scheduleMeetingTabs());
 
 // Also attempt a connection as soon as the worker loads (covers the common case
 // where the worker was just spun up by any event).

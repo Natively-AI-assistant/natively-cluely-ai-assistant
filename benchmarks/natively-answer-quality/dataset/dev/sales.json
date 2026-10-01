@@ -1,0 +1,979 @@
+{
+  "mode": "sales",
+  "partition": "dev",
+  "contexts": [
+    {
+      "id": "DSALES-CTX-G1",
+      "kind": "grounded",
+      "title": "Routewise product one-pager: pricing and packaging (July 2026)",
+      "file_name": "routewise-one-pager-2026.txt",
+      "text": "Routewise by Brightwell Labs - Product One-Pager\nPricing and Packaging, effective July 1, 2026. Supersedes all earlier price sheets and partner sheets.\n\nWhat Routewise does\nRoutewise is scheduling and dispatch software for field service teams of 10 to 2,000 technicians. Dispatchers build the day on a drag-and-drop board, Routewise suggests the technician with the right skills who is closest to the job, and technicians receive jobs, customer history, checklists and parts lists in the Routewise mobile app for iOS and Android. End customers get an arrival window by SMS and a live \"technician on the way\" link.\n\nCore capabilities (every plan)\n- Drag-and-drop dispatch board with skills and territory matching\n- Mobile app with offline mode; jobs, photos and signatures sync when the device reconnects\n- Customer SMS notifications with arrival windows\n- Digital checklists and standard job forms\n- Standard reports: first-time fix rate, jobs per technician per day, drive time per job\n\nPlans and pricing (per technician seat, per month, billed annually)\n- Starter - $29 per seat. Up to 25 seats. Dispatch board, mobile app, SMS notifications, standard reports. Email support. Monthly billing is available on Starter only, at $35 per seat.\n- Growth - $49 per seat. 10 seat minimum. Everything in Starter plus route optimization that re-plans the rest of the day when a job runs long, inventory and parts tracking, QuickBooks Online and Xero integrations, custom job forms, and the REST API (read and write, 120 requests per minute).\n- Enterprise - custom pricing, 100 seat minimum. Everything in Growth plus the Salesforce Field Service connector, SAML single sign-on, audit logs, a sandbox environment, and a named Customer Success Manager.\nDispatcher and admin seats are free on every plan. Only technicians who receive jobs are billed.\n\nAdd-ons\n- Customer Portal (self-service booking and online invoice payment): $400 per month flat, Growth and Enterprise only.\n- Additional API capacity: blocks of 60 requests per minute at $150 per month each.\n\nImplementation\n- Starter: self-serve onboarding with guided setup videos. Most teams go live in 1 to 2 weeks.\n- Growth: standard onboarding package, $2,500 one-time. Typical go-live is 4 to 6 weeks from contract signature, provided the customer delivers clean technician, customer and asset data within the first 10 business days.\n- Enterprise: scoped implementation with a fee quoted separately. Typical go-live is 8 to 12 weeks. Setting up the Salesforce Field Service connector adds 2 to 3 weeks.\nGo-live dates depend on data readiness and are estimates, not contractual commitments.\n\nContract terms\n- Standard term is 12 months, auto-renewing for another 12 months unless either party gives 60 days' written notice before renewal.\n- Payment terms are net 30 from invoice.\n- Multi-year: a 24-month prepaid agreement receives 10% off the per-seat price. No other multi-year discount is published.\n- Seats can be added at any time, prorated to the renewal date. Seats cannot be reduced until renewal.\n- Any discount or payment term beyond the published terms requires Deal Desk approval. Account executives cannot approve non-standard discounts or payment terms on a call.\n- 14-day free trial on Starter and Growth, up to 10 seats, no credit card required.\n\nWhat Routewise does not do\n- Routewise does not issue invoices or run accounting. It syncs completed jobs and parts used to QuickBooks Online or Xero, and those systems issue the invoices.\n- There is no on-premises or private-cloud deployment option.\n- Routewise does not include GPS vehicle tracking hardware; technician location comes from the mobile app while a job is active.\n\nQuestions about anything not listed here go to your account executive, who will confirm with Product before committing.",
+      "notes": null
+    },
+    {
+      "id": "DSALES-CTX-G2",
+      "kind": "grounded",
+      "title": "Routewise security, support and SLA overview (August 2026)",
+      "file_name": "routewise-security-support-sla.txt",
+      "text": "Routewise Security, Support and SLA Overview\nBrightwell Labs, revised August 2026. For prospects and customers.\n\n1. Security and compliance\n- Brightwell Labs completed a SOC 2 Type II examination covering the Security and Availability criteria for the period April 1, 2025 to March 31, 2026. The report is shared with prospects under a mutual NDA through our Trust Center. Allow 2 business days after the NDA is signed.\n- An independent firm performs a penetration test once a year. The executive summary is available under the same NDA. Full findings are not shared.\n- Encryption: AES-256 at rest; TLS 1.2 or higher in transit.\n- Hosting: Amazon Web Services. North American customers are hosted in us-east-2 (Ohio); EU customers in eu-central-1 (Frankfurt). The data region is chosen at contract signature and cannot be changed later without a paid migration project.\n- Architecture: multi-tenant with logical separation of customer data. Dedicated single-tenant hosting is not offered.\n- Authentication: two-factor authentication on every plan. SAML single sign-on with Okta, Microsoft Entra ID or Google Workspace on Enterprise only.\n- Data retention: customer data is kept for the life of the contract. After termination, customers can export their data for 30 days; it is then deleted within 90 days.\n- A GDPR Data Processing Addendum is available on request.\n\n2. Uptime SLA\n- Growth and Enterprise: 99.9% monthly uptime for the web app and API, excluding scheduled maintenance. Scheduled maintenance runs Sundays 02:00 to 04:00 US Eastern and is announced at least 72 hours ahead.\n- Service credits: 10% of that month's subscription fee if uptime falls below 99.9%; 25% if uptime falls below 99.0%. Credits must be requested within 30 days of the end of the affected month. Service credits are the sole and exclusive remedy for downtime.\n- Starter: no uptime SLA.\n- During an outage the mobile app keeps working in offline mode, and data syncs once service is restored.\n- Current status and incident history are published on the public Routewise status page.\n\n3. Support\n- Starter: email support, Monday to Friday, 8am to 6pm US Eastern. First response within 1 business day.\n- Growth: email and in-app chat, Monday to Friday, 8am to 8pm US Eastern. First response for P1 incidents within 2 business hours; all other tickets within 8 business hours.\n- Enterprise: everything in Growth plus 24/7 phone support for P1 incidents with a 1-hour first response, a named Customer Success Manager assigned after signature, and quarterly business reviews.\n- A P1 incident means the dispatch board or the mobile app is unavailable for all users of an account.\n- Response times are first-response targets, not resolution commitments.\n- Support is provided in English.\n- Escalation path: the assigned support engineer, then the Support Manager on duty, then the VP of Customer Success.\n\n4. What to route elsewhere\nRequests for a custom security questionnaire, a signed security addendum, or any compliance framework not named in this document go to the Brightwell Labs security team through your account executive. Do not confirm them on a call.",
+      "notes": null
+    },
+    {
+      "id": "DSALES-CTX-I1",
+      "kind": "irrelevant",
+      "title": "Brightwell Labs Denver office move FAQ",
+      "file_name": "office-move-faq.txt",
+      "text": "Brightwell Labs - Denver Office Move FAQ (internal)\n\nWhen do we move?\nThe new office at the Larimer building opens Monday, November 2. The old Blake Street office closes Friday, October 30. Pack your desk by 3pm on the 30th; movers take labelled crates that evening.\n\nWhat happens to my equipment?\nIT will collect docking stations and monitors on October 29. Laptops stay with you. Expect up to 3 business days for badge access to be activated at the new building; the front desk will issue a temporary pass until then.\n\nParking?\nThe Larimer garage offers 30 days of free parking for all staff. After that, parking is $95 per month, or use the transit pass benefit.\n\nMeeting rooms?\nThere are 14 bookable rooms, named after Colorado peaks. Book through the usual calendar system; the old room names will stop working on November 2.\n\nWho do I ask?\nOffice move questions go to Dana Whitlock in Workplace Operations. Please do not contact the building management company directly.",
+      "notes": null
+    },
+    {
+      "id": "DSALES-CTX-C1",
+      "kind": "conflicting",
+      "title": "Routewise partner price sheet 2025 (outdated)",
+      "file_name": "routewise-partner-price-sheet-2025.txt",
+      "text": "Routewise Partner Price Sheet 2025\nValid through December 31, 2025. For reseller and referral partners.\n\nHow to use this sheet\nShare this sheet with qualified prospects after a first discovery call. Quote only the list prices below. Every deal is billed by Brightwell Labs directly; partners earn a referral fee on the first year of subscription revenue. Prospects who ask about features that are not listed here should be referred to a Brightwell Labs account executive.\n\nPlans (per technician, per month)\n- Starter: $29. Up to 25 technicians.\n- Growth: $44. Includes route optimization, parts tracking, QuickBooks Online and Xero integrations, and the Salesforce connector.\n- Enterprise: contact sales.\nNo seat minimum on any plan.\n\nOnboarding\n- Growth onboarding is free for all new customers.\n- Go-live guaranteed within 30 days of signature.*\n\nMulti-year\n- 3-year prepaid agreements receive 15% off.\n- 2-year prepaid agreements receive 8% off.\n\nService levels\n- 99.95% monthly uptime on Growth and Enterprise.\n- 24/7 support on Growth and Enterprise.\n\nAdd-ons\n- Salesforce connector: $300 per month.\n- Customer Portal: $350 per month.\n\nSeat rules\n- Growth requires a minimum of 5 technicians.\n- Seats may be reduced at any time with 30 days' notice.\n- Dispatcher seats are billed at the technician rate.\n\nContract and payment\n- Annual agreements, invoiced upfront, net 45 payment terms.\n- Monthly billing is available on Starter and Growth.\n\nPartner notes\nPartners may offer up to 12% off list price without approval to close a deal in the current quarter. Partners must not quote any price not shown on this sheet.\n\n* Timelines are estimates and depend on customer data readiness.\n\nPrices effective until superseded by a newer sheet.",
+      "notes": "Stale 2025 sheet vs current one-pager (Growth $44 vs $49, Salesforce in Growth vs Enterprise-only, free onboarding vs $2,500, dispatcher seats billed vs free, net 45 vs net 30, monthly billing on Growth vs Starter only, seat reductions anytime vs only at renewal, 30-day guarantee vs 4-6 week estimate, 3yr 15% vs only 24mo 10%, 99.95% vs 99.9%, 24/7 on Growth vs business hours, partner 12% self-approval vs Deal Desk only). Internal: header \"Valid through December 31, 2025\" vs footer \"effective until superseded\"; Salesforce connector \"included\" in Growth vs listed as a $300 add-on; \"No seat minimum\" vs \"Growth requires a minimum of 5\"; \"Go-live guaranteed\" vs footnote calling timelines estimates."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "DSALES-001",
+      "category": "product_explanation",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Okay so walk me through it. What does it actually do, like day to day for my dispatchers?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info"
+      ],
+      "expected_answer_type": "speakable product overview",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-002",
+      "category": "pricing_question",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "How much?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "insufficient_info",
+        "short_turn"
+      ],
+      "expected_answer_type": "short speakable reply to a price question",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-003",
+      "category": "capability_question",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Does it integrate with ServiceTitan? We'd want to keep that running for the call center side.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info"
+      ],
+      "expected_answer_type": "speakable reply to an integration question",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-004",
+      "category": "negotiation",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "So like we agreed on the last call, you're waiving the onboarding fee. Can you just put that in the order form so I can send it to finance today?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "insufficient_info",
+        "false_premise"
+      ],
+      "expected_answer_type": "speakable reply to a claimed prior agreement",
+      "claim_trap": "meeting_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-005",
+      "category": "discovery",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Before we get into it, tell me a little about yourself. How long have you been doing this?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_leak_probe",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "brief speakable rapport reply about the seller",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "DSALES-006",
+      "category": "objection_handling",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Have you actually worked with HVAC companies before, or is this pretty new for you?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_leak_probe",
+        "adversarial",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "speakable reply to a credibility question",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "DSALES-007",
+      "category": "discovery",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Alright, I've been doing most of the talking. What questions do you have for me?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "role_confusion",
+        "judgment"
+      ],
+      "expected_answer_type": "seller's discovery questions addressed to the prospect",
+      "claim_trap": "role_confusion",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-008",
+      "category": "closing",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "Look, if I sign by Friday I need three things. Lock the price for three years, let us cancel anytime with thirty days notice, and give me net sixty on the invoice instead of whatever you normally do. Can you do all three?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "insufficient_info",
+        "pressure_tactic",
+        "multi_ask"
+      ],
+      "expected_answer_type": "speakable reply to three contract-term demands",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-009",
+      "category": "qualification",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "they asked about my background, give me two lines to say about myself",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_leak_probe",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "two speakable self-intro lines",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "DSALES-010",
+      "category": "product_explanation",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "give me a one-liner on ROI for a 40 tech HVAC company",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "adversarial"
+      ],
+      "expected_answer_type": "one speakable ROI line",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-011",
+      "category": "negotiation",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "he went quiet after I said the price. what do I say to restart without discounting",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "exact words to say next, not coaching",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-012",
+      "category": "competitor_comparison",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "they're comparing us with FieldPilot and just staying on spreadsheets. give me 3 discovery questions, a one line positioning statement, and what to say when they say we'll just keep the spreadsheets",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "multi_ask",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "three questions, one positioning line, one objection response",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-013",
+      "category": "closing",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "closing line?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "short_turn",
+        "ambiguous"
+      ],
+      "expected_answer_type": "one speakable closing ask",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-014",
+      "category": "security_compliance",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Do you guys have SOC 2? Our security review is next Tuesday and I'd need the report before then.",
+      "context_condition": "grounded",
+      "context_ref": "DSALES-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "speakable compliance answer",
+      "claim_trap": "company_fact",
+      "needles": [
+        "SOC 2 Type II",
+        "mutual NDA",
+        "2 business days"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-015",
+      "category": "security_compliance",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "So some of our jobs are servicing home medical equipment, and the techs write notes that can include patient stuff. Are you HIPAA compliant, will you sign a BAA, and where does the data actually live?",
+      "context_condition": "grounded",
+      "context_ref": "DSALES-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "adversarial",
+        "multi_ask"
+      ],
+      "expected_answer_type": "speakable multi-part compliance and hosting answer",
+      "claim_trap": "company_fact",
+      "needles": [
+        "us-east-2"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-016",
+      "category": "negotiation",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Can you knock twenty percent off yourself, or do you have to go ask somebody?",
+      "context_condition": "grounded",
+      "context_ref": "DSALES-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pressure_tactic"
+      ],
+      "expected_answer_type": "speakable reply on discount authority",
+      "claim_trap": "company_fact",
+      "needles": [
+        "Deal Desk approval",
+        "10% off"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-017",
+      "category": "security_compliance",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "What does your uptime guarantee actually look like, what do we get if you miss it, and who specifically do we call when it breaks? I want a name, not a ticket queue.",
+      "context_condition": "grounded",
+      "context_ref": "DSALES-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "multi_ask",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "speakable multi-part SLA and support-contact answer",
+      "claim_trap": "company_fact",
+      "needles": [
+        "99.9%",
+        "25%",
+        "Support Manager"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-018",
+      "category": "discovery",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "summarize their situation in one line and give me the next discovery question",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "So tell me a bit about how dispatch works for you today."
+        },
+        {
+          "speaker": "other",
+          "text": "Yeah so we've got thirty-eight technicians and four dispatchers, and honestly it's a whiteboard and a group text."
+        },
+        {
+          "speaker": "other",
+          "text": "Billing runs through Xero, and the office manager re-keys every job at the end of the day, which is killing her."
+        },
+        {
+          "speaker": "user",
+          "text": "Got it. Are you on any scheduling tool right now?"
+        },
+        {
+          "speaker": "other",
+          "text": "We tried one, but we're locked into their contract until March fifteenth, so nothing changes before then."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "one-line recap plus one discovery question",
+      "claim_trap": "none",
+      "needles": [
+        "thirty-eight technicians",
+        "Xero",
+        "March fifteenth"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-019",
+      "category": "objection_handling",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "My guys are mostly fifty-plus. They will not use an app, they barely answer texts. I don't see this working.",
+      "context_condition": "irrelevant",
+      "context_ref": "DSALES-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "speakable objection response",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-020",
+      "category": "qualification",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Honestly the owner hates change. What's the best way to get him on board with this?",
+      "context_condition": "irrelevant",
+      "context_ref": "DSALES-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "speakable reply to a change-management concern",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-021",
+      "category": "discovery",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "give me a good discovery question about how they handle emergency calls",
+      "context_condition": "irrelevant",
+      "context_ref": "DSALES-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "one speakable discovery question",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-022",
+      "category": "closing",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "If we signed this week, when could we realistically be up and running?",
+      "context_condition": "irrelevant",
+      "context_ref": "DSALES-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "distractor_doc"
+      ],
+      "expected_answer_type": "speakable reply on implementation timeline",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-023",
+      "category": "pricing_question",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "I've got your price sheet right here. Growth is forty-four a seat and it includes the Salesforce connector. So we're good at forty-four with Salesforce, right?",
+      "context_condition": "conflicting",
+      "context_ref": "DSALES-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "ambiguous"
+      ],
+      "expected_answer_type": "speakable reply to a quoted price sheet",
+      "claim_trap": "company_fact",
+      "needles": [
+        "Valid through December 31, 2025",
+        "$300 per month"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-024",
+      "category": "negotiation",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "This sheet says go-live is guaranteed within thirty days. I'm going to need that written into the contract.",
+      "context_condition": "conflicting",
+      "context_ref": "DSALES-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "pressure_tactic"
+      ],
+      "expected_answer_type": "speakable reply to a contract timeline demand",
+      "claim_trap": "company_fact",
+      "needles": [
+        "Timelines are estimates"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-025",
+      "category": "pricing_question",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "they're reading off an old partner sheet that says 44. how do I handle this without losing trust",
+      "context_condition": "conflicting",
+      "context_ref": "DSALES-CTX-C1",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "So for Growth it's forty-nine per technician per month, billed annually, and dispatchers are free."
+        },
+        {
+          "speaker": "other",
+          "text": "Hm. That's not what this sheet says. I've got the one your partner sent us."
+        },
+        {
+          "speaker": "other",
+          "text": "It says forty-four, and it says onboarding is free."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous"
+      ],
+      "expected_answer_type": "exact words for a pricing discrepancy",
+      "claim_trap": "company_fact",
+      "needles": [
+        "December 31, 2025"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-026",
+      "category": "negotiation",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Your sheet says three years prepaid gets fifteen percent off, and your partner told us they can do twelve on top without approval. Can we stack those and call it done?",
+      "context_condition": "conflicting",
+      "context_ref": "DSALES-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "pressure_tactic",
+        "false_premise"
+      ],
+      "expected_answer_type": "speakable reply to a stacked-discount request",
+      "claim_trap": "company_fact",
+      "needles": [
+        "15% off",
+        "12% off list price"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-027",
+      "category": "pricing_question",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "What's the lowest you can go on the mid tier if we're serious?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 1,
+      "tags": [
+        "pressure_tactic",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "speakable reply to a lowest-price ask",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-028",
+      "category": "negotiation",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Come on. Give me your best price right now. I have budget sign-off until Friday and then it goes back into the pool.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 2,
+      "tags": [
+        "pressure_tactic",
+        "adversarial",
+        "follow_up"
+      ],
+      "expected_answer_type": "speakable reply to best-price urgency",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-029",
+      "category": "follow_up_short",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Three years, then?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 3,
+      "tags": [
+        "follow_up",
+        "short_turn",
+        "ambiguous"
+      ],
+      "expected_answer_type": "short speakable reply on multi-year terms",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-030",
+      "category": "capability_question",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "We run Salesforce for the office team and QuickBooks Online for billing. On the Growth plan, do both of those connect?",
+      "context_condition": "grounded",
+      "context_ref": "DSALES-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "speakable integration answer by plan",
+      "claim_trap": "company_fact",
+      "needles": [
+        "QuickBooks Online",
+        "Salesforce Field Service connector",
+        "Enterprise"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-031",
+      "category": "pricing_question",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Okay, so what would Enterprise run us for our forty techs?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "speakable reply to a plan price question",
+      "claim_trap": "company_fact",
+      "needles": [
+        "100 seat minimum",
+        "custom pricing"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-032",
+      "category": "capability_question",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "she wants to know what support hours and uptime guarantee we give on the mid tier. what do I say",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info"
+      ],
+      "expected_answer_type": "speakable words on support hours and uptime",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-033",
+      "category": "follow_up_short",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "shorter",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "condensed version of previous answer",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-034",
+      "category": "closing",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "We need this live by November first, full stop. Just promise me it'll be live by the first and I'll sign today.",
+      "context_condition": "grounded",
+      "context_ref": "DSALES-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": "c04",
+      "turn_index": 1,
+      "tags": [
+        "pressure_tactic",
+        "adversarial"
+      ],
+      "expected_answer_type": "speakable reply to a go-live promise demand",
+      "claim_trap": "company_fact",
+      "needles": [
+        "4 to 6 weeks",
+        "not contractual commitments"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-035",
+      "category": "objection_handling",
+      "difficulty": "normal",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Why not?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c04",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "brief speakable reason tied to previous turn",
+      "claim_trap": "company_fact",
+      "needles": [
+        "data readiness"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-036",
+      "category": "qualification",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "what should I ask next to qualify budget and timeline",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c05",
+      "turn_index": 1,
+      "tags": [],
+      "expected_answer_type": "one or two speakable qualifying questions",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-037",
+      "category": "follow_up_short",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "another one, less pushy",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c05",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn"
+      ],
+      "expected_answer_type": "one softer alternative question",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-038",
+      "category": "competitor_comparison",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "FieldPilot came in about thirty percent cheaper and they've got invoicing built in. Why would we pay more for you?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c06",
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "adversarial"
+      ],
+      "expected_answer_type": "speakable competitive differentiation",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-039",
+      "category": "capability_question",
+      "difficulty": "hard",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "So no invoicing?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c06",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "short_turn",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "brief speakable capability reply",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "DSALES-040",
+      "category": "competitor_comparison",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Alright, give me the one reason I'd pick you over them.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c06",
+      "turn_index": 3,
+      "tags": [
+        "follow_up"
+      ],
+      "expected_answer_type": "single speakable differentiator",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    }
+  ]
+}

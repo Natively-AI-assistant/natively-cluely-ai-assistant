@@ -96,12 +96,12 @@ test('launcher calendar button surfaces calendarConnect failure instead of silen
 });
 
 test('settings calendar tab surfaces calendarConnect failure instead of silently idling', () => {
-    const source = read('src/components/SettingsOverlay.tsx');
+    const source = read('src/components/settings/CalendarSettings.tsx');
 
     assert.match(source, /getCalendarConnectErrorMessage/, 'settings must import the shared formatter');
-    assert.match(source, /const \[calendarError,\s*setCalendarError\]/, 'settings must keep visible calendar error state');
-    assert.match(source, /setCalendarError\(getCalendarConnectErrorMessage\(res\.error,\s*t\)\)/, 'success=false result must set localized visible error text');
-    assert.match(source, /setCalendarError\(getCalendarConnectErrorMessage\(e,\s*t\)\)/, 'thrown errors must set localized visible error text');
-    assert.match(source, /calendarError &&/, 'settings must render the error below the button');
-    assert.match(source, /<div role="alert"/, 'settings errors must be announced to assistive technology');
+    assert.match(source, /const \[error,\s*setError\]/, 'settings must keep visible calendar error state');
+    assert.match(source, /setError\(getCalendarConnectErrorMessage\(res\.error,\s*t\)\)/, 'success=false result must set localized visible error text');
+    assert.match(source, /setError\(getCalendarConnectErrorMessage\(err,\s*t\)\)/, 'thrown errors must set localized visible error text');
+    assert.match(source, /open=\{!!error && !connected\}/, 'settings must render the error below the button');
+    assert.match(source, /<div[^>]*role="alert"/, 'settings errors must be announced to assistive technology');
 });

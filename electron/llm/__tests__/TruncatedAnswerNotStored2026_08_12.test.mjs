@@ -166,10 +166,17 @@ describe('manual chat refuses to store a truncated answer', () => {
   });
 
   test('the two answer-side emitters outside that region carry their own guard', () => {
-    for (const call of ['addAssistantMessage', 'publishAssistantMessage']) {
-      const re = new RegExp(`if \\(!v3Truncated\\) [^;\\n]*${call}`);
-      assert.match(ipcSrc, re, `${call} must be individually gated on !v3Truncated`);
-    }
+    const re = /if \(!v3Truncated\) [^;\n]*addAssistantMessage/;
+    assert.match(ipcSrc, re, 'addAssistantMessage must be individually gated on !v3Truncated');
+    // The phone mirror (2026-09-27): the answer now streams to the phone as it
+    // is written, so the end of the turn is what must not pass a truncated
+    // answer off as complete. A truncated one ends as an error (its words stay
+    // on the phone, marked as stopped); only a complete one ends as done.
+    assert.match(
+      ipcSrc,
+      /if \(v3Truncated\) PhoneMirrorService\.getInstance\(\)\.publishError\([^;\n]*\);\s*else PhoneMirrorService\.getInstance\(\)\.publishDone\(/,
+      'the phone gets done only for a complete answer',
+    );
   });
 
   test('USER-side sinks are NOT gated — the question survives a truncated answer', () => {

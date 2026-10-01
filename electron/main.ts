@@ -7,6 +7,8 @@
 // init_DatabaseManager() (which is what loads better-sqlite3).
 // ============================================================================
 import './nativeArchGate';
+// Dev-only prompt recorder: must wrap fetch before any SDK client exists (inert unless NATIVELY_PROMPT_DEBUG=1, never when packaged).
+import './llm/promptDebug';
 
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
@@ -17,6 +19,7 @@ import os from "os"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
 import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
 import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
+import { resolveDebugLogPath } from "./utils/debugLogPath.mjs"
 import { MeetingLifecycleQueue, type MeetingLifecycleState } from "./audio/meetingLifecycleQueue"
 import { autoUpdater } from "electron-updater"
 import { summarizeUpdateDownload } from "./update/updateDownloadSummary"
@@ -195,12 +198,20 @@ process.on('uncaughtException', (err) => {
       // app.whenReady() if the bundle is loaded in a non-Electron context.
       const { dialog, app: electronApp } = require('electron');
       // showErrorBox is modal and blocks until the user clicks OK.
-      dialog.showErrorBox(
-        packaged
-          ? 'Natively was built for a different chip — please reinstall'
-          : 'Native modules are wrong architecture — run this command to fix:',
-        detail,
-      );
+      // A system dialog would show in a screen share while Undetectable is on
+      // (stealthPromptGate.ts). Settings are not loaded yet, so the saved flag
+      // is read directly; unreadable settings still get the dialog.
+      const { savedUndetectableOn } = require('./services/stealthPromptGate');
+      if (savedUndetectableOn(electronApp.getPath('userData'))) {
+        console.error('[nativeArch] ' + detail + ' (error dialog skipped: Undetectable is on)');
+      } else {
+        dialog.showErrorBox(
+          packaged
+            ? 'Natively was built for a different chip — please reinstall'
+            : 'Native modules are wrong architecture — run this command to fix:',
+          detail,
+        );
+      }
       electronApp.exit(1);
     } catch {
       // Electron not loaded (running under bare Node in a test) — exit
@@ -332,7 +343,13 @@ let _logFile: string | null = null;
 const getLogFile = (): string | null => {
   if (_logFile) return _logFile;
   try {
-    _logFile = path.join(app.getPath('documents'), 'natively_debug.log');
+    // An agent instance (npm run dev:agent) logs into its own userData; see
+    // resolveDebugLogPath. Packaged builds always use Documents.
+    _logFile = resolveDebugLogPath({
+      isPackaged: app.isPackaged,
+      agentUserData: process.env.NATIVELY_AGENT_USER_DATA,
+      documentsDir: () => app.getPath('documents'),
+    });
     return _logFile;
   } catch {
     // app.ready may not have fired yet (including native module boot gates).
@@ -823,6 +840,9 @@ type MacScreenCaptureCapability = {
 };
 
 let latestSystemAudioPermissionWarning: string | null = null;
+// Undetectable mode for the windows setContentProtection cannot reach (file
+// pickers, message boxes, tooltips, popups). Built in initializeApp.
+let foreignWindowCaptureGuard: ForeignWindowCaptureGuard | null = null;
 
 function rememberSystemAudioPermissionWarning(message: string): void {
   latestSystemAudioPermissionWarning = message;
@@ -1209,6 +1229,8 @@ import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
 import { buildJudgePrompt } from "./intelligence/autoAnswer/AutoAnswerJudge"
 import { SimpleAutoAnswerEngine } from "./intelligence/autoAnswer/SimpleAutoAnswer"
+import { AutoAnswerUsageTelemetry } from "./intelligence/autoAnswer/AutoAnswerUsageTelemetry"
+import { nameTerms, setSttContextTerms } from "./audio/sttContextTerms"
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
@@ -1218,6 +1240,7 @@ import { NativelyProSTT } from "./audio/NativelyProSTT"
 import { NvidiaNimStreamingSTT } from "./audio/NvidiaNimStreamingSTT"
 import { AppleSpeechSTT } from "./audio/AppleSpeechSTT"
 import { punctuationSourceFor } from "./llm/punctuationProvenance"
+import { configureVisionCapabilityStore } from "./llm/visionCapabilityStore"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
@@ -1298,14 +1321,35 @@ try {
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
 import { PhoneMirrorService, shouldStartPhoneMirrorOnBoot } from "./services/PhoneMirrorService"
+import { PHONE_IMAGE_PREFIX } from "./utils/phoneImage"
+import { renderPhoneAnswer } from "./services/phoneMirrorMarkdown"
 import { describePageCaptureFallback, describeDoubleCaptureFailure, PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL } from "./services/pageCaptureFallback"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
+import { linkSessionToCalendar, cancelSessionCalendarLink } from './services/calendar/SessionCalendarLinker'
+import { wireExtensionMeetingTabs } from './services/meetingDetection/extensionMeetingTabs'
+import { SHORTCUT_TOUR_ACTIONS } from './services/shortcutTourActions'
+import { wireMeetingDetection, registerMeetingDetection, electronNotify, type MeetingStartRequest } from './services/meetingDetection/wireMeetingDetection'
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
+import { nativePromptsBlocked } from './services/stealthPromptGate'
+import { createForeignWindowCaptureGuard, wrapAsyncDialogs, type ForeignWindowCaptureGuard } from './services/foreignWindowCaptureGuard'
+import { acceptsLocalSpeechEndHint } from './intelligence/autoAnswer/SimpleAutoAnswer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
+import {
+  shouldPromoteToRegularAtStartup,
+  planDisguiseTitleWrites,
+  DOCK_ENFORCE_INTERVAL_MS,
+  DOCK_ENFORCE_MAX_ATTEMPTS,
+  DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS,
+} from './utils/macDockPolicy'
+import { disguiseAppName } from './utils/disguiseAppName'
+import { disguiseIconRelativePath, shouldSetMacDockIcon } from './utils/disguiseIcon'
+import { resolveTrayIcon } from './utils/trayIcon'
+import { appUserModelIdForDisguise } from './utils/windowsTaskbarPolicy'
+import { shouldOpenExternally } from './utils/windowOpenPolicy'
 import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
 
 // Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
@@ -1427,6 +1471,43 @@ export class AppState {
   // before booting a new session so the shared STT instances are not torn down
   // mid-meeting by a stale teardown task.
   private _pendingTeardown: Promise<void> | null = null;
+  // First-launch shortcut tour (src/components/onboarding/ShortcutTour.tsx).
+  // While it is up, the shortcuts it teaches are practice presses: they go to
+  // the tour's renderer instead of hiding the launcher it is drawn in or taking
+  // a real screenshot. Cleared the moment that renderer reloads or goes away,
+  // so a crashed tour can never leave the real shortcuts disabled.
+  private shortcutTourContents: Electron.WebContents | null = null;
+  private detachShortcutTour: (() => void) | null = null;
+
+  public setShortcutTour(active: boolean, contents: Electron.WebContents): void {
+    if (!active) {
+      if (this.shortcutTourContents === contents) this.clearShortcutTour();
+      return;
+    }
+    this.clearShortcutTour();
+    this.shortcutTourContents = contents;
+    const clear = () => {
+      if (this.shortcutTourContents === contents) this.clearShortcutTour();
+    };
+    contents.on('did-start-loading', clear);
+    contents.on('destroyed', clear);
+    contents.on('render-process-gone', clear);
+    // Removed with the routing, so re-arming (the tour re-subscribes when its
+    // bindings load) never stacks listeners on the same WebContents.
+    this.detachShortcutTour = () => {
+      contents.removeListener('did-start-loading', clear);
+      contents.removeListener('destroyed', clear);
+      contents.removeListener('render-process-gone', clear);
+    };
+  }
+
+  private clearShortcutTour(): void {
+    this.shortcutTourContents = null;
+    const detach = this.detachShortcutTour;
+    this.detachShortcutTour = null;
+    detach?.();
+  }
+
   // Tracks meeting IDs currently being processed by processCompletedMeetingForRAG.
   // Without this guard, a rapid stop→start→stop cycle could enqueue the same
   // meeting for RAG twice (e.g. recovery retry + normal completion), duplicating
@@ -1463,6 +1544,7 @@ export class AppState {
   private _disguiseTimers: NodeJS.Timeout[] = []; // Track forceUpdate timeouts
   private _dockDebounceTimer: NodeJS.Timeout | null = null; // Debounce dock state changes
   private _dockReassertTimers: NodeJS.Timeout[] = []; // Self-verifying dock-enforcement retry timers
+  private _macDockIconOverridden = false; // app.dock.setIcon() has replaced the bundle icon (see utils/disguiseIcon.ts)
   private _ollamaBootstrapPromise: Promise<void> | null = null;
   private screenshotCaptureInProgress: boolean = false;
   private localWhisperRecoveryNotice: LocalWhisperRecoveryNotice | null = null;
@@ -1558,6 +1640,10 @@ export class AppState {
 
     // 3. Initialize other helpers
     this.screenshotHelper = new ScreenshotHelper(this.view)
+    // Saved provider vision answers (2026-10-01). Before ProcessingHelper,
+    // because its setModel at startup may refresh OpenRouter's catalogue, and
+    // after dev:agent's userData override (module load, above whenReady).
+    configureVisionCapabilityStore(path.join(app.getPath('userData'), 'vision-capabilities.json'))
     this.processingHelper = new ProcessingHelper(this)
 
     this.windowHelper.setContentProtection(this.isUndetectable);
@@ -1823,6 +1909,11 @@ export class AppState {
 
     keybindManager.onShortcutTriggered(async (actionId) => {
       console.log(`[Main] Global shortcut triggered: ${actionId}`);
+      const tour = this.shortcutTourContents;
+      if (tour && !tour.isDestroyed() && SHORTCUT_TOUR_ACTIONS.has(actionId)) {
+        tour.send('onboarding:tour-shortcut', actionId);
+        return;
+      }
       try {
         if (actionId === 'general:toggle-visibility') {
           this.toggleMainWindow();
@@ -1992,6 +2083,7 @@ export class AppState {
           actionId === 'chat:answer' ||
           actionId === 'chat:codeHint' ||
           actionId === 'chat:brainstorm' ||
+          actionId === 'chat:acceptSuggestion' ||
           actionId === 'chat:dynamicAction4' ||
           actionId === 'chat:scrollUp' ||
           actionId === 'chat:scrollDown' ||
@@ -2005,6 +2097,7 @@ export class AppState {
             'chat:answer': 'answer',
             'chat:codeHint': 'codeHint',
             'chat:brainstorm': 'brainstorm',
+            'chat:acceptSuggestion': 'acceptSuggestion',
             'chat:dynamicAction4': 'dynamicAction4',
             'chat:scrollUp': 'scrollUp',
             'chat:scrollDown': 'scrollDown',
@@ -2069,7 +2162,6 @@ export class AppState {
         enabled: !!settingsManager.get('codexCliEnabled'),
         path: settingsManager.get('codexCliPath'),
         model: settingsManager.get('codexCliModel'),
-        fastModel: settingsManager.get('codexCliFastModel'),
         timeoutMs: settingsManager.get('codexCliTimeoutMs'),
         sandboxMode: settingsManager.get('codexCliSandboxMode'),
         serviceTier: settingsManager.get('codexCliServiceTier'),
@@ -2266,6 +2358,10 @@ export class AppState {
     const helper = this.getWindowHelper();
     this.sendToWindow(helper.getLauncherWindow(), 'native-audio-transcript', payload);
     this.sendToWindow(helper.getOverlayWindow(), 'native-audio-transcript', payload);
+    // Phone mirror shows the same live transcript (no-op when it isn't running).
+    try {
+      PhoneMirrorService.getInstance().publishTranscript(payload);
+    } catch { /* mirror only */ }
   }
 
   /**
@@ -2382,6 +2478,12 @@ export class AppState {
 
   private broadcastMeetingState(): void {
     this.broadcast('meeting-state-changed', { isActive: this.isMeetingActive });
+    // A new meeting starts without the last one's phone images, as the overlay
+    // starts without its attachments (session-reset).
+    if (this.isMeetingActive) this.phoneImages = [];
+    try {
+      PhoneMirrorService.getInstance().publishMeetingState(this.isMeetingActive);
+    } catch { /* mirror only */ }
   }
 
   // Public so the reference-file upload IPC handler can kick a retry for a
@@ -2558,7 +2660,11 @@ export class AppState {
         // negotiation script + all extraction keep the quality-first fn above.
         if (typeof this.knowledgeOrchestrator.setLiveCoachingContentFn === 'function') {
           this.knowledgeOrchestrator.setLiveCoachingContentFn(async (contents: any[]) => {
-            return await llmHelper.generateContentStructured(joinContents(contents), { preferFast: true });
+            // Deliberately NOT on the fast path - this returns a tacticalNote + exactScript the user reads
+            // and says aloud, so it is not an "invisible call". The fast rung also caps
+            // output at 256 tokens, and a truncated coaching JSON degrades to a canned
+            // fallback mid-negotiation with nothing pointing at the setting that caused it.
+            return await llmHelper.generateContentStructured(joinContents(contents));
           });
         }
 
@@ -3259,11 +3365,20 @@ export class AppState {
     noteCandidate: (id, gen) => this.intelligenceManager.noteAutoAnswerCandidate(id, gen),
     speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
     prefetchAnswer: (id, text) => this.intelligenceManager.prefetchAutoAnswer(id, text),
+    // The retrieval query's embedding, started when the interviewer stops rather
+    // than when the final lands (~0.7 s later). Filler words are stripped as the
+    // orchestrator strips them from the question, so the texts line up.
+    warmQuery: (text) => {
+      try {
+        const { stripSttFillers } = require('./context-intelligence/question/turn-classifier');
+        this.ragManager?.getEmbeddingPipeline()?.warmQueryEmbedding(stripSttFillers(text) || text);
+      } catch { /* speculative */ }
+    },
     ...((process.env.NATIVELY_AUTO_ANSWER_JUDGE || '').toLowerCase() === 'off' ? {} : {
-      judgeCandidate: async (req) => {
+      judgeCandidate: async (req, signal) => {
         const llm = this.processingHelper?.getLLMHelper?.();
         if (!llm) return null;
-        return await llm.generateJudgeVerdict(buildJudgePrompt(req));
+        return await llm.generateJudgeVerdict(buildJudgePrompt(req), { signal });
       },
     }),
     modeName: () => {
@@ -3272,12 +3387,16 @@ export class AppState {
         return ModesManager.getInstance().getActiveMode()?.name ?? null;
       } catch { return null; }
     },
+    // Who the USER is, so "Raj, can you…" in a team meet stays quiet: the
+    // active résumé's name, else the connected Calendar account's.
+    userName: () => this.currentUserName(),
     telemetry: (event) => {
       try {
         const { telemetryService } = require('./services/telemetry/TelemetryService');
         const { name, meetingGeneration, provider, ...properties } = event;
         telemetryService.track({ name, provider, properties: { meetingGeneration, ...properties } });
       } catch { /* telemetry must never break the pipeline */ }
+      this.autoAnswerUsage.observe(event);
     },
     log: (line) => { if (this._verboseLogging) console.log(line); },
     // review#10 parity (2026-08-25): boot on the registry's no-mode default
@@ -3285,8 +3404,53 @@ export class AppState {
   }, undefined, resolveAutoAnswerThresholds(null));
   private autoAnswerEmbedder: { embed(text: string): Promise<number[]> } | null = null;
 
+  /** The user's name: the active résumé's, else the connected Calendar account's. */
+  private currentUserName(): string | null {
+    try {
+      const orchestrator = this.knowledgeOrchestrator ?? this.processingHelper?.getLLMHelper?.()?.getKnowledgeOrchestrator?.();
+      const resume = (orchestrator as any)?.activeResume?.structured_data;
+      const fromResume = resume?.identity?.name || resume?.name;
+      if (typeof fromResume === 'string' && fromResume.trim()) return fromResume;
+      const { CalendarManager } = require('./services/CalendarManager');
+      return CalendarManager.getInstance().getConnectionStatus().name ?? null;
+    } catch { return null; }
+  }
+
+  /**
+   * The same Auto Answer events, sent to Pro operational telemetry: one row per
+   * automatic answer, one per meeting, counts and labels only. The engine hook
+   * above also writes them to TelemetryService, whose only active sink is a
+   * local JSONL file. See AutoAnswerUsageTelemetry.ts.
+   */
+  private readonly autoAnswerUsage = new AutoAnswerUsageTelemetry({
+    sink: (row) => {
+      // The same setting TelemetryService honours.
+      if (SettingsManager.getInstance().get('telemetryEnabled') === false) return;
+      const { usageOutbox } = require('./services/UsageOutbox');
+      usageOutbox.recordTelemetry(row);
+    },
+    // The template id (a fixed enum, never the user's mode name); a user mode
+    // is marked custom because it can carry any prompt.
+    mode: () => {
+      const { ModesManager } = require('./services/ModesManager');
+      const am = ModesManager.getInstance().getActiveMode();
+      if (!am) return null;
+      return am.isBuiltin ? am.templateType : `custom:${am.templateType}`;
+    },
+    answerModel: () => {
+      const selection = this.processingHelper?.getLLMHelper?.()?.getDirectAssistSelection?.();
+      if (!selection) return null;
+      // A custom or cURL provider's "model" is the user's own config id.
+      return selection.provider === 'custom' || selection.provider === 'curl'
+        ? { provider: selection.provider }
+        : { provider: selection.provider, model: selection.model };
+    },
+  });
+
   /** A manual What-to-Answer started (hotkey / button / accepted offer): the offer card is committed. */
   public onManualWhatToAnswer(): void {
+    // What streams next is the manual answer, not the automatic one.
+    this.autoAnswerUsage.stopAwaitingAnswer();
     this.simpleAutoAnswer.onManualAnswerStarted();
   }
 
@@ -3360,7 +3524,7 @@ export class AppState {
       const apiKey = CredentialsManager.getInstance().getDeepgramApiKey();
       if (apiKey) {
         console.log(`[Main] Using DeepgramStreamingSTT for ${speaker}`);
-        const dg = new DeepgramStreamingSTT(apiKey);
+        const dg = new DeepgramStreamingSTT(apiKey, CredentialsManager.getInstance().getSttModel('deepgram'));
         // Opt-in diarization (#3): only on the remote/system channel ('interviewer'), where
         // multiple people may speak. The mic channel is always the local user ('me'), so
         // diarizing it adds cost with no benefit. Default OFF via flag.
@@ -3393,14 +3557,14 @@ export class AppState {
         stt = new GoogleSTT(speaker);
       }
     } else if (sttProvider === 'openai') {
-      // OpenAI: WebSocket Realtime (gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback.
+      // OpenAI: WebSocket Realtime (gpt-live-transcribe → gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback.
       // If a custom OpenAI-compatible base URL is configured (e.g. Speaches), the STT class
       // skips the Realtime WS path and uses REST against the custom endpoint.
       const apiKey = CredentialsManager.getInstance().getOpenAiSttApiKey();
       const baseUrl = CredentialsManager.getInstance().getOpenAiSttBaseUrl();
       if (apiKey) {
         console.log(`[Main] Using OpenAIStreamingSTT for ${speaker}${baseUrl ? ` (custom endpoint: ${baseUrl})` : ' (WebSocket+REST fallback)'}`);
-        stt = new OpenAIStreamingSTT(apiKey, baseUrl);
+        stt = new OpenAIStreamingSTT(apiKey, baseUrl, CredentialsManager.getInstance().getSttModel('openai'));
       } else {
         console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
@@ -3433,7 +3597,7 @@ export class AppState {
 
       if (apiKey) {
         console.log(`[Main] Using RestSTT (${sttProvider}) for ${speaker}`);
-        stt = new RestSTT(sttProvider, apiKey, modelOverride, region);
+        stt = new RestSTT(sttProvider, apiKey, modelOverride, region, speaker);
       } else {
         console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
@@ -3987,9 +4151,33 @@ export class AppState {
     capture.on('speech_ended', () => {
       if (this.systemAudioCapture === capture) {
         this.googleSTT?.notifySpeechEnded?.();
+        // Auto Answer: the local VAD saw the interviewer stop. For a provider
+        // with no end-of-turn event of its own this is the only early signal;
+        // the controller guards against a half-transcribed turn by ignoring the
+        // stop while an interim is dangling. Excluded: providers whose FINAL
+        // is produced by the end of the segment itself, with no interim to
+        // guard on — the REST ones (Groq Whisper, Azure, IBM Watson), OpenAI
+        // (its whisper-1 REST fallback; its Realtime mode emits its own
+        // endpoint anyway) and the local models (their own VAD closes the
+        // segment, then inference runs). For those the stop always precedes
+        // the text, so it would judge the turn without its last words.
+        if (this._autoAnswerEnabled && this.isMeetingActive) {
+          try {
+            const { CredentialsManager } = require('./services/CredentialsManager');
+            const provider = CredentialsManager.getInstance().getSttProvider();
+            if (acceptsLocalSpeechEndHint(provider)) {
+              this.simpleAutoAnswer.onLocalSpeechEnd();
+            }
+          } catch { /* an endpoint hint must never break capture */ }
+        }
       }
     });
     capture.on('speech_edge', (edge: SpeechEdge) => {
+      // Auto Answer's stall cap: the interviewer talking again ends the stop
+      // it would otherwise promote a frozen interim on.
+      if (this.systemAudioCapture === capture && edge?.channel === 'interviewer' && edge.speaking) {
+        this.simpleAutoAnswer.onLocalSpeechStart();
+      }
     });
     // setupAudioRecoveryHandler registers its own 'error' listener — do not
     // add a duplicate logger here or the same error reports twice.
@@ -6320,10 +6508,21 @@ export class AppState {
 
     const meetingGeneration = ++this._meetingGeneration;
     this.isMeetingActive = true;
+    this.autoAnswerUsage.meetingStarted();
+    // The user's name as a transcription hint, before any STT connects (sttContextTerms.ts).
+    try { setSttContextTerms(nameTerms(this.currentUserName())); } catch { /* a hint, never a blocker */ }
     this.broadcastMeetingState()
     if (metadata) {
       this.intelligenceManager.setMeetingMetadata(metadata);
+      // Which calendar event this is (title, attendees, 1:1 speaker names,
+      // follow-up recipients). Decides at once from the cached list; never
+      // delays the start. See services/calendar/SessionCalendarLinker.ts.
+      linkSessionToCalendar(metadata, () => this.isMeetingActive);
     }
+    // Every meeting gets its own conversation history, whether or not a mode
+    // is active (the dynamic-action session id below exists only WITH a mode,
+    // and without one every meeting shared one history — 2026-09-24).
+    this.intelligenceManager.beginMeetingConversation(`conv_${crypto.randomUUID()}`);
 
     // Phase 3 — bind dynamic action engine to this meeting + active mode.
     // Action store is per-(sessionId, modeId), so a fresh sessionId here gives
@@ -6540,6 +6739,7 @@ export class AppState {
   }
 
   private async endMeetingTransition(): Promise<void> {
+    cancelSessionCalendarLink();
     // Idempotency guard: a double-click on Stop, or a Stop racing with a
     // global-shortcut reset, can deliver two endMeeting() calls within ms of
     // each other. Without this, both invocations would run the synchronous
@@ -6554,6 +6754,7 @@ export class AppState {
     }
 
     this.cancelAutoAnswer();
+    this.autoAnswerUsage.meetingEnded();
     // Cover the window between here and `_pendingTeardown` assignment, during which
     // the new in-flight-audio-init await below yields the event loop.
     this._endMeetingInFlight = true;
@@ -6950,6 +7151,7 @@ export class AppState {
       // TurnPlan. Falls back to 'General knowledge' for legacy emitters
       // (fallback paths, code-hint, brainstorm) that don't compute it.
       flushBatchesBeforeFinal();
+      this.autoAnswerUsage.answerShown();
       const win = mainWindow()
       // emittedAt (2026-07-31): WTA supersession is generation-relative only —
       // a slow generation stays "current" through any number of manual turns
@@ -6966,6 +7168,7 @@ export class AppState {
       // drop a batch belonging to a superseded live answer. Undefined for the
       // other live streams (code hint / brainstorm) — id-less items are accepted.
       queueBatch('suggested_answer', { token, question, confidence, generationId });
+      this.autoAnswerUsage.answerShown();
     })
 
     // Orphaned-scaffold fix: a what-to-answer stream that already showed a
@@ -6973,6 +7176,7 @@ export class AppState {
     // Tell the renderer to drop the open scaffold row. Flush pending token
     // batches first so a late scaffold batch can't re-mount the row afterwards.
     this.intelligenceManager.on('suggested_answer_discard', (reason: string) => {
+      this.autoAnswerUsage.stopAwaitingAnswer();
       flushBatchesBeforeFinal();
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-suggested-answer-discard', { reason })
@@ -7523,6 +7727,67 @@ export class AppState {
     return this.screenshotHelper.getImagePreview(filepath)
   }
 
+  // Images the phone sent (uploads, and desktop captures it asked for), kept
+  // for the phone's own typed questions: the overlay gets each one through
+  // screenshot-attached, but a phone question never goes through the overlay.
+  // Cleared at meeting start, when the overlay drops its attachments too.
+  private phoneImages: Array<{ path: string; at: number; used: boolean }> = []
+  private static readonly PHONE_IMAGE_TTL_MS = 15 * 60 * 1000
+
+  /** Save a photo or screenshot sent from the phone and attach it to the next answer. */
+  public async receivePhoneImage(image: { data: Buffer; ext: 'jpg' | 'png' | 'webp' }): Promise<string> {
+    // The prefix tells the vision path it is a phone photo/screenshot, which it
+    // sends at a higher resolution than a capture of this screen.
+    const imagePath = await this.screenshotHelper.addExternalImage(image.data, image.ext, {
+      namePrefix: PHONE_IMAGE_PREFIX,
+    })
+    await this.attachImageToMeeting(imagePath)
+    return imagePath
+  }
+
+  /**
+   * Attach an image to the next answer the way a capture taken on this machine
+   * is (the overlay lists it and sends it with its next request), and remember
+   * it for the phone's next typed question. Returns whether a meeting surface
+   * received it.
+   */
+  public async attachImageToMeeting(imagePath: string): Promise<boolean> {
+    let preview = ''
+    try {
+      preview = await this.getImagePreview(imagePath)
+    } catch {
+      // The preview is only the thumbnail; answers read the file itself.
+    }
+    const helper = this.getWindowHelper()
+    const sent = new Set<number>()
+    let delivered = false
+    for (const win of [helper.getLauncherWindow(), helper.getOverlayWindow()]) {
+      if (!win || sent.has(win.id)) continue
+      if (this.sendToWindow(win, 'screenshot-attached', { path: imagePath, preview })) {
+        sent.add(win.id)
+        delivered = true
+      }
+    }
+    this.phoneImages.push({ path: imagePath, at: Date.now(), used: false })
+    if (this.phoneImages.length > 5) this.phoneImages = this.phoneImages.slice(-5)
+    return delivered
+  }
+
+  /** The phone took this image off the tray: no phone question may use it after this. */
+  public dropPhoneImage(imagePath: string): void {
+    for (const img of this.phoneImages) if (img.path === imagePath) img.used = true
+  }
+
+  /** Images the phone sent that no phone question has used yet (recent, still on disk); marks them used. */
+  public takePhoneChatImages(): string[] {
+    const now = Date.now()
+    const fresh = this.phoneImages.filter(
+      (img) => !img.used && now - img.at < AppState.PHONE_IMAGE_TTL_MS && fs.existsSync(img.path),
+    )
+    for (const img of fresh) img.used = true
+    return fresh.map((img) => img.path)
+  }
+
   public async deleteScreenshot(
     path: string
   ): Promise<{ success: boolean; error?: string }> {
@@ -7555,39 +7820,26 @@ export class AppState {
   public showTray(): void {
     if (this.tray) return;
 
-    // Try to find a template image first for macOS
-    const resourcesPath = app.isPackaged ? process.resourcesPath : app.getAppPath();
-
-    // Potential paths for tray icon
-    const templatePath = path.join(resourcesPath, 'assets', 'iconTemplate.png');
-    const defaultIconPath = app.isPackaged
-      ? path.join(resourcesPath, 'assets', 'icon.png')
-      : path.join(app.getAppPath(), 'src/components/icon.png');
-
-    let iconToUse = defaultIconPath;
-
-    // Check if template exists (sync check is fine for startup/rare toggle)
-    try {
-      if (require('fs').existsSync(templatePath)) {
-        iconToUse = templatePath;
-        console.log('[Tray] Using template icon:', templatePath);
-      } else {
-        // Also check src/components for dev
-        const devTemplatePath = path.join(app.getAppPath(), 'src/components/iconTemplate.png');
-        if (require('fs').existsSync(devTemplatePath)) {
-          iconToUse = devTemplatePath;
-          console.log('[Tray] Using dev template icon:', devTemplatePath);
-        } else {
-          console.log('[Tray] Template icon not found, using default:', defaultIconPath);
+    // The template (16 px + @2x beside it) loads as-is so the @2x representation
+    // survives; only the full-size fallback art is resized. See utils/trayIcon.ts.
+    const choice = resolveTrayIcon({
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      appPath: app.getAppPath(),
+      exists: (p) => {
+        try {
+          return require('fs').existsSync(p);
+        } catch (e) {
+          console.error('[Tray] Error checking for icon:', e);
+          return false;
         }
-      }
-    } catch (e) {
-      console.error('[Tray] Error checking for icon:', e);
-    }
+      },
+    });
+    console.log(choice.template ? '[Tray] Using template icon:' : '[Tray] Template icon not found, using default:', choice.path);
 
-    const trayIcon = nativeImage.createFromPath(iconToUse).resize({ width: 16, height: 16 });
-    // IMPORTANT: specific template settings for macOS if needed, but 'Template' in name usually suffices
-    trayIcon.setTemplateImage(iconToUse.endsWith('Template.png'));
+    const loadedTrayIcon = nativeImage.createFromPath(choice.path);
+    const trayIcon = choice.resizeTo16 ? loadedTrayIcon.resize({ width: 16, height: 16 }) : loadedTrayIcon;
+    trayIcon.setTemplateImage(choice.template);
 
     this.tray = new Tray(trayIcon)
     this.tray.setToolTip('Natively') // This tooltip might also need update if we change global shortcut, but global shortcut is removed.
@@ -7721,6 +7973,7 @@ export class AppState {
     this.settingsWindowHelper.setContentProtection(state)
     this.modelSelectorWindowHelper.setContentProtection(state)
     this.cropperWindowHelper.setContentProtection(state)
+    foreignWindowCaptureGuard?.sync(state)
 
     if (process.platform === 'win32') {
       this.windowHelper.syncOverlayInteractionPolicy();
@@ -7835,7 +8088,7 @@ export class AppState {
     wantUndetectable: boolean,
     targetFocusWindow: BrowserWindow | null,
     attempt: number,
-    maxAttempts: number = 6,
+    maxAttempts: number = DOCK_ENFORCE_MAX_ATTEMPTS,
   ): void {
     if (process.platform !== 'darwin') return;
 
@@ -7884,7 +8137,7 @@ export class AppState {
       const t = setTimeout(() => {
         this._dockReassertTimers = this._dockReassertTimers.filter((x) => x !== t);
         this._enforceDockState(wantUndetectable, targetFocusWindow, attempt + 1, maxAttempts);
-      }, 130);
+      }, DOCK_ENFORCE_INTERVAL_MS);
       this._dockReassertTimers.push(t);
     }
   }
@@ -7917,11 +8170,11 @@ export class AppState {
   // reset sharingType) and drive the dock to hidden, retrying against the OS
   // ground truth so a late ready-to-show dock re-show is corrected.
   public applyInitialUndetectableState(): void {
-    // Longer retry budget than the toggle path (~2.5s vs ~0.8s): at startup the
+    // Longer retry budget than the toggle path (~2.3s vs ~1.3s): at startup the
     // dock re-show lands at the launcher's ready-to-show, which on a cold launch
-    // can arrive later than the toggle path's 6-retry window. Extra isVisible()
+    // can arrive later than the toggle path's retry window. Extra isVisible()
     // re-checks are cheap and stop early via the isUndetectable guard.
-    this.reassertUndetectableStealth(18);
+    this.reassertUndetectableStealth(DOCK_ENFORCE_STARTUP_MAX_ATTEMPTS);
   }
 
   // Re-drive the app back to a fully-stealth state after any operation that can
@@ -7944,7 +8197,7 @@ export class AppState {
   // so it cannot be defeated by a dropped call or a late re-show. Cheap and safe
   // to call redundantly — it no-ops immediately off-darwin or when not
   // undetectable, and stops early via the isUndetectable guard inside the loop.
-  public reassertUndetectableStealth(maxAttempts: number = 10): void {
+  public reassertUndetectableStealth(maxAttempts: number = DOCK_ENFORCE_MAX_ATTEMPTS): void {
     if (process.platform !== 'darwin') return;
     if (!this.isUndetectable) return;
     // Collapse any in-flight enforcement chain from a PRIOR re-assert before
@@ -8117,25 +8370,19 @@ export class AppState {
 
     // NO runtime activation-policy churn here — and this is deliberate.
     //
-    // The dual-dock-icon bug is a STARTUP phenomenon: the app is born, paints a
-    // tile, THEN renames via app.setName()+CFBundleName, and the LaunchServices
-    // re-registration races into a second tile. That path is fully handled at
-    // startup by LSUIElement (the bundle is born tile-less) plus the one-shot
-    // accessory→regular promotion after createWindow() — see the whenReady block.
+    // Duplicate Dock tiles come from activation-policy churn (rapid
+    // regular↔accessory/UIElement flips), not from the rename — see
+    // utils/macDockPolicy.ts. The old code bracketed this rename in
+    // accessory→regular "to be safe", but that round-trip is exactly such a flip,
+    // and it also deactivates the whole application for a tick — the
+    // always-on-top overlay/launcher windows leave the foreground layer and snap
+    // back, producing a visible disappear/reappear flicker on every disguise
+    // switch. With no policy change the app never deactivates, so there is also
+    // nothing to re-focus.
     //
-    // At RUNTIME the app already owns a single stable 'regular' dock tile, and
-    // app.setName() updates that tile's label in place rather than spawning a
-    // duplicate. The old code still bracketed this rename in accessory→regular
-    // "to be safe", but that round-trip deactivates the whole application for a
-    // tick — the always-on-top overlay/launcher windows leave the foreground
-    // layer and snap back, producing a visible disappear/reappear flicker on
-    // every disguise switch. Trading a guaranteed flicker for a hypothetical
-    // duplicate tile is the wrong deal, so the bracket is gone. With no policy
-    // change the app never deactivates, so there is also nothing to re-focus.
-    //
-    // Stealth is unaffected: _applyDisguise() already skips app.setName() and
-    // app.dock.setIcon() when isUndetectable (the dock stays hidden), and we
-    // never promote activation policy here.
+    // Stealth: the Settings UI locks the disguise picker while undetectable is
+    // on, and _applyDisguise() skips app.setName()/app.dock.setIcon() and
+    // re-hides the tile after its process.title write if it ever runs then.
     this._applyDisguise(mode);
   }
 
@@ -8144,76 +8391,28 @@ export class AppState {
   }
 
   private _applyDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
-    let appName = "Natively";
-    let iconPath = "";
-
+    const appName = disguiseAppName(mode, process.platform);
     const isWin = process.platform === 'win32';
     const isMac = process.platform === 'darwin';
 
-    switch (mode) {
-      case 'terminal':
-        appName = isWin ? "Command Prompt " : "Terminal ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/terminal.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/terminal.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/terminal.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/terminal.png");
-        }
-        break;
-      case 'settings':
-        appName = isWin ? "Settings " : "System Settings ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/settings.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/settings.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/settings.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/settings.png");
-        }
-        break;
-      case 'activity':
-        appName = isWin ? "Task Manager " : "Activity Monitor ";
-        if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/win/activity.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/win/activity.png");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/fakeicon/mac/activity.png")
-            : path.join(app.getAppPath(), "assets/fakeicon/mac/activity.png");
-        }
-        break;
-      case 'none':
-      default:
-        appName = "Natively";
-        if (isMac) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "natively.icns")
-            : path.join(app.getAppPath(), "assets/natively.icns");
-        } else if (isWin) {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/icons/win/icon.ico")
-            : path.join(app.getAppPath(), "assets/icons/win/icon.ico");
-        } else {
-          iconPath = app.isPackaged
-            ? path.join(process.resourcesPath, "assets/icon.png")
-            : path.join(app.getAppPath(), "assets/icon.png");
-        }
-        break;
-    }
+    // macOS 'none' is the macOS-drawn render of assets/Natively.icon, not full-bleed icon.png — see utils/disguiseIcon.ts.
+    const iconRelativePath = disguiseIconRelativePath(mode, process.platform);
+    const iconPath = app.isPackaged
+      ? path.join(process.resourcesPath, iconRelativePath)
+      : path.join(app.getAppPath(), iconRelativePath);
 
     console.log(`[AppState] Applying disguise: ${mode} (${appName}) on ${process.platform}`);
 
-    // 1. Update process title (affects Activity Monitor / Task Manager)
-    process.title = appName;
+    // 1. Update process title (affects Activity Monitor / Task Manager).
+    // On macOS this write re-checks the app in with LaunchServices, which
+    // UNHIDES a hidden Dock tile — see planDisguiseTitleWrites below.
+    const titlePlan = planDisguiseTitleWrites(process.platform, this.isUndetectable);
+    const titleWritten = !(titlePlan.skipUnchangedWrite && process.title === appName);
+    if (titleWritten) process.title = appName;
 
-    // 2. Update app name (affects macOS Menu / Dock)
-    // Skip when undetectable — app.setName() causes macOS to re-register
-    // the app and re-show the dock icon even after dock.hide()
+    // 2. Update app name (affects macOS Menu / Dock label). On macOS
+    // app.setName() only stores the name; still skipped when undetectable so the
+    // stealth path makes no identity changes beyond the title above.
     if (!this.isUndetectable) {
       app.setName(appName);
     }
@@ -8222,10 +8421,12 @@ export class AppState {
       process.env.CFBundleName = appName.trim();
     }
 
-    // 3. Update App User Model ID (Windows Taskbar grouping)
+    // 3. Update App User Model ID (Windows Taskbar grouping). Undisguised, it
+    // is the installer shortcut's ID so the running window groups with a
+    // pinned Natively instead of adding a second button; each disguise keeps
+    // its own ID so it never groups with the real app. See windowsTaskbarPolicy.
     if (isWin) {
-      // Use unique AUMID per disguise to avoid grouping with the real app
-      app.setAppUserModelId(`com.natively.assistant.${mode}`);
+      app.setAppUserModelId(appUserModelIdForDisguise(mode));
     }
 
     // 4. Update Icons
@@ -8235,7 +8436,11 @@ export class AppState {
       if (isMac) {
         // Skip dock icon update when dock is hidden to avoid potential flicker
         if (!this.isUndetectable) {
-          if (app.dock) app.dock.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
+          // Packaged + undisguised keeps the live Liquid Glass bundle icon — see utils/disguiseIcon.ts.
+          if (app.dock && !image.isEmpty() && shouldSetMacDockIcon(mode, app.isPackaged, this._macDockIconOverridden)) {
+            app.dock.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
+            this._macDockIconOverridden = true;
+          }
         }
       } else {
         // Windows/Linux: Update all window icons
@@ -8284,9 +8489,19 @@ export class AppState {
       this._disguiseTimers.push(ts);
     };
 
-    scheduleUpdate(200);
-    scheduleUpdate(1000);
-    scheduleUpdate(5000);
+    // Not while the macOS Dock must stay hidden: each re-assert unhides the
+    // tile, and the +5000ms one landed after startup enforcement had finished,
+    // leaving the icon up in undetectable mode for the rest of the session.
+    if (titlePlan.scheduleReasserts) {
+      scheduleUpdate(200);
+      scheduleUpdate(1000);
+      scheduleUpdate(5000);
+    }
+
+    // A write above has already unhidden the tile; hide it again now.
+    if (titlePlan.reassertStealthAfterWrite && titleWritten) {
+      this.reassertUndetectableStealth();
+    }
   }
 
   // Helper: broadcast an IPC event to all windows
@@ -8335,8 +8550,30 @@ export class AppState {
 // packaged build — there it logs and exits, because a packaged mismatch means
 // the release pipeline shipped the wrong .node binaries and no runtime fix is
 // honest.
-const gotSingleInstanceLock = app.requestSingleInstanceLock();
-logStartupPhase('single-instance-lock', { gotLock: gotSingleInstanceLock });
+/*
+  Agent UI testing (CLAUDE.md, "Agent UI testing via CDP"). An agent-driven
+  instance must not fight the developer's own app for the single-instance lock,
+  and must not write into the real profile. scripts/dev-agent.mjs is the only
+  thing that sets NATIVELY_AGENT_USER_DATA.
+
+  Both concessions are gated on !app.isPackaged. A packaged build must keep the
+  lock and the real profile whatever the environment says, or a stray env var in
+  a user's shell would silently give them a second app writing to a throwaway
+  directory — and CLAUDE.md forbids enabling this in packaged builds outright.
+*/
+const agentUserData = !app.isPackaged ? process.env.NATIVELY_AGENT_USER_DATA : undefined;
+if (agentUserData) {
+  // Before whenReady and before anything reads userData, or the log file and
+  // the DB would already have been opened against the real profile.
+  app.setPath('userData', agentUserData);
+}
+
+// Skipping the lock is what lets an agent instance run beside the developer's.
+const gotSingleInstanceLock = agentUserData ? true : app.requestSingleInstanceLock();
+logStartupPhase('single-instance-lock', {
+  gotLock: gotSingleInstanceLock,
+  agentMode: Boolean(agentUserData),
+});
 if (!gotSingleInstanceLock) {
   console.log('[Main] Another instance is already running. Exiting this instance.');
   // process.exit(0), not app.quit() and not app.exit(0). app.quit() before
@@ -8361,6 +8598,22 @@ async function initializeApp() {
     } catch (err) {
       console.error('[Main] second-instance handler failed:', err);
     }
+  });
+
+  // No renderer may open another Electron window: a target="_blank" link used
+  // to spawn a default BrowserWindow — its own taskbar button on Windows and no
+  // content protection, even in undetectable mode. https goes to the default
+  // browser (the 'open-external' rule); everything else is dropped. Registered
+  // before whenReady so it covers every window. See utils/windowOpenPolicy.ts.
+  app.on('web-contents-created', (_event, contents) => {
+    contents.setWindowOpenHandler(({ url }) => {
+      if (shouldOpenExternally(url)) {
+        shell.openExternal(url).catch((err) => console.warn('[Main] openExternal failed:', err?.message || err));
+      } else {
+        console.warn('[Main] Blocked window.open', { protocol: url.split(':')[0] });
+      }
+      return { action: 'deny' };
+    });
   });
 
   // PHASE-2E: install lifecycle tracking BEFORE app.whenReady() so we never
@@ -8436,32 +8689,32 @@ async function initializeApp() {
     }
   }
 
-  // 2a. PRE-EMPTIVE dock hide / activation-policy clamp: must happen before ANY
-  // operation that causes macOS to register a dock entry (app.setName, the
-  // LaunchServices live-rename in _applyDisguise, BrowserWindow creation, etc.).
+  // 2a. PRE-EMPTIVE dock hide for a persisted-undetectable launch: the packaged
+  // bundle has no LSUIElement, so the process is born with a Dock tile. Hide it
+  // before any window exists; applyInitialUndetectableState() later converges it.
+  // The disguise title is written FIRST, while the born tile is still up: on
+  // macOS a process.title write re-checks the app in as a Foreground app, and
+  // doing it after the hide (as _applyDisguise used to) made born tile → hide →
+  // re-shown → re-hide within ~150ms, which left a duplicate tile up for the
+  // whole session. _applyDisguise then skips the identical rewrite.
   //
-  // DUAL-DOCK-ICON FIX: even in NORMAL (non-stealth) mode, applyInitialDisguise()
-  // → app.setName() + the native setProcessDisplayName() LaunchServices rename
-  // re-register the running app's LS identity. Doing that while the app is on the
-  // default 'regular' activation policy makes macOS paint a SECOND dock tile (the
-  // old identity's tile lingers while the renamed one registers) — the duplicate
-  // "Natively" icon multiple users reported. We therefore drop to 'accessory'
-  // (no dock tile) for the whole rename+window-creation window, then promote back
-  // to 'regular' exactly once AFTER createWindow() so a single, correctly-named
-  // tile appears together with the window. Stealth mode stays hidden via dock.hide()
-  // and is never promoted.
+  // Normal mode deliberately does NOTHING here. It used to clamp to 'accessory'
+  // and promote back to 'regular' after createWindow(), on the theory that the
+  // startup rename painted a second tile. Measured on the real build
+  // (2026-09-23) that round-trip was itself the duplicate-tile bug: a bundle
+  // born 'regular' went regular→accessory→regular, and with the DockHide() that
+  // setVisibleOnAllWorkspaces used to run per window, startup left 4 tiles and
+  // 2 after quit. With neither, the app shows exactly one tile. (app.setName()
+  // on macOS only stores a string; it re-registers nothing.) See
+  // utils/macDockPolicy.ts.
   // We read isUndetectable directly from settings here — AppState singleton isn't
   // constructed yet, so we cannot call appState.getUndetectable().
   if (process.platform === 'darwin') {
     // SettingsManager is already statically imported — no require() needed.
     const isUndetectableOnStartup = SettingsManager.getInstance().get('isUndetectable') ?? false;
     if (isUndetectableOnStartup) {
+      process.title = disguiseAppName(normalizeDisguiseMode(SettingsManager.getInstance().get('disguiseMode')), process.platform);
       if (app.dock) app.dock.hide();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 7445
-    } else {
-      // Non-stealth: clamp to accessory (dock-tile-less) until the disguised
-      // name/icon is painted and the window exists. Do NOT promote to 'regular'
-      // here — that happens once after createWindow() below.
-      app.setActivationPolicy('accessory');
     }
   }
 
@@ -8562,9 +8815,33 @@ async function initializeApp() {
     const apiKey = getReviewApiKey();
     getReviewHardwareId()
       .then((hwid: string | null) => reviewService.syncWithBackend(apiKey, hwid))
+      .then(() => {
+        // A review or "Never ask" from another install lands here, after the
+        // card ledger's one-time import: retire the review card now too.
+        const { CardLedger } = require('./services/cards/CardLedger');
+        const { settleReviewCard } = require('./services/cards/mainLegacy');
+        const ledger = settleReviewCard(CardLedger.getInstance(), reviewService.getLocalState());
+        if (ledger) {
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed()) win.webContents.send('cards:changed', ledger);
+          });
+        }
+      })
       .catch(() => {});
   } catch (err) {
     console.warn('[Init] ReviewService recordSessionStart failed (non-fatal):', err);
+  }
+
+  // Card ledger (toaster policy): count this real app start and, once, seed
+  // it from the pre-ledger review / donation / trial history.
+  try {
+    const { CardLedger } = require('./services/cards/CardLedger');
+    const { gatherMainLegacy } = require('./services/cards/mainLegacy');
+    const cardLedger = CardLedger.getInstance();
+    cardLedger.recordLaunch();
+    cardLedger.importLegacy('main', gatherMainLegacy());
+  } catch (err) {
+    console.warn('[Init] CardLedger startup failed (non-fatal):', err);
   }
 
   // Generic, provider-agnostic local-model download service. Owns the
@@ -8669,7 +8946,7 @@ async function initializeApp() {
   // a usable window, and every failure inside is already isolated per extension.
   try {
     const { wireExtensions, startExtensions } = require('./services/extensions/appWiring');
-    const extensionManager = wireExtensions();
+    const extensionManager = wireExtensions({ isUndetectable: () => appState.getUndetectable() });
     void startExtensions(extensionManager);
   } catch (err: any) {
     // A subsystem that cannot be built leaves the built-in reranker in place,
@@ -8910,14 +9187,11 @@ if (process.env.THINKING_MATRIX === '1') {
   // on 2026-09-05 with the classifier itself; its cache is swept above.
   // See docs/natively-router-final-answer-2026-09-05.md.
 
-  // DUAL-DOCK-ICON FIX (promotion half): now that the disguised name/icon are
-  // applied and the window exists, promote back to 'regular' so a SINGLE dock
-  // tile appears together with the window. Gated on darwin && !undetectable so
-  // stealth mode is never promoted (it must stay dock-tile-less). This pairs
-  // with the 'accessory' clamp in step 2a above — together they ensure the LS
-  // re-registration from app.setName()/setProcessDisplayName() happens while no
-  // tile is visible, so macOS never paints a second "Natively" icon.
-  if (process.platform === 'darwin' && !appState.getUndetectable()) {
+  // One-shot promotion to 'regular', only to ADD a missing tile: the dev
+  // Electron.app is patched to LSUIElement=1 and is born without one. A packaged
+  // bundle is born 'regular', so it is left alone (re-promoting is churn), and
+  // undetectable mode is never promoted.
+  if (shouldPromoteToRegularAtStartup(process.platform, appState.getUndetectable(), app.dock?.isVisible() ?? false)) {
     app.setActivationPolicy('regular');
   }
 
@@ -9053,6 +9327,12 @@ if (process.env.THINKING_MATRIX === '1') {
   // server so the phone/companion extension can't connect. If the leak vanishes,
   // PhoneMirror connect is confirmed as the trigger.
   const disablePhoneMirrorOnBoot = process.env.NATIVELY_DISABLE_PHONE_MIRROR === '1';
+  // Photos and screenshots sent from the phone join the screenshot queue and
+  // attach to the next answer, like a capture taken on this machine.
+  PhoneMirrorService.getInstance().setPhoneImageHandler((image) => appState.receivePhoneImage(image));
+  // Answers reach the phone rendered as the overlay renders them: markdown,
+  // tables, math and the [[GIST]] chip.
+  PhoneMirrorService.getInstance().setAnswerRenderer(renderPhoneAnswer);
   if (
     shouldStartPhoneMirrorOnBoot({
       disablePhoneMirror: disablePhoneMirrorOnBoot,
@@ -9065,6 +9345,46 @@ if (process.env.THINKING_MATRIX === '1') {
   } else if (disablePhoneMirrorOnBoot) {
     console.warn('[LeakTest] NATIVELY_DISABLE_PHONE_MIRROR=1 → PhoneMirror WS server NOT started this run');
   }
+  // Each connected browser reports its open meeting tabs, so a session links to
+  // its calendar event by the meeting link itself (services/meetingDetection).
+  const meetingDetectionOn = SettingsManager.getInstance().get('meetingDetectionEnabled') ?? true;
+  wireExtensionMeetingTabs(PhoneMirrorService.getInstance(), meetingDetectionOn);
+
+  // Starts a meeting the way the Launcher's button does (saved devices,
+  // retention, the mic-permission recovery) when a notification asks: the
+  // meeting-detected one and the calendar reminder. The launcher's renderer
+  // runs the start (App.tsx, meeting:start-request); with no live launcher,
+  // main starts it.
+  const requestMeetingStart = (req: MeetingStartRequest) => {
+    const launcher = appState.getWindowHelper().getLauncherWindow();
+    if (launcher && !launcher.isDestroyed() && !launcher.webContents.isCrashed()) {
+      launcher.webContents.send('meeting:start-request', req);
+      return;
+    }
+    appState
+      .startMeeting(req.calendarEventId ? { title: req.title, calendarEventId: req.calendarEventId, source: 'calendar' } : undefined)
+      .catch((err) => console.error('[Main] Meeting start from a notification failed:', err));
+  };
+
+  // When a call starts in Zoom, Teams, Meet (…), offer to start Natively.
+  const meetingDetector = wireMeetingDetection({
+    platform: process.platform,
+    native: loadNativeModule(),
+    self: { pid: process.pid, execPath: process.execPath },
+    isMeetingActive: () => appState.getIsMeetingActive(),
+    promptsBlocked: () => nativePromptsBlocked(() => appState.getUndetectable()) || appState.getDisguise() !== 'none',
+    events: () => {
+      try {
+        return require('./services/CalendarManager').CalendarManager.getInstance().getCachedEvents(30 * 60_000);
+      } catch {
+        return null;
+      }
+    },
+    requestStart: requestMeetingStart,
+    notify: electronNotify,
+  });
+  registerMeetingDetection(meetingDetector, PhoneMirrorService.getInstance());
+  meetingDetector.setEnabled(meetingDetectionOn);
 
   // One-time macOS screen recording permission prompt.
   //
@@ -9178,20 +9498,81 @@ if (process.env.THINKING_MATRIX === '1') {
     }, 800);
   }
 
+  // Undetectable also covers the process's non-BrowserWindow windows: file
+  // pickers, message boxes, tooltips, popups (foreignWindowCaptureGuard.ts).
+  try {
+    foreignWindowCaptureGuard = createForeignWindowCaptureGuard({
+      native: () => {
+        const { loadNativeModule } = require('./audio/nativeModuleLoader');
+        return loadNativeModule();
+      },
+      ownHandles: () => BrowserWindow.getAllWindows()
+        .filter((w) => !w.isDestroyed())
+        .map((w) => w.getNativeWindowHandle()),
+      isUndetectable: () => appState.getUndetectable(),
+      log: (message) => console.warn(message),
+    });
+    wrapAsyncDialogs(require('electron').dialog, foreignWindowCaptureGuard);
+    foreignWindowCaptureGuard.sync(appState.getUndetectable());
+    // An activation change resets sharing state on macOS; re-apply at once
+    // rather than waiting for the next interval tick.
+    const resweep = () => { foreignWindowCaptureGuard?.sweep(); };
+    app.on('did-become-active', resweep);
+    app.on('browser-window-focus', resweep);
+  } catch (e) {
+    console.error('[Main] Failed to start the foreign-window capture guard:', e);
+  }
+
   // Initialize CalendarManager
   try {
     const { CalendarManager } = require('./services/CalendarManager');
     const calMgr = CalendarManager.getInstance();
+    // Reminders are system notifications (with a chime): their own OS window,
+    // outside content protection. Checked when each one fires, not when it is
+    // scheduled, since the mode can change during the wait.
+    calMgr.setNotificationSuppressor(() => nativePromptsBlocked(() => appState.getUndetectable()));
     calMgr.init();
 
+    // The Launcher card and Settings › Calendar follow the connection wherever it changes.
+    require('./services/calendar/calendarConnectionBroadcast').broadcastCalendarConnection(calMgr, () => BrowserWindow.getAllWindows());
+
+    // Notes name the user by first name ("Evin"), not the account's full name.
+    // Meetings saved before that are carried over once per account name, after
+    // their originals are backed up to userData/backups (calendarNameMigration).
+    // Off the boot path, and again whenever Calendar connects (a new account).
+    const runCalendarNameMigration = () => {
+      try {
+        const status = calMgr.getConnectionStatus();
+        if (!status?.connected || !status.name) return;
+        const { runCalendarNameMigration: run } = require('./services/calendar/calendarNameMigration');
+        const { SettingsManager } = require('./services/SettingsManager');
+        const settings = SettingsManager.getInstance();
+        const db = DatabaseManager.getInstance();
+        const changed: string[] = run({
+          fullName: status.name,
+          getDoneFor: () => settings.get('calendarFirstNameMigratedFor'),
+          setDoneFor: (name: string) => { settings.set('calendarFirstNameMigratedFor', name); },
+          listMentioning: (text: string) => db.listMeetingSummariesMentioning(text),
+          replaceDetailedSummary: (id: string, detailed: any) => db.replaceDetailedSummary(id, detailed),
+          backup: (rows: Array<{ id: string; summaryJson: string }>) => {
+            const dir = path.join(app.getPath('userData'), 'backups');
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, `calendar-first-name-${Date.now()}.json`), JSON.stringify(rows, null, 1));
+          },
+        });
+        if (changed.length) console.log(`[Main] Saved notes now use the first name in ${changed.length} meeting(s).`);
+      } catch (e: any) {
+        console.warn('[Main] Calendar first-name migration skipped:', e?.message);
+      }
+    };
+    setTimeout(runCalendarNameMigration, 8000);
+    calMgr.on('connection-changed', (connected: boolean) => { if (connected) runCalendarNameMigration(); });
+
     calMgr.on('start-meeting-requested', (event: any) => {
-      console.log('[Main] Start meeting requested from calendar notification', event);
-      appState.centerAndShowWindow();
-      appState.startMeeting({
-        title: event.title,
-        calendarEventId: event.id,
-        source: 'calendar'
-      });
+      console.log('[Main] Start meeting requested from calendar notification', event?.id);
+      // Through the renderer's start path, like the Launcher's button (it used
+      // to start in main: default devices, and a mic denial went unhandled).
+      requestMeetingStart({ title: event.title, calendarEventId: event.id, via: 'reminder' });
     });
 
     calMgr.on('open-requested', () => {
@@ -9217,9 +9598,16 @@ if (process.env.THINKING_MATRIX === '1') {
   app.on("activate", () => {
     console.log("App activated")
     if (process.platform === 'darwin') {
-      // Do NOT call dock.show() while a meeting is running — the dock icon
-      // appearing mid-meeting is a critical stealth failure.
-      if (!appState.getUndetectable() && !appState.getIsMeetingActive()) {
+      if (appState.getUndetectable()) {
+        // A LaunchServices re-open of the running app (clicking its pinned
+        // Dock icon, `open -a`, Spotlight) has ALREADY made it a Foreground
+        // app when this fires — measured: the tile came back ~5 ms before the
+        // event and stayed. Not calling dock.show() is not enough; drive the
+        // Dock back to hidden. (Identified in PR #595.)
+        appState.reassertUndetectableStealth();
+      } else if (!appState.getIsMeetingActive()) {
+        // Do NOT call dock.show() while a meeting is running — the dock icon
+        // appearing mid-meeting is a critical stealth failure.
         if (app.dock) app.dock.show();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 8080
       }
     }
@@ -9390,16 +9778,23 @@ if (process.env.THINKING_MATRIX === '1') {
         reloadsInWindow: history.length,
         windowMs: RENDERER_RELOAD_WINDOW_MS,
       });
-      try {
-        // dialog is not imported at module top — require it lazily (matches
-        // the native-arch gate handler's pattern above).
-        const { dialog } = require('electron');
-        dialog.showErrorBox(
-          'Natively — display error',
-          'A window keeps crashing while rendering. Please restart Natively. ' +
-          'If this continues, update to the latest version.'
-        );
-      } catch { /* dialog best-effort */ }
+      // A system dialog would show in a screen share (stealthPromptGate.ts),
+      // and this one can fire mid-meeting. While Undetectable is on it is
+      // logged instead; the app still exits below, just without a message.
+      if (nativePromptsBlocked(() => appState.getUndetectable())) {
+        logToFile('[main] render-process-gone-loop-giveup: error dialog skipped (Undetectable is on)');
+      } else {
+        try {
+          // dialog is not imported at module top — require it lazily (matches
+          // the native-arch gate handler's pattern above).
+          const { dialog } = require('electron');
+          dialog.showErrorBox(
+            'Natively — display error',
+            'A window keeps crashing while rendering. Please restart Natively. ' +
+            'If this continues, update to the latest version.'
+          );
+        } catch { /* dialog best-effort */ }
+      }
       // showErrorBox is modal and blocks until the user clicks OK, so the
       // terminal sequence runs AFTER they have seen the message. We told them
       // to restart, so actually end the process — leaving it alive here meant
@@ -9456,8 +9851,39 @@ if (process.env.THINKING_MATRIX === '1') {
     logToFile('[DIAG:gpu-info-update] GPU process info changed');
   });
 
+  // Local embedding workers must be idle before the process exits (2026-09-22):
+  // quitting while one was inside a native ONNX call aborted the app with
+  // SIGABRT (see LocalEmbeddingProvider.shutdownForQuit). Deferred ONCE, only
+  // when a worker still owes a reply, and bounded so a wedged worker cannot
+  // hold the quit hostage. Same code path on macOS and Windows: both run the
+  // worker on a Node worker_thread that process exit tears down.
+  let localEmbeddingQuitDrainStarted = false;
+  const LOCAL_EMBEDDING_QUIT_DRAIN_MS = 5_000;
+  /** True when the quit was deferred; before-quit returns and re-runs on app.quit(). */
+  const deferQuitForLocalEmbeddingDrain = (event: Electron.Event): boolean => {
+    if (localEmbeddingQuitDrainStarted) return false;
+    localEmbeddingQuitDrainStarted = true;
+    try {
+      const { LocalEmbeddingProvider } = require('./rag/providers/LocalEmbeddingProvider');
+      if (!LocalEmbeddingProvider.hasInFlightWorkForQuit()) return false;
+      event.preventDefault();
+      appState.setQuitting(true);
+      const startedAt = Date.now();
+      console.log('[Main] Quit deferred: waiting for the local embedding worker to finish its current batch...');
+      void LocalEmbeddingProvider.shutdownAllForQuit(LOCAL_EMBEDDING_QUIT_DRAIN_MS)
+        .then((outcomes: string[]) => console.log(`[Main] Local embedding workers stopped for quit in ${Date.now() - startedAt}ms: ${outcomes.join(', ')}`))
+        .catch((e: unknown) => console.warn('[Main] Local embedding quit drain failed; quitting anyway:', e))
+        .finally(() => app.quit());
+      return true;
+    } catch (e) {
+      console.warn('[Main] Local embedding quit drain unavailable; quitting normally:', e);
+      return false;
+    }
+  };
+
   // Scrub API keys from memory on quit to minimize exposure window
   app.on("before-quit", (event) => {
+    if (deferQuitForLocalEmbeddingDrain(event)) return;
     console.log("App is quitting, cleaning up resources...");
     appState.setQuitting(true);
 

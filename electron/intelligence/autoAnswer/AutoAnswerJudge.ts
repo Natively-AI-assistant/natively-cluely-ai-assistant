@@ -33,6 +33,31 @@ export const JUDGE_CONTAINMENT_MIN = 0.65;
 /** How many hot-window turns of context the judge sees. */
 export const JUDGE_CONTEXT_TURNS = 8;
 
+/**
+ * Character ceilings for the VARIABLE part of the judge prompt.
+ *
+ * Measured 2026-09-24 (gemini-3.1-flash-lite, thinking minimal, tiny output,
+ * median of 3): ~1.0 s at <=2k input tokens, 1.58 s at 7.5k, 3.77 s at 28k.
+ * Input size, not model tier, is the dominant term — and the fixed boilerplate
+ * below is already ~1955 tokens, so the transcript is the only part we control.
+ *
+ * JUDGE_CONTEXT_TURNS caps how MANY turns are shown; nothing capped how LONG
+ * they are, so eight rambling turns could push a 2500 ms deadline past it.
+ *
+ * Tails are kept, never heads: an ask lands at the END of speech.
+ */
+export const JUDGE_TURN_CHAR_CAP = 400;
+export const JUDGE_CANDIDATE_CHAR_CAP = 1000;
+export const JUDGE_ANSWERED_CHAR_CAP = 250;
+export const JUDGE_PROMPT_MAX_VARIABLE_CHARS =
+  JUDGE_CONTEXT_TURNS * JUDGE_TURN_CHAR_CAP + JUDGE_CANDIDATE_CHAR_CAP + JUDGE_ANSWERED_CHAR_CAP;
+
+/** Keep the last `max` characters, marking the elision so the model knows. */
+function keepTail(text: string, max: number): string {
+  const t = String(text ?? '');
+  return t.length <= max ? t : `…${t.slice(t.length - max)}`;
+}
+
 export interface JudgeRequest {
     candidateText: string;
     recentTurns: TranscriptTurn[];
@@ -62,6 +87,99 @@ export interface JudgeRequest {
      * see that "your task is to recreate this game in React" is the same ask.
      */
     lastAnsweredText?: string | null;
+    /**
+     * The USER's name, when the app knows it (the active résumé, else the
+     * connected Calendar account). Team meets and lectures call on people BY
+     * NAME, and without it the judge cannot tell "Alex, how is the migration
+     * going?" from "Raj, can you tell support?": measured 2026-09-27, every
+     * named ask to someone else fired. Absent, the prompt is byte-identical.
+     */
+    userName?: string | null;
+    /**
+     * The candidate's last words are a STALLED interim standing in for a final
+     * that has not arrived: the speaker has stopped (the local voice detector
+     * says so), the transcript has not caught up, so its last word is usually
+     * cut or missing. Absent, the prompt is byte-identical. See
+     * SimpleAutoAnswer's STALL_PROMOTE_MS.
+     */
+    transcriptLagging?: boolean;
+}
+
+/**
+ * The first name the prompt may carry: letters (any script), apostrophes and
+ * hyphens only, so a résumé or account field can never inject prompt text.
+ */
+export function judgeUserFirstName(raw: string | null | undefined): string | null {
+    const first = String(raw ?? '').trim().split(/\s+/)[0] ?? '';
+    const clean = first.replace(/[^\p{L}\p{M}'’-]/gu, '').slice(0, 30);
+    return /\p{L}.*\p{L}/u.test(clean) ? clean : null;
+}
+
+/** Sentence openers that sit one edit from a short name ("And" / Andy, "All" / Ali). */
+const NOT_A_NAME = new Set(['and', 'all', 'but', 'the', 'how', 'why', 'what', 'who', 'can', 'could', 'okay', 'yes', 'yeah',
+    'right', 'great', 'good', 'thanks', 'now', 'well', 'also', 'then', 'that', 'this', 'just', 'even', 'ever', 'over',
+    'alright', 'before', 'after', 'one', "let's", 'hey', 'morning', 'any', 'are', 'did', 'does', 'will', 'would']);
+
+/** Optimal string alignment distance (Levenshtein plus adjacent swaps). */
+function editDistance(a: string, b: string): number {
+    const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+            if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+        }
+    }
+    return d[a.length][b.length];
+}
+
+/**
+ * Capitalized words in the transcript that are speech-to-text slips for the
+ * USER's name: one edit away (two for names of six letters or more), or a
+ * short or long form of it. The model will not make this call itself —
+ * measured 2026-09-27, told "a spelling one letter away is a slip", it still
+ * silenced "Evan, can you…" and "Kevin, can you…" for a USER named Evin. So
+ * the code decides and the prompt states the result. A real teammate whose
+ * name is this close gets answered too: the cheap direction to be wrong in.
+ */
+export function userNameSlipsIn(texts: string[], name: string): string[] {
+    const want = name.toLowerCase();
+    const found = new Map<string, string>();
+    for (const text of texts) {
+        for (const m of String(text ?? '').matchAll(/\p{Lu}[\p{L}\p{M}'’-]*/gu)) {
+            const word = m[0].replace(/['’-]+$/, '');
+            const low = word.toLowerCase();
+            if (low === want || low.length < 3 || NOT_A_NAME.has(low) || found.has(low)) continue;
+            const affix = Math.min(low.length, want.length) >= 3 && (low.startsWith(want) || want.startsWith(low));
+            if (affix || editDistance(low, want) <= (Math.max(low.length, want.length) >= 6 ? 2 : 1)) found.set(low, word);
+        }
+    }
+    return [...found.values()].slice(0, 4);
+}
+
+/** Capitalized words that open a clause with a comma but are not names ("Okay, …", "Sir, …"). */
+const NOT_A_VOCATIVE = new Set([...NOT_A_NAME, 'yes', 'yep', 'no', 'nope', 'ok', 'so', 'sure', 'cool', 'nice', 'perfect',
+    'awesome', 'excellent', 'first', 'second', 'third', 'hmm', 'um', 'uh', 'oh', 'ah', 'like', 'sorry', 'hi', 'hello',
+    'please', 'interesting', 'today', 'tomorrow', 'yesterday', 'instead', 'otherwise', 'meanwhile', 'again', 'anyway',
+    'however', 'sir', 'madam', "ma'am", 'guys', 'everyone', 'everybody', 'folks', 'team', 'all', 'fine', 'wow', 'there',
+    'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'january', 'february', 'march', 'april',
+    'june', 'july', 'august', 'september', 'october', 'november', 'december']);
+
+/**
+ * Words the candidate addresses someone BY: a capitalized word followed by a
+ * comma, at the start of a sentence or clause or after a greeting/thanks —
+ * "Raj, can you…", "Before we finish, Alex, can you…", "Thanks Raj, can you…".
+ */
+export function addressedNamesIn(text: string): string[] {
+    const out: string[] = [];
+    const re = /(?:^|[.?!,;:]\s+|\b(?:thanks|thank you|okay|so|and|hi|hey|well|now|alright|right|great)\s+)(\p{Lu}[\p{L}\p{M}'’-]{2,})(?=\s*,)/giu;
+    for (const m of String(text ?? '').matchAll(re)) {
+        const word = m[1];
+        if (!/^\p{Lu}/u.test(word) || NOT_A_VOCATIVE.has(word.toLowerCase()) || /ly$/i.test(word)) continue;
+        if (!out.includes(word)) out.push(word);
+    }
+    return out;
 }
 
 /**
@@ -134,18 +252,22 @@ export function buildJudgePrompt(req: JudgeRequest): string {
     const anyLabels = kept.some((t, i) => t.role === 'interviewer' && speakerOf(i));
     const context = kept
         .map((t, i) => {
-            if (t.role !== 'interviewer') return `USER: ${t.text}`;
+            const text = keepTail(t.text, JUDGE_TURN_CHAR_CAP);
+            if (t.role !== 'interviewer') return `USER: ${text}`;
             const who = speakerOf(i);
-            return `${who ? `OTHERS/${who}` : 'OTHERS'}: ${t.text}`;
+            return `${who ? `OTHERS/${who}` : 'OTHERS'}: ${text}`;
         })
         .join('\n');
     // Only shown when the transcript actually carries labels, so an
     // undiarized session never sees a rule it cannot apply.
     const parts = req.candidateParts ?? [];
     const partsLabelled = parts.some(p => p.speaker);
-    const candidateBlock = partsLabelled
-        ? parts.map(p => `${p.speaker ? `OTHERS/${p.speaker}` : 'OTHERS'}: ${p.text}`).join('\n')
-        : req.candidateText;
+    const candidateBlock = keepTail(
+        partsLabelled
+            ? parts.map(p => `${p.speaker ? `OTHERS/${p.speaker}` : 'OTHERS'}: ${p.text}`).join('\n')
+            : req.candidateText,
+        JUDGE_CANDIDATE_CHAR_CAP,
+    );
     const diarization = anyLabels || partsLabelled ? `
 The meeting audio is SPEAKER-LABELLED (OTHERS/speaker_1, OTHERS/speaker_2, …). Where a rule below asks you to work out WHO said something, the labels settle it — prefer them over any guess from wording, including in the merged-reply rule:
 - A question and its answer under the SAME label is one person answering themselves: closed, is_ask false, however substantive the question sounds.
@@ -157,7 +279,21 @@ ${partsLabelled ? 'The candidate itself is split by speaker below; judge the ASK
     // 2026-08-25, with it in the preamble the model fired on five separate
     // elaborations of a task it had just answered (API-endpoint details).
     const answered = req.lastAnsweredText
-        ? `\nAlready answered for the USER moments ago: "${req.lastAnsweredText}"\nAnything that RESTATES that ask, or adds its details, constraints, materials or follow-on explanation, is NOT a new ask: is_ask false, answerability at most 0.2. Only a genuinely NEW question or a changed requirement counts.\n`
+        ? `\nAlready answered for the USER moments ago: "${keepTail(req.lastAnsweredText, JUDGE_ANSWERED_CHAR_CAP)}"\nAnything that RESTATES that ask, or adds its details, constraints, materials or follow-on explanation, is NOT a new ask: is_ask false, answerability at most 0.2. Only a genuinely NEW question or a changed requirement counts.\n`
+        : '';
+    // Only when the candidate calls on SOMEONE ELSE by name. Any extra text
+    // here moves the model on unrelated borderline turns (measured 2026-09-27:
+    // with the rule on every call, senior-swe-strings #10/#11 flipped 3/3 on
+    // a transcript with no names in it), so every other prompt stays
+    // byte-identical. Trailing, like the answered ask: it decides
+    // directed_at_user for the candidate, so it sits next to it.
+    const name = judgeUserFirstName(req.userName);
+    const slips = name ? userNameSlipsIn([candidateBlock, ...kept.map(t => t.text)], name) : [];
+    const isUser = (w: string) => [name ?? '', ...slips].some(n => n.toLowerCase() === w.toLowerCase());
+    const addressesSomeoneElse = name !== null && addressedNamesIn(candidateBlock).some(w => !isUser(w));
+    const aka = slips.length ? ` (speech-to-text also wrote it as ${slips.map(s => `"${s}"`).join(', ')} here: that is the USER too)` : '';
+    const addressee = addressesSomeoneElse
+        ? `\nThe USER's name is ${name}${aka}. "${name}, can you…" is addressed TO the USER. "<another name>, can you…" is addressed to that OTHER person: directed_at_user false, action "silent", even though the USER could answer it. "Does anyone…" and asks with no name are judged as usual.\n`
         : '';
     // ORDERING IS LOAD-BEARING (measured 2026-08-25). A cache-friendly layout
     // (all instructions first, only a short trailer after the candidate) was
@@ -167,6 +303,14 @@ ${partsLabelled ? 'The candidate itself is split by speaker below; judge the ASK
     // it" — regressed from 3/3 fires to 0/3 rhetorical, reproducing the live
     // miss in meeting fd28a1af. The task rules and the JSON schema must be
     // the LAST thing the model reads, after the untrusted candidate.
+    // Only for a stalled transcript. The completeness rule judges the
+    // candidate "on its own last words", and a stall cuts exactly those: with
+    // the last word dropped or clipped to a letter, the judge called 17/36 and
+    // 29/36 real asks unfinished (2026-09-27), so the stall cap bought nothing.
+    // Trailing, beside the candidate it qualifies.
+    const lagging = req.transcriptLagging
+        ? `\nThe speaker has STOPPED talking, but speech-to-text has not caught up: the candidate's LAST word may be cut off or missing (e.g. "…how would you partition the ord"). Do not call it incomplete for that alone. Judge the ask from the words that are there; everything else in the rules still applies.\n`
+        : '';
     return `${JUDGE_PROMPT_INTRO}
 ${mode}${diarization}Recent transcript (oldest first):
 ${context || '(none)'}
@@ -174,7 +318,7 @@ ${context || '(none)'}
 <candidate>
 ${candidateBlock}
 </candidate>
-${answered}
+${answered}${addressee}${lagging}
 ${JUDGE_PROMPT_RULES}`;
 }
 

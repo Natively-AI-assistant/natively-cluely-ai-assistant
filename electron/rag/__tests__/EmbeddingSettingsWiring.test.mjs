@@ -643,7 +643,15 @@ describe('the width picker floats, like the active model selector', () => {
   });
 
   test('the picker is sized for a width, not a model name', () => {
-    assert.match(block(), /containerClassName="relative shrink-0 w-\[\d+px\]"/);
+    // Settings row pickers fit their own label (capped at 16 characters), so
+    // "3072d" gets a narrow picker without a fixed width of its own. A width
+    // here, or a fixed width back on the shared container, would size it for a
+    // model name again.
+    assert.doesNotMatch(block(), /containerClassName=/);
+    assert.match(
+      read('src/components/settings/AIProvidersSettings.tsx'),
+      /export const AIP_ACTIVE_SELECT_CONTAINER = 'relative shrink-0';/,
+    );
   });
 });
 
@@ -854,8 +862,10 @@ describe('code-review fixes (xhigh, 2026-08-31)', () => {
     // One 429 or DNS blip would otherwise demote on the first failure, changing
     // the embedding SPACE and stranding every persisted vector.
     const src = read('electron/rag/EmbeddingProviderResolver.ts');
+    // Slice the whole Set literal: a fixed +300 window failed once a comment
+    // (the ninerouter note) pushed the names past it, while the set was correct.
     const i = src.indexOf('CLOUD_PROVIDER_NAMES');
-    const block = src.slice(i, i + 300);
+    const block = src.slice(i, src.indexOf(']);', i));
     for (const p of ['voyage', 'openrouter', 'custom']) assert.match(block, new RegExp(`'${p}'`));
   });
 

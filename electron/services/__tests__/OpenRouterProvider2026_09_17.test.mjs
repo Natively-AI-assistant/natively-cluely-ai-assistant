@@ -18,7 +18,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
@@ -116,7 +116,7 @@ describe('the two prefix strips are different, and both are load-bearing', () =>
   // ONE segment for the wire, TWO for the capability table. Conflating them is
   // the single likeliest way to break this provider.
   test('the capability strip takes TWO segments, so a bare vendor model is recognised', async () => {
-    const mod = await import(path.join(root, 'dist-electron/electron/llm/modelCapabilities.js'));
+    const mod = await import(pathToFileURL(path.join(root, 'dist-electron/electron/llm/modelCapabilities.js')).href);
     assert.equal(mod.stripProviderRoutingPrefix('openrouter/anthropic/claude-sonnet-5'), 'claude-sonnet-5');
     assert.equal(mod.stripProviderRoutingPrefix('openrouter/openai/gpt-5.6-terra'), 'gpt-5.6-terra');
     assert.equal(mod.stripProviderRoutingPrefix('openrouter/google/gemini-3.8-flash'), 'gemini-3.8-flash');
@@ -126,7 +126,7 @@ describe('the two prefix strips are different, and both are load-bearing', () =>
     // Directly guards the comment in STANDARD_CLOUD_MODELS.openrouter. A preset
     // whose bare name the table does not know resolves text-only, and Code Hint
     // then refuses every screenshot on a fresh OpenRouter setup.
-    const mod = await import(path.join(root, 'dist-electron/electron/llm/modelCapabilities.js'));
+    const mod = await import(pathToFileURL(path.join(root, 'dist-electron/electron/llm/modelCapabilities.js')).href);
     const presets = [
       'openrouter/anthropic/claude-sonnet-5',
       'openrouter/openai/gpt-5.6-terra',

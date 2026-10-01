@@ -1,0 +1,340 @@
+{
+ "batch": "b009-looking-for-work",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "DJOB-CTX-C1": {
+   "title": "Older resume version (November 2022)",
+   "text": "TOBIAS VENKATARAMAN\nSoftware Engineer\nCincinnati, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\nResume - last updated November 2022\n\nSUMMARY\nBackend engineer with 2+ years of experience building services in Kotlin and Python, with a focus on healthcare scheduling and reliable messaging. Enjoys turning fragile scripts into well-tested services.\n\nEXPERIENCE\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Jun 2021 - Present\n- Built the appointment-reminder service in Kotlin (Spring Boot); it sent about 4 million SMS reminders in its first year. The no-show rate at our 6 pilot clinics fell from 18.4% to 14.2%.\n- Migrated 38 cron scripts into a single Temporal-based scheduler.\n- Introduced Pact contract tests between 3 internal services, reducing broken deploys to the shared integration environment.\n- Implemented field-level encryption for patient phone numbers using AWS KMS.\n- Participated in a weekly on-call rotation of 8 engineers.\n\nBrindlecap Labs | Associate Developer | Cincinnati, OH | Sep 2020 - May 2021\n- Maintained a Python/Django inventory tool used by about 40 independent bookstores.\n- Added a CSV import feature so store owners could load publisher catalogs without retyping them.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 58%.\n- Answered customer-support escalations two days per week.\n\nSIDE PROJECT\nSparrowhawk (open source, started 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 85 GitHub stars.\n- Test suite runs against PostgreSQL 12 through 14.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Statistics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Kotlin, Python, SQL, Go (learning)\nData: PostgreSQL, Redis, AWS SQS\nInfrastructure: AWS (ECS, KMS), Docker, GitHub Actions"
+  },
+  "PI-A:RESUME": {
+   "title": "the user's résumé (Tobias Venkataraman)",
+   "text": "TOBIAS VENKATARAMAN\nBackend Engineer\nColumbus, OH | tobias.venkataraman@example.com | (555) 014-2273 | github.com/tvenkat-example\n\nSUMMARY\nBackend engineer with about 6 years of experience building high-throughput services in Go and Kotlin on PostgreSQL and Kafka. Tech lead for Project Tern, the carrier-settlement rewrite at Larkspur Freight. Comfortable owning a service from design doc through launch and on-call.\n\nEXPERIENCE\n\nLarkspur Freight | Software Engineer II, Backend | Columbus, OH | Mar 2023 - Present\n- Tech lead for Project Tern, a rewrite of the carrier-settlement service from a Rails monolith into three Go services; coordinated a working group of 4 engineers and 1 QA analyst over 7 months.\n- Cut p95 latency of the rate-quote API from 820 ms to 190 ms by replacing N+1 PostgreSQL queries with a batched loader and a 90-second Redis cache keyed by lane ID.\n- Designed Dockhand, a Kafka event pipeline that processes about 2.3 million shipment status events per day, using a transactional outbox table to avoid duplicate writes.\n- Reduced monthly settlement mismatches from 312 to 41 with a nightly reconciliation job that compares carrier invoices against booked loads.\n- Partitioned the 1.9-billion-row load_events table by month in PostgreSQL, cutting nightly vacuum time from 4 hours to 35 minutes.\n- Wrote the team's first set of 14 incident runbooks; member of a 6-person on-call rotation.\n\nQuillfeather Health | Software Engineer | Cincinnati, OH | Aug 2021 - Feb 2023\n- Built the appointment-reminder service in Kotlin (Spring Boot) that sent 11 million SMS and email reminders in 2022; the no-show rate at the 9 pilot clinics fell from 18.4% to 12.9%.\n- Migrated 38 cron scripts into Metronome, a single Temporal-based scheduler, removing a class of double-send bugs.\n- Introduced Pact contract tests between 5 internal services, cutting integration-environment breakages from roughly 9 per month to 2.\n- Implemented field-level encryption for patient phone numbers using envelope keys in AWS KMS.\n\nBrindlecap Labs | Junior Developer | Cincinnati, OH | Aug 2020 - Jul 2021\n- Maintained a Python/Django inventory tool used by 60 independent bookstores; added a CSV import that replaced a manual 3-hour weekly task.\n- Wrote the product's first automated test suite, taking line coverage from 0% to 71%.\n- Handled customer-support escalations one day per week.\n\nSIDE PROJECT\nSparrowhawk (open source, maintainer since 2022)\n- Go library for idempotency keys backed by PostgreSQL advisory locks; about 640 GitHub stars.\n- Supports configurable key expiry and a replay-safe response cache; test suite runs against PostgreSQL 13 through 16.\n\nEDUCATION\nOhio Valley Polytechnic University | B.S. Computer Science, Minor in Mathematics | May 2020\n- Senior capstone: a route-planning simulator for municipal snowplow fleets.\n\nSKILLS\nLanguages: Go, Kotlin, Python, SQL, some TypeScript\nData and messaging: PostgreSQL, Redis, Kafka, AWS SQS\nInfrastructure: AWS (ECS, RDS, KMS), Terraform, Docker, GitHub Actions, Datadog\nPractices: design docs, transactional outbox, idempotency, contract testing, on-call and runbooks"
+  },
+  "PI-A:JD": {
+   "title": "the job description the user is targeting",
+   "text": "SENIOR BACKEND ENGINEER, PAYMENTS & LEDGER\nTallowmarket, Inc. | Denver, CO\n\nABOUT TALLOWMARKET\nTallowmarket is a B2B marketplace where independent restaurants buy directly from regional farms and ranches. Our Payments & Ledger group moves about $1.1B a year through escrowed payouts to more than 6,500 growers. We are a team of 140 people, about 55 of them in engineering. Our backend is Go on PostgreSQL, with Kafka between services and Temporal for long-running payment workflows.\n\nWHAT YOU WILL DO\n- Own services in the money path: escrow holds, split payouts to growers, refunds and chargebacks.\n- Design and evolve Harrow, our double-entry ledger built on PostgreSQL, as volume grows from 400,000 to a projected 1.5 million ledger entries per day.\n- Improve the reliability of the nightly settlement batch that runs at 02:00 Mountain Time and must finish before banks open.\n- Lead technical design reviews and mentor mid-level engineers on the team.\n- Join the on-call rotation, currently one week in six.\n- Partner with Finance and Risk on reconciliation and audit requirements.\n\nWHAT YOU BRING\n- 5+ years of professional backend experience in Go, Java or Kotlin.\n- Deep PostgreSQL knowledge: indexing, locking, isolation levels, and safe online migrations.\n- Experience with event-driven systems (Kafka, Kinesis or similar) and idempotent processing.\n- A track record of leading multi-engineer projects from design doc to launch.\n- Clear written communication; we make most decisions in design docs.\n\nNICE TO HAVE\n- Prior work on a double-entry ledger or a payments platform.\n- Experience reducing PCI DSS scope.\n- Stripe Connect or Adyen for Platforms integration experience.\n- Experience with Temporal or another durable workflow engine.\n\nWORK ARRANGEMENT\nHybrid: in our Denver LoDo office Tuesday through Thursday; Monday and Friday are flexible. Relocation assistance is available for candidates moving to the Denver metro area.\n\nCOMPENSATION\nBase salary band: $172,000 - $208,000 USD, plus equity and a 6% 401(k) match. This role is leveled at L5 (Senior).\n\nINTERVIEW PROCESS\nRecruiter screen (30 minutes), a 60-minute ledger design exercise, a Go coding session, and a values conversation with our Director of Engineering, Imani Castellanos.\n\nTallowmarket is an equal opportunity employer."
+  },
+  "DJOB-CTX-G1": {
+   "title": "Dockhand project write-up (portfolio notes)",
+   "text": "DOCKHAND - PROJECT WRITE-UP\nPortfolio notes, Tobias Venkataraman (personal notes, not a Larkspur Freight document)\nLast edited: August 2026\n\nWHAT IT IS\nDockhand is the Kafka event pipeline that carries shipment status events (picked up, in transit, delayed, delivered, exception) from the carrier-facing services at Larkspur Freight to everything downstream: customer tracking pages, billing, and the nightly reconciliation job. It processes about 2.3 million shipment status events per day. At the weekday 7 a.m. Eastern dispatch peak it sustains roughly 610 events per second.\n\nWHY WE BUILT IT\nBefore Dockhand, each carrier integration wrote status updates straight into PostgreSQL and then made a separate HTTP call to notify downstream services. If the process died between the database commit and the HTTP call, downstream systems never heard about the update; if the call was retried after a timeout, they heard about it twice. Billing saw duplicate \"delivered\" events often enough that finance kept a manual spreadsheet of corrections.\n\nDESIGN\n- Transactional outbox. The service that records a status change inserts a row into a shipment_outbox table in the same PostgreSQL transaction as the status update itself. Either both commit or neither does.\n- Relay. A small Go relay polls shipment_outbox every 200 ms, claims up to 500 unpublished rows with SELECT ... FOR UPDATE SKIP LOCKED, publishes them to Kafka, and marks them published. Several relay instances can run at once without stepping on each other.\n- Topic layout. One topic, shipment.status.v1, with 24 partitions keyed by load ID, so all events for a given load stay in order.\n- Consumer-side dedupe. The relay is at-least-once, so each consumer records the event_id in a processed_events table inside the same transaction as its own write, and skips IDs it has already seen. processed_events rows are kept for 14 days.\n- The few consumers that call external carrier APIs reuse the idempotency-key approach from my open-source library, Sparrowhawk.\n\nROLLOUT\nI wrote the design doc in November 2023 and built Dockhand with one other engineer, Renata Obi. We ran it in shadow mode for 3 weeks, comparing its output against the old HTTP notifications, and cut over carrier by carrier, finishing in February 2024. Duplicate \"delivered\" events reaching billing went to zero in the first full month after cutover, and finance retired the correction spreadsheet.\n\nTHE INCIDENT\nIn October 2024 the relay fell 38 minutes behind during the morning peak. Customer tracking pages showed stale statuses and support received about 70 tickets before we caught up. Root cause: the hourly job that prunes published rows from shipment_outbox had been disabled during an unrelated migration and never re-enabled, so the table had grown to about 40 million rows and the relay's \"find unpublished rows\" query had degraded into a large scan. I was the on-call engineer that morning.\n\nFixes: a partial index on shipment_outbox covering only unpublished rows; re-enabling the prune job with a check that alerts if it has not run in 3 hours; and a Datadog monitor on relay lag that pages at 5 minutes instead of relying on customer reports. I wrote the postmortem and turned the recovery steps into one of the team's incident runbooks.\n\nWHAT I WOULD DO DIFFERENTLY\n- Alert on outbox table size and relay lag from day one, not after the first incident.\n- Evaluate change data capture (for example, reading the PostgreSQL write-ahead log) instead of polling. We chose polling for simplicity and it has held up, but it adds query load on the primary.\n- Write the consumer dedupe contract down earlier; two teams initially implemented it slightly differently."
+  },
+  "DJOB-CTX-I1": {
+   "title": "Maple Hollow Community Garden plot holder handbook",
+   "text": "MAPLE HOLLOW COMMUNITY GARDEN - PLOT HOLDER HANDBOOK, 2026 SEASON\n\nWelcome back, gardeners! This handbook covers the rules every plot holder agrees to when renewing.\n\nFEES\nA standard 10 x 10 foot plot is $45 for the season. Raised beds near the north fence are $25 and are reserved first for members with mobility needs. Fees are due by April 12. Unpaid plots are offered to the waitlist on April 20.\n\nVOLUNTEER HOURS\nEach plot holder commits 6 volunteer hours per season. Sign up for shifts on the clipboard inside the tool shed: path mulching, compost turning, or Saturday welcome table.\n\nWATER AND TOOLS\nSpigots are on from May 1 through October 15. Please coil hoses after use. The tool shed code changes on the first of every month and is posted in the members' group chat. Return tools clean.\n\nGROWING RULES\nNo synthetic pesticides or herbicides. Plants taller than 6 feet must be staked so they do not shade a neighbor's plot. Abandoned plots (no visible care for 3 weeks) receive one reminder, then are reassigned.\n\nEVENTS\nSeed swap: March 28. Tomato tasting: August 15. Harvest potluck: September 19 at the pavilion.\n\nQuestions? Leave a note in the shed mailbox for the garden committee."
+  },
+  "PI-B:RESUME": {
+   "title": "the user's résumé (Dashiell Marrow)",
+   "text": "DASHIELL MARROW\nPlatform / Infrastructure Engineer\nTacoma, WA | dash.marrow@example.com | (555) 019-8840 | github.com/dmarrow-example\n\nSUMMARY\nInfrastructure-focused engineer with about 1.5 years of full-time experience after a B.S. in Computer Engineering. Works mainly with Kubernetes, Terraform, Prometheus, Python and Rust. Interested in SLOs, alert quality, and removing manual toil. Certified Kubernetes Administrator.\n\nEXPERIENCE\n\nHollowbrook Data | Infrastructure Engineer (Contract) | Seattle, WA | Jun 2026 - Present\n- Moved 23 Terraform root modules from local state files to a remote S3 backend with DynamoDB state locking.\n- Wrote Kestrel, a Python CLI that checks Terraform plans against 17 Open Policy Agent rules before merge; it blocked 9 public-bucket changes in its first 10 weeks.\n- Right-sized node pools on two EKS clusters, lowering compute spend from about $41,300 to $29,800 per month.\n- Replaced hand-edited IAM policies with 11 reusable Terraform modules reviewed through pull requests.\n\nCindervale Systems | Site Reliability Engineer I | Tacoma, WA | Jul 2025 - Jan 2026\n- Member of a 5-person SRE team supporting 140 microservices on three GKE clusters.\n- Built Grafana SLO dashboards for the 12 tier-1 services; pages fell from about 260 to 70 per month after moving to multi-window burn-rate alerts.\n- Automated TLS certificate rotation with cert-manager, retiring a 47-step wiki runbook.\n- Wrote Lanternfish, a Rust sidecar that exports per-pod DNS lookup latency to Prometheus; it showed that 31% of p99 latency on the checkout path came from DNS resolution.\n- Ran a quarterly game day for GKE node-pool upgrades with 3 service teams, using a scripted drain-and-cordon checklist.\n- Shadowed the on-call rotation from August 2025; primary on-call from November 2025.\n\nOrrin Telematics | Platform Engineering Intern | Spokane, WA | May 2024 - Aug 2024\n- Containerized 6 legacy Java services and wrote Helm charts for each.\n- Cut CI time for the main monorepo from 34 minutes to 13 minutes with Buildkite build caching.\n- Demoed ephemeral preview environments to about 80 engineers at the internship showcase.\n\nSIDE PROJECT\nTidepool Homelab\n- 4-node Raspberry Pi k3s cluster managed through Flux GitOps.\n- Hosts a self-hosted Matrix chat server; measured 99.2% uptime over 180 days with Uptime Kuma.\n- Loki and Grafana for logs; all manifests public on GitHub.\n\nEDUCATION\nPuget Cascade University | B.S. Computer Engineering | May 2025\n- Capstone: Brine, a distributed key-value store in Rust using Raft consensus (team of 3).\n- Teaching assistant, CPE 342 Operating Systems, two semesters.\n- Relevant coursework: Operating Systems, Computer Networks, Distributed Systems.\n\nCERTIFICATIONS\n- Certified Kubernetes Administrator (CKA), 2025\n\nSKILLS\nInfrastructure: Kubernetes (GKE, EKS, k3s), Helm, Terraform, Flux, cert-manager\nObservability: Prometheus, Grafana, Loki, OpenTelemetry, Uptime Kuma\nLanguages: Python, Rust, Bash, some Java\nCloud: GCP, AWS\nOther: Linux networking, DNS, TLS, Buildkite, GitHub Actions, Open Policy Agent"
+  },
+  "PI-B:JD": {
+   "title": "the job description the user is targeting",
+   "text": "PLATFORM RELIABILITY ENGINEER (EARLY CAREER)\nNimbuscrest Cloud | Portland, OR\n\nABOUT NIMBUSCREST\nNimbuscrest Cloud runs managed PostgreSQL and S3-compatible object storage for about 9,000 customers across four regions: Portland, Frankfurt, Singapore and Sao Paulo. We operate our own fleet of roughly 3,000 bare-metal hosts rather than renting from a hyperscaler, and we publish a 99.95% monthly availability target for managed databases.\n\nTHE TEAM\nFleet Reliability is 7 engineers reporting to Engineering Manager Oyelaran Fitch. We own host provisioning, the Kubernetes control planes that run our storage services, and the incident process for the whole company.\n\nWHAT YOU WILL DO\n- Operate and harden the Kubernetes control planes behind our storage and database services.\n- Automate host provisioning and firmware updates across the bare-metal fleet.\n- Define and review SLOs with service teams, and tune alerting so pages are actionable.\n- Respond to incidents as part of a follow-the-sun rotation and write blameless postmortems.\n- Build capacity forecasts for disk and network in each region.\n- Retire manual runbooks by turning them into tested automation.\n\nWHAT WE ARE LOOKING FOR\n- 1-3 years in SRE, infrastructure, or platform engineering (internships count).\n- Hands-on Kubernetes operations experience.\n- Proficiency in at least one of Go, Python or Rust.\n- Solid understanding of Linux internals and networking fundamentals (DNS, TCP, TLS).\n- Infrastructure as code with Terraform or Pulumi.\n- Willingness to participate in on-call after a ramp-up period.\n\nNICE TO HAVE\n- eBPF-based debugging or observability tooling.\n- Ceph or other distributed storage operations.\n- Running PostgreSQL in production.\n- PXE-based bare-metal provisioning.\n- Experience with Prometheus and multi-window burn-rate alerting.\n\nWORK ARRANGEMENT\nHybrid: two days a week in the Portland Pearl District office. Occasional travel (about twice a year) to the Frankfurt region for data-center work.\n\nHOW WE HIRE\nA recruiter conversation, a 90-minute take-home in which you debug a broken three-node cluster, a systems deep-dive with two engineers, and a conversation with Oyelaran.\n\nNimbuscrest Cloud welcomes applicants from all backgrounds."
+  }
+ },
+ "items": [
+  {
+   "jid": "715016e3b99a",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Years of experience?",
+   "conversation": [],
+   "evidence_ids": [
+    "DJOB-CTX-C1",
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I've got about two years of professional backend experience, mostly in Kotlin, building services in healthcare scheduling. Before that I did a year as an associate developer in Python, so call it three years total since I started full time in 2020."
+  },
+  {
+   "jid": "4f942d7ed830",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Peak throughput?",
+   "conversation": [
+    "INTERVIEWER (heard): On Dockhand, how do you actually make sure a status event doesn't get written twice if the service crashes halfway through?",
+    "NATIVELY: On Dockhand I used a transactional outbox. The status write and the outbox row go into the same PostgreSQL transaction, so either both land or neither does. A relay then publishes unpublished rows to Kafka and marks them published, and because the consumer side is idempotent, a crash mid-publish just means a redelivery, not a duplicate write."
+   ],
+   "evidence_ids": [
+    "DJOB-CTX-G1",
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I don't have a hard peak number I'd want to quote off the top of my head. What I can say is the outbox relay was the throughput-sensitive part, and we tuned batch size and poll interval to keep the publish lag low under load. If you want, I can walk through how I'd measure it."
+  },
+  {
+   "jid": "885f8eab1b29",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about a project that didn't go the way you wanted. Maybe you missed a deadline, or shipped something that had to be rolled back. What happened, what was your part in it, and what did you change afterward?",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "The honest one is Project Tern. I was tech lead on the carrier-settlement rewrite, and we ran past the seven months we'd planned. My part was that I let the scope creep instead of holding the line, so I started cutting the migration into smaller, shippable slices and checking progress weekly. We still landed it, and I've scoped tighter since."
+  },
+  {
+   "jid": "1d4ad6f2e780",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "You've been at Larkspur a few years now and it looks like it's going well. Why leave?",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "Larkspur's been good to me, and Project Tern, the carrier-settlement rewrite I led, is the work I'm proudest of. But I've taken it about as far as I can there, and I'm looking for a place where I can keep leading backend work at a bigger scale."
+  },
+  {
+   "jid": "64e983010da4",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "that sounded bitter about my manager. give me a cleaner way to reframe it if they come back to it",
+   "conversation": [
+    "INTERVIEWER: So what's got you looking right now?",
+    "USER (spoken): Honestly, after the reorg in the spring my manager kind of took over all the design decisions and, I don't know, it's been frustrating. I don't feel like my input matters there anymore.",
+    "INTERVIEWER: Mm. Okay."
+   ],
+   "evidence_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'd reframe it around what I'm looking for rather than what went wrong. Something like: after the reorg, design decisions got centralized, and I realized I do my best work when I'm close to those calls. So I'm looking for a team where engineers own their area end to end. That's the honest version, and it points forward instead of back."
+  },
+  {
+   "jid": "ec54ee23d973",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "And you're out in Columbus right now, right? So would you be moving out here?",
+   "conversation": [
+    "INTERVIEWER (heard): Just so it's on the table, this is hybrid, Tuesday through Thursday in our LoDo office. Does that work for you?",
+    "NATIVELY: Yes, that works for me. Tuesday through Thursday in the office is fine, and I'm in the Denver area, so the commute to LoDo is easy. I actually like having the team together midweek, it makes the pairing and design conversations a lot faster."
+   ],
+   "evidence_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'm actually already in the Denver area, so no move needed. I relocated here recently, and the LoDo office is an easy commute for me. So Tuesday through Thursday in the office works without any relocation on your end."
+  },
+  {
+   "jid": "91ac6509f985",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "And those four engineers, did they report to you?",
+   "conversation": [
+    "INTERVIEWER (heard): Let's talk about Project Tern. What was the scope, and what did you personally own?",
+    "NATIVELY: Project Tern was a rewrite of our carrier-settlement service, moving it from a Rails monolith into three Go services. I was the tech lead, so I owned the design and coordinated a working group of four engineers and one QA analyst over seven months, from design doc through launch."
+   ],
+   "evidence_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "No, they didn't report to me. I was the tech lead on Project Tern, so I owned the design and coordinated the working group of four engineers and one QA analyst, but their reporting lines stayed with their own managers. I led the technical direction rather than managing them day to day."
+  },
+  {
+   "jid": "fe654e9c05d9",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So this team is pretty specialized, it's the payments and ledger group. What's pulling you toward that kind of work specifically?",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "Payments and ledger work is the kind of backend I actually want to be doing. The correctness bar is high, the money path has real consequences, and the problems are concrete: idempotency, reconciliation, safe migrations under load. That's the work I find genuinely interesting, and it's why a specialized team like this appeals to me more than a generalist role."
+  },
+  {
+   "jid": "28c2f66260c8",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Look, I'll be straight with you, we've got over forty people in the pipeline for this role. Why should it be you?",
+   "conversation": [
+    "INTERVIEWER: Sorry I'm a couple minutes late, parking downtown was a nightmare today.",
+    "USER (spoken): No worries at all, I figured traffic would be bad with the game tonight.",
+    "INTERVIEWER: Oh yeah, they had the whole stadium lot closed off. Anyway."
+   ],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I can't speak to the other forty, but I can tell you what I bring. I do my best work where the problem isn't fully defined yet, and I'd rather ask the hard questions early than find out late that we built the wrong thing. That's the kind of person I'd want on this team."
+  },
+  {
+   "jid": "3f3e490144b3",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "How do you usually work with QA when you're in the middle of a big rewrite and everything's moving?",
+   "conversation": [],
+   "evidence_ids": [
+    "DJOB-CTX-I1",
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "On Project Tern I had one QA analyst embedded with the working group for the whole seven months, so we weren't throwing builds over a wall. We kept the old Rails service running in parallel and had her diff settlement outputs against the new Go services, so regressions surfaced while we were still moving."
+  },
+  {
+   "jid": "16392127b03f",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Before we go too far, what are you looking for in terms of base salary?",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "The band for this role is $172,000 to $208,000 base, plus equity and a 6% 401(k) match. Based on my experience and where I'd come in at L5, I'd be looking at the upper half of that range, but I care more about the whole package and the scope of the work. What range did you have in mind for someone at my level?"
+  },
+  {
+   "jid": "ce2461a49927",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "When could you start?",
+   "conversation": [
+    "INTERVIEWER (heard): One thing I should mention, the role has travel to our Frankfurt region about twice a year for data center work. Is that going to be a problem?",
+    "NATIVELY: Twice a year to Frankfurt is no problem at all. I've worked across time zones and I'm comfortable with occasional travel for data center work, so that fits well with what I'm looking for. If anything, getting hands-on with the hardware side is something I'd welcome."
+   ],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I could start fairly soon, and I'm happy to work around your timeline. I'd want to give my current team proper notice and wrap up what I'm on, so I'd say a few weeks from an offer. If you need someone sooner, I can look at what's possible."
+  },
+  {
+   "jid": "0d50b4b164c9",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "I've never run kubernetes in prod, only ECS. what do I say right now",
+   "conversation": [
+    "INTERVIEWER: Most of our services run on Kubernetes these days. Have you operated Kubernetes in production, and at what kind of scale?"
+   ],
+   "evidence_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I haven't run Kubernetes in production myself. My production container experience is on **ECS**, where I've owned services end to end, including on-call and runbooks. The concepts carry over, and I've worked with Docker and Terraform, so I'd expect to ramp on the Kubernetes specifics quickly."
+  },
+  {
+   "jid": "b749a12c6ba8",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Have you ever had one of your own systems page you in the middle of a busy morning? What was going on, and what did you do about it?",
+   "conversation": [],
+   "evidence_ids": [
+    "DJOB-CTX-G1",
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "Yes, on Dockhand, our Kafka pipeline for shipment status events. A Datadog monitor on relay lag paged me during a busy morning. The relay had stopped publishing, so downstream tracking and billing weren't getting updates. I checked the outbox, found unpublished rows piling up, and re-enabled the prune job. Then I added a partial index on the unpublished rows and a monitor that pages if the prune job hasn't run in three hours. I wrote the postmortem and turned the recovery steps into a runbook."
+  },
+  {
+   "jid": "aef0a593c753",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "the JD says mentor mid-level engineers and I've never formally mentored anyone. if they ask about it, what can I honestly say?",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I haven't had a formal mentee, so I'd be straight about that. What I have done is lead Project Tern, coordinating 4 engineers and a QA analyst over 7 months, which meant reviewing their work and helping them get unstuck. I also wrote our team's first 14 incident runbooks so newer engineers had something to lean on. That's the closest thing, and I'd want to build on it."
+  },
+  {
+   "jid": "d6015f22aa23",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "I'm looking at your resume and there's a gap of about eight months before your current role. Can you walk me through what you were doing, why the break, and what made you decide to come back when you did?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I took that time deliberately rather than drifting through it. I used it to step back, be deliberate about what I wanted next, and come back only when the role and the team were the right fit rather than just the next available thing. What I care about is doing work I can own end to end, so I waited for that instead of taking something to fill the calendar. That's why the timing lined up the way it did."
+  },
+  {
+   "jid": "977d6971d063",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "I see you took the rate quote API from eight twenty milliseconds down to one ninety at p95. Walk me through what was actually slow and what you changed.",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-A:RESUME"
+   ],
+   "forbidden_ids": [],
+   "answer": "The main culprit was N+1 queries against PostgreSQL. The rate-quote path was firing a separate query per lane instead of fetching them in one round trip, so the database round trips dominated the p95. I replaced that with a batched loader, and added a 90-second Redis cache keyed by lane ID for the lanes that get hit repeatedly. Together that took p95 from 820 milliseconds down to 190."
+  },
+  {
+   "jid": "a4b610f56cd7",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "And comp expectations?",
+   "conversation": [
+    "INTERVIEWER (heard): One thing I should mention, the role has travel to our Frankfurt region about twice a year for data center work. Is that going to be a problem?",
+    "NATIVELY: Twice a year to Frankfurt is no problem at all. I've worked across time zones and I'm comfortable with occasional travel for data center work, so that fits well with what I'm looking for. If anything, getting hands-on with the hardware side is something I'd welcome.",
+    "INTERVIEWER (heard): When could you start?",
+    "NATIVELY: I could start fairly soon, and I'm happy to work around your timeline. I'd want to give my current team proper notice and wrap up what I'm on, so I'd say a few weeks from an offer. If you need someone sooner, I can look at what's possible."
+   ],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I'd rather hear what range you've set for the role, since that tells me whether we're in the same place. If it helps, I'm looking for something in line with the market for this kind of infrastructure work, and I'm flexible on how it's structured between base and the rest."
+  },
+  {
+   "jid": "c3788abf2d2a",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "One thing I should mention, the role has travel to our Frankfurt region about twice a year for data center work. Is that going to be a problem?",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "Twice a year to Frankfurt is no problem at all. I've worked across time zones and I'm comfortable with occasional travel for data center work, so that fits well with what I'm looking for. If anything, getting hands-on with the hardware side is something I'd welcome."
+  },
+  {
+   "jid": "e8199f10dbb8",
+   "mode": "looking-for-work",
+   "role": "USER: the job candidate. OTHER PARTY: the interviewer / recruiter. Natively: what the candidate says, in first person. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Where do you see yourself in three to five years?",
+   "conversation": [],
+   "evidence_ids": [
+    "DJOB-CTX-I1",
+    "PI-A:RESUME",
+    "PI-A:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I want to keep growing on the backend side, and in three to five years I'd like to be leading bigger technical efforts, the way I led Project Tern, the carrier-settlement rewrite at Larkspur Freight. I'm most interested in deepening my work on high-throughput systems in Go and Kafka, and mentoring engineers along the way."
+  }
+ ]
+}

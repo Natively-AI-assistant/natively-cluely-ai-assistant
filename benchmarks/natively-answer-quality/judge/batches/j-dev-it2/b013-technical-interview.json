@@ -1,0 +1,328 @@
+{
+ "batch": "b013-technical-interview",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "PI-B:RESUME": {
+   "title": "the user's résumé (Dashiell Marrow)",
+   "text": "DASHIELL MARROW\nPlatform / Infrastructure Engineer\nTacoma, WA | dash.marrow@example.com | (555) 019-8840 | github.com/dmarrow-example\n\nSUMMARY\nInfrastructure-focused engineer with about 1.5 years of full-time experience after a B.S. in Computer Engineering. Works mainly with Kubernetes, Terraform, Prometheus, Python and Rust. Interested in SLOs, alert quality, and removing manual toil. Certified Kubernetes Administrator.\n\nEXPERIENCE\n\nHollowbrook Data | Infrastructure Engineer (Contract) | Seattle, WA | Jun 2026 - Present\n- Moved 23 Terraform root modules from local state files to a remote S3 backend with DynamoDB state locking.\n- Wrote Kestrel, a Python CLI that checks Terraform plans against 17 Open Policy Agent rules before merge; it blocked 9 public-bucket changes in its first 10 weeks.\n- Right-sized node pools on two EKS clusters, lowering compute spend from about $41,300 to $29,800 per month.\n- Replaced hand-edited IAM policies with 11 reusable Terraform modules reviewed through pull requests.\n\nCindervale Systems | Site Reliability Engineer I | Tacoma, WA | Jul 2025 - Jan 2026\n- Member of a 5-person SRE team supporting 140 microservices on three GKE clusters.\n- Built Grafana SLO dashboards for the 12 tier-1 services; pages fell from about 260 to 70 per month after moving to multi-window burn-rate alerts.\n- Automated TLS certificate rotation with cert-manager, retiring a 47-step wiki runbook.\n- Wrote Lanternfish, a Rust sidecar that exports per-pod DNS lookup latency to Prometheus; it showed that 31% of p99 latency on the checkout path came from DNS resolution.\n- Ran a quarterly game day for GKE node-pool upgrades with 3 service teams, using a scripted drain-and-cordon checklist.\n- Shadowed the on-call rotation from August 2025; primary on-call from November 2025.\n\nOrrin Telematics | Platform Engineering Intern | Spokane, WA | May 2024 - Aug 2024\n- Containerized 6 legacy Java services and wrote Helm charts for each.\n- Cut CI time for the main monorepo from 34 minutes to 13 minutes with Buildkite build caching.\n- Demoed ephemeral preview environments to about 80 engineers at the internship showcase.\n\nSIDE PROJECT\nTidepool Homelab\n- 4-node Raspberry Pi k3s cluster managed through Flux GitOps.\n- Hosts a self-hosted Matrix chat server; measured 99.2% uptime over 180 days with Uptime Kuma.\n- Loki and Grafana for logs; all manifests public on GitHub.\n\nEDUCATION\nPuget Cascade University | B.S. Computer Engineering | May 2025\n- Capstone: Brine, a distributed key-value store in Rust using Raft consensus (team of 3).\n- Teaching assistant, CPE 342 Operating Systems, two semesters.\n- Relevant coursework: Operating Systems, Computer Networks, Distributed Systems.\n\nCERTIFICATIONS\n- Certified Kubernetes Administrator (CKA), 2025\n\nSKILLS\nInfrastructure: Kubernetes (GKE, EKS, k3s), Helm, Terraform, Flux, cert-manager\nObservability: Prometheus, Grafana, Loki, OpenTelemetry, Uptime Kuma\nLanguages: Python, Rust, Bash, some Java\nCloud: GCP, AWS\nOther: Linux networking, DNS, TLS, Buildkite, GitHub Actions, Open Policy Agent"
+  },
+  "PI-B:JD": {
+   "title": "the job description the user is targeting",
+   "text": "PLATFORM RELIABILITY ENGINEER (EARLY CAREER)\nNimbuscrest Cloud | Portland, OR\n\nABOUT NIMBUSCREST\nNimbuscrest Cloud runs managed PostgreSQL and S3-compatible object storage for about 9,000 customers across four regions: Portland, Frankfurt, Singapore and Sao Paulo. We operate our own fleet of roughly 3,000 bare-metal hosts rather than renting from a hyperscaler, and we publish a 99.95% monthly availability target for managed databases.\n\nTHE TEAM\nFleet Reliability is 7 engineers reporting to Engineering Manager Oyelaran Fitch. We own host provisioning, the Kubernetes control planes that run our storage services, and the incident process for the whole company.\n\nWHAT YOU WILL DO\n- Operate and harden the Kubernetes control planes behind our storage and database services.\n- Automate host provisioning and firmware updates across the bare-metal fleet.\n- Define and review SLOs with service teams, and tune alerting so pages are actionable.\n- Respond to incidents as part of a follow-the-sun rotation and write blameless postmortems.\n- Build capacity forecasts for disk and network in each region.\n- Retire manual runbooks by turning them into tested automation.\n\nWHAT WE ARE LOOKING FOR\n- 1-3 years in SRE, infrastructure, or platform engineering (internships count).\n- Hands-on Kubernetes operations experience.\n- Proficiency in at least one of Go, Python or Rust.\n- Solid understanding of Linux internals and networking fundamentals (DNS, TCP, TLS).\n- Infrastructure as code with Terraform or Pulumi.\n- Willingness to participate in on-call after a ramp-up period.\n\nNICE TO HAVE\n- eBPF-based debugging or observability tooling.\n- Ceph or other distributed storage operations.\n- Running PostgreSQL in production.\n- PXE-based bare-metal provisioning.\n- Experience with Prometheus and multi-window burn-rate alerting.\n\nWORK ARRANGEMENT\nHybrid: two days a week in the Portland Pearl District office. Occasional travel (about twice a year) to the Frankfurt region for data-center work.\n\nHOW WE HIRE\nA recruiter conversation, a 90-minute take-home in which you debug a broken three-node cluster, a systems deep-dive with two engineers, and a conversation with Oyelaran.\n\nNimbuscrest Cloud welcomes applicants from all backgrounds."
+  },
+  "DTECH-CTX-G1": {
+   "title": "Quarrystone take-home: Pager Quiet Windows (problem statement)",
+   "text": "QUARRYSTONE ANALYTICS - PLATFORM TEAM TAKE-HOME (v3)\nProblem: Pager Quiet Windows\n\nBackground\nOur on-call tool lets engineers schedule \"quiet windows\" during which non-critical pages for a host are held back. Engineers create windows independently, so the list for one host arrives unsorted and often overlapping. Before we push windows to the pager we collapse them into the smallest equivalent list.\n\nPart 1: merge_windows(windows, grace)\nInput:\n- windows: a list of pairs [start, end], in integer minutes since the start of the quarter. A window covers minute start (inclusive) up to end (exclusive), so [10, 20] covers 10 minutes.\n- grace: an integer number of minutes.\n\nRules:\n1. If any window has end < start, raise ValueError with the message \"inverted window at index i\", where i is the index of the FIRST such window in the input list as given (before any sorting).\n2. A window with end == start covers no time and is dropped silently. A dropped window must not bridge two other windows.\n3. After sorting by start, a window merges into the current merged window when its start <= current end + grace. Windows that touch (next start == current end) therefore always merge, even with grace 0.\n4. Grace only decides whether two windows merge; it never extends a window. A merged window ends at the largest end among the windows it absorbed.\n5. Return the merged windows sorted by start, as a new list of [start, end] pairs. Do not mutate the input list or the pairs inside it.\n\nExamples\nExample 1: windows = [[10, 20], [15, 30], [40, 50]], grace = 0\nOutput: [[10, 30], [40, 50]]\n\nExample 2: windows = [[5, 10], [10, 12], [13, 20]], grace = 0\nOutput: [[5, 12], [13, 20]]\n([5, 10] and [10, 12] touch, so they merge. The gap from 12 to 13 is 1 minute, which is larger than grace 0.)\n\nExample 3: windows = [[5, 10], [10, 12], [13, 20]], grace = 1\nOutput: [[5, 20]]\n(Note the result is [5, 20], not [5, 21]: grace never extends a window.)\n\nExample 4: windows = [[30, 30], [1, 4], [2, 3]], grace = 5\nOutput: [[1, 4]]\n([30, 30] is dropped; [2, 3] lies inside [1, 4].)\n\nExample 5: windows = [[0, 10], [11, 11], [12, 20]], grace = 1\nOutput: [[0, 10], [12, 20]]\n([11, 11] is dropped before merging, so it cannot bridge the gap between 10 and 12.)\n\nExample 6: windows = [[7, 3], [1, 2], [9, 4]], grace = 0\nRaises ValueError(\"inverted window at index 0\")\n\nExample 7: windows = [], grace = 10\nOutput: []\n\nPart 2: total_quiet_minutes(windows, grace)\nReturn the total number of minutes covered by the output of merge_windows. A gap that grace bridged is counted, because the merged window spans it. For Example 1 the answer is 30, for Example 3 it is 15, and for Example 7 it is 0.\n\nConstraints\n- 0 <= len(windows) <= 200,000\n- 0 <= start, end <= 10^9\n- 0 <= grace <= 60\n- Your solution must run in O(n log n) time. Our reference solution runs in under 1 second in Python for n = 200,000.\n- Python 3.10+ or Go 1.22+. Standard library only.\n\nWhat we look at\nCorrectness on our hidden cases (including every edge case above), readability, the tests you write yourself, and a short note (under 200 words) explaining your approach and its complexity. Please do not spend more than 3 hours.\n\nLive follow-up\nIn the follow-up interview we will ask how your design changes if windows arrive one at a time from a stream and the pager needs to ask \"is minute t quiet?\" at any moment."
+  },
+  "DTECH-CTX-C1": {
+   "title": "Quarrystone take-home candidate FAQ",
+   "text": "QUARRYSTONE TAKE-HOME - CANDIDATE FAQ\nForwarded by Pilar Okonkwo-Reyes, Technical Recruiter. Compiled from questions earlier candidates asked about the Pager Quiet Windows exercise. Different interviewers wrote different answers.\n\nQ: How long should I spend on it?\nA: Please keep it under 3 hours. We are not grading polish.\n\nQ: How big are the inputs?\nA: Each host has at most 200,000 windows, so an O(n log n) sort-based solution is what we expect.\n\nQ: Do windows that touch, like [5, 10] and [10, 12], merge when grace is 0?\nA: No. Ends are exclusive, so [5, 10] and [10, 12] stay separate unless grace is at least 1.\n\nQ: What languages can I use?\nA: Python 3.10+ or Go 1.22+, standard library only.\n\nQ: Can I use sortedcontainers or another package for part 2?\nA: Yes, any package on PyPI is fine as long as you pin it in requirements.txt.\n\nQ: What does the grader check first?\nA: The edge cases. Touching windows always merge, even with grace 0, and zero-length windows are dropped. Most failed submissions get one of those wrong.\n\nQ: What is the performance bar?\nA: The hidden cases go up to 2 million windows per host, and the reference solution finishes in under 1 second in Python. If yours takes a few seconds that is fine; we cut off at 5 seconds.\n\nQ: When is it due?\nA: You have 48 hours from when the link opens. Most people spend a full day on it.\n\nQ: Should part 2 count grace gaps as quiet time?\nA: No, only minutes actually inside a window count."
+  },
+  "DTECH-CTX-G2": {
+   "title": "Lanternfish design notes and retrospective",
+   "text": "LANTERNFISH - DESIGN NOTES AND RETROSPECTIVE\nAuthor: Dashiell Marrow, SRE I, Cindervale Systems. Written December 2025 for the SRE team wiki.\n\nProblem\nThe checkout path (cart-api -> pricing -> payments-gateway) had a p99 of about 1,380 ms against an SLO target of 900 ms. Traces showed unexplained gaps before outbound calls that no span covered. We suspected DNS but had no per-pod data. CoreDNS exposes metrics per CoreDNS replica, only for the queries that reach it, and it sees a client's search-domain expansion as several unrelated queries rather than one slow lookup.\n\nDesign\nLanternfish is a Rust sidecar built on the tokio async runtime, using the hickory-proto crate to parse DNS messages. It is injected into pods on the checkout path.\n- The pod uses dnsPolicy None with a dnsConfig whose first nameserver is 127.0.0.1. Lanternfish listens on 127.0.0.1:53 over UDP; only the sidecar container gets the NET_BIND_SERVICE capability.\n- Each query is forwarded unchanged to the cluster DNS service IP. Lanternfish times the lookup from the moment the query arrives from the application to the moment the response is written back.\n- It exports a Prometheus histogram, lanternfish_lookup_seconds, with 12 buckets from 1 ms to 2.5 s and the labels qtype, rcode and upstream. The queried name is deliberately NOT a label, to keep cardinality bounded.\n- A counter, lanternfish_search_expansions_total, counts queries for names that end in one of the pod's search suffixes and come back NXDOMAIN.\n- The existing Prometheus scrapes it every 15 seconds; no new storage was needed.\n- The second nameserver line in dnsConfig points straight at the cluster DNS IP, with options timeout:1, so a crashed sidecar costs a one-second retry rather than an outage.\n\nWhy a sidecar\nWe considered three options:\n1. CoreDNS metrics. Already existed, but aggregated per replica rather than per pod, and blind to how many expansions one application lookup triggered.\n2. An eBPF probe on each node. Per-pod data without touching pods, but our GKE nodes ran Container-Optimized OS, nobody on the team had written eBPF before, and we estimated 4 to 6 weeks.\n3. A sidecar. Per pod by construction, easy to remove, and about 2 weeks of work.\nWe chose the sidecar. The trade-off: it only sees pods it is injected into, and it adds one local hop to every lookup.\n\nRollout\nLanternfish ran on the 14 deployments of the checkout path for three weeks.\n\nFindings\n- 31% of p99 latency on the checkout path came from DNS resolution.\n- The main cause was the default ndots:5. External names such as the payment processor's API have fewer than five dots, so the resolver tried every search domain first. On GKE that meant up to 10 failed queries (A and AAAA for each of 5 search domains) before the real lookup.\n- A smaller share came from occasional 5-second stalls caused by a known conntrack race when A and AAAA queries go out in parallel over UDP.\n\nFix\n- Priya Oduya (senior SRE) reviewed the design and ran the rollout of the fix; I wrote the sidecar, the dashboards and the analysis.\n- Checkout-path pods moved to ndots:2, and the three external payment endpoints were changed to fully qualified names with a trailing dot.\n- NodeLocal DNSCache was enabled on the cluster, which also removed the conntrack stalls.\n- Checkout p99 fell from 1,380 ms to 910 ms, and DNS dropped to about 6% of p99.\n\nOverhead and limitations\n- Median added latency is about 0.3 ms per lookup; each sidecar uses about 6 MiB of memory and under 5 millicores of CPU.\n- UDP only: queries that fall back to TCP after a truncated response are passed through and not measured.\n- After the fix we removed the sidecar from 9 of the 14 deployments and kept it on 5 as a canary.\n- It was never deployed to the other two clusters, and it has not been open-sourced."
+  },
+  "DTECH-CTX-I1": {
+   "title": "Portland onsite travel itinerary",
+   "text": "PORTLAND ONSITE - TRAVEL ITINERARY\nPrepared by the travel desk for the candidate.\n\nGetting there\nTrain 517 departs Tacoma Dome Station at 7:52 AM and arrives at Portland Union Station at 10:05 AM. Your e-ticket is attached separately; show the QR code to the conductor. If the train runs late, text the travel desk and we will move your first meeting.\n\nFrom the station\nThe office is about a 12-minute walk from Union Station. A rideshare is fine if it is raining; keep the receipt.\n\nHotel\nThe Larchmont Hotel, one night, confirmation LRX-40218. Check-in from 3 PM. Breakfast is included; parking is not.\n\nMeals\nLunch is provided on the day. For other meals the per diem is $65 per day, and receipts are required for anything over $25.\n\nGetting home\nTrain 520 departs Portland Union Station at 5:30 PM the next day and arrives at Tacoma Dome Station at 7:41 PM.\n\nExpenses\nSubmit receipts within 30 days using the reimbursement form linked in your confirmation email. Reimbursement usually takes two pay cycles. Mileage is reimbursed only if you drive instead of taking the train."
+  }
+ },
+ "items": [
+  {
+   "jid": "75b2c1d1a9a4",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Here's a quick one. Someone wrote a Java method to check if two strings are anagrams. It turns both into char arrays, sorts both with Arrays.sort, and then returns first dot equals second. It returns false even for listen and silent. What's wrong, and how would you fix it?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "The bug is that `Arrays.sort` sorts the arrays in place, but `char[]` doesn't override `equals`, so `first.equals(second)` falls back to `Object.equals`, which is reference identity. Two different arrays are never the same reference, so it returns false even when the contents match. `listen` and `silent` sort to the same characters but are still two distinct array objects.\n\n```java\nimport java.util.Arrays;\n\npublic static boolean areAnagrams(String a, String b) {\n    if (a == null || b == null) return false;\n    if (a.length() != b.length()) return false;\n    char[] first = a.toCharArray();\n    char[] second = b.toCharArray();\n    Arrays.sort(first);\n    Arrays.sort(second);\n    return Arrays.equals(first, second);\n}\n```\n\n`Arrays.equals` compares element by element instead of by reference, so equal sorted contents return true. The length check is a cheap early exit, and it also makes the null handling explicit. This runs in O(n log n) time from the sorts, with O(n) extra space for the two arrays."
+  },
+  {
+   "jid": "a4d4176e6e19",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So if you joined and owned this, what would you change first, how would you know it worked, and what would you leave alone?",
+   "conversation": [
+    "INTERVIEWER: So some context on our side. Right now we page on any service whose 5xx rate is over 1 percent for five minutes.",
+    "USER (spoken): Same threshold across every service?",
+    "INTERVIEWER: Same threshold everywhere. On-call gets roughly 90 pages a week and people have started muting the channel.",
+    "INTERVIEWER: About half of those fire during deploys and clear on their own."
+   ],
+   "evidence_ids": [
+    "PI-B:RESUME"
+   ],
+   "forbidden_ids": [],
+   "answer": "The first thing I'd change is the deploy window, because about half the pages fire during deploys and clear on their own. I'd suppress or downgrade those alerts while a deploy is in flight, then let them re-fire if the 5xx rate doesn't recover. I'd know it worked by watching pages per week drop and whether people stop muting the channel. What I'd leave alone is the 1 percent over five minutes threshold itself, at least until I've seen the data, because loosening it everywhere would hide real outages."
+  },
+  {
+   "jid": "1c72b4d23ab1",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "heapify complexity?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Building a heap from an array is **O(n)**, not O(n log n). The reason is that most nodes sit near the bottom and sift down only a level or two, so the total work sums to a constant times n. Sifting down a single element is O(log n), and heapsort is O(n log n) overall."
+  },
+  {
+   "jid": "0f7735784854",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "What's the time complexity of this: the outer loop runs i from one to n, and inside it j starts at i and doubles each time while j is less than n, doing constant work per step.",
+   "conversation": [
+    "INTERVIEWER: Sorry I'm a couple of minutes late, my last meeting ran over.",
+    "USER (spoken): No worries at all.",
+    "INTERVIEWER: Did you get caught in the rain coming in? It's been pouring here all morning.",
+    "USER (spoken): A little, but the train was on time, so I can't complain.",
+    "INTERVIEWER: Nice. Okay, let's jump into something short."
+   ],
+   "evidence_ids": [
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "The outer loop runs n times, and for each i the inner loop doubles j from i up to n, which is log(n/i) steps. Summing that over i gives O(n log n) overall. The doubling is what makes each inner loop logarithmic rather than linear."
+  },
+  {
+   "jid": "e776d46fadc1",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Let's do a small API design. A URL shortener: what endpoints would you have, what does each one return, and what should happen if two people shorten the exact same long URL?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "I'd keep it to three endpoints. A POST to /urls that takes the long URL and returns the short code plus the short link, a GET on /{code} that returns a 301 or 302 redirect to the original, and a GET on /urls/{code} that returns metadata like the original URL, creation time, and click count.\n\nFor the duplicate case, I'd make the long URL the unique key. So if two people shorten the same URL, the second POST returns the same short code rather than creating a new one, which keeps storage clean and makes the mapping idempotent. If you wanted per-user analytics instead, you'd scope the uniqueness to the user and hand back a distinct code."
+  },
+  {
+   "jid": "5d16d47a5135",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Implement an LRU cache with get and put, both in constant time. With capacity two: put one, put two, get one returns one, put three should evict two, and then get two returns minus one.",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "```python\nclass LRUCache:\n    def __init__(self, capacity):\n        self.capacity = capacity\n        self.cache = {}\n        self.order = []  # most recently used at the end\n\n    def get(self, key):\n        if key not in self.cache:\n            return -1\n        self.order.remove(key)\n        self.order.append(key)\n        return self.cache[key]\n\n    def put(self, key, value):\n        if key in self.cache:\n            self.order.remove(key)\n        elif len(self.cache) >= self.capacity:\n            lru = self.order.pop(0)\n            del self.cache[lru]\n        self.cache[key] = value\n        self.order.append(key)\n```\n\nA dict gives O(1) lookup, and a list tracks recency with the most recent key at the end. `get` moves the key to the end, and `put` evicts the front when full. The list operations make this O(n) per call, so for true constant time I'd swap the list for a doubly linked list with a hash map to its nodes."
+  },
+  {
+   "jid": "34e2f521b7e5",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "And the complexity?",
+   "conversation": [
+    "INTERVIEWER (heard): Okay, let's go over your take-home. For example two and example three, walk me through what your merge returns and why the two outputs are different.",
+    "NATIVELY: I don't have the exact inputs for examples two and three in front of me, so let me walk through the logic and the one case that makes the outputs differ.\n\nmerge_windows sorts the windows by start, then walks them, extending the current merged window when the next start is within grace of the current end, and starting a new window otherwise. The outputs differ because of how grace bridges a gap: when the gap between two windows is at most grace, they collapse into one window that spans the gap, so the merged end jumps to the later window's end. When the gap is larger than grace, they stay separate.\n\nSo if example two has a gap that grace covers and example three has a gap that grace doesn't, that's the whole difference: one merges into a single window, the other stays as two. Can you put the two inputs up so I can point at the exact numbers?"
+   ],
+   "evidence_ids": [
+    "DTECH-CTX-G1",
+    "PI-B:RESUME"
+   ],
+   "forbidden_ids": [],
+   "answer": "Sorting dominates, so it's **O(n log n)** time, and the merge pass itself is linear, **O(n)**. Space is O(n) for the sorted output, or O(1) extra if I sort in place and merge into the input list."
+  },
+  {
+   "jid": "f023cffe9975",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "the quarrystone faq i attached, do touching windows like 5-10 and 10-12 merge at grace 0 or not? need to tell the interviewer my assumption before i code",
+   "conversation": [],
+   "evidence_ids": [
+    "DTECH-CTX-C1",
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "I don't have the Quarrystone FAQ in front of me, so I can't read its merge rule off the page. What I can tell you is the assumption I'd state before coding: touching intervals merge only if the problem says they do, and at grace 0 the usual convention is that a gap of exactly 0 counts as touching, so 5-10 and 10-12 would merge into 5-12. If the FAQ defines grace as strictly greater than zero, they stay separate. I'd say that out loud and ask the interviewer to confirm which convention the FAQ uses before I write anything."
+  },
+  {
+   "jid": "21cbec96867a",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Okay, let's go over your take-home. For example two and example three, walk me through what your merge returns and why the two outputs are different.",
+   "conversation": [],
+   "evidence_ids": [
+    "DTECH-CTX-G1",
+    "PI-B:RESUME"
+   ],
+   "forbidden_ids": [],
+   "answer": "I don't have the exact inputs for examples two and three in front of me, so let me walk through the logic and the one case that makes the outputs differ.\n\nmerge_windows sorts the windows by start, then walks them, extending the current merged window when the next start is within grace of the current end, and starting a new window otherwise. The outputs differ because of how grace bridges a gap: when the gap between two windows is at most grace, they collapse into one window that spans the gap, so the merged end jumps to the later window's end. When the gap is larger than grace, they stay separate.\n\nSo if example two has a gap that grace covers and example three has a gap that grace doesn't, that's the whole difference: one merges into a single window, the other stays as two. Can you put the two inputs up so I can point at the exact numbers?"
+  },
+  {
+   "jid": "47101967604a",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "interviewer wants approach only: detect a cycle in a linked list and find the node where it starts. no code, 3 sentences max",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:RESUME"
+   ],
+   "forbidden_ids": [],
+   "answer": "Use Floyd's tortoise and hare: move one pointer one step and another two steps until they meet, which proves a cycle exists. Then reset one pointer to the head and advance both one step at a time; the node where they meet again is the cycle's start. That works because the distance from the head to the entry equals the distance from the meeting point to the entry, so it runs in O(n) time and O(1) space."
+  },
+  {
+   "jid": "28986186c564",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Why a sidecar?",
+   "conversation": [
+    "INTERVIEWER (heard): Your resume says Lanternfish showed 41 percent of p99 on checkout was DNS. How did you actually measure that, and what was Lanternfish doing under the hood?",
+    "NATIVELY: The resume says 31 percent, not 41, so let me correct that first. Lanternfish was a Rust sidecar that exported per-pod DNS lookup latency to Prometheus, and that's how I measured it: per-pod lookup latency on the checkout path, then I compared it against the p99 breakdown to see how much of the tail was DNS resolution."
+   ],
+   "evidence_ids": [
+    "DTECH-CTX-G2",
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "We looked at three options. CoreDNS metrics were already there but aggregated per replica, not per pod, and blind to how many lookups one application call triggered. An eBPF probe would've given per-pod data without touching pods, but our nodes ran Container-Optimized OS, nobody on the team had written eBPF, and we estimated four to six weeks. The sidecar was per pod by construction, easy to remove, and about two weeks of work. The trade-off is it only sees pods it's injected into and adds one local hop per lookup."
+  },
+  {
+   "jid": "e4db687001e7",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Write a function that returns true if a string is a palindrome once you ignore case and anything that isn't a letter or a digit. So 'A man, a plan, a canal: Panama' should be true and 'race a car' should be false. Talk me through it as you go.",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "```python\ndef is_palindrome(s: str) -> bool:\n    left, right = 0, len(s) - 1\n    while left < right:\n        while left < right and not s[left].isalnum():\n            left += 1\n        while left < right and not s[right].isalnum():\n            right -= 1\n        if s[left].lower() != s[right].lower():\n            return False\n        left += 1\n        right -= 1\n    return True\n```\n\nTwo pointers start at the ends and skip anything that isn't alphanumeric, comparing the rest lowercased. On \"A man, a plan, a canal: Panama\" the pointers meet in the middle and it returns true; on \"race a car\" the 'e' and 'a' mismatch and it returns false.\n\nTime O(n), space O(1)."
+  },
+  {
+   "jid": "0445681a9067",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Let's warm up. Two sum: given 2, 7, 11, 15 and a target of 9, return the indices of the two numbers that add up to it. Approach and complexity, please.",
+   "conversation": [],
+   "evidence_ids": [
+    "DTECH-CTX-I1",
+    "PI-B:RESUME"
+   ],
+   "forbidden_ids": [],
+   "answer": "For [2, 7, 11, 15] with target 9, the answer is indices **0 and 1**, since 2 + 7 = 9.\n\nI'd use a hash map in one pass. For each number, check whether target minus it is already in the map. If it is, return the stored index and the current one. Otherwise store the current value and index and keep going. That's **O(n) time** and O(n) space, versus O(n²) for the brute-force pair check."
+  },
+  {
+   "jid": "51be740b3574",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "just the complexity",
+   "conversation": [
+    "INTERVIEWER: Next one. Given an array of integers, return all the unique triplets that add up to zero.",
+    "USER (spoken): Can the array have duplicates?",
+    "INTERVIEWER: Yes, but the output shouldn't repeat a triplet.",
+    "USER (spoken): Okay, I'll sort it, then for each index run two pointers on the rest and skip duplicates as I go.",
+    "INTERVIEWER: Sounds good. And what does that cost you?"
+   ],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "Sorting is **O(n log n)**, and the two-pointer scan after that is **O(n²)** since for each index I walk the rest of the array. So the total is O(n²), which dominates the sort. Space is O(1) extra beyond the output, ignoring the sort's own overhead."
+  },
+  {
+   "jid": "f6c40ff572eb",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Most of our control plane tooling is in Go. Walk me through how goroutines get scheduled onto OS threads, when you'd reach for a channel versus a mutex, and tell me honestly how much Go you've written in production.",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "Go's runtime schedules goroutines with an M:N model. G's are goroutines, M's are OS threads, and P's are logical processors, one per core by default. A P holds a local run queue, and each M needs a P to run Go code. When a goroutine blocks on a syscall, the M hands off its P so another thread keeps running the queue, and when a goroutine blocks on a channel or mutex the scheduler parks it and runs something else. The work-stealing part is that an idle P pulls from other P's queues or the global queue.\n\nOn channels versus mutexes: I reach for a channel when I'm passing ownership of data or coordinating a pipeline, and a mutex when I'm just protecting a shared struct or a counter. Channels are for communication, mutexes for state.\n\nHonestly, most of my Go is from my homelab, a 4-node Raspberry Pi k3s cluster I manage through Flux GitOps, plus coursework. I haven't written Go in a production control plane, so I'd be ramping up on that side."
+  },
+  {
+   "jid": "60ad1e1f1ef4",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "So with those changes, rerun example five for me, and tell me whether your n log n approach still holds.",
+   "conversation": [
+    "INTERVIEWER: Quick heads up before we look at your take-home, we changed a couple of rules since that PDF went out.",
+    "INTERVIEWER: Grace can now be anything up to a full day, so up to 1440 minutes, and zero length windows are kept now, they act as markers.",
+    "USER (spoken): Okay, so a zero length window can bridge two others now?",
+    "INTERVIEWER: Yeah, I think so."
+   ],
+   "evidence_ids": [
+    "DTECH-CTX-G1"
+   ],
+   "forbidden_ids": [],
+   "answer": "Under the new rules, [11, 11] is kept as a marker, so it bridges the gap. With grace 1, [0, 10] merges with [11, 11] since 11 <= 10 + 1, and that merged window reaches 11, so [12, 20] merges too. Example 5 now gives **[[0, 20]]**.\n\nThe approach still holds. Keeping zero-length windows just means I don't drop them before merging, so the sort-and-sweep stays **O(n log n)**."
+  },
+  {
+   "jid": "9c8d616723d7",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Don't write code yet. Count the islands in a grid of ones and zeros, except the grid is huge, millions of rows, and you can only stream it one row at a time with memory for about two rows. How would you approach it?",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "The key constraint is that I can't hold the whole grid, so I need to track connectivity incrementally as rows arrive. I'd keep a label array over the previous row, one entry per column, plus a union-find structure over those labels. For each new row, I scan left to right: a 1 that has a 1 above it inherits that label, a 1 with a 1 to its left joins the left label, and a 1 with neither starts a new label. When a cell connects two different labels, I union them.\n\nThe trick is counting islands without double-counting. I increment a counter when a new label is born, and decrement it whenever a union actually merges two previously distinct labels. That running count is the number of islands seen so far. At the end, the count is the answer.\n\nMemory stays bounded: two rows of labels plus the union-find over at most one row's worth of labels, so it's proportional to the number of columns, not the rows. The one thing I'd want to confirm is whether the grid is guaranteed rectangular with a fixed column count, since that's what lets me size the label array once."
+  },
+  {
+   "jid": "89e355d916b7",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Given an array of integers and a number k, return the k most frequent elements. For example one, one, one, two, two, three with k equal to two gives you one and two. How would you solve it?",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "## Approach\nCount each element's frequency with a hash map, then keep the top k. The clean way is a bucket sort: index buckets by frequency, so bucket f holds every element that appears f times. Walk buckets from the highest frequency down, collecting elements until you have k, which avoids sorting all distinct elements.\n\n## Code\n```python\nfrom collections import Counter\n\ndef topKFrequent(nums, k):\n    count = Counter(nums)\n    buckets = [[] for _ in range(len(nums) + 1)]\n    for num, freq in count.items():\n        buckets[freq].append(num)\n\n    result = []\n    for freq in range(len(buckets) - 1, 0, -1):\n        for num in buckets[freq]:\n            result.append(num)\n            if len(result) == k:\n                return result\n    return result\n```\n\n## Complexity\nTime is O(n), since counting is one pass and the bucket walk touches at most n elements. Space is O(n) for the count map and the buckets."
+  },
+  {
+   "jid": "9aa87ce38745",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "typed",
+   "question": "code only: merge two sorted linked lists in python, return the new head",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "```python\nclass ListNode:\n    def __init__(self, val=0, next=None):\n        self.val = val\n        self.next = next\n\n\ndef mergeTwoLists(list1, list2):\n    dummy = ListNode()\n    tail = dummy\n\n    while list1 and list2:\n        if list1.val <= list2.val:\n            tail.next = list1\n            list1 = list1.next\n        else:\n            tail.next = list2\n            list2 = list2.next\n        tail = tail.next\n\n    tail.next = list1 if list1 else list2\n    return dummy.next\n```"
+  },
+  {
+   "jid": "d81da7a5cd5e",
+   "mode": "technical-interview",
+   "role": "USER: the candidate. OTHER PARTY: the technical interviewer. Natively: explanation, reasoning, code, complexity, system design the candidate can use. Résumé/JD (if in evidence) are the candidate's own.",
+   "surface": "heard",
+   "question": "Tell me about a time you made something measurably faster or cheaper. I want actual numbers.",
+   "conversation": [],
+   "evidence_ids": [
+    "PI-B:RESUME",
+    "PI-B:JD"
+   ],
+   "forbidden_ids": [],
+   "answer": "The clearest one is CI time at Orrin Telematics. The main monorepo took 34 minutes to build, and I cut it to 13 minutes by adding Buildkite build caching, so we got roughly a 60% reduction. The other one is compute spend at Hollowbrook, where right-sizing node pools on two EKS clusters brought monthly cost from about $41,300 down to $29,800, which is a bit over $11,000 a month saved."
+  }
+ ]
+}

@@ -3,6 +3,9 @@ import fs from 'fs';
 import path from 'path';
 
 export interface AppSettings {
+    /** The Calendar account name whose full-name mentions in saved notes were carried
+     *  to the first name (calendarNameMigration); set once per name. */
+    calendarFirstNameMigratedFor?: string;
     // Only boot-critical or non-encrypted settings should live here.
     // In the future, other non-secret data like 'language' or 'theme'
     // can be moved here from CredentialsManager to allow early boot access.
@@ -14,6 +17,10 @@ export interface AppSettings {
     // typing is OFF, closing the residual leak where a dropped RegisterHotKey
     // registration lets a chord's modifier/completing key reach the foreground.
     stealthShortcutGuard?: boolean;
+    // Issue #517: master switch for OS-wide shortcuts. false = only Toggle
+    // Visibility stays global (so a hidden window can always come back); every
+    // other bind works only while Natively is focused. Unset = true.
+    globalShortcutsEnabled?: boolean;
     // Context Intelligence debug logging level (Developer settings). The env
     // var NATIVELY_CONTEXT_DEBUG overrides this — precedence is owned by
     // context-intelligence/debug/debug-config.ts, which reads this value
@@ -33,6 +40,11 @@ export interface AppSettings {
     // produced only by the What-to-Answer hotkey, exactly as before. The
     // trigger itself lives in AppState.scheduleAutoAnswer().
     autoAnswerEnabled?: boolean;
+    // Meeting detection (2026-09-27): Natively reads which meeting the user is in
+    // (the Companion extension's meeting tabs, later the meeting apps' windows and
+    // microphone use) to link a session to its calendar event exactly and to
+    // offer to start one. Local only. Unset = on.
+    meetingDetectionEnabled?: boolean;
     // Direct Assist is the opt-in, single-provider answer path. It deliberately
     // bypasses meeting retrieval and the legacy answer-orchestration pipeline.
     // Keep the persisted default OFF during rollout; the operator kill switch
@@ -49,7 +61,6 @@ export interface AppSettings {
     codexCliEnabled?: boolean;
     codexCliPath?: string;
     codexCliModel?: string;
-    codexCliFastModel?: string;
     codexCliTimeoutMs?: number;
     codexCliSandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
     codexCliServiceTier?: 'default' | 'fast' | 'flex';
@@ -240,6 +251,13 @@ export interface AppSettings {
     seenProfileOnboarding?: boolean;
     seenModesOnboarding?: boolean;
     permsShown?: boolean;
+    // The trialStartedAt of the free trial whose profile data the expiry wipe
+    // already removed, so the wipe runs once per trial however many windows or
+    // launches notice the expiry (ipcHandlers.ts settleExpiredTrial).
+    trialExpiryWipedFor?: string;
+    // The trial campaign (src/lib/trialCampaign.mjs) this install has already been
+    // through. Written only after every reset step persisted, so a failed one retries.
+    trialCampaignReset?: string;
     // Live SessionMemory rollout controls (release 2026-06-07c). Env vars take
     // precedence; these let the rollout be driven from settings without a redeploy.
     enableLiveSessionMemory?: boolean;
@@ -367,9 +385,21 @@ export class SettingsManager {
             console.warn(`[SettingsManager] Refusing to set "${String(key)}": the settings store is degraded this session (see the quarantine warning at startup).`);
             return false;
         }
+        const hadPreviousValue = Object.prototype.hasOwnProperty.call(this.settings, key);
+        const previousValue = this.settings[key];
         this.settings[key] = value;
-        this.saveSettings();
-        return true;
+        if (this.saveSettings()) return true;
+
+        // A write can fail even when the store loaded successfully (for example,
+        // a locked Windows profile, antivirus holding the destination, or a full
+        // disk). Keep the live process aligned with the last durable value so IPC
+        // callers never broadcast a change that will disappear on restart.
+        if (hadPreviousValue) {
+            this.settings[key] = previousValue;
+        } else {
+            delete this.settings[key];
+        }
+        return false;
     }
 
     // Resolved screen-understanding mode with default and runtime validation.
@@ -574,12 +604,10 @@ export class SettingsManager {
         const migrated = LEGACY_SCREEN_MODE_MIGRATION[raw];
         if (migrated) {
             console.warn(`[SettingsManager] Migrating legacy screenUnderstandingMode "${raw}" → "${migrated}" (OCR runtime path removed)`);
-            this.settings.screenUnderstandingMode = migrated;
-            this.saveSettings();
+            this.set('screenUnderstandingMode', migrated);
         } else {
             console.warn(`[SettingsManager] Unknown legacy screenUnderstandingMode "${raw}" — defaulting to vision_first`);
-            this.settings.screenUnderstandingMode = 'vision_first';
-            this.saveSettings();
+            this.set('screenUnderstandingMode', 'vision_first');
         }
     }
 
@@ -637,13 +665,13 @@ export class SettingsManager {
         }
     }
 
-    private saveSettings(): void {
+    private saveSettings(): boolean {
         if (this.settingsUnreadable) {
             console.warn('[SettingsManager] Refusing to save: settings.json was unreadable and could not be quarantined, so writing would overwrite it with an incomplete set. Repair or remove the file, then restart.');
-            return;
+            return false;
         }
+        const tmpPath = this.settingsPath + '.tmp';
         try {
-            const tmpPath = this.settingsPath + '.tmp';
             // R-15: write + fsync + rename. Without the fsync the rename could be
             // durable while the DATA was still in the page cache, so a power loss
             // left a 0-byte settings.json — which is exactly the input that used to
@@ -658,8 +686,16 @@ export class SettingsManager {
                 fs.closeSync(fd);
             }
             fs.renameSync(tmpPath, this.settingsPath);
+            return true;
         } catch (e) {
             console.error('[SettingsManager] Failed to save settings:', e);
+            try {
+                if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+            } catch {
+                // Best-effort cleanup only; the original settings file remains
+                // authoritative and the caller receives false either way.
+            }
+            return false;
         }
     }
 }

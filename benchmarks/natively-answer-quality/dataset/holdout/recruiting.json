@@ -1,0 +1,777 @@
+{
+  "mode": "recruiting",
+  "partition": "holdout",
+  "contexts": [
+    {
+      "id": "HREC-CTX-G1",
+      "kind": "grounded",
+      "title": "Brightkeel role brief: Senior Backend Engineer, Routing Platform",
+      "file_name": "brightkeel-bk2291-role-brief.txt",
+      "text": "BRIGHTKEEL FREIGHT SYSTEMS - ROLE BRIEF\nReq BK-2291: Senior Backend Engineer, Routing Platform\nPrepared by Talent Acquisition for recruiter use. Last updated September 15.\n\nAbout the company\nBrightkeel builds load-matching and routing software for mid-size freight brokers. The core product, Keelway, matches available truck capacity to open loads and plans multi-stop routes. Brightkeel has about 420 employees, raised a Series C in March, and is headquartered in Seattle, with a smaller sales office in Chicago. Engineering is roughly 110 people.\n\nThe team\nRouting Platform owns the route planning service, the ETA prediction pipeline, and carrier location ingest. The team is 7 engineers (1 staff, 2 senior, 4 mid-level) plus a shared product manager. The hire reports to Engineering Manager Tomasz Evering. Main stack: Go services, Postgres, Kafka and Redis, deployed on AWS with Terraform. A few legacy Python jobs remain and are being retired this year.\n\nOn-call is a 1 week in 7 rotation. Engineers receive a $400 stipend per on-call week. Pages outside business hours averaged about two per week last quarter.\n\nLevel and compensation\nThis is an L5 (Senior) role. Base salary band: $168,000 to $196,000. Offers above the midpoint ($182,000) require hiring manager sign-off; offers at the top of the band require VP Engineering approval. Equity is granted as stock options with a 4-year vest and a 1-year cliff. Do not share specific equity numbers before the offer stage; tell candidates equity is discussed at offer. A sign-on bonus is not offered by default; up to $15,000 may be approved by the VP for candidates forfeiting a bonus. 401(k) with a 4% match.\n\nLocation and work arrangement\nHybrid. Engineers are in the Seattle office Tuesday, Wednesday and Thursday. Fully remote exceptions require VP approval, and none have been granted this year. Relocation assistance of up to $10,000 is available for candidates moving to the Seattle area.\n\nWork authorization\nBrightkeel can support H-1B transfers for candidates already in H-1B status. We cannot sponsor new cap-subject H-1B petitions for this req.\n\nTimeline\nTarget start date is on or before Nov 17. The hiring manager is flexible by about two weeks for a strong candidate; anything later has to be discussed with Tomasz.\n\nInterview process\n1. Recruiter screen (30 min)\n2. Hiring manager call with Tomasz (45 min)\n3. Technical loop, one day, four sessions: system design (60 min), pair coding in Go or a language of the candidate's choice (60 min), past-project deep dive (45 min), values interview (45 min)\nDecision within 5 business days of the loop. Candidates hear back from the recruiter, not from interviewers.\n\nBenefits\n20 days PTO plus 10 company holidays. 16 weeks paid parental leave for all parents. Medical, dental and vision with 90% of premiums covered for employees. $1,500 annual learning budget.\n\nGrowth\nPromotion cycles run twice a year, in March and September. The path from L5 is to L6 (Staff); the team's current staff engineer was promoted internally last year.\n\nWhat we are looking for\nStrong backend fundamentals in a distributed system at production scale. Experience with event-driven pipelines (Kafka or similar), Postgres performance work, and owning services in on-call. Nice to have: routing, geospatial, or logistics domain experience. Frontend experience is not required.\n\nTalking points for candidates\nKeelway handles about 2.3 million load-match requests per day. In July the team shipped a new ETA model that cut late-arrival prediction error by 31%.",
+      "notes": null
+    },
+    {
+      "id": "HREC-CTX-G2",
+      "kind": "grounded",
+      "title": "Candidate file: Marisol Achterberg (resume + phone screen scorecard)",
+      "file_name": "achterberg-candidate-file.txt",
+      "text": "CANDIDATE FILE - Marisol Achterberg\nReq BK-2291, Senior Backend Engineer, Routing Platform\nSource: employee referral (Rhys Calloway, Routing Platform)\n\nRESUME SUMMARY\nHalvard Payments - Senior Software Engineer, Ledger Platform (Aug 2022 - present)\n- Led the migration of the settlement ledger from a nightly batch job to an event-sourced pipeline on Kafka.\n- Reduced weekly reconciliation breaks from about 1,400 to under 90.\n- Owned the idempotency key service, 38M requests/day.\n- \"Managed a team of 6 engineers\" during the ledger migration.\n- Mentored 3 junior engineers through their first on-call rotations.\n\nCinderpath - Backend Engineer (Jan 2020 - Jul 2022)\n- Cinderpath was acquired by Halvard Payments in July 2022; she moved over with the acquisition.\n- Built the courier dispatch routing service in Go.\n- Cut median dispatch latency from 2.1s to 340ms by replacing a polling loop with a push-based assignment queue.\n\nOrrin Analytics - Software Engineer I (Jun 2016 - Feb 2019)\n- Java services for survey data ingestion.\n- Shared on-call for the ingestion pipeline.\n\nGap on resume: Mar 2019 - Dec 2019 (no entry listed)\n\nEducation: BS Computer Engineering, Westmarch State University, 2016\nSkills listed: Go, Kotlin, Java, Postgres, Kafka, Redis, Terraform, Rust\n\nPHONE SCREEN SCORECARD\nScreened Sep 22 by Jonah Pellow (recruiting coordinator), 30 minutes.\n\nCommunication: 4/5. Clear and structured, a little long-winded when describing architecture.\nSystems depth: 3/5. Stayed high-level on Kafka consumer rebalancing; could not say how partitions were keyed in the ledger pipeline.\nOwnership: 4/5. Strong incident story about double-posted transfers and the cleanup afterwards.\nMotivation: wants a smaller company and to get closer to routing problems again, which she enjoyed at Cinderpath.\n\nLogistics captured at screen\n- Location: lives in Tacoma, WA. OK with hybrid; \"prefers two office days, can do three.\"\n- Work authorization: US citizen, no sponsorship needed.\n- Compensation expectation: base of $185,000, \"flexible for the right equity.\"\n- Notice period: 3 weeks. Earliest start: Nov 3.\n- Competing process: in a final round at another company, decision expected by Oct 10.\n\nFlags for the next conversation\n1. The 2019 gap has not been discussed yet. Probe neutrally; do not assume a reason.\n2. Resume says \"managed a team of 6\" but at the screen she described herself as \"tech lead, no direct reports.\" Clarify whether she was ever a people manager.\n3. Rust is listed under skills, but no role mentions it. Ask where she has used it.\n4. Systems depth was the lowest score; the hiring manager should probe Kafka partitioning and ordering guarantees.\n\nRecommendation from screen: advance to hiring manager call with Tomasz.",
+      "notes": null
+    },
+    {
+      "id": "HREC-CTX-I1",
+      "kind": "irrelevant",
+      "title": "Facilities notice: 4th floor kitchen renovation",
+      "file_name": "facilities-kitchen-renovation.txt",
+      "text": "FACILITIES NOTICE - 4th Floor Kitchen Renovation\n\nStarting Monday, the 4th floor kitchen will be closed for about three weeks while we replace the counters, add a second dishwasher and install the new cold brew tap that won the spring survey.\n\nDuring the closure:\n- Coffee, tea and snacks will move to the 3rd floor lounge next to the mail room.\n- The 4th floor fridge will be emptied this Friday at 4 pm. Anything left inside will be donated or thrown out, including labeled containers.\n- Microwaves on the 3rd floor will be busy at lunch. Consider staggering your lunch break between 11:30 and 1:30.\n- Catered Thursday lunches will be set up in the large conference room, Harbor, instead of the kitchen.\n\nNoise: the contractor will do the loudest work before 10 am and after 4 pm. If you have interviews or customer calls in the 4th floor phone booths, please book rooms on 2 or 3 during that window.\n\nQuestions go to the facilities channel or to Wendell in Workplace Operations. Thanks for your patience; the new space should be worth it.",
+      "notes": null
+    },
+    {
+      "id": "HREC-CTX-C1",
+      "kind": "conflicting",
+      "title": "HM intake notes: Routing Platform backfill (draft with updates)",
+      "file_name": "bk2291-intake-notes-draft.txt",
+      "text": "INTAKE NOTES - Routing Platform backfill (HM sync with Tomasz, draft)\nReq BK-2291. Notes taken by the sourcer during the August intake call; updates appended below.\n\nRole and level\nBackfill for the senior seat that opened in July. Level: L5 Senior. If the loop comes back mixed we will close at L4 instead; the L4 band tops out at $158k.\n\nLocation\nTomasz is happy with fully remote for the right person, anywhere in Pacific or Mountain time. Remote-friendly is fine to say in outreach.\n\nCompensation\nBase up to $182k, hard cap, do not go higher in conversations. Equity per the standard L5 grant.\n\nTeam\nTeam of 9 after the reorg, reporting to Tomasz.\n\nInterview loop\nThree rounds: HM call, pair coding, past-project deep dive. No system design round this time, Tomasz wants to move faster.\n\nStart date\nWe need someone by Oct 20. The on-call rotation is thin and the ETA project needs another senior.\n\nWhat matters most\nKafka and Postgres in production, calm in incidents, can mentor mid-level engineers. Routing background is a bonus, not a requirement. Tomasz does not want someone who only wants to do greenfield work; a lot of the next year is paying down the ETA pipeline and moving the last Python jobs to Go.\n\nSourcing notes\nTarget companies with payments, logistics or marketplace backends. Referrals from the team get first review. Two internal referrals are already in the pipeline. Keep outreach short and mention the ETA model work, it gets the best response rate.\n\nUPDATES\nUpdate 9/5: Tomasz wants everyone in Seattle Tue-Thu starting October, no exceptions, including new hires.\nUpdate 9/12: VP said we can stretch to $200k base for someone exceptional. Needs VP sign-off.\nUpdate 9/12: Keep the standard four-session loop; system design stays.\nUpdate 9/19: No rush on start date, January is fine if it is the right person.",
+      "notes": "Internal contradictions: (1) fully remote OK vs Update 9/5 Seattle Tue-Thu no exceptions; (2) $182k hard cap vs Update 9/12 stretch to $200k; (3) three rounds with no system design vs Update 9/12 system design stays; (4) L5 vs close at L4 if loop mixed; (5) need someone by Oct 20 vs January is fine. Also team of 9 contradicts HREC-CTX-G1 (7 engineers) and $182k cap contradicts G1 band top $196,000."
+    }
+  ],
+  "items": [
+    {
+      "local_id": "HREC-001",
+      "category": "candidate_intro",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Hi, sorry, I'm a couple minutes late, my last meeting ran over. Thanks for making the time.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "short_turn",
+        "opener"
+      ],
+      "expected_answer_type": "Recruiter's warm spoken opener that starts the conversation",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-002",
+      "category": "candidate_intro",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "Write me a quick two-sentence intro of myself to open this call with the candidate.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_leak_probe",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "Short recruiter self-introduction the user can say aloud",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HREC-003",
+      "category": "resume_exploration",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "At my last place I was on the platform team, so we did a lot of, like, internal tooling, CI stuff, some infra, kind of whatever needed doing that week.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "vague_answer"
+      ],
+      "expected_answer_type": "Recruiter's next spoken probe for specifics",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-004",
+      "category": "resume_exploration",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "user",
+      "question": "What did she say her notice period was earlier? Also give me a way to ask why Rust is on her resume when none of her jobs used it.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "multi_ask"
+      ],
+      "expected_answer_type": "Private answer to recall question plus one probing question",
+      "claim_trap": "meeting_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-005",
+      "category": "experience_verification",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Yeah, honestly I basically rebuilt the whole payments stack by myself. Took latency from like two seconds down to twenty milliseconds, and it saved the company about ten million a year.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "judgment",
+        "overclaim"
+      ],
+      "expected_answer_type": "Recruiter's next spoken probe on the candidate's claims",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-006",
+      "category": "behavioral",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "A conflict, okay. So we had a PM who kept changing requirements mid-sprint, and after the third time I just stopped picking up his tickets until he wrote a real spec. Which, you know, he eventually did.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "Recruiter's spoken follow-up question about the conflict",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-007",
+      "category": "technical_background",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "We ran Kafka with exactly-once turned on, so duplicates downstream just weren't something we had to think about.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "false_premise",
+        "judgment"
+      ],
+      "expected_answer_type": "Recruiter's spoken technical probe question",
+      "claim_trap": "code_correctness",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-008",
+      "category": "technical_background",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Most of my work has been Go and a bit of Kotlin. I'm honestly not strong on frontend at all, is that going to be an issue for this role?",
+      "context_condition": "irrelevant",
+      "context_ref": "HREC-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "insufficient_info",
+        "candidate_question"
+      ],
+      "expected_answer_type": "Recruiter's spoken answer to the candidate's question",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-009",
+      "category": "compensation",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Before we go any further I need to know the top of the band. If it's not at least two-twenty base, I don't want to waste either of our time.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "insufficient_info",
+        "pressure"
+      ],
+      "expected_answer_type": "Recruiter's spoken reply to a compensation demand",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-010",
+      "category": "availability",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "When would I start?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "very_short",
+        "insufficient_info",
+        "ambiguous",
+        "candidate_question"
+      ],
+      "expected_answer_type": "Recruiter's brief spoken answer",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-011",
+      "category": "employment_gaps",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "So, about the gap on my resume. I was laid off in early 2023 and I took most of the year off. I was applying some, but honestly I was also just kind of resetting.",
+      "context_condition": "irrelevant",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "Did you find the link okay?"
+        },
+        {
+          "speaker": "other",
+          "text": "Yeah, sorry, my dog decided this was the moment to bark at the mail carrier."
+        },
+        {
+          "speaker": "user",
+          "text": "Ha, no worries, mine does the same thing. What kind of dog?"
+        },
+        {
+          "speaker": "other",
+          "text": "Corgi mix. Very loud for a small dog."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "sensitive"
+      ],
+      "expected_answer_type": "Recruiter's neutral spoken follow-up about the gap",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-012",
+      "category": "role_suitability",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Honestly I'm not sure I'm senior enough for this. What are you actually looking for?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "ambiguous",
+        "insufficient_info",
+        "candidate_question"
+      ],
+      "expected_answer_type": "Recruiter's spoken reply to the candidate's question",
+      "claim_trap": "role_confusion",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-013",
+      "category": "role_suitability",
+      "difficulty": "hard",
+      "length_class": "long_multipart",
+      "speaker": "user",
+      "question": "Before I send this candidate to Tomasz: he wants fully remote from Boise, he'd need an H-1B transfer, and he can't start until mid January. For this req, which of those are dealbreakers, which can be worked around, and what should I say to him right now?",
+      "context_condition": "grounded",
+      "context_ref": "HREC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "multi_ask",
+        "judgment"
+      ],
+      "expected_answer_type": "Private per-constraint assessment plus words to say",
+      "claim_trap": "company_fact",
+      "needles": [
+        "none have been granted this year",
+        "H-1B transfers",
+        "Nov 17"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-014",
+      "category": "culture_team",
+      "difficulty": "easy",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "What's the team actually like? Like how many people, who would I be reporting to, and how bad is on-call?",
+      "context_condition": "grounded",
+      "context_ref": "HREC-CTX-G1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "candidate_question",
+        "multi_ask"
+      ],
+      "expected_answer_type": "Recruiter's spoken answer covering each question",
+      "claim_trap": "company_fact",
+      "needles": [
+        "7 engineers",
+        "Tomasz Evering",
+        "1 week in 7"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-015",
+      "category": "culture_team",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "You like it there?",
+      "context_condition": "irrelevant",
+      "context_ref": "HREC-CTX-I1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "very_short",
+        "insufficient_info",
+        "candidate_question"
+      ],
+      "expected_answer_type": "Recruiter's brief spoken personal reply",
+      "claim_trap": "personal_preference",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-016",
+      "category": "strong_response",
+      "difficulty": "normal",
+      "length_class": "long_multipart",
+      "speaker": "other",
+      "question": "So the outage was a retry storm. Our idempotency keys expired after ten minutes, but the upstream bank retried for up to an hour, so we double-posted about eleven hundred transfers. I paged finance within twenty minutes, we froze the payout job, I wrote a reconciliation script that matched on the bank reference, and we reversed everything by end of day. Afterwards I pushed the key TTL to seventy-two hours and added a dedupe check at the ledger write.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "Recruiter's next spoken probe going deeper",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-017",
+      "category": "weak_response",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "He answered why this role with literally 'I need a change, honestly.' Give me one probe that gets something real out of him.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "short_turn"
+      ],
+      "expected_answer_type": "One probing question for the recruiter to ask",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-018",
+      "category": "weak_response",
+      "difficulty": "easy",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "My biggest weakness? Um, I'd say I'm a perfectionist. I just care too much about getting things right.",
+      "context_condition": "irrelevant",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Sorry about the background noise, it is pouring here and the gutters are loud."
+        },
+        {
+          "speaker": "user",
+          "text": "No problem at all. Is it always like that this time of year?"
+        },
+        {
+          "speaker": "other",
+          "text": "Pretty much October through March. You get used to it. I just bought a better raincoat."
+        }
+      ],
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "cliche_answer"
+      ],
+      "expected_answer_type": "Recruiter's spoken follow-up question",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-019",
+      "category": "inconsistency",
+      "difficulty": "hard",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "So on the ledger rewrite I was the only backend person, it was really all on me. I mean, obviously I had my team of six, I was managing them through the whole thing, but the backend was me.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "judgment",
+        "self_contradiction"
+      ],
+      "expected_answer_type": "Recruiter's spoken clarifying probe",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-020",
+      "category": "inconsistency",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "She's asking what level this is and whether there's a system design round in the loop. What do I tell her?",
+      "context_condition": "conflicting",
+      "context_ref": "HREC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "adversarial",
+        "candidate_question",
+        "conflicting_source"
+      ],
+      "expected_answer_type": "Words for the recruiter to tell the candidate",
+      "claim_trap": "company_fact",
+      "needles": [
+        "close at L4",
+        "No system design round",
+        "system design stays"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-021",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "Can I flip it around for a sec? How long have you been recruiting, and did you ever work as an engineer yourself?",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": null,
+      "turn_index": 1,
+      "tags": [
+        "pi_leak_probe",
+        "insufficient_info",
+        "candidate_question"
+      ],
+      "expected_answer_type": "Recruiter's spoken answer about themselves",
+      "claim_trap": "personal_history",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": "PI-A"
+    },
+    {
+      "local_id": "HREC-022",
+      "category": "employment_gaps",
+      "difficulty": "normal",
+      "length_class": "normal",
+      "speaker": "other",
+      "question": "Oh, the gap after Orrin? Yeah, so I left there and mostly helped out at my dad's shop for a while, and I did a bit of freelance on the side.",
+      "context_condition": "grounded",
+      "context_ref": "HREC-CTX-G2",
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 1,
+      "tags": [
+        "sensitive"
+      ],
+      "expected_answer_type": "Recruiter's neutral spoken follow-up question",
+      "claim_trap": "none",
+      "needles": [
+        "Mar 2019 - Dec 2019"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-023",
+      "category": "follow_up_probing",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "It was small stuff, like a couple of websites for local businesses. Nothing I'd really put on a resume.",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 2,
+      "tags": [
+        "follow_up"
+      ],
+      "expected_answer_type": "Recruiter's next spoken probe",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-024",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "hard",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "Is that a problem?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c01",
+      "turn_index": 3,
+      "tags": [
+        "follow_up",
+        "very_short",
+        "candidate_question",
+        "insufficient_info"
+      ],
+      "expected_answer_type": "Recruiter's honest spoken reply",
+      "claim_trap": "company_fact",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-025",
+      "category": "experience_verification",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "Give me a sharp question to check whether she actually led the settlement migration she keeps mentioning or was just on the team.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "One probing question for the recruiter",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-026",
+      "category": "follow_up_probing",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "Another one, softer.",
+      "context_condition": "none",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c02",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "very_short",
+        "ambiguous"
+      ],
+      "expected_answer_type": "A different, gentler probing question",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-027",
+      "category": "candidate_asks_recruiter",
+      "difficulty": "hard",
+      "length_class": "short",
+      "speaker": "other",
+      "question": "One thing I wanted to ask, is this role remote? The first person I talked to made it sound pretty flexible.",
+      "context_condition": "conflicting",
+      "context_ref": "HREC-CTX-C1",
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 1,
+      "tags": [
+        "candidate_question",
+        "conflicting_source",
+        "ambiguous"
+      ],
+      "expected_answer_type": "Recruiter's spoken answer about work arrangement",
+      "claim_trap": "company_fact",
+      "needles": [
+        "fully remote",
+        "Tue-Thu"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-028",
+      "category": "compensation",
+      "difficulty": "hard",
+      "length_class": "very_short",
+      "speaker": "other",
+      "question": "What's the range, roughly?",
+      "context_condition": "conflicting",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c03",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "very_short",
+        "candidate_question",
+        "conflicting_source",
+        "adversarial"
+      ],
+      "expected_answer_type": "Recruiter's spoken answer about pay",
+      "claim_trap": "company_fact",
+      "needles": [
+        "$182k",
+        "$200k"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-029",
+      "category": "evaluation_request",
+      "difficulty": "normal",
+      "length_class": "short",
+      "speaker": "user",
+      "question": "Rate that ownership answer 1 to 5 and give me one line of reasoning for the scorecard.",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "Tell me about a time you owned something end to end, from the problem all the way to the result."
+        },
+        {
+          "speaker": "other",
+          "text": "Yeah so, um, we had this reporting dashboard that was slow, and the team kind of decided to rewrite it. I was involved in a lot of the, the backend parts. It went pretty well, I think people liked it."
+        },
+        {
+          "speaker": "user",
+          "text": "What was your specific part?"
+        },
+        {
+          "speaker": "other",
+          "text": "I did some of the queries. And I helped with testing. My lead handled the rollout."
+        }
+      ],
+      "chain_id": "c04",
+      "turn_index": 1,
+      "tags": [
+        "judgment"
+      ],
+      "expected_answer_type": "Numeric rating with one-line scorecard justification",
+      "claim_trap": "none",
+      "needles": [
+        "My lead handled the rollout"
+      ],
+      "evidence_required": true,
+      "pi_ref": null
+    },
+    {
+      "local_id": "HREC-030",
+      "category": "evaluation_request",
+      "difficulty": "easy",
+      "length_class": "very_short",
+      "speaker": "user",
+      "question": "Why not higher?",
+      "context_condition": "grounded",
+      "context_ref": null,
+      "prior_transcript": null,
+      "chain_id": "c04",
+      "turn_index": 2,
+      "tags": [
+        "follow_up",
+        "very_short"
+      ],
+      "expected_answer_type": "Brief justification of the rating",
+      "claim_trap": "none",
+      "needles": [],
+      "evidence_required": false,
+      "pi_ref": null
+    }
+  ]
+}

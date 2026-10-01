@@ -54,7 +54,11 @@ test('the main process advertises more than one hosted provider', () => {
 test('the panel renders one card per DISCOVERED provider, not per literal', () => {
   // The substance: cards come from the list, so a provider added to the table
   // gets a card without touching this file.
-  assert.match(panel, /hostedProviders\.map\(/,
+  // The cards map a FILTERED list (Natively has its own card), so allow one
+  // `.filter(…)` between the list and `.map(`. The old /hostedProviders\.map\(/
+  // never matched the cards: it passed on the fallback sentence's list of
+  // provider names, and it failed when that sentence stopped naming providers.
+  assert.match(panel, /hostedProviders(?:\.filter\([^)]*\))?\.map\(p =>/,
     'the hosted cards must be mapped from the discovered provider list');
   // And the old hardcoded mark must be gone. `provider="openrouter"` as a JSX
   // literal is exactly what pinned the panel to one provider.
@@ -138,8 +142,11 @@ test('every hosted provider has a real brand mark, not a monogram', () => {
   // that read as a placeholder next to OpenRouter's real mark. A provider added
   // to the table with no mark should fail here rather than on screen.
   for (const id of advertisedProviderIds()) {
-    assert.match(marks, new RegExp(`\\b${id}: \\w+Mark,`),
-      `${id} has no entry in AI_PROVIDER_MARKS, so its card renders a monogram`);
+    // An SVG in AI_PROVIDER_MARKS or a raster in AI_PROVIDER_MARK_IMAGES (the
+    // Natively row uses the app icon). Both map an id to an imported asset
+    // binding; AI_PROVIDER_BRANDS entries are object literals and never match.
+    assert.match(marks, new RegExp(`\\b${id}: [A-Za-z_]\\w*,`),
+      `${id} has no entry in AI_PROVIDER_MARKS or AI_PROVIDER_MARK_IMAGES, so its card renders a monogram`);
     assert.match(marks, new RegExp(`${id}:\\s*\\{ mono: '[A-Z]{2}', brand: '#[0-9A-Fa-f]{6}' \\}`),
       `${id} needs an AI_PROVIDER_BRANDS entry — brand drives the tile wash`);
   }

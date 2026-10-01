@@ -31,63 +31,64 @@
      values via var()/color-mix() rather than duplicating hex. If the hue
      ever needs adjusting, this is the only place to change it.
      --------------------------------------------------------------------- */
-  /* PERIWINKLE (2026-08), replacing Soft Orchid (2026-07) as the app-wide
-     accent — a re-hue from magenta-violet (H≈330) to blue-violet (H≈296).
-     Renamed as well as revalued, so nothing in the tree still says "orchid":
-     the scale, the .pi-root and .modes-manager-root blocks that consume it,
-     the [data-settings-theme] scoping attribute and both guard tests moved
-     together. If you are grepping for the old name, it is gone.
+  /* TOGGLE BLUE (2026-09), replacing the blue-violet periwinkle (H≈296) of
+     2026-08, which itself replaced Soft Orchid (2026-07). By owner request the
+     whole accent now takes the hue of the Settings toggle's ON colour,
+     --toggle-on #6688F5 (H≈268.5, between Tailwind blue and indigo).
 
-     Derivation, so a future step can be added consistently: -300 is the
-     anchor, picked by eye. Every other step keeps Soft Orchid's OKLCH
-     LIGHTNESS ramp (so all the contrast relationships the old scale was tuned
-     for are preserved), pins hue to the anchor's 296.4°, and scales chroma by
-     1.163 — the anchor's chroma over the old -300's — with per-step gamut
-     clamping. That is why -400 and -500 are more saturated than their orchid
-     counterparts: blue-violet has more gamut headroom there than magenta did. */
-  --periwinkle-50:  #F9F7FF;
-  --periwinkle-100: #EFEAFF;
-  --periwinkle-200: #DED3FF;
-  --periwinkle-300: #B9A1F6; /* dark-mode accent (light bg, needs dark foreground) — the anchor */
-  --periwinkle-400: #AF8CFE;
-  --periwinkle-500: #9C6FF3;
-  --periwinkle-600: #8050D4; /* light-mode accent (contrast-corrected — see PeriwinkleContrastGuard.test.mjs) */
-  --periwinkle-700: #643EA6;
-  --periwinkle-800: #492E7A;
-  --periwinkle-900: #311E52;
+     THE NAME WAS KEPT, only the values moved: --periwinkle-*, the
+     [data-settings-theme="periwinkle"] scope and the two Periwinkle* guard
+     tests still say periwinkle. Renaming reaches the premium submodule
+     (.modes-manager-root) and every Settings pane, so it is a separate step.
+
+     Derivation, so a future step can be added consistently: -500 IS
+     --toggle-on, by construction — #6688F5 has the same OKLCH lightness as the
+     old -500 (0.654 vs 0.648), so it drops onto the scale as-is. Every other
+     step keeps the periwinkle scale's OKLCH LIGHTNESS ramp (so every contrast
+     relationship the old scale was tuned for is preserved), pins hue to
+     268.5°, and scales chroma by 0.873 — #6688F5's chroma over the old -500's
+     — with per-step gamut clamping. Which steps do which job is unchanged:
+     -300 is the dark-mode accent, -600 the light-mode one.
+
+     ONE HAND NUDGE: -600 came out #4A68D4, which as accent text on the real
+     light canvas (--bg-main #F2F2F7) is 4.46:1, a hair under AA. It is taken
+     0.003 darker in OKLCH lightness to #4967D3 (4.52:1; white on it 5.04:1). */
+  --periwinkle-50:  #F6F8FF;
+  --periwinkle-100: #E6EDFF;
+  --periwinkle-200: #CCDAFF;
+  --periwinkle-300: #95AFF6; /* dark-mode accent (light bg, needs dark foreground) */
+  --periwinkle-400: #7F9FFE;
+  --periwinkle-500: #6688F5; /* = --toggle-on, the anchor */
+  --periwinkle-600: #4967D3; /* light-mode accent (contrast-corrected — see PeriwinkleContrastGuard.test.mjs) */
+  --periwinkle-700: #3951A6;
+  --periwinkle-800: #293C7A;
+  --periwinkle-900: #1B2852;
   --periwinkle-on-accent-dark: #14102A;  /* foreground for solid periwinkle-300 fills */
   --periwinkle-on-accent-light: #FFFFFF; /* foreground for solid periwinkle-600 fills */
 
   /* ─── Meeting notes → Usage tab, user question bubble ─────────────────────
      This bubble is the only chromatic element in the whole view — the AI answer
      below it is an open canvas of grey text — so it carries the entire accent
-     moment, and it therefore tracks --periwinkle-300 rather than holding a
-     private hue.
+     moment. Its fill is the Settings toggle's ON colour, --toggle-on (#6688F5,
+     defined with the toggle further down), by owner instruction: the bubble
+     and the switches read as one colour, and retuning the toggle moves both.
 
-     ACCESSIBILITY EXCEPTION, SEVERE — the foreground is white by explicit
-     owner instruction, on a fill the palette calibrates for a DARK foreground.
-     White measures 2.21:1 on the top gradient stop and 2.55:1 on the bottom,
-     against a 4.5:1 WCAG AA floor for normal text (15px regular, so the 3:1
-     large-text allowance does not apply); neither stop clears even the 3:1 bar
-     used for non-text UI. --periwinkle-on-accent-dark on this same fill gives
-     8.35:1, which is what the 300 step was designed for. Two ways to keep
-     white legible if this is ever revisited: swap the foreground back, or
-     point --bubble-user-bg at --periwinkle-600 (white clears AA there at
-     5.23:1, as light mode already does). Both stops are pinned in
-     PeriwinkleContrastGuard.test.mjs.
+     Light mode lifts the fill 25% toward white (the [data-theme='light']
+     block), still mixed from --toggle-on. It used to swap in --periwinkle-600,
+     which read as a dark purple slab on the light pane. The material itself —
+     the original Liquid Glass (the measured pill, as .lg-action draws it),
+     with nothing painted around the card and no hover effect — is .lg-bubble
+     in src/ui-components/LiquidGlassButton.css, which reads these two tokens.
 
-     --bubble-user-bg MUST stay a solid colour: it is consumed through
-     Tailwind's bg-[var(...)], which compiles to `background-color`, and a
-     gradient value there is silently dropped. The gradient rides
-     background-image in .bubble-user instead.
-
-     Dark-mode values; the light-theme override lives in the
-     [data-theme='light'] block. Every stop is asserted in
-     PeriwinkleContrastGuard.test.mjs. */
-  --bubble-user-bg: var(--periwinkle-300);
+     ACCESSIBILITY EXCEPTION — the foreground is white by explicit owner
+     instruction. White measures 3.28:1 on the dark-theme fill and 2.35:1 on
+     the lighter light-theme fill, against a 4.5:1 WCAG AA floor for normal
+     text (15px regular, so the 3:1 large-text allowance does not apply).
+     --periwinkle-on-accent-dark gives 5.63:1 and 7.85:1 on the same fills —
+     swapping --bubble-user-fg to it is the one-token fix if this is ever
+     revisited. Pinned in PeriwinkleContrastGuard.test.mjs. */
+  --bubble-user-bg: var(--toggle-on);
   --bubble-user-fg: #FFFFFF;
-  --bubble-user-grad-to: #AC96E5;
-  --bubble-user-glow: rgba(185, 161, 246, 0.28);
 
   /* --- SEMANTIC TOKEN SYSTEM (DEFAULT: DARK) --- */
   /* Reference Image Matching */
@@ -183,13 +184,19 @@
   --overlay-text-muted: rgba(255, 255, 255, 0.7);
   --overlay-text-placeholder: rgba(255, 255, 255, 0.58);
   --overlay-text-strong: #ffffff;
-  /* Teleprompter hot words — lavender, deliberately NOT --accent-primary.
-     The accent also paints buttons, focus rings and usage bars; the glance
-     highlight is its own concern and moves independently. Defined once per
-     scope that decides light-on-dark vs dark-on-light (i.e. wherever
-     --overlay-text-primary is set), because that is what the ratio depends
-     on. 9.03:1 on the #1E1E1E overlay — see PeriwinkleContrastGuard. */
-  --hotword-color: #C4B5FD;
+  /* Teleprompter hot words (bold words in answers, and the gist chip) —
+     deliberately NOT --accent-primary. The accent also paints buttons, focus
+     rings and usage bars; the glance highlight is its own concern and moves
+     independently. Defined once per scope that decides light-on-dark vs
+     dark-on-light (i.e. wherever --overlay-text-primary is set), because that
+     is what the ratio depends on.
+     2026-09: moved from lavender (#C4B5FD / #6D5AC7) to the toggle blue's hue
+     with the accent scale, by owner request. Same derivation as the scale:
+     each value keeps its lavender's OKLCH lightness, hue 268.5°, chroma
+     x0.873. The light one then went 0.009 darker (#4D68C1 -> #4B65BE) so it
+     holds the lavender's 5.33:1 on white instead of dropping to 5.17.
+     9.22:1 on the #1E1E1E overlay — see PeriwinkleContrastGuard. */
+  --hotword-color: #A9C0FB;
   --overlay-shell-blur: calc(2px + (var(--overlay-opacity) * 18px));
   --overlay-pill-blur: calc(1px + (var(--overlay-opacity) * 12px));
   --overlay-transcript-blur: calc(var(--overlay-opacity) * 6px);
@@ -197,7 +204,7 @@
 
   /* Primary Action Button Defaults (Dark) — promoted to the accent (Phase 2) */
   --btn-primary-bg: var(--periwinkle-300);
-  --btn-primary-hover: #E4BCEF; /* not a canonical scale step — dedicated lighter dark-mode hover tint */
+  --btn-primary-hover: #B9CCFC; /* not a canonical scale step — dedicated lighter dark-mode hover tint (the old #E4BCEF re-hued to 268.5°) */
   --btn-primary-disabled-bg: color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
   --btn-primary-disabled-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
   --btn-primary-disabled-text: color-mix(in srgb, var(--periwinkle-300) 45%, transparent);
@@ -208,7 +215,7 @@
      ="periwinkle"] scoped block below, which is now a redundant no-op override
      kept only so a future Settings-specific divergence has somewhere to go. */
   --accent-subtle: color-mix(in srgb, var(--periwinkle-300) 10%, transparent);
-  --accent-hover: #E4BCEF;
+  --accent-hover: #B9CCFC;
   --accent-pressed: var(--periwinkle-400);
   --accent-strong: var(--periwinkle-500);
   --accent-border: color-mix(in srgb, var(--periwinkle-300) 28%, transparent);
@@ -231,13 +238,17 @@
   --legacy-action-disabled-bg: rgba(30, 58, 138, 0.3);
   --legacy-action-disabled-border: rgba(30, 64, 175, 0.3);
   --legacy-action-disabled-text: rgba(96, 165, 250, 0.4);
+
+  /* Scrim & overlay backdrops */
+  --scrim-backdrop: rgba(0, 0, 0, 0.60);
+  --scrim-backdrop-subtle: rgba(0, 0, 0, 0.40);
 }
 
 /* Phase-1 Settings-only accent override (dark mode), scoped via
    data-settings-theme so the rest of the app keeps the blue brand accent. */
 [data-settings-theme="periwinkle"] {
   --accent-primary: var(--periwinkle-300);
-  --accent-hover: #E4BCEF; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
+  --accent-hover: #B9CCFC; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
   --accent-pressed: var(--periwinkle-400);
   --accent-strong: var(--periwinkle-500);
   --accent-subtle: color-mix(in srgb, var(--periwinkle-300) 10%, transparent);
@@ -249,137 +260,126 @@
   --on-accent-surface: color-mix(in srgb, var(--periwinkle-on-accent-dark) 12%, transparent);
 
   --btn-primary-bg: var(--periwinkle-300);
-  --btn-primary-hover: #E4BCEF; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
+  --btn-primary-hover: #B9CCFC; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
   --btn-primary-disabled-bg: color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
   --btn-primary-disabled-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
   --btn-primary-disabled-text: color-mix(in srgb, var(--periwinkle-300) 45%, transparent);
   --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-500) 20%, transparent);
 }
 
+/* Natively light theme, Apple-style revision.
+   Built on Apple's own light system values: grouped background #F2F2F7,
+   apple.com surfaces #F5F5F7 / #FBFBFD, label #1D1D1F, separator hue rgb(60,60,67).
+   Large areas sit on soft cool gray; cards are near white islands, never #FFFFFF.
+   Accent: the shared --periwinkle-* scale's -600 step. */
+
 [data-theme='light'] {
-  /* ─── LIGHT MODE — Professional SaaS Standard ────────────────────────────
-     Synthesised from Linear, Vercel, Stripe, Figma, Notion design systems.
+  /* Canvas and surfaces */
+  --bg-primary: #F2F2F7;
+  --bg-secondary: #EBEBF0;
+  --bg-main: #F2F2F7;
+  --bg-sidebar: #EBEBF0;
+  --bg-elevated: #FBFBFD;
+  --bg-card: #FBFBFD;
+  --bg-input: #EFEFF4;
+  --bg-component: #E5E5EA;
 
-     Rules used by every top product design team:
-       1. Canvas is near-white gray (#F5F5F5), never pure white — not harsh
-       2. Cards are #FFFFFF — elevated via SHADOW, not thick borders
-       3. Borders: rgba(0,0,0,0.07) — structural only, barely visible
-       4. Text: #111827 → #6B7280 → #9CA3AF (gray-900/500/400, WCAG AA)
-       5. Separation = whitespace first, shadow second, border last
-       6. Accent: blue-600 (#2563EB) — accessible, confident, not electric
+  /* Text */
+  --text-primary: #1D1D1F;
+  --text-secondary: #6E6E73;
+  --text-tertiary: #86868B;
+  --text-danger: #D70015;
 
-     Settings modal visual stack:
-       #F5F5F5 canvas  →  #FFFFFF sidebar/frame  →  #FFFFFF cards (shadow)
-     ─────────────────────────────────────────────────────────────────────── */
-
-  /* ── Canvas / page layer ── */
-  --bg-primary:        #fafafa;   /* App page / list canvas — neutral near-white  */
-  --bg-secondary:      #f5f5f5;   /* Header / nav bar chrome                      */
-
-  /* ── Settings modal surfaces ── */
-  --bg-main:           #fafafa;   /* Content body — the recessed canvas           */
-  --bg-sidebar:        #FFFFFF;   /* Sidebar — white panel, matches modal frame   */
-  --bg-elevated:       #FFFFFF;   /* Modal outer frame & dropdowns                */
-  --bg-card:           #FFFFFF;   /* Section cards — white, depth via shadow      */
-  --bg-input:          #F9FAFB;   /* Inputs — hairline tint (gray-50)             */
-
-  /* ── Interactive elements ── */
-  --bg-component:      #F3F4F6;   /* Secondary button fill (gray-100)             */
-  --bg-item-surface:   #EAECEF;   /* Row hover — clearly visible against canvas   */
-  --bg-item-active:    rgba(37, 99, 235, 0.09); /* Blue-tinted selection (Linear/Notion style) */
-  --badge-beta-bg:     #FFCC00;   /* systemYellow (light appearance)              */
-  --badge-beta-fg:     #1C1C1E;   /* near-black — ~11:1 on the yellow             */
-  --bg-row-hover:      #E1E4E8;   /* Neutral list-row hover (see dark-theme note) */
-  --text-danger:       #B91C1C;   /* Destructive label — red-700 for contrast on light fills */
-  --bg-toggle-switch:  #D1D5DB;   /* Toggle off-state track (gray-300)            */
-
-  /* ── Typography — Tailwind gray scale, proven for readability ── */
-  --text-primary:      #111827;   /* gray-900 — near-black, warm                  */
-  --text-secondary:    #6B7280;   /* gray-500 — comfortable secondary             */
-  --text-tertiary:     #9CA3AF;   /* gray-400 — soft hints and labels             */
-
-  /* ── Meeting-notes generation placeholder (see :root for the rationale) ── */
-  --mn-skel-strong:    rgba(0, 0, 0, 0.12);
-  --mn-skel-base:      rgba(0, 0, 0, 0.075);
-  --mn-skel-soft:      rgba(0, 0, 0, 0.055);
-
-  /* ── Borders — barely-there structural lines ── */
-  --border-subtle:     rgba(0, 0, 0, 0.07);   /* card outlines, dividers          */
-  --border-muted:      rgba(0, 0, 0, 0.11);   /* inputs, tables                   */
-
-  /* ── Accent — promoted from Settings-only to the app-wide default (Phase 2) ── */
-  --accent-primary:    var(--periwinkle-600);
-  --accent-muted:      color-mix(in srgb, var(--periwinkle-600) 10%, transparent);
-
-  --bg-component:      #F3F4F6;
-
-  /* ── Overlay system (in-meeting floating UI) ── */
-  /* Frosted white glass — lighter than dark mode for less visual weight    */
-  --overlay-bg:              rgba(255, 255, 255, 0.82);
-  --overlay-border:          rgba(0, 0, 0, 0.09);
-  --overlay-border-soft:     rgba(0, 0, 0, 0.06);
-  --overlay-undetectable-ring: rgba(0, 0, 0, 0.42);
-  --overlay-panel-bg:        rgb(255 255 255 / calc(0.22 + (var(--overlay-opacity) * 0.50)));
-  --overlay-pill-bg:         rgb(255 255 255 / calc(0.18 + (var(--overlay-opacity) * 0.42)));
-  --overlay-transcript-bg:   rgb(0 0 0 / calc(0.003 + (var(--overlay-opacity) * 0.016)));
-  --overlay-chip-bg:         rgba(255, 255, 255, 0.20);
-  --overlay-chip-hover-bg:   rgba(243, 244, 246, 0.32);
-  --overlay-input-bg:        rgba(255, 255, 255, 0.24);
-  --overlay-input-hover-bg:  rgba(255, 255, 255, 0.38);
-  --overlay-input-focus-bg:  rgba(239, 246, 255, 0.46);
-  --overlay-control-bg:      rgba(255, 255, 255, 0.24);
-  --overlay-control-hover-bg:rgba(243, 244, 246, 0.38);
-  --overlay-code-bg:         rgba(249, 250, 251, 0.22);
-  --overlay-code-border:     rgba(0, 0, 0, 0.08);
-  --overlay-code-header-bg:  rgba(243, 244, 246, 0.28);
-  --overlay-inline-code-bg:  rgba(229, 229, 229, 0.62);
-  --overlay-icon-bg:         rgba(255, 255, 255, 0.22);
-  --overlay-icon-hover-bg:   rgba(243, 244, 246, 0.36);
-  --overlay-panel-shadow:    rgb(0 0 0 / calc(0.04 + (var(--overlay-opacity) * 0.08)));
-  --overlay-pill-shadow:     rgb(0 0 0 / calc(0.02 + (var(--overlay-opacity) * 0.05)));
-  --overlay-text-primary:    rgba(17, 24, 39, 0.95);
-  --overlay-text-secondary:  rgba(55, 65, 81, 0.85);
-  --overlay-text-muted:      rgba(107, 114, 128, 0.90);
-  --overlay-text-placeholder:rgba(156, 163, 175, 0.90);
-  --overlay-text-strong:     #111827;
-  /* Dark lavender: this scope puts dark text on a near-white overlay, so the
-     light lavender above would be invisible here. 5.33:1 on white. */
-  --hotword-color:           #6D5AC7;
-  --overlay-shell-blur:      calc(2px + (var(--overlay-opacity) * 18px));
-  --overlay-pill-blur:       calc(2px + (var(--overlay-opacity) * 12px));
-  --overlay-transcript-blur: calc(var(--overlay-opacity) * 5px);
-
-
-  /* Primary Action Button (Light) — promoted to the accent (Phase 2) */
+  /* Accent: the -600 step. The scale itself is NOT redeclared here — this
+     block used to repeat -600/-700/-800 as hex, and being later in the file it
+     beat :root, so a :root-only retune left light mode on the old colour. */
+  --accent-primary: var(--periwinkle-600);
+  --accent-text: var(--periwinkle-700);
   --btn-primary-bg: var(--periwinkle-600);
   --btn-primary-hover: var(--periwinkle-700);
-  --btn-primary-disabled-bg: var(--bg-input); /* #F9FAFB */
-  --btn-primary-disabled-border: var(--border-subtle);
-  --btn-primary-disabled-text: var(--text-tertiary);
-  --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-600) 15%, transparent);
-
-  --accent-subtle: color-mix(in srgb, var(--periwinkle-600) 8%, transparent);
   --accent-hover: var(--periwinkle-700);
   --accent-pressed: var(--periwinkle-800);
   --accent-strong: var(--periwinkle-700);
+  --on-accent: #FFFFFF;
+  --on-accent-surface: color-mix(in srgb, #FFF 18%, transparent);
+  --accent-muted: color-mix(in srgb, var(--periwinkle-600) 10%, transparent);
   --accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
   --accent-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
-  --accent-shadow-20: color-mix(in srgb, var(--periwinkle-600) 18%, transparent);
-  --on-accent: var(--periwinkle-on-accent-light);
-  --on-accent-surface: color-mix(in srgb, var(--periwinkle-on-accent-light) 18%, transparent);
+  --btn-primary-disabled-bg: var(--bg-component);
+  --btn-primary-disabled-text: var(--text-tertiary);
+  --btn-primary-shadow-color: color-mix(in srgb, var(--periwinkle-600) 15%, transparent);
 
-  /* Question bubble, light theme. The dark-mode lavender-pink is tuned for a
-     near-black ground and loses its separation on the #f5f5f5 pane, so light
-     keeps the solid periwinkle-600 + white it already had.
-     grad-to and glow MUST be redeclared here even though the hue is unchanged:
-     .bubble-user references them unconditionally, and an undefined custom
-     property drops the entire declaration silently — leaving light mode with
-     no gradient and no shadow, with nothing to indicate why. */
-  --bubble-user-bg: var(--periwinkle-600);
-  --bubble-user-fg: #FFFFFF;
-  --bubble-user-grad-to: #764AC3;
-  --bubble-user-glow: rgba(128, 80, 212, 0.28);
+  /* Interactive (Apple systemGray5 / systemGray4 steps) */
+  --bg-item-surface: #E5E5EA;
+  --bg-item-active: color-mix(in srgb, var(--periwinkle-600) 12%, transparent);
+  --bg-row-hover: #DEDEE3;
+  --badge-beta-bg: #FFCC00;
+  --badge-beta-fg: #1C1C1E;
+  --bg-toggle-switch: #D1D1D6;
 
+  /* Borders: Apple separator hue */
+  --border-subtle: rgba(60, 60, 67, 0.12);
+  --border-muted: rgba(60, 60, 67, 0.18);
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+
+  /* Meeting notes and Q/A bubbles. On the light pane the question bubble takes
+     the toggle colour lifted 25% toward white (~#8CA6F8), by owner request
+     (15% first, then "lighten the colour a shade down"):
+     the full --toggle-on read too heavy there. Still mixed from --toggle-on, so
+     retuning the toggle moves both themes. White on it is 2.35:1 (see :root). */
+  --bubble-user-bg: color-mix(in srgb, var(--toggle-on) 75%, #FFFFFF);
+  --ai-response-text: #1D1D1F;
+  --ai-response-link: #0066CC;
+  --mn-skel-strong: rgba(60, 60, 67, 0.14);
+  --mn-skel-base: rgba(60, 60, 67, 0.09);
+  --mn-skel-soft: rgba(60, 60, 67, 0.06);
+
+  /* Floating overlay, Apple thick material */
+  --overlay-bg: rgba(242, 242, 247, 0.82);
+  --overlay-border: rgba(60, 60, 67, 0.14);
+  --overlay-border-soft: rgba(60, 60, 67, 0.08);
+  --overlay-undetectable-ring: rgba(0, 0, 0, 0.42);
+  --overlay-panel-bg: rgb(242 242 247 / calc(0.22 + (var(--overlay-opacity) * 0.50)));
+  --overlay-pill-bg: rgba(251, 251, 253, 0.55);
+  --overlay-transcript-bg: rgb(0 0 0 / calc(0.003 + (var(--overlay-opacity) * 0.016)));
+  --overlay-chip-bg: rgba(251, 251, 253, 0.40);
+  --overlay-chip-hover-bg: rgba(235, 235, 240, 0.55);
+  --overlay-input-bg: rgba(251, 251, 253, 0.60);
+  --overlay-input-hover-bg: rgba(251, 251, 253, 0.75);
+  --overlay-input-focus-bg: rgba(251, 251, 253, 0.92);
+  --overlay-control-bg: rgba(118, 118, 128, 0.12);
+  --overlay-control-hover-bg: rgba(118, 118, 128, 0.18);
+  --overlay-code-bg: rgba(242, 242, 247, 0.45);
+  --overlay-code-border: rgba(60, 60, 67, 0.10);
+  --overlay-code-header-bg: rgba(229, 229, 234, 0.50);
+  --overlay-inline-code-bg: rgba(220, 220, 225, 0.65);
+  --overlay-icon-bg: rgba(118, 118, 128, 0.12);
+  --overlay-icon-hover-bg: rgba(118, 118, 128, 0.18);
+  --overlay-panel-shadow: rgb(0 0 0 / calc(0.04 + (var(--overlay-opacity) * 0.08)));
+  --overlay-pill-shadow: rgb(0 0 0 / calc(0.02 + (var(--overlay-opacity) * 0.05)));
+  --overlay-text-primary: rgba(29, 29, 31, 0.96);
+  --overlay-text-secondary: rgba(110, 110, 115, 0.95);
+  --overlay-text-muted: rgba(134, 134, 139, 0.95);
+  --overlay-text-placeholder: rgba(134, 134, 139, 0.90);
+  --overlay-text-strong: #1D1D1F;
+  --hotword-color: #4B65BE;
+  --overlay-shell-blur: calc(2px + (var(--overlay-opacity) * 18px));
+  --overlay-pill-blur: calc(2px + (var(--overlay-opacity) * 12px));
+  --overlay-transcript-blur: calc(var(--overlay-opacity) * 5px);
+
+  /* Liquid glass */
+  --glass-fill: hsl(240 20% 97% / var(--glass-frost));
+  --glass-rim: 0 0 2px 1px color-mix(in oklch, black, transparent 88%) inset;
+  --glass-drop: 0 4px 16px rgba(0, 0, 0, 0.05), 0 8px 24px rgba(0, 0, 0, 0.05);
+  --lg-clear-bg: rgba(118, 118, 128, 0.10);
+  --lg-clear-hover: rgba(118, 118, 128, 0.16);
+  --lg-clear-lens: rgba(118, 118, 128, 0.08);
+  --lg-clear-underside: inset 0 -1px 0 rgba(60, 60, 67, 0.08);
+
+  /* Legacy action button tokens */
   --legacy-action-bg: #2563EB;
   --legacy-action-hover: #1d4ed8;
   --legacy-action-fg: #FFFFFF;
@@ -390,7 +390,18 @@
   --legacy-action-disabled-bg: var(--bg-input);
   --legacy-action-disabled-border: var(--border-subtle);
   --legacy-action-disabled-text: var(--text-tertiary);
+
+  /* Scrim & overlay backdrops (Apple macOS Sheet dimming: subtle 6% tint without blur) */
+  --scrim-backdrop: rgba(0, 0, 0, 0.06);
+  --scrim-backdrop-subtle: rgba(0, 0, 0, 0.04);
 }
+
+[data-theme='light'] .ai-response-card p,
+[data-theme='light'] .ai-response-card li,
+[data-theme='light'] .ai-response-card h1,
+[data-theme='light'] .ai-response-card h2,
+[data-theme='light'] .ai-response-card h3 { color: var(--ai-response-text); }
+[data-theme='light'] .ai-response-card a { color: var(--ai-response-link); }
 
 /* Phase-1 Settings-only accent override (light mode), scoped via
    data-settings-theme so the rest of the app keeps the blue brand accent. */
@@ -487,8 +498,8 @@
   --overlay-text-placeholder: rgba(255, 255, 255, 0.40);
   --overlay-text-strong:      #ffffff;
   /* Light theme + liquid glass still renders WHITE text on a dark glass
-     panel, so it takes the light lavender, not the light-theme one. */
-  --hotword-color:            #C4B5FD;
+     panel, so it takes the light hot-word blue, not the light-theme one. */
+  --hotword-color:            #A9C0FB;
 
   /* Glass surfaces — near-transparent white tints */
   --overlay-panel-bg:           rgba(255, 255, 255, 0.055);
@@ -768,12 +779,10 @@
   background: var(--overlay-control-hover-bg) !important;
 }
 
+/* The checked model is marked by its check alone, as in a native menu: a
+   filled selected row next to a filled hovered row read as two selections. */
 [data-interface-theme="liquid-glass"] .model-selector-row-selected {
   color: var(--overlay-text-primary) !important;
-  background: var(--overlay-control-bg) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.36),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.12) !important;
 }
 
 [data-interface-theme="liquid-glass"] .glass-shortcut-key,
@@ -796,11 +805,25 @@
 
 [data-interface-theme="modern"] .model-selector-row-selected {
   color: var(--overlay-text-primary) !important;
-  background: var(--overlay-control-bg) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
-    0 2px 8px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* Popover windows (the overlay's settings and model dropdowns) are sized to
+   exactly their panel, so anything painted OUTSIDE the panel's rounded box
+   lands only in the window's four square corners: an outer shadow there makes
+   the corners stop following the 14px radius. Keep everything inside the shape.
+   The panels no longer carry `shadow-2xl`: under [data-theme='light'] that
+   class becomes an !important three-layer drop shadow (the "Level 3 —
+   Dropdowns" rule below), which filled those corners and also replaced the
+   glass and modern inset highlights. This rule is the backstop.
+   Liquid glass: its own rule is more specific and all-inset already, so it
+   wins and is left alone. Modern: keeps its inset top highlight and drops only
+   its 0.5px outer ring. */
+.overlay-popover-surface {
+  box-shadow: none !important;
+}
+
+[data-interface-theme="modern"] .overlay-shell-surface.overlay-popover-surface {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
 }
 
 [data-interface-theme="modern"] .glass-shortcut-key,
@@ -1415,12 +1438,13 @@
   --overlay-text-placeholder: rgba(255, 255, 255, 0.50);
   --overlay-text-strong:      #ffffff;
   /* Modern forces white text on the slate gradient in BOTH themes, so it
-     takes the light lavender. Measured against all three gradient stops:
-     3.65 / 6.33 / 8.28. The lightest top stop sits under 4.5, but that is
-     pre-existing and system-wide — the modern accent #8FB4F7 measures 3.22
-     and the old orchid highlight 3.42 at the same point, so this is strictly
-     better than what it replaces, not a new shortfall. */
-  --hotword-color:            #C4B5FD;
+     takes the light hot-word blue. Measured against all three gradient stops:
+     3.73 / 6.46 / 8.46. The lightest top stop sits under 4.5, but that is
+     pre-existing and system-wide — the modern accent #8FB4F7 measures 3.22,
+     the old lavender 3.65 and the older orchid highlight 3.42 at the same
+     point, so this is strictly better than what it replaces, not a new
+     shortfall. */
+  --hotword-color:            #A9C0FB;
 
   /* Slate/graphite surfaces — the DARK_GLASS gradient */
   --overlay-panel-bg:           linear-gradient(160deg, rgba(90, 90, 108, 0.88) 0%, rgba(55, 55, 70, 0.93) 50%, rgba(36, 36, 50, 0.97) 100%);
@@ -2438,9 +2462,13 @@ body {
   will-change: background-position;
 }
 
+/* Sweeps LEFT → RIGHT, in reading direction. With an image wider than the
+   element, a rising background-position slides the image LEFT, so 0% → 100%
+   ran the band right-to-left; 100% → 0% is the reading-direction pass.
+   Shared with .settings-listening; phoneMirrorClient.ts keeps its own copy. */
 @keyframes natively-thinking-sweep {
-  0% { background-position: 0% 0; }
-  100% { background-position: 100% 0; }
+  0% { background-position: 100% 0; }
+  100% { background-position: 0% 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2644,43 +2672,12 @@ body {
    the spoken-answer ReactMarkdown intents and, via the scoped rule below,
    on the imperative streaming bubble (marked.parse emits bare <strong>). */
 .overlay-hotword {
-  color: var(--hotword-color, #C4B5FD);
+  color: var(--hotword-color, #A9C0FB);
 }
 
 .natively-streaming-answer strong {
-  color: var(--hotword-color, #C4B5FD);
+  color: var(--hotword-color, #A9C0FB);
   font-weight: 600;
-}
-
-/* Meeting notes → Usage tab, user question bubble.
-
-   Three separable layers, deliberately kept apart so a future "it looks wrong"
-   can be bisected: the flat fill, the vertical gradient, and the hue-tinted
-   glow. Tokens live in the :root / [data-theme='light'] blocks.
-
-   Why a class rather than Tailwind utilities: bg-[var(--bubble-user-bg)]
-   compiles to `background-color`, which cannot hold a gradient — assigning one
-   there fails silently and leaves a transparent bubble with white text on the
-   dark pane.
-
-   The gradient runs DOWNWARD (base → darker). Lightening it upward was tested
-   and drops white text to 4.01:1, below AA; darkening keeps the lightest pixel
-   at the top stop, so the worst white contrast anywhere in the fill is the
-   4.699:1 asserted in the guard test.
-
-   The glow and the inset highlight sit outside the 10px text padding, so
-   neither touches legibility. On a flat dark ground salience comes from chroma
-   rather than luminance, and bleeding a faint tinted halo into the surrounding
-   neutral grey is what makes the bubble read as a lit object instead of a
-   pasted swatch. */
-.bubble-user {
-  background-color: var(--bubble-user-bg);
-  background-image: linear-gradient(180deg, var(--bubble-user-bg) 0%, var(--bubble-user-grad-to) 100%);
-  color: var(--bubble-user-fg);
-  box-shadow:
-    0 1px 1px rgba(0, 0, 0, 0.28),
-    0 6px 18px -8px var(--bubble-user-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
 /* ── Streaming word materialization ────────────────────────────────────────
@@ -2786,8 +2783,19 @@ body {
   font-size: 12px;
   line-height: 1.4;
   color: var(--overlay-text-secondary);
-  background: color-mix(in srgb, var(--hotword-color, #C4B5FD) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--hotword-color, #C4B5FD) 24%, transparent);
+  background: color-mix(in srgb, var(--hotword-color, #A9C0FB) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hotword-color, #A9C0FB) 24%, transparent);
+}
+
+/* In meeting notes the chip also takes .lg-chip, the subtle Apple-style glass
+   from src/ui-components/LiquidGlassButton.css. The glass ring replaces the
+   flat border, so the border goes and its 1px moves into the padding: the
+   box stays 25px tall and nothing around it shifts. The live overlay's chip
+   is untouched. */
+.overlay-gist-chip.lg-chip {
+  --lg-chip-tint: var(--hotword-color, #A9C0FB);
+  border: 0;
+  padding: 4px 11px;
 }
 
 .overlay-gist-chip::before {
@@ -2796,7 +2804,7 @@ body {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--hotword-color, #C4B5FD);
+  color: var(--hotword-color, #A9C0FB);
 }
 
 .overlay-text-interactive {
@@ -2873,8 +2881,9 @@ body {
 }
 
 /* Resize handles. The hit strips are invisible; the cursor is the entire
-   affordance, so without these rules the feature is undiscoverable. `se` gets a
-   faint corner chevron on hover — the one handle worth advertising. */
+   affordance, so without these rules the feature is undiscoverable. Nothing
+   else is drawn on hover — no corner chevron, no title tooltip — so the
+   handles never paint anything that could show up in a capture. */
 .resize-handle {
   -webkit-app-region: no-drag;
   touch-action: none;
@@ -2887,28 +2896,6 @@ body {
    this file is `!important` on universal selectors, so it wins from anywhere
    above it. They are declared as its one documented exception — search
    `@cursor-lock-exception`. */
-
-.resize-handle-se::after {
-  content: '';
-  position: absolute;
-  /* Kept inside the 12px strip below the footer controls, which now sit above
-     the handles (z-60) — so the chevron is never painted over. */
-  right: 3px;
-  bottom: 3px;
-  width: 7px;
-  height: 7px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  border-bottom-right-radius: 3px;
-  opacity: 0;
-  transition: opacity 140ms ease;
-  pointer-events: none;
-}
-.resize-handle-se:hover::after { opacity: 0.35; }
-
-@media (prefers-reduced-motion: reduce) {
-  .resize-handle-se::after { transition: none; }
-}
 
 .drag-region {
   -webkit-app-region: drag;
@@ -2925,6 +2912,20 @@ body {
 [data-overlay-group-drag-managed='true'] .draggable-area,
 [data-overlay-group-drag-managed='true'].draggable-area {
   -webkit-app-region: no-drag;
+}
+
+/* Overlay aux windows (pill, resize toggle), for the first frames after they
+   are shown: a hover main cleared while the window was hidden applies at once
+   instead of fading out in front of the user. Buttons only — that is where the
+   hover styles live, and the pill's collapse/expand opacity fade (on its
+   wrapper) must keep animating. `:not(#_)` matches everything but carries ID
+   specificity, so this also beats the liquid-glass / modern surface rules
+   (e.g. `[data-interface-theme="liquid-glass"] .overlay-icon-surface`), which
+   set their own transition with !important. Set and cleared by
+   OverlayAuxWindows.useNoTransitionsOnShow. */
+[data-aux-just-shown] button:not(#_),
+[data-aux-just-shown] button *:not(#_) {
+  transition: none !important;
 }
 
 /* Make sure buttons and interactive elements are not draggable */
@@ -3108,10 +3109,15 @@ a,
 }
 /* @undetectable-ring:end */
 
-/* Restore keyboard focus rings that Tailwind preflight removes */
+/* No keyboard focus rings anywhere in the app — product decision (2026-09-27):
+   the ring drew stray indigo circles/boxes around buttons, toggles, tabs and
+   rows after any keypress. This rule must stay (not be deleted): without it
+   Chromium's own blue auto-ring comes back. Component rules must not add a
+   focus-only outline/box-shadow either. Text fields keep their own designed
+   focus states (.aurora-focus chat glow, .overlay-input-surface:focus, input
+   border/halo changes) — those are separate rules, untouched by this one. */
 *:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
+  outline: none;
 }
 
 /* Utilities for sidebar layout */
@@ -3170,6 +3176,14 @@ html[data-platform="win32"] body,
 html[data-platform="linux"] body {
   border-radius: 8px !important;
   overflow: hidden;
+}
+
+/* The launcher matches the 16px macOS gives its window natively (where the
+   rounding comes from the OS, not from CSS — nothing to change there). Only
+   the launcher: the aux windows keep 8px. */
+html[data-platform="win32"][data-window="launcher"] body,
+html[data-platform="linux"][data-window="launcher"] body {
+  border-radius: 16px !important;
 }
 
 /* ───────────────────────────────────────────────────────────────────────
@@ -3312,26 +3326,15 @@ html[data-platform="linux"] body {
   border: 1.5px solid transparent !important;
   position: relative !important;
   overflow: hidden !important;
-  /* `transform` is deliberately NOT transitioned here. InteractiveCard writes
-     transform: scale(...) inline from a spring on every frame; a CSS transition
-     on the same property re-smooths each of those writes, so the press spring
-     arrives late and mushy. Framer owns transform, CSS owns the material.
-     (The .pricing-card-* rules keep transform in their lists — those cards are
-     not wrapped in InteractiveCard.)
-
-     THIS LIST IS THE LEAVE HALF. A transition declared on the base rule runs
-     when :hover stops matching; the one on the :hover rule runs on enter. That
-     is how the asymmetry below is achieved without JS.
-     The curve changed, not just the clock, and that is the point:
-     cubic-bezier(0.23, 1, 0.32, 1) puts ~83% of the travel in the first 30% of
-     the duration, so at 180ms all perceptible motion was over in ~54ms — it was
-     animating and still reading as instant. Raising the duration on that curve
-     only lengthens an invisible tail. easeOutCubic spreads the travel out.
-     Leave is the SLOWER half here, which inverts the usual "exit fast" rule
-     because nothing is exiting: this is ambient light on a surface that stays
-     put, and light that snaps off is exactly what reads as un-animated. */
+  /* The card has no hover state and nothing moves it, so `transform` is not
+     in this list and this is the only transition the card has: the tier
+     switch and the [data-active] change ease box-shadow and border-color on
+     easeOutCubic, and background-color rides along on the tier switch's clock
+     (the pill's 250ms smooth-out), so the committed fill cross-fades instead
+     of jumping. */
   transition: box-shadow 420ms cubic-bezier(0.33, 1, 0.68, 1),
-              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1) !important;
+              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1),
+              background-color 250ms cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
 /* Glass shine gloss highlight on liquid glass detail cards */
@@ -3507,19 +3510,11 @@ html[data-platform="linux"] body {
     0 1px 3px rgba(0, 0, 0, 0.22) !important;
 }
 
-/* NO border brighten on hover for the API detail card. It used to brighten its
-   edge to rgba(255,255,255,0.30) here, mirroring .pricing-card-yearly:hover —
-   but on a card that is already a saturated fill with a lit rim, the edge
-   flicking brighter under the pointer read as the card being selected rather
-   than merely pointed at, which the active-state border is what actually means.
-   Hover feedback is now the cursor-tracked spotlight (InteractiveCard) plus the
-   per-tier bloom near the end of this file — both of which change the card's
-   LIGHT, not its outline.
-   The rule that lived here declared `border-color` and a `box-shadow`; only
-   the border was ever live, since the per-tier bloom is later in source at
-   equal specificity and every detail card carries both classes (see
-   NativelyApiSettings.tsx:896). Deleted whole rather than trimmed, so nothing
-   is left implying the shadow here does something. Same for the `modern`
+/* NO border brighten on hover for the API detail card, and no hover state at
+   all: on a card that is already a saturated fill with a lit rim, any change
+   under the pointer read as the card being selected, which is what the
+   active-state border actually means. The rule that lived here declared
+   `border-color` and a `box-shadow`; it was deleted whole, as was the `modern`
    twin that used to sit near the features panel. */
 
 /* ──── Premium Graphics & Specular Upgrades (Liquid Glass Theme) ──── */
@@ -3928,26 +3923,15 @@ html[data-platform="linux"] body {
   border: 1.5px solid transparent !important;
   position: relative !important;
   overflow: hidden !important;
-  /* `transform` is deliberately NOT transitioned here. InteractiveCard writes
-     transform: scale(...) inline from a spring on every frame; a CSS transition
-     on the same property re-smooths each of those writes, so the press spring
-     arrives late and mushy. Framer owns transform, CSS owns the material.
-     (The .pricing-card-* rules keep transform in their lists — those cards are
-     not wrapped in InteractiveCard.)
-
-     THIS LIST IS THE LEAVE HALF. A transition declared on the base rule runs
-     when :hover stops matching; the one on the :hover rule runs on enter. That
-     is how the asymmetry below is achieved without JS.
-     The curve changed, not just the clock, and that is the point:
-     cubic-bezier(0.23, 1, 0.32, 1) puts ~83% of the travel in the first 30% of
-     the duration, so at 180ms all perceptible motion was over in ~54ms — it was
-     animating and still reading as instant. Raising the duration on that curve
-     only lengthens an invisible tail. easeOutCubic spreads the travel out.
-     Leave is the SLOWER half here, which inverts the usual "exit fast" rule
-     because nothing is exiting: this is ambient light on a surface that stays
-     put, and light that snaps off is exactly what reads as un-animated. */
+  /* The card has no hover state and nothing moves it, so `transform` is not
+     in this list and this is the only transition the card has: the tier
+     switch and the [data-active] change ease box-shadow and border-color on
+     easeOutCubic, and background-color rides along on the tier switch's clock
+     (the pill's 250ms smooth-out), so the committed fill cross-fades instead
+     of jumping. */
   transition: box-shadow 420ms cubic-bezier(0.33, 1, 0.68, 1),
-              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1) !important;
+              border-color 420ms cubic-bezier(0.33, 1, 0.68, 1),
+              background-color 250ms cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
 /* Card Specific variations (Modern) — same four hues, same depth ladder as
@@ -4456,7 +4440,9 @@ html[data-platform="linux"] body {
    THE OTHER SATURATED SURFACES ON THIS TAB, measured rather than assumed —
    the jewel arc has neighbours the old teal ramp never had to care about:
      --accent-primary (the usage bars, directly above the plan selector) is
-       PERIWINKLE: #B9A1F6 257° dark / #8050D4 262° light.
+       TOGGLE BLUE since 2026-09: #95AFF6 224° dark / #4967D3 227° light (it
+       was periwinkle #B9A1F6 257° / #8050D4 262°). The usage-bar fills
+       themselves read --toggle-on #6688F5 226° (.natively-meter-fill).
        *** THE ΔE76 FIGURES BELOW ARE STALE — RE-MEASURE BEFORE RELYING ON
        THEM. *** They were taken when the accent was Soft Orchid (#D9A7E8 286°
        dark / #984DB2 285° light), which measured 12-13° from Max at ΔE76 43.8
@@ -4967,7 +4953,8 @@ html[data-platform="linux"] body {
   .natively-api-selector-pill-track {
     transition: none !important;
   }
-  .natively-api-selector-tab:active {
+  .natively-api-selector-tab:active,
+  :root [data-interface-theme] .natively-api-selector-tab:active {
     transform: none !important;
   }
   .natively-api-detail-card > div,
@@ -5061,9 +5048,9 @@ html[data-platform="linux"] body {
 /* Lifetime card — premium slate-violet plaque */
 [data-interface-theme="liquid-glass"] .pricing-card-lifetime {
   background:
-    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.35) 0%, transparent 60%),
-    linear-gradient(135deg, rgba(55, 30, 95, 0.50) 0%, rgba(20, 10, 36, 0.65) 100%) !important;
-  border: 1px solid rgba(139, 92, 246, 0.35) !important;
+    radial-gradient(circle at 50% 0%, rgba(79, 113, 238, 0.35) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(26, 40, 93, 0.50) 0%, rgba(8, 14, 36, 0.65) 100%) !important;
+  border: 1px solid rgba(79, 113, 238, 0.35) !important;
   border-radius: 28px !important;
   position: relative;
   overflow: hidden;
@@ -5071,7 +5058,7 @@ html[data-platform="linux"] body {
               box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
               border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
   box-shadow:
-    inset 0 1px 0 rgba(139, 92, 246, 0.6),
+    inset 0 1px 0 rgba(79, 113, 238, 0.6),
     inset 0 2px 4px rgba(255, 255, 255, 0.22),
     inset 0 -3px 8px rgba(0, 0, 0, 0.4),
     0 4px 16px rgba(0, 0, 0, 0.2) !important;
@@ -5096,12 +5083,12 @@ html[data-platform="linux"] body {
 
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="liquid-glass"] .pricing-card-lifetime:hover {
-    border-color: rgba(139, 92, 246, 0.48) !important;
+    border-color: rgba(79, 113, 238, 0.48) !important;
     box-shadow:
-      inset 0 1px 0 rgba(139, 92, 246, 0.6),
+      inset 0 1px 0 rgba(79, 113, 238, 0.6),
       inset 0 2px 6px rgba(255, 255, 255, 0.25),
       inset 0 -3px 8px rgba(0, 0, 0, 0.6),
-      0 12px 32px rgba(139, 92, 246, 0.2),
+      0 12px 32px rgba(79, 113, 238, 0.2),
       0 4px 12px rgba(0, 0, 0, 0.35) !important;
   }
 }
@@ -5128,13 +5115,19 @@ html[data-platform="linux"] body {
 }
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="liquid-glass"] .pricing-cta-yearly:hover {
-    background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%) !important;
     transform: translateY(-1px) !important;
     box-shadow: 
       inset 0 2px 3px rgba(255, 255, 255, 0.95), 
       inset 0 -2.5px 3px rgba(15, 23, 42, 0.16), 
       0 6px 14px rgba(0, 0, 0, 0.22) !important;
   }
+  /* The gloss, on a layer so it can fade (6a, further down). */
+  [data-interface-theme="liquid-glass"] .pricing-cta-yearly:hover::after {
+    opacity: 1;
+  }
+}
+[data-interface-theme="liquid-glass"] .pricing-cta-yearly::after {
+  background-image: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%);
 }
 [data-interface-theme="liquid-glass"] .pricing-cta-yearly:active {
   transform: translateY(0) scale(0.97) !important;
@@ -5145,32 +5138,38 @@ html[data-platform="linux"] body {
 
 /* Lifetime CTA — solid brand violet button */
 [data-interface-theme="liquid-glass"] .pricing-cta-lifetime {
-  background: radial-gradient(circle at 50% 0%, rgba(129, 140, 248, 1) 0%, rgba(79, 70, 229, 1) 100%) !important;
+  background: radial-gradient(circle at 50% 0%, rgba(117, 147, 237, 1) 0%, rgba(54, 82, 212, 1) 100%) !important;
   color: #ffffff !important;
   border: 1px solid rgba(255, 255, 255, 0.25) !important;
   box-shadow: 
     inset 0 2.5px 3px rgba(255, 255, 255, 0.45), 
     inset 0 -2.5px 3px rgba(0, 0, 0, 0.35), 
-    0 3px 10px rgba(99, 102, 241, 0.25) !important;
+    0 3px 10px rgba(78, 111, 226, 0.25) !important;
   transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
               transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
               box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:hover {
-    background: radial-gradient(circle at 50% 0%, rgba(147, 157, 255, 1) 0%, rgba(67, 56, 202, 1) 100%) !important;
     transform: translateY(-1px) !important;
     box-shadow: 
       inset 0 3px 4px rgba(255, 255, 255, 0.55), 
       inset 0 -3px 4px rgba(0, 0, 0, 0.4), 
-      0 6px 16px rgba(99, 102, 241, 0.35) !important;
+      0 6px 16px rgba(78, 111, 226, 0.35) !important;
   }
+  /* The gloss, on a layer so it can fade (6a, further down). */
+  [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:hover::after {
+    opacity: 1;
+  }
+}
+[data-interface-theme="liquid-glass"] .pricing-cta-lifetime::after {
+  background-image: radial-gradient(circle at 50% 0%, rgba(135, 164, 246, 1) 0%, rgba(44, 68, 187, 1) 100%);
 }
 [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:active {
   transform: translateY(0) scale(0.97) !important;
   box-shadow: 
     inset 0 1px 2px rgba(0, 0, 0, 0.2), 
-    0 2px 4px rgba(99, 102, 241, 0.15) !important;
+    0 2px 4px rgba(78, 111, 226, 0.15) !important;
 }
 
 /* Feature icon chip — small slate square */
@@ -5368,9 +5367,9 @@ html[data-platform="linux"] body {
 /* Lifetime card — premium slate-violet plaque */
 [data-interface-theme="modern"] .pricing-card-lifetime {
   background:
-    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.35) 0%, transparent 60%),
-    linear-gradient(135deg, rgba(55, 30, 95, 0.50) 0%, rgba(20, 10, 36, 0.65) 100%) !important;
-  border: 1px solid rgba(139, 92, 246, 0.35) !important;
+    radial-gradient(circle at 50% 0%, rgba(79, 113, 238, 0.35) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(26, 40, 93, 0.50) 0%, rgba(8, 14, 36, 0.65) 100%) !important;
+  border: 1px solid rgba(79, 113, 238, 0.35) !important;
   border-radius: 28px !important;
   position: relative;
   overflow: hidden;
@@ -5378,7 +5377,7 @@ html[data-platform="linux"] body {
               box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
               border-color 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
   box-shadow:
-    inset 0 1px 0 rgba(139, 92, 246, 0.6),
+    inset 0 1px 0 rgba(79, 113, 238, 0.6),
     inset 0 2px 4px rgba(255, 255, 255, 0.22),
     inset 0 -3px 8px rgba(0, 0, 0, 0.4),
     0 4px 16px rgba(0, 0, 0, 0.2) !important;
@@ -5403,12 +5402,12 @@ html[data-platform="linux"] body {
 
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="modern"] .pricing-card-lifetime:hover {
-    border-color: rgba(139, 92, 246, 0.48) !important;
+    border-color: rgba(79, 113, 238, 0.48) !important;
     box-shadow:
-      inset 0 1px 0 rgba(139, 92, 246, 0.6),
+      inset 0 1px 0 rgba(79, 113, 238, 0.6),
       inset 0 2px 6px rgba(255, 255, 255, 0.25),
       inset 0 -3px 8px rgba(0, 0, 0, 0.6),
-      0 12px 32px rgba(139, 92, 246, 0.2),
+      0 12px 32px rgba(79, 113, 238, 0.2),
       0 4px 12px rgba(0, 0, 0, 0.35) !important;
   }
 }
@@ -5435,13 +5434,19 @@ html[data-platform="linux"] body {
 }
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="modern"] .pricing-cta-yearly:hover {
-    background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%) !important;
     transform: translateY(-1px) !important;
     box-shadow: 
       inset 0 2px 3px rgba(255, 255, 255, 0.95), 
       inset 0 -2.5px 3px rgba(15, 23, 42, 0.16), 
       0 6px 14px rgba(0, 0, 0, 0.22) !important;
   }
+  /* The gloss, on a layer so it can fade (6a, further down). */
+  [data-interface-theme="modern"] .pricing-cta-yearly:hover::after {
+    opacity: 1;
+  }
+}
+[data-interface-theme="modern"] .pricing-cta-yearly::after {
+  background-image: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%);
 }
 [data-interface-theme="modern"] .pricing-cta-yearly:active {
   transform: translateY(0) scale(0.97) !important;
@@ -5452,32 +5457,38 @@ html[data-platform="linux"] body {
 
 /* Lifetime CTA — solid brand violet button */
 [data-interface-theme="modern"] .pricing-cta-lifetime {
-  background: radial-gradient(circle at 50% 0%, rgba(129, 140, 248, 1) 0%, rgba(79, 70, 229, 1) 100%) !important;
+  background: radial-gradient(circle at 50% 0%, rgba(117, 147, 237, 1) 0%, rgba(54, 82, 212, 1) 100%) !important;
   color: #ffffff !important;
   border: 1px solid rgba(255, 255, 255, 0.25) !important;
   box-shadow: 
     inset 0 2.5px 3px rgba(255, 255, 255, 0.45), 
     inset 0 -2.5px 3px rgba(0, 0, 0, 0.35), 
-    0 3px 10px rgba(99, 102, 241, 0.25) !important;
+    0 3px 10px rgba(78, 111, 226, 0.25) !important;
   transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
               transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
               box-shadow 150ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="modern"] .pricing-cta-lifetime:hover {
-    background: radial-gradient(circle at 50% 0%, rgba(147, 157, 255, 1) 0%, rgba(67, 56, 202, 1) 100%) !important;
     transform: translateY(-1px) !important;
     box-shadow: 
       inset 0 3px 4px rgba(255, 255, 255, 0.55), 
       inset 0 -3px 4px rgba(0, 0, 0, 0.4), 
-      0 6px 16px rgba(99, 102, 241, 0.35) !important;
+      0 6px 16px rgba(78, 111, 226, 0.35) !important;
   }
+  /* The gloss, on a layer so it can fade (6a, further down). */
+  [data-interface-theme="modern"] .pricing-cta-lifetime:hover::after {
+    opacity: 1;
+  }
+}
+[data-interface-theme="modern"] .pricing-cta-lifetime::after {
+  background-image: radial-gradient(circle at 50% 0%, rgba(135, 164, 246, 1) 0%, rgba(44, 68, 187, 1) 100%);
 }
 [data-interface-theme="modern"] .pricing-cta-lifetime:active {
   transform: translateY(0) scale(0.97) !important;
   box-shadow: 
     inset 0 1px 2px rgba(0, 0, 0, 0.2), 
-    0 2px 4px rgba(99, 102, 241, 0.15) !important;
+    0 2px 4px rgba(78, 111, 226, 0.15) !important;
 }
 
 /* Feature icon chip — small slate square */
@@ -7203,12 +7214,13 @@ html[data-platform="linux"] body {
 /* ── Pill: dark theme (card fill × 0.86) ─────────────────────────────── */
 [data-interface-theme] .natively-api-selector-bar .natively-api-selector-pill {
   /* Not `all`: only the properties that actually change on a tier switch.
-     The slide itself lives on .natively-api-selector-pill-track and is
-     deliberately left alone. */
+     The slide itself lives on .natively-api-selector-pill-track; the colour
+     rides on the same clock as that slide (250ms smooth-out), so the pill
+     arrives and settles its tint in one motion. */
   transition:
-    background 260ms cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 260ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 260ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+    background 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 250ms cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
 /* The four pills ARE the four card fills surfacing up through the segmented
@@ -7466,9 +7478,9 @@ html[data-platform="linux"] body {
 [data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-card-lifetime,
 [data-theme='light'] [data-interface-theme="modern"] .pricing-card-lifetime {
   background:
-    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.16) 0%, transparent 60%),
-    linear-gradient(135deg, rgba(245, 243, 255, 0.85) 0%, rgba(237, 233, 254, 0.9) 100%) !important;
-  border-color: rgba(139, 92, 246, 0.22) !important;
+    radial-gradient(circle at 50% 0%, rgba(79, 113, 238, 0.16) 0%, transparent 60%),
+    linear-gradient(135deg, rgba(241, 245, 255, 0.85) 0%, rgba(229, 236, 254, 0.9) 100%) !important;
+  border-color: rgba(79, 113, 238, 0.22) !important;
   box-shadow:
     inset 0 1.5px 0 rgba(255, 255, 255, 0.8),
     inset 0 3px 6px rgba(255, 255, 255, 0.4),
@@ -7483,12 +7495,12 @@ html[data-platform="linux"] body {
 
 [data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-card-lifetime:hover,
 [data-theme='light'] [data-interface-theme="modern"] .pricing-card-lifetime:hover {
-  border-color: rgba(139, 92, 246, 0.42) !important;
+  border-color: rgba(79, 113, 238, 0.42) !important;
   box-shadow:
     inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
     inset 0 3px 8px rgba(255, 255, 255, 0.55),
     inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-    0 12px 28px rgba(139, 92, 246, 0.12),
+    0 12px 28px rgba(79, 113, 238, 0.12),
     0 4px 12px rgba(15, 23, 42, 0.04) !important;
 }
 
@@ -7520,13 +7532,13 @@ html[data-platform="linux"] body {
 }
 
 .pricing-card-lifetime .badge-tier-label {
-  background: linear-gradient(180deg, rgba(139, 92, 246, 0.28) 0%, rgba(109, 40, 217, 0.18) 100%) !important;
-  border: 1px solid rgba(139, 92, 246, 0.42) !important;
-  color: #c4b5fd !important;
+  background: linear-gradient(180deg, rgba(79, 113, 238, 0.28) 0%, rgba(46, 71, 208, 0.18) 100%) !important;
+  border: 1px solid rgba(79, 113, 238, 0.42) !important;
+  color: #a9c0fb !important;
   box-shadow: 
     inset 0 1.5px 0 rgba(255, 255, 255, 0.22),
     inset 0 -2px 4px rgba(0, 0, 0, 0.25),
-    0 2px 6px rgba(139, 92, 246, 0.18) !important;
+    0 2px 6px rgba(79, 113, 238, 0.18) !important;
 }
 
 [data-theme='light'] .pricing-card-yearly .badge-tier-label {
@@ -7540,13 +7552,13 @@ html[data-platform="linux"] body {
 }
 
 [data-theme='light'] .pricing-card-lifetime .badge-tier-label {
-  background: linear-gradient(180deg, rgba(139, 92, 246, 0.18) 0%, rgba(109, 40, 217, 0.10) 100%) !important;
-  border: 1px solid rgba(139, 92, 246, 0.28) !important;
-  color: #6d28d9 !important;
+  background: linear-gradient(180deg, rgba(79, 113, 238, 0.18) 0%, rgba(46, 71, 208, 0.10) 100%) !important;
+  border: 1px solid rgba(79, 113, 238, 0.28) !important;
+  color: #2e47d0 !important;
   box-shadow: 
     inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
-    inset 0 -2px 4px rgba(139, 92, 246, 0.06),
-    0 2px 6px rgba(139, 92, 246, 0.06) !important;
+    inset 0 -2px 4px rgba(79, 113, 238, 0.06),
+    0 2px 6px rgba(79, 113, 238, 0.06) !important;
 }
 
 [data-theme='light'] .feature-icon-chip {
@@ -7589,9 +7601,16 @@ html[data-platform="linux"] body {
     0 3px 8px rgba(15, 23, 42, 0.16) !important;
 }
 
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-yearly::after,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-cta-yearly::after {
+  background-image: radial-gradient(circle at 50% 0%, #303a5c 0%, #1c2440 100%);
+}
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-yearly:hover::after,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-cta-yearly:hover::after {
+  opacity: 1;
+}
 [data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-yearly:hover,
 [data-theme='light'] [data-interface-theme="modern"] .pricing-cta-yearly:hover {
-  background: radial-gradient(circle at 50% 0%, #303a5c 0%, #1c2440 100%) !important;
   box-shadow:
     inset 0 1.5px 0 rgba(255, 255, 255, 0.20),
     inset 0 -2.5px 3px rgba(0, 0, 0, 0.28),
@@ -7603,16 +7622,16 @@ html[data-platform="linux"] body {
    with no light-mode override and no colour, because nothing rendered it
    until now. */
 [data-interface-theme] .pricing-card-lifetime .badge-best-value {
-  color: #e9e2ff !important;
+  color: #dde7ff !important;
 }
 
 [data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-best-value {
-  background: linear-gradient(180deg, rgba(139, 92, 246, 0.20) 0%, rgba(109, 40, 217, 0.12) 100%) !important;
-  border: 1px solid rgba(109, 40, 217, 0.32) !important;
-  color: #5b21b6 !important;
+  background: linear-gradient(180deg, rgba(79, 113, 238, 0.20) 0%, rgba(46, 71, 208, 0.12) 100%) !important;
+  border: 1px solid rgba(46, 71, 208, 0.32) !important;
+  color: #263baf !important;
   box-shadow:
     inset 0 1.5px 0 rgba(255, 255, 255, 0.85),
-    0 2px 6px rgba(139, 92, 246, 0.08) !important;
+    0 2px 6px rgba(79, 113, 238, 0.08) !important;
 }
 
 /* ─── Pro teaser plaque: light mode ────────────────────────────────────
@@ -7675,9 +7694,14 @@ html[data-platform="linux"] body {
     0 2px 8px rgba(15, 23, 42, 0.18) !important;
 }
 
+[data-theme='light'] [data-interface-theme] .pro-teaser .pro-teaser-cta::after {
+  background-image: radial-gradient(circle at 50% 0%, #303a5c 0%, #1c2440 100%);
+}
 @media (hover: hover) and (pointer: fine) {
+  [data-theme='light'] [data-interface-theme] .pro-teaser:hover .pro-teaser-cta::after {
+    opacity: 1;
+  }
   [data-theme='light'] [data-interface-theme] .pro-teaser:hover .pro-teaser-cta {
-    background: radial-gradient(circle at 50% 0%, #303a5c 0%, #1c2440 100%) !important;
     box-shadow:
       inset 0 1.5px 0 rgba(255, 255, 255, 0.20),
       0 5px 14px rgba(15, 23, 42, 0.24) !important;
@@ -7687,22 +7711,29 @@ html[data-platform="linux"] body {
 /* 6. Lifetime CTA (Vibrant Purple button, refined contrast in Light) */
 [data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-lifetime,
 [data-theme='light'] [data-interface-theme="modern"] .pricing-cta-lifetime {
-  background: radial-gradient(circle at 50% 0%, #a78bfa 0%, #6d28d9 100%) !important;
+  background: radial-gradient(circle at 50% 0%, #7d9cf8 0%, #2e47d0 100%) !important;
   color: #ffffff !important;
-  border: 1px solid rgba(109, 40, 217, 0.25) !important;
+  border: 1px solid rgba(46, 71, 208, 0.25) !important;
   box-shadow: 
     inset 0 2.5px 3px rgba(255, 255, 255, 0.45), 
     inset 0 -2.5px 3px rgba(0, 0, 0, 0.25), 
-    0 3px 10px rgba(109, 40, 217, 0.18) !important;
+    0 3px 10px rgba(46, 71, 208, 0.18) !important;
 }
 
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-lifetime::after,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-cta-lifetime::after {
+  background-image: radial-gradient(circle at 50% 0%, #80a0ff 0%, #263baf 100%);
+}
+[data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:hover::after,
+[data-theme='light'] [data-interface-theme="modern"] .pricing-cta-lifetime:hover::after {
+  opacity: 1;
+}
 [data-theme='light'] [data-interface-theme="liquid-glass"] .pricing-cta-lifetime:hover,
 [data-theme='light'] [data-interface-theme="modern"] .pricing-cta-lifetime:hover {
-  background: radial-gradient(circle at 50% 0%, #c084fc 0%, #5b21b6 100%) !important;
   box-shadow: 
     inset 0 3px 4px rgba(255, 255, 255, 0.55), 
     inset 0 -3px 4px rgba(0, 0, 0, 0.30), 
-    0 6px 16px rgba(109, 40, 217, 0.28) !important;
+    0 6px 16px rgba(46, 71, 208, 0.28) !important;
 }
 
 /* 7. Poster SVG — theme-responsive paint
@@ -7749,7 +7780,7 @@ html[data-platform="linux"] body {
 
 /* ── Ambient bloom, per card ─────────────────────────────────────────────── */
 .pricing-poster-glow-yearly { stop-color: rgba(59, 130, 246, 0.42) !important; }
-.pricing-poster-glow-lifetime { stop-color: rgba(139, 92, 246, 0.45) !important; }
+.pricing-poster-glow-lifetime { stop-color: rgba(79, 113, 238, 0.45) !important; }
 
 /* ── The plate behind (the call/doc the overlay is sitting on top of) ────── */
 .pricing-poster-plate-fill { fill: rgba(255, 255, 255, 0.05) !important; }
@@ -7785,10 +7816,10 @@ html[data-platform="linux"] body {
 
 /* ── The live accent: level meter, source pips, streaming caret, per card ── */
 .pricing-poster-accent-yearly { fill: #8CBBFF !important; }
-.pricing-poster-accent-lifetime { fill: #C3AEFF !important; }
+.pricing-poster-accent-lifetime { fill: #A2BBFE !important; }
 
 [data-theme='light'] .pricing-poster-glow-yearly { stop-color: rgba(59, 130, 246, 0.20) !important; }
-[data-theme='light'] .pricing-poster-glow-lifetime { stop-color: rgba(139, 92, 246, 0.22) !important; }
+[data-theme='light'] .pricing-poster-glow-lifetime { stop-color: rgba(79, 113, 238, 0.22) !important; }
 
 [data-theme='light'] .pricing-poster-plate-fill { fill: rgba(255, 255, 255, 0.50) !important; }
 [data-theme='light'] .pricing-poster-plate-stroke { stroke: rgba(15, 23, 42, 0.12) !important; }
@@ -7809,7 +7840,7 @@ html[data-platform="linux"] body {
 [data-theme='light'] .pricing-poster-source-line { fill: rgba(15, 23, 42, 0.28) !important; }
 
 [data-theme='light'] .pricing-poster-accent-yearly { fill: #2563EB !important; }
-[data-theme='light'] .pricing-poster-accent-lifetime { fill: #6D28D9 !important; }
+[data-theme='light'] .pricing-poster-accent-lifetime { fill: #2E47D0 !important; }
 
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -7907,16 +7938,19 @@ html[data-platform="linux"] body {
   z-index: 1 !important;
 }
 
-/* Light: same construction, no hue. Bottom stop lands on --bg-item-surface
-   (#EAECEF) so the plaque resolves into the section's own card colour instead
-   of a tint of it; the top stays near-white to keep the vertical lift. */
+/* Light: same construction, no hue — but CLEAN at the bottom. It used to fall
+   to #EAECEF with an inner bottom shade and an 18px floor blur; on a white page
+   those three stacked into a grey smudge along the lower edge (the owner's
+   word), which the dark card hides. Now it stays near-white top to bottom, the
+   inner bottom shade is gone, and the floor is a crisp contact shadow plus a
+   faint lift, so the edge reads as an edge. */
 [data-theme='light'] .natively-key-card {
-  background: linear-gradient(180deg, #FDFDFD 0%, #EAECEF 100%) !important;
-  border: 1px solid rgba(0, 0, 0, 0.09) !important;
+  background: linear-gradient(180deg, #FFFFFF 0%, #F8F8FA 100%) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -14px 26px rgba(0, 0, 0, 0.035),
-    0 6px 18px rgba(0, 0, 0, 0.07) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 4px 12px rgba(0, 0, 0, 0.035) !important;
 }
 
 [data-theme='light'] .natively-key-card::before {
@@ -8087,9 +8121,12 @@ html[data-platform="linux"] body {
   }
 }
 
+/* --lgc-z is only defined on the Pro pricing CTAs. Without the 0px fallback the
+   whole transform was invalid at computed-value time here, so Activate / Start
+   free trial / See your options never pressed: they just lost the hover lift. */
 .natively-key-cta[data-state='ready']:active,
 .natively-key-cta[data-state='secondary']:active {
-  transform: translateZ(var(--lgc-z)) scale(0.985) !important;
+  transform: translateZ(var(--lgc-z, 0px)) scale(0.985) !important;
   box-shadow: 0 2px 6px rgba(69, 79, 184, 0.24) !important;
 }
 
@@ -8495,181 +8532,15 @@ html[data-platform="linux"] body {
   }
 
   .natively-key-cta[data-state='ready']:hover,
-  .natively-key-cta[data-state='ready']:active {
+  .natively-key-cta[data-state='ready']:active,
+  .natively-key-cta[data-state='secondary']:hover,
+  .natively-key-cta[data-state='secondary']:active {
     transform: none !important;
   }
 }
 
 
 
-
-/* The generic light-theme hover that used to sit here is GONE, and the comment
-   with it claimed its box-shadow was live. It was not: at (0,4,0) it ties the
-   per-tier light hovers below, which come later in source, and every render of
-   this card carries a tier class (NativelyApiSettings.tsx:896). Nothing it
-   declared ever painted. */
-
-
-/* The ENTER half of the card's asymmetric hover. Declares `transition` and
-   nothing else: no box-shadow, so it cannot participate in (or violate) the
-   four-slot contract, and at (0,3,0) it outranks the base rule's leave timing
-   from anywhere in the file.
-   cubic-bezier(0.32, 0.72, 0, 1) moves immediately — no ease-in sluggishness —
-   but spreads the travel across the middle (~55% at the 30% mark, against the
-   old curve's 83%), which is what makes the arrival legible rather than instant. */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme] .natively-api-detail-card:hover {
-    transition: box-shadow 260ms cubic-bezier(0.32, 0.72, 0, 1),
-                border-color 260ms cubic-bezier(0.32, 0.72, 0, 1) !important;
-  }
-}
-
-
-/* Per-tier hover bloom. The Pro purchase cards glow in their OWN hue on hover
-   (.pricing-card-yearly:hover uses its blue, lifetime its violet); a neutral
-   grey glow here read as a different control. Deepens the resting shadow the
-   committed-fill block already carries rather than introducing one.
-   Obeys the four-slot contract above the committed fills: slot 1 repeats each
-   tier's RESTING rim byte-for-byte, so the hairline against the border does not
-   move; hover lives entirely in the floor (slot 2), the tier-hued ambient
-   bloom (slot 3) and the contact shadow (slot 4). */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme] .natively-api-detail-card-standard:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.16),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-      0 12px 32px rgba(60, 107, 105, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-pro:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.17),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-      0 12px 32px rgba(17, 89, 153, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-max:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.18),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-      0 12px 32px rgba(102, 60, 104, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-ultra:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.20),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.40),
-      0 12px 32px rgba(111, 37, 66, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-}
-
-
-/* Active + hover. Without these the per-tier bloom above — (0,3,0), later in
-   source than every [data-active="true"] rule — would win on the CURRENT plan's
-   card and replace its tier-hued rim with the generic one, i.e. the active
-   card's outline would change on hover. That is exactly the border-highlight
-   behaviour being removed, and it also breaks the four-slot contract's promise
-   that slot 1 never moves. These sit at (0,4,0) so they outrank it, repeat the
-   active rim verbatim, and let hover act only on slots 2-4. */
-@media (hover: hover) and (pointer: fine) {
-  [data-interface-theme] .natively-api-detail-card-standard[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(165, 209, 207, 0.72),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
-      0 12px 32px rgba(60, 107, 105, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-pro[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(151, 199, 241, 0.78),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
-      0 12px 32px rgba(17, 89, 153, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-max[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(203, 175, 204, 0.84),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
-      0 12px 32px rgba(102, 60, 104, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-  [data-interface-theme] .natively-api-detail-card-ultra[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(207, 160, 179, 0.90),
-      inset 0 -3px 8px rgba(0, 0, 0, 0.50),
-      0 12px 32px rgba(111, 37, 66, 0.28),
-      0 4px 12px rgba(0, 0, 0, 0.25) !important;
-  }
-}
-
-
-/* Light-theme per-tier hover bloom (mirrors the dark rules above and the
-   Pro cards' own light hovers). */
-@media (hover: hover) and (pointer: fine) {
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.55),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-      0 12px 28px rgba(60, 107, 105, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.60),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-      0 12px 28px rgba(17, 89, 153, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-max:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.65),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-      0 12px 28px rgba(102, 60, 104, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.70),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.06),
-      0 12px 28px rgba(111, 37, 66, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-}
-
-
-/* Light active + hover — (0,5,0), outranking the light per-tier bloom (0,4,0)
-   for the same reason as the dark pair above. */
-@media (hover: hover) and (pointer: fine) {
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-standard[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
-      0 12px 28px rgba(60, 107, 105, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-pro[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
-      0 12px 28px rgba(17, 89, 153, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-max[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
-      0 12px 28px rgba(102, 60, 104, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-  [data-theme='light'] [data-interface-theme] .natively-api-detail-card-ultra[data-active="true"]:hover {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -2.5px 6px rgba(0, 0, 0, 0.05),
-      0 12px 28px rgba(111, 37, 66, 0.18),
-      0 4px 12px rgba(15, 23, 42, 0.05) !important;
-  }
-}
 
 /* ------------------------------------------------------------------ */
 /* Settings — section entrance stagger                                 */
@@ -8703,7 +8574,12 @@ html[data-platform="linux"] body {
 @keyframes settings-stagger-in {
   from {
     opacity: 0;
-    transform: translateY(7px);
+    /* Signed by SettingsOverlay's section motion.div (--settings-stagger-dy):
+       entering a section ABOVE the current one in the nav, the container
+       settles downward, so its children must too. A fixed +7px made them
+       rise against a falling container and bunch up. 7px is the fallback
+       for any other data-settings-stagger host. */
+    transform: translateY(var(--settings-stagger-dy, 7px));
   }
   to {
     opacity: 1;
@@ -8772,6 +8648,75 @@ html[data-platform="linux"] body {
   }
 }
 
+/* Settings — a region swapped by a choice ABOVE it (Audio's speech provider
+   picks which cards follow). Each swapped-in card fades up 4px as it mounts,
+   so a provider change reads as the panel answering rather than a cut.
+   `backwards`, never `both`, for the stagger's stacking-context reason above.
+   It also plays when the pane is entered, where it sits under that cascade's
+   own fade on the same pixels and reads as part of it. */
+@keyframes settings-swap-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+.settings-swap-in {
+  animation: settings-swap-in 250ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-swap-in { animation: settings-stagger-fade 150ms linear backwards; }
+}
+
+/* Settings — a control that is LISTENING for input: the shortcut recorder's
+   "Press keys…". It was a static label, so an armed recorder read like a
+   frozen one. It borrows the overlay Thinking label's sweep (the
+   natively-thinking-sweep keyframes): the transitions.dev "shimmer text"
+   move, without a second shimmer.
+   The label RESTS at full accent, exactly as the static one did, and the sweep
+   moves TOWARD the text colour, so it only ever gains contrast. Dimming the
+   rest instead (the recipe's shape) failed: 55% accent measured 3.28:1 dark and
+   2.17:1 light on the recorder's bg-input, and light's full accent is only
+   4.56:1, so there is no dimmed stop that passes there. */
+.settings-listening {
+  --settings-listening-peak: color-mix(in srgb, var(--accent-primary) 45%, var(--text-primary));
+  display: inline-block;
+  background-image: linear-gradient(
+    90deg,
+    var(--accent-primary) 0%,
+    var(--accent-primary) 40%,
+    var(--settings-listening-peak) 50%,
+    var(--accent-primary) 60%,
+    var(--accent-primary) 100%
+  );
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: natively-thinking-sweep 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-listening {
+    animation: none;
+    background: none;
+    color: var(--accent-primary);
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
+/* Settings — a small control arriving in place of another (the recorder
+   growing out of the keycaps it replaces, an "In use" tag): transitions.dev's
+   dropdown-open scale, at the quick duration a control swap gets. */
+@keyframes settings-control-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+.settings-control-in {
+  animation: settings-control-in 150ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-control-in { animation: settings-stagger-fade 120ms linear backwards; }
+}
+
 /* Apple-style toggle — the reference component's exact 88x40/4px-inset/
    52x32-thumb/28px-travel/56px-press-width/24px-press-on-travel proportions,
    reproduced at each size variant via literal px values (below) computed
@@ -8789,7 +8734,10 @@ html[data-platform="linux"] body {
     /* Hardcoded on purpose, same as --toggle-off/-thumb: every toggle in the
        app reads identically regardless of theme or panel, ignoring each
        caller's own track token (bg-accent-primary, --pi-accent, --aip-accent,
-       Phone Mirror's amber LAN switch, …) and the app's periwinkle accent. */
+       Phone Mirror's amber LAN switch, …) and the app's periwinkle accent.
+       --toggle-on also fills the meeting notes Usage question bubble
+       (--bubble-user-bg; lifted toward white in light mode), so retuning it
+       repaints that bubble too. */
     --toggle-off: #474949;
     --toggle-on: #6688F5;
     --toggle-thumb: #e1ebfe;
@@ -8806,16 +8754,17 @@ html[data-platform="linux"] body {
     background: var(--toggle-off);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
+    /* opacity + filter so a switch that becomes disabled fades to 0.5, and the
+       hover brighten eases in, instead of both snapping. */
     transition:
         background 220ms cubic-bezier(0.4, 0, 0.2, 1),
         box-shadow 180ms ease,
-        transform 120ms ease;
+        transform 120ms ease,
+        opacity 150ms ease-out,
+        filter 150ms ease-out;
 }
 .t-toggle:disabled { cursor: not-allowed; opacity: 0.5; }
 .t-toggle[data-on="true"] { background: var(--toggle-on); }
-.t-toggle:focus-visible {
-    box-shadow: 0 0 0 4px var(--toggle-focus-ring);
-}
 /* `hover:` guard so a tap on touch/trackpad doesn't leave a stuck brighten. */
 @media (hover: hover) {
     .t-toggle:not(:disabled):hover { filter: brightness(1.03); }
@@ -8971,7 +8920,9 @@ html[data-platform="linux"] body {
   transition:
     transform var(--tabs-dur) var(--tabs-ease),
     width     var(--tabs-dur) var(--tabs-ease);
-  will-change: transform, width;
+  /* transform only: width is a layout property, so a will-change hint for it
+     reserves a layer and composites nothing. */
+  will-change: transform;
   z-index: 0;
   pointer-events: none;
 }
@@ -9003,6 +8954,672 @@ html[data-platform="linux"] body {
   /* Reduced motion does not mean invisible — the placeholder keeps its full
      legibility, it just stops moving. */
   .mn-skel { animation: none; opacity: 0.85; }
+}
+
+/* ── Meeting-notes follow-up draft: texts reveal ───────────────────────────────
+   transitions.dev #18. Nothing moves while the draft is written. When a first
+   draft lands, the "Write a follow-up…" hint fades out in place (.is-hiding),
+   then the Subject line and the mail card rise in one stagger step apart
+   (.is-shown) — FollowUpDraftReveal in MeetingDetails.tsx. A draft that was
+   already saved carries .is-shown from its first paint, so it never animates.
+   The variables are scoped to .mn-root (the whole notes page, so the header
+   Copy, the toolbar and the Usage tab's Copy share them) as well as
+   .mn-followup; every t-* rule below is its snippet verbatim and global.
+   src/components/ui/textsReveal.css carries the same .t-stagger rules and
+   ProviderChangeNotice.css the same .t-icon-swap rules — keep the copies
+   identical and tune through the variables, never the rules.
+   The section's controls use the rest of the scale: icon swap (#09) on
+   Copy → Check, text states swap (#04) timing on the Copy / Generate labels,
+   shimmer text (#15) on "Generating…", menu dropdown (#05) on the tone menu. */
+.mn-root,
+.mn-followup {
+  --stagger-dur: 500ms;
+  --stagger-distance: 12px;
+  --stagger-stagger: 40ms;
+  --stagger-blur: 3px;
+  --stagger-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --icon-swap-dur: 250ms;
+  --icon-swap-blur: 2px;
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;
+
+  --text-swap-dur: 150ms;
+  --text-swap-translate-y: 4px;
+  --text-swap-blur: 2px;
+  --text-swap-ease: ease-in-out;
+
+  /* Theme-following shimmer: the band is the primary ink sweeping over the
+     tertiary one, in both themes (the snippet's greys are light-mode only). */
+  --shimmer-dur: 2000ms;
+  --shimmer-base: var(--text-tertiary);
+  --shimmer-highlight: var(--text-primary);
+  --shimmer-band: 400%;
+  --shimmer-ease: linear;
+
+  --dropdown-open-dur: 250ms;
+  --dropdown-close-dur: 150ms;
+  --dropdown-pre-scale: 0.97;
+  --dropdown-closing-scale: 0.99;
+  --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Lines start translated down + blurred + invisible; .is-shown
+   on the parent flips them to their resting state. The second
+   line's transition-delay holds it back by --stagger-stagger
+   so the eye lands on the headline first. */
+.t-stagger-line {
+  display: block;
+  opacity: 0;
+  transform: translateY(var(--stagger-distance));
+  filter: blur(var(--stagger-blur));
+  transition:
+    opacity   var(--stagger-dur) var(--stagger-ease),
+    transform var(--stagger-dur) var(--stagger-ease),
+    filter    var(--stagger-dur) var(--stagger-ease);
+  will-change: transform, opacity, filter;
+}
+.t-stagger-line--2 { transition-delay: var(--stagger-stagger); }
+
+.t-stagger.is-shown .t-stagger-line {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+/* Exit decouples from the stagger: same fade for every line,
+   no Y return, no blur — so the disappearance reads as a
+   single quiet fade instead of a reverse reveal. */
+.t-stagger.is-hiding .t-stagger-line {
+  opacity: 0;
+  transform: translateY(0);
+  filter: blur(0);
+  transition:
+    opacity 200ms ease,
+    transform 0s linear,
+    filter 0s linear;
+  transition-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-stagger-line { transition: none !important; }
+}
+
+/* Icon swap (transitions.dev #09) — Copy → Check. */
+.t-icon-swap {
+  position: relative;
+  display: inline-grid;
+}
+.t-icon-swap .t-icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity   var(--icon-swap-dur) var(--icon-swap-ease),
+    filter    var(--icon-swap-dur) var(--icon-swap-ease),
+    transform var(--icon-swap-dur) var(--icon-swap-ease);
+  will-change: opacity, filter, transform;
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="a"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="b"] {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="b"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="a"] {
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--icon-swap-start-scale));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-icon-swap .t-icon { transition: none !important; }
+}
+
+/* Shimmer text (transitions.dev #15) — "Generating…". */
+.t-shimmer {
+  position: relative;
+  display: inline-block;
+  color: var(--shimmer-base);
+}
+.t-shimmer::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(
+    90deg,
+    transparent          0%,
+    transparent         40%,
+    var(--shimmer-highlight) 50%,
+    transparent         60%,
+    transparent        100%
+  );
+  background-size: var(--shimmer-band) 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: t-shimmer var(--shimmer-dur) var(--shimmer-ease) infinite;
+}
+@keyframes t-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: 0% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-shimmer::before { animation: none !important; }
+}
+
+/* Menu dropdown (transitions.dev #05) — the tone menu. */
+.t-dropdown {
+  transform-origin: top left;
+  transform: scale(var(--dropdown-pre-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--dropdown-open-dur) var(--dropdown-ease),
+    opacity   var(--dropdown-open-dur) var(--dropdown-ease);
+  will-change: transform, opacity;
+}
+.t-dropdown[data-origin="top-right"]     { transform-origin: top right; }
+.t-dropdown[data-origin="top-center"]    { transform-origin: top center; }
+.t-dropdown[data-origin="bottom-left"]   { transform-origin: bottom left; }
+.t-dropdown[data-origin="bottom-center"] { transform-origin: bottom center; }
+.t-dropdown[data-origin="bottom-right"]  { transform-origin: bottom right; }
+
+.t-dropdown.is-open {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+.t-dropdown.is-closing {
+  transform: scale(var(--dropdown-closing-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--dropdown-close-dur) var(--dropdown-ease),
+    opacity   var(--dropdown-close-dur) var(--dropdown-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-dropdown { transition: none !important; }
+}
+
+/* The notes' "Regenerate notes as …" (MeetingDetails NotesActions) and the
+   follow-up draft's Generate (.mn-generate): the same clear glass as Regenerate
+   and Show evidence at rest. On hover they turn a light ice blue and read as
+   glass: an icy wash, a bright ice rim that fades in on the edge (the glass's
+   own top/bottom-aimed ::before), and a quiet pointer lens. Everything eases on
+   the glass's hover timing (300 ms, easeInOutSine). The selectors out-rank
+   [data-theme='light'] .lg-button.lg-clear, which sets the light lens and rim. */
+.lg-button.lg-clear.lg-sm.mn-suggest,
+.lg-button.lg-clear.lg-sm.mn-generate {
+  --lg-clear-hover: rgba(176, 202, 238, .21);
+  /* The pointer lens is kept quiet (under the clear glass's own .055/.30/.13):
+     the wash and rim carry the hover, the lens only hints at where the cursor is. */
+  --lg-lens-tint: rgba(232, 244, 255, .035);
+  --lg-lens-rim: rgba(226, 241, 255, .18);
+  --lg-lens-rim-soft: rgba(226, 241, 255, .07);
+}
+.lg-button.lg-clear.lg-sm.mn-suggest,
+.lg-button.lg-clear.lg-sm.mn-generate {
+  transition:
+    transform 110ms cubic-bezier(.2, .85, .25, 1),
+    background-color var(--lg-hover-dur) var(--lg-hover-ease),
+    color var(--lg-hover-dur) var(--lg-hover-ease),
+    box-shadow var(--lg-hover-dur) var(--lg-hover-ease);
+}
+.lg-button.lg-clear.lg-sm.mn-suggest::before,
+.lg-button.lg-clear.lg-sm.mn-generate::before {
+  transition: box-shadow var(--lg-hover-dur) var(--lg-hover-ease), opacity 150ms ease-in-out;
+}
+/* Dark: the label lifts to an icy white, as if lit from inside the glass. */
+.lg-button.lg-clear.lg-sm.mn-suggest:not(:disabled):hover,
+.lg-button.lg-clear.lg-sm.mn-generate:not(:disabled):hover { color: #E3EAF4; }
+.lg-button.lg-clear.lg-sm.mn-suggest:not(:disabled):hover::before,
+.lg-button.lg-clear.lg-sm.mn-generate:not(:disabled):hover::before {
+  box-shadow: inset 0 0 0 1px rgba(214, 228, 246, .50), inset 0 0 0 2px rgba(190, 210, 240, .14);
+}
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-suggest,
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-generate {
+  --lg-clear-hover-light: rgba(174, 204, 244, .30);
+  --lg-lens-tint: rgba(255, 255, 255, .30);
+  --lg-lens-rim: rgba(255, 255, 255, .85);
+  --lg-lens-rim-soft: rgba(255, 255, 255, .40);
+  transition:
+    transform 110ms cubic-bezier(.2, .85, .25, 1),
+    background-color var(--lg-hover-dur) var(--lg-hover-ease),
+    color var(--lg-hover-dur) var(--lg-hover-ease),
+    box-shadow var(--lg-hover-dur) var(--lg-hover-ease);
+}
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-suggest:not(:disabled):hover,
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-generate:not(:disabled):hover {
+  color: inherit;
+  box-shadow: inset 0 -1px 0 rgba(60, 100, 170, .11), 0 1px 3px rgba(60, 100, 170, .07);
+}
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-suggest:not(:disabled):hover::before,
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-generate:not(:disabled):hover::before {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .90), inset 0 0 0 2px rgba(130, 165, 220, .13);
+}
+
+/* AutoWidth (MeetingDetails): a label slot whose width eases to its content —
+   a resize, so --duration-fast (250ms) on --ease-smooth-out. The inner span is
+   the measured, natural-width copy; the swap's exiting label is absolutely
+   placed, so only the label on screen sets the width. */
+.mn-autow { display: inline-block; transition: width 250ms cubic-bezier(0.22, 1, 0.36, 1); }
+.mn-autow-in { display: inline-block; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .mn-autow { transition: none; } }
+
+/* Generate while it writes: it stays lit (the shimmer says so), so the hover and
+   press that would invite a second click are held off. */
+.lg-button.mn-generate[aria-busy='true'] { cursor: default; }
+.lg-button.lg-clear.lg-sm.mn-generate[aria-busy='true']:hover { background-color: var(--lg-clear-bg, rgba(255, 255, 255, .06)); color: inherit; }
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-generate[aria-busy='true']:hover { background-color: var(--lg-clear-bg-light, rgba(17, 17, 26, .04)); box-shadow: inset 0 -1px 0 rgba(17, 17, 26, .07); }
+.lg-button.lg-clear.lg-sm.mn-generate[aria-busy='true']:hover::before { box-shadow: inset 0 0 0 1px var(--lg-rim-1); }
+.lg-button.mn-generate[aria-busy='true']:hover .lg-lens,
+.lg-button.mn-generate[aria-busy='true'] .mn-glint { opacity: 0; }
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-generate[aria-busy='true']:hover::before { box-shadow: inset 0 0 0 1px var(--lg-rim-1); }
+.lg-button.lg-sm.mn-generate[aria-busy='true']:active { transform: none; }
+
+/* The follow-up card's "Open in Gmail", on the sign-off's line (FollowUpDraftCard).
+   .mn-fu-gmail-room is an empty inline box at the end of the text, the button's
+   measured width plus a 16px gap (--mn-fu-gmail-room, set by the card), so the last line always leaves room; the button is pinned to
+   the bottom right and centred on that last line: the body's 16px bottom padding
+   plus half the 13px x 1.65 line box, less half the 30px glass pill. */
+.mn-fu-gmail-room { display: inline-block; width: var(--mn-fu-gmail-room, 156px); height: 1px; }
+.mn-fu-gmail { position: absolute; right: 12px; bottom: calc(16px + (13px * 1.65) / 2 - 15px); }
+
+/* The follow-up draft's tone + Regenerate, in the notes' clear Liquid Glass.
+   The tone pill keeps its hover wash while its menu is open, so the open menu
+   reads as coming from it. Regenerate is the same glass as a 30px circle; its
+   arrows turn half a turn on hover (400ms, as before) and spin while the draft is
+   rewritten, when it stays lit rather than dimming (aria-busy), with the hover
+   wash, lens and press held off so it does not invite a second click. */
+.lg-button.lg-clear.lg-sm.mn-tone[aria-expanded='true'] { background-color: var(--lg-tint-hover); }
+.lg-button.lg-sm.mn-fu-regen { width: 30px; padding: 0; }
+.mn-fu-regen-turn { transition: transform 400ms cubic-bezier(0.23, 1, 0.32, 1); }
+@media (hover: hover) and (pointer: fine) {
+  .lg-button.mn-fu-regen:not([aria-busy='true']):hover .mn-fu-regen-turn { transform: rotate(-180deg); }
+}
+.lg-button.mn-fu-regen[aria-busy='true'] { cursor: default; }
+.lg-button.lg-clear.lg-sm.mn-fu-regen[aria-busy='true']:hover { background-color: var(--lg-clear-bg, rgba(255, 255, 255, .06)); }
+[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-fu-regen[aria-busy='true']:hover { background-color: var(--lg-clear-bg-light, rgba(17, 17, 26, .04)); }
+.lg-button.mn-fu-regen[aria-busy='true']:hover .lg-lens { opacity: 0; }
+.lg-button.lg-sm.mn-fu-regen[aria-busy='true']:active { transform: none; }
+@media (prefers-reduced-motion: reduce) { .mn-fu-regen-turn { transition: none; } }
+
+/* The notes' action row (MeetingDetails NotesActions). While notes regenerate
+   the buttons dim (LiquidGlassButton's :disabled rim, cap and label opacities);
+   here that eases over 150 ms instead of snapping, both ways. Show evidence's
+   toggle-blue ink fades on the same beat as its label swap. */
+.mn-notes-actions .lg-button::after,
+.mn-notes-actions .lg-button .lg-content,
+.mn-fu-actions .lg-button::after,
+.mn-fu-actions .lg-button .lg-content {
+  transition: opacity 150ms ease-in-out;
+}
+.mn-notes-actions .lg-button::before,
+.mn-fu-actions .lg-button::before {
+  transition: opacity 150ms ease-in-out, box-shadow var(--lg-hover-dur) var(--lg-hover-ease);
+}
+.lg-button.lg-sm.mn-evidence {
+  transition:
+    transform 110ms cubic-bezier(.2, .85, .25, 1),
+    background-color var(--lg-hover-dur) var(--lg-hover-ease),
+    color 150ms ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mn-notes-actions .lg-button::before,
+  .mn-notes-actions .lg-button::after,
+  .mn-notes-actions .lg-button .lg-content,
+  .mn-fu-actions .lg-button::before,
+  .mn-fu-actions .lg-button::after,
+  .mn-fu-actions .lg-button .lg-content { transition: none; }
+}
+
+/* The notes' calendar menu (meeting/CalendarLinkChip): "Looking at your
+   calendar…" gives way to the timeline strip and the events. The body eases to
+   its new height (resize: --duration-fast, --ease-smooth-out) while the content
+   settles in with the skeleton-reveal cross-blur (--duration-slow,
+   --ease-in-out, --blur-small), each item --cal-reveal-delay later (40 ms
+   apart, set inline). */
+.cal-link {
+  /* The trigger's label swap (ui/SwapText): #04's values, as in .mn-followup. */
+  --text-swap-dur: 150ms;
+  --text-swap-translate-y: 4px;
+  --text-swap-blur: 2px;
+  --text-swap-ease: ease-in-out;
+}
+/* The swap span is the button's flex item; let it shrink so a long label truncates. */
+.cal-link .t-text-swap { min-width: 0; }
+.cal-menu-body {
+  overflow: hidden;
+  transition: height 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes cal-reveal-in {
+  from { opacity: 0; filter: blur(2px); }
+}
+.cal-reveal-in {
+  animation: cal-reveal-in 400ms ease-in-out both;
+  animation-delay: var(--cal-reveal-delay, 0ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cal-menu-body { transition: none; }
+  .cal-reveal-in { animation: none; }
+}
+
+/* Text states swap (transitions.dev #04), for React: the snippet's timing and
+   its exit-up-then-enter-from-below order, as keyframes on keyed spans rather
+   than a class toggled on one node. Every label the slot can show is stacked
+   invisibly in the same grid cell, so the button keeps one width through the
+   swap instead of jumping when "Copy" becomes "Copied". (SwapText in
+   MeetingDetails.tsx.) The outgoing label is taken out of the cell's sizing:
+   where the set of labels itself changes (the header Copy follows the tab),
+   a longer departing label would otherwise hold the button wide for the
+   length of its exit and then let it snap narrower. text-align: start, because
+   a button centres its text: a shorter label ("Copied" in a cell held to
+   "Copy full summary") floated ~35px off its icon instead of sitting where it
+   would at its own width — the spare width belongs after the label. */
+.mn-swap { display: inline-grid; position: relative; text-align: start; }
+.mn-swap > * { grid-area: 1 / 1; }
+.mn-swap-sizer { visibility: hidden; }
+.mn-swap > .mn-swap-out { position: absolute; top: 0; left: 0; white-space: nowrap; }
+@keyframes mn-swap-exit {
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--text-swap-translate-y) * -1));
+    filter: blur(var(--text-swap-blur));
+  }
+}
+@keyframes mn-swap-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--text-swap-translate-y));
+    filter: blur(var(--text-swap-blur));
+  }
+}
+.mn-swap-out { animation: mn-swap-exit var(--text-swap-dur) var(--text-swap-ease) forwards; }
+.mn-swap-in  { animation: mn-swap-enter var(--text-swap-dur) var(--text-swap-ease) var(--text-swap-dur) backwards; }
+
+/* The header's right slot: Generate before a draft exists, the tone +
+   Regenerate group after. Both sit in one grid cell (so the header never
+   changes height) and cross-fade with the icon swap's blur and timing, at
+   the dropdown's gentler pre-scale — a whole control group, not a glyph. */
+.mn-fu-actions { display: inline-grid; justify-items: end; align-items: center; }
+.mn-fu-actions > * {
+  grid-area: 1 / 1;
+  transition:
+    opacity   var(--icon-swap-dur) var(--icon-swap-ease),
+    filter    var(--icon-swap-dur) var(--icon-swap-ease),
+    transform var(--icon-swap-dur) var(--icon-swap-ease);
+}
+.mn-fu-actions > [data-active="false"] {
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--dropdown-pre-scale));
+  pointer-events: none;
+}
+
+/* The Regenerate tooltip (the committed .t-tt) belongs to a button at the
+   content column's right edge: anchor it to the button's right side instead
+   of centring it, so it never hangs past the column. */
+.mn-followup .t-tt {
+  left: auto;
+  right: 0;
+  transform: scale(var(--tt-scale));
+  transform-origin: 100% 0%;
+}
+.mn-followup .t-tt-wrap:hover .t-tt,
+.mn-followup .t-tt-trigger:focus-visible + .t-tt {
+  transform: scale(1);
+}
+
+/* A rewritten draft (Regenerate / a tone change) settles in with the
+   skeleton-reveal cross-blur (--duration-slow, --ease-in-out, --blur-small)
+   from the dimmed state the card holds while it is rewritten. */
+@keyframes mn-fu-body-in {
+  from { opacity: 0.5; filter: blur(2px); }
+}
+.mn-fu-body-in { animation: mn-fu-body-in 400ms ease-in-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-swap-out { display: none; }
+  .mn-swap-in, .mn-fu-body-in { animation: none; }
+  .mn-fu-actions > * { transition: none; }
+}
+
+/* ── Meeting notes: tab swap, summary cards, evidence lines, jump highlight ──
+   The rest of the page's motion, on the same scale as the follow-up section
+   above. No motion tokens are imported in this app, so the values are the
+   tokens' literals, named here once. */
+.mn-root {
+  /* Tab swap: transitions.dev #08's page-slide values (--duration-fast,
+     --distance-base, --blur-medium, --ease-smooth-out). */
+  --mn-tab-dur: 250ms;
+  --mn-tab-distance: 8px;
+  --mn-tab-blur: 3px;
+  --mn-tab-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Summary cards: a content reveal (--duration-slow, --distance-base). */
+  --mn-card-dur: 400ms;
+  --mn-card-distance: 8px;
+  --mn-card-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #21 accordion, for the evidence lines. Symmetric, by the polish rules. */
+  --acc-expand: 250ms;
+  --acc-collapse: 250ms;
+  --acc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Transcript jump highlight: in with the scroll, out slowly once read. */
+  --mn-hl-in: 250ms;
+  --mn-hl-out: 500ms;
+  --mn-hl-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Speaker chip: every change of the pill's width — making room for the
+     pencil on hover, opening into its rename field and closing back, following
+     your typing — rides Apple's default spring (SwiftUI .smooth: response 0.5,
+     damping 1; the Plans accordions' curve, AccordionSection.css). It was the
+     smooth-out cubic, which put ~80% of each move in its first ~110ms and read
+     as a snap; Evin asked for it slower. Critically damped, so the same curve
+     over a shorter time is the same spring at a quicker response. */
+  --mn-spring: linear(0, 0.0229, 0.0789, 0.1534, 0.2363, 0.3211, 0.4034, 0.4807, 0.5515, 0.6152, 0.6717, 0.7214, 0.7645, 0.8018, 0.8337, 0.861, 0.8841, 0.9036, 0.9201, 0.9339, 0.9454, 0.9551, 0.9631, 0.9698, 0.9753, 0.9799, 0.9837, 0.9868, 0.9894, 0.9915, 0.9932, 0.9946, 0.9958, 0.9968, 0.9975, 0.9982, 0.9987, 0.9991, 0.9995, 0.9998, 1);
+  --mn-chip-morph-dur: 720ms; /* open / close — response 0.5 (CHIP_MORPH_MS) */
+  --mn-chip-hover-dur: 600ms; /* room for the pencil, both ways — response ~0.4 */
+  --mn-chip-type-dur: 300ms;  /* following keystrokes: settles between them */
+}
+
+/* Tab swap. The #08 snippet slides two absolutely positioned pages, which
+   would collapse a scroller whose tabs differ in height, and holding both
+   tabs in flow for even a frame doubles the page (see handoffExit in
+   MeetingDetails.tsx for what that did to the tab row's pill). So only the
+   incoming tab moves, as a keyframe on a wrapper keyed by the tab; the
+   outgoing one leaves at once. --mn-tab-from is set per swap: +distance
+   toward a tab on the right, -distance toward one on the left. No `forwards`
+   fill, so at rest the panel carries no transform or filter. */
+@keyframes mn-tab-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--mn-tab-from, 0px));
+    filter: blur(var(--mn-tab-blur));
+  }
+}
+.mn-tab-in { animation: mn-tab-in var(--mn-tab-dur) var(--mn-tab-ease); }
+/* Opacity only, for a Usage tab whose items still owe their own first-view
+   slide: a travelling panel under them would move them twice. */
+.mn-tab-in--fade { animation: mn-fade-in var(--mn-tab-dur) var(--mn-tab-ease); }
+
+/* Summary cards (source quality, toolbar, template suggestion, earlier
+   meetings) rise in with the note's reveal: its start and a 40ms stagger,
+   set inline. CSS, not Framer `initial`: the cards sit under the notes'
+   AnimatePresence initial={false}, whose context blocks `initial` on every
+   descendant — their old Framer entrances never played (measured). */
+@keyframes mn-card-in {
+  from { opacity: 0; transform: translateY(var(--mn-card-distance)); }
+}
+.mn-card-in { animation: mn-card-in var(--mn-card-dur) var(--mn-card-ease) backwards; }
+
+/* Evidence lines (Show evidence): #21's grid-rows height with its fade and
+   2px unblur, so each bullet grows open instead of the whole note jumping a
+   line per bullet in one frame. The snippet's .t-acc-panel rules under mn-
+   names: the .t-acc classes are global in two other stylesheets whose
+   variables are scoped to their own components. min-height 0 keeps the 0fr
+   row able to close; padding lives INSIDE .mn-ev-inner, never on the track.
+   An open line rests at filter: none rather than blur(0), so it holds no
+   layer. */
+.mn-ev {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--acc-collapse) var(--acc-ease);
+}
+.mn-ev[data-open="true"] {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--acc-expand) var(--acc-ease);
+}
+.mn-ev-inner {
+  overflow: hidden;
+  min-height: 0;
+  opacity: 0;
+  filter: blur(2px);
+  transition:
+    opacity var(--acc-collapse) var(--acc-ease),
+    filter var(--acc-collapse) var(--acc-ease);
+}
+.mn-ev[data-open="true"] .mn-ev-inner {
+  opacity: 1;
+  filter: none;
+  transition:
+    opacity var(--acc-expand) var(--acc-ease),
+    filter var(--acc-expand) var(--acc-ease);
+}
+
+/* Transcript jump highlight (an evidence link, or a search hit opening the
+   meeting at a line). A layer behind the line rather than padding on it, so
+   marking a line moves nothing — the old -mx-2 px-2 py-1 pushed every line
+   below it down 8px and back. Same box as before: 8px out to the sides, 4px
+   above and below, rounded-md, 1px accent ring. */
+.mn-ts-row { position: relative; isolation: isolate; }
+.mn-ts-row::before {
+  content: '';
+  position: absolute;
+  inset: -4px -8px;
+  z-index: -1;
+  border-radius: 6px;
+  background: var(--accent-subtle);
+  box-shadow: 0 0 0 1px var(--accent-border);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--mn-hl-out) var(--mn-hl-ease);
+}
+.mn-ts-row[data-highlight="true"]::before {
+  opacity: 1;
+  transition-duration: var(--mn-hl-in);
+}
+
+/* Speaker chip (Transcript). The rename pencil takes no room at rest, so the
+   chip hugs its name; it used to hold an invisible 16px for the pencil. On
+   hover — or keyboard focus — the chip grows to fit it (#01 card resize, on
+   the pencil's slot: the chip's own width is just its content; on the spring,
+   --mn-chip-hover-dur both ways) and the pencil arrives in the new room with
+   the icon-swap blur and scale: 120ms after the room starts opening, when about
+   half of it is there, over 250ms ease-out. Out is never delayed: the pencil
+   is gone in 150ms, before the closing slot can
+   clip it to a sliver, while the chip settles back over the full resize. */
+.mn-chip-pencil {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 0;
+  overflow: hidden;
+  /* No will-change: the #01 snippet's `will-change: width` hints a property
+     the compositor cannot take (width is layout), which this stylesheet's
+     composited-motion contract forbids. */
+  transition: width var(--mn-chip-hover-dur) var(--mn-spring);
+}
+.mn-chip-pencil > svg {
+  flex-shrink: 0;
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--icon-swap-start-scale));
+  transition:
+    opacity   150ms ease-out,
+    filter    150ms ease-out,
+    transform 150ms ease-out;
+}
+.mn-chip:hover .mn-chip-pencil,
+.mn-chip:focus-visible .mn-chip-pencil {
+  width: 16px; /* the old 6px gap + the 10px glyph */
+}
+.mn-chip:hover .mn-chip-pencil > svg,
+.mn-chip:focus-visible .mn-chip-pencil > svg {
+  opacity: 1;
+  filter: none;
+  transform: none;
+  transition-duration: 250ms;
+  transition-delay: 120ms;
+}
+
+/* Speaker chip ⇄ rename field: one pill morphing (#01 card resize), not a
+   swap. The field is the chip in a soft accent tint with no border — Evin's
+   pick from four mocks, over a near-black fill with an accent ring that
+   flashed in mid-morph. Opening, the tint is there from the first frame and
+   only the width moves: the field starts at the chip's on-screen width
+   (--mn-chip-from-w, set inline for one morph, via @starting-style) and
+   eases to its own `width: auto` — interpolate-size lets a transition land
+   on auto. Closing, the chip starts at the field's width and tint and eases
+   back to its own size and grey. The clip keeps the growing field's buttons
+   inside the pill; they fade in as the room opens, not after it (a delay
+   left the pill empty for a beat). overflow: clip, NOT hidden: hidden makes
+   the pill a scroll container, and the field's autofocus scrolled it 10px
+   to bring the input into view — the name jumped left and crept back over
+   the morph (measured). clip cannot be scrolled — but it also stops the pill
+   being a scroll container, so as a flex item its min-width: auto becomes
+   its content width and pinned the growing field at full size from frame
+   one; min-width: 0 lets it start narrower than its contents again. The
+   class is on only for the duration of one morph (CHIP_MORPH_MS in
+   MeetingDetails.tsx), so a remount later never replays it. */
+.mn-chip-morph-in,
+.mn-chip-morph-out {
+  interpolate-size: allow-keywords;
+  overflow: clip;
+  min-width: 0;
+  transition:
+    width            var(--mn-chip-morph-dur) var(--mn-spring),
+    background-color var(--mn-chip-morph-dur) var(--mn-spring),
+    border-color     var(--mn-chip-morph-dur) var(--mn-spring),
+    color            150ms ease;
+}
+@starting-style {
+  .mn-chip-morph-in {
+    width: var(--mn-chip-from-w);
+  }
+  /* the field's look: bg-accent-subtle, no visible border */
+  .mn-chip-morph-out {
+    width: var(--mn-chip-from-w);
+    background-color: var(--accent-subtle);
+    border-color: transparent;
+  }
+}
+.mn-chip-morph-in .mn-chip-editor-actions {
+  animation: mn-fade-in 300ms ease-out backwards;
+}
+
+/* The rename field follows its text as you type (SpeakerNameInput sets the
+   width); the pill, being auto-width, follows the field. The pill's spring at
+   --mn-chip-type-dur: short enough that a keystroke's few pixels mostly settle
+   before the next one. */
+.mn-chip-input--animate {
+  transition: width var(--mn-chip-type-dur) var(--mn-spring);
+}
+
+/* !important as in the #21 snippet: the open-state rules ([data-open],
+   [data-highlight], :hover) out-rank a plain class and would keep their
+   transitions. */
+@media (prefers-reduced-motion: reduce) {
+  .mn-tab-in, .mn-tab-in--fade, .mn-card-in { animation: none; }
+  .mn-ev, .mn-ev-inner, .mn-ts-row::before,
+  .mn-chip-pencil, .mn-chip-pencil > svg,
+  .mn-chip-morph-in, .mn-chip-morph-out, .mn-chip-input--animate { transition: none !important; }
+  .mn-chip-morph-in .mn-chip-editor-actions { animation: none; }
 }
 
 /* Reduced-motion equivalent of the text reveal below: one short cross-fade on
@@ -9146,8 +9763,8 @@ html[data-platform="linux"] body {
 }
 [data-interface-theme] .pricing-card-lifetime {
   background:
-    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.35) 0%, transparent 60%),
-    rgba(37, 20, 65, 0.575) !important;
+    radial-gradient(circle at 50% 0%, rgba(79, 113, 238, 0.35) 0%, transparent 60%),
+    rgba(17, 27, 64, 0.575) !important;
   border: 1px solid transparent !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.20) !important;
 }
@@ -9160,8 +9777,8 @@ html[data-platform="linux"] body {
 }
 [data-theme='light'] [data-interface-theme] .pricing-card-lifetime {
   background:
-    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.16) 0%, transparent 60%),
-    rgba(241, 238, 254, 0.875) !important;
+    radial-gradient(circle at 50% 0%, rgba(79, 113, 238, 0.16) 0%, transparent 60%),
+    rgba(235, 240, 254, 0.875) !important;
   border: 1px solid transparent !important;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.10) !important;
 }
@@ -9519,17 +10136,21 @@ html[data-platform="linux"] body {
 
 /* Lifetime — a dark body on a dark ground, so the rim is symmetric: it
    catches a bounce from below as well as the key light. The fill is the flat
-   brand violet the old radial ran to; white on it is 6.31:1, clear of the
-   4.5:1 AA floor for 13px text that the gloss it replaces did not meet. */
+   colour the old radial ran to; white on it is 6.34:1, clear of the
+   4.5:1 AA floor for 13px text that the gloss it replaces did not meet.
+   2026-09: every violet/indigo in the lifetime-only rules (card, CTA, badges,
+   poster) moved to the toggle blue's hue by owner request: same OKLCH
+   lightness, hue 268.5, chroma x0.873, and any colour carrying white text
+   held at (or above) its old contrast. #4f46e5 -> #3652d4 here. */
 [data-interface-theme] .pricing-cta-lifetime {
   --lgc-r: 22px;
   --lgc-z: 28px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, .08) 0%, rgba(255, 255, 255, 0) 14%,
                             rgba(255, 255, 255, 0) 86%, rgba(255, 255, 255, .08) 100%),
-    #4f46e5 !important;
+    #3652d4 !important;
   color: #ffffff !important;
-  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.34) !important;
+  box-shadow: 0 6px 18px rgba(54, 82, 212, 0.34) !important;
 }
 [data-interface-theme] .pricing-cta-lifetime::before {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.40);
@@ -9628,11 +10249,11 @@ html[data-platform="linux"] body {
   mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask);
 }
 [data-theme='light'] [data-interface-theme] .pricing-cta-lifetime {
-  background: #6d28d9 !important;
+  background: #2e47d0 !important;
   color: #ffffff !important;
   box-shadow:
     inset 0 -1px 0 rgba(0, 0, 0, 0.28),
-    0 6px 18px rgba(109, 40, 217, 0.28) !important;
+    0 6px 18px rgba(46, 71, 208, 0.28) !important;
 }
 [data-theme='light'] [data-interface-theme] .pricing-cta-lifetime::before {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.34);
@@ -9668,6 +10289,123 @@ html[data-platform="linux"] body {
   mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask) !important;
 }
 
+/* ── 6a. The hover clock ──────────────────────────────────────────────────
+   Hover on these cards used to arrive in 180ms, and the pills' gloss in
+   0ms: it was a radial-gradient BACKGROUND, and a gradient cannot be
+   interpolated, so it swapped in one frame while the fill and shadow around
+   it were still easing. The same gradients now paint on ::after (declared
+   beside each hover rule further up), which fades, and everything hover
+   changes runs on one slower clock:
+     in   300ms  declared on :hover, so it drives the arrival
+     out  400ms  declared on the resting state, so it drives the leave
+   easeInOutSine, as the pills already used. The look at rest and at full
+   hover is unchanged; only the time it takes to get there moved.
+   Movement keeps its 180ms: the lift and the press are not what read as
+   fast, and a slower transform would make a release trail the finger. The
+   press's shadow change is restated on :active below, which has to win over
+   :hover because the pointer is still over the pill while pressing. */
+
+/* The gloss layer. Under the rim (::before, z -1) and over the fill, which
+   is where the gloss sat when it was the background. */
+[data-interface-theme] .pricing-cta-yearly::after,
+[data-interface-theme] .pricing-cta-lifetime::after,
+[data-interface-theme] .pro-teaser .pro-teaser-cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: -2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 400ms cubic-bezier(.37, 0, .63, 1);
+}
+
+/* out. Movement (the 1px lift, the press) keeps its 180ms everywhere, so a
+   release still snaps back up as it did; only light and colour slow down. */
+[data-interface-theme] .pricing-cta-yearly,
+[data-interface-theme] .pricing-cta-lifetime,
+[data-interface-theme] .pro-teaser .pro-teaser-cta {
+  transition:
+    background-color 400ms cubic-bezier(.37, 0, .63, 1),
+    box-shadow 400ms cubic-bezier(.37, 0, .63, 1),
+    transform 180ms cubic-bezier(.37, 0, .63, 1) !important;
+}
+[data-interface-theme] .pricing-card-yearly,
+[data-interface-theme] .pricing-card-lifetime {
+  transition:
+    transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 400ms cubic-bezier(.37, 0, .63, 1),
+    border-color 400ms cubic-bezier(.37, 0, .63, 1) !important;
+}
+[data-interface-theme] .pro-teaser {
+  transition:
+    transform 180ms cubic-bezier(.37, 0, .63, 1),
+    box-shadow 400ms cubic-bezier(.37, 0, .63, 1),
+    border-color 400ms cubic-bezier(.37, 0, .63, 1) !important;
+}
+/* The rims (::after) had no box-shadow transition at all, so their hover
+   change snapped; ::before is the grid on the cards and the noise on the
+   plaque, and both brighten on hover. */
+[data-interface-theme] .pricing-card-yearly::after,
+[data-interface-theme] .pricing-card-lifetime::after,
+[data-interface-theme] .pricing-card-yearly::before,
+[data-interface-theme] .pricing-card-lifetime::before,
+[data-interface-theme] .pro-teaser::after,
+[data-interface-theme] .pro-teaser::before {
+  transition:
+    box-shadow 400ms cubic-bezier(.37, 0, .63, 1),
+    opacity 400ms cubic-bezier(.37, 0, .63, 1) !important;
+}
+
+/* in */
+@media (hover: hover) and (pointer: fine) {
+  [data-interface-theme] .pricing-cta-yearly:hover,
+  [data-interface-theme] .pricing-cta-lifetime:hover,
+  [data-interface-theme] .pro-teaser:hover .pro-teaser-cta {
+    transition:
+      background-color 300ms cubic-bezier(.37, 0, .63, 1),
+      box-shadow 300ms cubic-bezier(.37, 0, .63, 1),
+      transform 180ms cubic-bezier(.37, 0, .63, 1) !important;
+  }
+  [data-interface-theme] .pricing-cta-yearly:hover::after,
+  [data-interface-theme] .pricing-cta-lifetime:hover::after,
+  [data-interface-theme] .pro-teaser:hover .pro-teaser-cta::after {
+    transition: opacity 300ms cubic-bezier(.37, 0, .63, 1);
+  }
+  [data-interface-theme] .pricing-card-yearly:hover,
+  [data-interface-theme] .pricing-card-lifetime:hover {
+    transition:
+      transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+      box-shadow 300ms cubic-bezier(.37, 0, .63, 1),
+      border-color 300ms cubic-bezier(.37, 0, .63, 1) !important;
+  }
+  [data-interface-theme] .pro-teaser:hover {
+    transition:
+      transform 180ms cubic-bezier(.37, 0, .63, 1),
+      box-shadow 300ms cubic-bezier(.37, 0, .63, 1),
+      border-color 300ms cubic-bezier(.37, 0, .63, 1) !important;
+  }
+  [data-interface-theme] .pricing-card-yearly:hover::after,
+  [data-interface-theme] .pricing-card-lifetime:hover::after,
+  [data-interface-theme] .pricing-card-yearly:hover::before,
+  [data-interface-theme] .pricing-card-lifetime:hover::before,
+  [data-interface-theme] .pro-teaser:hover::after,
+  [data-interface-theme] .pro-teaser:hover::before {
+    transition:
+      box-shadow 300ms cubic-bezier(.37, 0, .63, 1),
+      opacity 300ms cubic-bezier(.37, 0, .63, 1) !important;
+  }
+}
+
+/* press: the same 180ms it always had */
+[data-interface-theme] .pricing-cta-yearly:active,
+[data-interface-theme] .pricing-cta-lifetime:active {
+  transition:
+    background-color 180ms cubic-bezier(.37, 0, .63, 1),
+    box-shadow 180ms cubic-bezier(.37, 0, .63, 1),
+    transform 180ms cubic-bezier(.37, 0, .63, 1) !important;
+}
+
 /* ── 6. Hover and press ───────────────────────────────────────────────────
    The tint gains luminance while HOLDING its hue, so it reads as the same
    colour lit better rather than a different colour (design.md). Violet
@@ -9686,9 +10424,9 @@ html[data-platform="linux"] body {
       0 6px 16px rgba(0, 0, 0, 0.20) !important;
   }
   [data-interface-theme] .pricing-cta-lifetime:hover {
-    background-color: #5b52ea !important;
+    background-color: #405eda !important;
     transform: translateZ(var(--lgc-z)) translateY(-1px) !important;
-    box-shadow: 0 10px 22px rgba(79, 70, 229, 0.50) !important;
+    box-shadow: 0 10px 22px rgba(54, 82, 212, 0.50) !important;
   }
   [data-interface-theme] .pro-teaser:hover .pro-teaser-cta {
     background-color: #eef2f6 !important;
@@ -9707,7 +10445,7 @@ html[data-platform="linux"] body {
     background-color: #1c2440 !important;
   }
   [data-theme='light'] [data-interface-theme] .pricing-cta-lifetime:hover {
-    background-color: #7c3aed !important;
+    background-color: #3a57e4 !important;
   }
   [data-theme='light'] [data-interface-theme] .pro-teaser:hover .pro-teaser-cta {
     background-color: #1c2440 !important;
@@ -9780,8 +10518,14 @@ html[data-platform="linux"] body {
    describes for a light ground, where there is no bounce for a bottom rim to
    catch and the surface sits ON the page rather than floating in it. */
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card {
+  /* Four slots, [inset rim, inset floor, outer ambient, outer contact], like
+     every other card shadow, so a rule that later differs from this one
+     interpolates instead of snapping. Rim and ambient are transparent: they
+     paint nothing and only keep the list shape. */
   box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0),
     inset 0 -1px 0 rgba(15, 23, 42, 0.10),
+    0 0 0 rgba(15, 23, 42, 0),
     0 6px 18px rgba(15, 23, 42, 0.12) !important;
 }
 
@@ -9974,14 +10718,15 @@ html[data-platform="linux"] body {
   z-index: 1 !important;
   pointer-events: none !important;
   border-radius: inherit !important;
-  opacity: 0.55 !important;
+  /* Fixed at what used to be the hover strength: the grid is always shown and
+     the card has no hover state. */
+  opacity: 0.8 !important;
   mix-blend-mode: normal !important;
   background-color: transparent !important;
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px) !important;
   background-size: 24px 24px !important;
-  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
 
 /* On a light ground a white grid is invisible, so it inverts to ink — the same
@@ -9994,7 +10739,10 @@ html[data-platform="linux"] body {
     linear-gradient(rgba(16, 22, 43, 0.030) 1px, transparent 1px),
     linear-gradient(90deg, rgba(16, 22, 43, 0.030) 1px, transparent 1px) !important;
 }
+/* `opacity` restated here: the light veil suppressor further up sits at
+   (0,3,1) and would otherwise hide the grid, leaving it visible only on hover. */
 [data-theme='light'] [data-interface-theme] .natively-api-detail-card::before {
+  opacity: 0.8 !important;
   background-image:
     linear-gradient(rgba(16, 22, 43, 0.090) 1px, transparent 1px),
     linear-gradient(90deg, rgba(16, 22, 43, 0.090) 1px, transparent 1px) !important;
@@ -10003,8 +10751,7 @@ html[data-platform="linux"] body {
 /* hover brightened the grid before; it still does */
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme] .pricing-card-yearly:hover::before,
-  [data-interface-theme] .pricing-card-lifetime:hover::before,
-  [data-interface-theme] .natively-api-detail-card:hover::before {
+  [data-interface-theme] .pricing-card-lifetime:hover::before {
     opacity: 0.8 !important;
   }
 }
@@ -10119,18 +10866,18 @@ html[data-platform="linux"] body {
   box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.45);
 }
 [data-interface-theme] .pricing-card-lifetime .badge-tier-label {
-  background: rgba(124, 66, 232, 0.23) !important;
-  color: #c4b5fd !important;
+  background: rgba(61, 91, 224, 0.23) !important;
+  color: #a9c0fb !important;
 }
 [data-interface-theme] .pricing-card-lifetime .badge-tier-label::before {
-  box-shadow: inset 0 0 0 1px rgba(196, 181, 253, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(169, 192, 251, 0.45);
 }
 [data-interface-theme] .pricing-card-lifetime .badge-best-value {
-  background: rgba(139, 92, 246, 0.15) !important;
-  color: #e9e2ff !important;
+  background: rgba(79, 113, 238, 0.15) !important;
+  color: #dde7ff !important;
 }
 [data-interface-theme] .pricing-card-lifetime .badge-best-value::before {
-  box-shadow: inset 0 0 0 1px rgba(196, 181, 253, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(169, 192, 251, 0.42);
 }
 
 [data-theme='light'] [data-interface-theme] .pricing-card-yearly .badge-tier-label {
@@ -10141,18 +10888,18 @@ html[data-platform="linux"] body {
   box-shadow: inset 0 0 0 1px rgba(29, 78, 216, 0.30);
 }
 [data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-tier-label {
-  background: rgba(124, 66, 232, 0.14) !important;
-  color: #6d28d9 !important;
+  background: rgba(61, 91, 224, 0.14) !important;
+  color: #2e47d0 !important;
 }
 [data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-tier-label::before {
-  box-shadow: inset 0 0 0 1px rgba(109, 40, 217, 0.30);
+  box-shadow: inset 0 0 0 1px rgba(46, 71, 208, 0.30);
 }
 [data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-best-value {
-  background: rgba(124, 66, 232, 0.16) !important;
-  color: #5b21b6 !important;
+  background: rgba(61, 91, 224, 0.16) !important;
+  color: #263baf !important;
 }
 [data-theme='light'] [data-interface-theme] .pricing-card-lifetime .badge-best-value::before {
-  box-shadow: inset 0 0 0 1px rgba(91, 33, 182, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(38, 59, 175, 0.32);
 }
 
 /* The teaser plaque is a smaller sibling of the two pricing cards, so it takes
@@ -10207,9 +10954,10 @@ html[data-platform="linux"] body {
 
    Rendered at 3 / 4 / 6 / 8px at device scale 1 before choosing: 3px is where
    the specular still reads as a highlight, and by 6px it separates into a
-   visible band and the bar starts reading as a capsule. The heights are
-   therefore UNCHANGED (3px, 2px for the Knowledge sub-rows) — this is the
-   material fitted to the existing rhythm, not a resize.
+   visible band and the bar starts reading as a capsule. The heights were
+   therefore kept at 3px (2px for the Knowledge sub-rows) — UNTIL 2026-09-25,
+   when the owner asked for the Liquid Glass fill in the Settings toggle's
+   colour: that capsule read is now the point, so the bars are 6px (4px).
 
    NO `[data-interface-theme]` PREFIX, deliberately. Every other pricing rule in
    this file is anchored on that attribute, and half of them on a specific VALUE
@@ -10233,12 +10981,20 @@ html[data-platform="linux"] body {
     inset 0 -1px 0 rgba(255, 255, 255, 0.055);
 }
 
+/* The fill is now the Liquid Glass body at bar scale (design.md, .lg-sky's
+   light-body lighting): the flat hue with a specular sheen on the top face that
+   dies by the middle, a crisp top rim, and a faint underside. At 6px (4px for
+   the Knowledge sub-rows) the sheen reads as glass; at the old 3px it could
+   only be a line. */
 .natively-meter-fill {
   height: 100%;
   border-radius: 999px;
-  background: var(--meter-hue);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.40) 0%, rgba(255, 255, 255, 0) 60%),
+    var(--meter-hue);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
     0 0 6px -1px var(--meter-hue);
 }
 
@@ -10277,8 +11033,11 @@ html[data-platform="linux"] body {
    Deliberately NOT `--accent-primary` itself: that token is contrast-guarded
    (PeriwinkleContrastGuard.test.mjs) and used across the app, and nothing about
    a usage meter should move if the app's accent is ever retuned. */
-.natively-meter-fill { --meter-hue: hsl(234 48% 68%); }
-[data-theme='light'] .natively-meter-fill { --meter-hue: hsl(236 38% 39%); }
+/* By owner request the resting fill is now the Settings toggle's ON colour
+   (--toggle-on, #6688F5, the same in both themes), so a meter reads as the
+   same control family as every switch in Settings. It still leaves amber the
+   loudest thing on the bar: relative luminance 0.27 against amber's 0.44. */
+.natively-meter-fill { --meter-hue: var(--toggle-on); }
 .natively-meter-fill--high { --meter-hue: #f59e0b; }
 .natively-meter-fill--over { --meter-hue: #ef4444; }
 
@@ -10295,6 +11054,473 @@ html[data-platform="linux"] body {
 }
 [data-theme='light'] .natively-meter-fill {
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.40),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
     inset 0 -1px 0 rgba(16, 22, 43, 0.14);
+}
+/* ── Stealth-typing caret ──────────────────────────────────────────────
+   On Windows the overlay is WS_EX_NOACTIVATE and the chat input is
+   readOnly while the hook is engaged, so the OS draws no caret: the box
+   looks dead even though keystrokes ARE being delivered through
+   StealthKeyboardManager. That ambiguity is the "it didn't take charge"
+   confusion. This mirrors the input's text invisibly (to occupy the same
+   width) and draws a blinking pipe right after it, so "Natively has your
+   keystrokes" is visible. macOS takes real DOM focus and gets the native
+   caret, so this only renders while stealthTapActive. */
+.nat-caret-mirror {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  border: 1px solid transparent; /* match the input's border box exactly */
+  border-radius: 0.75rem;        /* rounded-xl */
+  white-space: pre;
+  overflow: hidden;
+  pointer-events: none;
+  /* No `font: inherit`. This rule lands after `@tailwind utilities`, so the
+     shorthand overrode the element's own `text-[13px] leading-relaxed` and the
+     mirror measured the text at the wrapper's 16px while the input drew it at
+     13px — the caret drifted ~1.5px further right with every character. The
+     family and weight already inherit; the size comes from those classes. */
+}
+/* Takes width, paints nothing — the real input still renders the glyphs. */
+.nat-caret-mirror > .nat-caret-text {
+  visibility: hidden;
+  flex: none;
+}
+.nat-caret {
+  flex: none;
+  display: inline-block;
+  width: 1.5px;
+  height: 1.15em;
+  border-radius: 1px;
+  background: var(--accent-primary);
+  animation: nat-caret-blink 1.06s steps(1, end) infinite;
+}
+@keyframes nat-caret-blink {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+/* A caret that never stops moving is a problem for vestibular sensitivity,
+   and a steady bar still communicates "input is live". */
+@media (prefers-reduced-motion: reduce) {
+  .nat-caret { animation: none; opacity: 1; }
+}
+
+/* ── Error notice shake (transitions.dev #12, "error state shake") ───────
+   Sync surfaces four failure states — status load, enable/disable, LAN
+   reset, browser-context save — and every one of them arrived through the
+   same `notice()` helper as the informational ones: a 250ms height+opacity
+   collapse. An error that enters exactly like a tip is not feedback, it is
+   just more content. This gives the alert notices, and only those, the
+   percussive hint the recipe is for.
+
+   Ported values, not invented ones: 6px throw, 4px overshoot, 80/60/80/60ms
+   segments (280ms total), and the per-stop `animation-timing-function` that
+   lets each leg follow its own curve — the whole point of the recipe, and the
+   thing a single eased keyframe cannot reproduce. The %-stops are the
+   cumulative segment durations: 28.57 / 57.14 / 78.57 / 100.
+
+   `--shake-ease` is cubic-bezier(0.22, 1, 0.36, 1), which is already this
+   app's smooth-out curve (--aip-ease-out, EASE_SMOOTH_OUT in
+   PhoneMirrorSettings), so it needs no new easing vocabulary.
+
+   Replay is keyed in React rather than by the reference's
+   remove-class/reflow/re-add dance: the notice is re-keyed on its message, so
+   a NEW error remounts the node and the animation runs again, while a
+   re-render with the same message leaves it alone. No reflow, no timers, and
+   nothing to clean up on unmount.
+
+   transform only — it composites, and it cannot disturb the height the
+   Collapse above it is animating at the same time. */
+/* No will-change: the class stays on the notice after its one shake, so a
+   hint would pin a compositor layer on it for as long as it is shown. */
+.t-notice-shake {
+  animation: t-notice-shake 280ms linear;
+}
+@keyframes t-notice-shake {
+  0%     { transform: translateX(0);     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  28.57% { transform: translateX(6px);   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  57.14% { transform: translateX(-6px);  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  78.57% { transform: translateX(4px);   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  100%   { transform: translateX(0); }
+}
+
+/* Required by the recipe. A shake is pure emphasis — there is no information
+   in it that the red border and the alert role do not already carry — so it
+   is dropped entirely rather than shortened. */
+@media (prefers-reduced-motion: reduce) {
+  .t-notice-shake { animation: none !important; transform: none !important; }
+}
+
+/* ── Tooltip open/close (transitions.dev 17) ──────────────────────────
+   Verbatim from transitions/tooltip.md.
+   A hover/focus tooltip that fades + scales in with a short appear-delay
+   but disappears immediately on leave. Pure CSS. */
+:root {
+  --tt-in-dur: 150ms;
+  --tt-out-dur: 50ms;
+  --tt-scale: 0.98;
+  --tt-delay: 80ms;
+  --tt-in-ease: ease-out;
+  --tt-out-ease: ease-out;
+  --tt-bg: rgba(28, 28, 32, 0.85);
+  --tt-fg: rgba(255, 255, 255, 0.62);
+  --tt-border: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='light'] {
+  --tt-bg: rgba(244, 245, 247, 0.92);
+  --tt-fg: rgba(35, 39, 47, 0.68);
+  --tt-border: rgba(0, 0, 0, 0.08);
+}
+
+.t-tt-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.t-tt {
+  position: absolute;
+  top: calc(100% + 5px);
+  bottom: auto;
+  left: 50%;
+  transform: translate(-50%, 0) scale(var(--tt-scale));
+  transform-origin: 50% 0%;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: var(--tt-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--tt-fg);
+  font-size: 10.5px;
+  font-weight: 450;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  border: 1px solid var(--tt-border);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 50;
+  transition:
+    opacity   var(--tt-out-dur) var(--tt-out-ease),
+    transform var(--tt-out-dur) var(--tt-out-ease);
+}
+
+.t-tt[data-side='top'] {
+  top: auto;
+  bottom: calc(100% + 5px);
+  transform-origin: 50% 100%;
+}
+
+[data-theme='light'] .t-tt {
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.t-tt-wrap:hover .t-tt,
+.t-tt-trigger:focus-visible + .t-tt {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+  transition-duration: var(--tt-in-dur);
+  transition-timing-function: var(--tt-in-ease);
+  transition-delay: var(--tt-delay);
+}
+
+.t-tt-wrap:has(:disabled):hover .t-tt {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-tt { transition: none !important; }
+}
+
+/* @overlay-motion:start ─────────────────────────────────────────────────────
+   Meeting overlay micro-interactions (2026-09-27), on the transitions.dev
+   motion-token scale. The tokens are not installed globally, so the values
+   are literals; the token each one maps to is named beside it.
+
+   Rules for everything in this block:
+   - Inside the card only transform, opacity and filter move. Animating a
+     size would feed the viewport ResizeObserver every frame and fight the
+     card's 300ms height tween (OVERLAY_RESIZE_TWEEN).
+   - Motion sits on INNER elements, never on an .overlay-*-surface: the
+     liquid-glass and modern themes set `transition … !important` on those
+     surfaces, so a transition added there would be dead in two of the three
+     themes.
+   - Entrances use @starting-style, so they play once, when the node is
+     inserted, and never replay on a re-render or across Cmd+B.
+   - Answers are deliberately absent. They already materialize word by word,
+     and the streaming → final swap mounts a new node, so an entrance there
+     would re-fade text the user has already read. */
+.ov-motion {
+  /* #04 text states swap — Answer ⇄ Stop (SwapText.tsx). */
+  --text-swap-dur: 150ms;          /* --duration-quick */
+  --text-swap-translate-y: 4px;    /* --distance-micro */
+  --text-swap-blur: 2px;           /* --blur-small */
+  --text-swap-ease: ease-in-out;   /* --ease-in-out */
+
+  /* #09 icon swap — Copy → Check on answer cards and code blocks. */
+  --icon-swap-dur: 250ms;          /* --duration-fast */
+  --icon-swap-blur: 2px;           /* --blur-small */
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;   /* --ease-in-out */
+}
+
+/* transitions.dev #04, verbatim. ProviderChangeNotice.css carries the same
+   rules; keep the copies identical and tune through the variables. */
+.t-text-swap {
+  display: inline-block;
+  transform: translateY(0);
+  filter: blur(0);
+  opacity: 1;
+  transition:
+    transform var(--text-swap-dur) var(--text-swap-ease),
+    filter    var(--text-swap-dur) var(--text-swap-ease),
+    opacity   var(--text-swap-dur) var(--text-swap-ease);
+  will-change: transform, filter, opacity;
+}
+.t-text-swap.is-exit {
+  transform: translateY(calc(var(--text-swap-translate-y) * -1));
+  filter: blur(var(--text-swap-blur));
+  opacity: 0;
+}
+.t-text-swap.is-enter-start {
+  transform: translateY(var(--text-swap-translate-y));
+  filter: blur(var(--text-swap-blur));
+  opacity: 0;
+  transition: none;
+}
+/* At rest the overlay's swap label must not be a stacking context. The modern
+   theme paints a z-index:0 gloss (.overlay-chip-surface::before) OVER each
+   chip's label; a resting translateY(0) / blur(0) / will-change would lift the
+   Answer label above it and make that one chip read differently from its
+   neighbours. The transitions still interpolate from `none`. */
+.ov-motion .t-text-swap:not(.is-exit):not(.is-enter-start) {
+  transform: none;
+  filter: none;
+  will-change: auto;
+}
+
+/* The code block's Copy → Check slots. Every theme recolours
+   `.ai-response-card span:not(.token)…` to the answer's text colour, which
+   with !important, which would turn the muted copy icon bright; the slots take
+   the button's colour. `:not(#_)` carries ID specificity to outrank those
+   rules (0,4,5). */
+.ov-copy-swap:not(#_),
+.ov-copy-swap:not(#_) > .t-icon {
+  color: inherit !important;
+}
+
+/* Your question lands. The bubble rises from the input side and settles.
+   The tail corner is top-right, but the eye follows the send, so the scale
+   grows out of the bottom-right. No blur: the bubble carries its own
+   backdrop-filter. */
+.ov-bubble-in {
+  transform-origin: 100% 100%;
+  transition:
+    opacity   250ms cubic-bezier(0.22, 1, 0.36, 1),   /* --duration-fast, --ease-smooth-out */
+    transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@starting-style {
+  .ov-bubble-in {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);          /* --distance-base, --scale-medium */
+  }
+}
+
+/* Listening (manual recording). The entrance used to be Tailwind
+   `animate-in fade-in slide-in-from-bottom-2`, which never ran: the project
+   has no tailwindcss-animate plugin. */
+.ov-listening-in {
+  transition:
+    opacity   250ms cubic-bezier(0.22, 1, 0.36, 1),   /* --duration-fast, --ease-smooth-out */
+    transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@starting-style {
+  .ov-listening-in {
+    opacity: 0;
+    transform: translateY(8px);                       /* --distance-base */
+  }
+}
+/* Its level bars reuse the existing `stt-wave-dot` keyframes. The wrapper
+   holds only the bars, so the rule's nth-child delays line up. */
+.ov-listening-wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 14px;
+}
+
+/* Screenshot attached. The tray and its thumbnails move in framer
+   (overlay/ScreenshotTray.tsx + ChromeFold.tsx): the tray folds the card's
+   height open and closed, which CSS can't do without animating a size here.
+   Only the thumbnail's remove disc is CSS: it grows in with the hover, quick
+   in, and shrinks away as the pointer leaves. */
+.ov-thumb-remove {
+  transform: scale(0.8);
+  transition:
+    opacity   150ms ease-out,                          /* --duration-quick, --ease-out */
+    transform 150ms cubic-bezier(0.22, 1, 0.36, 1),    /* --ease-smooth-out */
+    background-color 150ms ease-out;
+}
+.group\/thumb:hover .ov-thumb-remove {
+  transform: scale(1);
+}
+.group\/thumb:hover .ov-thumb-remove:active {
+  transform: scale(0.9);
+}
+
+/* The quick-action row sits 12px under whatever is above it, 4px under the
+   rolling transcript. That padding eases with the transcript's fold
+   (ChromeFold: 250ms open; on the fold, 250ms that starts just after the line's) instead of
+   stepping 8px at its first or last frame. */
+.ov-quickrow-pad {
+  transition: padding-top 250ms cubic-bezier(0.22, 1, 0.36, 1);   /* --duration-fast, --ease-smooth-out */
+}
+.ov-quickrow-pad.is-bare {
+  /* Trails the fold's collapse (which starts at 60ms, on framer's clock) by
+     a frame or two, so the padding can never grow before the line shrinks. */
+  transition-delay: 100ms;
+}
+
+/* Skill picker — transitions.dev #05 menu dropdown, growing UP from the
+   input's left edge. It mounts fresh on every open, so @starting-style is
+   the pre-open state; SkillPickerLayer holds it mounted with .is-closing for
+   the close. */
+.ov-skill-picker {
+  transform-origin: 0% 100%;
+  transition:
+    opacity   250ms cubic-bezier(0.22, 1, 0.36, 1),   /* open: --duration-fast, --ease-smooth-out */
+    transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@starting-style {
+  .ov-skill-picker {
+    opacity: 0;
+    transform: scale(0.97);                           /* --scale-medium */
+  }
+}
+.ov-skill-picker.is-closing {
+  opacity: 0;
+  transform: scale(0.99);                             /* --scale-tiny */
+  pointer-events: none;
+  transition-duration: 150ms;                         /* close: --duration-quick */
+}
+
+/* A colour set inline that must survive the answer card's
+   `span:not(.token)… { color: … !important }` recolour (0,4,5). */
+.ov-keep-color:not(#_) {
+  color: var(--ov-keep-color) !important;
+}
+
+/* Quick-action chips: hover highlights in place — nothing moves. A faint
+   neutral tint of the overlay's strongest text colour (so it reads on every
+   interface × colour theme) and a hairline ring fade in over the chip's own
+   surface, and the icon comes up from 70% to full. Kept deliberately quiet:
+   just enough to see which chip the pointer is on. The tint is a ::after layer under
+   the label (the chip isolates, the layer sits at z-index -1), so the glass
+   and modern surfaces keep their gradient and rim beneath it. The recording
+   Stop chip is not a chip surface, so it keeps its red. */
+.ov-chip-row > .overlay-chip-surface {
+  position: relative;
+  isolation: isolate;
+}
+.ov-chip-row > .overlay-chip-surface::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+  background-color: color-mix(in srgb, var(--overlay-text-strong, #fff) 5%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--overlay-text-strong, #fff) 10%, transparent);
+  opacity: 0;
+  /* Hover out: softer and longer than the in, so a sweep along the row
+     leaves a faint trail instead of blinking off. */
+  transition:
+    opacity 250ms ease-out,                           /* --duration-fast, --ease-out */
+    background-color 250ms ease-out;
+}
+.ov-chip-row > .overlay-chip-surface:hover::after {
+  opacity: 1;
+  transition-duration: 150ms;                         /* hover in: --duration-quick */
+}
+/* Press: the tint deepens while the chip is held, snapping in and easing back
+   on release (back to the hover rule's 150ms). */
+.ov-chip-row > .overlay-chip-surface:active::after {
+  background-color: color-mix(in srgb, var(--overlay-text-strong, #fff) 9%, transparent);
+  transition-duration: 80ms;                          /* --duration-micro */
+}
+.ov-chip-row > .overlay-chip-surface svg {
+  transition: opacity 250ms ease-out;                 /* out, with the tint */
+}
+.ov-chip-row > .overlay-chip-surface:hover svg {
+  opacity: 1;
+  transition-duration: 150ms;                         /* in, with the tint */
+}
+/* Glass and modern lift a hovered chip 1px on their own; here it stays put.
+   Mid-press their press scale still applies. */
+.ov-chip-row > .overlay-chip-surface:hover:not(:active):not(#_) {
+  transform: none;
+}
+
+/* Not animated on purpose: the pill's Hide ⇄ Show. On collapse the whole pill
+   fades out and its window hides with the overlay (OverlayAuxWindows.tsx), so
+   its "Show" state never reaches the screen. A swap there would only play
+   inside that fade, and on re-show it would open on an empty label. */
+
+@media (prefers-reduced-motion: reduce) {
+  .t-text-swap { transition: none !important; }
+  .ov-bubble-in,
+  .ov-listening-in,
+  .ov-thumb-remove,
+  .ov-quickrow-pad,
+  .ov-skill-picker {
+    transition: none !important;
+  }
+  .ov-listening-wave .stt-wave-dot {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+/* @overlay-motion:end */
+
+/* ── Theme switch: one tight dissolve of the whole window ───────────────────
+   lib/themeTransition.mjs flips html[data-theme] inside a View Transition and
+   sets data-theme-switching for its lifetime. The UA cross-fades the old
+   snapshot into the live page (plus-lighter, which stays exact for the
+   translucent glass surfaces and the transparent overlay window); these rules
+   only set the timing.
+
+   240ms on cubic-bezier(0.77, 0, 0.175, 1) — a strong ease-in-out. A window-wide
+   swap is not an open/close, so it takes the symmetric curve; the strong shape
+   holds the first ~60ms almost still and lands the change in the middle, so it
+   reads as one decisive dissolve rather than a slow fade. Rare event, so it may
+   animate, but it stays under 300ms. No blur, no movement: a colour change
+   never blurs. Old and new share the group's duration and easing via the UA
+   sheet's `inherit`.
+
+   The live page underneath must not ALSO animate its colours (the toggles'
+   `transition-all 300ms`, the ask-bar pill, every `transition-colors`), or they
+   would land out of step with the rest. That is handled in themeTransition.mjs
+   by finishing colour transitions as they start — NOT with a universal
+   `transition: none` rule here, which forces a full-document style recalc as the
+   dissolve begins and dropped 54-83ms frames on the launcher. */
+:root[data-theme-switching]::view-transition-group(root) {
+  animation-duration: 240ms;
+  animation-timing-function: cubic-bezier(0.77, 0, 0.175, 1);
+}
+/* Reduced motion keeps the dissolve — opacity only, the gentle equivalent, so
+   the brightness change is still eased — but shorter. */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme-switching]::view-transition-group(root) {
+    animation-duration: 160ms;
+    animation-timing-function: ease-in-out;
+  }
 }

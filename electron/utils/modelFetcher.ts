@@ -4,13 +4,17 @@
  */
 
 import axios from 'axios';
+import { DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PRO_MODEL, isDeepseekModelId } from '../llm/deepseekModels';
+import { AGENTROUTER_MODELS_URL, agentRouterCatalogue, agentRouterHttpHeaders } from '../llm/agentRouter';
+import { getVisionCapabilityStore } from '../llm/visionCapabilityStore';
+import { parseOpenRouterVision } from '../llm/providerVisionData';
 
 export interface ProviderModel {
     id: string;
     label: string;
 }
 
-type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion';
+type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter';
 
 /**
  * Fetch available models from a provider's API.
@@ -37,6 +41,8 @@ export async function fetchProviderModels(
             return fetchOpenRouterModels(apiKey);
         case 'fluxion':
             return fetchFluxionModels(apiKey);
+        case 'agentrouter':
+            return fetchAgentRouterModels(apiKey);
         default:
             throw new Error(`Unknown provider: ${provider}`);
     }
@@ -67,6 +73,10 @@ async function fetchOpenRouterModels(apiKey: string): Promise<ProviderModel[]> {
     const response = await axios.get('https://openrouter.ai/api/v1/models', {
         headers: { Authorization: `Bearer ${apiKey}` }, timeout: 15000,
     });
+    // The same response says which models read images (2026-10-01): Refresh in
+    // Settings updates the saved answers too.
+    const vision = parseOpenRouterVision(response.data);
+    if (vision.size > 0) getVisionCapabilityStore().replaceProviderAnswers('openrouter', '', vision);
     return (response.data?.data || [])
         .filter((m: any) => m?.id && !String(m.id).endsWith(':batch'))
         // `openrouter/` is Natively's own routing prefix and is NOT optional:
@@ -119,6 +129,31 @@ async function fetchFluxionModels(apiKey: string): Promise<ProviderModel[]> {
         .filter((m: any) => m?.id && !FLUXION_NON_CHAT_MODEL_IDS.has(String(m.id)))
         .map((m: any) => ({ id: `fluxion/${m.id}`, label: String(m.id) }))
         .sort((a: ProviderModel, b: ProviderModel) => a.label.localeCompare(b.label));
+}
+
+/**
+ * AgentRouter's catalogue: GET /v1/models, key-scoped (401 `无效的令牌` on a
+ * bad key), carrying `supported_endpoint_types` per model. Returned 4 ids on
+ * 2026-09-30 — claude-opus-4-8, claude-opus-5, deepseek-v4-flash, gpt-6-astra —
+ * while the docs still list gpt-5.6-sol and glm-5.3, which would 503 "no
+ * available channel". So this list, not the docs, is the source.
+ *
+ * Needs the client-identity header like every AgentRouter route (see
+ * AGENTROUTER_CLIENT_HEADERS); without it this is a 401
+ * `unauthorized_client_error` whatever the key.
+ *
+ * The `agentrouter/` prefix is load-bearing for Fluxion's reason: these are
+ * the vendors' own ids, so unprefixed they would be classified — and billed —
+ * as the user's own Anthropic/OpenAI/DeepSeek models.
+ *
+ * The ORDER is load-bearing (unrationed default first) — see
+ * agentRouterCatalogue for why.
+ */
+async function fetchAgentRouterModels(apiKey: string): Promise<ProviderModel[]> {
+    const response = await axios.get(AGENTROUTER_MODELS_URL, {
+        headers: agentRouterHttpHeaders(apiKey), timeout: 15000,
+    });
+    return agentRouterCatalogue((response.data?.data || []).map((m: any) => m?.id));
 }
 
 /**
@@ -395,12 +430,14 @@ export function pickLatestSnapshotPerModel<T extends { id?: string; created_at?:
 
 // ─── DeepSeek ────────────────────────────────────────────────────────────────
 
-// Documented current DeepSeek text models; used as fallback if /models call fails
-// or returns an unexpected shape. deepseek-chat / deepseek-reasoner are deprecated
-// (2026-07-24) and intentionally excluded.
+// Documented current DeepSeek models (api-docs.deepseek.com/quick_start/pricing);
+// used as fallback if /models call fails or returns an unexpected shape.
+// deepseek-chat / deepseek-reasoner were discontinued 2026-07-24, and
+// deepseek-v4-flash was retired 2026-09-10 in favour of deepseek-flash — all
+// intentionally excluded (see llm/deepseekModels.ts).
 const DEEPSEEK_DEFAULT_MODELS: ProviderModel[] = [
-    { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
-    { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+    { id: DEEPSEEK_DEFAULT_MODEL, label: DEEPSEEK_DEFAULT_MODEL },
+    { id: DEEPSEEK_PRO_MODEL, label: DEEPSEEK_PRO_MODEL },
 ];
 
 async function fetchDeepSeekModels(apiKey: string): Promise<ProviderModel[]> {
@@ -422,7 +459,7 @@ async function fetchDeepSeekModels(apiKey: string): Promise<ProviderModel[]> {
 
         const filtered = models.filter((m: any) => {
             const id = (m.id || '').toLowerCase();
-            if (!/^deepseek-v\d/.test(id)) return false;
+            if (!isDeepseekModelId(id)) return false;
             if (excludePatterns.some(p => id.includes(p))) return false;
             return true;
         });

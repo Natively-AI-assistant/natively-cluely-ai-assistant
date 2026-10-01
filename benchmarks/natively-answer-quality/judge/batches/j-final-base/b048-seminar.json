@@ -1,0 +1,262 @@
+{
+ "batch": "b048-seminar",
+ "instructions": "Judge every item per CHARTER.md. evidence_ids / forbidden_ids refer to material_library.",
+ "material_library": {
+  "SEMINAR-CTX-C1": {
+   "title": "Slide deck: flywheel assist for municipal bus depots (transport engineering)",
+   "text": "SLIDE 1. Flywheel Assist for Municipal Bus Depots: Trial Results\nLorcan Adeyemi-Fisk, Tarnbrook Transit Authority\nDepot managers briefing, October 2024\n\nSLIDE 2. Context\n- Tarnbrook Transit runs 120 diesel buses from two depots, Millgate and Eastfield.\n- We ran a 6-month trial (February to July 2024) of a flywheel regenerative-braking assist on Route family 14.\n- 48 buses at Millgate depot were fitted.\n\nSLIDE 3. Method\n- Baseline period: November 2023 to January 2024, before fitting.\n- Fuel logged per shift by on-board telematics, compared with the same buses' baseline.\n- Buses with telematics faults were excluded from the analysis.\n\nSLIDE 4. Headline\n- Fuel use down 31% on fitted buses.\n- Brake pad replacements per bus per year fell from 3.1 to 2.4.\n\nSLIDE 5. Results table\nMetric | Baseline | Trial\nBuses in analysis | 42 | 42\nFuel use, L per 100 km | 41.2 | 32.6\nChange in fuel use | - | -20.9%\nTrial dates | - | 1 February to 30 September 2024\np-value (paired by bus) | - | 0.09\nBrake pad replacements per bus per year | 3.1 | 2.4\n\nSLIDE 6. Cost\n- Capital cost of fitting the buses, installation included: USD 1.86 million.\n- Annual fuel and maintenance saving: USD 0.31 million.\n- Payback: under 3 years.\n\nSLIDE 7. Conclusion\n- The retrofit cut fuel use by roughly a quarter, with statistically significant results, and pays back within three years.\n- Recommendation: roll out to all 120 buses.\n\nSLIDE 8. Caveats\n- One depot only.\n- The baseline covers winter months only."
+  },
+  "SEMINAR-CTX-G4": {
+   "title": "Experiment writeup: RetrievalPath spaced retrieval practice with ablation (education)",
+   "text": "RetrievalPath: Adaptive Spaced Retrieval Practice in a First-Year Statistics Course\nAnnika Feldmarsh and Tobias Quenby, Westerlund College. Technical report WC-EDU-TR-12, January 2025\n\n1. SYSTEM\nRetrievalPath is a plugin for the course learning platform that serves short retrieval quizzes. The item bank holds 640 multiple-choice and short-numeric items tagged to 11 topics. It has three components. (a) Difficulty estimator: each item carries an Elo-style rating updated after every response (K = 24), and items are chosen to target a 75% success rate for the student. (b) Interval scheduler: after a correct answer the next review interval is multiplied by 2.2 if the student reported high confidence and by 1.4 if low confidence; after an incorrect answer the interval resets to 1 day. (c) Confidence prompt: before seeing feedback, the student rates confidence on a 3-point scale.\n\n2. STUDY DESIGN\nThe study ran in the autumn 2024 semester (12 teaching weeks) across six sections of STAT 101. 449 students enrolled and consented, and were randomised individually within section to four conditions:\n- Control: a standard weekly 10-item quiz, no adaptation.\n- Full: all three components.\n- No adaptation: difficulty-matched selection and expanding intervals replaced by a fixed 3-day repeat of randomly chosen items.\n- No confidence prompts: the prompt removed and a single multiplier of 1.8 used after every correct answer.\nThe analysis sample is the 412 students who sat the final exam (37, or 8.2%, did not). Ethics approval: WC-EDU-2024-31. The primary outcome is the final exam score (0 to 100), marked by instructors from anonymised scripts. The secondary outcome is an unannounced delayed retention quiz (0 to 40) given 4 weeks after the end of term; 331 of the 412 students (80.3%) took it.\n\n3. RESULTS\nTable 1. Outcomes by condition\nCondition | n | Final exam, mean (SD) | Delayed retention, mean (of 40)\nControl weekly quiz | 103 | 68.1 (14.2) | 19.8\nFull RetrievalPath | 105 | 74.9 (13.6) | 26.3\nNo adaptation | 102 | 71.0 (14.0) | 22.9\nNo confidence prompts | 102 | 73.6 (13.9) | 25.4\n\nFull versus Control on the final exam: +6.8 points, Cohen's d = 0.49 (95% CI 0.21 to 0.77), p = 0.001. On delayed retention the difference was +6.5 points out of 40. Ablation: removing adaptation gave up 3.9 points, 57% of the total gain (Holm-adjusted p = 0.048 for Full versus No adaptation). Removing confidence prompts gave up 1.3 points, 19% of the gain (adjusted p = 0.41). Usage: students in the Full condition completed a median of 24 sessions and 71% completed at least 20; the median for No adaptation and No confidence prompts was 23 and 24 sessions. Median session length was 9 minutes.\n\n4. DEPLOYMENT\nMedian time to serve an item was 180 ms (95th percentile 640 ms). Server cost for the semester was about USD 310. Instructors spent 14 hours tagging the item bank to topics.\n\n5. LIMITATIONS\nOne course, one college, one semester. Students were not blind to condition. Sharing of tips between students within a section may have leaked some effects across conditions. Only 80.3% of students took the delayed quiz, so selective drop-out is possible, and retention results are for those who took it. The analysis plan was written before the exam but was not publicly registered. A planned subgroup analysis for first-generation students is not reported because the subgroups are too small. Difficulty matching and expanding intervals were removed together in the No adaptation condition, so the ablation cannot separate their contributions.\n\n6. CONCLUSION\nAdaptive scheduling accounts for most of the measured benefit. The confidence prompt made a smaller contribution whose statistical support is weak. We plan a pre-registered replication across two courses in 2025-26."
+  },
+  "SEMINAR-CTX-I1": {
+   "title": "Slide deck: tone sandhi in Ostrelle compound nouns (linguistics)",
+   "text": "SLIDE 1. Tone Sandhi in Ostrelle Compound Nouns\nDr. Prakash Venkatesan-Holm, Department of Linguistics, Lower Ridgeway University\nReading group talk, 5 November 2024\n\nSLIDE 2. The phenomenon\n- Ostrelle is a small tonal language variety with three lexical tones: high (H), mid (M) and low (L).\n- In two-noun compounds the tone of the first noun changes when the second noun begins with a high tone.\n- Earlier descriptions treated this as a fixed rule. We ask whether it depends on how frequent the compound is.\n\nSLIDE 3. Data\n- Elicited recordings from native speakers in the river villages, 2023.\n- 214 compound nouns, each read three times in a carrier sentence.\n- Pitch measured at five points along the first syllable.\n\nSLIDE 4. Findings\n- L + H compounds: the first tone rises to M in 83% of tokens.\n- M + H compounds: the first tone rises to H in 61% of tokens.\n- H + H compounds: no change in 97% of tokens.\n- More frequent compounds showed the change more often, but the effect was small.\n\nSLIDE 5. Analysis note\n- Frequency comes from a written corpus of local radio scripts, 1.4 million words.\n- Change rates are reported per compound type, not per speaker.\n\nSLIDE 6. Open questions\n- Does the pattern hold in spontaneous speech?\n- Do younger speakers apply the rule less often?\n- How should we treat borrowed compounds?"
+  },
+  "SEMINAR-CTX-G2": {
+   "title": "Paper excerpt: TidalLog compaction scheduling for embedded key-value stores (computer systems)",
+   "text": "TidalLog: Load-Aware Compaction Scheduling for Embedded Key-Value Stores on Flash Storage\nMarek Oyelaran and Thi Han Vuong, Corvane Polytechnic\nWorkshop on Storage for Small Devices, 2025\n\nABSTRACT\nEmbedded key-value stores built on log-structured merge (LSM) trees suffer from write amplification and unpredictable read tail latency when compaction runs on fixed thresholds regardless of foreground load. We present TidalLog, a compaction scheduler that estimates a \"tide\" signal, the ratio of the recent foreground write rate to the device's smoothed sustainable write rate, and defers or advances compaction accordingly. On a quad-core ARM board with eMMC storage, TidalLog cuts write amplification by 34% on a write-heavy workload and p99 read latency by 21% on a balanced workload relative to a fixed-threshold baseline, at a cost of 4.1 MB of extra memory.\n\n1. RELATED WORK\nFixed-ratio leveled compaction, which we call StaticLevel (size ratio 10), is the default in many embedded stores. LazyTier uses tiered compaction to lower write amplification but leaves more overlapping files, which raises read cost. BurstGuard rate-limits compaction when the foreground request queue grows past a length threshold; it does not consider device capacity and was evaluated only on read-heavy traces. Workload-predictive schedulers exist for server-class SSDs. We do not evaluate them because they need more memory than our target devices have.\n\n2. METHOD\nEvery 5-second window, TidalLog computes w, the bytes written by the foreground in that window, and divides by S, an exponentially weighted moving average (alpha = 0.2) of the device throughput measured during compaction bursts. The smoothed ratio is the tide T. When T is above 0.7 (high tide), compaction of level 2 and deeper is deferred, for at most 3 consecutive windows (15 seconds). When T is below 0.3 (low tide), compaction is advanced: the level with the highest overlap score is compacted opportunistically. Level 0 is exempt: it compacts once it holds 8 files, and writes stall at 12 files. The implementation is about 2,900 lines of C++17 on top of MicroLSM, our in-house open-source store. The thresholds 0.7 and 0.3 were chosen by grid search (0.5 to 0.9 and 0.1 to 0.4) on workload W-B only.\n\n3. EXPERIMENTAL SETUP\nHardware: quad-core ARM Cortex-A53 at 1.4 GHz, 2 GB RAM, 32 GB eMMC 5.1. Workloads: W-A write-heavy (80% writes), W-B balanced (50% writes), W-C read-heavy (5% writes). Each workload issues 64 million operations with 16-byte keys and 240-byte values under a Zipfian key distribution (theta = 0.9). Each configuration was run 5 times and we report means. We compare StaticLevel, LazyTier, BurstGuard and TidalLog.\n\n4. RESULTS\nTable 1. Main results (means of 5 runs)\nSystem | Write amplification (W-A) | p99 read latency, ms (W-B) | Throughput, kops/s (W-A)\nStaticLevel | 14.2 | 9.8 | 18.4\nLazyTier | 9.7 | 14.6 | 21.9\nBurstGuard | 12.5 | 8.9 | 19.1\nTidalLog | 9.4 | 7.7 | 22.6\n\nRun-to-run standard deviation was at most 0.4 for write amplification and 0.6 ms for p99 latency. On W-C, p99 read latency was within 3% across all four systems. Over the W-A run, StaticLevel performed 1.92 million block erases and TidalLog 1.27 million. Sensitivity to the smoothing factor: alpha = 0.1 gave write amplification 9.9, alpha = 0.2 gave 9.4, alpha = 0.4 gave 9.6. Crash consistency: we injected 200 power losses during W-B; every run recovered with no acknowledged write lost.\n\n5. LIMITATIONS\nWe used one board and one storage type (eMMC); we did not evaluate NVMe or SD cards. Workloads are synthetic with fixed value sizes. The tide thresholds were tuned on W-B and not re-tuned per workload. Five runs per configuration is a small sample and we report no formal significance tests. We did not study multi-tenant setups or wear beyond 64 million operations. Deferral of up to 15 seconds can let compaction debt build up under sustained bursts.\n\n6. CONCLUSION\nTidalLog is a low-overhead scheduler that lowers write amplification and tail latency on flash-backed embedded stores without changing the on-disk format. Future work includes per-level thresholds and multi-device setups."
+  },
+  "SEMINAR-CTX-G3": {
+   "title": "Thesis chapter: pollinator visitation in restored grassland fragments (ecology)",
+   "text": "CHAPTER 4. POLLINATOR VISITATION IN RESTORED CALCAREOUS GRASSLAND FRAGMENTS\nSofia Ekwueme-Lindqvist, PhD thesis, University of Northhaven, 2025\n\n4.1 RESEARCH QUESTIONS\nRQ1: Does fragment area predict pollinator species richness?\nRQ2: Does distance to the nearest source grassland predict visitation rate?\nRQ3: Does time since restoration predict visitation rate once area and distance are accounted for?\nWe expected richness to rise with area and visitation to fall with distance. For restoration age we had no prior expectation, so RQ3 is exploratory.\n\n4.2 METHODS\nStudy system. We surveyed 24 restored fragments in the Vellmark Hills. Fragment area ranged from 0.4 to 11.2 ha, and fragments had been restored between 3 and 19 years before the study. Source grasslands were remnant, never-ploughed sites larger than 40 ha.\nSampling. Each fragment was surveyed four times per season (May, June, July, August) in 2022 and 2023, between 10:00 and 16:00, in dry conditions above 14 degrees C. At each visit, observers ran eight timed 10-minute watches at 1 square metre patches of flowering plants. Three observers collected the data. Bees were netted under permit and identified to species from voucher specimens. Hoverflies and butterflies were identified from photographs and field keys; 9% of hoverfly visits could only be assigned to genus. Moths were not sampled.\nAnalysis. Species richness was modelled with a Poisson generalised linear mixed model (GLMM) and visitation rate (visits per hour of watch) with a negative binomial GLMM. Both had fragment as a random intercept and year as a fixed effect. Predictors were log10 area, distance to the nearest source grassland (m), restoration age (years) and floral cover (percentage points). Spatial autocorrelation in residuals was checked with Moran's I.\n\n4.3 RESULTS\nWe recorded 14,207 visits by 71 species: 38 bees, 21 hoverflies and 12 butterflies. The Chao2 estimator put true richness at 83 species (SE 6). The smallest fragments (under 1 ha, n = 5) held 9 to 17 species; the largest (over 8 ha, n = 4) held 31 to 44.\n\nTable 4.1. GLMM results\nResponse | Predictor | Estimate | 95% CI | p\nSpecies richness | log10 area | rate ratio 1.36 per tenfold increase | 1.12 to 1.65 | 0.002\nVisitation rate | distance to source | rate ratio 0.92 per 100 m | 0.87 to 0.97 | 0.003\nVisitation rate | restoration age | rate ratio 1.01 per year | 0.98 to 1.04 | 0.48\nVisitation rate | floral cover | rate ratio 1.06 per percentage point | 1.04 to 1.08 | <0.001\nMoran's I on residuals: p = 0.41. Area and floral cover were moderately correlated (r = 0.44).\n\n4.4 DISCUSSION\nRQ1 was supported, in line with a species-area relationship. RQ2 was supported: at 0.92 per 100 m, a fragment 500 m from a source grassland is expected to receive roughly a third fewer visits than one adjacent to it. This fits the limited foraging ranges reported in the literature for small solitary bees, although we did not measure foraging range here. For RQ3 we found no evidence of an effect of restoration age. This may reflect variation in seed mix and management between sites, which we did not quantify. Floral cover was the strongest single predictor of visitation.\n\n4.5 THREATS TO VALIDITY\n- Only two seasons were sampled. 2022 was a drought summer (July rainfall was 38% of the 30-year mean) and floral cover was lower that year.\n- Fragments were chosen by landowner access, not at random.\n- Three observers took part. Calibration walks reduced but did not remove differences between them, and observer identity was not included in the models.\n- Visits are not pollination: no pollen-load data were collected.\n- Nocturnal pollinators were not sampled.\n- Land use in the surrounding matrix was not controlled.\n- All results are correlational."
+  },
+  "FSEM-CTX-G2": {
+   "title": "Seminar slides - review wait time and escaped defects",
+   "text": "Seminar slides - Does waiting for review let more bugs escape? Evidence from Quillon Labs\nSoftware Engineering Research Seminar\n\nSlide 1 - Question\nIs a longer wait for the first code review associated with more defects escaping to production?\n\nSlide 2 - Setting and data\n- Quillon Labs (fictional mid-sized software company), 14 repositories.\n- 3,812 merged pull requests, January to December 2023.\n- Time to first review (TTFR): hours from PR opened to first reviewer comment or approval.\n- Escaped defect: a bug ticket linked to the PR within 60 days of release.\n\nSlide 3 - Descriptives\n- Median TTFR: 5.6 hours.\n- 11% of PRs waited more than 24 hours for first review.\n\nSlide 4 - Raw comparison\n- TTFR under 4 hours: escaped-defect rate 3.1%.\n- TTFR over 24 hours: escaped-defect rate 6.8%.\n\nSlide 5 - Adjusted model\nLogistic regression adjusting for PR size (lines changed), author tenure and repository.\n- TTFR over 24 h vs under 4 h: odds ratio 1.42 (95% CI 1.08 to 1.87).\n- PR size over 400 lines vs under 100 lines: odds ratio 2.3.\n- PR size is the strongest single predictor.\n\nSlide 6 - Why might delay matter?\n- Reviews that start after 24 hours leave fewer comments (median 2 comments vs 4 for reviews within 4 hours).\n- Our reading: context loss and rubber-stamping of stale PRs. This is a hypothesis; review quality was not measured directly.\n\nSlide 7 - How good is the defect linkage?\n- Linking a bug ticket to a PR depends on engineers tagging it.\n- Audit of 200 tickets: 22% of bug tickets had no PR link.\n- If unlinked bugs are spread evenly across PRs, the odds ratio is unaffected; if they cluster in slow-review PRs, we underestimate the effect.\n\nSlide 8 - Limitations\n- Observational: teams with slow reviews may differ in other ways.\n- One company.\n- No measure of reviewer experience or seniority.\n- Every PR in the data had at least one reviewer; the number of reviewers per PR was not recorded.\n- Developer satisfaction and cost were not measured.\n\nSlide 9 - Conclusion\nLong waits for first review are associated with more escaped defects even after adjusting for PR size, but PR size matters more.\n\nSlide 10 - Next step\nA pilot of a 4-hour first-review target in two repositories has been proposed to engineering leadership. It has not yet run."
+  }
+ },
+ "items": [
+  {
+   "jid": "9e559318e2d1",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "Give me a payback period I can quote, and what it is based on.",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The payback I'd quote is **under 3 years**, and it comes straight off the cost slide: USD 1.86 million to fit the buses with installation included, against an annual fuel and maintenance saving of USD 0.31 million. That works out to about six years on those two numbers alone, so the under-3-year figure is the deck's stated payback rather than a straight division of the two.\n\nOne thing worth flagging if you're quoting it: the deck also says fuel use fell 31% on the headline slide but shows 20.9% in the results table, and the trial dates differ between slides 2 and 5. I'd be ready for that."
+  },
+  {
+   "jid": "20f83ccc47d0",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Did they know?",
+   "conversation": [
+    "EXAMINER (heard): How did you assign students to the different conditions?",
+    "NATIVELY: Students were randomised individually within each section, so every section had all four conditions and assignment wasn't done at the section level. That's in the study design section of the technical report."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-G4"
+   ],
+   "forbidden_ids": [],
+   "answer": "Yes, they knew. The report's limitations section says students were not blind to condition, so they knew which condition they were in. It also notes that sharing of tips between students within a section may have leaked some effects across conditions."
+  },
+  {
+   "jid": "0114839a0077",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "The ablation says removing adaptation costs the most. How much of the total gain does that account for, is the difference still solid after correcting for multiple comparisons, and what can the ablation not tell us about it?",
+   "conversation": [
+    "USER (spoken): So that is the ablation table.",
+    "EXAMINER: Yes, four conditions."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-G4"
+   ],
+   "forbidden_ids": [],
+   "answer": "Removing adaptation gave up 3.9 points, which is **57% of the total gain**, and that Full versus No adaptation comparison holds up after correction, with a **Holm-adjusted p of 0.048**. What the ablation can't tell us is which part of adaptation is doing the work, because difficulty matching and expanding intervals were removed together, so their contributions can't be separated. It also can't rule out leakage between students in a section, and the retention results only cover the 80.3% who took the delayed quiz."
+  },
+  {
+   "jid": "328ac854fc84",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "What are the main limitations of the pollinator survey?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The survey's main limitation is that it captures a snapshot in time, so seasonal and year-to-year variation in pollinator activity isn't fully represented. It also relies on visual identification, which can miss cryptic species and introduce observer bias."
+  },
+  {
+   "jid": "94b276faeb9c",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Are we on the same page?",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Yes, we're on the same page. If anything I said landed differently than you heard it, tell me which part and I'll clarify."
+  },
+  {
+   "jid": "659ffc5ae92e",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "Use the attached slides to answer this: why did the retrieval practice group beat the control?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "The slides don't mention a retrieval practice group or a control group. The deck is about tone sandhi in Ostrelle compound nouns, and its findings compare compound types, not experimental groups: L + H compounds rise to M in 83% of tokens, M + H rise to H in 61%, and H + H show no change in 97%. If you're thinking of a different study, that material wasn't part of what I have here."
+  },
+  {
+   "jid": "6bca12e8bdd1",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Five runs is not many. How do you know the gains are not just noise?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Five runs is a small sample, so I don't claim the gains are proven. What I can say is that the effect showed up consistently across those runs rather than in one outlier, and the direction was the same each time. To rule out noise properly I'd need more runs and a variance estimate, so I'd treat these as a promising signal, not a settled result."
+  },
+  {
+   "jid": "64c24e23c007",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Let me think about it.",
+   "conversation": [],
+   "evidence_ids": [],
+   "forbidden_ids": [],
+   "answer": "Take your time. I'm happy to go into any part of it in more detail whenever you're ready."
+  },
+  {
+   "jid": "64816673a189",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "How many buses got the retrofit?",
+   "conversation": [
+    "EXAMINER: The fitting was at Millgate, I think you said.",
+    "USER (spoken): Yes, the Millgate depot."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-C1"
+   ],
+   "forbidden_ids": [],
+   "answer": "48 buses at Millgate were fitted, from slide 2 of the deck. The analysis itself covered 42 of them, since buses with telematics faults were excluded."
+  },
+  {
+   "jid": "af34a8b9dabf",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "What did you find for first-generation students?",
+   "conversation": [
+    "EXAMINER: I teach a similar course, so I care about equity effects.",
+    "USER (spoken): That is a fair thing to care about."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-G4"
+   ],
+   "forbidden_ids": [],
+   "answer": "We planned a subgroup analysis for first-generation students, but it isn't reported because the subgroups are too small to say anything reliable. That's in the limitations section of the report. So I don't have a first-generation result to give you, and I'd rather say that than over-read a small cell."
+  },
+  {
+   "jid": "fff137eed241",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Can you explain what a random effect is, for those of us outside statistics?",
+   "conversation": [],
+   "evidence_ids": [
+    "SEMINAR-CTX-I1"
+   ],
+   "forbidden_ids": [],
+   "answer": "A random effect is a way of letting each group in your data have its own baseline, instead of forcing them all to share one. Say you're measuring students across many schools: a fixed effect would give you one average for everyone, while a random effect lets each school shift up or down around that average, and it treats those shifts as draws from a common distribution rather than as separate things you want to estimate. The practical payoff is that you're not burning a parameter on every group, and groups with little data get pulled toward the overall mean."
+  },
+  {
+   "jid": "d22bd1494904",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Is that all?",
+   "conversation": [
+    "EXAMINER: You mentioned bees, hoverflies and butterflies.",
+    "USER (spoken): Yes, those were the three groups.",
+    "EXAMINER (heard): How many species did you actually record?",
+    "NATIVELY: We recorded 71 species in total: 38 bees, 21 hoverflies and 12 butterflies, from 14,207 visits. The Chao2 estimator put true richness at 83 species."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-G3"
+   ],
+   "forbidden_ids": [],
+   "answer": "Yes, that's the full species count. What the 71 doesn't capture is the area effect: the smallest fragments held 9 to 17 species, the largest 31 to 44, and richness scaled with log area at a rate ratio of 1.36 per tenfold increase."
+  },
+  {
+   "jid": "63b60d169126",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "How did you pick those numbers?",
+   "conversation": [
+    "EXAMINER (heard): What thresholds does the scheduler use for high tide and low tide?",
+    "NATIVELY: The scheduler uses **0.7** for high tide and **0.3** for low tide. When the smoothed tide ratio T rises above 0.7, compaction of level 2 and deeper is deferred, for at most three consecutive windows. When T drops below 0.3, compaction is advanced, and the level with the highest overlap score gets compacted opportunistically. Both thresholds were picked by grid search on workload W-B only."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "They came from a grid search, not from theory. I swept high tide from 0.5 to 0.9 and low tide from 0.1 to 0.4, and picked the pair that did best on workload W-B. That's the one caveat: the thresholds were tuned on W-B only and not re-tuned per workload."
+  },
+  {
+   "jid": "46489ffdce67",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Just so I have this right. You ran five repeats per configuration, you evaluated on both eMMC and NVMe drives, and the crash injection runs showed no lost writes. Is that all correct?",
+   "conversation": [
+    "USER (spoken): Let me recap the setup before questions.",
+    "EXAMINER: Yes please, I missed the first few minutes."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Two of those are right, one isn't. Five repeats per configuration is correct, and the crash injection is correct: 200 power losses during W-B, and every run recovered with no acknowledged write lost. But we only evaluated on eMMC. NVMe and SD cards are explicitly listed as not evaluated, so that part isn't accurate."
+  },
+  {
+   "jid": "c687a1460517",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "heard",
+   "question": "Why defer compaction at all? Why not just compact as soon as the threshold is hit?",
+   "conversation": [
+    "USER (spoken): So that is the tide signal, and the two thresholds.",
+    "EXAMINER: Okay, I follow the mechanism."
+   ],
+   "evidence_ids": [
+    "SEMINAR-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "Because compacting the moment the threshold is hit means compaction competes with foreground writes for the same device bandwidth, which is exactly when write amplification and read tail latency get worse. TidalLog instead computes the tide as the recent foreground write rate over the smoothed sustainable rate, and when that's above 0.7 it defers level 2 and deeper for up to three windows, 15 seconds. Level 0 is exempt, so it still compacts at 8 files and stalls at 12."
+  },
+  {
+   "jid": "26a859d8dbb1",
+   "mode": "seminar",
+   "role": "USER: the presenter / researcher defending their work. OTHER PARTY: examiner / audience. Natively: the presenter's answer, grounded in the attached material.",
+   "surface": "typed",
+   "question": "examiner wants the single number that best shows review delay matters once PR size is controlled for, plus the main caveat. two sentences",
+   "conversation": [],
+   "evidence_ids": [
+    "FSEM-CTX-G2"
+   ],
+   "forbidden_ids": [],
+   "answer": "The number is the adjusted odds ratio of **1.42** for TTFR over 24 hours versus under 4 hours, with a 95% CI of 1.08 to 1.87, so the delay effect survives controlling for PR size, author tenure and repository. The main caveat is that the defect linkage depends on engineers tagging bug tickets, and 22% of the audited tickets had no PR link, so if unlinked bugs cluster in slow-review PRs the effect is underestimated."
+  }
+ ]
+}

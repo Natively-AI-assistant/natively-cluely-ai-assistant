@@ -533,6 +533,9 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // either direction) is never read — this flag now only listens to the env kill-switch and
   // its default. Set NATIVELY_FOLLOWUP_DRAFT_V2=0 to force the deterministic fallback draft
   // in an emergency without a release; that is the ONLY remaining way to turn this off.
+  // Since 2026-09-26 no draft is written with the notes: the user clicks Generate
+  // (MeetingPersistence.regenerateFollowUpDraft), and this flag decides whether that
+  // click, and a notes Regenerate on a meeting that already has a draft, uses the LLM.
   followUpDraftV2: { env: 'NATIVELY_FOLLOWUP_DRAFT_V2', setting: 'followUpDraftV2Enabled', settingIgnored: true, default: true },
   speakerLabelsV1: { env: 'NATIVELY_SPEAKER_LABELS_V1', setting: 'speakerLabelsV1Enabled', default: true },
   // Constrained LLM polish of the Summary (note-content-only, "no new tokens" gated). ON by

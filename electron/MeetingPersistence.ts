@@ -8,6 +8,7 @@ import { DatabaseManager, Meeting } from './db/DatabaseManager';
 import { GROQ_SUMMARY_JSON_PROMPT } from './llm';
 import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
 import { MeetingContextAssembler } from './services/meeting/MeetingContextAssembler';
+import { followUpRedraftPlan } from './services/meeting/FollowUpDraftGenerator';
 import { cleanMeetingTitle, isAnswerFragmentTitle, isAnswerShapedGeneration } from './services/meeting/MeetingSummaryV3';
 import { NOTE_CALL_TIMEOUT_MS } from './services/meeting/generateStructured';
 import type { MeetingSummaryTelemetryMeta } from './services/meeting/types';
@@ -261,6 +262,15 @@ export class MeetingPersistence {
     }
 
     /**
+     * The connected calendar account's name, which labels the user's own voice
+     * ("me") in the notes; undefined without a connected calendar. A method so a
+     * test can supply one (the build bundles CalendarManager into this file).
+     */
+    protected calendarUserName(): string | undefined {
+        return followUpSenderName();
+    }
+
+    /**
      * Stops the meeting immediately, snapshots data, and triggers background processing.
      * Returns immediately so UI can switch.
      */
@@ -405,7 +415,7 @@ export class MeetingPersistence {
         data: { transcript: TranscriptSegment[], usage: any[] | undefined, startTime: number, durationMs: number, context: string, memoryEligibleCount?: number },
         meetingId: string,
         // BUG-04 fix: accept metadata snapshot so calendar info is not lost after session.reset()
-        metadata?: { title?: string; calendarEventId?: string; source?: 'manual' | 'calendar' } | null,
+        metadata?: { title?: string; calendarEventId?: string; calendarEvent?: import('./services/calendar/calendarSessionMatch').CalendarEventSnapshot; callKey?: string; source?: 'manual' | 'calendar' } | null,
         // BUG-MODE-BLEEDING fix: accept mode snapshot so async summary uses the mode that was
         // active when meeting stopped, not whatever mode is active when async processing runs.
         modeSnapshot?: { id: string; name: string; templateType: string } | null
@@ -486,13 +496,84 @@ export class MeetingPersistence {
 
         // Use passed-in metadata snapshot (NOT this.session.getMeetingMetadata() which is already cleared)
         let calendarEventId: string | undefined;
+        let calendarEvent: import('./services/calendar/calendarSessionMatch').CalendarEventSnapshot | undefined;
         let source: 'manual' | 'calendar' = 'manual';
 
         if (metadata) {
             if (metadata.title) title = metadata.title;
             if (metadata.calendarEventId) calendarEventId = metadata.calendarEventId;
+            if (metadata.calendarEvent && metadata.calendarEvent.id === calendarEventId) calendarEvent = metadata.calendarEvent;
             if (metadata.source) source = metadata.source;
         }
+
+        // The calendar can name the speakers: the mic is always the user, so with
+        // a connected calendar their account name labels it in EVERY meeting
+        // (it used to happen only for meetings linked to an event, so most
+        // transcripts still said "Me"); a linked 1:1 also names the other voice,
+        // the one other attendee (calendarSpeakerLabels). No calendar name: "Me".
+        // The notes are written from a NAMED COPY of the transcript, so "Priya
+        // will send the deck" rather than "Speaker 1 will…"; the stored
+        // transcript keeps its raw speakers, because the rename map is keyed on
+        // them. The same map is saved as the meeting's speaker labels, exactly as
+        // if the user had typed the names, and under the same "Speaker labels" switch.
+        let calendarLabels: Record<string, string> | null = null;
+        let llmTranscript = data.transcript;
+        const userName = this.calendarUserName();
+        if ((calendarEvent || userName) && isIntelligenceFlagEnabled('speakerLabelsV1')) {
+            try {
+                const { calendarSpeakerLabels } = require('./services/calendar/calendarSessionMatch') as typeof import('./services/calendar/calendarSessionMatch');
+                calendarLabels = calendarSpeakerLabels(calendarEvent, userName);
+                if (calendarLabels) {
+                    const { SpeakerLabelService } = require('./services/meeting/SpeakerLabelService');
+                    llmTranscript = new SpeakerLabelService().applyLabels(data.transcript, calendarLabels);
+                }
+            } catch (e: any) {
+                console.warn('[MeetingPersistence] calendar speaker names skipped:', e?.message);
+                calendarLabels = null;
+                llmTranscript = data.transcript;
+            }
+        }
+
+        // The call's own record of who spoke (the Meet page's speaking indicator,
+        // via the Companion extension): each other-side line whose speaker is
+        // clear gets that person, in the stored transcript (as a speaker id, so
+        // the notes show the name and a rename applies per person) and in the
+        // notes' named copy; the people in the call are kept with the meeting.
+        // Group calls get names this way, which the calendar alone can't give.
+        // Same "Speaker labels" switch.
+        let storedTranscript = data.transcript;
+        let callLabels: Record<string, string> | null = null;
+        let callParticipants: string[] = [];
+        if (metadata?.callKey && isIntelligenceFlagEnabled('speakerLabelsV1')) {
+            try {
+                const { nameCallLines } = require('./services/meetingDetection/nameCallLines') as typeof import('./services/meetingDetection/nameCallLines');
+                const named = nameCallLines(data.transcript, metadata.callKey, data.startTime, data.durationMs);
+                if (named) {
+                    storedTranscript = named.transcript;
+                    callParticipants = named.participants;
+                    if (Object.keys(named.labels).length > 0) {
+                        callLabels = named.labels;
+                        const byLine = named.transcript;
+                        llmTranscript = llmTranscript.map((seg, i) => {
+                            const id = byLine[i]?.speakerId;
+                            return id && named.labels[id] ? { ...seg, speaker: named.labels[id] } : seg;
+                        });
+                    }
+                }
+            } catch (e: any) {
+                console.warn('[MeetingPersistence] call speaker names skipped:', e?.message);
+                storedTranscript = data.transcript;
+                callLabels = null;
+                callParticipants = [];
+            }
+        }
+        // Only the call's named ids are stored: an STT provider's own voice ids
+        // (diarization) stay in-session, as they always have.
+        storedTranscript = storedTranscript.map((seg: any) => {
+            if (!seg?.speakerId || (callLabels && callLabels[seg.speakerId])) return seg;
+            const { speakerId: _unnamed, ...rest } = seg;
+            return rest;
+        });
 
         // Scope gate applies to the entire post-call LLM summary path, not just
         // mode-reference snippets. If denied, V3 is skipped and LLMHelper's existing
@@ -607,7 +688,7 @@ export class MeetingPersistence {
                 const assembler = new MeetingContextAssembler(this.llmHelper);
                 const v3StartedMs = Date.now();
                 const assembled = await assembler.assembleSummary({
-                    transcript: data.transcript,
+                    transcript: llmTranscript,
                     title,
                     modeTemplateType: modeSnapshot?.templateType,
                     modeNoteSections,
@@ -625,9 +706,8 @@ export class MeetingPersistence {
                     },
                     startedAtMs: v3StartedMs,
                     startedAtIso: new Date(v3StartedMs).toISOString(),
-                    // Phase 8 — LLM follow-up draft. Gated by flag; scope already enforced by
-                    // postCallSummaryAllowed (we are inside that branch).
-                    generateFollowUpDraft: isIntelligenceFlagEnabled('followUpDraftV2'),
+                    // No follow-up draft here: it is written on demand, when the user
+                    // clicks Generate on the notes (regenerateFollowUpDraft below).
                     // #1 — constrained LLM Summary polish (note-content-only, gated, safe fallback).
                     polishSummary: isIntelligenceFlagEnabled('meetingSummaryLlmPolish'),
                     onStatusUpdate: status => db.updateSummaryStatus(meetingId, status),
@@ -673,21 +753,8 @@ export class MeetingPersistence {
                     // deterministic, no LLM, no network. Compares this meeting's open
                     // questions/risks to recent prior meetings to surface "still open from
                     // last time". Degrades to nothing when there is no prior history.
-                    try {
-                        if (isIntelligenceFlagEnabled('meetingMemoryV2')) {
-                            const { CrossMeetingRecall, priorFromDetailedSummary } = require('./services/meeting/CrossMeetingRecall');
-                            const recent = DatabaseManager.getInstance().getRecentMeetings(15)
-                                .filter(m => m.id !== meetingId)
-                                .map(priorFromDetailedSummary)
-                                .filter((p: unknown): p is NonNullable<typeof p> => p !== null);
-                            const recall = new CrossMeetingRecall().compute(v3, recent);
-                            if (recall.stillOpen.length > 0) {
-                                (summaryData as any).crossMeeting = recall;
-                            }
-                        }
-                    } catch (xmErr) {
-                        console.warn('[CrossMeetingRecall] skipped (non-fatal):', (xmErr as any)?.message);
-                    }
+                    const recall = computeCrossMeetingRecall(meetingId, v3);
+                    if (recall) (summaryData as any).crossMeeting = recall;
                 }
             }
 
@@ -753,7 +820,7 @@ Return ONLY valid JSON (no markdown code blocks):
                     groqSummaryPrompt = GROQ_SUMMARY_JSON_PROMPT;
                 }
 
-                const fallbackContext = buildBalancedTranscriptContext(data.transcript, 16000);
+                const fallbackContext = buildBalancedTranscriptContext(llmTranscript, 16000);
                 const generatedSummary = await this.llmHelper.generateMeetingSummary(summaryPrompt, fallbackContext, groqSummaryPrompt);
 
                 if (generatedSummary) {
@@ -817,7 +884,9 @@ Return ONLY valid JSON (no markdown code blocks):
                     actionItemsStructured: Array.isArray(summaryData.actionItemsStructured) && summaryData.actionItemsStructured.length > 0
                         ? summaryData.actionItemsStructured
                         : postCallEnhancements.actionItemsStructured,
-                    followUpDraft: summaryData.followUpDraft || postCallEnhancements.followUpDraft,
+                    // No follow-up draft: V3 notes offer Generate, and a saved template
+                    // draft would hide that button. The V2 branch below keeps its
+                    // deterministic draft — V2 has no on-demand route.
                 }
                 : {
                     ...summaryData,
@@ -837,7 +906,7 @@ Return ONLY valid JSON (no markdown code blocks):
                 if (isIntelligenceFlagEnabled('meetingMemoryV2')) {
                     const record = new MeetingMemoryService().buildMeetingRecord({
                         meetingId,
-                        segments: data.transcript,
+                        segments: llmTranscript,
                         mode: modeSnapshot?.templateType,
                         startedAt: data.startTime,
                         endedAt: data.startTime + data.durationMs,
@@ -849,7 +918,7 @@ Return ONLY valid JSON (no markdown code blocks):
                     // regardless of what the extractor returned. Defense-in-depth on top
                     // of the extractor's own provenance filter. A zero-audio session of
                     // manual-chat questions + assistant answers persists NO meeting memory.
-                    const persisted = buildPersistedMeetingMemory(data.transcript, record);
+                    const persisted = buildPersistedMeetingMemory(llmTranscript, record);
                     if (persisted.telemetry.zeroEligibleGuardApplied) {
                         console.warn('[MeetingMemoryV2] zero memory-eligible (spoken/STT) transcript segments — persisting EMPTY structured memory. Manual-chat questions and assistant answers are not meeting evidence (Defect B provenance guard).', {
                             meetingId,
@@ -882,6 +951,19 @@ Return ONLY valid JSON (no markdown code blocks):
             const seconds = ((data.durationMs % 60000) / 1000).toFixed(0);
             const durationStr = `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
 
+            // The calendar's speaker names become the meeting's labels (a rename
+            // the user already made always wins). Regenerate and the follow-up
+            // draft carry speakerLabels forward, as they do the user's own.
+            if (calendarLabels && summaryData && typeof summaryData === 'object' && !summaryData.speakerLabels) {
+                summaryData = { ...summaryData, speakerLabels: calendarLabels };
+            }
+            // The call's names join them (a user's rename of an id still wins),
+            // and the people who were in the call are kept for the notes.
+            if (summaryData && typeof summaryData === 'object') {
+                if (callLabels) summaryData = { ...summaryData, speakerLabels: { ...callLabels, ...(summaryData.speakerLabels || {}) } };
+                if (callParticipants.length > 0) summaryData = { ...summaryData, callParticipants };
+            }
+
             const meetingData: Meeting = {
                 id: meetingId,
                 title: title,
@@ -889,9 +971,10 @@ Return ONLY valid JSON (no markdown code blocks):
                 duration: durationStr,
                 summary: "See detailed summary",
                 detailedSummary: summaryData,
-                transcript: data.transcript,
+                transcript: storedTranscript,
                 usage: data.usage,
                 calendarEventId: calendarEventId,
+                calendarEvent: calendarEvent,
                 source: source,
                 isProcessed: true,
                 summaryStatus: generationSucceeded || data.transcript.length <= 2 ? 'completed' : 'failed'
@@ -1116,7 +1199,7 @@ Return ONLY valid JSON (no markdown code blocks):
      *
      * Honors providerDataScopes.post_call_summary — if denied, returns false (no cloud call).
      */
-    public async regenerateSavedMeeting(meetingId: string, opts?: { templateType?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
+    public async regenerateSavedMeeting(meetingId: string, opts?: { templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
         const db = DatabaseManager.getInstance();
         const details = db.getMeetingDetails(meetingId);
         if (!details || !Array.isArray(details.transcript) || details.transcript.length < 3) return false;
@@ -1143,7 +1226,22 @@ Return ONLY valid JSON (no markdown code blocks):
             const { ModesManager, TEMPLATE_NOTE_SECTIONS } = require('./services/ModesManager');
             const modesMgr = ModesManager.getInstance();
             const storedMode = (details.detailedSummary as any)?.mode;
-            if (!templateType) templateType = storedMode?.selectedTemplateType || modesMgr.getActiveMode()?.templateType;
+            const all = modesMgr.getModes() as Array<{ id: string; name: string; templateType: string }>;
+            // PRECEDENCE (2026-09-25): explicit mode id > explicit template > the mode
+            // this meeting ran under > the active mode. The auto-detect suggestion
+            // ("Regenerate notes as Sales") used to lose to the saved mode here, so the
+            // notes came back in the ORIGINAL template and the suggestion vanished as if
+            // it had worked.
+            const resolved = resolveRegenerateTarget({
+                modeId: opts?.modeId,
+                templateType: opts?.templateType,
+                stored: storedMode,
+                modes: all,
+                activeTemplateType: modesMgr.getActiveMode()?.templateType,
+            });
+            templateType = resolved.templateType;
+            const explicitMode = resolved.explicitMode;
+            const explicitTemplate = resolved.explicitTemplate;
             // F-503: prefer the mode this meeting actually ran under.
             // MeetingPersistence PERSISTS selectedModeId at write time, but
             // regeneration used to ignore it and resolve by templateType —
@@ -1153,15 +1251,12 @@ Return ONLY valid JSON (no markdown code blocks):
             // first, so regenerating a meeting run under a custom mode silently
             // used a DIFFERENT mode's note sections and then rewrote
             // modeMeta.selectedModeId/Name with that other mode's identity.
-            const all = modesMgr.getModes() as Array<{ id: string; name: string; templateType: string }>;
-            const byId = storedMode?.selectedModeId
-                ? all.find((m) => m.id === storedMode.selectedModeId)
-                : undefined;
+            const byId = resolved.byId;
             // Fall back to the legacy template lookup only when the recorded
             // mode is gone (deleted) or was never recorded (pre-selectedModeId
             // meetings).
-            const match = byId ?? all.find((m) => m.templateType === templateType);
-            if (!byId && storedMode?.selectedModeId) {
+            const match = resolved.match;
+            if (!byId && !explicitMode && !explicitTemplate && storedMode?.selectedModeId) {
                 console.warn(`[MeetingPersistence] regenerate: mode ${storedMode.selectedModeId} no longer exists; falling back to the first '${templateType}' mode.`);
             }
             if (match) { modeId = match.id; modeName = match.name; modeNoteSections = modesMgr.getNoteSections(match.id); }
@@ -1174,7 +1269,16 @@ Return ONLY valid JSON (no markdown code blocks):
         let transcript = details.transcript as TranscriptSegment[];
         try {
             if (isIntelligenceFlagEnabled('speakerLabelsV1')) {
-                const labels = (details.detailedSummary as any)?.speakerLabels;
+                // A meeting saved before the calendar named "me" in every meeting
+                // has no `me` label: with a connected calendar the regenerated notes
+                // name the user all the same (the Transcript tab shows that name too).
+                const stored = (details.detailedSummary as any)?.speakerLabels;
+                const { calendarSpeakerLabels, modernizeCalendarLabels } = require('./services/calendar/calendarSessionMatch') as typeof import('./services/calendar/calendarSessionMatch');
+                // A `me` the calendar wrote in full before first names regenerates as
+                // the first name (modernizeCalendarLabels); one the user typed stays.
+                const userName = this.calendarUserName();
+                const current = modernizeCalendarLabels(stored, (details as any).calendarEvent, userName) ?? stored;
+                const labels = current?.me ? current : { ...(calendarSpeakerLabels(null, userName) ?? {}), ...(current ?? {}) };
                 if (labels && Object.keys(labels).length > 0) {
                     const { SpeakerLabelService } = require('./services/meeting/SpeakerLabelService');
                     transcript = new SpeakerLabelService().applyLabels(transcript, labels);
@@ -1185,6 +1289,11 @@ Return ONLY valid JSON (no markdown code blocks):
         }
 
         db.updateSummaryStatus(meetingId, 'queued');
+        // The follow-up draft is on demand: re-draft it against the new notes only when
+        // the user already asked for one, in the tone they last chose. Otherwise the
+        // notes come back with Generate, as they do after a meeting.
+        const followUpPlan = followUpRedraftPlan((details.detailedSummary as any)?.followUpDraft);
+
         try {
             const startedMs = Date.now();
             const assembler = new MeetingContextAssembler(this.llmHelper);
@@ -1202,9 +1311,10 @@ Return ONLY valid JSON (no markdown code blocks):
                 },
                 startedAtMs: startedMs,
                 startedAtIso: new Date(startedMs).toISOString(),
-                generateFollowUpDraft: isIntelligenceFlagEnabled('followUpDraftV2'),
+                generateFollowUpDraft: followUpPlan.redraft && isIntelligenceFlagEnabled('followUpDraftV2'),
                 polishSummary: isIntelligenceFlagEnabled('meetingSummaryLlmPolish'),
-                followUpTone: opts?.tone,
+                followUpTone: opts?.tone ?? followUpPlan.tone,
+                followUpSenderName: followUpPlan.redraft ? followUpSenderFirstName() : undefined,
                 onStatusUpdate: status => db.updateSummaryStatus(meetingId, status),
             });
 
@@ -1235,6 +1345,16 @@ Return ONLY valid JSON (no markdown code blocks):
                 console.log(`[MeetingPersistence] regenerate: keeping the existing title "${existingTitle}" over the note-derived fallback.`);
             }
             const detailedSummary = buildV3DetailedSummary(v3, details.detailedSummary);
+            // "Capture key points" used to be erased by Regenerate: neither the
+            // "From earlier meetings" recall nor the structured memory record was
+            // carried into the rebuilt blob. The recall is recomputed against the
+            // NEW notes (the items it matches may have changed); the memory record
+            // is built from the transcript, which Regenerate does not change, so it
+            // is kept as saved.
+            const recall = computeCrossMeetingRecall(meetingId, v3);
+            if (recall) detailedSummary.crossMeeting = recall;
+            const prevMemory = (details.detailedSummary as any)?.meetingMemory;
+            if (prevMemory) detailedSummary.meetingMemory = prevMemory;
             const ok = db.replaceDetailedSummary(meetingId, detailedSummary, { title: v3.title, summaryStatus: 'completed' });
             try {
                 const wins = require('electron').BrowserWindow.getAllWindows();
@@ -1249,7 +1369,9 @@ Return ONLY valid JSON (no markdown code blocks):
     }
 
     /**
-     * Regenerate ONLY the follow-up draft for a saved V3 meeting (cheap; no re-summarize).
+     * Write the follow-up draft for a saved V3 meeting, or rewrite it (cheap; no
+     * re-summarize). This is the ONLY place a draft is first written: meetings save
+     * without one and the notes offer Generate, which lands here.
      */
     public async regenerateFollowUpDraft(meetingId: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly'): Promise<boolean> {
         const db = DatabaseManager.getInstance();
@@ -1285,6 +1407,9 @@ Return ONLY valid JSON (no markdown code blocks):
                 },
                 mode: detailed.mode?.selectedTemplateType,
                 tone,
+                senderName: followUpSenderFirstName(),
+                // NATIVELY_FOLLOWUP_DRAFT_V2=0 kill switch: the template draft, no LLM call.
+                deterministicOnly: !isIntelligenceFlagEnabled('followUpDraftV2'),
             });
             const ok = db.replaceDetailedSummary(meetingId, { ...detailed, followUpDraft: draft });
             try {
@@ -1299,9 +1424,89 @@ Return ONLY valid JSON (no markdown code blocks):
     }
 }
 
+/**
+ * Which mode a Regenerate rebuilds the notes in. PRECEDENCE: an explicit mode id
+ * (the auto-detect suggestion) > an explicit template > the mode this meeting ran
+ * under (F-503) > the active mode. `match` falls back to the first mode with the
+ * resolved template when the chosen one no longer exists. Pure — exported for tests.
+ */
+export function resolveRegenerateTarget<M extends { id: string; templateType: string }>(input: {
+    modeId?: string;
+    templateType?: string;
+    stored?: { selectedModeId?: string; selectedTemplateType?: string } | null;
+    modes: M[];
+    activeTemplateType?: string;
+}): { templateType: string | undefined; explicitMode: M | undefined; explicitTemplate: boolean; byId: M | undefined; match: M | undefined } {
+    const explicitMode = input.modeId ? input.modes.find((m) => m.id === input.modeId) : undefined;
+    const explicitTemplate = Boolean(!explicitMode && input.templateType);
+    const templateType = explicitMode?.templateType
+        || input.templateType
+        || input.stored?.selectedTemplateType
+        || input.activeTemplateType;
+    const byId = explicitMode
+        ?? (explicitTemplate || !input.stored?.selectedModeId
+            ? undefined
+            : input.modes.find((m) => m.id === input.stored!.selectedModeId));
+    const match = byId ?? input.modes.find((m) => m.templateType === templateType);
+    return { templateType, explicitMode, explicitTemplate, byId, match };
+}
+
+// CROSS-MEETING RECALL (Phase 13, behind meetingMemoryV2 — "Capture key points").
+// Local-first, deterministic, no LLM, no network. Compares this meeting's open
+// questions, action items, risks and decisions to the 15 most recent other meetings
+// to surface "still open from last time" and earlier decisions. Returns null when the
+// switch is off, there is no prior history, or nothing matched. Shared by the
+// meeting-end save and Regenerate so the two can never disagree.
+function computeCrossMeetingRecall(
+    meetingId: string,
+    v3: import('./services/meeting/types').MeetingSummaryV3,
+): import('./services/meeting/CrossMeetingRecall').CrossMeetingResult | null {
+    try {
+        if (!isIntelligenceFlagEnabled('meetingMemoryV2')) return null;
+        const { CrossMeetingRecall, priorFromDetailedSummary } = require('./services/meeting/CrossMeetingRecall');
+        const recent = DatabaseManager.getInstance().getRecentMeetings(15)
+            .filter(m => m.id !== meetingId)
+            .map(priorFromDetailedSummary)
+            .filter((p: unknown): p is NonNullable<typeof p> => p !== null);
+        const recall = new CrossMeetingRecall().compute(v3, recent);
+        return recall.stillOpen.length > 0 ? recall : null;
+    } catch (xmErr) {
+        console.warn('[CrossMeetingRecall] skipped (non-fatal):', (xmErr as any)?.message);
+        return null;
+    }
+}
+
 // Build the persisted detailedSummary blob from a MeetingSummaryV3, preserving back-compat
 // V2 bridge fields. Mirrors the inline mapping in processAndSaveMeeting so regenerate and
 // initial save produce identical shapes.
+/**
+ * The user's own name, to sign follow-up drafts with: the Google account connected
+ * for Calendar sync (CalendarManager reads it from that sign-in's id_token). Only
+ * the name is used, never the email. Undefined when Calendar is not connected or
+ * the account carried no name, and the draft is then signed with no name.
+ */
+function followUpSenderName(): string | undefined {
+    try {
+        const { CalendarManager } = require('./services/CalendarManager');
+        const status = CalendarManager.getInstance().getConnectionStatus();
+        return status?.connected && typeof status.name === 'string' ? status.name : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/** The sender's first name: what the follow-up email is signed with (and how it
+ *  refers to the user), whatever the mode's signAs — "Evin", not the account's
+ *  "Evin John Ignatious". */
+function followUpSenderFirstName(): string | undefined {
+    try {
+        const { firstNameOf } = require('./services/calendar/calendarSessionMatch') as typeof import('./services/calendar/calendarSessionMatch');
+        return firstNameOf(followUpSenderName()) ?? undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 function buildV3DetailedSummary(v3: import('./services/meeting/types').MeetingSummaryV3, prev?: any): any {
     return {
         ...(prev && typeof prev === 'object' ? { speakerLabels: prev.speakerLabels } : {}),

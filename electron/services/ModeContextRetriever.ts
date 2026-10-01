@@ -877,6 +877,20 @@ function buildDocumentIdentityBlock(mode: Mode, identities: DocumentIdentity[]):
     return lines.join('\n');
 }
 
+/**
+ * Index states the launch sweep (retryLexicalOnlyFiles) re-indexes.
+ *
+ * `indexing` was missing until 2026-09-22. A persisted `indexing` state at
+ * launch is left over from a process that quit or died mid-index. Live-
+ * reproduced: two files stayed `indexing`, half-embedded, after a relaunch,
+ * because only mode ACTIVATION re-indexes non-ready files and an already-active
+ * mode is never re-activated. Safe even if a file is genuinely mid-index:
+ * ModeHybridRetriever.indexFile is single-flight per file id.
+ *
+ * One exported set: ModesManager used to keep two private copies of it.
+ */
+export const RETRY_ELIGIBLE_INDEX_STATUSES: ReadonlySet<string> = new Set(['lexical_only', 'failed', 'pending', 'indexing']);
+
 export class ModeContextRetriever {
     // Expose helpers for unit testing the fuzzy-matching layer in isolation.
     static __test__ = { levenshtein1, levenshteinBounded };
@@ -1709,7 +1723,7 @@ export class ModeContextRetriever {
         for (const file of files) {
             try {
                 const { status } = retriever.getFileIndexStatus(file.id);
-                if (status === 'lexical_only' || status === 'failed' || status === 'pending') {
+                if (RETRY_ELIGIBLE_INDEX_STATUSES.has(status)) {
                     console.log(`[ModeContextRetriever] re-indexing "${file.fileName}" (was ${status})`);
                     await retriever.indexFile(file);
                 }

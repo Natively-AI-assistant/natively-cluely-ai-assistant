@@ -16,7 +16,7 @@
 // unresolvable — each returns the shipped constant and an undefined observer,
 // which is byte-for-byte today's behaviour.
 
-import type { StreamObservation } from '../liveDeadlines';
+import type { StreamObservation, StreamObserver } from '../liveDeadlines';
 import { LIVE_INTER_TOKEN_STALL_MS } from '../liveDeadlines';
 import { streamIdleTimeoutMs, adaptiveTtftCeilingMs, connectTimeoutMs, type DeadlineDecision } from './deadlines';
 import { getProviderPerformanceStore } from './ProviderPerformanceStore';
@@ -37,6 +37,15 @@ export interface PerformanceIdentitySource {
   performanceIdentity(hasImages?: boolean): {
     providerId: string; modelId: string; route: RouteKind; isOllama?: boolean;
   };
+  /**
+   * Who ANSWERED, known only once the turn has run — LLMHelper.textTurn()'s
+   * view has it. Null when no one model did (a failed Fast Response pick
+   * rescued by the fallback). Absent: the identity read at the start stands.
+   */
+  answeredIdentity?(hasImages?: boolean): {
+    identity: { providerId: string; modelId: string; route: RouteKind; isOllama?: boolean };
+    hasImages: boolean;
+  } | null;
 }
 
 function flagOn(
@@ -77,6 +86,22 @@ const seenThisSession = new Set<string>();
  */
 const capabilitiesSeeded = new Set<string>();
 
+/**
+ * Forget which identities were seeded, so the next turn copies the registry
+ * facts again. Needed after "Forget all measurements": the store drops every
+ * profile, and without this the rebuilt profiles keep `unknownCapability()` —
+ * no vision or context-window facts — until the app restarts.
+ */
+export function resetCapabilitySeeding(providerId?: string): void {
+  if (!providerId) {
+    capabilitiesSeeded.clear();
+    return;
+  }
+  for (const key of [...capabilitiesSeeded]) {
+    if (key.startsWith(`${providerId}|`)) capabilitiesSeeded.delete(key);
+  }
+}
+
 export interface PerformanceHookOptions {
   llmHelper: PerformanceIdentitySource | null | undefined;
   hasImages: boolean;
@@ -110,7 +135,7 @@ export interface PerformanceTurnRecord {
 
 export interface PerformanceHooks {
   /** Pass straight into raceStreamWithDeadline. */
-  observe?: (observation: StreamObservation) => void;
+  observe?: StreamObserver;
   /**
    * The stall guard to use. Equals LIVE_INTER_TOKEN_STALL_MS unless the
    * adaptiveStreamIdle flag is on AND there is enough evidence to move it.
@@ -188,35 +213,58 @@ export function performanceHooks(opts: PerformanceHookOptions): PerformanceHooks
     } catch { /* capability seeding must never break a turn */ }
   }
 
-  const observe = (observation: StreamObservation) => {
-    const turn: TurnIdentity = {
-      providerId: identity.providerId,
-      modelId: identity.modelId,
-      route: identity.route,
-      inputTokens: opts.inputTokens,
-      outputTokens: opts.outputTokens ?? 0,
-      hasImages: opts.hasImages,
-      startedAt,
-      coldStart,
-      userCancelled: (() => {
-        try { return opts.isUserCancelled?.() === true; } catch { return false; }
-      })(),
-    };
-    const sample = recordStreamObservation(observation, turn, {
-      store,
-      signals,
-      networkProfileId: network.id,
-      generation,
-    });
+  // "Did the user cancel?" as of the moment the turn ENDED. Read after the
+  // race's onCleanup it was always yes: manual chat's cleanup aborts its own
+  // controller on every ending and Auto Answer's on every deadline, so every
+  // manual answer — and every timeout everywhere — was filed as a user cancel,
+  // and the profile learned nothing from either. The race snapshots this just
+  // before cleanup (StreamObserver.beforeCleanup); a caller driving observe
+  // directly still gets a live read.
+  let cancelledAtEnd: boolean | undefined;
+  const readCancelled = () => { try { return opts.isUserCancelled?.() === true; } catch { return false; } };
+  const observe: StreamObserver = (observation: StreamObservation) => {
+    // Filed under the model that ANSWERED. With Fast Response Mode that is only
+    // known after the turn ran: a pick that failed hands the turn to a fallback
+    // (a clean sample for neither — the pick's failure is filed on its own), and
+    // a screenshot a privacy setting dropped makes a text turn.
+    let answered: { identity: typeof identity; hasImages: boolean } | null = { identity, hasImages: opts.hasImages };
+    const source = opts.llmHelper;
+    if (typeof source?.answeredIdentity === 'function') {
+      try { answered = source.answeredIdentity(opts.hasImages); } catch { /* the start identity stands */ }
+    }
+    let sample: ReturnType<typeof recordStreamObservation> = null;
+    if (answered) {
+      const answeredKey = `${answered.identity.providerId}|${answered.identity.modelId}`;
+      const answeredCold = answeredKey === sessionKey ? coldStart : !seenThisSession.has(answeredKey);
+      seenThisSession.add(answeredKey);
+      const turn: TurnIdentity = {
+        providerId: answered.identity.providerId,
+        modelId: answered.identity.modelId,
+        route: answered.identity.route,
+        inputTokens: opts.inputTokens,
+        outputTokens: opts.outputTokens ?? 0,
+        hasImages: answered.hasImages,
+        startedAt,
+        coldStart: answeredCold,
+        userCancelled: cancelledAtEnd ?? readCancelled(),
+      };
+      sample = recordStreamObservation(observation, turn, {
+        store,
+        signals,
+        networkProfileId: network.id,
+        generation,
+      });
+    }
 
     if (sample) emitTelemetry(sample, network.interfaceClass);
 
     try {
+      const shown = answered?.identity ?? identity;
       opts.onDiagnostics?.({
-        providerId: identity.providerId,
-        modelId: identity.modelId,
-        route: identity.route,
-        workload,
+        providerId: shown.providerId,
+        modelId: shown.modelId,
+        route: shown.route,
+        workload: answered ? classifyWorkload(opts.inputTokens, answered.hasImages) : workload,
         networkProfileId: network.id,
         interfaceClass: network.interfaceClass,
         ttftMs: observation.ttftMs,
@@ -232,6 +280,7 @@ export function performanceHooks(opts: PerformanceHookOptions): PerformanceHooks
     } catch { /* diagnostics must never break a turn */ }
   };
 
+  observe.beforeCleanup = () => { cancelledAtEnd = readCancelled(); };
   return { observe, interTokenStallMs: effectiveStallMs, streamIdle };
 }
 
@@ -439,6 +488,13 @@ export function imageProfileForTurn(
     llmHelper: PerformanceIdentitySource | null | undefined;
     inputTokens: number;
     streamRoute?: string | null;
+    /**
+     * The turn is a coding session, so its screenshot is code whatever preset
+     * the call site requested. Every call site used to request 'balanced', so
+     * the `technical` exemption below never applied to anything and a code
+     * screenshot could drop to 1024px — the opposite of the switch's promise.
+     */
+    isCode?: boolean;
   },
 ): 'fast' | 'balanced' | 'technical' | 'best' {
   try {
@@ -452,7 +508,7 @@ export function imageProfileForTurn(
     // visibly DEGRADES output (1280px@q85 -> 1024px@q78), which is a trade, not
     // a strict improvement. A user seeing blurrier screenshots deserves a switch.
     if (!flagOn('adaptiveImageQuality')) return requested;
-    if (requested === 'technical') return requested;
+    if (requested === 'technical' || opts.isCode === true) return requested;
     if (requested === 'fast') return requested;
     const advice = slowWorkloadAdvice({
       llmHelper: opts.llmHelper,

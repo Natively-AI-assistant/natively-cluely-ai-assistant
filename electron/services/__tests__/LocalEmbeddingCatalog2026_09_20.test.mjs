@@ -78,26 +78,33 @@ describe('Local Embedding Model Catalog (2026-09-20)', () => {
     assert.equal(bge.dimensions, 384);
   });
 
-  test('bundled MiniLM is marked bundled and discovers packaged resources', () => {
-    const minilm = findEmbeddingCatalogModel('minilm-l6-v2');
-    assert.ok(minilm);
-    assert.equal(minilm.bundled, true);
+  test('the bundled model (multilingual-e5-small since 2026-09-22) is marked bundled and discovers packaged resources', () => {
+    const bundled = findEmbeddingCatalogModel('multilingual-e5-small');
+    assert.ok(bundled);
+    assert.equal(bundled.bundled, true);
+    assert.deepEqual(EMBEDDING_MODEL_CATALOG.filter((m) => m.bundled).map((m) => m.id), ['multilingual-e5-small'], 'exactly one bundled entry');
 
-    const status = statusOf(minilm);
+    const status = statusOf(bundled);
     assert.equal(status.state, 'installed');
     assert.equal(status.missing.length, 0);
 
-    const resolved = resolveEmbeddingModelPath(minilm);
+    const resolved = resolveEmbeddingModelPath(bundled);
     assert.ok(resolved);
-    assert.ok(resolved.includes('all-MiniLM-L6-v2'));
+    assert.ok(resolved.includes('multilingual-e5-small'));
+  });
+
+  test('MiniLM, no longer shipped, is an ordinary download', () => {
+    const minilm = findEmbeddingCatalogModel('minilm-l6-v2');
+    assert.ok(minilm);
+    assert.notEqual(minilm.bundled, true);
   });
 
   test('listEmbeddingCatalogStatus maps status for all catalog models', () => {
     const statusList = listEmbeddingCatalogStatus();
     assert.equal(statusList.length, EMBEDDING_MODEL_CATALOG.length);
-    const minilmStatus = statusList.find((m) => m.id === 'minilm-l6-v2');
-    assert.ok(minilmStatus);
-    assert.equal(minilmStatus.status.state, 'installed');
+    const bundledStatus = statusList.find((m) => m.id === 'multilingual-e5-small');
+    assert.ok(bundledStatus);
+    assert.equal(bundledStatus.status.state, 'installed');
   });
 
   test('all catalog models declare realistic context length values', () => {

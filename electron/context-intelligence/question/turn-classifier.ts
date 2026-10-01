@@ -422,6 +422,18 @@ const DEVICE_SYMPTOM_RE = /\b(overheat\w*|(?:gets?|getting|becomes?|becoming|is|
 const MATH_OPERAND_RE = /\d[\d,.]*\s*(?:%|percent)|[$€£₹]\s?\d|\d[\d,.]*\s*(?:rupees|dollars|euros|pounds|cents)\b|\d\s*(?:\+|−|\*|×|\/|÷)\s*\d|\b\d[\d,.]*\s+(?:per|each|apiece)\b/i;
 const MATH_ASK_RE = /\bwhat (?:is|was|will|would)(?: be)? the (?:[\w-]+ )?(?:price|cost|amount|value|total|percentage|interest|profit|loss|average|difference|change)\b|\bhow (?:much|many)\b|\bcalculate\b|\bcompute\b|\bwhat is \d/i;
 const PROJECT_RE = /\b(project|built|build|shipped|implemented|designed|architect(ed|ure) of your)\b/;
+// Status and current-work asks about the user's own work (2026-09-29). With no
+// pronoun ("Give me a quick project update.") or with "are you" ("what are you
+// working on right now?") nothing above marks them, so they routed
+// GENERAL_TECHNICAL/FAST: no notice, no worked status example, and the live
+// answers were a hand-back ("tell me which project…") or an invented status.
+// A STATUS ask is classified exactly like "are we on schedule?" (MEETING_FACT
+// + DOCUMENT_FACT): the status lives in what was said in the meeting or in the
+// project's documents, and those are the sources planned in every mode. A
+// CURRENT-WORK ask ("what are you working on?") is the user's own work, like
+// any personal project question.
+const USER_STATUS_RE = /\b(?:(?:project|status|progress|quick) update|where (?:do|does) (?:things|it|that|the project|we) stand|what(?:'s| is) the (?:latest |current )?status|how(?:'s| is) (?:the|your) project (?:going|coming along))\b/;
+const CURRENT_WORK_RE = /\b(?:what are you (?:currently |actually )?working on|what(?:'s| is) on your plate)\b/;
 // Matches BOTH orderings, because interviewers use both interchangeably:
 //   "experience WITH Kubernetes"   (preposition-led)
 //   "your Kubernetes EXPERIENCE"   (noun-final)
@@ -431,6 +443,24 @@ const PROJECT_RE = /\b(project|built|build|shipped|implemented|designed|architec
 // permitted. Gated on `personal`, so the bare nouns cannot over-trigger.
 const SKILL_RE = /\b(experience|expertise|background|proficien\w*|familiar with|worked with|know how to|skills?|leadership|hands-on|languages?|technolog\w*)\b/;
 const MOTIVATION_RE = /\b(why|reason|motivat\w*|what (led|made)|decided? to|chose to|choose to)\b/;
+// A "why don't you <start/tell/walk…>" is an INVITATION, not a request for a
+// reason (2026-09-30, measured live in looking-for-work): "Thanks for hopping
+// on. Why don't you start by telling me a bit about yourself?" matched the
+// bare `why` above, claimed USER_MOTIVATION — which PROHIBITS the résumé — and,
+// because a named aspect suppresses the catch-all employment claim, planned
+// [PROFILE_FACT] alone. PROFILE_FACT has no production store, so the intro went
+// out with zero evidence over a hydrated résumé. Only the invitation shape is
+// removed: "why don't you like on-call?" and "why didn't you use Kafka?" still
+// ask for a reason, because neither verb invites the listener to begin.
+const SUGGESTION_WHY_RE = /\bwhy (?:don['’]?t|do not) (?:you|we) (?:just |first |quickly |briefly |go ahead and )?(?:start|begin|kick|go ahead|tell|walk|give|share|introduce|talk|describe|run|take)\b|\bwhy not (?:start|begin|tell|walk|give|share|introduce|talk|describe)\b/;
+const asksForReason = (clause: string): boolean => MOTIVATION_RE.test(clause.replace(SUGGESTION_WHY_RE, ' '));
+// A SELF-INTRODUCTION request (2026-09-30). The answer IS the résumé — who the
+// user is, what they have done — so it always claims USER_EMPLOYMENT, even when
+// the same clause also names another aspect ("tell me about yourself and why
+// this role" keeps its motivation claim AND reaches the résumé). Before this,
+// the employment claim came only from the "no aspect named" catch-all, so any
+// co-occurring aspect cue silently took the résumé out of the plan.
+const SELF_INTRO_RE = /\b(?:tell (?:me|us) (?:\w+ ){0,4}about (?:yourself|you)\b|about (?:yourself|myself)\b|introduce (?:yourself|myself)\b|self-?introduction|(?:your|my) background\b|walk (?:me|us) through (?:your|my) (?:background|resume|résumé|cv|career)\b)/;
 // The presence-check shape of a skill question — "do I HAVE it", not "tell me
 // about it". Used to widen a personal skill claim into a résumé-vs-JD
 // comparison in modes that carry a JD.
@@ -468,7 +498,13 @@ const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|
 // concept question, took the FAST path, and a JD that lists SIX named stages
 // lost to a generic three-round model answer — with a clean trace (answerability
 // FULL, zero evidence). The stages live in the JD, so this is a JOB claim.
-const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required (skills?|languages?|qualifications?|experience|technolog\w*)|preferred skills?|compensation|base salar\w*|salary (band|range)s?|the salary\b|the team you|qualification\w*|requirement\w*|minimum quals?|(interview|hiring|recruitment) (process|stages?|rounds?|loops?|steps?|timeline))\b/;
+// Deictic job-posting nouns added 2026-09-30: "based on the job post what are
+// the rounds…" with only a job description uploaded claimed the user side,
+// planned [RESUME, PROFILE_FACT, REFERENCE_FILE] — none of which existed — and
+// answered "I don't have the job post in front of me". Determiner-bound on
+// purpose: "how do I write a good job posting?" is general advice, not a
+// pointer at the JD this user uploaded.
+const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|(?:the|this|that|their|your) (?:job (?:post(?:ing)?|listing|ad(?:vert(?:isement)?)?|spec)|posting)|responsibilit\w*|required (skills?|languages?|qualifications?|experience|technolog\w*)|preferred skills?|compensation|base salar\w*|salary (band|range)s?|the salary\b|the team you|qualification\w*|requirement\w*|minimum quals?|(interview|hiring|recruitment) (process|stages?|rounds?|loops?|steps?|timeline))\b/;
 
 // Split 2026-08-01 (Defect A): the old single MEETING_RE conflated TRANSCRIPT
 // EVENTS (things people said/decided/assigned — only the live transcript can
@@ -917,11 +953,17 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
         && !SYSTEM_DESIGN_RE.test(clause)));
 
     if (personal && PROJECT_RE.test(clause)) { types.add('PERSONAL_PROJECT'); noteClaim('USER_PROJECT', clause); }
+    if (!aboutAssistant && USER_STATUS_RE.test(clause)) {
+      types.add('MEETING_FACT'); noteClaim('MEETING_STATEMENT', clause);
+      types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
+    }
+    if (!aboutAssistant && CURRENT_WORK_RE.test(clause)) { types.add('PERSONAL_PROJECT'); noteClaim('USER_PROJECT', clause); }
     // "why did you choose/build X" asks for a REASON. Motivation is authoritative
     // only from explicit user context, so it must be claimed separately: a
     // USER_PROJECT claim is satisfied by evidence that the project exists, which
     // says nothing about why it was built (measured failure C-03).
-    if (personal && MOTIVATION_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_MOTIVATION', clause); }
+    if (personal && asksForReason(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_MOTIVATION', clause); }
+    if (personal && SELF_INTRO_RE.test(clause)) { types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause); }
     if (personal && SKILL_RE.test(clause)) {
       types.add('PERSONAL_SKILL'); noteClaim('USER_SKILL', clause);
       // A PRESENCE CHECK ("Do I have Kubernetes experience?") in a mode that
@@ -951,7 +993,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // its authority still PROHIBITS the job description, so this cannot become a
     // route for JD requirements to describe the candidate.
     const namedAnAspect = PROJECT_RE.test(clause) || SKILL_RE.test(clause)
-      || EDUCATION_RE.test(clause) || EMPLOYMENT_RE.test(clause) || MOTIVATION_RE.test(clause);
+      || EDUCATION_RE.test(clause) || EMPLOYMENT_RE.test(clause) || asksForReason(clause);
     // …and never for a clause that is plainly a technical task: "can I solve
     // this with dynamic programming" is about the problem, not the person, and
     // a USER_EMPLOYMENT claim here demands résumé evidence for an algorithm
@@ -1532,6 +1574,48 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
 
   if (input.isFollowUp || isBareFollowUp(q)) types.add('FOLLOW_UP');
 
+  // LIVE MEETING, PERSONAL OR FOLLOW-UP TURN (2026-09-24, measured live).
+  //
+  // In an interview the user states their own experience OUT LOUD, and the
+  // interviewer comes back to it ten or twenty minutes later without restating
+  // it: "Going back to that latency project you mentioned earlier, how did you
+  // measure the improvement?". Those turns claim USER_* (or are FOLLOW_UPs),
+  // whose authority is résumé/profile/documents — so General planned NOTHING,
+  // Technical Interview planned the résumé alone, and the transcript that
+  // holds the answer was never read: 2 of 16 details recalled across four
+  // live runs (tests/meeting-memory, interview scenario), each miss answered
+  // "I don't have the specifics of that project".
+  //
+  // Same shape as the inferred-claim rule above (issue #552): the meeting side
+  // is claimed as an ALTERNATIVE, so answerability grades each side honestly,
+  // and only when a meeting port was actually built for this turn. Which lines
+  // of the transcript may evidence a PERSONAL fact is the composer's rule
+  // (the user's own spoken words, never the other party's).
+  //
+  // A question that POINTS BACK at the conversation ("given what I told you
+  // about our setup", "you mentioned earlier", "going back to") is about what
+  // was said whatever else it claims: measured in Technical Interview, "Given
+  // what I told you about our setup, how would you tackle our write-load
+  // problem?" was claimed DOCUMENT_FACT by another branch, planned only
+  // documents, and answered "I don't have the details of your setup" 4 of 4.
+  if (input.inLiveMeeting
+      && input.policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')
+      && !claims.has('MEETING_STATEMENT')
+      && ([...claims].some((c) => c.startsWith('USER_')) || types.has('FOLLOW_UP') || SAID_EARLIER_RE.test(q)
+        // A LOOKUP is the same case (2026-09-24): in a live meeting the value
+        // a question needs is as likely to have been SAID as written. In
+        // technical-interview "How much storage should we plan for the event
+        // archive at one kilobyte per event?" and "How would you key the Kafka
+        // topic for this?" claimed the document side only, and the
+        // interviewer's "keep every event for forty-five days" / "ordering per
+        // warehouse ID", said 26 minutes earlier, were never retrieved (0/4).
+        // A question that names its document ("what does section 3 of the
+        // design doc say…") is about that document and is left alone.
+        || (claims.has('DOCUMENT_FACT') && !DOCUMENT_RE.test(q) && !DOC_DEIXIS_RE.test(q)
+          && !mentionsAttachedFile(q, input.attachedFileNames)))) {
+    types.add('MEETING_FACT'); noteWholeQ('MEETING_STATEMENT');
+  }
+
   // A meta-request is not a question about the sources, so it carries no claim
   // and needs no retrieval. Returning early keeps prompt-shaped document text
   // out of the candidate pool entirely.
@@ -1689,6 +1773,13 @@ const NON_RETRIEVABLE: readonly SourceType[] = ['CONVERSATION_STATE'];
 // is widened unconditionally, and does not need this gate: it runs against
 // chunks that were actually retrieved, and a retrieved chunk is proof a document
 // exists.
+/** A pointer back at the conversation itself — see the live-meeting rule in detectTypes. */
+// `told you` / `told me` with no lead-in, and "at the start": live STT drops the
+// first words of an utterance ("Given what I told you about our setup at the
+// start" arrived as "told you about our setup at the start…", measured
+// 2026-09-24), so the pattern cannot depend on the lead-in.
+const SAID_EARLIER_RE = /\btold\s+(?:you|me)\b|\b(?:at|from)\s+the\s+(?:start|beginning)\s+of\s+(?:the|this|our)\s+(?:call|meeting|conversation|interview)\b|\bat\s+the\s+start\b(?=[^?]*\?)|\b(?:what|as|like)\s+(?:i|we|you)\s+(?:told\s+(?:you|me)|said|mentioned|described|explained)\b|\b(?:you|i|we)\s+(?:mentioned|said|told\s+(?:me|you)|described)\s+(?:earlier|before|at\s+the\s+start)\b|\bgoing\s+back\s+to\b|\b(?:earlier|before)\s+you\s+(?:said|mentioned)\b/i;
+
 const claimToSource = (claim: ClaimType, hasDocuments: boolean, anchored: readonly SourceType[] = [], profileOnlyDocuments = false): SourceType[] => {
   const authoritative = (hasDocuments ? claimAuthority(claim) : CLAIM_AUTHORITY[claim]).authoritative;
   if (!authoritative.length) return [];
@@ -1908,7 +1999,13 @@ export function classifyTurn(input: ClassificationInput): Classification {
     // consults document pools only and the evidence gate keeps the last word.
     const ambiguousOverDocuments = input.hasAttachedDocuments === true
       && DOCUMENT_FACT_RETRIEVAL_SOURCES.some((src) => input.policy.allowedSourceTypes.includes(src));
-    path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp || ambiguousOverDocuments;
+    // The same holds for a live meeting (2026-09-24): the meeting is the
+    // material, and "How would you key the Kafka topic for this?" — AMBIGUOUS,
+    // no claim — went out with nothing while the interviewer's "ordering must
+    // hold per warehouse ID" sat in the meeting index.
+    const ambiguousInLiveMeeting = input.inLiveMeeting === true
+      && input.policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT');
+    path = 'GROUNDED'; shouldRetrieve = requiredSourceTypes.length > 0 || followUp || ambiguousOverDocuments || ambiguousInLiveMeeting;
     reason = followUp ? 'follow-up may reference grounded content by pronoun' : 'ambiguous question — retrieve conservatively';
   } else {
     path = 'GROUNDED'; shouldRetrieve = true;

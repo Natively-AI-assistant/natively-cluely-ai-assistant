@@ -10,12 +10,23 @@
 // which stalls IPC the overlay depends on.
 //
 // This renders in a Radix portal inside the existing window instead, so nothing
-// blocks and focus is never handed to an OS-level dialog.
+// blocks and focus is never handed to an OS-level dialog. Staying inside the
+// window also keeps it under the window's content protection: a native dialog
+// is its own OS window, and it showed up in screen shares while Undetectable
+// was on.
+//
+// Its dim and panel sit above the popup cards (GenieModal, z-index 300), not
+// at the shared dialog's z-50: a confirm asked from inside Settings otherwise
+// opened BEHIND it, invisible, while its modal dim swallowed every click, so
+// Settings looked frozen.
 
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { AlertTriangle, Loader2 } from 'lucide-react';
-import { Dialog, DialogContent } from './dialog';
 import { useT } from '../../i18n';
+
+/** Above GenieModal's default layer (300), where Settings and the managers sit. */
+const CONFIRM_LAYER = 400;
 
 interface ConfirmDialogProps {
     open: boolean;
@@ -49,8 +60,13 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     const t = useT();
 
     return (
-        <Dialog open={open} onOpenChange={(next) => { if (!busy) onOpenChange(next); }}>
-            <DialogContent className="w-[400px] max-w-[92vw] bg-bg-elevated border border-border-subtle rounded-2xl shadow-2xl p-5">
+        <DialogPrimitive.Root open={open} onOpenChange={(next) => { if (!busy) onOpenChange(next); }}>
+          <DialogPrimitive.Portal>
+            <DialogPrimitive.Overlay className="fixed inset-0 bg-black bg-opacity-50" style={{ zIndex: CONFIRM_LAYER }} />
+            <DialogPrimitive.Content
+                className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] max-w-[92vw] bg-bg-elevated border border-border-subtle rounded-2xl shadow-2xl p-5"
+                style={{ zIndex: CONFIRM_LAYER }}
+            >
                 <div className="flex items-start gap-3">
                     <div
                         className={`mt-0.5 shrink-0 ${destructive ? 'text-red-500' : 'text-text-tertiary'}`}
@@ -89,9 +105,55 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                         {confirmLabel || t('Remove')}
                     </button>
                 </div>
-            </DialogContent>
-        </Dialog>
+            </DialogPrimitive.Content>
+          </DialogPrimitive.Portal>
+        </DialogPrimitive.Root>
     );
 };
+
+type ConfirmOptions = Pick<ConfirmDialogProps, 'title' | 'description' | 'confirmLabel' | 'cancelLabel' | 'destructive'>;
+
+/**
+ * Promise-shaped stand-in for `window.confirm()`, for call sites that read as
+ * a guard clause: `if (!(await confirm({ title }))) return;`. Render `dialog`
+ * once in the calling component. Resolves `false` on cancel, on dismiss, when
+ * a second confirm replaces the first, and on unmount.
+ */
+export function useConfirmDialog(): {
+    confirm: (options: ConfirmOptions) => Promise<boolean>;
+    dialog: React.ReactNode;
+} {
+    const [pending, setPending] = useState<ConfirmOptions | null>(null);
+    const resolverRef = useRef<((ok: boolean) => void) | null>(null);
+
+    const settle = useCallback((ok: boolean) => {
+        const resolve = resolverRef.current;
+        resolverRef.current = null;
+        setPending(null);
+        resolve?.(ok);
+    }, []);
+
+    const confirm = useCallback((options: ConfirmOptions) => new Promise<boolean>((resolve) => {
+        resolverRef.current?.(false);
+        resolverRef.current = resolve;
+        setPending(options);
+    }), []);
+
+    useEffect(() => () => {
+        resolverRef.current?.(false);
+        resolverRef.current = null;
+    }, []);
+
+    const dialog = pending ? (
+        <ConfirmDialog
+            open
+            {...pending}
+            onOpenChange={(next) => { if (!next) settle(false); }}
+            onConfirm={() => settle(true)}
+        />
+    ) : null;
+
+    return { confirm, dialog };
+}
 
 export default ConfirmDialog;

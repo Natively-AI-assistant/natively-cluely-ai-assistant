@@ -4,9 +4,10 @@ import { AnimatePresence, motion, useReducedMotion, type Variants, useMotionValu
 import { CheckCircle, AlertCircle, X, ChevronDown } from 'lucide-react';
 import { InteractiveCard } from '../ui/InteractiveCard';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
-import { Disclosure } from '../ui/AccordionSection';
+import { AccordionPanel } from '../ui/AccordionSection';
 import { getLicenseSnapshot, setLicenseSnapshot } from '../../lib/licenseCache';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
+import { SwapLabel } from './SettingsRow';
 
 // ─── Strong cubic-bezier easings (per emil-design-eng) ───────
 // Never use the weak default `ease` / `ease-in` for UI motion.
@@ -443,6 +444,8 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
     // Whether the Yearly/Lifetime grid is revealed. Only consulted when
     // `collapsePricing` is set; otherwise the grid is always shown.
     const [pricingOpen, setPricingOpen] = useState(false);
+    // The teaser row: opening the grid scrolls it into view, never past this.
+    const teaserRef = useRef<HTMLButtonElement>(null);
 
 
     // Seeded from the process-level snapshot so a revisit's first render already
@@ -730,7 +733,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
     // Lifetime pulse one-shot — transient box-shadow override that CSS
     // releases back to its [data-active] steady state after 520ms.
     const lifetimePulseShadow =
-        '0 0 0 2px rgba(190, 185, 255, 0.85), 0 0 64px -4px rgba(140, 130, 240, 0.70), 0 20px 50px rgba(99, 102, 241, 0.42), 0 4px 14px rgba(0, 0, 0, 0.30)';
+        '0 0 0 2px rgba(171, 193, 251, 0.85), 0 0 64px -4px rgba(110, 140, 230, 0.70), 0 20px 50px rgba(78, 111, 226, 0.42), 0 4px 14px rgba(0, 0, 0, 0.30)';
 
     if (isPremium === null) {
         return <div className="p-8 flex justify-center"><div className="w-5 h-5 border-2 border-white/40 border-t-transparent rounded-full animate-spin" /></div>;
@@ -808,7 +811,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
             }
             transition={
                 prefersReducedMotion
-                    ? { duration: INK.out }
+                    ? { duration: INK.out, layout: { duration: 0 } }
                     : deactivatePhase === 'exiting'
                         ? { duration: INK.out, ease: EASE_LEAVE }
                         : {
@@ -889,7 +892,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                             disabled={deactivatePhase !== 'idle'}
                             data-phase={deactivatePhase}
                             aria-busy={deactivatePhase === 'pending'}
-                            className="pro-deactivate-cta shrink-0 px-3.5 py-1.5 text-[12px] font-medium flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B2B22]"
+                            className="pro-deactivate-cta shrink-0 px-3.5 py-1.5 text-[12px] font-medium flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none"
                         >
                             {/* No crossfade on the label swap. The change is
                                 instantaneous and user-caused, the press already
@@ -961,11 +964,12 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                         it, on the two card CTAs only. */}
                     {collapsePricing && (
                         <button
+                            ref={teaserRef}
                             type="button"
                             onClick={() => setPricingOpen((o) => !o)}
                             aria-expanded={pricingOpen}
                             aria-controls="natively-pro-pricing"
-                            className="pro-teaser group relative w-full overflow-hidden text-left flex items-center gap-4 px-5 py-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                            className="pro-teaser group relative w-full overflow-hidden text-left flex items-center gap-4 px-5 py-4 cursor-pointer focus-visible:outline-none"
                         >
                             <span className="relative z-[3] min-w-0 flex-1 block">
                                 <span className="pro-teaser-eyebrow inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-bold" style={{ letterSpacing: '0.09em' }}>
@@ -981,21 +985,37 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                 </span>
                             </span>
                             <span className="pro-teaser-cta relative z-[3] shrink-0 inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[12.5px] font-semibold" style={{ letterSpacing: '-0.005em' }}>
-                                {pricingOpen ? 'Hide' : 'See pricing'}
+                                {/* Both words share one grid cell: the pill keeps the
+                                    wider one's width, so it no longer shrinks ~45px
+                                    out from under the pointer that just pressed it,
+                                    and the word swaps (Settings' text swap). */}
+                                <SwapLabel id={pricingOpen ? 'hide' : 'show'} sizers={['See pricing', 'Hide']}>
+                                    {pricingOpen ? 'Hide' : 'See pricing'}
+                                </SwapLabel>
+                                {/* Turns on the grid's own spring and clock
+                                    (acc-spring-turn), so the two land together. */}
                                 <ChevronDown
                                     size={14}
-                                    className={`shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${pricingOpen ? 'rotate-0' : '-rotate-90'}`}
+                                    className={`acc-spring-turn shrink-0 ${pricingOpen ? 'rotate-0' : '-rotate-90'}`}
                                 />
                             </span>
                         </button>
                     )}
 
                     {/* ── Choose-your-plan hero ────────────────────────────── */}
-                    <Disclosure open={collapsePricing ? pricingOpen : true}>
-                    {/* No top padding here: the parent's `space-y-4` already
-                        supplies the gap, and it only exists while the disclosure
-                        is mounted, so a collapsed teaser has no dead space
-                        hanging off its bottom edge. */}
+                    {/* The Plans accordions' motion (AccordionPanel): the grid
+                        grows on the Apple spring, its cards settle in, and the
+                        page glides it into view. The panel stays in the DOM
+                        while collapsed, so it takes no `space-y-4` gap (!mt-0);
+                        the gap is padding inside the moving body instead, and
+                        opens with it. Without a teaser the grid leads the
+                        section and needs no gap at all. */}
+                    <AccordionPanel
+                        open={collapsePricing ? pricingOpen : true}
+                        anchorRef={teaserRef}
+                        className="!mt-0"
+                        bodyClassName={collapsePricing ? 'pt-4' : ''}
+                    >
                     <div className="space-y-3" id="natively-pro-pricing">
 
                         {/* Two-card pricing grid. Lifetime is the recommended
@@ -1066,7 +1086,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                 {/* CTA — neutral-bright jelly, dark text */}
                                 <button
                                     onClick={() => openExternal(yearlyUrl)}
-                                    className="pricing-cta-yearly relative mt-4 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                                    className="pricing-cta-yearly relative mt-4 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none"
                                     style={{ letterSpacing: '-0.005em', transform: 'translateZ(28px)' }}
                                 >
                                     Get Pro
@@ -1076,12 +1096,12 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                 </p>
                             </InteractiveCard>
 
-                            {/* ── Right: Pro · Lifetime (deeper indigo-violet jelly) ── */}
+                            {/* ── Right: Pro · Lifetime (toggle-blue jelly; violet until 2026-09) ── */}
                             <InteractiveCard
                                 className="pricing-card-lifetime group relative overflow-hidden px-6 py-5 flex flex-col"
                                 data-active="true"
                                 style={{ minHeight: 200, transformStyle: 'preserve-3d' }}
-                                glowColor="rgba(139, 92, 246, 0.32)"
+                                glowColor="rgba(79, 113, 238, 0.32)"
                             >
                                 {/* Label row: Pro · Lifetime + the recommendation.
                                     Without this the two cards read as equally
@@ -1161,7 +1181,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                 {/* CTA — tinted jelly, light text, brighter specular crown */}
                                 <button
                                     onClick={() => openExternal(lifetimeUrl)}
-                                    className="pricing-cta-lifetime relative mt-4 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                                    className="pricing-cta-lifetime relative mt-4 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none"
                                     style={{ letterSpacing: '-0.005em', transform: 'translateZ(28px)' }}
                                 >
                                     Lock in lifetime
@@ -1220,7 +1240,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                             </p>
                         </div>
                     </div>
-                    </Disclosure>
+                    </AccordionPanel>
 
                     {/* "Already purchased? Enter your license key" card intentionally
                         removed — the Natively key card (NativelyApiSettings.tsx,

@@ -34,6 +34,8 @@ import {
 import { ProviderStatusRegistry } from '../../services/ProviderStatusRegistry';
 import type { LocalWorkerStatus } from '../../utils/workerStatus';
 import { resolveBundledScript } from '../resolveRagWorker';
+import { BUNDLED_LOCAL_EMBEDDING } from '../bundledLocalEmbedding';
+import { resolveEmbeddingExperiment, experimentSpaceModelId } from '../embeddingExperiments';
 
 const WORKER_INIT_TIMEOUT_MS = 60_000; // model load (cold disk read + ORT session init)
 const WORKER_EMBED_TIMEOUT_MS = 30_000; // a single embed()/embedBatch() call
@@ -50,7 +52,20 @@ let startupPoisoned = false;
  */
 const DISPOSE_DRAIN_MAX_MS = 120_000;
 
+/**
+ * Providers whose worker thread is alive, for the quit drain below.
+ *
+ * On `globalThis`, not module scope: esbuild inlines this file into more than
+ * one bundle, and a module-scoped set would give each bundle its own view.
+ */
+const LIVE_PROVIDERS_KEY = '__nativelyLiveLocalEmbeddingProviders';
+function liveProviders(): Set<LocalEmbeddingProvider> {
+  const g = globalThis as unknown as Record<string, Set<LocalEmbeddingProvider> | undefined>;
+  return (g[LIVE_PROVIDERS_KEY] ??= new Set<LocalEmbeddingProvider>());
+}
+
 import {
+  BUNDLED_CATALOG_ID,
   findEmbeddingCatalogModel,
   type LocalEmbeddingModel,
 } from '../embeddingModelCatalog';
@@ -80,7 +95,21 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   readonly runtime: 'onnx' | 'gguf';
   readonly catalogId: string;
   readonly pooling: 'mean' | 'cls' | 'last';
+  /** Prepended to query text only; empty for a symmetric model. */
+  readonly queryPrefix: string;
+  /** Prepended to document/chunk text only. */
+  readonly documentPrefix: string;
+  /** Free memory (GB) this model needs above the shared ONNX floor. */
+  private readonly extraMemoryHeadroomGB: number;
+  /** transformers.js identifier the worker loads (the catalog `modelId`). */
+  private readonly hfModelId: string;
+  /** Indexing batch ceiling; ModeHybridRetriever sizes its sub-batches to it. */
+  readonly maxBatchSize?: number;
+  /** Input truncation below the tokenizer's own limit (long-context models). */
+  private readonly maxInputTokens?: number;
   private readonly slotWaitMs: number | undefined;
+  /** Set by shutdownForQuit(): new requests are refused so the worker can drain. */
+  private closingForQuit = false;
 
   private worker: Worker | null = null;
   private requestId = 0;
@@ -93,27 +122,60 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   private modelPath: string;
 
   constructor(opts?: LocalEmbeddingOptions) {
-    // No settings fallback here: an argument-less instance is the bundled
-    // MiniLM. The pipeline's offline fallback is constructed that way, and it
-    // must not inherit the user's catalog pick (a multi-GB model in a
-    // different embedding space). The resolver passes the pick explicitly.
+    // No settings fallback here: an argument-less instance is the BUNDLED model
+    // (multilingual-e5-small since 2026-09-22, electron/rag/bundledLocalEmbedding.ts).
+    // The pipeline's offline fallback is constructed that way, and it must not
+    // inherit the user's catalog pick (a multi-GB model in a different
+    // embedding space). The resolver passes the pick explicitly.
     const modelId = opts?.modelId;
     const catalogEntry = modelId ? findEmbeddingCatalogModel(modelId) : null;
+    // R&D only: NATIVELY_EMBEDDING_EXPERIMENT swaps the argument-less (bundled)
+    // provider for a registered benchmark recipe. Unset in every shipped build.
+    const experiment = catalogEntry ? null : resolveEmbeddingExperiment();
     if (catalogEntry) {
       this.catalogId = catalogEntry.id;
       this.model = catalogEntry.repo;
+      this.hfModelId = catalogEntry.modelId || catalogEntry.repo;
       this.dimensions = opts?.dimensions || catalogEntry.dimensions;
       this.runtime = opts?.runtime || catalogEntry.runtime;
       this.pooling = catalogEntry.pooling || 'mean';
-      const resolved = resolveEmbeddingModelPath(catalogEntry);
-      this.modelPath = opts?.modelPath || resolved || LocalEmbeddingProvider.resolveModelPath();
+      this.queryPrefix = catalogEntry.queryPrefix || '';
+      this.documentPrefix = catalogEntry.documentPrefix || '';
+      this.extraMemoryHeadroomGB = catalogEntry.bundled
+        ? BUNDLED_LOCAL_EMBEDDING.extraMemoryHeadroomGB
+        : (catalogEntry.memoryHeadroomGB ?? 0);
+      this.maxBatchSize = catalogEntry.maxBatchSize;
+      this.maxInputTokens = catalogEntry.maxInputTokens;
+      const resolved = catalogEntry.bundled ? null : resolveEmbeddingModelPath(catalogEntry);
+      this.modelPath = opts?.modelPath || resolved || LocalEmbeddingProvider.resolveModelPath(this.hfModelId);
+    } else if (experiment) {
+      this.catalogId = `experiment:${experiment.key}`;
+      this.model = experimentSpaceModelId(experiment);
+      this.hfModelId = experiment.modelId;
+      this.dimensions = experiment.dimensions;
+      this.runtime = 'onnx';
+      this.pooling = experiment.pooling;
+      this.queryPrefix = experiment.queryPrefix;
+      this.documentPrefix = experiment.documentPrefix;
+      this.extraMemoryHeadroomGB = 0;
+      // Benchmarks run the recipe's own cap, so results describe what ships.
+      this.maxInputTokens = experiment.maxInputTokens;
+      this.maxBatchSize = experiment.maxBatchSize;
+      this.modelPath = opts?.modelPath || LocalEmbeddingProvider.resolveModelPath(this.hfModelId);
     } else {
-      this.catalogId = 'minilm-l6-v2';
-      this.model = 'Xenova/all-MiniLM-L6-v2';
-      this.dimensions = opts?.dimensions || 384;
+      const bundled = BUNDLED_LOCAL_EMBEDDING;
+      this.catalogId = BUNDLED_CATALOG_ID;
+      // The bundled model's space key is its plain model id, the convention
+      // MiniLM used (`local:xenova/all-minilm-l6-v2:384`).
+      this.model = bundled.modelId;
+      this.hfModelId = bundled.modelId;
+      this.dimensions = opts?.dimensions || bundled.dimensions;
       this.runtime = opts?.runtime || 'onnx';
-      this.pooling = 'mean';
-      this.modelPath = opts?.modelPath || LocalEmbeddingProvider.resolveModelPath();
+      this.pooling = bundled.pooling;
+      this.queryPrefix = bundled.queryPrefix;
+      this.documentPrefix = bundled.documentPrefix;
+      this.extraMemoryHeadroomGB = bundled.extraMemoryHeadroomGB;
+      this.modelPath = opts?.modelPath || LocalEmbeddingProvider.resolveModelPath(this.hfModelId);
     }
 
     this.slotWaitMs = opts?.slotWaitMs;
@@ -125,7 +187,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   // Playwright launching dist-electron/main.js (where getAppPath() points at the
   // built dir, not the repo root that holds resources/models). Without this an
   // exhausted-cloud-quota run had NO working embedder (tokenizer 404).
-  private static resolveModelPath(): string {
+  private static resolveModelPath(probeModelId: string = BUNDLED_LOCAL_EMBEDDING.modelId): string {
     const candidates: string[] = [];
     if (process.env.NATIVELY_LOCAL_MODELS_PATH) candidates.push(process.env.NATIVELY_LOCAL_MODELS_PATH);
     try {
@@ -142,7 +204,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     }
     candidates.push(path.join(process.cwd(), 'resources', 'models'));
     for (const c of candidates) {
-      try { if (fs.existsSync(path.join(c, 'Xenova', 'all-MiniLM-L6-v2', 'tokenizer.json'))) return c; } catch { /* keep trying */ }
+      try { if (fs.existsSync(path.join(c, ...probeModelId.split('/'), 'tokenizer.json'))) return c; } catch { /* keep trying */ }
     }
     return candidates.find(Boolean) || path.join(process.resourcesPath || '.', 'models');
   }
@@ -175,6 +237,8 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       writeOnnxLoadSentinel('embeddings', this.model);
       const spawned = new Worker(this.getWorkerPath());
       this.worker = spawned;
+      liveProviders().add(this);
+      spawned.once('exit', () => { if (this.worker === spawned || this.worker === null) liveProviders().delete(this); });
 
       this.worker.on('message', (msg: { type: string; requestId?: number; vectors?: number[][]; error?: string; status?: LocalWorkerStatus }) => {
         if (msg.type === 'status' && msg.status) {
@@ -420,6 +484,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
   }
 
   private postToWorker<T>(message: any, timeoutMs: number): Promise<T> {
+    if (this.closingForQuit) {
+      return Promise.reject(new Error('[LocalEmbeddingProvider] the app is quitting; local embedding request refused'));
+    }
     this.requestId = (this.requestId + 1) % Number.MAX_SAFE_INTEGER;
     const id = this.requestId;
     message.requestId = id;
@@ -486,9 +553,11 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // EmbeddingPipeline falls back to lexical retrieval, and the next call
     // retries. We do NOT have a `loadFailed` latch (matches the pre-gate
     // behavior); a later, less-pressured moment will retry automatically.
-    if (!hasEnoughMemoryForOnnxSession()) {
+    // MODEL-AWARE since 2026-09-22: the shared floor plus this model's own
+    // extra footprint (the floor alone is blind to model size).
+    if (!hasEnoughMemoryForOnnxSession(this.extraMemoryHeadroomGB)) {
       throw new Error(
-        `insufficient available memory (<${getMinFreeGBForOnnxSession()}GB) — skipping local embedder load`,
+        `insufficient available memory (<${getMinFreeGBForOnnxSession(this.extraMemoryHeadroomGB)}GB for ${this.hfModelId}) — skipping local embedder load`,
       );
     }
 
@@ -509,11 +578,12 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
           {
             type: 'init',
             modelId: this.catalogId,
-            hfModelId: this.model,
+            hfModelId: this.hfModelId,
             modelPath: this.modelPath,
             runtime: this.runtime,
             dimensions: this.dimensions,
             pooling: this.pooling,
+            maxInputTokens: this.maxInputTokens,
           },
           WORKER_INIT_TIMEOUT_MS,
         );
@@ -542,26 +612,111 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     return vector;
   }
 
+  /**
+   * Query and document text are NOT embedded the same way for asymmetric
+   * models (e5: "query: "/"passage: ", Arctic/BGE: a query instruction, Nomic:
+   * "search_query: "/"search_document: "). EmbeddingPipeline routes queries
+   * here and chunks to embedBatch(), so this is the one place for the split.
+   * A symmetric model (empty prefixes) falls through to a plain embed().
+   */
   async embedQuery(text: string): Promise<number[]> {
-    return this.embed(text); // symmetric
+    if (!this.queryPrefix) return this.embed(text);
+    const [vector] = await this.embedRaw([this.queryPrefix + text]);
+    return vector;
   }
 
   async embedBatch(texts: string[]): Promise<number[][]> {
+    const prefix = this.documentPrefix;
+    return this.embedRaw(prefix ? texts.map((t) => prefix + t) : texts);
+  }
+
+  /**
+   * Post already-prefixed text to the worker, never more than `maxBatchSize`
+   * texts per worker call. ModeHybridRetriever already sizes its sub-batches to
+   * the cap, but profile ingest (10 per batch) and live meeting indexing call
+   * embedBatch with their own sizes. A capped model (nomic-v1.5 SIGTRAPs at
+   * 16; the 1024-d models time out) must be safe whichever caller it serves.
+   */
+  private async embedRaw(texts: string[]): Promise<number[][]> {
+    const cap = this.maxBatchSize && this.maxBatchSize > 0 ? this.maxBatchSize : 0;
+    if (cap && texts.length > cap) {
+      const out: number[][] = [];
+      for (let i = 0; i < texts.length; i += cap) out.push(...(await this.embedRawOnce(texts.slice(i, i + cap))));
+      return out;
+    }
+    return this.embedRawOnce(texts);
+  }
+
+  private async embedRawOnce(texts: string[]): Promise<number[][]> {
     await this.ensureLoaded();
-    const result = await this.postToWorker<{ vectors: number[][] }>(
+    const result = await this.postToWorker<{ vectors: number[][]; dimensions?: number }>(
       {
         type: 'embed',
         texts,
         modelId: this.catalogId,
-        hfModelId: this.model,
+        hfModelId: this.hfModelId,
         modelPath: this.modelPath,
         runtime: this.runtime,
         dimensions: this.dimensions,
         pooling: this.pooling,
+        maxInputTokens: this.maxInputTokens,
       },
       WORKER_EMBED_TIMEOUT_MS,
     );
+    // The worker derives the width from the tensor. If it disagrees with the
+    // width this provider advertises, every vector written under this space key
+    // would be mislabelled, so refuse rather than index them.
+    const width = result.dimensions ?? result.vectors?.[0]?.length;
+    if (width && width !== this.dimensions) {
+      throw new Error(
+        `[LocalEmbeddingProvider] ${this.model} returned ${width}d but this ` +
+        `provider advertises ${this.dimensions}d — refusing to emit mislabelled vectors`,
+      );
+    }
     return result.vectors;
+  }
+
+  /**
+   * Quit-time teardown (2026-09-22).
+   *
+   * Quitting while this worker was inside a native ONNX call ABORTED the app:
+   * process exit tore the worker thread down mid-`run()`, onnxruntime-node's
+   * binding threw a Napi::Error into the dying environment, and libc++ called
+   * std::terminate (SIGABRT). Reproduced 4/4 on multilingual-e5-small and 3/3
+   * on MiniLM by quitting mid-indexing. A quit during model LOAD also left the
+   * load sentinel behind, so the next launch skipped local embedding.
+   *
+   * So: refuse new requests, let the ones already sent finish (each is one
+   * batch), then terminate a worker that is idle in its message loop. Bounded:
+   * a wedged worker must not hold the quit hostage.
+   */
+  async shutdownForQuit(maxWaitMs: number): Promise<'idle' | 'drained' | 'timed-out'> {
+    this.closingForQuit = true;
+    const worker = this.worker;
+    if (!worker) return 'idle';
+    const hadWork = this.pendingRequests.size > 0;
+    const deadline = Date.now() + maxWaitMs;
+    while (this.pendingRequests.size > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    const outcome = this.pendingRequests.size > 0 ? 'timed-out' : hadWork ? 'drained' : 'idle';
+    this.worker = null;
+    this.loadingPromise = null;
+    try { clearOnnxLoadSentinel('embeddings', this.model); } catch { /* best effort */ }
+    try { await worker.terminate(); } catch { /* already gone */ }
+    liveProviders().delete(this);
+    return outcome;
+  }
+
+  /** True when any live local embedding worker still owes a reply. */
+  static hasInFlightWorkForQuit(): boolean {
+    for (const p of liveProviders()) if (p.worker && p.pendingRequests.size > 0) return true;
+    return false;
+  }
+
+  /** shutdownForQuit() on every live provider, in parallel. */
+  static async shutdownAllForQuit(maxWaitMs: number): Promise<string[]> {
+    return Promise.all([...liveProviders()].map((p) => p.shutdownForQuit(maxWaitMs).then((o) => `${p.model}:${o}`)));
   }
 }
 

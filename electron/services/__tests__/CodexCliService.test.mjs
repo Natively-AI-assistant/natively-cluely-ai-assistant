@@ -52,7 +52,9 @@ test('DEFAULT_CODEX_CLI_CONFIG has expected shape', () => {
   // Issue #558: gpt-5.4 / gpt-5.3-codex are rejected for a ChatGPT account
   // (live, 2026-09-11). gpt-5.5 answered fastest of the models that work.
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.model, 'gpt-5.5');
-  assert.equal(DEFAULT_CODEX_CLI_CONFIG.fastModel, 'gpt-5.5');
+  // No Codex fast model of its own (2026-09-26): Fast Response Mode answers
+  // with the Background Model, and a Codex "Fast Mode Model" contradicted it.
+  assert.equal('fastModel' in DEFAULT_CODEX_CLI_CONFIG, false);
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.timeoutMs, 60_000);
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.sandboxMode, 'read-only');
 });

@@ -23,3 +23,26 @@ Baseline at the time of writing: wordle 1.000/1.000, interview 0.750/1.000 with
 one documented false fire (a candidate cut mid-phrase, reachable only in the
 pessimistic per-final segmentation). Any prompt edit should hold these or
 explain the trade.
+
+## Regression gate (nightly)
+
+    npm run test:auto-answer:judge-gate              # every set, 3 passes, Natively rung
+    node electron/intelligence/autoAnswer/__tests__/judgeEvalGate.mjs --update-baseline
+
+`judgeEvalGate.mjs` runs every set several times and compares the mean number
+of false fires and misses per set with `../judge-eval-baseline.json` (per
+provider). A set regresses when either rises by MORE than one case in one pass:
+one case flipped in every pass fails, one flake in one pass does not. Counts,
+not rates: several sets hold 3-4 asks, where one case moves precision 0.15-0.25.
+Exit 0 = nothing regressed, 1 = a set regressed (the flipped case numbers are
+printed), 2 = the run itself failed (no key, or more than 5% of calls errored:
+that measures the network, not the judge). An edited set (different size) is
+reported as stale until re-baselined.
+
+It runs one call at a time: at 6 in flight the Natively rung exceeded
+natively-api's 120 requests/minute and 10% of calls came back rate-limited.
+Re-baseline only after a deliberate prompt or model change, and say why in the
+commit. Baseline 2026-09-27 (Natively decision tier, 3 passes): recall 1.000 on
+every set; the one documented false fire each in google-mock-interview (#43),
+live-tech-interview-followups (#12), senior-swe-strings (#1),
+system-design-leetcode (#5) and team-meet-lecture-named (#13).

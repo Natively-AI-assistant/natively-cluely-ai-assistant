@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
-    Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star, Sparkles,
+    Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star,
     User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, FileText,
     GraduationCap, FolderKanban, Layers, Mail, MessageSquare, Target,
 } from 'lucide-react';
 import { ThinkingOrb } from 'thinking-orbs';
 import { useToggleInit } from './settings/useToggleInit';
-import { PremiumUpgradeModal, RoleInsightPanel } from '../premium';
+import { RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { useLensTracking } from '../ui-components/LiquidGlassButton';
+import { LiquidGlassButton, useLensTracking } from '../ui-components/LiquidGlassButton';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
 import { CHECKOUT_URLS } from '../config/urls';
+import { useConfirmDialog } from './ui/ConfirmDialog';
 
 const openExternal = (url: string) => {
     if ((window as any).electronAPI?.openExternal) {
@@ -879,18 +880,23 @@ const PI_CSS = `
     /*
       The trial pill keeps its own body, and needs its own hover tint: the
       neutral rule above is (0,3,0) and .pi-cta--trial is (0,1,0), so without
-      this the purple would cross-fade to grey under the pointer. The tint gains
-      saturation and a little luminance while HOLDING its hue (262), so it reads
-      as the same colour lit better rather than as a different colour.
+      this the blue would cross-fade to grey under the pointer. The tint gains
+      a little luminance while HOLDING its hue, so it reads as the same colour
+      lit better rather than as a different colour.
+
+      2026-09: violet (#8455ef / #9468ff) moved to the toggle blue's hue with the
+      app accent, by owner request. Each value keeps the violet's OKLCH
+      lightness, hue 268.5, chroma x0.873, then goes a hair darker so white text
+      holds the violet's contrast: body 4.68:1 (was 4.64), hover 3.71 (was 3.70).
     */
     .pi-cta--trial {
-        --pi-cta-bg: #8455ef;
-        --pi-cta-hover: #9468ff;
+        --pi-cta-bg: #496ae6;
+        --pi-cta-hover: #5a7cf7;
         color: #fff;
-        --pi-cta-rim: rgba(240,235,255,0.24);
-        --pi-cta-lens-tint: rgba(240,235,255,0.06);
-        --pi-cta-lens-rim: rgba(245,240,255,0.30);
-        --pi-cta-lens-rim-soft: rgba(245,240,255,0.13);
+        --pi-cta-rim: rgba(232,238,255,0.24);
+        --pi-cta-lens-tint: rgba(232,238,255,0.06);
+        --pi-cta-lens-rim: rgba(238,243,255,0.30);
+        --pi-cta-lens-rim-soft: rgba(238,243,255,0.13);
         /* A mid-dark body, so unlike either neutral pill it takes the measured
            symmetric rim — and it keeps it in both themes, because the body is
            its own colour rather than the theme's. */
@@ -899,10 +905,26 @@ const PI_CSS = `
             rgba(255,255,255,0.090) 0%, rgba(255,255,255,0) 11%,
             rgba(255,255,255,0) 89%, rgba(255,255,255,0.090) 100%);
         --pi-cta-cap-opacity: 0.5;
-        --pi-cta-shadow: 0 1px 2px rgba(124,58,237,0.26), 0 4px 10px rgba(124,58,237,0.20);
-        --pi-cta-shadow-hover: 0 2px 4px rgba(124,58,237,0.28), 0 8px 18px rgba(124,58,237,0.30);
+        --pi-cta-shadow: 0 1px 2px rgba(61,92,234,0.26), 0 4px 10px rgba(61,92,234,0.20);
+        --pi-cta-shadow-hover: 0 2px 4px rgba(61,92,234,0.28), 0 8px 18px rgba(61,92,234,0.30);
     }
     .pi-cta--trial .pi-cta-ring { background: rgba(255,255,255,0.18); }
+    /*
+      The trial "Upgrade" button is now the shared LiquidGlassButton
+      (src/ui-components, variant="action" + .lg-sm .lg-wide) rather than this
+      pill, so the .pi-cta--trial rules above no longer paint anything live.
+      This sizes it to the box it replaced (36px tall, full width, 13px label)
+      and feeds .lg-action the same blue in both themes: white on #496ae6 is
+      4.68:1. (0,3,0) so it beats .lg-button.lg-sm's own 30px.
+    */
+    .lg-button.lg-sm.pi-upgrade-lg {
+        width: 100%;
+        --lg-pill-h: 36px;
+        --lg-label-size: 13px;
+        --legacy-action-bg: #496ae6;
+        --legacy-action-hover: #5a7cf7;
+        --legacy-action-fg: #ffffff;
+    }
 
     /*
       prefers-contrast: more — the whole premise of this material is a rim so
@@ -1917,19 +1939,30 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
 // ─── Main export ──────────────────────────────────────────────────────────────
 export function ProfileIntelligenceSettings({
     onClose,
+    isTrialActive = false,
     onOpenNativelyAPI,
 }: {
     onClose: () => void;
+    /** An unexpired free trial grants the same access a Pro licence does. Owned by
+     *  App (the `trial-started` / `trial-ended` events), exactly as ModesSettings
+     *  receives it — this panel used to hardcode it to false, so a trial user was
+     *  shown the Unlock-Pro gate on every Profile Intelligence surface even though
+     *  main's own `isProOrTrialActive()` would have served every one of them. */
+    isTrialActive?: boolean;
     onOpenNativelyAPI?: () => void;
 }) {
     const cachedPremium = readPremiumCache();
+    // In-window confirms only: see ConfirmDialog.tsx for why never confirm().
+    const { confirm: askConfirm, dialog: confirmDialog } = useConfirmDialog();
     // Safe as a panel-level call ONLY because this panel renders exactly one
     // switch. Add a second and it must move into a per-switch component.
     const piToggleInit = useToggleInit();
     const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
     const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
-    const [isTrialActive] = useState(false);
-    const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+    // Upgrading, entering a licence key and managing Pro all live in Settings →
+    // Plans & Billing. The manager hands over to it (App's openSettingsExclusive
+    // closes this panel), and the licence is read again on the next mount.
+    const openPlans = () => onOpenNativelyAPI?.();
     const [licenseLoaded, setLicenseLoaded] = useState(false);
     const hasProfileAccess = isPremium || isTrialActive;
     const theme = useResolvedTheme();
@@ -1968,6 +2001,9 @@ export function ProfileIntelligenceSettings({
         extractionMode?: 'llm' | 'heuristic' | 'none';
     }>({ hasProfile: false, profileMode: false });
     const [profileUploading, setProfileUploading] = useState(false);
+    // The genie keeps a picture of this card to pour out on the next open
+    // (genieSnapshots.ts); it must never picture it half-loaded.
+    const [statusLoaded, setStatusLoaded] = useState(false);
     const [profileUploadStatus, setProfileUploadStatus] = useState<string | undefined>(undefined);
     const [profileError, setProfileError] = useState('');
     // Nothing sets `cancelled` any more — the X button used to, but that only
@@ -2109,7 +2145,7 @@ export function ProfileIntelligenceSettings({
             if (status?.resume_indexing_in_flight || status?.jd_indexing_in_flight) {
                 setAdoptTick(t => t + 1);
             }
-        }).catch(() => {});
+        }).catch(() => {}).finally(() => setStatusLoaded(true));
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
             setProfileData(data);
             if (data?.coverLetter) setCoverLetter(data.coverLetter);
@@ -2264,7 +2300,7 @@ export function ProfileIntelligenceSettings({
     }, [profileData?.aotStatus?.companyResearch]);
 
     const handleRemoveTavilyKey = async () => {
-        if (!confirm('Remove your Tavily API key?')) return;
+        if (!(await askConfirm({ title: 'Remove your Tavily API key?' }))) return;
         try {
             const res = await window.electronAPI?.setTavilyApiKey?.('');
             if (res?.success) { setHasStoredTavilyKey(false); setTavilyApiKey(''); }
@@ -2357,14 +2393,14 @@ export function ProfileIntelligenceSettings({
     // FileUploadEmpty stays: it also decides the "Requires Pro." hint, so it is
     // doing UI work, not just guarding — and a double gate here is idempotent.
     const browseResume = async () => {
-        if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
+        if (!hasProfileAccess) { openPlans(); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doResumeUpload(fileResult.filePath);
     };
 
     const browseJD = async () => {
-        if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
+        if (!hasProfileAccess) { openPlans(); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doJdUpload(fileResult.filePath);
@@ -2471,7 +2507,7 @@ export function ProfileIntelligenceSettings({
                     hint="Add your resume as real-time context."
                     hasAccess={hasProfileAccess}
                     onBrowse={browseResume}
-                    onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    onNeedUpgrade={() => openPlans()}
                     enterClass={profileHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
@@ -2499,7 +2535,7 @@ export function ProfileIntelligenceSettings({
                                 // no profile while the resume was in fact saved and live.
                                 // The button is disabled mid-ingest rather than lying.
                                 if (profileUploading) return;
-                                if (!confirm('Delete your resume and its extracted data?')) return;
+                                if (!(await askConfirm({ title: 'Delete your resume and its extracted data?', confirmLabel: 'Delete' }))) return;
                                 try {
                                     await window.electronAPI?.profileDelete?.();
                                     setProfileStatus({ hasProfile: false, profileMode: false });
@@ -2583,7 +2619,7 @@ export function ProfileIntelligenceSettings({
                     hint="Add a job description as real-time context."
                     hasAccess={hasProfileAccess}
                     onBrowse={browseJD}
-                    onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    onNeedUpgrade={() => openPlans()}
                     enterClass={jdHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
@@ -3696,7 +3732,7 @@ export function ProfileIntelligenceSettings({
     const renderRoleInsight = () => (
         <RoleInsightPanel
             hasAccess={hasProfileAccess}
-            onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+            onNeedUpgrade={() => openPlans()}
             onGoToProfile={() => goToSection('identity')}
         />
     );
@@ -3711,35 +3747,17 @@ export function ProfileIntelligenceSettings({
     };
 
     // ── CTA class ─────────────────────────────────────────────────────────────
+    // The trial state renders LiquidGlassButton instead (see the CTA footer),
+    // so this pill is only ever Manage Pro or Unlock Pro.
     const ctaClass = [
         'pi-cta',
-        isTrialActive && !isPremium  ? 'pi-cta--trial'   : '',
-        !isPremium && !isTrialActive  ? 'pi-cta--shimmer' : '',
+        !isPremium ? 'pi-cta--shimmer' : '',
     ].filter(Boolean).join(' ');
-
-    // ── Shared premium-modal lifecycle handlers (used by both the gate and the
-    //    unlocked panel's own CTA, so activating/deactivating behaves the same
-    //    regardless of which surface triggered the modal) ──────────────────────
-    const handlePremiumActivated = async () => {
-        setIsPremium(true);
-        try {
-            const details = await window.electronAPI?.licenseGetDetails?.();
-            const plan = details?.plan ?? '';
-            if (plan) setPremiumPlan(plan);
-            writePremiumCache(true, plan);
-        } catch { writePremiumCache(true, premiumPlan); }
-        const status = await window.electronAPI?.profileGetStatus?.();
-        if (status) setProfileStatus(status);
-    };
-    const handlePremiumDeactivated = () => {
-        setIsPremium(false); setPremiumPlan('');
-        writePremiumCache(false, '');
-        setProfileStatus(prev => ({ ...prev, profileMode: false }));
-    };
 
     // ── Non-pro users see the gate (wait for license verification) ────────────
     if (!hasProfileAccess) {
-        if (!licenseLoaded) return null;
+        // Busy, not empty: an empty card would read as settled to the genie.
+        if (!licenseLoaded) return <div aria-busy="true" style={{ height: '100%' }} />;
         return (
             <ProfileIntelligenceProGate
                 onOpenNativelyAPI={onOpenNativelyAPI}
@@ -3752,6 +3770,7 @@ export function ProfileIntelligenceSettings({
         <div
             className="pi-root"
             data-theme={theme}
+            aria-busy={!statusLoaded || profileUploading || jdUploading}
             style={{
                 display: 'flex', height: '100%', background: 'var(--pi-bg)',
                 borderRadius: 16, overflow: 'hidden',
@@ -3760,6 +3779,7 @@ export function ProfileIntelligenceSettings({
             } as React.CSSProperties}
         >
             <style>{PI_CSS}</style>
+            {confirmDialog}
 
             {/* ── Sidebar ── */}
             <div style={{
@@ -3809,9 +3829,21 @@ export function ProfileIntelligenceSettings({
 
                 {/* CTA footer */}
                 <div style={{ padding: '12px', borderTop: '1px solid var(--pi-border)', flexShrink: 0 }}>
+                    {isTrialActive && !isPremium ? (
+                        /* During a free trial: the shared Liquid Glass button
+                           (src/ui-components), label only. Colour and size come
+                           from .pi-upgrade-lg in the style block above. */
+                        <LiquidGlassButton
+                            variant="action"
+                            className="lg-sm lg-wide pi-upgrade-lg"
+                            onClick={() => openPlans()}
+                        >
+                            Upgrade
+                        </LiquidGlassButton>
+                    ) : (
                     <button
                         ref={ctaLens.ref}
-                        onClick={() => setIsPremiumModalOpen(true)}
+                        onClick={() => openPlans()}
                         onPointerMove={ctaLens.onPointerMove}
                         onFocus={ctaLens.onFocus}
                         className={ctaClass}
@@ -3821,20 +3853,19 @@ export function ProfileIntelligenceSettings({
                         {/* Painted above the flat fill and the rim, below the
                             content. Both pseudos are the material's already. */}
                         <span className="pi-cta-lens" aria-hidden="true" />
-                        {!isPremium && !isTrialActive
+                        {!isPremium
                             ? <span className="pi-cta-shimmer" aria-hidden="true" />
                             : null}
                         <span className="pi-cta-label">
-                            {isPremium ? 'Manage Pro' : isTrialActive ? 'Upgrade' : 'Unlock Pro'}
+                            {isPremium ? 'Manage Pro' : 'Unlock Pro'}
                         </span>
                         <div className="pi-cta-ring">
                             {isPremium
                                 ? <CheckCircle size={13} strokeWidth={2.5} />
-                                : isTrialActive
-                                    ? <Sparkles size={13} strokeWidth={2.5} />
-                                    : <ArrowUpRight size={13} strokeWidth={2.5} />}
+                                : <ArrowUpRight size={13} strokeWidth={2.5} />}
                         </div>
                     </button>
+                    )}
                 </div>
             </div>
 
@@ -3843,19 +3874,11 @@ export function ProfileIntelligenceSettings({
                 {/* Scrollable content — key remounts the block on each switch, which
                     is what re-fires the directional blur-in below it. */}
                 <div ref={panelScrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '24px 32px', boxSizing: 'border-box' }}>
-                    <div key={activeSection} className="pi-panel-fade" data-dir={navDir}>
+                    <div key={activeSection} className="pi-panel-fade" data-dir={navDir} data-genie-view={activeSection}>
                         {(SECTION_RENDERERS[activeSection] ?? renderIdentity)()}
                     </div>
                 </div>
             </div>
-
-            <PremiumUpgradeModal
-                isOpen={isPremiumModalOpen}
-                onClose={() => setIsPremiumModalOpen(false)}
-                isPremium={isPremium}
-                onActivated={handlePremiumActivated}
-                onDeactivated={handlePremiumDeactivated}
-            />
         </div>
     );
 }

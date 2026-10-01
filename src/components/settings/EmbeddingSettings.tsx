@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Check, ChevronDown, Download, ExternalLink, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Search, Server, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, type AipTone } from './AIProvidersSettings';
+import { AIP_ACTIVE_SELECT_CONTAINER, AIP_CSS, AipBadge, AipModelList, AipProviderMark, AipSaveLabel, AipTestLabel, type AipTone } from './AIProvidersSettings';
+import { Presence, SwapLabel, useMotionReadyAfter } from './SettingsRow';
+import { PICKER_MENU_WIDTH, RETRIEVAL_HERO_PICKER_ATTR, RETRIEVAL_HERO_PICKER_MIN_WIDTH, capPickerLabel } from './SettingsRow';
 import { isMac, isWindows } from '../../utils/platformUtils';
 
 // Embeddings — configured INDEPENDENTLY of the generation model.
@@ -199,6 +201,9 @@ interface EmbeddingModelSelectProps {
     ariaLabel?: string;
     /** Native tooltip — used to explain why the control is disabled. */
     title?: string;
+    /** Sizes the open menu. Defaults to fitting its options; the Active card's
+     *  picker passes w-full so the menu is exactly as wide as its button. */
+    menuClassName?: string;
 }
 
 const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
@@ -212,6 +217,7 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
     containerClassName = AIP_ACTIVE_SELECT_CONTAINER,
     ariaLabel,
     title,
+    menuClassName = PICKER_MENU_WIDTH,
 }) => {
     const t = useT();
     const [isOpen, setIsOpen] = useState(false);
@@ -232,6 +238,7 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
         || (selectedOption ? (selectedOption.triggerName || selectedOption.name) : null)
         || (value && value.includes('::') ? bareModelName(value.split('::').slice(1).join('::')) : null)
         || (placeholder || t('Select model'));
+    const shownLabel = capPickerLabel(resolvedLabel);
 
     return (
         <div className={containerClassName} ref={containerRef}>
@@ -241,18 +248,18 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
                 aria-expanded={isOpen}
                 aria-haspopup="listbox"
                 aria-label={ariaLabel}
-                title={title}
+                title={title ?? (shownLabel !== resolvedLabel ? resolvedLabel : undefined)}
                 disabled={disabled}
                 className={`aip-select-trigger cursor-pointer flex items-center justify-between w-full ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
             >
-                <span className="truncate pr-2 text-xs">{resolvedLabel}</span>
+                <span className="truncate pr-2 text-xs">{shownLabel}</span>
                 <ChevronDown size={14} strokeWidth={1.75} className={`aip-select-chevron transition-transform duration-150 shrink-0 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
 
             {isOpen && (
                 <div
                     role="listbox"
-                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1 w-full z-50 max-h-60 p-1 custom-scrollbar shadow-lg"
+                    className={`aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1 ${menuClassName} z-50 max-h-60 p-1 custom-scrollbar shadow-lg`}
                 >
                     {options.map((option) => (
                         <button
@@ -267,6 +274,7 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
                                 setIsOpen(false);
                             }}
                             className={`aip-select-option flex items-center justify-between w-full text-left px-3 py-2 rounded-md text-xs cursor-pointer ${value === option.id ? 'aip-text font-medium' : ''}`}
+                            title={option.name}
                         >
                             <span className="truncate flex-1">{option.name}</span>
                             {value === option.id && (
@@ -323,11 +331,14 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
 
     const [providers, setProviders] = useState<CatalogProvider[]>([]);
     const [loaded, setLoaded] = useState(false);
+    // Keys that load with the panel land; keys saved afterwards animate in.
+    const motionReady = useMotionReadyAfter(loaded);
     const [hasCatalog, setHasCatalog] = useState<Record<string, boolean>>({});
     const [fetchingModels, setFetchingModels] = useState<string | null>(null);
     const [active, setActive] = useState<ActiveDescription>({ configured: false });
     const [configured, setConfigured] = useState<{ mode?: 'auto' | 'manual'; provider?: string; model?: string }>({ mode: 'auto' });
     const [acknowledged, setAcknowledged] = useState(false);
+    const [ackLeaving, setAckLeaving] = useState(false);
 
     const [reindexing, setReindexing] = useState(false);
     const [pending, setPending] = useState<string | null>(null);
@@ -467,7 +478,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                 return;
             }
         }
-        setBusyLocalModelId(id ?? 'minilm-l6-v2');
+        setBusyLocalModelId(id ?? localModels.find(m => m.bundled)?.id ?? 'multilingual-e5-small');
         setLocalModelError(null);
         try {
             // No renderer-side deadline: the main process bounds the switch
@@ -718,10 +729,10 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
     const activeLocalModel = useMemo(() => {
         if (active.provider !== 'local') return null;
         const key = active.catalogId || active.model;
-        if (!key) return localModels.find(m => m.id === 'minilm-l6-v2') ?? null;
-        return localModels.find(m => m.id === key || m.repo === key)
-            ?? (key === 'Xenova/all-MiniLM-L6-v2' ? localModels.find(m => m.id === 'minilm-l6-v2') : null)
-            ?? null;
+        // The built-in row is whichever catalog entry is `bundled` (multilingual-e5-small
+        // since 2026-09-22), never a hardcoded id.
+        if (!key) return localModels.find(m => m.bundled) ?? null;
+        return localModels.find(m => m.id === key || m.repo === key) ?? null;
     }, [active, localModels]);
 
     const filteredLocalModels = useMemo(() => {
@@ -805,7 +816,9 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         if (!active.configured) return null;
 
         const providerId = active.provider || 'local';
-        const modelId = active.model || active.catalogId || 'Xenova/all-MiniLM-L6-v2';
+        // Display fallback only, when the status carries no model. Names the
+        // model actually bundled since 2026-09-22 (electron/rag/bundledLocalEmbedding.ts).
+        const modelId = active.model || active.catalogId || 'Xenova/multilingual-e5-small';
 
         if (providerId === 'local') {
             const modelName = activeLocalModel?.name || (active.catalogId ? localModels.find(m => m.id === active.catalogId)?.name : null) || bareModelName(modelId);
@@ -953,14 +966,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                     className="aip-btn-seg aip-field-seg"
                                     data-tone={savedKey[p.id] ? 'ok' : undefined}
                                 >
-                                    {savingKey[p.id]
-                                        ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                        : savedKey[p.id]
-                                            ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                            : t('Save')}
+                                    <AipSaveLabel saving={!!(savingKey[p.id])} saved={!!(savedKey[p.id])} dots />
                                 </button>
                             </div>
-                            {storedKeys[p.id] && (
+                            {/* Arrives with the saved key, like AI Providers' cards. */}
+                            <Presence kind="control" id={storedKeys[p.id] ? 'remove' : null} ready={motionReady} className="shrink-0">
                                 <button
                                     onClick={() => void handleRemoveKey(p.id as 'gemini' | 'openai' | 'openrouter' | 'voyage')}
                                     className="aip-btn shrink-0"
@@ -970,7 +980,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                 >
                                     <Trash2 size={14} strokeWidth={1.75} />
                                 </button>
-                            )}
+                            </Presence>
                         </div>
                     </div>
                 )}
@@ -998,11 +1008,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                     className="aip-field-seg"
                                     data-tone={endpointSaved ? 'ok' : undefined}
                                 >
-                                    {endpointSaving
-                                        ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                        : endpointSaved
-                                            ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                            : t('Save')}
+                                    <AipSaveLabel saving={!!(endpointSaving)} saved={!!(endpointSaved)} dots />
                                 </button>
                             </div>
                         </div>
@@ -1021,10 +1027,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                 data-tone={testStatus[p.id] === 'success' ? 'ok' : testStatus[p.id] === 'error' ? 'danger' : undefined}
                                 title={testErrors[p.id] || t('Test Connection')}
                             >
-                                {testStatus[p.id] === 'testing' ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</> :
-                                    testStatus[p.id] === 'success' ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</> :
-                                        testStatus[p.id] === 'error' ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</> :
-                                            <>{t('Test Connection')}</>}
+                                <AipTestLabel status={testStatus[p.id] ?? 'idle'} />
                             </button>
                         )}
 
@@ -1098,8 +1101,6 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                 // width belongs to.
                                 ariaLabel={target ? `${t('Output width for')} ${target.label || target.id}` : t('Output width')}
                                 title={hint}
-                                // Narrow: it holds "3072d", not a model name.
-                                containerClassName="relative shrink-0 w-[104px]"
                                 value={current ? String(current) : ''}
                                 options={(fixedWidth || !widths ? (current ? [current] : []) : widths)
                                     .map(d => ({ id: String(d), name: `${d}d` }))}
@@ -1201,7 +1202,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         const isSelected = active.provider === 'local' && (
             (activeLocalModel ? m.id === activeLocalModel.id : false) ||
             m.selected ||
-            (m.id === 'minilm-l6-v2' && (!selectedLocalModel || selectedLocalModel.id === 'minilm-l6-v2'))
+            (m.bundled && (!selectedLocalModel || selectedLocalModel.bundled))
         );
 
         const acceptLicence = async () => {
@@ -1228,7 +1229,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                             aria-hidden="true"
                             className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? 'bg-[var(--aip-accent)]' : installed ? 'bg-[var(--aip-tertiary)]' : 'border border-[var(--aip-border-strong)]'}`}
                         />
-                        <span className="text-xs font-semibold text-white truncate">{m.name}</span>
+                        <span className="text-xs font-semibold aip-hero truncate">{m.name}</span>
                         {m.bundled && <AipBadge tone="neutral" label={t('Included')} />}
                         {isSelected && <AipBadge tone="ok" label={t('In use')} />}
                     </div>
@@ -1278,7 +1279,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                         disabled={locked}
                                         onClick={() => void useLocalModel(m.id)}
                                     >
-                                        {busy ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : null}
+                                        {busy ? <Loader2 size={12} className="aip-spinner" aria-hidden="true" /> : null}
                                         <span>{t('Use')}</span>
                                     </button>
                                 )}
@@ -1291,7 +1292,9 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                                         onClick={() => void testLocalModel(m.id)}
                                         title={t('Measure how long one embedding takes on this device')}
                                     >
-                                        <span>{testingLocalModelId === m.id ? t('Testing…') : t('Test')}</span>
+                                        <SwapLabel id={testingLocalModelId === m.id ? 'testing' : 'test'} sizers={[t('Test'), t('Testing…')]}>
+                                            {testingLocalModelId === m.id ? t('Testing…') : t('Test')}
+                                        </SwapLabel>
                                     </button>
                                 )}
                                 {installed && !isSelected && !m.bundled && (
@@ -1318,13 +1321,13 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                             .filter(Boolean).join(' · ')}
                     </span>
                     {test?.latencyMs !== undefined && (
-                        <span className="text-[var(--aip-secondary)]">{`${test.latencyMs} ms · ${test.accelerator}`}</span>
+                        <span className="aip-panel-fade text-[var(--aip-secondary)]">{`${test.latencyMs} ms · ${test.accelerator}`}</span>
                     )}
                     {test?.error && <span className="aip-danger-fg">{test.error}</span>}
                 </div>
 
                 {m.note && (
-                    <p className="text-[10px] aip-muted leading-relaxed pl-3.5 text-white/60">{m.note}</p>
+                    <p className="text-[10px] aip-muted leading-relaxed pl-3.5">{m.note}</p>
                 )}
 
                 {needsLicence && (
@@ -1352,8 +1355,8 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
 
                 {busy && prog && (
                     <div className="space-y-1 pl-3.5 pt-1">
-                        <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
-                            <div className="h-full bg-[var(--aip-accent)] transition-all duration-150" style={{ width: `${Math.round(prog.fraction * 100)}%` }} />
+                        <div className="h-1 w-full bg-[var(--aip-item-active)] rounded-full overflow-hidden">
+                            <div className="h-full w-full origin-left bg-[var(--aip-accent)] transition-transform duration-150 ease-linear" style={{ transform: `scaleX(${Math.min(1, Math.max(0, prog.fraction))})` }} />
                         </div>
                         <div className="text-[10px] aip-muted flex justify-between">
                             <span>{`${Math.round(prog.fraction * 100)}% · ${prog.file}`}</span>
@@ -1383,8 +1386,12 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
 
     const renderLocalEmbeddingLibraryCard = () => {
         const isLocalActive = active.provider === 'local';
+        // Theme tokens, not white literals: white text and a 10%-white pill
+        // vanished on the light card. --aip-pill-bg is exactly the old 10% white
+        // in dark and a raised white chip in light.
         const filterTabStyle = (tab: typeof localFilterTab) => ({
-            background: localFilterTab === tab ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+            background: localFilterTab === tab ? 'var(--aip-pill-bg)' : undefined,
+            boxShadow: localFilterTab === tab ? 'var(--aip-pill-shadow)' : 'none',
             fontWeight: localFilterTab === tab ? 600 : 400,
         });
 
@@ -1406,7 +1413,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                         {t('Runs on this device with zero data sent externally. Built-in MiniLM model shipped with Natively, or download open models directly from Hugging Face.')}
                     </p>
                     <span className="shrink-0 inline-flex items-center gap-2">
-                        <span className="font-medium tabular-nums text-white/70">
+                        <span className="font-medium tabular-nums aip-text">
                             {installedLocalCount}/{totalLocalCount} {t('installed')}
                             {installedLocalBytes > 0 && <> · {humanBytes(installedLocalBytes)}</>}
                         </span>
@@ -1430,14 +1437,14 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                         </p>
                     ) : <div />}
 
-                    <div className="flex items-center gap-1 bg-white/5 p-0.5 rounded-md text-[11px]">
-                        <button type="button" className="px-2 py-0.5 rounded text-white transition-colors" style={filterTabStyle('all')} onClick={() => setLocalFilterTab('all')}>
+                    <div className="flex items-center gap-1 bg-[var(--aip-btn-bg)] p-0.5 rounded-md text-[11px]">
+                        <button type="button" className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100" style={filterTabStyle('all')} onClick={() => setLocalFilterTab('all')}>
                             {t('All')} ({totalLocalCount})
                         </button>
-                        <button type="button" className="px-2 py-0.5 rounded text-white transition-colors" style={filterTabStyle('installed')} onClick={() => setLocalFilterTab('installed')}>
+                        <button type="button" className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100" style={filterTabStyle('installed')} onClick={() => setLocalFilterTab('installed')}>
                             {t('Installed')} ({installedLocalCount})
                         </button>
-                        <button type="button" className="px-2 py-0.5 rounded text-white transition-colors" style={filterTabStyle('recommended')} onClick={() => setLocalFilterTab('recommended')}>
+                        <button type="button" className="px-2 py-0.5 rounded aip-hero transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-[color:var(--aip-item-hover)] active:scale-[0.97] motion-reduce:active:scale-100" style={filterTabStyle('recommended')} onClick={() => setLocalFilterTab('recommended')}>
                             {t('Recommended')}
                         </button>
                     </div>
@@ -1505,8 +1512,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                         </p>
                     </div>
 
-                    <div className="shrink-0">
+                    <div className="shrink-0" {...{ [RETRIEVAL_HERO_PICKER_ATTR]: '' }} style={{ minWidth: RETRIEVAL_HERO_PICKER_MIN_WIDTH }}>
                         <EmbeddingModelSelect
+                            // The menu matches the button's width; a name too
+                            // long for it truncates and shows whole on hover.
+                            menuClassName="w-full"
                             value={activeOptionId}
                             displayLabel={activeDisplayLabel}
                             options={activeOptions}
@@ -1526,7 +1536,11 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                 </div>
 
                 {active.lightweight && !acknowledged && (
-                    <div className="aip-inline-warn flex items-start gap-2 mt-3" role="status">
+                    <div className="aip-dismissable" data-leaving={ackLeaving ? 'true' : 'false'}>
+                    {/* Bare grid item: padding here would floor the collapse. */}
+                    <div>
+                    <div className="pt-3">
+                    <div className="aip-inline-warn flex items-start gap-2" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span className="min-w-0">
                             {t('This is the compatibility default. It may retrieve less well on large projects, which can affect answer quality even with a strong AI model.')}
@@ -1536,12 +1550,23 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
                             className="aip-btn shrink-0 ml-auto"
                             data-size="sm"
                             onClick={async () => {
+                                // Persist first: the fold is decoration.
                                 await window.electronAPI.acknowledgeLightweightEmbeddings?.(true);
-                                setAcknowledged(true);
+                                // Reduced motion squashes the collapse panel-wide, so
+                                // a timer would only hold an invisible box open.
+                                if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+                                    setAcknowledged(true);
+                                    return;
+                                }
+                                setAckLeaving(true);
+                                setTimeout(() => setAcknowledged(true), 170);
                             }}
                         >
                             {t('Keep it')}
                         </button>
+                    </div>
+                    </div>
+                    </div>
                     </div>
                 )}
 
