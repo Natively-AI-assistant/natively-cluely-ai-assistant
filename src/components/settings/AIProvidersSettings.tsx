@@ -1080,7 +1080,7 @@ select.aip-input { cursor:pointer; }
 .aip-select-fit-measure { position:absolute; left:0; top:0; visibility:hidden; pointer-events:none;
                           white-space:nowrap; overflow:hidden; box-sizing:content-box;
                           padding-right:8px; max-width:15rem; display:grid; }
-.aip-select-fit-measure > * { grid-area: 1 / 1; }
+.aip-select-fit-measure > * { grid-area: 1 / 1; justify-self:start; }
 /* The models trigger is not an .aip-select-trigger, so it never matched the rule
    above. It was passing an "is-open" class that has no rule anywhere — the chevron
    has never rotated. Use the ARIA state already on the button.
@@ -1098,6 +1098,13 @@ select.aip-input { cursor:pointer; }
 .aip-select-option:hover,
 .aip-select-option[data-active='true'] { background: var(--aip-item-hover); color: var(--aip-primary); }
 .aip-select-option[aria-selected='true'] { background: var(--aip-item-active); color: var(--aip-primary); }
+/* A fitted picker's menu rows (ModelSelect minLabel): one line each, left-aligned,
+   cut with an ellipsis when too long. Only the picked row gives up room for its
+   check, and the 6px gap keeps that at 19px, so a name that fits the trigger fits
+   its own row uncut (the trigger's label column is 50px short of the menu, the
+   picked row's is 45px short). The check used to take 29px and broke the picked
+   name in two. */
+.aip-select-option.aip-select-option--fit { gap:6px; }
 .aip-select-empty { padding:6px 8px; font-size:12px; color: var(--aip-tertiary); }
 
 /* ── Segmented control. Architecture unchanged — still ONE absolutely-positioned
@@ -2138,15 +2145,27 @@ interface ModelSelectProps {
         growing and shrinking with an ease as the pick changes
         (.aip-select-trigger--fit). Without it the trigger is a fixed w-40. Pair
         it with the default menuClassName: the menu is then the trigger's width
-        and long names wrap. */
+        and a name too long for a row is cut with an ellipsis. */
     minLabel?: string;
 }
 
 /** The Active Model and Background Model pickers: at least wide enough for this
     name. Measured, not a ch count: SF Pro and Segoe UI set it at different widths. */
 const HERO_MODEL_PICKER_MIN_LABEL = 'Gemini 3.8 Flash';
-/** A fitted picker's label shorter than this many characters is centred. */
-const HERO_PICKER_CENTER_BELOW_CHARS = 16;
+
+/** A fitted picker's label is centred only when it is narrower than the picker's
+    floor by at least this much, in em of its font (30px at 12px). Short of that, a
+    centred name sits a few px in from the left edge and reads as misaligned. */
+const FIT_LABEL_CENTRE_MIN_SPARE_EM = 2.5;
+
+/** A fitted menu row whose name is cut shows the whole name as its tooltip. Set as
+    the pointer arrives: only a laid-out row knows whether it is cut. */
+const showFullNameIfCut = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const row = event.currentTarget;
+    const name = row.firstElementChild;
+    if (!(name instanceof HTMLElement)) return;
+    row.title = name.scrollWidth > name.clientWidth ? name.textContent ?? '' : '';
+};
 
 const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, placeholder, className = "", containerClassName = "relative", maxLabelChars, menuClassName = "w-full", minLabel }) => {
     const t = useT();
@@ -2156,24 +2175,35 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
     const measureRef = useRef<HTMLSpanElement>(null);
     const [fitWidth, setFitWidth] = useState<number | null>(null);
     const [fitTruncated, setFitTruncated] = useState(false);
+    const [fitCentred, setFitCentred] = useState(false);
     const [fitAnimate, setFitAnimate] = useState(false);
 
     // The hidden copy re-measures whenever its text or font changes (a new pick,
     // a language switch, a late webfont). offsetWidth, not a rect: layout px,
     // whatever transform the settings panel's own entrance applies. A hidden
     // ancestor reads 0: keeping the last real width stops an ease in from 0.
+    // offsetWidth is a whole number and rounds DOWN for a label 140.2px wide,
+    // which left the slot 0.2px short: "OpenAI Codex (GPT-5.5)" ellipsized in
+    // the trigger and was cut in its own menu row. One spare px covers it.
+    // The label's own copy is watched too: two names both narrower than the
+    // floor leave the box the same size, but can differ on whether they centre.
     React.useLayoutEffect(() => {
         const el = measureRef.current;
-        if (!fit || !el) return;
+        const label = el?.firstElementChild;
+        const floor = el?.lastElementChild;
+        if (!fit || !el || !(label instanceof HTMLElement) || !(floor instanceof HTMLElement)) return;
         const measure = () => {
             if (el.offsetWidth === 0) return;
-            setFitWidth(el.offsetWidth);
+            setFitWidth(el.offsetWidth + 1);
             setFitTruncated(el.scrollWidth > el.clientWidth);
+            const spare = floor.offsetWidth - label.offsetWidth;
+            setFitCentred(spare >= FIT_LABEL_CENTRE_MIN_SPARE_EM * parseFloat(getComputedStyle(el).fontSize));
         };
         measure();
         if (typeof ResizeObserver === 'undefined') return;
         const ro = new ResizeObserver(measure);
         ro.observe(el);
+        ro.observe(label);
         return () => ro.disconnect();
     }, [fit]);
     // The saved pick arrives over IPC after mount. It is loading, not news, so the
@@ -2220,14 +2250,15 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
                         >
                             {/* The label leaves and the new one arrives (Presence
                                 "text") while the slot eases to the new width. A
-                                short name is centred (mx-auto in the flex slot)
-                                rather than hugging the left edge. The class rides
-                                on each label, so the one leaving keeps its own
-                                alignment through its fade instead of jumping. */}
+                                name well short of the slot is centred (mx-auto in
+                                the flex slot, fitCentred); one close to its width
+                                stays at the left edge. The class rides on each
+                                label, so the one leaving keeps its own alignment
+                                through its fade instead of jumping. */}
                             <Presence
                                 kind="text"
                                 id={shownLabel}
-                                className={`max-w-full truncate ${Array.from(shownLabel).length < HERO_PICKER_CENTER_BELOW_CHARS ? 'mx-auto' : ''}`}
+                                className={`max-w-full truncate ${fitCentred ? 'mx-auto' : ''}`}
                             >
                                 {shownLabel}
                             </Presence>
@@ -2265,21 +2296,18 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
                             }}
                             role="option"
                             aria-selected={value === option.id}
-                            className="aip-select-option"
+                            className={`aip-select-option ${fit ? 'aip-select-option--fit' : ''}`}
+                            onMouseEnter={fit ? showFullNameIfCut : undefined}
                             type="button"
                         >
-                            {/* A fitted picker's menu is exactly the trigger's width,
-                                so a name longer than the trigger wraps rather than
-                                cuts: "OpenAI Codex: GPT-5.6-Terra" and "…-Luna" would
-                                ellipsize to the same text. Hyphens become non-breaking
-                                (U+2011), so a line breaks between words ("OpenAI Codex"
-                                / "(GPT-5.5)") and not inside a version ("GPT-" / "5.5)");
-                                overflow-wrap:anywhere still splits one word too long
-                                for the row. */}
-                            <span className={fit ? 'min-w-0 leading-snug [overflow-wrap:anywhere]' : 'truncate'}>
-                                {fit ? option.name.replace(/-/g, '\u2011') : option.name}
-                            </span>
-                            {value === option.id && <Check size={13} strokeWidth={1.75} className="aip-accent-fg shrink-0 ml-2" aria-hidden="true" />}
+                            {/* A fitted picker's menu is exactly the trigger's width, and
+                                a row is one line: a name too long for it is cut with
+                                an ellipsis (as many characters as fit, less the one
+                                the ellipsis takes), and the row's tooltip then carries
+                                the whole name, since "OpenAI Codex: GPT-5.6-Terra" and
+                                "…-Luna" cut to the same text. */}
+                            <span className={fit ? 'min-w-0 truncate' : 'truncate'}>{option.name}</span>
+                            {value === option.id && <Check size={13} strokeWidth={1.75} className={`aip-accent-fg shrink-0 ${fit ? '' : 'ml-2'}`} aria-hidden="true" />}
                         </button>
                     ))}
                     {options.length === 0 && (
