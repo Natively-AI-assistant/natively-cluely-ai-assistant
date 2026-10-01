@@ -73,7 +73,7 @@ const SELECTIONS = {
   'gemini-3.8-flash': {}, 'gpt-3.5-turbo': {}, 'gpt-5.5': {}, 'claude-opus-5': {}, natively: {},
   'deepseek-v4-flash': {}, 'deepseek-v4-pro': {}, 'openrouter/openai/gpt-4o': {}, 'litellm/internal': {},
   'fluxion/claude-opus-5': {}, 'agentrouter/claude-opus-5': {}, 'ninerouter/openai/gpt-5': {}, 'nvidia_nim/meta/llama-3.2-90b-vision-instruct': {},
-  'ollama selected': { selection: { provider: 'ollama', model: 'llava' }, stale: 'gemini-3.8-flash' },
+  'ollama selected': { selection: { provider: 'ollama', model: 'llava' }, stale: 'gemini-3.8-flash', ollamaTarget: { model: 'llava:7b', url: 'http://127.0.0.1:11434' } },
   'custom local, reads images': { custom: custom('c-local', 'http://localhost:1234/v1/chat', IMG), stale: 'gemini-3.8-flash' },
   'custom local, text only': { custom: custom('c-local-text', 'http://127.0.0.1:8080/gen', NOIMG), stale: 'gemini-3.8-flash' },
   'custom hosted, reads images': { custom: custom('c-hosted', 'https://api.example.com/v1/chat', IMG), stale: 'gemini-3.8-flash' },
@@ -95,6 +95,7 @@ function installHelper(label, over = {}) {
     getActiveCurlProvider: () => s.curl ?? null,
     getDirectAssistSelection: () => selection,
     getFixedVisionModels: () => FIXED,
+    getOllamaRecordTarget: () => s.ollamaTarget ?? null,
     ...over,
   });
 }
@@ -142,6 +143,10 @@ function expected(name, before, purpose = 'prepass') {
   // (c) A selected cURL provider that reads images: a local one in both modes, a hosted one only where cloud is allowed.
   if (label === 'curl local, reads images') rungs.push('curl= (local)');
   if (label === 'curl hosted, reads images' && mode === 'vision_first') rungs.push('curl=');
+  // (f) Evin's record rule, the Ollama half (phase 5c-1): the after-the-answer
+  //     record falls back to the selected Ollama's vision model — after the
+  //     cloud rungs, or alone in "keep on this device" mode. Never the pre-pass.
+  if (purpose === 'record' && label === 'ollama selected') rungs.push('ollama=llava:7b (local)');
   // (d) Defect 9: the OpenAI rung said `gpt-4o` while the request went to the
   //     SELECTED OpenAI model. It now names, and sends to, the fixed vision model.
   rungs = rungs.map((r) => (r === 'openai=gpt-4o' ? `openai=${FIXED.openai}` : r));
@@ -176,10 +181,12 @@ test('the after-the-answer record tries what it tried before 5b: a local selecti
     assert.deepEqual(now, expected(name, was, 'record'), `record: ${name}\n  was: ${was.join(' > ') || '(nothing)'}\n  now: ${now.join(' > ') || '(nothing)'}`);
   }
 });
-test('the record, with Ollama selected and a cloud key saved: the cloud makes it; in "keep on this device" mode nothing does', () => {
+test('the record, with Ollama selected and a cloud key saved: the cloud makes it first; in "keep on this device" mode only Ollama may', () => {
   const ids = (list) => list.map((r) => r.split('=')[0]);
-  assert.deepEqual(ids(eligible('gemini', 'ollama selected', 'vision_first', undefined, 'record')), ['gemini_flash_lite', 'gemini_flash', 'gemini_pro']);
-  assert.deepEqual(eligible('gemini', 'ollama selected', 'private_vision', undefined, 'record'), []);
+  const noVisionModel = { getOllamaRecordTarget: () => null };
+  assert.deepEqual(ids(eligible('gemini', 'ollama selected', 'vision_first', undefined, 'record')), ['gemini_flash_lite', 'gemini_flash', 'gemini_pro', 'ollama']);
+  assert.deepEqual(ids(eligible('gemini', 'ollama selected', 'private_vision', undefined, 'record')), ['ollama'], 'phase 5c-1: the local model writes it');
+  assert.deepEqual(eligible('gemini', 'ollama selected', 'private_vision', noVisionModel, 'record'), [], 'no installed model reads images: nothing may');
   assert.deepEqual(eligible('gemini', 'ollama selected', 'vision_first', undefined, 'prepass'), [], 'the pre-pass still stays off the cloud');
   assert.deepEqual(eligible('gemini', 'ollama selected', 'vision_first'), [], 'and no purpose given means the pre-pass rule');
 });
@@ -468,4 +475,33 @@ test('the service tells the registry which call is the record: only `transcribe`
   for (const action of ['what_to_say', 'what_to_answer', 'manual_use_screen', 'code_hint', 'brainstorm', undefined]) {
     assert.equal(purpose(action), 'prepass', String(action));
   }
+});
+
+// ── Phase 5c-1: the Ollama model writes the after-the-answer record ──────────
+
+describe('the Ollama record rung', () => {
+  const ids = (list) => list.map((r) => r.split('=')[0]);
+  const remote = { getOllamaRecordTarget: () => ({ model: 'llava:7b', url: 'http://ollama.example.com:11434' }) };
+  test('the record: after the cloud rungs; alone in "keep on this device" mode', () => {
+    assert.deepEqual(ids(eligible('gemini', 'ollama selected', 'vision_first', undefined, 'record')), ['gemini_flash_lite', 'gemini_flash', 'gemini_pro', 'ollama']);
+    assert.deepEqual(eligible('gemini', 'ollama selected', 'private_vision', undefined, 'record'), ['ollama=llava:7b (local)']);
+    assert.deepEqual(eligible('none', 'ollama selected', 'vision_first', undefined, 'record'), ['ollama=llava:7b (local)'], 'no cloud provider: Ollama makes the record');
+  });
+  test('the PRE-PASS never reaches Ollama, in any mode', () => {
+    for (const keySet of Object.keys(KEY_SETS)) for (const mode of MODES) {
+      assert.ok(!ids(eligible(keySet, 'ollama selected', mode)).includes('ollama'), `${mode} / ${keySet}`);
+      assert.ok(!ids(eligible(keySet, 'ollama selected', mode, undefined, 'prepass')).includes('ollama'), `${mode} / ${keySet}`);
+    }
+  });
+  test('"local" is earned from the URL host: an Ollama on another machine is not eligible in "keep on this device" mode', () => {
+    assert.deepEqual(eligible('none', 'ollama selected', 'private_vision', remote, 'record'), []);
+    assert.deepEqual(eligible('none', 'ollama selected', 'vision_first', remote, 'record'), ['ollama=llava:7b']);
+    const lan = { getOllamaRecordTarget: () => ({ model: 'llava:7b', url: 'http://192.168.1.20:11434' }) };
+    assert.deepEqual(eligible('none', 'ollama selected', 'private_vision', lan, 'record'), ['ollama=llava:7b (local)']);
+  });
+  test('no model that reads images, or Ollama not selected: no rung', () => {
+    assert.deepEqual(eligible('none', 'ollama selected', 'vision_first', { getOllamaRecordTarget: () => null }, 'record'), []);
+    assert.ok(!ids(eligible('everything', 'gemini-3.8-flash', 'vision_first', undefined, 'record')).includes('ollama'));
+    assert.ok(!ids(eligible('everything', 'gemini-3.8-flash', 'vision_first', { getOllamaRecordTarget: undefined }, 'record')).includes('ollama'));
+  });
 });

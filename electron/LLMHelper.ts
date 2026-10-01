@@ -810,6 +810,8 @@ export class LLMHelper {
   // the last one found nothing vision-capable or ran out of budget. Without it a
   // user with Ollama selected and no vision model re-paid the probe per screenshot.
   private ollamaVisionNegativeUntil = 0;
+  /** The screen-record request in flight, if any; an Ollama answer cancels it (see runVisionRequest('ollama')). */
+  private ollamaRecordAbort?: AbortController | null;
   private ollamaStartedByApp: boolean = false;
   private geminiModel: string = GEMINI_FLASH_MODEL
   private customProvider: CustomProvider | null = null;
@@ -2207,7 +2209,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter' | 'deepseek' | 'curl',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter' | 'deepseek' | 'curl' | 'ollama',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -2259,6 +2261,29 @@ export class LLMHelper {
         let text = '';
         for await (const piece of this.streamWithDeepseek(userPrompt, systemPrompt, this.currentModelId, opts?.signal, [imagePath])) text += piece;
         return text;
+      }
+      // The after-the-answer screen record, written locally (2026-10-01, Evin's
+      // rule). Through streamWithOllama with the resolved vision model — strict,
+      // so a failure throws instead of becoming "Error: Failed to stream…" text
+      // that would be stored as the screen's contents.
+      case 'ollama': {
+        const target = this.getOllamaRecordTarget() ?? await this.resolveOllamaRecordTarget();
+        if (!target) throw new Error('No local model that reads images is available for the screen record');
+        const record = new AbortController();
+        const onOuterAbort = () => record.abort();
+        if (opts?.signal?.aborted) record.abort();
+        opts?.signal?.addEventListener('abort', onOuterAbort, { once: true });
+        this.cancelOllamaRecordFor(undefined);
+        this.ollamaRecordAbort = record;
+        try {
+          let text = '';
+          for await (const piece of this.streamWithOllama(userPrompt, undefined, systemPrompt, [imagePath], record.signal, target.model, true)) text += piece;
+          if (record.signal.aborted) throw new Error('The screen record was cancelled');
+          return text;
+        } finally {
+          opts?.signal?.removeEventListener('abort', onOuterAbort);
+          if (this.ollamaRecordAbort === record) this.ollamaRecordAbort = null;
+        }
       }
       case 'curl': {
         if (!this.activeCurlProvider) throw new Error('No cURL provider selected');
@@ -3289,6 +3314,7 @@ export class LLMHelper {
   }
 
   private async callOllama(prompt: string, imagePath?: string | string[], systemPrompt?: string): Promise<string> {
+    this.cancelOllamaRecordFor(undefined);
     try {
       let images: string[] | undefined;
       const imagePaths = Array.isArray(imagePath) ? imagePath : imagePath ? [imagePath] : [];
@@ -3457,6 +3483,36 @@ export class LLMHelper {
   private async resolveLocalVisionModel(): Promise<string | null> {
     if (!this.useOllama || this.isProviderDisabled('ollama')) return null;
     return this.resolveOllamaVisionModelForChain(OLLAMA_LOCAL_VISION_PROBE_BUDGET_MS);
+  }
+
+  /**
+   * The Ollama model that can write the after-the-answer screen record, with
+   * the daemon's URL (the registry decides "local" from its host). Resolves
+   * through the same bounded, cached probe; null when Ollama is not the
+   * selected provider or no installed model reads images.
+   */
+  public async resolveOllamaRecordTarget(): Promise<{ model: string; url: string } | null> {
+    const model = await this.resolveLocalVisionModel();
+    return model ? { model, url: this.ollamaUrl } : null;
+  }
+
+  /** What the last resolve found, without touching the daemon (the registry is synchronous). */
+  public getOllamaRecordTarget(): { model: string; url: string } | null {
+    if (!this.useOllama || this.isProviderDisabled('ollama') || !this.ollamaVisionModel) return null;
+    return { model: this.ollamaVisionModel, url: this.ollamaUrl };
+  }
+
+  /**
+   * A screen record still being written must not hold up an ANSWER: one local
+   * daemon serves both, and a record can take tens of seconds. Any Ollama
+   * request other than the record itself cancels it; the screen is then
+   * recorded as "not transcribed", which is what it was before records existed.
+   */
+  private cancelOllamaRecordFor(signal: AbortSignal | undefined): void {
+    const record = this.ollamaRecordAbort;
+    if (!record || signal === record.signal) return;
+    this.ollamaRecordAbort = null;
+    record.abort();
   }
 
   /**
@@ -12680,6 +12736,7 @@ let isMultimodal = !!(imagePaths?.length);
     // When a screenshot is attached and the primary model is text-only, the
     // caller passes the resolved vision-capable model here so the image is
     // actually understood instead of silently dropped.
+    this.cancelOllamaRecordFor(abortSignal);
     const ollamaModel = modelOverride || this.ollamaModel;
     let userContent = context ? `CONTEXT:\n${context}\n\nUSER:\n${message}` : message;
     // Per-request hard guard: trim userContent (never systemPrompt) until total fits the model's max ctx.

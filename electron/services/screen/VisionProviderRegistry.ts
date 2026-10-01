@@ -12,7 +12,6 @@
 // intentionally lazy-import LLMHelper so tests can replace this registry
 // without booting the whole LLM stack.
 
-import fs from 'node:fs/promises';
 import type {
   VisionProviderConfig,
   VisionInvocationParams,
@@ -27,6 +26,7 @@ import {
 } from '../../llm/visionCapability';
 import {
   readActiveCustomProvider, readActiveCurlProvider, readActiveModelId, readActiveSelection, readFixedVisionModels,
+  readOllamaRecordTarget,
 } from '../../llm/activeCustomProvider';
 import { gatewaySeatReadsImages, readsImages, resolveVision } from '../../llm/visionResolver';
 import { normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from '../../llm/visionCapabilityStore';
@@ -228,26 +228,32 @@ function groqScout(creds: CredentialsManager, _inputs: VisionProviderBuildInputs
   };
 }
 
-function ollama(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
-  // NEVER CONFIGURED (found 2026-10-01): nothing in the app writes
-  // `ollamaBaseUrl` or `ollamaModel` to the credential store, so this rung has
-  // never run. That is now the intended behaviour (Evin, 2026-10-01): with
-  // Ollama selected the pre-pass stays off the cloud (selectionIsLocal) and
-  // there is no local pre-pass — a local vision model rarely answers inside
-  // the 6 s budget, and Ollama reads the screenshot in the answer itself.
-  const baseUrl = (creds.getAllCredentials() as any)?.ollamaBaseUrl as string | undefined;
-  const ollamaModel = (creds.getAllCredentials() as any)?.ollamaModel as string | undefined;
-  const isVisionModel = ollamaModel ? isOllamaVisionModel(ollamaModel) : false;
+function ollama(_creds: CredentialsManager, inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  // The after-the-answer RECORD only (2026-10-01, Evin's rule: "send it to
+  // cloud if available, else send it to the Ollama model"). The PRE-PASS never
+  // uses Ollama: it runs before the answer inside 6 s, and Ollama reads the
+  // screenshot in the answer itself.
+  //
+  // Fed by the live helper, not the credential store: this rung used to read
+  // `ollamaBaseUrl` / `ollamaModel` from credentials, which nothing ever wrote,
+  // so it had never run. The helper names the model only when Ollama is the
+  // SELECTED provider and `/api/show` (else the name list) says an installed
+  // model reads images; ScreenUnderstandingService resolves it before building.
+  //
+  // "Local" is earned from the daemon's host, as for the custom and cURL
+  // rungs: OLLAMA_URL / switchToOllama can point at another machine, and that
+  // must not satisfy "Keep screenshots on this device".
+  const target = inputs.purpose === 'record' ? readOllamaRecordTarget() : null;
   return {
     id: 'ollama',
-    displayName: 'Ollama (local)',
-    modelId: ollamaModel,
-    isLocal: true,
-    isConfigured: !!baseUrl && !!ollamaModel,
-    supportsVision: isVisionModel,
+    displayName: target ? `Ollama (${target.model})` : 'Ollama (local)',
+    modelId: target?.model,
+    isLocal: !!target && customProviderIsLocal({ curlCommand: target.url }),
+    isConfigured: !!target,
+    supportsVision: !!target,
     scopeAllowsScreenshots: true,
     hint: 'ollama',
-    invoke: async (p) => callOllamaVision(baseUrl!, ollamaModel!, p),
+    invoke: async (p) => callLLMHelperVision('ollama', p),
   };
 }
 
@@ -650,62 +656,6 @@ async function callLLMHelperVision(providerId: string, params: VisionInvocationP
     params.optimized.path,
     { signal: params.signal, timeoutMs: params.timeoutMs },
   );
-}
-
-/**
- * Call a local Ollama vision model. Uses the OpenAI-compatible /v1/chat/completions
- * endpoint at `${baseUrl}/v1/` with an image_url data URL — supported by every
- * vision-capable Ollama model we care about (llava family, qwen2.5-vl, etc.).
- */
-async function callOllamaVision(baseUrl: string, model: string, params: VisionInvocationParams): Promise<string> {
-  const { optimized, systemPrompt, userPrompt, signal } = params;
-  const data = await fs.readFile(optimized.path);
-  const dataUrl = `data:${optimized.mimeType};base64,${data.toString('base64')}`;
-  const trimmedBase = baseUrl.replace(/\/+$/, '');
-  const url = `${trimmedBase}/v1/chat/completions`;
-
-  const body = {
-    model,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: userPrompt },
-          { type: 'image_url', image_url: { url: dataUrl } },
-        ],
-      },
-    ],
-    stream: false,
-  };
-
-  const serializedBody = JSON.stringify(body);
-  require('../../llm/providerPayloadCapture').captureProviderPayload({
-    provider: 'ollama_vision',
-    classification: 'exact_serialized_provider_payload',
-    payload: body,
-    serializedPayload: serializedBody,
-  });
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: serializedBody,
-    signal,
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    // Surface a classifiable error so VisionProviderFallbackChain can bucket it.
-    throw new Error(`Ollama ${res.status}: ${text.substring(0, 200)}`);
-  }
-
-  const json: any = await res.json();
-  const content = json?.choices?.[0]?.message?.content;
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content.map((part: any) => (typeof part === 'string' ? part : part?.text || '')).join('');
-  }
-  throw new Error('Ollama returned empty content');
 }
 
 /**

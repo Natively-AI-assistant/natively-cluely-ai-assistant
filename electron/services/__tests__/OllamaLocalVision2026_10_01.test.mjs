@@ -51,7 +51,7 @@ function fakeOllama(models, { reply = 'local model reply', holdChat = false } = 
       const body = raw ? JSON.parse(raw) : null;
       const entry = { path: req.url, body, aborted: false };
       requests.push(entry);
-      req.on('close', () => { if (!res.writableEnded) entry.aborted = true; });
+      res.on('close', () => { if (!res.writableEnded) entry.aborted = true; });
       if (req.url === '/api/tags') {
         res.writeHead(200, { 'content-type': 'application/json' });
         return res.end(JSON.stringify({ models: Object.keys(models).map((name) => ({ name })) }));
@@ -63,7 +63,9 @@ function fakeOllama(models, { reply = 'local model reply', holdChat = false } = 
         return res.end(JSON.stringify(reads === null ? {} : { capabilities: reads ? ['completion', 'vision'] : ['completion'] }));
       }
       if (req.url === '/api/chat') {
-        if (holdChat) { open.add(res); res.writeHead(200, { 'content-type': 'application/x-ndjson' }); return; } // never answers
+        if (typeof holdChat === 'function' ? holdChat(body) : holdChat) {            // accepted, never answered
+          open.add(res); res.writeHead(200, { 'content-type': 'application/x-ndjson' }); res.flushHeaders(); return;
+        }
         if (body?.stream === false) {
           res.writeHead(200, { 'content-type': 'application/json' });
           return res.end(JSON.stringify({ message: { role: 'assistant', content: reply }, done: true }));
@@ -211,6 +213,144 @@ describe('the Privacy panel\'s "local vision available" indicator', () => {
     const h = Object.assign(helper(await ollama.start(), 'llava:7b'), { useOllama: false });
     assert.equal(await h.scopeFallbackAvailable(true), false);
     assert.equal(ollama.requests.length, 0);
+  });
+});
+
+// ── 2. The Ollama model writes the after-the-answer screen record ────────────
+
+const { getScreenUnderstandingService, OLLAMA_RECORD_BUDGET_MS } = require(dist('services/screen/ScreenUnderstandingService.js'));
+const { composeScreenDescription } = require(dist('services/screen/screenDescription.js'));
+const SYSTEM = 'Extract what is on the screen.';
+
+describe('runVisionRequest("ollama"): the record request, on the wire', () => {
+  let ollama;
+  afterEach(async () => { await ollama?.stop(); ollama = null; });
+  beforeEach(() => fakeCredentials());
+
+  test('the resolved vision model, the image and the system prompt', async () => {
+    ollama = fakeOllama({ 'qwen2.5:4b': false, 'llava:7b': true }, { reply: 'A terminal with a build error.' });
+    const url = await ollama.start();
+    const h = helper(url, 'qwen2.5:4b');
+    assert.equal(h.getOllamaRecordTarget(), null, 'nothing is known before the resolver has run');
+    assert.deepEqual(await h.resolveOllamaRecordTarget(), { model: 'llava:7b', url });
+    assert.deepEqual(h.getOllamaRecordTarget(), { model: 'llava:7b', url });
+    assert.equal(await h.runVisionRequest('ollama', 'What is on the screen?', SYSTEM, png, {}), 'A terminal with a build error.');
+    const [chat] = ollama.chats();
+    assert.equal(chat.body.model, 'llava:7b');
+    assert.deepEqual(chat.body.messages.at(-1).images, [pngBase64]);
+    assert.equal(chat.body.messages[0].content, SYSTEM);
+    assert.equal(h.ollamaModel, 'qwen2.5:4b');
+  });
+  test('no model that reads images: no target, and the request is refused before it is made', async () => {
+    ollama = fakeOllama({ 'qwen2.5:4b': false });
+    const h = helper(await ollama.start(), 'qwen2.5:4b');
+    assert.equal(await h.resolveOllamaRecordTarget(), null);
+    await assert.rejects(() => h.runVisionRequest('ollama', 'u', SYSTEM, png, {}), /No local model that reads images/);
+    assert.equal(ollama.chats().length, 0);
+  });
+  test('Ollama not selected: no target and no request to any daemon', async () => {
+    ollama = fakeOllama({ 'llava:7b': true });
+    const h = Object.assign(helper(await ollama.start(), 'llava:7b'), { useOllama: false });
+    assert.equal(await h.resolveOllamaRecordTarget(), null);
+    assert.equal(ollama.requests.length, 0);
+  });
+});
+
+describe('the screen record through the service', () => {
+  let ollama; let h; let n = 0;
+  const svc = getScreenUnderstandingService();
+  const cloudKeys = (keys) => {
+    const has = (k) => (keys.includes(k) ? `key-${k}` : undefined);
+    globalThis[CRED_SLOT] = {
+      getDisabledProviders: () => [], anyVisionProviderConfigured: () => true, anyLocalVisionProviderConfigured: () => false,
+      getNativelyApiKey: () => undefined, getOpenaiApiKey: () => undefined, getGeminiApiKey: () => has('gemini'), getClaudeApiKey: () => undefined,
+      getGroqApiKey: () => undefined, getDeepseekApiKey: () => undefined, getOpenrouterApiKey: () => undefined, getNvidiaNimApiKey: () => undefined,
+      getFluxionApiKey: () => undefined, getAgentRouterApiKey: () => undefined, getLitellmBaseURL: () => undefined, getNinerouterBaseURL: () => undefined,
+      getNinerouterVisionModels: () => [], getAllCredentials: () => ({}),
+    };
+  };
+  const boot = async (models, opts, selected = 'qwen2.5:4b') => {
+    ollama = fakeOllama(models, opts);
+    h = helper(await ollama.start(), selected);
+    globalThis.__nativelyGetLLMHelper = () => h;
+  };
+  const understand = (userAction, mode = 'vision_first') => {
+    const shot = path.join(userData, `record-${++n}.png`);
+    fs.writeFileSync(shot, renderDigitsPng(String(2000 + n)));          // a new image each time: no cache hit
+    return svc.understand({ imagePaths: [shot], userAction, transcript: 'q', screenUnderstandingMode: mode, providerPolicy: { allowScreenshots: true, localOnly: mode === 'private_vision' } });
+  };
+  beforeEach(() => { cloudKeys([]); svc.rungHealth.clear(); });
+  afterEach(async () => { delete globalThis.__nativelyGetLLMHelper; await ollama?.stop(); ollama = null; });
+
+  test('no cloud provider: the Ollama vision model writes the record', async () => {
+    await boot({ 'qwen2.5:4b': false, 'llava:7b': true }, { reply: 'FATAL: disk quota exceeded (code E4012).' });
+    const result = await understand('transcribe');
+    assert.equal(result.status, 'available');
+    assert.equal(result.providerUsed, 'ollama');
+    assert.match(composeScreenDescription(result), /E4012/, 'the text a later turn will quote');
+    assert.equal(ollama.chats()[0].body.model, 'llava:7b');
+  });
+  test('"keep on this device": the record stays local, written by Ollama', async () => {
+    await boot({ 'qwen2.5:4b': false, 'llava:7b': true }, { reply: 'A login form.' });
+    cloudKeys(['gemini']);
+    const cloud = [];
+    const real = h.runVisionRequest;
+    h.runVisionRequest = function (id, ...rest) { if (id !== 'ollama') { cloud.push(id); return Promise.resolve('CLOUD'); } return real.call(this, id, ...rest); };
+    const result = await understand('transcribe', 'private_vision');
+    assert.equal(result.providerUsed, 'ollama');
+    assert.deepEqual(cloud, [], 'no cloud provider may be asked in this mode');
+  });
+  test('a cloud provider is available: it writes the record, and Ollama is not asked', async () => {
+    await boot({ 'qwen2.5:4b': false, 'llava:7b': true });
+    cloudKeys(['gemini']);
+    const real = h.runVisionRequest;
+    h.runVisionRequest = function (id, ...rest) { return id === 'ollama' ? real.call(this, id, ...rest) : Promise.resolve('Cloud transcription of the screen.'); };
+    const result = await understand('transcribe');
+    assert.equal(result.providerUsed, 'gemini_flash_lite');
+    assert.equal(ollama.chats().length, 0);
+  });
+  test('every cloud provider fails: Ollama still writes it', async () => {
+    await boot({ 'qwen2.5:4b': false, 'llava:7b': true }, { reply: 'A stack trace.' });
+    cloudKeys(['gemini']);
+    const real = h.runVisionRequest;
+    h.runVisionRequest = function (id, ...rest) { return id === 'ollama' ? real.call(this, id, ...rest) : Promise.reject(Object.assign(new Error('503 unavailable'), { status: 503 })); };
+    assert.equal((await understand('transcribe')).providerUsed, 'ollama');
+  });
+  test('the PRE-PASS never asks Ollama: it runs before the answer, inside 6 seconds', async () => {
+    await boot({ 'qwen2.5:4b': false, 'llava:7b': true });
+    for (const action of ['what_to_say', 'what_to_answer', 'manual_use_screen']) {
+      const result = await understand(action);
+      assert.notEqual(result.status, 'available', action);
+    }
+    assert.equal(ollama.chats().length, 0);
+  });
+  test('whatever shape the local model answers in, a record is kept', async () => {
+    for (const reply of [
+      JSON.stringify({ visibleSummary: 'A build log.', extractedText: 'error TS2345 at src/app.ts:12' }),
+      'The screen shows a build log. Line 12 reports error TS2345 in src/app.ts.',
+      '```json\n' + JSON.stringify({ visibleSummary: 'A build log.', extractedText: 'error TS2345 at src/app.ts:12' }) + '\n```',
+    ]) {
+      await boot({ 'llava:7b': true }, { reply }, 'llava:7b');
+      const text = composeScreenDescription(await understand('transcribe'));
+      assert.match(text, /TS2345/, `lost for reply: ${reply.slice(0, 40)}`);
+      assert.doesNotMatch(text, /```json/, 'a fenced JSON reply is unwrapped, not stored as raw markup');
+      await ollama.stop(); ollama = null; svc.rungHealth.clear();
+    }
+  });
+  test('the record gets its own time limit, far longer than the pre-pass', () => {
+    assert.ok(OLLAMA_RECORD_BUDGET_MS >= 30_000 && OLLAMA_RECORD_BUDGET_MS <= 60_000, String(OLLAMA_RECORD_BUDGET_MS));
+  });
+  test('an Ollama ANSWER cancels a record still in flight, and nothing is kept for it', async () => {
+    await boot({ 'llava:7b': true }, { holdChat: (body) => Boolean(body?.messages?.at(-1)?.images) }, 'llava:7b');
+    const record = understand('transcribe');
+    for (let i = 0; i < 200 && ollama.chats().length === 0; i++) await new Promise((r) => setTimeout(r, 10));
+    assert.equal(ollama.chats().length, 1, 'the record request is in flight');
+    let answer = '';
+    for await (const piece of h.streamWithOllama('the next question', undefined, 'SYS')) answer += piece;
+    assert.equal(answer, 'local model reply', 'the user\'s next answer is not queued behind the record');
+    const result = await record;
+    assert.equal(ollama.chats()[0].aborted, true, 'the record request was cancelled on the wire');
+    assert.equal(composeScreenDescription(result), '');
   });
 });
 

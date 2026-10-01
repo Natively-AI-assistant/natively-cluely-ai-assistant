@@ -37,6 +37,7 @@ import {
 import { getImageOptimizer, ImageOptimizer } from './ImageOptimizer';
 import { buildVisionProviders, selectionRung, VisionProviderBuildInputs } from './VisionProviderRegistry';
 import { forgetBreakersOfOtherSelections } from '../../llm/visionOrdering';
+import { resolveOllamaRecordTarget } from '../../llm/activeCustomProvider';
 
 export type UserAction =
   | 'manual_use_screen'
@@ -145,6 +146,16 @@ export interface ScreenUnderstandingResult {
  * long a user waits before their answer starts.
  */
 export const SCREEN_UNDERSTANDING_TOTAL_BUDGET_MS = 6000;
+
+/**
+ * The time a LOCAL model gets to write the after-the-answer screen record
+ * (2026-10-01). Far longer than the budget above: the record runs after the
+ * answer has been delivered, and a local vision model needs tens of seconds
+ * where a cloud one needs two. Not measured against a real Ollama (none on the
+ * development machine); an answer starting on the same daemon cancels the
+ * record (LLMHelper.cancelOllamaRecordFor), so this bounds only idle time.
+ */
+export const OLLAMA_RECORD_BUDGET_MS = 45_000;
 
 export class ScreenUnderstandingService {
   private imageHashService: ImageHashService;
@@ -263,6 +274,13 @@ export class ScreenUnderstandingService {
     // buildVisionProviders(); tests can substitute their own list via the
     // optional `request.providerPolicy.__providersOverride` hook (untyped to
     // keep the public contract clean).
+    // The record may be written by the selected Ollama's vision model. Finding
+    // that model is asynchronous (/api/tags + /api/show, bounded and cached in
+    // the helper) and the registry is not, so it is resolved here first. Record
+    // calls only: the pre-pass never uses Ollama and must not wait for this.
+    const isRecord = request.userAction === 'transcribe';
+    if (isRecord) await resolveOllamaRecordTarget();
+
     const providers: VisionProviderConfig[] = (request.providerPolicy as any)?.__providersOverride
       || buildVisionProviders(this.collectBuildInputs(request, mode, policy));
 
@@ -295,11 +313,16 @@ export class ScreenUnderstandingService {
 
     // Run the chain.
     const latestPath = validPaths[validPaths.length - 1];
-    const result = await runVisionFallback({
+    // The Ollama record rung runs as a SECOND stage with its own time limit
+    // (below), so everything else — the pre-pass, and the cloud record — keeps
+    // the 6 s envelope it always had.
+    const ollamaRecordRung = isRecord ? providers.find(p => p.id === 'ollama') : undefined;
+    const firstStage = ollamaRecordRung ? providers.filter(p => p !== ollamaRecordRung) : providers;
+    let result = await runVisionFallback({
       imagePath: latestPath,
       cacheKey: imageHash,
       mode,
-      providers,
+      providers: firstStage,
       systemPrompt,
       userPrompt,
       optimizer: this.optimizer,
@@ -323,6 +346,28 @@ export class ScreenUnderstandingService {
       totalDeadlineMs: SCREEN_UNDERSTANDING_TOTAL_BUDGET_MS,
       health: this.rungHealth,
     });
+
+    // "Send it to cloud if available, else send it to the Ollama model" (Evin,
+    // 2026-10-01): nothing above produced a record — no cloud provider, every
+    // one failed, or "Keep screenshots on this device" allows none — so the
+    // selected Ollama's vision model writes it. The chain applies the same
+    // eligibility rules (a remote Ollama is skipped in that mode).
+    if (!result.ok && ollamaRecordRung) {
+      const local = await runVisionFallback({
+        imagePath: latestPath,
+        cacheKey: imageHash,
+        mode,
+        providers: [ollamaRecordRung],
+        systemPrompt,
+        userPrompt,
+        optimizer: this.optimizer,
+        optimizationProfile: profile,
+        perProviderTimeoutMs: OLLAMA_RECORD_BUDGET_MS,
+        totalDeadlineMs: OLLAMA_RECORD_BUDGET_MS,
+        health: this.rungHealth,
+      });
+      result = { ...local, attempts: [...result.attempts, ...local.attempts], durationMs: result.durationMs + local.durationMs };
+    }
 
     // The chain's attempt ledger is otherwise WRITE-ONLY: runVisionFallback
     // reports through `params.telemetry?.()`, this call site passed no callback,
@@ -448,7 +493,11 @@ export class ScreenUnderstandingService {
     taskDetected?: string;
     confidence?: number;
   } {
-    const trimmed = rawOutput.trim();
+    // A reply that is ONE fenced block holding JSON is that JSON (2026-10-01):
+    // small local vision models often wrap the structured answer in ```json,
+    // and the raw markup would otherwise be stored as the screen's text.
+    const fenced = /^```(?:json)?\s*\n([\s\S]*?)\n```$/i.exec(rawOutput.trim());
+    const trimmed = (fenced && fenced[1].trim().startsWith('{') ? fenced[1] : rawOutput).trim();
     if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
       try {
         const parsed = JSON.parse(trimmed);
