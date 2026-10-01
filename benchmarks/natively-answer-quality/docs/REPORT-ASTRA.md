@@ -22,11 +22,13 @@ eight modes are fix11's runs and judgments (`tools/compose-run.mjs`, runs `aq2-*
 
 ## 2. Iterations: attempted, kept, reverted
 
-37 changes were tried; 21 are in the kept build, 16 were rejected or taken back. Every one is described, with its evidence, in `docs/ITERATIONS-ASTRA.md`; every dev question
-with each run's answer is in `docs/ITERATIONS-QA.md`.
+41 changes were tried; 25 are in the kept build, 16 were rejected or taken back. Every one is described, with its
+evidence, in `docs/ITERATIONS-ASTRA.md`; every dev question with each run's answer is in `docs/ITERATIONS-QA.md`.
 
-**In the kept build (21):** I1 small corpus read whole · I2 hidden arithmetic scratch block · I5 own-life rule only
-in the job modes · I7 no product material → no product facts · I8 claim verifier · I8b no-document product clause ·
+**In the kept build (25):** I1 small corpus read whole · I2 hidden arithmetic scratch block · I3 the user's own
+life is remembered, not checked · I4 the recruiting hotkey is the interviewer's spoken words · I5 own-life rule
+only in the job modes · I6 a heard question about the user's own life is theirs to answer · I7 no product material
+→ no product facts · I8 claim verifier · I8b no-document product clause ·
 I8c highlights kept, formatting-only edit is no edit · I9 Recruiting heard turns never plan as coding · I10 Call
 Center states the rule, then verifies · I11 "Today" line · I13 Team Meet wording (superseded by I15) · I14 document
 freshness status · I15 spoken replies do not open by reporting their notes · I16 no question handed back when
