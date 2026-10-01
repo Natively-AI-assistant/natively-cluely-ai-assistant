@@ -3458,6 +3458,11 @@ export class LLMHelper {
         // exists. The resolver is the one the cloud chain already uses; the
         // sites that dispatch on this answer send to the model it names
         // (localVisionOverride), never to `model`.
+        // "On this device" is earned from the daemon's HOST, as for a custom
+        // or cURL endpoint: OLLAMA_URL can point at another machine. Every
+        // caller of this branch is deciding whether a screenshot that must not
+        // leave the machine may go to Ollama, so a public host is a no.
+        if (!customProviderIsLocal({ curlCommand: this.ollamaUrl })) return { ok: false, model };
         const visionModel = await this.resolveLocalVisionModel();
         if (!visionModel) return { ok: false, model };
         // Fail CLOSED, as the text branch below does: the daemon must confirm

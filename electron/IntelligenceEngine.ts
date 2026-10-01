@@ -1648,44 +1648,39 @@ export class IntelligenceEngine extends EventEmitter {
         if (!answer) return;
         void (async () => {
         try {
-            const { recordAnswerSummary } =
+            const { recordAnswerSummary, attachScreenToAnsweredTurn } =
                 require('./context-intelligence/question/conversation-state-store');
-            const { SCREEN_NOT_TRANSCRIBED } = require('./services/screen/screenDescription');
-            // A DEDICATED transcription, not the answering call's output. The
-            // answering call is asked to answer concisely; measured live, its
-            // text for a build-failure screen was "Your build failed because
-            // you've run out of disk quota" — no error code, no ticket
-            // reference, which is precisely what the follow-up then asked for.
-            // Awaited here, not before the answer: the user already has their
-            // answer by this point, so this costs them nothing.
-            let screenText = '';
-            if (imagePaths?.length) {
-                const { transcribeScreenForMemory } = require('./services/screen/screenTranscription');
-                screenText = await transcribeScreenForMemory(imagePaths, question);
-            }
-            // FALLBACK to the caller's already-computed ScreenUnderstandingResult.
+            const { SCREEN_NOT_TRANSCRIBED, composeScreenDescription: compose } =
+                require('./services/screen/screenDescription');
+            // Captured now: the awaited transcription below can outlive a
+            // session switch, and its text belongs to the turn recorded here.
+            const sessionId = this.conversationSessionId();
+            // The caller's already-computed ScreenUnderstandingResult, as the
+            // text to record with until a dedicated transcription arrives.
             //
-            // `screenContext` was accepted and never read: the text came solely
-            // from imagePaths. Harmless only because every current caller that
-            // supplies one also supplies attachments — but a turn that answers
-            // from a periodic screen capture with no attachment would record
-            // neither screen text NOR the not-transcribed marker, silently
-            // losing a screen the model demonstrably saw. Its own answer is
-            // less faithful than a dedicated transcription, which is why it is
-            // the fallback rather than the source.
-            if (!screenText && screenContext) {
-                const { composeScreenDescription: compose } = require('./services/screen/screenDescription');
-                screenText = compose(screenContext as never) || '';
-            }
+            // `screenContext` was once accepted and never read: the text came
+            // solely from imagePaths. A turn that answers from a periodic
+            // screen capture with no attachment would then record neither
+            // screen text NOR the not-transcribed marker, silently losing a
+            // screen the model demonstrably saw. Its own answer is less
+            // faithful than a dedicated transcription, which is why the
+            // transcription replaces it below.
+            const fallbackText = screenContext ? (compose(screenContext as never) || '') : '';
+            // RECORDED AT ONCE (2026-10-01). This used to wait for the
+            // transcription and only then write the turn. That wait was the
+            // cloud pre-pass's 6 s at most; with a local model writing the
+            // record it can be 45 s, and a follow-up asked inside that window
+            // was assembled without this answer — the assistant had forgotten
+            // what it said ten seconds earlier. The turn is written now and
+            // the screen's text is attached to it when it is ready.
             recordAnswerSummary(
-                this.conversationSessionId(),
+                sessionId,
                 answer,
-                // A failed transcription still records that a screen was THERE.
-                // Recording nothing is what let a follow-up deny the screenshot
-                // ever existed, which is a worse answer than "I can't read it".
-                // A screen was THERE whenever attachments or a ScreenUnderstanding
-                // result existed, whether or not either yielded text.
-                screenText || ((imageCount > 0 || screenContext) ? SCREEN_NOT_TRANSCRIBED : undefined),
+                // A screen that was THERE is recorded as there even before (or
+                // without) its text. Recording nothing is what let a follow-up
+                // deny the screenshot ever existed, which is a worse answer
+                // than "I can't read it".
+                fallbackText || ((imageCount > 0 || screenContext) ? SCREEN_NOT_TRANSCRIBED : undefined),
                 // Seeds state for a turn that never reached orchestrate() (V3
                 // off, or a legacy route). runAssistMode deliberately passes
                 // nothing: an unprompted insight has no question, and a
@@ -1696,6 +1691,18 @@ export class IntelligenceEngine extends EventEmitter {
                 // Auto Answer passes the detected interviewer question.
                 { from: 'meeting' },
             );
+            // A DEDICATED transcription, not the answering call's output. The
+            // answering call is asked to answer concisely; measured live, its
+            // text for a build-failure screen was "Your build failed because
+            // you've run out of disk quota" — no error code, no ticket
+            // reference, which is precisely what the follow-up then asked for.
+            // After the answer AND after the turn is recorded, so it costs the
+            // user nothing and holds nothing up.
+            if (imagePaths?.length) {
+                const { transcribeScreenForMemory } = require('./services/screen/screenTranscription');
+                const screenText = await transcribeScreenForMemory(imagePaths, question);
+                if (screenText) attachScreenToAnsweredTurn(sessionId, answer, screenText);
+            }
         } catch (error: any) {
             // NEVER silent: a lost turn leaves the next follow-up with no
             // antecedent, which is indistinguishable from a bad answer.

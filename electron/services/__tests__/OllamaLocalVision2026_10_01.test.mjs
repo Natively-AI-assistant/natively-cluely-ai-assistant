@@ -15,117 +15,18 @@
  * No Ollama is installed where this runs. A fake Ollama HTTP server stands in,
  * and the requests are asserted ON THE WIRE: the model named, the image bytes.
  */
-import { test, describe, before, after, beforeEach, afterEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import {
+  fakeOllama, helper, ask, png, pngBase64, setMode, setScopes, fakeCredentials, isolateSingletons,
+  userData, dist, require, LLMHelper, CRED_SLOT,
+} from './fakeOllamaHarness.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-const dist = (p) => path.join(__dirname, '../../../dist-electron/electron', p);
-const electronPath = require.resolve('electron');
-const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'ollama-local-vision-'));
-require.cache[electronPath] = {
-  id: electronPath, filename: electronPath, loaded: true,
-  exports: { app: { isReady: () => true, getPath: () => userData, getVersion: () => '0.0.0-test' }, safeStorage: { isEncryptionAvailable: () => false } },
-};
-const { LLMHelper } = require(dist('LLMHelper.js'));
-const { SettingsManager } = require(dist('services/SettingsManager.js'));
 const { PRIVATE_VISION_NO_LOCAL_MESSAGE } = require(dist('llm/visionPolicy.js'));
 const { renderDigitsPng } = require(dist('llm/visionTestImage.js'));
-
-// ── A fake Ollama ────────────────────────────────────────────────────────────
-
-/** `models`: name → true (reads images, per /api/show), false (text-only), or null (no capabilities reported). */
-function fakeOllama(models, { reply = 'local model reply', holdChat = false, showFails = false } = {}) {
-  const requests = [];
-  const open = new Set();
-  const server = http.createServer((req, res) => {
-    let raw = '';
-    req.on('data', (c) => { raw += c; });
-    req.on('end', () => {
-      const body = raw ? JSON.parse(raw) : null;
-      const entry = { path: req.url, body, aborted: false };
-      requests.push(entry);
-      res.on('close', () => { if (!res.writableEnded) entry.aborted = true; });
-      if (req.url === '/api/tags') {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        return res.end(JSON.stringify({ models: Object.keys(models).map((name) => ({ name })) }));
-      }
-      if (req.url === '/api/show') {
-        if (showFails) { res.writeHead(500); return res.end('{}'); }
-        const reads = models[body?.name];
-        if (reads === undefined) { res.writeHead(404); return res.end('{}'); }
-        res.writeHead(200, { 'content-type': 'application/json' });
-        return res.end(JSON.stringify(reads === null ? {} : { capabilities: reads ? ['completion', 'vision'] : ['completion'] }));
-      }
-      if (req.url === '/api/chat') {
-        if (typeof holdChat === 'function' ? holdChat(body) : holdChat) {            // accepted, never answered
-          open.add(res); res.writeHead(200, { 'content-type': 'application/x-ndjson' }); res.flushHeaders(); return;
-        }
-        if (body?.stream === false) {
-          res.writeHead(200, { 'content-type': 'application/json' });
-          return res.end(JSON.stringify({ message: { role: 'assistant', content: reply }, done: true }));
-        }
-        res.writeHead(200, { 'content-type': 'application/x-ndjson' });
-        res.write(JSON.stringify({ message: { role: 'assistant', content: reply }, done: false }) + '\n');
-        return res.end(JSON.stringify({ message: { role: 'assistant', content: '' }, done: true }) + '\n');
-      }
-      res.writeHead(404); res.end('{}');
-    });
-  });
-  return {
-    requests,
-    chats: () => requests.filter((r) => r.path === '/api/chat'),
-    start: () => new Promise((r) => server.listen(0, '127.0.0.1', () => r(`http://127.0.0.1:${server.address().port}`))),
-    stop: () => new Promise((r) => { for (const res of open) res.destroy(); server.closeAllConnections?.(); server.close(r); }),
-  };
-}
-
-// ── A helper pointed at it ───────────────────────────────────────────────────
-
-const SETTINGS_SLOT = '__nativelySettingsManagerV1__';
-const CRED_SLOT = '__nativelyCredentialsManagerV1__';
-let slots;
-beforeEach(() => { slots = [globalThis[SETTINGS_SLOT], globalThis[CRED_SLOT]]; });
-afterEach(() => {
-  for (const [i, slot] of [SETTINGS_SLOT, CRED_SLOT].entries()) { if (slots[i] === undefined) delete globalThis[slot]; else globalThis[slot] = slots[i]; }
-});
-const setMode = (mode) => SettingsManager.getInstance().setScreenUnderstandingMode(mode);
-const setScopes = (scopes) => SettingsManager.getInstance().set('providerDataScopes', scopes);
-const fakeCredentials = () => {
-  globalThis[CRED_SLOT] = { getDisabledProviders: () => [], anyVisionProviderConfigured: () => true, anyLocalVisionProviderConfigured: () => false };
-};
-
-function helper(url, selected) {
-  const h = Object.create(LLMHelper.prototype);
-  Object.assign(h, {
-    useOllama: true, ollamaUrl: url, ollamaModel: selected, ollamaKeepAlive: '30m',
-    ollamaVisionModel: null, ollamaVisionCache: new Map(), ollamaVisionNegativeUntil: 0, ollamaVisionRefreshInFlight: null,
-    customProvider: null, activeCurlProvider: null, currentModelId: 'gemini-3.8-flash', isLocalOnlyMode: false,
-    pickConfiguredCustomProviderForFallback: () => null, getActiveModeGroundingInfo: () => null,
-    visionHealth: new Map(), textHealth: new Map(),
-  });
-  // No cloud adapter may be reached in any test here.
-  h.cloud = [];
-  for (const k of Object.getOwnPropertyNames(LLMHelper.prototype)) {
-    if ((/^streamWith/.test(k) && k !== 'streamWithOllama') || k === 'streamVisionWithFallback') {
-      h[k] = async function* (...args) { h.cloud.push({ provider: k, args }); yield 'CLOUD'; };
-    }
-  }
-  return h;
-}
-const png = (() => { const p = path.join(userData, 'screen.png'); fs.writeFileSync(p, renderDigitsPng('4816')); return p; })();
-const pngBase64 = fs.readFileSync(png).toString('base64');
-async function ask(h, message, imagePaths) {
-  let out = '';
-  for await (const piece of LLMHelper.prototype._streamChatInner.call(h, message, imagePaths, undefined, 'SYS', true, true, [], undefined, 0, { v3Owned: true })) out += piece;
-  return out;
-}
+isolateSingletons();
 
 // ── 1. Keep on device, and a denied screenshots scope ────────────────────────
 
@@ -171,6 +72,58 @@ describe('"Keep screenshots on this device": the screenshot goes to the Ollama m
     h.streamWithOllama = async function* (...args) { h.cloud.push({ provider: 'ollama-text', args }); yield 'text'; };
     await ask(h, 'hello', undefined);
     assert.ok(!ollama.chats().some((c) => c.body.model === 'llava:7b'), 'the vision model is for screenshots only');
+  });
+});
+
+describe('an Ollama on ANOTHER machine is not "this device"', () => {
+  // OLLAMA_URL can point anywhere. The fake listens on loopback; `fetch` is
+  // redirected so the helper believes it is talking to a public host.
+  let ollama; let realFetch;
+  const REMOTE = 'http://ollama.example.com:11434';
+  const remoteHelper = async (models, selected) => {
+    ollama = fakeOllama(models);
+    const local = await ollama.start();
+    realFetch = globalThis.fetch;
+    globalThis.fetch = (input, init) => realFetch(String(input).replace(REMOTE, local), init);
+    return helper(REMOTE, selected);
+  };
+  afterEach(async () => { if (realFetch) globalThis.fetch = realFetch; realFetch = null; await ollama?.stop(); ollama = null; });
+  beforeEach(() => { fakeCredentials(); setScopes({}); });
+
+  test('keep on device: refused, whether the vision model is another installed one or the selected one', async () => {
+    setMode('private_vision');
+    for (const selected of ['qwen2.5:4b', 'llava:7b']) {
+      const h = await remoteHelper({ 'qwen2.5:4b': false, 'llava:7b': true }, selected);
+      assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE, `selected ${selected}`);
+      assert.equal(ollama.chats().length, 0, `LEAK: the screenshot was posted to ${REMOTE} (selected ${selected})`);
+      globalThis.fetch = realFetch; realFetch = null; await ollama.stop(); ollama = null;
+    }
+  });
+  test('the Privacy panel does not claim on-device vision for it; text fallback is unaffected', async () => {
+    const h = await remoteHelper({ 'llava:7b': true }, 'llava:7b');
+    assert.equal(await h.scopeFallbackAvailable(true), false);
+    assert.equal(await h.scopeFallbackAvailable(false), true);
+  });
+  test('outside keep-on-device mode the remote Ollama still answers a screenshot (the chat chain, unchanged)', async () => {
+    setMode('vision_first');
+    const h = await remoteHelper({ 'llava:7b': true }, 'llava:7b');
+    h.streamVisionWithFallback = LLMHelper.prototype.streamVisionWithFallback;
+    Object.assign(h, { modelVersionManager: { getAllVisionTiers: () => [] }, maybeProbeSelectedVision: () => {}, isCodexAvailable: () => false, antigravityFallbackModel: () => null, hasNatively: () => false, hasFluxionCredential: () => false, hasAgentRouterCredential: () => false, codexCliConfig: { model: 'x' }, ninerouterVisionModels: new Set() });
+    assert.equal(await ask(h, 'what is on my screen?', [png]), 'local model reply');
+    assert.equal(ollama.chats()[0].body.model, 'llava:7b');
+  });
+});
+
+describe('customProviderIsLocal', () => {
+  const { customProviderIsLocal } = require(dist('llm/visionCapability.js'));
+  test('IPv6 loopback is this machine', () => {
+    assert.equal(customProviderIsLocal({ curlCommand: 'curl http://[::1]:11434/api/chat' }), true);
+    assert.equal(customProviderIsLocal({ curlCommand: 'http://[::1]:11434' }), true);
+  });
+  test('a public IPv6 address, and every host it already refused, are not', () => {
+    for (const url of ['http://[2001:db8::1]:11434', 'http://ollama.example.com:11434', 'http://100.64.0.3:11434', '127.0.0.1:11434']) {
+      assert.equal(customProviderIsLocal({ curlCommand: url }), false, url);
+    }
   });
 });
 
@@ -363,18 +316,21 @@ describe('the screen record through the service', () => {
   test('the record gets its own time limit, far longer than the pre-pass', () => {
     assert.ok(OLLAMA_RECORD_BUDGET_MS >= 30_000 && OLLAMA_RECORD_BUDGET_MS <= 60_000, String(OLLAMA_RECORD_BUDGET_MS));
   });
-  test('an Ollama ANSWER cancels a record still in flight, and nothing is kept for it', async () => {
+  test('an Ollama ANSWER cancels a record still in flight: the answer is not queued behind it, and nothing is kept', async () => {
+    // The fake serves one chat at a time, as a daemon does for one model: while
+    // the record is being written, the answer's request waits. Without the
+    // cancellation the answer would wait out the record's whole time limit.
     await boot({ 'llava:7b': true }, { holdChat: (body) => Boolean(body?.messages?.at(-1)?.images) }, 'llava:7b');
     const record = understand('transcribe');
     for (let i = 0; i < 200 && ollama.chats().length === 0; i++) await new Promise((r) => setTimeout(r, 10));
     assert.equal(ollama.chats().length, 1, 'the record request is in flight');
-    let answer = '';
-    for await (const piece of h.streamWithOllama('the next question', undefined, 'SYS')) answer += piece;
-    assert.equal(answer, 'local model reply', 'the user\'s next answer is not queued behind the record');
-    const result = await record;
+    const within = (ms, promise, what) => Promise.race([promise, new Promise((_, no) => setTimeout(() => no(new Error(`${what} did not finish within ${ms} ms`)), ms))]);
+    const started = Date.now();
+    const answer = await within(3000, (async () => { let out = ''; for await (const piece of h.streamWithOllama('the next question', undefined, 'SYS')) out += piece; return out; })(), 'the answer');
+    assert.equal(answer, 'local model reply');
+    const result = await within(3000, record, 'the cancelled record');
+    assert.ok(Date.now() - started < 3000, 'neither waited for the record\'s 45 s limit');
     assert.equal(ollama.chats()[0].aborted, true, 'the record request was cancelled on the wire');
     assert.equal(composeScreenDescription(result), '');
   });
 });
-
-export { fakeOllama, helper, png, pngBase64, setMode, setScopes, fakeCredentials, userData, dist, require as requireFromTest };

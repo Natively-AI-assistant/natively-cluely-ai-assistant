@@ -207,6 +207,29 @@ export function appendTurn(
     .slice(-MAX_HISTORY_TURNS);
 }
 
+/**
+ * Fill in the screen text of a turn that is ALREADY recorded (2026-10-01).
+ *
+ * The live writer records the answer the moment it exists and attaches the
+ * screen's text when its transcription arrives, which for a local model can be
+ * tens of seconds later. The turn is found by its answer, newest first; a turn
+ * that has left the ring is simply not there. Same cap and marker as appendTurn.
+ */
+export function withTurnScreen(turns: readonly HistoryTurn[], a: string, screen: string): HistoryTurn[] | null {
+  const answer = String(a ?? '').slice(0, MAX_TURN_ANSWER_CHARS);
+  const rawShot = String(screen ?? '').trim();
+  if (!answer.trim() || !rawShot) return null;
+  let at = -1;
+  for (let i = turns.length - 1; i >= 0; i--) { if (turns[i].a === answer) { at = i; break; } }
+  if (at < 0) return null;
+  const shot = rawShot.length > MAX_TURN_SCREEN_CHARS
+    ? rawShot.slice(0, MAX_TURN_SCREEN_CHARS) + SCREEN_TRUNCATION_MARKER
+    : rawShot;
+  const next = [...turns];
+  next[at] = { ...next[at], screen: shot };
+  return next;
+}
+
 const STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'have', 'has', 'was',
   'were', 'you', 'your', 'our', 'their', 'about', 'what', 'how', 'why', 'when', 'did', 'does',
   'can', 'could', 'would', 'should', 'they', 'them', 'been', 'into', 'more', 'than', 'then']);
