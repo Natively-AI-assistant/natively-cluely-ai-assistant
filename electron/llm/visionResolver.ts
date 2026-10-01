@@ -93,6 +93,11 @@ export function resolveVision(q: VisionQuery, facts: VisionFacts = {}): VisionVe
       if (reported !== undefined) return answer(reported, 'provider');
       return fromTestThenNames(q, facts);
     }
+    // LiteLLM's /model/info can say `supports_vision: true`; nothing there means "no".
+    case 'litellm': {
+      if (facts.providerReportsVision?.('litellm', model) === true) return answer(true, 'provider');
+      return fromTestThenNames(q, facts);
+    }
     default:
       return fromTestThenNames(q, facts);
   }

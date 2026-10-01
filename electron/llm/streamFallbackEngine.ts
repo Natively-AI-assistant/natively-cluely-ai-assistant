@@ -153,6 +153,8 @@ export interface FallbackHooks {
    * ModelVersionManager.
    */
   onModelGone?: (providerId: string, providerName: string, err: any) => void;
+  /** A provider refused the image as unsupported. Notification only. */
+  onNoVision?: (providerId: string, providerName: string, err: any) => void;
   /** Called immediately before a rung is opened, with its 1-based attempt.
    *  Lets a caller narrate the walk (Direct Assist turns the first open of a
    *  NEW rung into a provider_switch event) without the engine knowing what an
@@ -506,6 +508,7 @@ export async function* runStreamingFallback(
   const log = hooks.log ?? (() => { });
   const warn = hooks.warn ?? (() => { });
   const onModelGone = hooks.onModelGone ?? (() => { });
+  const onNoVision = hooks.onNoVision ?? (() => { });
   const onRungOpen = hooks.onRungOpen ?? (() => { });
   const sleep = hooks.sleep ?? ((ms: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
     const t = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
@@ -692,6 +695,7 @@ export async function* runStreamingFallback(
           markUnhealthy(health, provider.id, cfg.authCooldownMs, now());
           providerFatal = true;
         } else if (cls === 'no_vision' || cls === 'payload') {
+          if (cls === 'no_vision') { try { onNoVision(provider.id, provider.name, err); } catch { /* notification only */ } }
           // Structurally incompatible with this image — retrying won't help, and
           // demote it so it isn't tried first on the next request either.
           markUnhealthy(health, provider.id, cfg.incompatibleCooldownMs, now());

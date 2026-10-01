@@ -149,3 +149,89 @@ describe("the test goes through Direct Assist's own boundary", () => {
     fs.rmSync(img, { force: true });
   });
 });
+describe('a saved test result decides the seat (phase 3)', () => {
+  async function chain(model, extra = {}) {
+    const opened = [];
+    const stub = (name) => async function* () { opened.push(name); yield 'ok'; };
+    const h = helper({
+      currentModelId: model, client: {}, openaiClient: null, claudeClient: null, groqClient: null,
+      litellmClient: {}, nvidiaNimClient: {}, hasFluxionCredential: () => true, hasAgentRouterCredential: () => true,
+      codexCliConfig: { enabled: false }, isCodexAvailable: () => false, antigravityFallbackModel: () => null, hasNatively: () => false,
+      streamWithLiteLLM: stub('litellm'), streamWithNvidiaNim: stub('nvidia_nim'), streamWithFluxion: stub('fluxion'),
+      streamWithAgentRouter: stub('agentrouter'), streamWithGeminiModel: stub('gemini'), ...extra,
+    });
+    for await (const _ of h.streamVisionWithFallback({ userContent: 'u', message: 'm', imagePaths: ['/tmp/x.png'], systemPrompt: 's' })) { /* drain */ }
+    return opened;
+  }
+  for (const [provider, model, base] of [['fluxion', 'fluxion/glm-5.3', ''], ['nvidia_nim', 'nvidia_nim/meta/text-model', ''], ['litellm', 'litellm/internal-model', 'http://localhost:4000']]) {
+    test(`${provider}: tested "no" → another provider answers; untested → the selected model still leads`, async () => {
+      assert.equal((await chain(model))[0], provider, 'untested: seated as before');
+      store.recordTest(provider, base, model.slice(provider.length + 1), false);
+      const opened = await chain(model);
+      assert.ok(!opened.includes(provider), `opened: ${opened}`);
+      assert.equal(opened[0], 'gemini');
+    });
+  }
+  test('AgentRouter: an unknown model is not seated until its test says yes', async () => {
+    assert.ok(!(await chain('agentrouter/glm-5.3')).includes('agentrouter'));
+    store.recordTest('agentrouter', '', 'glm-5.3', true);
+    assert.equal((await chain('agentrouter/glm-5.3'))[0], 'agentrouter');
+  });
+  test('Direct Assist: a gateway model tested "no" is refused; untested still forwards; a direct model tested "yes" forwards', () => {
+    const h = helper();
+    assert.equal(h.directSelectionSupportsImages({ provider: 'fluxion', model: 'fluxion/glm-5.3' }, null, null), true);
+    store.recordTest('fluxion', '', 'glm-5.3', false);
+    assert.equal(h.directSelectionSupportsImages({ provider: 'fluxion', model: 'fluxion/glm-5.3' }, null, null), false);
+    assert.equal(h.directSelectionSupportsImages({ provider: 'openai', model: 'gpt-next-unknown' }, null, null), false);
+    store.recordTest('openai', '', 'gpt-next-unknown', true);
+    assert.equal(h.directSelectionSupportsImages({ provider: 'openai', model: 'gpt-next-unknown' }, null, null), true);
+  });
+  test('Direct Assist: untested LiteLLM, NVIDIA NIM and 9Router models keep their image; a 9Router model its catalogue marks text-only is refused', () => {
+    const h = helper();
+    for (const [provider, model] of [['litellm', 'litellm/internal-model'], ['nvidia_nim', 'nvidia_nim/meta/text-model'], ['ninerouter', 'ninerouter/alicode/glm-5']]) {
+      assert.equal(h.directSelectionSupportsImages({ provider, model }, null, null), true, provider);
+    }
+    // 9Router answers HTTP 200 for an image sent to a text-only model, so
+    // forwarding a catalogued "no" was a blind answer.
+    const catalogued = helper({ ninerouterVisionModels: new Set(['gemini/gemini-3.6-flash']) });
+    assert.equal(catalogued.directSelectionSupportsImages({ provider: 'ninerouter', model: 'ninerouter/alicode/glm-5' }, null, null), false);
+    assert.equal(catalogued.directSelectionSupportsImages({ provider: 'ninerouter', model: 'ninerouter/gemini/gemini-3.6-flash' }, null, null), true);
+  });
+});
+
+describe('a real screenshot refused as image-unsupported re-tests the model', () => {
+  test('the engine reports it, and the chain forces a re-test of the selection', async () => {
+    const { runStreamingVisionFallback, DEFAULT_VISION_FALLBACK_CONFIG } = require(dist('llm/visionStreamFallback.js'));
+    const reported = [];
+    const refuse = { id: 'fluxion', name: 'Fluxion (glm-5.3)', isLocal: false, priority: 0, open: async function* () { throw new Error('this model does not support image input'); } };
+    const ok = { id: 'gemini_flash', name: 'Gemini', isLocal: false, priority: 1, open: async function* () { yield 'ok'; } };
+    for await (const _ of runStreamingVisionFallback([refuse, ok], { ...DEFAULT_VISION_FALLBACK_CONFIG, hedgeEnabled: false }, new Map(), { onNoVision: (id) => reported.push(id), sleep: async () => {} })) { /* drain */ }
+    assert.deepEqual(reported, ['fluxion']);
+  });
+  test('registry rungs pass the test fact', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../screen/VisionProviderRegistry.ts'), 'utf8');
+    for (const fn of ['litellm', 'nvidiaNim', 'fluxion', 'agentrouter', 'ninerouter', 'openrouter']) {
+      const start = src.indexOf(`function ${fn}(`);
+      const body = src.slice(start, src.indexOf('\n}\n', start));
+      assert.match(body, /gatewaySeatReadsImages\(/, fn);
+      assert.match(body, /registryVisionFacts\(/, fn);
+    }
+  });
+});
+
+describe("LiteLLM's supports_vision", () => {
+  test('only true is saved; false and missing stay unknown', async () => {
+    const h = helper({ litellmBaseURL: 'http://localhost:4000/v1', litellmApiKey: 'k', litellmModelBudgetsFetchedAt: 0, litellmModelBudgetsFetch: null, litellmModelBudgets: new Map(), litellmModelInputCaps: new Map() });
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({ ok: true, json: async () => ({ data: [
+      { model_name: 'internal-mm', model_info: { supports_vision: true } },
+      { model_name: 'plain', model_info: { supports_vision: false } },
+      { model_name: 'unset', model_info: {} },
+    ] }) });
+    try { await h.refreshLitellmModelBudgets(); } finally { globalThis.fetch = realFetch; }
+    assert.equal(store.answer('litellm', 'http://localhost:4000', 'internal-mm'), true);
+    assert.equal(store.answer('litellm', 'http://localhost:4000', 'plain'), undefined);
+    assert.equal(store.answer('litellm', 'http://localhost:4000', 'unset'), undefined);
+    assert.equal(h.getCapabilities.call(helper({ currentModelId: 'litellm/internal-mm', litellmBaseURL: 'http://localhost:4000/v1' })).supportsImages, true);
+  });
+});

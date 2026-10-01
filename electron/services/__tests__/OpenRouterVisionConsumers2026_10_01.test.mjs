@@ -143,7 +143,7 @@ describe('VisionProviderRegistry asks the same function', () => {
   const body = src.slice(start, src.indexOf('\n}\n', start));
   test('openrouter() seats by gatewaySeatReadsImages with the stored answers', () => {
     assert.match(body, /gatewaySeatReadsImages\('openrouter'/);
-    assert.match(body, /storedVisionAnswer/);
+    assert.match(body, /registryVisionFacts\(/, 'the saved catalogue and test results reach the rung');
   });
 });
 describe('refreshOpenRouterVisionData', () => {

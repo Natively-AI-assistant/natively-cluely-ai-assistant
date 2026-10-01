@@ -1826,8 +1826,12 @@ export class LLMHelper {
         const data: any = await resp.json();
         const fresh = new Map<string, number>();
         const freshInput = new Map<string, number>();
+        const freshVision = new Map<string, boolean>();
         for (const entry of (data?.data || [])) {
           const name = entry?.model_name;
+          // Only `true` is trustworthy: absence and `false` also mean the admin
+          // never set it (LiteLLM docs, model_info.supports_vision).
+          if (name && entry?.model_info?.supports_vision === true) freshVision.set(name, true);
           const budget = Number(entry?.model_info?.max_output_tokens ?? entry?.model_info?.max_tokens);
           if (name && Number.isFinite(budget) && budget > 0) fresh.set(name, Math.floor(budget));
           // INPUT ceiling, which this fetch used to discard.
@@ -1853,6 +1857,7 @@ export class LLMHelper {
         }
         this.litellmModelBudgets = fresh;
         this.litellmModelInputCaps = freshInput;
+        getVisionCapabilityStore().replaceProviderAnswers('litellm', normalizeVisionBaseURL(issuedForBaseURL), freshVision);
         console.log(`[LLMHelper] LiteLLM /model/info: cached budgets for ${fresh.size} model(s) `
           + `(${freshInput.size} with an input ceiling)`);
       } catch {
@@ -2051,7 +2056,7 @@ export class LLMHelper {
    */
   private ninerouterModelSupportsVision(modelId: string): boolean {
     if (!this.isNinerouterModel(modelId)) return false;
-    return gatewaySeatReadsImages('ninerouter', modelId, { ninerouterVisionModels: [...this.ninerouterVisionModels] });
+    return gatewaySeatReadsImages('ninerouter', modelId, this.visionFacts({ provider: 'ninerouter', model: modelId }));
   }
 
   /**
@@ -2450,7 +2455,7 @@ export class LLMHelper {
    * primary path; a future text-only model is still kept away from screenshots.
    */
   private agentRouterModelSupportsVision(modelId: string): boolean {
-    return gatewaySeatReadsImages('agentrouter', modelId);
+    return gatewaySeatReadsImages('agentrouter', modelId, this.visionFacts({ provider: 'agentrouter', model: modelId }));
   }
 
   /**
@@ -8590,6 +8595,9 @@ let isMultimodal = !!(imagePaths?.length);
     const { userContent, message, context, imagePaths, systemPrompt } = req;
 
     // ── Resolve per-family model tiers (tier1→tier2→tier3 across attempts) ──
+    // Still unknown (a test that hit a transient failure)? Try again in the
+    // background; a no-op when the answer is known or the retry is backing off.
+    this.maybeProbeSelectedVision();
     const tiers = this.modelVersionManager.getAllVisionTiers();
     const tierModel = (family: ModelFamily, attempt: number): string | undefined => {
       const entry = tiers.find(t => t.family === family);
@@ -8655,11 +8663,15 @@ let isMultimodal = !!(imagePaths?.length);
       // theirs takes images, so it must not be auto-recruited as a fallback for
       // someone else's turn — but when it is the model they picked, it has to be
       // tried, and the upstream's own error is the honest answer.
-      if (this.isLiteLLMModel(this.currentModelId) && this.litellmClient) {
+      // A model TESTED as text-only (or catalogued so) is not seated (2026-10-01);
+      // an untested one seats as before. Same rule for the next three gateways.
+      if (this.isLiteLLMModel(this.currentModelId) && this.litellmClient
+        && gatewaySeatReadsImages('litellm', this.currentModelId, this.visionFacts({ provider: 'litellm', model: this.currentModelId }))) {
         cloud.push({ id: 'litellm', name: `LiteLLM (${this.currentModelId.replace('litellm/', '')})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithLiteLLM(userContent, systemPrompt, imagePaths, sig) });
       }
-      if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
+      if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient
+        && gatewaySeatReadsImages('nvidia_nim', this.currentModelId, this.visionFacts({ provider: 'nvidia_nim', model: this.currentModelId }))) {
         cloud.push({ id: 'nvidia_nim', name: `NVIDIA NIM (${this.currentModelId.replace('nvidia_nim/', '')})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithNvidiaNim(userContent, systemPrompt, imagePaths, sig) });
       }
@@ -8693,7 +8705,8 @@ let isMultimodal = !!(imagePaths?.length);
       // picked. It matters more here than for the others — Fluxion's ids are the
       // real vendors' own, so a Fluxion rung seated for someone else's turn would
       // look entirely plausible in the logs while billing the wrong account.
-      if (this.isFluxionModel(this.currentModelId) && this.hasFluxionCredential()) {
+      if (this.isFluxionModel(this.currentModelId) && this.hasFluxionCredential()
+        && gatewaySeatReadsImages('fluxion', this.currentModelId, this.visionFacts({ provider: 'fluxion', model: this.currentModelId }))) {
         cloud.push({ id: 'fluxion', name: `Fluxion (${this.fluxionWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithFluxion(userContent, systemPrompt, imagePaths, sig) });
       }
@@ -8857,6 +8870,12 @@ let isMultimodal = !!(imagePaths?.length);
         // id stayed pinned indefinitely (Groq llama-4-scout, 2026-08-12).
         onModelGone: (_id, name) => {
           this.modelVersionManager.onModelError(name).catch(() => { });
+        },
+        // A real screenshot refused as image-unsupported contradicts whatever
+        // said this model reads images: test it again now (2026-10-01).
+        onNoVision: (id) => {
+          const selected = (() => { try { return this.getDirectAssistSelection().provider; } catch { return null; } })();
+          if (id === selected) this.maybeProbeSelectedVision({ force: true });
         },
       },
       abortSignal,
@@ -14005,7 +14024,15 @@ let isMultimodal = !!(imagePaths?.length);
         // app's static capability table. Preserve the image and exact model;
         // an unsupported upstream returns a normal provider error, never a
         // fallback or a text-only retry.
-        return true;
+        //
+        //
+        // Since 2026-10-01 that holds for a model nothing is KNOWN about. One
+        // that its catalogue or a one-time test marks text-only is refused here
+        // with Direct Assist's own clear message — a refusal, not a dropped
+        // image. For 9Router that matters most: it returns HTTP 200 for an
+        // image sent to a text-only model, so forwarding a known "no" was the
+        // blind answer, not the honest error the paragraph above hoped for.
+        return readsImages(this.visionVerdict(selection, custom, curl), true);
       default:
         // Everything else asks the resolver (2026-10-01). Unknown stays "no"
         // for a direct selection, exactly as the name table answered: Direct
