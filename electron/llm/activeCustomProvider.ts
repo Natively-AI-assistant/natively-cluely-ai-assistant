@@ -182,3 +182,20 @@ export function readUsingOllama(): boolean {
     return false;
   }
 }
+
+/**
+ * Does the turn being assembled stay on this device (2026-10-01)? True only
+ * when the live helper says its SELECTED provider is a local one — Ollama on
+ * this machine or network, or a custom / cURL endpoint whose request goes to a
+ * private host. False when there is no helper to ask, and false on any error:
+ * the caller is deciding whether text read off a kept-on-device screenshot may
+ * be put in a prompt, and "nobody can say" must not mean yes.
+ */
+export function readSelectionStaysOnDevice(): boolean {
+  try {
+    const getHelper = (globalThis as Record<string, unknown>).__nativelyGetLLMHelper as (() => any) | undefined;
+    return getHelper?.()?.selectionStaysOnDevice?.() === true;
+  } catch {
+    return false;
+  }
+}

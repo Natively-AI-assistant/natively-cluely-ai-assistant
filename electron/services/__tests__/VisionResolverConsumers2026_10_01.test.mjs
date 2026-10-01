@@ -71,9 +71,15 @@ describe('getCapabilities().supportsImages follows the selection that will run',
 
 describe('the gateway seat rule is the one shared function', () => {
   const ids = ['ninerouter/openai/gpt-5', 'ninerouter/alicode/glm-5', 'ninerouter/gemini/gemini-3.6-flash'];
-  for (const catalogue of [[], ['gemini/gemini-3.6-flash']]) {
+  // The expected answers are written out (they were computed by calling the
+  // shared function, which is what the helper method does: equal by construction).
+  for (const [catalogue, expected] of [
+    [[], [true, true, true]],                                // never fetched: unknown seats
+    [['gemini/gemini-3.6-flash'], [false, false, true]],     // fetched: only what it lists
+  ]) {
     test(`9Router, catalogue ${JSON.stringify(catalogue)}`, () => {
       const h = helper({ ninerouterVisionModels: new Set(catalogue) });
+      assert.deepEqual(ids.map((id) => h.ninerouterModelSupportsVision(id)), expected);
       for (const id of ids) {
         assert.equal(h.ninerouterModelSupportsVision(id), gatewaySeatReadsImages('ninerouter', id, { ninerouterVisionModels: catalogue }), id);
       }
@@ -81,7 +87,9 @@ describe('the gateway seat rule is the one shared function', () => {
   }
   test('AgentRouter', () => {
     const h = helper();
-    for (const id of ['agentrouter/claude-opus-5', 'agentrouter/deepseek-v4-flash', 'agentrouter/glm-5.3', 'agentrouter/o3']) {
+    const cases = { 'agentrouter/claude-opus-5': true, 'agentrouter/deepseek-v4-flash': true, 'agentrouter/glm-5.3': false, 'agentrouter/never-heard-of-it': false };
+    for (const [id, expected] of Object.entries(cases)) {
+      assert.equal(h.agentRouterModelSupportsVision(id), expected, id);
       assert.equal(h.agentRouterModelSupportsVision(id), gatewaySeatReadsImages('agentrouter', id), id);
     }
   });

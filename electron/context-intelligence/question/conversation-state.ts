@@ -219,10 +219,15 @@ function capScreen(screen: unknown): string {
  * The live writer records the answer the moment it exists and attaches the
  * screen's text when its transcription arrives, which for a local model can be
  * tens of seconds later. Which turn:
- *   1. `opts.turn` — the very turn object the writer recorded — when it is
- *      still in the ring;
- *   2. else the newest turn with that answer that is still WAITING, i.e. whose
- *      screen is `opts.placeholder` (what the writer recorded in its place).
+ *   • a writer that HAS the turn it recorded passes it as `opts.turn`: that
+ *     turn or none. When it is no longer in the ring (evicted, or the session
+ *     was cleared while a 45-second local record was still being written) the
+ *     text is dropped — a waiting turn with the same answer is then a
+ *     DIFFERENT turn, and filling it would also stop that turn's own text from
+ *     ever attaching. `null` means the writer's turn was never recorded.
+ *   • a writer WITHOUT the turn (`opts.turn` undefined): the newest turn with
+ *     that answer that is still WAITING, i.e. whose screen is
+ *     `opts.placeholder` (what the writer recorded in its place).
  * Matching on the answer alone put a first turn's screen on a later turn that
  * happened to give the same answer and never had a screenshot.
  */
@@ -234,7 +239,7 @@ export function withTurnScreen(
   const shot = capScreen(screen);
   if (!shot) return null;
   let at = opts.turn ? turns.indexOf(opts.turn) : -1;
-  if (at < 0) {
+  if (opts.turn === undefined) {
     if (!answer.trim()) return null;
     const waiting = opts.placeholder === undefined ? undefined : capScreen(opts.placeholder);
     for (let i = turns.length - 1; i >= 0; i--) {

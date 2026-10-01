@@ -400,7 +400,10 @@ test('a screenshot that could not be transcribed is still recorded as having exi
   // (2026-10-01: the turn is recorded AT ONCE with this marker or the caller's
   // own description, and the dedicated transcription is attached to it when it
   // arrives — see LiveTurnRecordedAtOnce2026_10_01.test.mjs for the behaviour.)
-  assert.match(engine, /fallbackText \|\| \(\(imageCount > 0 \|\| screenContext\) \? SCREEN_NOT_TRANSCRIBED : undefined\)/);
+  // (…and while a dedicated read is on its way the marker says "still being
+  // read"; it becomes this one only if that read fails. Behaviour:
+  // LiveTurnRecordedAtOnce2026_10_01.test.mjs.)
+  assert.match(engine, /imagePaths\?\.length \? SCREEN_BEING_READ : \(imageCount > 0 \|\| screenContext\) \? SCREEN_NOT_TRANSCRIBED : undefined/);
   // And screenContext is a real fallback source, not an unread parameter.
   assert.match(engine, /const fallbackText = screenContext \? \(compose\(screenContext as never\) \|\| ''\) : '';/);
   assert.match(engine, /if \(screenText\) attachScreenToAnsweredTurn\(sessionId, answer, screenText, \{ turn, placeholder \}\);/);

@@ -22,9 +22,10 @@ import {
   TINY_ASSIST_PROMPT, TINY_BRAINSTORM_PROMPT, TINY_CLARIFY_PROMPT, TINY_CODE_HINT_PROMPT,
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
-import { gatewaySeatReadsImages, readsImages, resolveVision, type VisionFacts, type VisionVerdict } from "./llm/visionResolver"
+import { gatewaySeatReadsImages, readsImages, resolveVision, resolveVisionAuto, type VisionFacts, type VisionModelState, type VisionVerdict } from "./llm/visionResolver"
 import { forgetBreakersOfOtherSelections, orderVisionCandidates } from "./llm/visionOrdering"
-import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from "./llm/visionCapabilityStore"
+import { hasOnDeviceScreenText, ON_DEVICE_SCREEN_REFUSED_MESSAGE } from "./context-intelligence/question/on-device-screen"
+import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, storedVisionOverride, storedVisionTest, visionWireModel } from "./llm/visionCapabilityStore"
 import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/visionProbe"
 import { parseOpenRouterVision } from "./llm/providerVisionData"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, claudeThinkingParam, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
@@ -50,6 +51,7 @@ import {
   resolveOllamaVision,
   customProviderSupportsVision,
   customProviderIsLocal,
+  isLegacyRemoteOllamaVisionName,
 } from "./llm/visionCapability"
 import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE, isProviderFamilyDisabled, ProviderDisabledError, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
 // Outbound-scope vocabulary shared with Context Intelligence V3. ONE mapping of
@@ -1484,7 +1486,35 @@ export class LLMHelper {
     if (family && this.isProviderDisabled(family)) {
       throw new ProviderDisabledError(provider);
     }
+    // Text read off a screenshot that was KEPT ON THIS DEVICE (2026-10-01).
+    // The prompt builders already leave it out unless the selected provider
+    // is local; this is the backstop for every way a payload can still reach
+    // a cloud provider after that — a cloud spare behind a local endpoint, a
+    // Background Model pick, a selection changed mid-turn. Fails closed.
+    if (hasOnDeviceScreenText(text) && !this.outboundLabelIsOnDevice(provider)) {
+      throw new VisionPolicyError(provider, ON_DEVICE_SCREEN_REFUSED_MESSAGE);
+    }
     assertProviderDataScopes(provider, this.scopesForPayload(text, imagePaths, extraScopes), this.getProviderScopePolicy());
+  }
+
+  /** Is this outbound label a provider on this device? Only a custom or cURL endpoint can be; every named provider is hosted. */
+  private outboundLabelIsOnDevice(provider: string): boolean {
+    if (provider === 'custom_provider') return customProviderIsLocal(this.customProvider);
+    if (provider === 'custom_curl') return customProviderIsLocal(this.activeCurlProvider);
+    return false;
+  }
+
+  /**
+   * Does a turn answered by the SELECTED provider stay on this device? Ollama
+   * on this machine or network, or a custom / cURL endpoint whose request goes
+   * to a private host. Same precedence as getDirectAssistSelection: a custom
+   * provider IS the selection even when the Ollama flag is still set.
+   */
+  public selectionStaysOnDevice(): boolean {
+    if (this.customProvider) return customProviderIsLocal(this.customProvider);
+    if (this.activeCurlProvider) return customProviderIsLocal(this.activeCurlProvider);
+    if (this.useOllama) return customProviderIsLocal({ curlCommand: this.ollamaUrl });
+    return false;
   }
 
   private getDeniedOutboundScopes(text: string, imagePaths?: string[], extraScopes: ProviderDataScope[] = []): ProviderDataScope[] {
@@ -2936,6 +2966,9 @@ export class LLMHelper {
     // cloud spare offered at all, so the failure mode is "no spare" rather
     // than "a spare that throws on every turn".
     if (this.isLocalOnlyMode) return spares;
+    // …and none for a turn carrying text from a kept-on-device screenshot:
+    // every spare is a cloud provider, and the boundary would refuse each one.
+    if (hasOnDeviceScreenText(userContent)) return spares;
     const skip = new Set(excludeIds);
     let prio = 1;
     if (!skip.has('natively') && this.hasNatively()) {
@@ -3525,7 +3558,10 @@ export class LLMHelper {
       // name, then confirmed below. Widening this to "any model installed
       // there" would send a keep-on-device screenshot to a remote host in a
       // state that used to be refused.
-      if (needsVision && !getModelCapabilities(model, true).supportsImages) return { ok: false, model };
+      // The user's own answer for that selected model (Settings, phase 4)
+      // comes first, as everywhere: Off refuses it, On admits it. It is still
+      // the selected model only.
+      if (needsVision && !(this.userVisionOverride('ollama', model) ?? isLegacyRemoteOllamaVisionName(model))) return { ok: false, model };
       const response = await fetch(`${this.ollamaUrl}/api/show`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -5380,6 +5416,10 @@ let isMultimodal = !!(imagePaths?.length);
     skipSystemPrompt = false,
     turn?: FastTurn | null,
   ): { modelId: string; family: FastModelFamily; auto: boolean; stream: AsyncGenerator<string, void, unknown> } | null {
+    // The Background Model is a cloud provider. A turn carrying text from a
+    // kept-on-device screenshot is answered by the Active Model, which is the
+    // local one that turn was assembled for.
+    if (hasOnDeviceScreenText(userContent)) return null;
     const pick = turn ? this.fastPickAtDispatch(turn) : this.fastPickForTextTurn();
     if (!pick) {
       if (this.groqFastTextMode && this.fastModelId) {
@@ -8900,6 +8940,7 @@ let isMultimodal = !!(imagePaths?.length);
     const selectedGemini = selectedDirect('gemini')?.replace(/^models\//, '') ?? null;
     const selectedGroq = selectedDirect('groq');
     const fixedGemini = { lite: GEMINI_FLASH_LITE_MODEL, flash: tierModel(ModelFamily.GEMINI_FLASH, 1) || GEMINI_FLASH_MODEL, pro: tierModel(ModelFamily.GEMINI_PRO, 1) || GEMINI_PRO_MODEL };
+    const groqVisionModel = selectedGroq && !isRetiredGroqModelId(selectedGroq) ? selectedGroq : GROQ_VISION_MODEL;
 
     if (!localOnly) {
       if (this.openaiClient) {
@@ -8944,7 +8985,6 @@ let isMultimodal = !!(imagePaths?.length);
         // adapter calls Groq directly, without the successor substitution the
         // text path has, so the retired id 404'd and the one Groq rung was
         // demoted for a day.
-        const groqVisionModel = selectedGroq && !isRetiredGroqModelId(selectedGroq) ? selectedGroq : GROQ_VISION_MODEL;
         cloud.push({ id: 'groq', name: `Groq (${groqVisionModel})`, isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
           open: (sig) => this.streamWithGroqMultimodal(userContent, imagePaths, systemPrompt, sig, groqVisionModel) });
       }
@@ -9058,6 +9098,26 @@ let isMultimodal = !!(imagePaths?.length);
       if (antigravityVisionModel) {
         cloud.push({ id: 'antigravity', name: `Antigravity (${antigravityVisionModel})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithAntigravity(userContent, systemPrompt, imagePaths, sig, `antigravity:${antigravityVisionModel}`) });
+      }
+      // "Reads images: Off" (Settings, phase 4) is about the MODEL, whichever
+      // rung would send to it. The selection's own rungs and the gateway seats
+      // above already asked the resolver; these are the rungs with a fixed
+      // model, which never did. Off for Gemini Flash means the Flash fallback
+      // does not get a Claude user's screenshot either.
+      const fixedRungModel: Record<string, readonly [DirectAssistProvider, string | null | undefined]> = {
+        openai: ['openai', tierModel(ModelFamily.OPENAI, 1)],
+        claude: ['claude', tierModel(ModelFamily.CLAUDE, 1)],
+        gemini_flash_lite: ['gemini', fixedGemini.lite],
+        gemini_flash: ['gemini', fixedGemini.flash],
+        gemini_pro: ['gemini', fixedGemini.pro],
+        groq: ['groq', groqVisionModel],
+        natively: ['natively', 'natively'],
+        'codex-cli': ['codex-cli', this.getSelectedCodexCliModel()],
+        antigravity: ['antigravity', antigravityVisionModel ? `antigravity:${antigravityVisionModel}` : null],
+      };
+      for (let i = cloud.length - 1; i >= 0; i--) {
+        const fixed = fixedRungModel[cloud[i].id];
+        if (fixed?.[1] && this.userVisionOverride(fixed[0], fixed[1]) === false) cloud.splice(i, 1);
       }
     }
 
@@ -9221,6 +9281,12 @@ let isMultimodal = !!(imagePaths?.length);
       // …unless that id is left over from before a local selection (see
       // `localSelection` above): then no gateway is "the selected" one.
       const selectedGateway = localSelection ? null : gateway;
+      // The selected model is switched to "Reads images: Off" in Settings and
+      // nothing else can read the screenshot: say so, before any message that
+      // would blame the model or the provider (phase 4).
+      if (sel && this.visionVerdict(sel).source === 'override' && this.visionVerdict(sel).reads === 'no') {
+        throw new Error(`No vision-capable provider configured. "Reads images" is switched off for the selected model (${visionWireModel(sel.provider, sel.model)}) in Settings › AI Providers. Switch it back to Auto or On, or add another vision provider in Settings.`);
+      }
       // OpenRouter's own catalogue said this model is text-only, so "check the
       // proxy is reachable" would be the wrong advice (2026-10-01).
       if (!localSelection && this.isOpenRouterModel(this.currentModelId) && storedVisionAnswer('openrouter', this.currentModelId) === false) {
@@ -13849,6 +13915,9 @@ let isMultimodal = !!(imagePaths?.length);
    */
   private async probeOllamaVision(modelId: string): Promise<boolean> {
     if (!modelId) return false;
+    // The user's own answer in Settings beats /api/show and the name list.
+    const forced = this.userVisionOverride('ollama', modelId);
+    if (forced !== undefined) return forced;
     const cached = this.ollamaVisionCache.get(modelId);
     if (cached !== undefined) return cached;
 
@@ -14044,6 +14113,43 @@ let isMultimodal = !!(imagePaths?.length);
    * legacy getCurrentProvider(), this identifies every supported provider and
    * never labels OpenAI/Claude/Groq selections as Gemini.
    */
+  /**
+   * Which provider answers a cloud model id, and under which model name. Null
+   * when no adapter claims it. One classifier for the live selection
+   * (getDirectAssistSelection) and for any id the Settings pane asks about
+   * (visionSelectionForId), so the two cannot name a model differently.
+   */
+  private classifyCloudModel(selected: string): { provider: DirectAssistProvider; model: string } | null {
+    // Gateway IDs can contain a nested vendor/model name (for example,
+    // litellm/openai/gpt-4o). Classify those explicit prefixes before the
+    // generic vendor predicates or the request escapes through the wrong
+    // credential/client boundary.
+    if (selected === 'natively') return { provider: 'natively', model: selected };
+    if (this.isAntigravityModel(selected)) return { provider: 'antigravity', model: selected };
+    if (this.isCodexCliModel(selected)) return { provider: 'codex-cli', model: this.codexModelForFastPick(selected) };
+    if (this.isNvidiaNimModel(selected)) return { provider: 'nvidia_nim', model: selected };
+    if (this.isOpenRouterModel(selected)) return { provider: 'openrouter', model: selected };
+    // Fluxion's ids are the real vendors' own, so EVERY predicate below would
+    // claim one if the prefix check did not come first — claude-*, gpt-*,
+    // gemini-* and deepseek-v* are all live Fluxion catalogue entries.
+    if (this.isFluxionModel(selected)) return { provider: 'fluxion', model: selected };
+    // Fluxion's rule again: claude-*, gpt-* and deepseek-v* are all live
+    // AgentRouter ids, so every vendor predicate below would claim one.
+    if (this.isAgentRouterModel(selected)) return { provider: 'agentrouter', model: selected };
+    if (this.isLiteLLMModel(selected)) return { provider: 'litellm', model: selected };
+    // Same rule, same reason as Fluxion above: 9Router's ids carry a real
+    // vendor segment (`ninerouter/openai/gpt-5`,
+    // `ninerouter/gemini/gemini-3.6-flash`), so every predicate below would
+    // claim one if this did not come first.
+    if (this.isNinerouterModel(selected)) return { provider: 'ninerouter', model: selected };
+    if (this.isGroqModel(selected)) return { provider: 'groq', model: selected };
+    if (this.isOpenAiModel(selected)) return { provider: 'openai', model: selected };
+    if (this.isClaudeModel(selected)) return { provider: 'claude', model: selected };
+    if (this.isDeepseekModel(selected)) return { provider: 'deepseek', model: selected };
+    if (this.isGeminiModel(selected)) return { provider: 'gemini', model: selected };
+    return null;
+  }
+
   public getDirectAssistSelection(): DirectAssistSelection {
     let provider: DirectAssistProvider;
     let model: string;
@@ -14058,38 +14164,10 @@ let isMultimodal = !!(imagePaths?.length);
       provider = 'ollama';
       model = this.ollamaModel;
     } else {
-      const selected = this.currentModelId;
-      model = selected;
-      // Gateway IDs can contain a nested vendor/model name (for example,
-      // litellm/openai/gpt-4o). Classify those explicit prefixes before the
-      // generic vendor predicates or the request escapes through the wrong
-      // credential/client boundary.
-      if (selected === 'natively') provider = 'natively';
-      else if (this.isAntigravityModel(selected)) provider = 'antigravity';
-      else if (this.isCodexCliModel(selected)) {
-        provider = 'codex-cli';
-        model = this.getSelectedCodexCliModel();
-      } else if (this.isNvidiaNimModel(selected)) provider = 'nvidia_nim';
-      else if (this.isOpenRouterModel(selected)) provider = 'openrouter';
-      // Fluxion's ids are the real vendors' own, so EVERY predicate below would
-      // claim one if the prefix check did not come first — claude-*, gpt-*,
-      // gemini-* and deepseek-v* are all live Fluxion catalogue entries.
-      else if (this.isFluxionModel(selected)) provider = 'fluxion';
-      // Fluxion's rule again: claude-*, gpt-* and deepseek-v* are all live
-      // AgentRouter ids, so every vendor predicate below would claim one.
-      else if (this.isAgentRouterModel(selected)) provider = 'agentrouter';
-      else if (this.isLiteLLMModel(selected)) provider = 'litellm';
-      // Same rule, same reason as Fluxion above: 9Router's ids carry a real
-      // vendor segment (`ninerouter/openai/gpt-5`,
-      // `ninerouter/gemini/gemini-3.6-flash`), so every predicate below would
-      // claim one if this did not come first.
-      else if (this.isNinerouterModel(selected)) provider = 'ninerouter';
-      else if (this.isGroqModel(selected)) provider = 'groq';
-      else if (this.isOpenAiModel(selected)) provider = 'openai';
-      else if (this.isClaudeModel(selected)) provider = 'claude';
-      else if (this.isDeepseekModel(selected)) provider = 'deepseek';
-      else if (this.isGeminiModel(selected)) provider = 'gemini';
-      else throw new DirectAssistError('MODEL_UNAVAILABLE', 'The selected model has no Direct Assist adapter.');
+      const cloud = this.classifyCloudModel(this.currentModelId);
+      if (!cloud) throw new DirectAssistError('MODEL_UNAVAILABLE', 'The selected model has no Direct Assist adapter.');
+      provider = cloud.provider;
+      model = cloud.model;
     }
 
     if (!model || !model.trim()) {
@@ -14324,7 +14402,126 @@ let isMultimodal = !!(imagePaths?.length);
       customProvider: selection.provider === 'curl' ? curl : custom,
       providerReportsVision: (provider, routed) => storedVisionAnswer(provider, routed, this.visionStoreBaseURL(provider)),
       testedVision: (provider, routed) => storedVisionTest(provider, routed, this.visionStoreBaseURL(provider))?.reads,
+      overriddenVision: (provider, routed) => this.userVisionOverride(provider, routed),
     };
+  }
+
+  /** The user's Auto / On / Off answer for a model (Settings › AI Providers): true, false, or undefined on Auto. */
+  private userVisionOverride(provider: string, routedModel: string): boolean | undefined {
+    return storedVisionOverride(provider, routedModel, this.visionStoreBaseURL(provider));
+  }
+
+  // ── "Reads images: Auto / On / Off" for Settings (phase 4) ────────────────
+
+  private visionCapabilityListener: (() => void) | null = null;
+  /** main: told whenever an answer changed (a setting, a finished test), to refresh open windows. */
+  public onVisionCapabilityChanged(listener: (() => void) | null): void { this.visionCapabilityListener = listener; }
+  private visionCapabilityChanged(): void {
+    try { this.visionCapabilityListener?.(); } catch { /* a listener never breaks a turn */ }
+  }
+
+  /**
+   * The provider and model a PICKER id names: `ollama-<tag>`, `natively`,
+   * `antigravity:<id>`, `codex-cli[:<model>]`, a gateway's routed id, or a
+   * vendor's bare id. Null for anything else — a custom or cURL provider has
+   * its own "Screenshot / Vision Support" control and is not asked here.
+   */
+  private visionSelectionForId(id: string): { provider: DirectAssistProvider; model: string } | null {
+    const picked = String(id ?? '').trim();
+    if (!picked) return null;
+    if (picked.startsWith('ollama-')) {
+      const tag = picked.slice('ollama-'.length);
+      return tag ? { provider: 'ollama', model: tag } : null;
+    }
+    return this.classifyCloudModel(picked);
+  }
+
+  /** Can the one-time image test ask this model right now? */
+  private visionTestAllowed(selection: { provider: DirectAssistProvider; model: string }): boolean {
+    if (!this.visionProbingEnabled || this.isLocalOnlyMode) return false;
+    if (!LLMHelper.VISION_TESTABLE.has(selection.provider)) return false;
+    if (!this.directProviderHasCredential(selection.provider) || this.isProviderDisabled(selection.provider)) return false;
+    try {
+      this.assertOutboundImagesAllowed(selection.provider, true);
+      return !this.getDeniedOutboundScopes(VISION_PROBE_QUESTION, ['probe.png'], []).includes('screenshots');
+    } catch { return false; }
+  }
+
+  private describeVisionSelection(selection: { provider: DirectAssistProvider; model: string }): VisionModelState {
+    const facts = this.visionFacts(selection);
+    const inForce = resolveVision(selection, facts);
+    const auto = resolveVisionAuto(selection, facts);
+    const forced = this.userVisionOverride(selection.provider, selection.model);
+    const tested = storedVisionTest(selection.provider, selection.model, this.visionStoreBaseURL(selection.provider));
+    return {
+      setting: forced === undefined ? 'auto' : forced ? 'on' : 'off',
+      reads: inForce.reads,
+      source: inForce.source,
+      auto: { reads: auto.reads, source: auto.source, ...(auto.source === 'test' && tested ? { testedAt: tested.at } : {}) },
+      provider: selection.provider,
+      checking: this.visionProbe?.isRunning(selection) ?? false,
+      testable: this.visionTestAllowed(selection),
+    };
+  }
+
+  /** What Settings shows for each picker id; null for an id that has no row control (custom, cURL, unknown). */
+  public describeVisionModels(ids: readonly string[]): Record<string, VisionModelState | null> {
+    const out: Record<string, VisionModelState | null> = {};
+    for (const id of Array.isArray(ids) ? ids.slice(0, 2000) : []) {
+      if (typeof id !== 'string') continue;
+      const selection = this.visionSelectionForId(id);
+      out[id] = selection ? this.describeVisionSelection(selection) : null;
+    }
+    return out;
+  }
+
+  /** Save the user's answer for one picker id. Null when the id has no row control. */
+  public setVisionSetting(id: string, setting: 'auto' | 'on' | 'off'): VisionModelState | null {
+    const selection = this.visionSelectionForId(id);
+    if (!selection || !['auto', 'on', 'off'].includes(setting)) return null;
+    getVisionCapabilityStore().setOverride(
+      selection.provider, this.visionStoreBaseURL(selection.provider), visionWireModel(selection.provider, selection.model),
+      setting === 'auto' ? null : setting === 'on',
+    );
+    if (selection.provider === 'ollama') {
+      // The remembered "which installed model reads images" was chosen under
+      // the old answer: look again on the next screenshot.
+      this.ollamaVisionModel = null;
+      this.ollamaVisionNegativeUntil = 0;
+    }
+    // Back on Auto with nothing known: the selected model is tested as it
+    // would have been when it was picked.
+    if (setting === 'auto') this.maybeProbeSelectedVision();
+    this.visionCapabilityChanged();
+    return this.describeVisionSelection(selection);
+  }
+
+  /**
+   * "Test again" (Settings): forget the saved result and ask the model now.
+   * The way out of a wrong "can't read images" that does not need the user to
+   * know better than the test. Nothing is sent when the test may not run
+   * (local-only mode, screenshots kept on this device, no key, provider off)
+   * or when the user has answered for this model themselves.
+   */
+  public async retestVision(id: string): Promise<VisionModelState | null> {
+    const selection = this.visionSelectionForId(id);
+    if (!selection) return null;
+    let inconclusive = false;
+    if (this.userVisionOverride(selection.provider, selection.model) === undefined && this.visionTestAllowed(selection)) {
+      const run = this.getVisionProbe().ensure(selection, { force: true }).catch(() => 'unknown' as const);
+      this.visionCapabilityChanged();   // "Checking…"
+      const outcome = await run;
+      // An inconclusive re-test must not leave the OLD answer standing as if it
+      // had been confirmed: the model is "not known" until a test settles it.
+      if (outcome === 'unknown') {
+        inconclusive = true;
+        getVisionCapabilityStore().forgetTest(selection.provider, this.visionStoreBaseURL(selection.provider), visionWireModel(selection.provider, selection.model));
+      }
+      this.visionCapabilityChanged();
+    }
+    // The row says so: a test that could not finish (no credit, rate limit,
+    // provider down) otherwise looks like a button that did nothing.
+    return { ...this.describeVisionSelection(selection), ...(inconclusive ? { inconclusive: true } : {}) };
   }
 
   /** Providers the one-time test can ask. The rest are decided by their route, their own table, or /api/show. */
@@ -14366,7 +14563,10 @@ let isMultimodal = !!(imagePaths?.length);
       },
       removeImage: (file) => { fs.rmSync(file, { force: true }); },
       recorded: (s) => getVisionCapabilityStore().tested(s.provider, this.visionStoreBaseURL(s.provider), wire(s)),
-      record: (s, reads) => getVisionCapabilityStore().recordTest(s.provider, this.visionStoreBaseURL(s.provider), wire(s), reads),
+      record: (s, reads) => {
+        getVisionCapabilityStore().recordTest(s.provider, this.visionStoreBaseURL(s.provider), wire(s), reads);
+        this.visionCapabilityChanged();
+      },
       keyOf: (s) => `${s.provider}|${this.visionStoreBaseURL(s.provider)}|${wire(s)}`,
       log: (m) => console.log(m),
     });
@@ -14385,6 +14585,9 @@ let isMultimodal = !!(imagePaths?.length);
     if (!LLMHelper.VISION_TESTABLE.has(selection.provider)) return;
     if (!this.directProviderHasCredential(selection.provider) || this.isProviderDisabled(selection.provider)) return;
     const verdict = this.visionVerdict(selection);
+    // The user answered for this model (On or Off): nothing to find out, and
+    // Off also means "send it no image", the test image included.
+    if (verdict.source === 'override') return;
     if (!opts.force && verdict.reads !== 'unknown' && verdict.source !== 'test') return;
     // Nothing is sent when screenshots may not leave this device; the boundary
     // would refuse anyway, and there is no point drawing an image first.
@@ -14586,6 +14789,17 @@ let isMultimodal = !!(imagePaths?.length);
       || (provider === 'curl' && customProviderIsLocal(curl));
     if (this.isLocalOnlyMode && !directProviderIsLocal) {
       throw new DirectAssistError('PROVIDER_ERROR', 'Cloud providers are disabled in local-only mode.');
+    }
+    // Text read off a screenshot that was kept on this device (an earlier
+    // turn's description, carried in the history): only a provider on this
+    // device may have it. Checked here because some Direct adapters pass an
+    // empty text to assertOutboundScopes. `ollama` is the daemon the user
+    // configured, and one on another machine is not this device.
+    const directOnDevice = provider === 'ollama'
+      ? customProviderIsLocal({ curlCommand: this.ollamaUrl })
+      : directProviderIsLocal;
+    if (!directOnDevice && (hasOnDeviceScreenText(request.userPrompt) || hasOnDeviceScreenText(request.systemPrompt))) {
+      throw new DirectAssistError('SCREENSHOT_BLOCKED_BY_PRIVACY', ON_DEVICE_SCREEN_REFUSED_MESSAGE);
     }
     // This is the shared last boundary for every Direct image dispatch. The
     // provider-specific streamers are intentionally not trusted to remember

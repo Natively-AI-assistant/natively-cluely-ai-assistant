@@ -34,6 +34,8 @@ const BLIND_RE = new RegExp([
   '\\b(?:ability|able) to (?:see|view|process|analy[sz]e|read) (?:image|picture|photo)',
   '\\btext[- ](?:only|based)\\b',
   '\\b(?:image|picture|photo|attachment)s?\\b[^.]{0,40}\\b(?:wasn\'?t|isn\'?t|not|never) (?:provided|attached|visible|included|shared|available|shown|uploaded|received)',
+  // "I do not have vision capabilities", "without image input support"
+  '\\b(?:no|without|lack(?:s|ing)?|don\'?t have|do not have|doesn\'?t have|does not have)\\b[^.]{0,30}\\b(?:vision|image|visual)s?\\b[^.]{0,20}\\b(?:capabilit|support|input|abilit|access)',
 ].join('|'), 'i');
 
 /** How long a saved test result counts as an answer. After it the model is
@@ -66,7 +68,10 @@ export function judgeProbeReply(reply: string, number: string): ProbeOutcome {
   // Some gateways answer HTTP 200 with the failure in the body. That is the
   // provider talking, not the model: unknown, to be retried later.
   if (PROVIDER_NOTICE_RE.test(text)) return 'unknown';
-  if (isImageRefusalMessage(text) || BLIND_RE.test(text)) return 'no';
+  // Models write "can’t" with a typographic apostrophe (deepseek-v4-pro,
+  // measured 2026-10-01); the rules are written with the plain one.
+  const plain = text.replace(/[\u2018\u2019\u02BC]/g, "'");
+  if (isImageRefusalMessage(plain) || BLIND_RE.test(plain)) return 'no';
   if (ERROR_TEXT_RE.test(text)) return 'unknown';
   // A different number IS an answer, however short.
   return (text.match(/\d/g) ?? []).length >= 2 ? 'no' : 'unknown';

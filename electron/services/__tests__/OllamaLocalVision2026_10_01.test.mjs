@@ -26,6 +26,7 @@ import {
 
 const { PRIVATE_VISION_NO_LOCAL_MESSAGE } = require(dist('llm/visionPolicy.js'));
 const { renderDigitsPng } = require(dist('llm/visionTestImage.js'));
+const { VisionCapabilityStore, __setVisionCapabilityStore } = require(dist('llm/visionCapabilityStore.js'));
 isolateSingletons();
 
 // ── 1. Keep on device, and a denied screenshots scope ────────────────────────
@@ -121,6 +122,47 @@ describe('an Ollama on ANOTHER machine (OLLAMA_URL)', () => {
     const h = await remoteHelper({ 'acme-sight:latest': true }, 'acme-sight:latest');
     assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE, 'a name on no list was refused before; a remote daemon gets nothing new');
     assert.equal(ollama.chats().length, 0);
+  });
+  // "Exactly as before" includes the LIST (2026-10-01): the old remote rule used
+  // an older, shorter name list. Phase 1's consolidated list added names, and
+  // through this rule each one was a new state in which a keep-on-device
+  // screenshot left the machine.
+  for (const name of ['llama4:latest', 'qwen2.5vl:7b', 'mistral-small3.1:24b', 'granite3.2-vision:2b', 'llama-guard3-vision:11b']) {
+    test(`a name the old rule did not know (${name}) is refused on a remote daemon, as it was`, async () => {
+      setMode('private_vision');
+      const h = await remoteHelper({ [name]: true }, name);
+      assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE);
+      assert.equal(ollama.chats().length, 0);
+    });
+  }
+  test('…unless the user says so themselves: "Reads images: On" for that selected model admits it', async () => {
+    setMode('private_vision');
+    const h = await remoteHelper({ 'llama4:latest': true }, 'llama4:latest');
+    const store = new VisionCapabilityStore({ filePath: null });
+    store.setOverride('ollama', '', 'llama4:latest', true);
+    __setVisionCapabilityStore(store);
+    try {
+      assert.equal(await ask(h, 'what is on my screen?', [png]), 'local model reply');
+      assert.equal(ollama.chats()[0].body.model, 'llama4:latest');
+    } finally { __setVisionCapabilityStore(new VisionCapabilityStore({ filePath: null })); }
+  });
+  test('…and "Off" refuses a model the old rule admitted', async () => {
+    setMode('private_vision');
+    const h = await remoteHelper({ 'llava:7b': true }, 'llava:7b');
+    const store = new VisionCapabilityStore({ filePath: null });
+    store.setOverride('ollama', '', 'llava:7b', false);
+    __setVisionCapabilityStore(store);
+    try {
+      assert.equal(await ask(h, 'what is on my screen?', [png]), PRIVATE_VISION_NO_LOCAL_MESSAGE);
+      assert.equal(ollama.chats().length, 0);
+    } finally { __setVisionCapabilityStore(new VisionCapabilityStore({ filePath: null })); }
+  });
+  test('on THIS machine those names are read as before phase 4 (the daemon\'s own answer decides)', async () => {
+    setMode('private_vision');
+    if (realFetch) globalThis.fetch = realFetch;
+    ollama = fakeOllama({ 'llama4:latest': true });
+    const h = helper(await ollama.start(), 'llama4:latest');
+    assert.equal(await ask(h, 'what is on my screen?', [png]), 'local model reply');
   });
   test('text fallback is unaffected', async () => {
     const h = await remoteHelper({ 'qwen2.5:4b': false }, 'qwen2.5:4b');
@@ -308,6 +350,10 @@ describe('the screen record through the service', () => {
   });
   test('the PRE-PASS never asks Ollama: it runs before the answer, inside 6 seconds', async () => {
     await boot({ 'qwen2.5:4b': false, 'llava:7b': true });
+    // The record target is resolved FIRST (test audit, 2026-10-01): on a fresh
+    // helper the Ollama rung is unconfigured whatever the purpose rule says, so
+    // without this the test passed with that rule deleted.
+    assert.deepEqual(await h.resolveOllamaRecordTarget(), { model: 'llava:7b', url: h.ollamaUrl });
     for (const action of ['what_to_say', 'what_to_answer', 'manual_use_screen']) {
       const result = await understand(action);
       assert.notEqual(result.status, 'available', action);
@@ -359,8 +405,25 @@ describe('the screen record through the service', () => {
     await prepass();
     assert.equal(cloudCalls, after, 'a failed pre-pass is not retried for the same screen');
   });
-  test('the record gets its own time limit, far longer than the pre-pass', () => {
+  test('the record gets its own time limit, far longer than the pre-pass', async () => {
     assert.ok(OLLAMA_RECORD_BUDGET_MS >= 30_000 && OLLAMA_RECORD_BUDGET_MS <= 60_000, String(OLLAMA_RECORD_BUDGET_MS));
+    // …and the second stage is really GIVEN it (the constant alone proves
+    // nothing): the timers the chain arms are observed. A cloud rung fails
+    // inside the pre-pass's 6 s; then Ollama's attempt is armed with 45 s.
+    await boot({ 'qwen2.5:4b': false, 'llava:7b': true }, { reply: 'A terminal.' });
+    cloudKeys(['gemini']);
+    const real = h.runVisionRequest;
+    h.runVisionRequest = function (id, ...rest) { return id === 'ollama' ? real.call(this, id, ...rest) : Promise.reject(Object.assign(new Error('503 unavailable'), { status: 503 })); };
+    const armed = [];
+    const realSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = (fn, ms, ...rest) => { if (typeof ms === 'number' && ms >= 1000) armed.push(ms); return realSetTimeout(fn, ms, ...rest); };
+    let result;
+    try { result = await understand('transcribe'); } finally { globalThis.setTimeout = realSetTimeout; }
+    assert.equal(result.providerUsed, 'ollama');
+    // (A few milliseconds short of the full 45 s: what is left of the stage's deadline.)
+    assert.ok(armed.some((ms) => ms > 40_000 && ms <= OLLAMA_RECORD_BUDGET_MS), `no attempt was armed with the record budget: ${armed}`);
+    const cloudAttempts = armed.filter((ms) => ms <= 40_000);
+    assert.ok(cloudAttempts.length > 0 && cloudAttempts.every((ms) => ms <= 6000), `a cloud attempt was armed past the 6 s pre-pass budget: ${armed}`);
   });
   test('an Ollama ANSWER cancels a record still in flight: the answer is not queued behind it, and nothing is kept', async () => {
     // The fake serves one chat at a time, as a daemon does for one model: while

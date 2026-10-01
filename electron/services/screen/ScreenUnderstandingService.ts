@@ -133,6 +133,13 @@ export interface ScreenUnderstandingResult {
   timestamp?: number;
   // Marker so PromptAssembler knows this came from vision, not OCR.
   source_kind?: 'vision' | 'ocr_legacy';
+  /**
+   * Read while "Keep screenshots on this device" was on (2026-10-01). The text
+   * composed from this result is marked, and from then on is shown only to a
+   * model on this device — see on-device-screen.ts. Sticky: turning the
+   * setting off later does not release text that was read under it.
+   */
+  keptOnDevice?: boolean;
 }
 
 /**
@@ -397,6 +404,7 @@ export class ScreenUnderstandingService {
       imageHash,
       isTechnical,
     });
+    if (mode === 'private_vision' && out.status === 'available') out.keptOnDevice = true;
     this.lastResult = out;
     this.lastResultKind = resultKind;
     return out;

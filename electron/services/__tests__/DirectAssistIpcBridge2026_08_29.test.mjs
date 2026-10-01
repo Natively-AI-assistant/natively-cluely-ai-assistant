@@ -342,7 +342,10 @@ test('Direct Assist transcribes its own screenshot AFTER the answer, never befor
   const helper = read('electron/services/screen/screenTranscription.ts');
   // Skipped entirely when these exact bytes are already described. The cache is
   // the point: a re-captured screen costs nothing.
-  assert.match(helper, /if \(cached\?\.description\) return cached\.description;/);
+  // (…unless the cached text was made while the screenshot was being kept on
+  // this device and that setting is now off: then it is read again. Behaviour:
+  // OnDeviceScreenText2026_10_01.test.mjs.)
+  assert.match(helper, /if \(cached\?\.description && !stale\) return cached\.description;/);
   // Reaches the extraction prompt. Every pre-existing call site passed an action
   // that took the "answer concisely" branch instead.
   assert.match(helper, /userAction: 'transcribe'/);

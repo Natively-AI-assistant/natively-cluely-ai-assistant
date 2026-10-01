@@ -2461,6 +2461,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getFastModel: () => ipcRenderer.invoke('get-fast-model'),
   setFastModel: (modelId: string | null) => ipcRenderer.invoke('set-fast-model', modelId),
   filterFastModelCandidates: (ids: string[]) => ipcRenderer.invoke('filter-fast-model-candidates', ids),
+  getVisionModelStates: (ids: string[]) => ipcRenderer.invoke('vision-capability:describe', ids),
+  setVisionSetting: (id: string, setting: 'auto' | 'on' | 'off') => ipcRenderer.invoke('vision-capability:set', id, setting),
+  retestVision: (id: string) => ipcRenderer.invoke('vision-capability:retest', id),
+  onVisionCapabilityChanged: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on('vision-capability-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('vision-capability-changed', subscription);
+    };
+  },
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) =>
     ipcRenderer.invoke('toggle-model-selector', coords),
   modelSelectorCloseIfOpen: () => ipcRenderer.invoke('model-selector:close-if-open'),

@@ -1994,7 +1994,18 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // caches and hits exactly like a single-image one.
                 const cacheKey = screenStore.hashImageSet(imagePaths);
                 if (cacheKey) {
-                  v3ScreenDescription = screenStore.getScreenshotDescription(cacheKey)?.description ?? '';
+                  const cachedDescription = screenStore.getScreenshotDescription(cacheKey)?.description ?? '';
+                  // A description made while this screenshot was being kept on
+                  // this device feeds THIS turn's prompt only when the turn
+                  // stays on this device. Otherwise it is a miss: the pre-pass
+                  // below reads the screen again under today's setting (or not
+                  // at all, when that setting is still on).
+                  const { hasOnDeviceScreenText } = require('./context-intelligence/question/on-device-screen') as
+                    typeof import('./context-intelligence/question/on-device-screen');
+                  const turnOnDevice = (() => {
+                    try { return appState.processingHelper.getLLMHelper().selectionStaysOnDevice() === true; } catch { return false; }
+                  })();
+                  v3ScreenDescription = hasOnDeviceScreenText(cachedDescription) && !turnOnDevice ? '' : cachedDescription;
                 }
                 const {
                   getScreenUnderstandingService,
@@ -7411,13 +7422,22 @@ export function initializeIpcHandlers(appState: AppState): void {
       // read-only cache probe — every actual dispatch still goes through the
       // full validation below.
       const describedByTurn = new Map<number, string>();
+      const { hasOnDeviceScreenText: keptOnDeviceText, ON_DEVICE_SCREEN_WITHHELD } = require('./context-intelligence/question/on-device-screen') as
+        typeof import('./context-intelligence/question/on-device-screen');
+      const directSelectionOnDevice = (() => {
+        try { return appState.processingHelper.getLLMHelper().selectionStaysOnDevice() === true; } catch { return false; }
+      })();
       const screenStorePre = require('./services/screen/ScreenshotDescriptionStore') as
         typeof import('./services/screen/ScreenshotDescriptionStore');
       for (let i = rawTurns.length - 1; i >= 0; i -= 1) {
         if (!rawTurns[i].imagePaths.length) continue;
         try {
           const described = screenStorePre.getDescriptionForImageSet(rawTurns[i].imagePaths);
-          if (described) describedByTurn.set(i, described);
+          // A description made while that screenshot was being kept on this
+          // device goes only to a provider on this device; anyone else gets a
+          // note that a screenshot was there (never a silent gap). The note
+          // also keeps the image's bytes from being carried instead.
+          if (described) describedByTurn.set(i, keptOnDeviceText(described) && !directSelectionOnDevice ? ON_DEVICE_SCREEN_WITHHELD : described);
         } catch { /* a cache miss is the normal case */ }
       }
 
@@ -14147,6 +14167,34 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (!Array.isArray(ids)) return { ids: [] };
     const llmHelper = appState.processingHelper.getLLMHelper();
     return { ids: ids.filter((id) => typeof id === 'string' && llmHelper.canDispatchFastModel(id)) };
+  });
+
+  // ── "Reads images: Auto / On / Off" per model (2026-10-01) ────────────────
+  // Main answers for the same reason as above: the renderer sends picker ids
+  // and main, which owns the classifiers and the saved answers, says what each
+  // one is. The listener is (re)attached on every call so it follows the live
+  // helper; it tells every window to ask again when an answer changed — a
+  // setting, or a one-time image test that finished in the background.
+  const visionHelper = () => {
+    const llmHelper = appState.processingHelper.getLLMHelper();
+    llmHelper.onVisionCapabilityChanged(() => {
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('vision-capability-changed');
+      });
+    });
+    return llmHelper;
+  };
+  safeHandle('vision-capability:describe', async (_, ids: string[]) => {
+    if (!Array.isArray(ids)) return { states: {} };
+    return { states: visionHelper().describeVisionModels(ids.filter((id) => typeof id === 'string')) };
+  });
+  safeHandle('vision-capability:set', async (_, id: string, setting: 'auto' | 'on' | 'off') => {
+    if (typeof id !== 'string' || !['auto', 'on', 'off'].includes(setting)) return { state: null };
+    return { state: visionHelper().setVisionSetting(id, setting) };
+  });
+  safeHandle('vision-capability:retest', async (_, id: string) => {
+    if (typeof id !== 'string') return { state: null };
+    return { state: await visionHelper().retestVision(id) };
   });
 
   safeHandle('get-fast-model', async () => {

@@ -232,7 +232,28 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
    retired model. **Phase 3b** (built): the direct DeepSeek adapter attaches
    images; a selected DeepSeek Flash reads its own screenshots in the chat path
    and Direct Assist. The screen-reading path gets its DeepSeek rung in phase 5.
-4. **Auto / On / Off override** plus the picker marker.
+4. **Auto / On / Off override** plus the picker marker (built, 2026-10-01).
+   - The user's answer is saved beside the catalogues and test results
+     (`overrides`, optional, no version bump) and asked FIRST by the resolver.
+     Off beats everything; On beats provider data, a saved test and the name
+     list, but not a route with nowhere to put an image.
+   - Off is about the MODEL, whichever rung would send to it: the fixed vendor
+     rungs in the chat chain (`fixedRungModel`) and the pre-pass
+     (`FIXED_RUNG_PROVIDER`) skip a model switched off. The image test never
+     runs for a model the user answered for.
+   - Settings › AI Providers: every chat-model row has a glyph (reads / does
+     not / not known; an accent dot when the user set it) that discloses an
+     in-flow line: Auto · On · Off, what Auto says and why, and **Test now /
+     Test again** — the way out of a wrong saved "can't read images" that the
+     review asked for. An inconclusive test says so. Ollama rows have it too.
+     Custom providers keep their own "Screenshot / Vision Support" control.
+   - **Deviation from §4:** the overlay picker marks the models that CANNOT
+     read screenshots, not the ones that can. Almost every model can, and a
+     glyph on every row would cost each name 16 px of a 141 px panel (a
+     trailing slot on every row was rejected there once already).
+   - Main owns the answer: `vision-capability:describe / set / retest` and a
+     `vision-capability-changed` event. One classifier for a cloud model id
+     (`classifyCloudModel`) serves the live selection and the Settings lookup.
 5. **Selected model first in both chains.** Built before phase 4 (Evin,
    2026-10-01: phase 4 is Settings UI and needs the dev app; this is
    main-process routing). In two parts.
@@ -367,12 +388,38 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
      screenshot is sent only on a pass. Never in the private modes. Live:
      DeepSeek Pro is tested in 2.4 s, saved as not reading images and refused.
 
-   **Still open after 5c-2:**
-   - Codex and Antigravity pre-pass rungs, each only if a measurement in a
-     signed-in app shows it answers comfortably inside the 6 s budget (Evin:
-     "add them in 5c after measuring"). Needs Evin: the dev instance has its
-     own empty profile.
-   - Phase 4 (the Auto / On / Off override and the picker marker).
+   **Codex pre-pass: measured, not added (2026-10-01).** The real pre-pass
+   prompt and a real screenshot through the real Codex transport (the
+   machine's own `codex login`), complete answer: gpt-5.5 5.9–6.7 s over 7
+   runs (1 inside 6 s), gpt-6-luna 5.6–6.5 s (3 of 5), gpt-5.6-luna 6.2–7.9 s
+   (0 of 5). First token is ~2.3 s; the ~750-character extraction is the
+   rest. It does not fit the 6 s budget, so by Evin's rule no rung is built.
+
+   **Still open:**
+   - An Antigravity pre-pass rung, on the same rule. Not measurable without
+     Evin: its sign-in lives in the real app's encrypted store.
+
+## 7. Follow-ups from the whole-session review (2026-10-01)
+
+- **Screen text from a kept-on-device screenshot never goes to a cloud
+  model.** The setting was enforced on image bytes only; the text a local
+  model read travelled as prose (a model switch mid-session, the description
+  cache, Direct Assist's history). A description made under that setting now
+  carries a mark in the text itself (`on-device-screen.ts`). History shows it
+  only when the selected provider is on this device and otherwise puts a short
+  note in its place; the last boundary before every cloud provider refuses a
+  payload carrying it. Sticky. Not covered, by decision: the answer the local
+  model gave about that screenshot is conversation and stays in history.
+- **A remote Ollama is admitted on exactly the old name list** (or an explicit
+  On for the selected model): the consolidated list had quietly added names.
+- **"Still being read"** replaces "could not be transcribed" while a record is
+  in flight; a failed test beats a catalogue "yes"; a screen text whose turn
+  is gone is dropped rather than given to a look-alike turn.
+- **The image test's judge** reads typographic apostrophes: deepseek-v4-pro's
+  real reply ("I can’t view or interpret images") was being left as "not known".
+- **Tests:** about a dozen that could not fail were repaired, and the paths
+  that had no executing test got one (`VisionTestGaps`, `VisionProbeShipped`),
+  each checked against a deliberately broken build.
 
 ### Verification status
 
@@ -386,6 +433,13 @@ In Settings › AI Providers, each model row gets **Reads images: Auto / On / Of
 | 5b | full suite | the real registry + pre-pass chain: DeepSeek Flash answers in 1.6–1.9 s; Pro not tried; cloud order unchanged with Gemini keyed | not run (no renderer change) |
 | 5c-1 | full suite | none possible: no Ollama on the development machine; a fake Ollama HTTP server, requests asserted on the wire | not run |
 | 5c-2 | full suite | the on-the-spot test with the real DeepSeek adapter (Pro: tested, refused); the local-endpoint path against a fake endpoint on loopback | not run |
+| 4 | full suite | "Test now" through the real DeepSeek adapter (Pro: "No · tested"); an out-of-credit AgentRouter account reads as "could not test", not "no" | **yes**, dev app with real keys: the row control, a setting surviving a restart, 389 OpenRouter rows from its catalogue, the picker marker |
+| §7 | full suite | none possible for the on-device rule (no Ollama here); fake Ollama and fake endpoints, requests asserted on the wire | not run |
+
+Not checked against the real thing, and why: a real Ollama and a real local
+endpoint (none on the development machine, and no room to install one); the
+Claude request change against Anthropic directly (no Anthropic key; the
+AgentRouter account that fronts Claude is out of credit).
 
 Windows: no phase added OS-specific code; none has been run on Windows.
 

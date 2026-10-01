@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import { Check, Loader2 } from 'lucide-react';
+import { Check, ImageOff, Loader2 } from 'lucide-react';
 import { groupModelOptions, type ModelSelectorOption } from './ui/modelSelectorGroups';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
 import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, gatewayModelLabel, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
@@ -310,6 +310,36 @@ const ModelSelectorWindow = () => {
         };
     }, []);
 
+    // Which listed models cannot read a screenshot (2026-10-01). Marked on the
+    // row, because that is the moment it matters: picking one means a screen
+    // question is answered by another provider, or not at all. Only the
+    // exception is marked — most models read images, and a glyph on every row
+    // would cost each name 16px of a 141px panel. Main owns the answer
+    // (the user's Auto / On / Off in Settings included); a custom provider has
+    // none here (its own Settings control decides), so it is never marked.
+    const [textOnlyIds, setTextOnlyIds] = useState<ReadonlySet<string>>(() => new Set());
+    const visionIdsKey = useMemo(
+        () => availableModels.filter(m => m.type !== 'custom').map(m => m.id).join('\n'),
+        [availableModels],
+    );
+    useEffect(() => {
+        if (!visionIdsKey) { setTextOnlyIds(new Set()); return; }
+        let cancelled = false;
+        let token = 0;
+        const load = async () => {
+            const mine = ++token;
+            try {
+                const result = await window.electronAPI?.getVisionModelStates?.(visionIdsKey.split('\n'));
+                if (cancelled || mine !== token || !result?.states) return;
+                setTextOnlyIds(new Set(Object.entries(result.states).filter(([, s]) => s?.reads === 'no').map(([id]) => id)));
+            } catch { /* no marker is the safe default */ }
+        };
+        void load();
+        // A setting changed in Settings, or a background image test finished.
+        const off = window.electronAPI?.onVisionCapabilityChanged?.(() => { void load(); });
+        return () => { cancelled = true; off?.(); };
+    }, [visionIdsKey]);
+
     const handleSelectFn = (modelId: string) => {
         setCurrentModel(modelId);
         localStorage.setItem('cached-current-model', modelId);
@@ -478,6 +508,11 @@ const ModelSelectorWindow = () => {
                                                     className={`w-full h-[30px] pl-2 pr-1.5 flex items-center gap-1.5 text-left rounded-[10px] transition-colors duration-100 overlay-text-primary model-selector-row ${rowHoverClass} ${isSelected ? 'model-selector-row-selected' : ''}`}
                                                 >
                                                     <span className="text-[12px] font-medium truncate flex-1 min-w-0">{model.label}</span>
+                                                    {/* No `title`: an overlay tooltip is a separate window
+                                                        that screen capture can see. */}
+                                                    {textOnlyIds.has(model.id) && (
+                                                        <ImageOff className="w-3 h-3 shrink-0 opacity-50" strokeWidth={1.75} role="img" aria-label="Can't read screenshots" />
+                                                    )}
                                                     {/* Only the checked row gives up room for the check:
                                                         reserving it on every row left a visible gap beside
                                                         names that were being cut short. */}

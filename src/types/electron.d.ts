@@ -100,6 +100,24 @@ export type DirectAssistEvent =
   | { type: 'error'; requestId: string; sequence: number; partial: boolean; error: DirectAssistError }
   | { type: 'cancel'; requestId: string; sequence: number }
 
+/** Mirrors electron/llm/visionResolver.ts VisionModelState (the renderer never imports from electron/*). */
+export interface VisionModelState {
+  /** The user's own answer; `auto` leaves it to Natively. */
+  setting: 'auto' | 'on' | 'off'
+  /** The answer in force, the setting included, and where it came from. */
+  reads: 'yes' | 'no' | 'unknown'
+  source: 'override' | 'route' | 'provider' | 'test' | 'names' | null
+  /** What Natively itself can tell. */
+  auto: { reads: 'yes' | 'no' | 'unknown'; source: 'override' | 'route' | 'provider' | 'test' | 'names' | null; testedAt?: number }
+  provider: string
+  /** A one-time image test of this model is running now. */
+  checking: boolean
+  /** The one-time test may ask this model now. */
+  testable: boolean
+  /** Only on the answer to "Test again": the test ran and could not finish. */
+  inconclusive?: boolean
+}
+
 export interface ElectronAPI {
   updateContentDimensions: (dimensions: {
     width: number
@@ -819,6 +837,13 @@ export interface ElectronAPI {
   setFastModel: (modelId: string | null) => Promise<{ success: boolean; error?: string }>;
   /** Narrows picker options to the ids the fast path can actually dispatch. */
   filterFastModelCandidates: (ids: string[]) => Promise<{ ids: string[] }>;
+  /** "Reads images: Auto / On / Off" per model. Keyed by picker id; null = that id has no row control. */
+  getVisionModelStates: (ids: string[]) => Promise<{ states: Record<string, VisionModelState | null> }>;
+  setVisionSetting: (id: string, setting: 'auto' | 'on' | 'off') => Promise<{ state: VisionModelState | null }>;
+  /** Forget the saved image test and ask the model again now. */
+  retestVision: (id: string) => Promise<{ state: VisionModelState | null }>;
+  /** An answer changed (a setting, or a background image test finished): ask again. */
+  onVisionCapabilityChanged: (callback: () => void) => () => void;
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) => Promise<void>;
   modelSelectorCloseIfOpen: () => Promise<void>;
   // NOTE: this interface and the one in electron/preload.ts are maintained

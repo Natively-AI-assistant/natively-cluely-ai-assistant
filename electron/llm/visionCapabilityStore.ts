@@ -29,7 +29,15 @@ interface TestResult { reads: boolean; at: number }
 // `tests` is optional and was added in phase 3 WITHOUT a version bump: load()
 // starts empty on any other version, so bumping it would have erased every
 // user's saved OpenRouter catalogue on upgrade.
-interface PersistedShape { version: number; providers: Record<string, ProviderCatalogue>; tests?: Record<string, Record<string, TestResult>> }
+//
+// `overrides` (phase 4) is optional for the same reason: the user's own
+// Auto / On / Off answer per model. true = On, false = Off; Auto is absence.
+interface PersistedShape {
+  version: number;
+  providers: Record<string, ProviderCatalogue>;
+  tests?: Record<string, Record<string, TestResult>>;
+  overrides?: Record<string, Record<string, boolean>>;
+}
 
 const catalogueKey = (provider: string, baseURL: string) => `${provider}|${baseURL}`;
 const RESAVE_UNCHANGED_AFTER_MS = 60 * 60 * 1000;
@@ -44,6 +52,7 @@ export class VisionCapabilityStore {
   private readonly now: () => number;
   private providers = new Map<string, ProviderCatalogue>();
   private tests = new Map<string, Record<string, TestResult>>();
+  private overrides = new Map<string, Record<string, boolean>>();
   /** When each catalogue was last written to disk (its fetchedAt in the file). */
   private savedAt = new Map<string, number>();
 
@@ -94,6 +103,32 @@ export class VisionCapabilityStore {
     this.save();
   }
 
+  /** The user's own answer for a model: true (On), false (Off), undefined (Auto). */
+  override(provider: string, baseURL: string, wireModel: string): boolean | undefined {
+    const models = this.overrides.get(catalogueKey(provider, baseURL));
+    return models && Object.prototype.hasOwnProperty.call(models, wireModel) ? models[wireModel] : undefined;
+  }
+
+  /** true = On, false = Off, null = back to Auto. False when the file could not be written. */
+  setOverride(provider: string, baseURL: string, wireModel: string, value: boolean | null): boolean {
+    const key = catalogueKey(provider, baseURL);
+    const next = { ...(this.overrides.get(key) ?? {}) };
+    if (value === null) delete next[wireModel]; else next[wireModel] = value;
+    if (Object.keys(next).length === 0) this.overrides.delete(key); else this.overrides.set(key, next);
+    return this.save();
+  }
+
+  /** Forget a saved test result, so the model is tested afresh. */
+  forgetTest(provider: string, baseURL: string, wireModel: string): void {
+    const key = catalogueKey(provider, baseURL);
+    const models = this.tests.get(key);
+    if (!models || !Object.prototype.hasOwnProperty.call(models, wireModel)) return;
+    const next = { ...models };
+    delete next[wireModel];
+    this.tests.set(key, next);
+    this.save();
+  }
+
   private load(): void {
     if (!this.filePath) return;
     try {
@@ -119,9 +154,19 @@ export class VisionCapabilityStore {
           this.tests.set(key, clean);
         }
       }
+      // Optional since phase 4.
+      if (parsed.overrides && typeof parsed.overrides === 'object') {
+        for (const [key, models] of Object.entries(parsed.overrides)) {
+          if (!models || typeof models !== 'object') continue;
+          const clean: Record<string, boolean> = {};
+          for (const [id, v] of Object.entries(models)) if (typeof v === 'boolean') clean[id] = v;
+          if (Object.keys(clean).length > 0) this.overrides.set(key, clean);
+        }
+      }
     } catch {
       this.providers.clear(); // corrupt: start empty; the next write repairs the file
       this.tests.clear();
+      this.overrides.clear();
     }
   }
 
@@ -129,7 +174,10 @@ export class VisionCapabilityStore {
   private save(): boolean {
     if (!this.filePath) return true;
     try {
-      const payload: PersistedShape = { version: SCHEMA_VERSION, providers: Object.fromEntries(this.providers), tests: Object.fromEntries(this.tests) };
+      const payload: PersistedShape = {
+        version: SCHEMA_VERSION, providers: Object.fromEntries(this.providers),
+        tests: Object.fromEntries(this.tests), overrides: Object.fromEntries(this.overrides),
+      };
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
       // tmp + rename, as ProviderPerformanceStore and SettingsManager do: a crash
       // mid-write leaves the previous good file, not a truncated one.
@@ -185,4 +233,14 @@ export function storedVisionTest(provider: string, routedModel: string, baseURL 
   const wire = (routedModel || '').startsWith(`${provider}/`) ? routedModel.slice(provider.length + 1) : routedModel;
   const saved = getVisionCapabilityStore().tested(provider, baseURL, wire);
   return saved && now - saved.at < VISION_TEST_FRESH_MS ? saved : undefined;
+}
+
+/** The wire id a ROUTED id is saved under (`openrouter/openai/gpt-4o` → `openai/gpt-4o`). */
+export function visionWireModel(provider: string, routedModel: string): string {
+  return (routedModel || '').startsWith(`${provider}/`) ? routedModel.slice(provider.length + 1) : (routedModel || '');
+}
+
+/** The user's Auto / On / Off answer for a ROUTED id: true (On), false (Off), undefined (Auto). */
+export function storedVisionOverride(provider: string, routedModel: string, baseURL = ''): boolean | undefined {
+  return getVisionCapabilityStore().override(provider, baseURL, visionWireModel(provider, routedModel));
 }

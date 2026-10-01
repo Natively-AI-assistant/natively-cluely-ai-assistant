@@ -34,6 +34,7 @@ import {
 import type { AnswerSurface, EvidenceScope } from '../contracts/types';
 import type { ProviderDataScope } from '../../llm/ProviderRouter';
 import { describeUserInstructionDelivery } from '../../llm/userInstructionContract';
+import { readSelectionStaysOnDevice } from '../../llm/activeCustomProvider';
 
 /**
  * Credential-scrub a [V3] trace payload before stringifying. Keeps every
@@ -413,6 +414,9 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
             // evicted every older turn.
             screenBudgetChars: MAX_TURN_SCREEN_CHARS * 2,
             screensDenied,
+            // Text read off a kept-on-device screenshot: shown only when this
+            // turn stays on this device. Asked live, like the scope above.
+            onDeviceScreens: readSelectionStaysOnDevice(),
             // Older exchanges this question is about, in full (RECALL tier).
             query: question,
             recallBudgetChars: RECALL_BUDGET_CHARS,
@@ -469,6 +473,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
             // prompt on every what-to-answer and assist turn.
             screenBudgetChars: MAX_TURN_SCREEN_CHARS * 2,
             screensDenied: isScopeDenied('screenshots', readProviderScopePolicy()),
+            onDeviceScreens: readSelectionStaysOnDevice(),
             // Dedupe against the ACTUAL window text, not "was it recent": the
             // 2,400-char cut lands inside the 90 seconds, so recency alone
             // could leave a turn in neither place. A screen turn is never
