@@ -64,7 +64,9 @@ describe('the adapter', () => {
     assert.equal(user.content[1].type, 'image_url');
     assert.match(user.content[1].image_url.url, /^data:image\/png;base64,/);
     assert.deepEqual(scopes, [{ provider: 'deepseek', images: 1 }], 'the screenshots scope is checked with the image, not the text alone');
-    assert.equal(requests[0].model, 'deepseek-v4-flash');
+    // `deepseek-v4-flash` is a retired id DeepSeek serves as `deepseek-flash`
+    // (deepseekWireModel); the image travels with the successor.
+    assert.equal(requests[0].model, 'deepseek-flash');
     fs.rmSync(img, { force: true });
   });
   test('without an image: byte-for-byte the text request it always sent', async () => {
