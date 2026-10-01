@@ -37,10 +37,21 @@ function scoreTable(title, set, cols) {
   console.log(`\n### ${title}\n`);
   console.log(`| Mode | ${J.map(([l]) => `${l} mean | p10 | hard fails`).join(' | ')} |`);
   console.log(`|---|${J.map(() => '---:|---:|---:').join('|')}|`);
+  // A column judged on fewer than 90% of a mode's items is PARTIAL (a batch ran out): its mean is marked † and is
+  // not comparable with the full columns; under a quarter of the items it is not shown at all.
+  const count = (j, m) => Object.values(j).filter((x) => m === 'ALL' || x.mode === m).length;
+  let partial = false;
   for (const m of [...MODES, 'ALL']) {
-    const cells = J.map(([, j]) => { const v = Object.values(j).filter((x) => m === 'ALL' || x.mode === m); const s = v.map((x) => x.official.overall); return `${f2(mean(s))} | ${f1(pct(s, 0.1))} | ${v.length ? `${v.filter((x) => x.official.hard_fail).length}/${v.length}` : '—'}`; });
+    const full = Math.max(...J.map(([, j]) => count(j, m)));
+    const cells = J.map(([, j]) => {
+      const v = Object.values(j).filter((x) => m === 'ALL' || x.mode === m); const s = v.map((x) => x.official.overall);
+      if (!v.length || v.length < 0.25 * full) return `— | — | ${v.length ? `(${v.length} judged)` : '—'}`;
+      const mark = v.length < 0.9 * full ? '†' : ''; if (mark) partial = true;
+      return `${f2(mean(s))}${mark} | ${f1(pct(s, 0.1))} | ${v.filter((x) => x.official.hard_fail).length}/${v.length}`;
+    });
     console.log(`| ${m === 'ALL' ? '**All**' : NAME[m]} | ${cells.join(' | ')} |`);
   }
+  if (partial) console.log('\n† partial: judged on fewer than 90% of that mode\'s items (the judge batch ran out). Use the paired lines below, which compare common items only.');
   return J;
 }
 function pairedLine(set, a, b) {
