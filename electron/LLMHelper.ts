@@ -172,6 +172,10 @@ const GROQ_VISION_MAX_IMAGES = 5
 // trusted. The probe itself can take 5s per request against a hung daemon.
 const OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS = 1500
 const OLLAMA_VISION_NEGATIVE_TTL_MS = 30_000
+// "Keep screenshots on this device" waits for this answer before it can answer
+// at all, so it gets longer than the cloud chain's 1.5 s (the old check allowed
+// 10 s). A daemon slower than this still fills the cache for the next turn.
+const OLLAMA_LOCAL_VISION_PROBE_BUDGET_MS = 5_000
 const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
 // Auto Answer judge on the OpenAI rung — chosen by MEASUREMENT, not by size.
@@ -3300,14 +3304,18 @@ export class LLMHelper {
         }
         if (encoded.length > 0) images = encoded;
       }
+      // An image goes to the model that reads images (2026-10-01): the one the
+      // local-vision check resolved, which is the selected model whenever that
+      // one reads images itself. A text turn is unchanged.
+      const ollamaModel = (images && this.ollamaVisionModel) || this.ollamaModel;
 
       const sys = systemPrompt ? this.resolveLocalSystemPrompt(systemPrompt) : TINY_SYSTEM_PROMPT;
       // Per-request hard guard: trim userContent (never sys) until total fits the model's max ctx.
       let userContent = prompt;
-      const maxCtx = getModelCapabilities(this.ollamaModel, true).maxContextTokens;
+      const maxCtx = getModelCapabilities(ollamaModel, true).maxContextTokens;
       let total = estimateTokens(sys) + estimateTokens(userContent) + 2000;
       if (total > maxCtx) {
-        console.warn('[Ollama] context overflow', { model: this.ollamaModel, total, max: maxCtx });
+        console.warn('[Ollama] context overflow', { model: ollamaModel, total, max: maxCtx });
         const lines = userContent.split('\n');
         while (lines.length > 1 && (estimateTokens(sys) + estimateTokens(lines.join('\n')) + 2000) > maxCtx) {
           lines.shift();
@@ -3321,10 +3329,10 @@ export class LLMHelper {
         userMessage,
       ];
 
-      console.log(`[LLMHelper] Ollama call → model=${this.ollamaModel} sysLen=${sys.length} userLen=${userContent.length} images=${images?.length ?? 0}`);
+      console.log(`[LLMHelper] Ollama call → model=${ollamaModel} sysLen=${sys.length} userLen=${userContent.length} images=${images?.length ?? 0}`);
 
       const ollamaBody: any = {
-        model: this.ollamaModel,
+        model: ollamaModel,
         messages,
         stream: false,
         // Keep the model resident between turns (see ollamaKeepAlive / streamWithOllama).
@@ -3334,7 +3342,7 @@ export class LLMHelper {
           top_p: 0.9,
         }
       };
-      if (this.isThinkingModel(this.ollamaModel)) ollamaBody.think = false;
+      if (this.isThinkingModel(ollamaModel)) ollamaBody.think = false;
       const response = await fetch(`${this.ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3401,7 +3409,7 @@ export class LLMHelper {
    * possible silently reassigned the user's runtime model selection. A
    * Settings poll doing that a few times a second is not a hypothetical.
    */
-  private async probeOllama(needsVision: boolean): Promise<{ ok: boolean; model?: string }> {
+  private async probeOllama(needsVision: boolean): Promise<{ ok: boolean; model?: string; visionModel?: string }> {
     // No exemption for the local provider: the user switched it off in the same
     // Settings panel as the cloud ones. A scope-denied turn then degrades to a
     // scrubbed cloud payload or a clean error instead of a local answer the
@@ -3416,8 +3424,17 @@ export class LLMHelper {
       const model = (this.ollamaModel && availableModels.includes(this.ollamaModel))
         ? this.ollamaModel
         : availableModels[0];
-      const capabilities = getModelCapabilities(model, true);
-      if (needsVision && !capabilities.supportsImages) return { ok: false, model };
+      if (needsVision) {
+        // ANY installed model that reads images, per /api/show (2026-10-01).
+        // This used to ask whether the SELECTED model's NAME looked like a
+        // vision model, so a user on a text model with llava installed — and a
+        // vision model whose name is on no list — was told no local vision
+        // exists. The resolver is the one the cloud chain already uses; the
+        // sites that dispatch on this answer send to the model it names
+        // (localVisionOverride), never to `model`.
+        const visionModel = await this.resolveLocalVisionModel();
+        return visionModel ? { ok: true, model, visionModel } : { ok: false, model };
+      }
       const response = await fetch(`${this.ollamaUrl}/api/show`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3430,6 +3447,26 @@ export class LLMHelper {
       console.warn('[ScopeFallback] Ollama availability check failed:', message);
       return { ok: false };
     }
+  }
+
+  /**
+   * The installed Ollama model that will read a screenshot that must stay on
+   * this machine, or null. Only when Ollama is the selected provider: a daemon
+   * the user did not choose is never probed. Cached after the first answer.
+   */
+  private async resolveLocalVisionModel(): Promise<string | null> {
+    if (!this.useOllama || this.isProviderDisabled('ollama')) return null;
+    return this.resolveOllamaVisionModelForChain(OLLAMA_LOCAL_VISION_PROBE_BUDGET_MS);
+  }
+
+  /**
+   * The model a LOCAL dispatch carrying images must name: the one the check
+   * above found. Undefined for a text turn (the selected model answers) and
+   * when nothing was resolved (the caller keeps today's behaviour).
+   */
+  private localVisionOverride(imagePaths?: readonly string[] | string): string | undefined {
+    const carriesImages = Array.isArray(imagePaths) ? imagePaths.length > 0 : Boolean(imagePaths);
+    return carriesImages ? (this.ollamaVisionModel ?? undefined) : undefined;
   }
 
   /**
@@ -10064,7 +10101,7 @@ let isMultimodal = !!(imagePaths?.length);
       }
       if (ollamaAvailable) {
         const ollamaScopePrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT));
-        yield* this.streamWithOllama(message, context, ollamaScopePrompt, imagePaths, abortSignal);
+        yield* this.streamWithOllama(message, context, ollamaScopePrompt, imagePaths, abortSignal, this.localVisionOverride(imagePaths));
         return;
       }
       if (deniedOutboundScopes.includes('transcript')) context = undefined;
@@ -10097,7 +10134,7 @@ let isMultimodal = !!(imagePaths?.length);
         if (localVisionAvailable) {
           console.warn(`[VisionPolicy] routing screenshot to local vision: ${visionDecision.reason}`);
           const localVisionPrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT));
-          yield* this.streamWithOllama(message, context, localVisionPrompt, imagePaths, abortSignal);
+          yield* this.streamWithOllama(message, context, localVisionPrompt, imagePaths, abortSignal, this.localVisionOverride(imagePaths));
           return;
         }
         if (visionDecision.whenLocalUnavailable === 'block') {
@@ -13627,14 +13664,14 @@ let isMultimodal = !!(imagePaths?.length);
    * with any concurrent caller), so a slow-but-alive daemon still populates
    * ollamaVisionModel for the next screenshot.
    */
-  private async resolveOllamaVisionModelForChain(): Promise<string | null> {
+  private async resolveOllamaVisionModelForChain(budgetMs: number = OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS): Promise<string | null> {
     if (!this.useOllama) return null;
     if (this.ollamaVisionModel) return this.ollamaVisionModel;
     if (Date.now() < this.ollamaVisionNegativeUntil) return null;
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<null>((resolve) => {
-      timer = setTimeout(() => resolve(null), OLLAMA_VISION_CHAIN_PROBE_BUDGET_MS);
+      timer = setTimeout(() => resolve(null), budgetMs);
     });
     const model = await Promise.race([this.refreshOllamaVisionModel(), timedOut]);
     clearTimeout(timer);
