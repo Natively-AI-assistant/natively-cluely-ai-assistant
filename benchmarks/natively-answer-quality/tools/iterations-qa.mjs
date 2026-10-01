@@ -23,7 +23,8 @@ const RUNS = [
   { id: 'aq2-dev-fix8', label: 'fix8', commit: '13b649c7', contains: 'fix7 + I18 + language rail' },
   { id: 'aq2-dev-fix9', label: 'fix9', commit: '8e30ca40', contains: 'fix8 + I21 + I22 + tidy' },
   { id: 'aq2-dev-fix10', label: 'fix10', commit: '497c9ba9', contains: 'fix9 + claim kinds in the verifier' },
-  { id: 'aq2-dev-fix11', label: 'fix11 (candidate)', commit: 'ab264bb3', contains: 'fix10 + source-word rail' },
+  { id: 'aq2-dev-fix11', label: 'fix11', commit: 'ab264bb3', contains: 'fix10 + source-word rail' },
+  { id: 'aq2-dev-fix12', label: 'fix12 (Seminar rows only)', commit: 'f0c3a263', contains: 'fix11 + Seminar study-scope clause; other modes identical to fix11' },
 ];
 
 const ITERATIONS = [
@@ -96,11 +97,11 @@ const ITERATIONS = [
     'The edit said its prompt\'s word aloud ("The material gives both…", 3 of 61 edits).',
     '`SOURCE_WORD_RE` rail (`source_exposed`); rules 3 and 4 no longer make "the material" the subject of a spoken sentence.',
     'In the app: 0 source words in a shown answer on dev, holdout and supp-behavior.', 'Built; judged with fix11.'],
-  ['I25', 'e7325287', 'fix12 (not run in the app yet)', 'An honest limit is not a claim',
-    'The verifier filed "I can\'t confirm a credit on this call" and "We didn\'t measure anything about colonies" as unsupported claims and removed them: asked "am I getting money back for today or not?", the shown reply was "I\'ll get the outage documented… Can I get your account number". fix11 dev: 21 of 41 drafts that stated a limit lost it (fix6: 8 of 38); one supp-behavior validator failed because of it.',
-    'Three narrowings of existing rules: the never-list names an honest limit (not knowing, cannot confirm or promise yet) and what the request itself states; "Never say you cannot speak to…" becomes "Never add…"; in Seminar a study\'s scope is closed ("we did not measure X" is supported when the study as described does not include X). Invented capability or policy limits ("I can\'t send a reset by text") are still removed.',
-    'Replay on the fix11 drafts: limits lost 19 → 10 of 41 (dev) and 3 → 1 of 6 (supp-behavior); edits 109 → 94; the "not measured" validator 2/6 → 6/6 over six repeats; the invented reset-by-text restriction still removed 6/6.',
-    'Source committed and unit-tested; not run in the app and not judged. Built only if fix11 is kept as the base.'],
+  ['I25', 'f0c3a263', 'fix12 (Seminar re-run only)', 'In Seminar, "we did not measure that" is kept',
+    'Asked whether the extra foraging helped honeybee colonies, the draft said "We didn\'t measure anything about colonies or nests" — what the paper supports — and the verifier removed it as an unsupported denial. One supp-behavior validator failed because of it (2 of 6 replays pass), which is why fix11 was not promoted despite its holdout gain.',
+    'A study\'s scope is closed: in Seminar, that the study did not measure, test or include something the material never mentions is supported. No other mode\'s prompt changes. A wider exemption for any honest limit ("I can\'t confirm a credit on this call") in every mode was built first (e7325287) and taken back.',
+    'Replay: the validator passes 6 of 6 with the clause. The wider exemption halved the limits removed (19 → 10 of 41 drafts) but the judge scored its 44 target drafts −0.02 (±0.24): it prefers the reply without the hedge.',
+    'Built; Seminar rows re-run in the app; decision pending its judge read.'],
 ];
 
 const REJECTED = [
@@ -110,6 +111,9 @@ const REJECTED = [
   ['I13 Team Meet wording', 'no effect in the app → replaced by the deterministic I15'],
   ['Removing the Today line (I17)', 'not needed: the Team Meet "regression" was the judge reading "tomorrow" a day late; fixed in the judge envelope'],
   ['Verifier wording with more rules per claim kind (scratch-v2)', '7.99 vs 8.20, sampling noise'],
+  ['A general "honest limit is not a claim" exemption in every mode (e7325287)', 'judged −0.02 (±0.24) on its 44 target drafts; the pass also stopped removing the invented process beside the limit'],
+  ['"An explicitly older version is not a conflict"', 'the list step then stopped naming genuine conflicts (3/6 → 0/6, 5/6 → 0/6)'],
+  ['Call Center: keep every "I can\'t…" the draft says', 'brought back the invented restrictions ("I can\'t send a reset by text")'],
   ['I19 technical second look for Technical interview', 'found 2 of 7 known errors; one of its two fixes was wrong'],
   ['I20 list facts the documents hold that the answer left out', '−0.01 (±0.20)'],
   ['I23 "what to say instead" rules for Looking for work', '+0.13 (±0.44); the judge capped the reframed motives too'],
