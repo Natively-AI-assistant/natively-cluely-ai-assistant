@@ -14,12 +14,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const opt = (k, d = null) => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : d; };
-const run = opt('run'); const name = opt('name'); const modes = opt('mode') ? new Set(opt('mode').split(',')) : null;
+const run = opt('run'); const name = opt('name'); const modes = opt('mode') ? new Set(opt('mode').split(',')) : null; const ids = opt('ids') ? new Set(opt('ids').split(',')) : null;
 const cv = await import(pathToFileURL(path.resolve(opt('module'))).href);
 const env = fs.readFileSync(process.env.NATIVELY_ENV_FILE || '/Users/evin/natively-cluely-ai-assistant/.env', 'utf8');
 const KEY = (env.match(/^DEEPSEEK_API_KEY=(.*)$/m)?.[1] ?? '').trim().replace(/^["']|["']$/g, '');
 const rows = fs.readFileSync(path.join(ROOT, 'results', run, 'natively_benchmark_full.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
-  .filter((r) => !modes || modes.has(r.mode));
+  .filter((r) => (!modes || modes.has(r.mode)) && (!ids || ids.has(r.benchmark_id)));
 const wires = Object.fromEntries(fs.readFileSync(path.join(ROOT, 'results', run, 'natively_benchmark_wire.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => { const w = JSON.parse(l); return [w.benchmark_id, w]; }));
 const lim = (n) => { let a = 0; const q = []; const nx = () => { if (a >= n || !q.length) return; a++; const { f, r, j } = q.shift(); f().then(r, j).finally(() => { a--; nx(); }); }; return (f) => new Promise((r, j) => { q.push({ f, r, j }); nx(); }); };
 const L = lim(Number(opt('concurrency', 8)));
@@ -38,7 +38,7 @@ await Promise.all(rows.map((r) => L(async () => {
           messages: [{ role: 'system', content: system }, { role: 'user', content: cv.claimVerifierStandaloneMessage(material, cv.splitGistTrailer(answer).body) }] }) });
       const j = await res.json();
       const v = cv.acceptVerifiedAnswer({ original: answer, edited: j.choices?.[0]?.message?.content ?? '', material });
-      Object.assign(rec, { answer: v.text, outcome: v.reason, ms: Date.now() - t0, out_tokens: j.usage?.completion_tokens ?? null, ...(cv.splitScratch ? { scratch: cv.splitScratch(j.choices?.[0]?.message?.content ?? '').scratch.trim() } : {}) });
+      Object.assign(rec, { answer: v.text, outcome: v.reason, ms: Date.now() - t0, out_tokens: j.usage?.completion_tokens ?? null, ...((cv.splitScratch ?? cv.splitVerifierScratch) ? { scratch: (cv.splitScratch ?? cv.splitVerifierScratch)(j.choices?.[0]?.message?.content ?? '').scratch.trim() } : {}) });
     } catch (e) { rec.outcome = `error`; }
   }
   fs.appendFileSync(outFile, JSON.stringify(rec) + '\n');
