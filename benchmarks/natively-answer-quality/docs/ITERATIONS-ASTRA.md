@@ -386,3 +386,25 @@ Paired per-mode reads with `astra/paired.mjs` (same items, official score, 95% i
 * Seminar, every turn, subject = the research: 8.64 → 8.99 (+0.35 ±0.37), hard fails 3 → 1.
 * Cost to state plainly: with I18 + I21 + I22 every spoken answer except Lecture and non-personal Technical
   interview pays the ~0.9 s pass and the replace-after-stream.
+
+### fix8 in-app (I18 + language rail, aq-fix2 13b649c7) — objective read; judge at 11:00Z
+* 360 rows, 0 failed, 0 non-English answers. Validators 8/9 (= fix6; DTEAM-034 still fails). Epistemic lines 11 → 5.
+* Verifier: ran on 220 of 360 turns; 144 edited, 71 unchanged, 5 rejected by rails (3 epistemic_introduced,
+  1 denial_introduced, 1 too_short); p50 951 ms, p90 1354 ms, max 2357 ms (budget 3500).
+* Latency vs fix6: TTFT p50 854 → 908 ms; total p50 1555 → 1907 ms, p95 2753 → 3415 ms. Team Meet total p50
+  1192 → 2133, Recruiting 1020 → 1987 (newly verified).
+* Spoken turns whose text is replaced after streaming: Sales 22/28, Call Center 23/30, LFW 27/32, Team Meet 17/28,
+  Recruiting 13/27, General 7/19, TI 6/29, Seminar 2/32, Lecture 0/20. This is the product trade-off of the pass.
+* Two defects of the new code found by reading the edits, fixed in 8e30ca40: a trailing quotation mark was stripped
+  from replies ending on a quoted line (6 of 149 edits; for 5 the only change → a pointless swap that dropped the
+  GIST chip); doubled spaces where a dash was normalised (35 of 149).
+* 02:00Z ration: ~2,160 judgments, 402 at 03:30Z. Blind pairwise cur vs fix6 stopped at 155 of 360 pairs: fix6 76,
+  ties 17, cur 62 (decisive 12 vs 2); Sales 30–9; General 13–18 (cur's wins 17 slight / 1 clear, fix6's 9 of 13
+  clear or decisive); Team Meet 12–17.
+
+### Candidate fix9 = aq-fix2 8e30ca40 (I18 + language rail + I21 + I22 + tidy)
+* Chain (one app): dev → holdout → supp-behavior → supp-quant → final (1038, aggregate only). 11:00Z queue:
+  fix9 dev + holdout → supp-behavior + blind pairwise cur vs fix9 → final-set sample 40 per mode for fix9 and the
+  baseline run → fix8 / supp-quant / leftovers.
+* I24 (verifier stops after "UNSUPPORTED: none"): no latency gain (unchanged turns 864 vs 876 ms p50 — the cost is
+  the second request's round trip, not its output). Not built.
