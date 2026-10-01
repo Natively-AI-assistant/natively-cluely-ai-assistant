@@ -662,3 +662,52 @@ cost is deflection.
 * Six repeats per item, fix12 → with the rule: DJOB-031 hedged 5/6 → 2/6 (better), but the list step stopped naming
   GENUINE conflicts: SBSEM-002 (abstract vs results) 3/6 → 0/6, DSALES-023 (two prices on one sheet) 5/6 → 0/6, and
   DJOB-032 got worse (hedged 0/6 → 5/6). The model does not separate "older version" from "two values". Not built.
+
+### HOLDOUT, charter v2: fix11 vs fix6 (270/270 judged each, paired, aggregate only) — 11:48Z
+| mode | fix6 | fix11 | Δ (95%) | hard fails | p10 |
+|---|---:|---:|---:|---:|---:|
+| General | 8.44 | 8.92 | +0.47 (±0.52) | 4 → 1 | 5.0 → 7.7 |
+| Sales | 8.10 | 8.49 | +0.39 (±0.66) | 5 → 3 | 4.0 → 6.9 |
+| Recruiting | 8.71 | 8.86 | +0.15 (±0.41) | 3 → 2 | 5.5 → 7.6 |
+| Team Meet | 8.43 | 8.45 | +0.02 (±0.50) | 6 → 4 | 5.0 → 4.9 |
+| Looking for work | 7.31 | 7.74 | +0.43 (±0.70) | 11 → 7 | 5.0 → 5.0 |
+| Lecture | 8.66 | 8.73 | +0.08 (±0.72) | 4 → 3 | 5.0 → 5.8 |
+| Technical interview | 8.24 | 8.46 | +0.21 (±0.92) | 6 → 3 | 4.0 → 6.6 |
+| Seminar | 7.65 | 8.39 | +0.74 (±0.69) | 7 → 3 | 3.0 → 6.3 |
+| Call Center | 6.66 | 7.93 | +1.27 (±0.73) | 14 → 5 | 4.0 → 4.0 |
+| ALL | 8.02 | 8.44 | +0.42 (±0.22) | 60 → 31 | 4.0 → 5.0 |
+Hard fails left in fix11 on holdout (31): unsupported_personal_claim 10, unsupported_company_claim 5,
+major_reasoning_error 5, unsupported_policy_claim 5, unsupported_research_claim 3, important_question_unanswered 2,
+and nine single flags.
+
+### DECISION on fix11 against the rule written at 10:05Z
+| rule | result | verdict |
+|---|---|---|
+| 1. holdout gain ≥ +0.25, interval excludes 0 | +0.42 (±0.22) | pass |
+| 2. hard fails not up | 60 → 31 | pass |
+| 3. no mode drops more than 0.4 | no mode drops | pass |
+| 4. Call Center not down | +1.27 (±0.73) | pass |
+| 5. validators not worse than fix6 | dev 8/9 = 8/9, holdout 2/2 = 2/2, supp-behavior 6/9 vs 8/9 | FAIL |
+| dev agrees in sign | +0.23 (±0.18) | yes |
+* Rule 5 fails and stays failed with the ungated Lecture item set aside: SBSEM-007 is caused by the verifier and
+  reproduces (2 of 6). The rule is not rewritten after the fact.
+* So: **fix11 is NOT promoted. fix6 stays the reference on paper.** fix11 is the BASE for the next build, because its
+  judged gain on holdout is large and consistent (no mode down, Call Center repaired, hard fails halved) and its one
+  objective regression is exactly what I25 targets. It is a holdout confirmation of the bundle (I16, I18, language
+  rail, I21, I22, claim kinds, source-word rail), not of each part.
+* Latency paid for it: settled answer +0.44 s (dev) / +0.63 s (holdout) at the median; text swapped on 24–31% of turns.
+
+### Promotion rule for fix12 (aq-fix2 e7325287 = fix11 + I25), written 11:52Z before any fix12 run exists
+fix12 is promoted over fix6 only if ALL hold (charter v2, holdout, paired):
+1. vs fix6: aggregate ≥ +0.25 with the interval excluding 0; hard fails not up; no mode down more than 0.4 with its
+   interval excluding 0; Call Center not down.
+2. vs fix11: the paired aggregate is not below −0.15 (I25 keeps text the pass used to remove; it must not give back
+   the bundle's gain), and Call Center, Seminar and Team Meet — the modes it changes — are each not below −0.4.
+3. vs fix11: `important_question_unanswered` (all judge flags, dev and holdout) does not go up.
+4. Validators: a failure counts against the build when its mode is gated or the verifier edited the shown answer;
+   a failure on an unedited answer in an ungated mode is reported as sampling. Counted that way fix12 must not be
+   worse than fix6 on dev, holdout and supp-behavior. (This reading would not have saved fix11: SBSEM-007 is gated
+   and edited.)
+5. Objective, in the app: drafts that state a limit and lose it (tools/limits-lost.mjs) go down against fix11.
+Otherwise fix6 stays; if only rule 2 or 3 fails, fix11's verifier without I25 is the one to carry forward and the
+validator defect is reported as open.
