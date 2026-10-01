@@ -23,7 +23,7 @@ const RUNS = [
   { id: 'aq2-dev-fix8', label: 'fix8', commit: '13b649c7', contains: 'fix7 + I18 + language rail' },
   { id: 'aq2-dev-fix9', label: 'fix9', commit: '8e30ca40', contains: 'fix8 + I21 + I22 + tidy' },
   { id: 'aq2-dev-fix10', label: 'fix10', commit: '497c9ba9', contains: 'fix9 + claim kinds in the verifier' },
-  { id: 'aq2-dev-fix11', label: 'fix11 (candidate)', commit: 'pending', contains: 'fix10 + source-word rail' },
+  { id: 'aq2-dev-fix11', label: 'fix11 (candidate)', commit: 'ab264bb3', contains: 'fix10 + source-word rail' },
 ];
 
 const ITERATIONS = [
@@ -92,6 +92,15 @@ const ITERATIONS = [
     'I18 over-verified: of 149 in-app edits, 36 turned the answer into a question and 26 removed a decision or ownership ("I can take this one" → "I\'ll come back on who\'s picking it up"; the pads-and-rotors decision → a question).',
     'The list step takes only three kinds — a past fact, a fact about the speaker, a consequential promise — and names what is never a claim (a decision made now, taking a task, a recommendation, a small commitment). A `CONFLICT:` line names two values the material gives; the reply must not assert either. An emptied answer gets a short holding line, never a question back.',
     'In the app (dev): edits 149 → 115, turned into a question 36 → 3, decisions removed 26 → 13, spoken turns replaced 117 → 95 of 245; validators 8/9 unchanged.', 'Built; judge and holdout read pending under charter v2.'],
+  ['Source words', 'ab264bb3', 'fix11', 'A verified reply never names the copilot\'s own sources',
+    'The edit said its prompt\'s word aloud ("The material gives both…", 3 of 61 edits).',
+    '`SOURCE_WORD_RE` rail (`source_exposed`); rules 3 and 4 no longer make "the material" the subject of a spoken sentence.',
+    'In the app: 0 source words in a shown answer on dev, holdout and supp-behavior.', 'Built; judged with fix11.'],
+  ['I25', 'e7325287', 'fix12 (not run in the app yet)', 'An honest limit is not a claim',
+    'The verifier filed "I can\'t confirm a credit on this call" and "We didn\'t measure anything about colonies" as unsupported claims and removed them: asked "am I getting money back for today or not?", the shown reply was "I\'ll get the outage documented… Can I get your account number". fix11 dev: 21 of 41 drafts that stated a limit lost it (fix6: 8 of 38); one supp-behavior validator failed because of it.',
+    'Three narrowings of existing rules: the never-list names an honest limit (not knowing, cannot confirm or promise yet) and what the request itself states; "Never say you cannot speak to…" becomes "Never add…"; in Seminar a study\'s scope is closed ("we did not measure X" is supported when the study as described does not include X). Invented capability or policy limits ("I can\'t send a reset by text") are still removed.',
+    'Replay on the fix11 drafts: limits lost 19 → 10 of 41 (dev) and 3 → 1 of 6 (supp-behavior); edits 109 → 94; the "not measured" validator 2/6 → 6/6 over six repeats; the invented reset-by-text restriction still removed 6/6.',
+    'Source committed and unit-tested; not run in the app and not judged. Built only if fix11 is kept as the base.'],
 ];
 
 const REJECTED = [
@@ -113,9 +122,10 @@ const readJsonl = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\
 const FAILED_RE = /didn.t come through from the AI provider|couldn.t generate an answer just now|No answer came back this time|^Connection error\.?$/i;
 const runs = RUNS.map((r) => {
   const rows = readJsonl(path.join(ROOT, 'results', r.id, 'natively_benchmark_full.jsonl'));
-  const judged = {};
-  for (const j of readJsonl(path.join(ROOT, 'astra', 'out', 'abs-dev', `${r.id}.jsonl`))) if (j.ok && (j.repeat ?? 0) === 0) judged[j.benchmark_id] = j;
-  return { ...r, rows: Object.fromEntries(rows.map((x) => [x.benchmark_id, x])), n: rows.length, judged };
+  // Two charters, never mixed: v1 (abs-dev) up to the 02:00Z batch of 2026-10-01, v2 (abs-dev-c2, claim kinds) after.
+  const load = (set) => { const o = {}; for (const j of readJsonl(path.join(ROOT, 'astra', 'out', set, `${r.id}.jsonl`))) if (j.ok && (j.repeat ?? 0) === 0) o[j.benchmark_id] = j; return o; };
+  const judged = load('abs-dev'); const judged2 = load('abs-dev-c2');
+  return { ...r, rows: Object.fromEntries(rows.map((x) => [x.benchmark_id, x])), n: rows.length, judged, judged2 };
 }).filter((r) => r.n > 0);
 const dataset = JSON.parse(fs.readFileSync(path.join(ROOT, 'dataset', 'dev.json'), 'utf8'));
 const items = dataset.items ?? dataset;
@@ -130,32 +140,35 @@ const mean = (x) => (x.length ? x.reduce((a, b) => a + b, 0) / x.length : null);
 const out = [];
 out.push('# Answer-quality iterations — changes, scores, and every dev question with its response per iteration');
 out.push('');
-out.push(`Generated ${new Date().toISOString().slice(0, 16)}Z by \`tools/iterations-qa.mjs\` (re-run to refresh). Generator: deepseek-flash. Judge: gpt-6-astra (AgentRouter), charter \`6dd53845a51c\`.`);
+out.push(`Generated ${new Date().toISOString().slice(0, 16)}Z by \`tools/iterations-qa.mjs\` (re-run to refresh). Generator: deepseek-flash. Judge: gpt-6-astra (AgentRouter); charter v1 \`6dd53845a51c\` and, from the 11:00 UTC batch of 2026-10-01, charter v2 \`c725615a54f6\` (claim kinds). Scores under the two charters are not comparable and are shown separately.`);
 out.push('');
 out.push('**Scope.** Only the DEV set (360 questions, 9 modes) is listed per item. The holdout, final and supplementary sets are blind: they are reported in aggregate elsewhere (`docs/ITERATIONS-ASTRA.md`) and never item by item.');
 out.push('');
-out.push('**Reading a response.** The text shown is what the user ends up with. "edited after streaming" means the claim verifier (or another post-stream repair) replaced the streamed draft. A judge line appears only for runs that were judged (Baseline, fix2, fix6 in full; fix4 on 25 items per mode in six modes). Scores are the official 0–10 score; a hard flag caps the score.');
+out.push('**Reading a response.** The text shown is what the user ends up with. "edited after streaming" means the claim verifier (or another post-stream repair) replaced the streamed draft. A judge line appears only for runs that were judged, tagged with the charter it was judged under (v1 or v2). Scores are the official 0–10 score; a hard flag caps the score.');
 out.push('');
 out.push('## 1. Runs');
 out.push('');
-out.push('| Run | App commit | Contains | Rows | Judged | Dev mean (judged) |');
-out.push('|---|---|---|---:|---:|---:|');
-for (const r of runs) {
-  const s = Object.values(r.judged).map((j) => j.official.overall);
-  out.push(`| ${r.label} (\`${r.id}\`) | \`${r.commit}\` | ${r.contains} | ${r.n} | ${s.length || '—'} | ${s.length >= 300 ? mean(s).toFixed(2) : s.length ? `${mean(s).toFixed(2)} (partial)` : '—'} |`);
-}
+out.push('| Run | App commit | Contains | Rows | Judged v1 | Dev mean v1 | Judged v2 | Dev mean v2 |');
+out.push('|---|---|---|---:|---:|---:|---:|---:|');
+const cell = (J) => { const s = Object.values(J).map((j) => j.official.overall); return `${s.length || '—'} | ${s.length >= 300 ? mean(s).toFixed(2) : s.length ? `${mean(s).toFixed(2)} (partial)` : '—'}`; };
+for (const r of runs) out.push(`| ${r.label} (\`${r.id}\`) | \`${r.commit}\` | ${r.contains} | ${r.n} | ${cell(r.judged)} | ${cell(r.judged2)} |`);
 out.push('');
 out.push('## 2. Judged score per mode');
 out.push('');
-const judgedRuns = runs.filter((r) => Object.keys(r.judged).length >= 300);
-out.push(`| Mode | ${judgedRuns.map((r) => `${r.label} mean (hard fails)`).join(' | ')} |`);
-out.push(`|---|${judgedRuns.map(() => '---:').join('|')}|`);
-for (const m of [...modeOrder, 'ALL']) {
-  const cells = judgedRuns.map((r) => { const js = Object.values(r.judged).filter((j) => m === 'ALL' || j.mode === m); return js.length ? `${mean(js.map((j) => j.official.overall)).toFixed(2)} (${js.filter((j) => j.official.hard_fail).length}/${js.length})` : '—'; });
-  out.push(`| ${m === 'ALL' ? '**All**' : (MODE_NAME[m] ?? m)} | ${cells.join(' | ')} |`);
+for (const [key, title] of [['judged', 'Charter v1'], ['judged2', 'Charter v2 (claim kinds)']]) {
+  const judgedRuns = runs.filter((r) => Object.keys(r[key]).length >= 300);
+  out.push(`**${title}**`);
+  out.push('');
+  if (!judgedRuns.length) { out.push('No run is fully judged under this charter yet.'); out.push(''); continue; }
+  out.push(`| Mode | ${judgedRuns.map((r) => `${r.label} mean (hard fails)`).join(' | ')} |`);
+  out.push(`|---|${judgedRuns.map(() => '---:').join('|')}|`);
+  for (const m of [...modeOrder, 'ALL']) {
+    const cells = judgedRuns.map((r) => { const js = Object.values(r[key]).filter((j) => m === 'ALL' || j.mode === m); return js.length ? `${mean(js.map((j) => j.official.overall)).toFixed(2)} (${js.filter((j) => j.official.hard_fail).length}/${js.length})` : '—'; });
+    out.push(`| ${m === 'ALL' ? '**All**' : (MODE_NAME[m] ?? m)} | ${cells.join(' | ')} |`);
+  }
+  out.push('');
 }
-out.push('');
-out.push('fix8, fix9 and fix10 are not judged yet (the judge budget ran out at 03:30 UTC on 2026-10-01; next batch 11:00 UTC). The scores above are under judge charter v1; from the next batch the judge uses charter v2 (claim kinds), whose scores are not comparable with these.');
+out.push('A run missing from a table is not fully judged under that charter (300 of 360 answers or more). Never compare a v1 number with a v2 number.');
 out.push('');
 out.push('## 3. What changed in each iteration');
 out.push('');
@@ -206,8 +219,9 @@ for (const mode of modeOrder) {
       out.push('');
       out.push(quote(body || '(empty)'));
       if (gist) out.push(`>\n> *Summary chip:* ${gist.replace(/\n/g, ' ')}`);
-      const j = r.judged[it.id];
-      if (j) out.push(`\n*Judge: ${j.official.overall.toFixed(1)}${j.official.flags?.length ? ` — ${j.official.flags.join(', ')}` : ''}. ${String(j.judgment.specific_issue ?? '').replace(/\s+/g, ' ').slice(0, 320)}*`);
+      for (const [j, tag] of [[r.judged[it.id], 'v1'], [r.judged2[it.id], 'v2']]) {
+        if (j) out.push(`\n*Judge (${tag}): ${j.official.overall.toFixed(1)}${j.official.flags?.length ? ` — ${j.official.flags.join(', ')}` : ''}. ${String(j.judgment.specific_issue ?? '').replace(/\s+/g, ' ').slice(0, 320)}*`);
+      }
       out.push('');
     }
     out.push('---');
