@@ -130,3 +130,17 @@ test('the chain order changes only by the selection moving to the front', async 
     assert.deepEqual(rest, wasRest, `${name}: rungs other than the selection's changed order (was ${was.join(' > ')}; now ${is.join(' > ')})`);
   }
 });
+
+const chainIds = async (keys, selection, state = {}) => {
+  const h = Object.assign(helper(keys, selection), state);
+  return (await h.buildVisionChain(REQ)).map((p) => p.id);
+};
+const coolingUntil = (id, until) => new Map([[id, { openUntil: until, consecutiveFails: 3, ttftEma: null }]]);
+
+test('a selected model whose breaker is open does not lead its screenshot turn; it leads again after', async () => {
+  const cooling = await chainIds(EVERYTHING, 'fluxion/claude-opus-5', { visionHealth: coolingUntil('fluxion', Date.now() + 60_000) });
+  assert.equal(cooling[0], 'openai', `a failing selection must not cost its first-token budget on every screenshot (got ${cooling.join(' > ')})`);
+  assert.equal(cooling.at(-1), 'fluxion', 'still tried, last');
+  const recovered = await chainIds(EVERYTHING, 'fluxion/claude-opus-5', { visionHealth: coolingUntil('fluxion', Date.now() - 1) });
+  assert.equal(recovered[0], 'fluxion');
+});

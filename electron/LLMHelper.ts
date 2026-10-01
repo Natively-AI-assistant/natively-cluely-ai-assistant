@@ -23,6 +23,7 @@ import {
   TINY_PROMPTS_SET
 } from "./llm/tinyPrompts"
 import { gatewaySeatReadsImages, readsImages, resolveVision, type VisionFacts, type VisionVerdict } from "./llm/visionResolver"
+import { orderVisionCandidates } from "./llm/visionOrdering"
 import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, storedVisionTest } from "./llm/visionCapabilityStore"
 import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/visionProbe"
 import { parseOpenRouterVision } from "./llm/providerVisionData"
@@ -31,7 +32,6 @@ import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
 import {
   runStreamingVisionFallback,
-  orderVisionByHealth,
   DEFAULT_VISION_FALLBACK_CONFIG,
   type VisionStreamProvider,
   type VisionHealthEntry,
@@ -8839,11 +8839,12 @@ let isMultimodal = !!(imagePaths?.length);
     // Honor an explicit local selection first, then health/speed-sorted cloud,
     // then any remaining local providers as a final fallback.
     const nowMs = Date.now();
-    let ordered: VisionStreamProvider[];
-    if (localOnly) {
-      ordered = orderVisionByHealth(local, this.visionHealth, nowMs);
-    } else {
-      const front: VisionStreamProvider[] = [];
+    // `front` is the selection's own rung(s). The ordering rule itself lives in
+    // visionOrdering.ts (2026-10-01), shared with the screen-reading path from
+    // phase 5b: the selection leads unless its breaker is open, then cloud by
+    // health, then local. Local-only mode ignores `front` and uses local rungs.
+    const front: VisionStreamProvider[] = [];
+    if (!localOnly) {
       if (this.useOllama) { const o = local.find(p => p.id === 'ollama'); if (o) front.push(o); }
       if (this.customProvider) { const c = local.find(p => p.id === 'custom'); if (c) front.push(c); }
       if (this.isCodexCliModel(this.currentModelId)) { const cdx = cloud.find(p => p.id === 'codex-cli'); if (cdx) front.push(cdx); }
@@ -8867,10 +8868,8 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isAgentRouterModel(this.currentModelId)) { const ar = cloud.find(p => p.id === 'agentrouter'); if (ar) front.push(ar); }
       // The selected DeepSeek model leads its own turn, like the gateways above.
       if (deepseekSelected) { const ds = cloud.find(p => p.id === 'deepseek'); if (ds) front.push(ds); }
-      const backLocal = local.filter(p => !front.includes(p));
-      const backCloud = cloud.filter(p => !front.includes(p));
-      ordered = [...front, ...orderVisionByHealth(backCloud, this.visionHealth, nowMs), ...backLocal];
     }
+    const ordered = orderVisionCandidates({ selected: front, cloud, local, localOnly, health: this.visionHealth, now: nowMs });
 
     if (ordered.length === 0) {
       // Local-only mode seats local providers only, so the cloud advice below
