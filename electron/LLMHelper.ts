@@ -1149,6 +1149,9 @@ export class LLMHelper {
     // V3 renders prior-turn continuity as a labelled prose section rather than
     // as evidence; it is CONVERSATION_STATE data, i.e. transcript scope.
     if (/^# Conversation so far$/m.test(message)) scopes.push('transcript');
+    // The system design on the table is prior assistant output about the
+    // conversation — the same CONVERSATION_STATE class (diagramPromptSignals.ts).
+    if (/<active_design\b/.test(message)) scopes.push('transcript');
     return [...new Set(scopes)];
   }
 
@@ -1184,6 +1187,9 @@ export class LLMHelper {
       scrubbed = scrubbed
         .replace(/<transcript\b[\s\S]*?<\/transcript>\s*/gi, '')
         .replace(/<recent_transcript\b[\s\S]*?<\/recent_transcript>\s*/gi, '')
+        // Defence in depth: the resolver already withholds the design when the
+        // transcript scope is denied; a block that reached here anyway goes too.
+        .replace(/<active_design\b[\s\S]*?<\/active_design>\s*/gi, '')
         // V3's prior-turn continuity section (CONVERSATION_STATE data). Runs to
         // the next top-level section or tag, both of which the composer emits
         // after a blank line.
@@ -4712,6 +4718,16 @@ try {
                 }
                 return resolved;
               } catch { return { codingTask: false }; }
+            })(),
+            // Universal diagram contract, same principle (2026-10-01): a caller
+            // that passed no system prompt still gets the diagram shape for a
+            // design question. This transport has no session, so it never
+            // sees a design on the table — fresh design asks only.
+            diagram: (() => {
+              try {
+                const { resolveDiagramTurn } = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
+                return resolveDiagramTurn({ question: message, answerType: routeOptions?.answerType, activeDesign: null, hasVisualContext: (imagePaths?.length ?? 0) > 0 }).signals;
+              } catch { return null; }
             })(),
           }) ?? systemPromptOverride;
     }
@@ -9528,6 +9544,16 @@ let isMultimodal = !!(imagePaths?.length);
                 }
                 return resolved;
               } catch { return { codingTask: false }; }
+            })(),
+            // Universal diagram contract, same principle (2026-10-01): a caller
+            // that passed no system prompt still gets the diagram shape for a
+            // design question. This transport has no session, so it never
+            // sees a design on the table — fresh design asks only.
+            diagram: (() => {
+              try {
+                const { resolveDiagramTurn } = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
+                return resolveDiagramTurn({ question: message, answerType: routeOptions?.answerType, activeDesign: null, hasVisualContext: (imagePaths?.length ?? 0) > 0 }).signals;
+              } catch { return null; }
             })(),
           }) ?? systemPromptOverride;
         }

@@ -30,10 +30,10 @@ document.documentElement.setAttribute('data-theme', theme);
 
 const FLAG_KEYS = [
   'meetingModeAutoDetect', 'speakerLabelsV1', 'calibration', 'capabilityProbe', 'adaptiveImageQuality',
-  'meetingMemoryV2', 'chatHistoryMultiTurn', 'conversationMemoryV2', 'profileTreeV2', 'answerDiversityGuard',
+  'meetingMemoryV2', 'chatHistoryMultiTurn', 'conversationMemoryV2', 'profileTreeV2', 'answerDiversityGuard', 'systemDesignDiagrams',
   'globalSearchV2', 'trace', 'hindsightMemory',
 ];
-const ON_BY_DEFAULT = new Set(['meetingModeAutoDetect', 'speakerLabelsV1', 'chatHistoryMultiTurn']);
+const ON_BY_DEFAULT = new Set(['meetingModeAutoDetect', 'speakerLabelsV1', 'chatHistoryMultiTurn', 'systemDesignDiagrams']);
 const flags = FLAG_KEYS.map((key) => ({ key, enabled: !allOff && ON_BY_DEFAULT.has(key), setting: key, env: '', default: false }));
 
 const baseUrl = hs === 'none' ? '' : hs === 'cloud' || hs === 'auth' ? 'https://api.hindsight.vectorize.io' : 'http://localhost:8888';

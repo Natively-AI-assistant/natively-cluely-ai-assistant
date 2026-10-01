@@ -39,6 +39,8 @@ import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/s
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { resolveCodingPromptSignals } from './llm/codingPromptSignals';
+import { resolveDiagramTurn, v3DiagramTurn, withDiagramContract, withDiagramTurnBlock, type DiagramTurn } from './llm/diagramPromptSignals';
+import { registerDiagramIpc, broadcastDiagramsEnabled } from './services/diagram/diagramIpc';
 import { isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock as buildPriorCodingBlockForV3 } from './llm/codingFollowup';
 import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, totalHardTimeoutMs, repairDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
 
@@ -137,7 +139,11 @@ function resolveManualChatBasePrompt(
   // answer aloud), 'chat' for the launcher's reading surfaces. See
   // BuildSystemPromptV2Input.surface.
   surface: 'live' | 'chat' = 'chat',
+  // The turn's diagram decision (diagramPromptSignals.ts). Omitted by callers
+  // that have none — the result is then exactly what it was before.
+  diagramTurn?: DiagramTurn | null,
 ): string {
+  const tier = llmHelper?.getPromptTier?.() === 'tiny' ? 'local' as const : 'cloud' as const;
   try {
     const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
     const v2 = resolveV2SystemPrompt({
@@ -151,10 +157,14 @@ function resolveManualChatBasePrompt(
       codingShape: opts?.codingShape,
       suppliedTemplate: opts?.suppliedTemplate,
       surface,
+      // Semantic diagram activation, same principle (2026-10-01).
+      diagram: diagramTurn?.signals ?? null,
     });
     if (v2) return v2;
   } catch { /* legacy fallback */ }
-  return CHAT_MODE_PROMPT;
+  // Flag-off fallback: the legacy constant never knew about diagrams, so the
+  // shared contract is appended. No diagram turn ⇒ CHAT_MODE_PROMPT itself.
+  return withDiagramContract(CHAT_MODE_PROMPT, diagramTurn, { tier, surface });
 }
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
 import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
@@ -316,6 +326,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     ipcMain.removeAllListeners(channel);
     ipcMain.on(channel, listener);
   };
+
+  // System-design diagram artifacts: repair, export, the feature switch and
+  // the Phone Mirror render path. One module, registered once here.
+  registerDiagramIpc(appState, safeHandle);
 
   // ── Expired free trial (toaster policy Phase 0) ─────────────────────────
   // Defined above every safeHandle registration: source-contract tests scan
@@ -2074,9 +2088,31 @@ export function initializeIpcHandlers(appState: AppState): void {
             // block previously carried its own copy of all of that — two copies
             // of a security-relevant construction is how the tokenizer copies
             // drifted (§2 of the architecture review).
+            // System-design diagram turn — resolved ONCE and handed to the
+            // persona (the contract) and the composer (the note + the design on
+            // the table), so the two cannot disagree. Same planner call the
+            // coding verdict below uses.
+            const manualDiagramTurn: DiagramTurn | null = (() => {
+              try {
+                const im = appState.getIntelligenceManager?.();
+                const turn = resolveDiagramTurn({
+                  question: v3Question,
+                  answerType: planAnswer({ question: v3Question, source: 'manual_input', speakerPerspective: 'user', activeMode: modeInfo ?? undefined }).answerType,
+                  activeDesign: im?.getActiveDesign?.() ?? null,
+                  pinnedModeId: modeInfo?.id ?? undefined,
+                  hasVisualContext: (imagePaths?.length ?? 0) > 0,
+                });
+                if (turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId) {
+                  im?.noteDesignQuestion?.(v3Question);
+                }
+                return turn;
+              } catch { return null; }
+            })();
+
             const composed = await buildV3Prompt({
               surface: 'manual-chat',
               readingSurface: answerSurface === 'chat',
+              diagramTurn: v3DiagramTurn(manualDiagramTurn),
               pathTag: 'ipc',
               queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(llmHelper),
               question: v3Question,
@@ -2305,6 +2341,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                     ?? ((codingTask || !!priorProblem) ? (require('./llm/codingShape') as typeof import('./llm/codingShape')).detectCodingShape(v3Question) : undefined),
                   suppliedTemplate: codingSignals.suppliedTemplate,
                   surface: answerSurface,
+                  diagram: manualDiagramTurn?.signals ?? null,
                 });
                 require('./llm/promptDebug').setPromptDebugTurnFacts({
                   personaAction: 'answer',
@@ -2349,7 +2386,14 @@ export function initializeIpcHandlers(appState: AppState): void {
             // the antecedent for the NEXT turn's referent resolution.
             // Bug 003: V3 owns this turn end to end, so if the skill block is not
             // appended here it is injected nowhere at all.
-            const v3SystemPrompt = skillPromptBlock ? `${composed.system}\n\n## ACTIVE SKILL\n${skillPromptBlock}` : composed.system;
+            // A persona-less V3 system (v2 kill-switch) has no diagram contract;
+            // a v2 persona already carries exactly one, and the helper never
+            // adds a second.
+            const v3SystemPrompt = withDiagramContract(
+              skillPromptBlock ? `${composed.system}\n\n## ACTIVE SKILL\n${skillPromptBlock}` : composed.system,
+              manualDiagramTurn,
+              { tier: llmHelper?.getPromptTier?.() === 'tiny' ? 'local' : 'cloud', surface: answerSurface },
+            );
             require('./llm/promptDebug').notePromptComposition({
               surface: 'manual-chat',
               promptSource: 'v3',
@@ -4450,6 +4494,26 @@ export function initializeIpcHandlers(appState: AppState): void {
         // the six-section treatment onto trivial code — proof the model already
         // resolves this conflict in the contract's favor. Left as-is; see
         // docs/answer-pipeline-rebuild/02_STATUS.md Phase 4 for the full writeup.
+        // Diagram turn on the legacy path (V3 off, or V3 fell through): the same
+        // resolver, the same contract. A caller that owns its own prompt
+        // (skipSystemPrompt) gets neither the contract nor the design block.
+        const legacyDiagramTurn: DiagramTurn | null = options?.skipSystemPrompt ? null : (() => {
+          try {
+            const im = appState.getIntelligenceManager?.();
+            const turn = resolveDiagramTurn({
+              question: message,
+              answerType: answerPlan.answerType,
+              activeDesign: im?.getActiveDesign?.() ?? null,
+              pinnedModeId: manualActiveMode?.id ?? undefined,
+              hasVisualContext: (imagePaths?.length ?? 0) > 0,
+            });
+            if (turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId) {
+              im?.noteDesignQuestion?.(message);
+            }
+            return turn;
+          } catch { return null; }
+        })();
+        if (legacyDiagramTurn?.turnBlock) context = withDiagramTurnBlock(context, legacyDiagramTurn);
         const systemPromptOverride: string | undefined = options?.skipSystemPrompt
           ? ''
           : resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({
@@ -4467,7 +4531,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             // coding_contract gate drops the block from the SYSTEM prompt
             // even though the user-channel contract is attached below.
             codingTurnPromoted: isCodingChat,
-          }), answerSurface);
+          }), answerSurface, legacyDiagramTurn);
         // NOTE (audit 2026-06-28): the document-grounded greeting-suppression +
         // question-first restructuring now lives INSIDE LLMHelper._streamChatInner
         // (shapeDocumentGroundedSystemPrompt + buildDocumentGroundedUserContent),
@@ -5472,7 +5536,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               // cases" list, a long analogy the user didn't ask for) is tightened to a
               // short spoken answer. Only for technical_concept_answer; analogy kept when
               // the user asked for simple/beginner terms.
-              if (answerPlan.answerType === 'technical_concept_answer') {
+              // Never on a diagram turn: this pass deletes fenced blocks, and an
+              // explicitly requested diagram ("draw the TLS handshake") routes
+              // as a technical concept.
+              if (answerPlan.answerType === 'technical_concept_answer' && !legacyDiagramTurn?.signals) {
                 const simpleRequested = answerPlan.answerStyle === 'beginner' || /\b(simple|simply|beginner|eli5|like i'?m (?:5|five)|layman)\b/i.test(message);
                 // FLATTEN-ONLY (user decision 2026-06-16): strip doc structure (headers/bullets/
                 // tables/code) into one spoken paragraph, but NEVER truncate — all prose content
@@ -8075,6 +8142,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (typeof key !== 'string' || !intelligenceFlagKeys().includes(key as any)) return { success: false, error: 'unknown_flag' };
       if (value !== null && typeof value !== 'boolean') return { success: false, error: 'invalid_value' };
       const ok = setIntelligenceFlag(key as any, value === null ? null : Boolean(value));
+      // The diagram switch governs rendering in every open window as well as
+      // the next prompt, so windows are told at once instead of on next mount.
+      if (ok && key === 'systemDesignDiagrams') broadcastDiagramsEnabled();
       return { success: ok, enabled: isIntelligenceFlagEnabled(key as any) };
     } catch (e: any) {
       console.warn('[IntelligenceFlags] set failed:', e?.message);
@@ -18987,7 +19057,32 @@ export function initializeIpcHandlers(appState: AppState): void {
             return [] as string[];
           }
         })();
-        const stream = llmHelper.streamChat(message, phoneImagePaths.length ? phoneImagePaths : undefined, context, resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({ answerType: phoneRouteOptions?.answerType as any, question: message }), 'live'), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
+        // The phone is a live surface like the overlay's typed box: a design
+        // question asked from it gets the same diagram contract, and can refine
+        // the design drawn on the desktop (one shared active design).
+        const phoneDiagramTurn: DiagramTurn | null = (() => {
+          try {
+            const turn = resolveDiagramTurn({
+              question: message,
+              answerType: phoneRouteOptions?.answerType as any,
+              activeDesign: intelligenceManager.getActiveDesign?.() ?? null,
+              hasVisualContext: phoneImagePaths.length > 0,
+            });
+            if (turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId) {
+              intelligenceManager.noteDesignQuestion?.(message);
+            }
+            return turn;
+          } catch { return null; }
+        })();
+        // The base prompt for this phone turn: the live surface, plus the turn's
+        // diagram decision. Composed INSIDE the v2 builder (never appended to
+        // its result) so LLMHelper still recognises the prompt as v2-composed.
+        const phoneBasePrompt = (signals: import('./llm/codingPromptSignals').CodingPromptSignals, surface: 'live' | 'chat') =>
+          resolveManualChatBasePrompt(llmHelper, signals, surface, phoneDiagramTurn);
+        // The design on the table joins this turn's context (a follow-up typed
+        // on the phone refines the design drawn on the desktop).
+        if (phoneDiagramTurn?.turnBlock) context = withDiagramTurnBlock(context, phoneDiagramTurn);
+        const stream = llmHelper.streamChat(message, phoneImagePaths.length ? phoneImagePaths : undefined, context, phoneBasePrompt(resolveCodingPromptSignals({ answerType: phoneRouteOptions?.answerType as any, question: message }), 'live'), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
         let full = '';
         let phoneSuperseded = false;
         // Deadline-guarded (Issue 1) — this is a live streaming surface too: a hung

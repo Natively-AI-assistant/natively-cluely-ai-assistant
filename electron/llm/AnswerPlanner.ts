@@ -448,6 +448,22 @@ Tradeoffs:
 Follow-up Points:
 [Likely interviewer follow-ups.]`;
 
+// When system-design diagrams are on, the diagram contract in the SYSTEM prompt
+// owns the shape of a design answer (approach → Mermaid → brief explanation).
+// The seven-section template above would contradict it from the user message,
+// so the plan's template defers instead of restating a second shape.
+const SYSTEM_DESIGN_DIAGRAM_TEMPLATE = `Follow the diagram contract in the system prompt: the approach and its assumptions first, then the diagram, then a brief explanation of components, data flow, scaling, failure handling and tradeoffs. Do not use the fixed section headings unless the user asked for a detailed design.`;
+
+// Routes a design follow-up may be re-routed FROM (see planAnswer).
+const DESIGN_FOLLOW_UP_REROUTABLE: ReadonlySet<AnswerType> = new Set<AnswerType>([
+  'coding_question_answer',
+  'dsa_question_answer',
+  'technical_concept_answer',
+  'follow_up_answer',
+  'unknown_answer',
+  'general_meeting_answer',
+]);
+
 const DEBUGGING_TEMPLATE = `Use exactly these sections:
 
 Likely Cause:
@@ -2063,6 +2079,22 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerType = docShape === 'broad_overview' ? 'lecture_answer' : docShape;
   }
 
+  // DESIGN FOLLOW-UP (2026-10-01). With a system design on the table, "add a
+  // dead-letter queue", "replace Kafka with RabbitMQ" and "why do we need the
+  // queue?" are follow-ups on THAT design — but the keyword patterns above read
+  // "queue", "cache" and "add" as coding / DSA (measured on the real-wiring E2E:
+  // both routed as coding, and the turn lost its diagram contract while gaining
+  // the six-section coding one). The shared diagram resolver decides; only the
+  // generic and keyword-coding routes are re-routed, never a mode-specific or
+  // profile route, and never a turn that actually asks for code. No design on
+  // the table (every unit test, every first question) ⇒ nothing changes.
+  if (!docGroundedEnforcementActive && DESIGN_FOLLOW_UP_REROUTABLE.has(answerType)) {
+    try {
+      const { isDesignFollowUpTurn } = require('./diagramPromptSignals') as typeof import('./diagramPromptSignals');
+      if (isDesignFollowUpTurn(question, answerType)) answerType = 'system_design_answer';
+    } catch { /* routing only; the keyword verdict stands */ }
+  }
+
   const speakerPerspective = input.speakerPerspective
     || (input.source === 'what_to_answer' || input.source === 'transcript' ? 'interviewer' : 'user');
 
@@ -2309,8 +2341,21 @@ Additional rules:
 - NEVER mention "Natively", the assistant, the product, or the candidate's profile/projects anywhere in the answer. This is a pure technical answer.`;
 };
 
+/** The system-design template that defers to the diagram contract, or null when diagrams are off. */
+const systemDesignDiagramTemplate = (plan: Pick<AnswerPlan, 'answerType'>): string | null => {
+  if (plan.answerType !== 'system_design_answer') return null;
+  try {
+    // Lazy: diagramPromptSignals imports userInstructionContract, as this file does.
+    const { isSystemDesignDiagramsEnabled } = require('./diagramPromptSignals') as typeof import('./diagramPromptSignals');
+    return isSystemDesignDiagramsEnabled() ? SYSTEM_DESIGN_DIAGRAM_TEMPLATE : null;
+  } catch {
+    return null;
+  }
+};
+
 export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationSpec = false, codingShape?: CodingShape): string => {
   const shapedTemplate = shapedCodingTemplate(plan, codingShape);
+  const diagramTemplate = systemDesignDiagramTemplate(plan);
   // The hidden test block only makes sense when the answer writes new code.
   const writesCode = !codingShape || codingShape === 'full' || codingShape === 'code' || codingShape === 'solve' || codingShape === 'optimize' || codingShape === 'debug';
   const verificationBlock = (includeVerificationSpec && isCodingAnswerType(plan.answerType) && writesCode)
@@ -2415,6 +2460,6 @@ VOICE: ${voiceLine}
 GROUNDING: ${policyLine}
 
 STRICT RESPONSE TEMPLATE:
-${shapedTemplate ?? plan.responseTemplate}${renderingDirective}${styleDirective}${lengthDirective}${verificationBlock}
+${shapedTemplate ?? diagramTemplate ?? plan.responseTemplate}${renderingDirective}${styleDirective}${lengthDirective}${verificationBlock}
 </answer_contract>`;
 };

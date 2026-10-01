@@ -1,7 +1,7 @@
 import {
   AlertCircle, BookmarkCheck, Brain, Check, Copy, Download, FolderOpen, Gauge, History, Image as ImageIcon,
   ImageDown, Loader2, MessagesSquare, RefreshCw, Repeat2, Route, Save, ScrollText, ShieldAlert,
-  SlidersHorizontal, Tags, Trash2, Wand2, Wifi, WifiOff,
+  SlidersHorizontal, Tags, Trash2, Wand2, Wifi, WifiOff, Workflow,
   // Reply, UserCheck — icons of the two commented-out switches below (conversationMemoryV2, profileTreeV2)
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -76,6 +76,11 @@ const FLAG_META: Record<string, { label: string; desc: string; group: FlagGroup 
   speakerLabelsV1: { label: 'Speaker labels', desc: 'Uses the names you give speakers in your notes and action items.', group: 'notes' },
   // profileTreeV2: { label: 'Extra candidate-voice check', desc: 'One more pass to catch answers that slip out of your first-person voice.', group: 'notes' }, // commented out — see conversationMemoryV2 above
   answerDiversityGuard: { label: 'Repetition guard', desc: 'Rewords a live answer’s opening when it repeats an earlier one.', group: 'notes' },
+  // System-design diagram artifacts (2026-10-01). One switch for both halves — the
+  // diagram contract in the answer prompt and the Mermaid renderer — so there is no
+  // "renderer on, generator off" state. Call sites: electron/llm/diagramPromptSignals.ts
+  // (every prompt path) and src/lib/diagram/diagramRuntime.ts (every surface that draws).
+  systemDesignDiagrams: { label: 'Design diagrams', desc: 'Draws a diagram in system-design answers. Off shows Mermaid as code.', group: 'notes' },
   // inMeetingSearchV2 / lectureIntelligenceV2 / diagramIntelligence removed (2026-09-25),
   // together with the "Try it" section that was their ONLY caller in the app: those three
   // flags gate nothing but the search-in-meeting / generate-lecture-notes /
@@ -120,6 +125,7 @@ const FLAG_ICON: Record<string, LucideIcon> = {
   // conversationMemoryV2: Reply,   // switch commented out (see FLAG_META)
   // profileTreeV2: UserCheck,      // switch commented out (see FLAG_META)
   answerDiversityGuard: Repeat2,
+  systemDesignDiagrams: Workflow,
   globalSearchV2: History,
   trace: Route,
 };

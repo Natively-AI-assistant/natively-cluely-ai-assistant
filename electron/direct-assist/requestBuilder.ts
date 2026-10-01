@@ -1,6 +1,11 @@
 import { DirectAssistError } from './errors';
 import { DIRECT_ASSIST_PROVIDERS } from './types';
 import { getModelCapabilities } from '../llm/modelCapabilities';
+// The shared diagram modules are required at the point of use (see
+// diagramModules below): LLMHelper imports this file statically, and the
+// per-file tsc trees two test suites build do not emit `.mjs` modules that
+// have `.d.mts` siblings. esbuild bundles the requires like any other.
+import type { DiagramPromptSignals } from '../../src/lib/diagram/diagramContract.mjs';
 import type {
   DirectAssistHistoryTurn,
   DirectAssistNormalizedHistoryTurn,
@@ -588,6 +593,75 @@ function renderHistory(
     .join('\n\n');
 }
 
+// ── System-design diagrams ───────────────────────────────────────────────────
+//
+// Direct Assist keeps its own prompt and its own history; it is NOT routed
+// through the intelligence engine to get diagrams. It consults the same pure
+// resolver and the same contract text every other route uses
+// (src/lib/diagram/*), with the two inputs this surface owns:
+//   - the request text (plus the current-turn speech on a screenshot request);
+//   - the design on the table, derived from the history the overlay sent —
+//     Direct Assist answers are never recorded in the main process, so the
+//     history IS this surface's conversation state.
+// The contract is appended to the system prompt; the design rides inside a
+// <recent_transcript> block so the existing transcript-scope enforcement
+// (LLMHelper.stripDeniedScopedBlocksFromMessage) removes it with the history.
+
+function directAssistDiagramsEnabled(): boolean {
+  try {
+    const { isIntelligenceFlagEnabled } = require('../intelligence/intelligenceFlags');
+    return isIntelligenceFlagEnabled('systemDesignDiagrams') === true;
+  } catch {
+    return true; // the documented default
+  }
+}
+
+function diagramModules() {
+  return {
+    ...(require('../../src/lib/diagram/diagramRequest.mjs') as typeof import('../../src/lib/diagram/diagramRequest.mjs')),
+    ...(require('../../src/lib/diagram/diagramContract.mjs') as typeof import('../../src/lib/diagram/diagramContract.mjs')),
+    ...(require('../../src/lib/diagram/activeDesign.mjs') as typeof import('../../src/lib/diagram/activeDesign.mjs')),
+  };
+}
+
+interface DirectAssistDiagram {
+  /** The diagram signals for this turn; null when it has none. */
+  readonly contractSignals: DiagramPromptSignals | null;
+  /** The design on the table as a transcript-scoped block; '' when not needed. */
+  readonly designBlock: string;
+}
+
+function resolveDirectAssistDiagram(request: DirectAssistRequest, history: readonly DirectAssistNormalizedHistoryTurn[]): DirectAssistDiagram {
+  try {
+    if (!directAssistDiagramsEnabled()) return { contractSignals: null, designBlock: '' };
+    const { resolveDiagramRequest, diagramPromptSignals, renderDiagramTurnBlock, activeDesignFromHistory } = diagramModules();
+    const question = request.source === 'screenshot' && request.transcript
+      ? `${request.currentRequest}\n${request.transcript}`
+      : request.currentRequest;
+    // Only history that survived trimming: a design the model cannot see must
+    // not be referred to as "the design on the table".
+    const activeDesign = activeDesignFromHistory(history.map((turn) => ({ role: turn.role, content: turn.content })));
+    const diagramRequest = resolveDiagramRequest({
+      question,
+      activeDesign,
+      featureEnabled: true,
+      userInstructions: request.skill?.instructions ?? null,
+      hasVisualContext: request.imagePaths.length > 0 || Boolean(request.pageContext),
+    });
+    const contractSignals = diagramPromptSignals(diagramRequest, { question });
+    const block = renderDiagramTurnBlock(diagramRequest, activeDesign);
+    // Unescaped on purpose: an XML-escaped arrow ("--&gt;") is what the model
+    // would copy back, and that is not Mermaid. Only the wrapper's own tag is
+    // neutralised, which is all that keeps the block boundary honest.
+    const designBlock = block
+      ? `<recent_transcript kind="active_design">\n${block.replace(/<(\/?)recent_transcript/gi, '&lt;$1recent_transcript')}\n</recent_transcript>`
+      : '';
+    return { contractSignals, designBlock };
+  } catch {
+    return { contractSignals: null, designBlock: '' };
+  }
+}
+
 interface MutablePromptParts {
   manualContext: string;
   pageContext: string;
@@ -624,6 +698,10 @@ function renderUserPrompt(request: DirectAssistRequest, parts: MutablePromptPart
     attachmentNotice ? section('CURRENT ATTACHMENTS', attachmentNotice) : '',
     parts.referenceContext ? scopedBlock('reference_file', parts.referenceContext) : '',
     parts.history.length ? scopedBlock('recent_transcript', renderHistory(parts.history, carried)) : '',
+    // The design on the table, when this turn updates, re-views or asks about
+    // it (see resolveDirectAssistDiagram). Derived from the history that
+    // survived, so it disappears with it.
+    parts.history.length ? resolveDirectAssistDiagram(request, parts.history).designBlock : '',
     parts.transcript ? scopedBlock('transcript', parts.transcript) : '',
     parts.currentTurnSpeech
       ? scopedBlock('transcript', `${DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER}\n${parts.currentTurnSpeech}`)
@@ -926,9 +1004,15 @@ export function prepareDirectAssistPrompt(input: DirectAssistRequestInput | Dire
     );
   }
 
+  // The diagram contract for THIS turn, decided against the history that
+  // actually survived the fitting above (same input renderUserPrompt used).
+  const diagram = resolveDirectAssistDiagram(request, parts.history);
+
   return Object.freeze({
     request,
-    systemPrompt: DIRECT_ASSIST_SYSTEM_PROMPT,
+    systemPrompt: diagram.contractSignals
+      ? diagramModules().appendDiagramContract(DIRECT_ASSIST_SYSTEM_PROMPT, diagram.contractSignals, { surface: 'live' })
+      : DIRECT_ASSIST_SYSTEM_PROMPT,
     userPrompt,
     imagePaths: request.imagePaths,
     // Off the SURVIVING history, not request.history: the loop above may have

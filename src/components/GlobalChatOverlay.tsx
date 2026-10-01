@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStreamBuffer } from '../hooks/useStreamBuffer';
 import { X, Copy, Check, Globe, ArrowUp } from 'lucide-react';
+import { DiagramAwareMarkdown } from './diagram/DiagramAwareMarkdown';
 import { motion, AnimatePresence } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
 import nativelyIcon from './icon.png';
@@ -86,7 +87,16 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
             className="flex flex-col items-start mb-6"
         >
             <div className="text-text-primary text-[15px] leading-relaxed max-w-[85%]">
-                {content}
+                {/* This chat shows answers as plain text. Its standard-chat fallback
+                    can answer a design question, so a ```mermaid block is still
+                    drawn by the shared diagram card; everything else is exactly
+                    the plain text it was. */}
+                <DiagramAwareMarkdown
+                    text={content}
+                    streaming={Boolean(isStreaming)}
+                    allowAutoRepair
+                    renderMarkdown={(chunk, key) => <React.Fragment key={key}>{chunk}</React.Fragment>}
+                />
             </div>
             {!isStreaming && content && (
                 <button

@@ -72,6 +72,7 @@ const EXPECTED_KEYS = [
   'chatHistoryMultiTurn',
   'lectureIntelligenceV2',
   'diagramIntelligence',
+  'systemDesignDiagrams',
   'hindsightMemory',
   'hindsightLiveRecall',
   'hindsightPostMeetingRetain',
@@ -172,6 +173,9 @@ const DEFAULT_ON_KEYS = new Set([
   // suites assert the FIXED behaviour. A dev/test-only default would pin a behaviour
   // users never receive, which is the exact failure contracts/flag.ts records.
   'chatHistoryMultiTurn',
+  // System-design diagram artifacts (2026-10-01). Default ON via a plain literal:
+  // one switch for the prompt contract and the renderer.
+  'systemDesignDiagrams',
   'meetingSummaryV3',
   'meetingModeAutoDetect',
   'followUpDraftV2',

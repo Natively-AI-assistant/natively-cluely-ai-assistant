@@ -61,6 +61,10 @@ export type StreamEvent =
   | { type: 'error'; streamId: string; message: string }
   | { type: 'assistant'; id: string; content: string; label: string; createdAt: string; html?: string; gist?: string | null }
   | { type: 'render'; streamId: string; html: string; gist: string | null }
+  // A diagram the desktop finished drawing after its answer was already sent
+  // (PhoneDiagramBroker). `src` is an image data URL; absent means it could not
+  // be drawn and the phone keeps the Mermaid source view.
+  | { type: 'diagram'; key: string; src?: string }
   | { type: 'ack'; action: string; message: string }
   | { type: 'transcript'; speaker: string; text: string; final: boolean; ts: number }
   | {
@@ -776,6 +780,27 @@ export class PhoneMirrorService {
       console.warn('[PhoneMirror] answer render failed, the page will render it:', err?.message || err);
       return null;
     }
+  }
+
+  /**
+   * A diagram finished drawing (or failed) after answers containing it were
+   * already rendered. Tell connected phones, and re-render the stored history
+   * entries that hold it so a phone joining later gets the picture too.
+   * `dataUrl` null = it could not be drawn.
+   */
+  publishDiagram(key: string, dataUrl: string | null): void {
+    if (!key) return;
+    const marker = `data-diagram="${key}"`;
+    for (const msg of this.history) {
+      if (msg.role !== 'assistant' || !msg.html || !msg.html.includes(marker)) continue;
+      const rendered = this.renderAnswer(msg.content);
+      if (rendered) msg.html = rendered.html;
+    }
+    if (!this.isRunning()) return;
+    this.broadcast(dataUrl ? { type: 'diagram', key, src: dataUrl } : { type: 'diagram', key });
+    // An answer still streaming re-renders on its own timer; nudge it so the
+    // picture does not wait for the next token.
+    if (this.livePartial) this.scheduleLiveRender();
   }
 
   /** While a phone question streams, send its rendered HTML at most every LIVE_RENDER_INTERVAL_MS. */

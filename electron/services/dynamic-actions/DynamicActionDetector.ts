@@ -1,3 +1,5 @@
+import { SYSTEM_DESIGN_ACTION_INSTRUCTION } from '../../llm/systemDesignAction';
+
 export interface ActionTrigger {
     type: string;
     patterns: RegExp[];
@@ -291,8 +293,12 @@ const TECHNICAL_TRIGGERS: ActionTrigger[] = [
         patterns: [/\b(design a system|system design|architecture|scale to|distributed|throughput)\b/i],
         priority: 0.89,
         label: 'Structure system design',
-        promptInstruction:
-            'You are in Technical Interview mode. Structure the system design answer around requirements, APIs, data model, scaling, and tradeoffs.',
+        // The shared instruction (llm/systemDesignAction.ts): accepting this
+        // action is a system-design ask, so it gets the same diagram contract
+        // and renderer as a design question typed or heard on any route. The
+        // engine recognises this exact text (isSystemDesignActionInstruction);
+        // on Direct Assist it rides as the request's output instruction.
+        promptInstruction: SYSTEM_DESIGN_ACTION_INSTRUCTION,
         answerStyle: { maxWords: 260, format: 'bullets', tone: 'analytical' },
     },
 ];

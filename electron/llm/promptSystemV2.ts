@@ -38,6 +38,12 @@ import {
 import { codingFormatDirective, type ExplicitCodingContract } from './codingFollowup';
 import { USER_INSTRUCTIONS_MAX_CHARS, analyzeUserInstructions, removeGroundingOverrides, renderResolvedInstructionLines } from './userInstructionContract';
 import type { CodingTaskKind } from './codingPromptSignals';
+// Type-only on purpose. LLMHelper imports this module statically, and two test
+// suites compile LLMHelper's import graph file by file with tsc — a tree in
+// which a `.mjs` module that has a `.d.mts` sibling is resolved as types and
+// never emitted. The contract text is therefore required at the point of use
+// (diagramContractBlock); esbuild bundles that require like any other.
+import type { DiagramPromptSignals } from '../../src/lib/diagram/diagramContract.mjs';
 import type { ModeTemplateType } from './modeProfiles';
 
 // ==========================================
@@ -115,6 +121,13 @@ export interface BuildSystemPromptV2Input {
      *  Unset keeps the pre-surface text byte-for-byte for callers that never
      *  declared one. `chatSurface: true` is the old spelling of 'chat'. */
     surface?: PromptSurfaceV2;
+    /** SEMANTIC diagram activation (2026-10-01): the turn asks for a system
+     *  design or a diagram (diagramPromptSignals.ts). Attaches the diagram
+     *  contract in ANY mode and on any answer-shaped action — the mode owns
+     *  voice and sources, never whether a design question gets its diagram.
+     *  Bounded enums and example ids only: the design's Mermaid source is
+     *  per-turn text and rides the turn content, not this prompt. */
+    diagram?: DiagramPromptSignals | null;
 }
 
 export type PromptSurfaceV2 = 'live' | 'chat';
@@ -838,6 +851,30 @@ function chatLayoutBlock(input: BuildSystemPromptV2Input, tier: PromptTierV2): s
     return tier === 'local' ? CHAT_LAYOUT_TINY : CHAT_LAYOUT;
 }
 
+// Actions whose output is not an answer to the turn's question. A diagram
+// contract on these would put a Mermaid block into a title or a JSON summary.
+const NO_DIAGRAM_ACTIONS: ReadonlySet<PromptSystemV2Action> = new Set([
+    'title', 'summary_json', 'followup_email', 'follow_up_questions', 'clarify',
+]);
+
+// System-design diagram contract (2026-10-01). One shared text
+// (src/lib/diagram/diagramContract.mjs) for every surface, selected by the
+// routed signals. Semantic activation only, exactly like the coding contract:
+// no mode attaches it on its own, and no mode can remove it.
+function diagramContractBlock(input: BuildSystemPromptV2Input, tier: PromptTierV2): string {
+    if (!input.diagram || NO_DIAGRAM_ACTIONS.has(input.action)) return '';
+    try {
+        const { renderDiagramContract } = require('../../src/lib/diagram/diagramContract.mjs') as typeof import('../../src/lib/diagram/diagramContract.mjs');
+        return renderDiagramContract(input.diagram, {
+            tier,
+            surface: resolvePromptSurfaceV2(input) === 'chat' ? 'chat' : 'live',
+        });
+    } catch {
+        // buildSystemPromptV2 never throws. Unreachable in the bundled app.
+        return '';
+    }
+}
+
 // ==========================================
 // System prompt composition
 // ==========================================
@@ -868,6 +905,8 @@ export interface V2PromptDescriptor {
     chatSurface?: boolean;
     /** Declared surface carried through for the same reason. */
     surface?: PromptSurfaceV2;
+    /** Diagram signals carried through for the same reason. */
+    diagram?: DiagramPromptSignals;
 }
 
 const V2_REGISTRY_MAX = 512;
@@ -934,6 +973,14 @@ export function buildSystemPromptV2(input: BuildSystemPromptV2Input): string {
     const chatLayout = chatLayoutBlock({ ...input, mode, action }, tier);
     if (chatLayout) parts.push(chatLayout);
 
+    // Diagram contract AFTER the coding contract and the chat layout: it states
+    // its own precedence over default shapes and length limits, and recency
+    // keeps the layout's "under 120 words" from being read as a cap on the
+    // Mermaid block. A mixed design-plus-code turn carries both contracts; the
+    // diagram one says where the code goes.
+    const diagram = diagramContractBlock({ ...input, mode, action }, tier);
+    if (diagram) parts.push(diagram);
+
     // Rendered for ANY mode (originally custom-only): production built-in modes
     // also carry user-authored pinned instructions (ModesManager customContext,
     // the "Real-time prompt"), and with the v2 turn envelope replacing the
@@ -970,6 +1017,7 @@ export function buildSystemPromptV2(input: BuildSystemPromptV2Input): string {
         suppliedTemplate: input.suppliedTemplate || undefined,
         chatSurface: input.chatSurface || undefined,
         surface: input.surface,
+        diagram: diagram ? (input.diagram ?? undefined) : undefined,
     });
     return prompt;
 }
@@ -1292,6 +1340,8 @@ export interface ResolveActionPromptInput {
     chatSurface?: boolean;
     /** Where the answer is used — see BuildSystemPromptV2Input.surface. */
     surface?: PromptSurfaceV2;
+    /** Diagram signals — see BuildSystemPromptV2Input.diagram. */
+    diagram?: DiagramPromptSignals | null;
 }
 
 /**
@@ -1324,6 +1374,7 @@ export function resolveV2SystemPrompt(input: ResolveActionPromptInput): string |
             suppliedTemplate: input.suppliedTemplate,
             chatSurface: input.chatSurface,
             surface: input.surface,
+            diagram: input.diagram,
         });
     } catch {
         return null;

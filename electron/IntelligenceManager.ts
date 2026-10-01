@@ -153,6 +153,21 @@ export class IntelligenceManager extends EventEmitter {
         return this.session.getLastAssistantMessage(surface);
     }
 
+    /** The system design currently on the table (shared across surfaces), or null. */
+    getActiveDesign() {
+        return this.session.getActiveDesign();
+    }
+
+    /** A fresh design turn is starting; remember what it asked (a hint only). */
+    noteDesignQuestion(question: string | null | undefined): void {
+        this.session.noteDesignQuestion(question);
+    }
+
+    /** Record a renderer-validated Mermaid repair wherever the broken block was stored. */
+    applyDiagramRepair(originalSource: string, repairedSource: string): boolean {
+        return this.session.applyDiagramRepair(originalSource, repairedSource);
+    }
+
     getContextEpoch(): number {
         return this.session.getContextEpoch();
     }

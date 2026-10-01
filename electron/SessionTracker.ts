@@ -6,6 +6,8 @@ import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
 import type { AttemptId, TurnIdentity } from './llm/turnIdentity';
 import { stripGistTrailer } from '../src/lib/displayMarkup';
+import { createActiveDesignState, type ActiveDesign } from '../src/lib/diagram/activeDesign.mjs';
+import { replaceMermaidSource } from '../src/lib/diagram/fencedBlocks.mjs';
 
 // Canned-fallback phrases that mean the model gave up entirely, not phrases
 // that might legitimately appear inside a real answer. Matched only when the
@@ -196,6 +198,14 @@ export class SessionTracker {
     private codingQuestionSource: 'screenshot' | 'transcript' | null = null;
     private codingQuestionSetAt: number | null = null;
 
+    // The system design currently on the table (latest valid Mermaid diagram,
+    // its view and version). ONE shared instance for every route that records
+    // through addAssistantMessage — typed chat, What to Answer, Auto Answer,
+    // follow-ups — so a design drawn on one surface can be refined from
+    // another. Cleared with the session context (new meeting, mode switch,
+    // reset); expires on its own after a quiet half hour.
+    private activeDesign = createActiveDesignState();
+
     // Rolling buffer for multi-segment interviewer question detection
     private recentInterviewerBuffer: { text: string; timestamp: number }[] = [];
     private static readonly INTERVIEWER_BUFFER_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
@@ -294,6 +304,7 @@ export class SessionTracker {
      */
     clearSessionContext(): void {
         this.contextItems = [];
+        this.activeDesign.clear();
         this.detectedCodingQuestion = null;
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
@@ -492,6 +503,9 @@ export class SessionTracker {
         if (surface) {
             this.lastAssistantMessageBySurface[surface] = cleanText;
         }
+        // A final answer carrying a valid diagram becomes (or updates) the
+        // design on the table. An answer without one leaves it untouched.
+        try { this.activeDesign.observeAnswer(cleanText); } catch { /* continuity only */ }
         if (identity) {
             this.lastCommittedAttemptBySurface[surface ?? 'unspecified'] = identity.attemptId;
         }
@@ -796,6 +810,61 @@ export class SessionTracker {
         this.capUsageArray();
     }
 
+    // ============================================
+    // Active design (system-design diagrams)
+    // ============================================
+
+    /** The design on the table, or null. */
+    getActiveDesign(): ActiveDesign | null {
+        try { return this.activeDesign.get(); } catch { return null; }
+    }
+
+    /** A fresh design turn is starting; remember what it asked (a hint only). */
+    noteDesignQuestion(question: string | null | undefined): void {
+        try { this.activeDesign.noteDesignQuestion(question); } catch { /* hint only */ }
+    }
+
+    /** Drop the design (a new meeting must not inherit the previous one's). */
+    clearActiveDesign(): void {
+        this.activeDesign.clear();
+    }
+
+    /**
+     * The renderer repaired a Mermaid block that did not parse. Put the working
+     * source wherever the broken one was recorded — the design on the table,
+     * the last answer, and the usage log that becomes the saved meeting — so a
+     * reopened meeting draws the repaired diagram. Exact-source match only: a
+     * repair can never be merged into a different answer.
+     */
+    applyDiagramRepair(originalSource: string, repairedSource: string): boolean {
+        let changed = false;
+        try { changed = this.activeDesign.applyRepair(originalSource, repairedSource) || changed; } catch { /* ignore */ }
+        const swap = (text: unknown): unknown => {
+            if (typeof text !== 'string') return text;
+            const next = replaceMermaidSource(text, originalSource, repairedSource);
+            if (next !== text) changed = true;
+            return next;
+        };
+        this.lastAssistantMessage = swap(this.lastAssistantMessage) as string | null;
+        for (const key of Object.keys(this.lastAssistantMessageBySurface) as ConversationSurface[]) {
+            this.lastAssistantMessageBySurface[key] = swap(this.lastAssistantMessageBySurface[key]) as string;
+        }
+        // Only the most recent entries: a repair belongs to an answer just shown.
+        for (const entry of this.fullUsage.slice(-6)) {
+            if (entry && typeof entry.answer === 'string') entry.answer = swap(entry.answer);
+        }
+        for (const item of this.contextItems.slice(-6)) {
+            if (item.role === 'assistant') item.text = swap(item.text) as string;
+        }
+        for (const seg of this.fullTranscript.slice(-12)) {
+            if (seg.speaker === 'assistant') seg.text = swap(seg.text) as string;
+        }
+        for (const h of this.assistantResponseHistory.slice(-4)) {
+            h.text = swap(h.text) as string;
+        }
+        return changed;
+    }
+
     pushUsage(entry: any): void {
         // Same rule as logUsage: the usage log (ai_interactions) stores the
         // answer without its [[GIST]] display line.
@@ -839,6 +908,7 @@ export class SessionTracker {
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.activeDesign.clear();
         this.sessionEpoch++;
         this.contextEpoch++;
     }

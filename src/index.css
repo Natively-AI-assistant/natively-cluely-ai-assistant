@@ -2604,6 +2604,247 @@ body {
   border-bottom-color: var(--overlay-code-border);
 }
 
+/* ─── Diagram artifact card (src/components/diagram/DiagramArtifact.tsx) ──
+   A Mermaid block drawn as a diagram. Shares the code block's surface tokens
+   (--overlay-code-*), which already resolve for every colour theme ×
+   interface theme, in the overlay and in the launcher alike — so the card
+   needs no theme branches of its own. Text colours come from the surrounding
+   card; muted parts use currentColor at reduced opacity for the same reason.
+   Hover states change colour only (no movement). */
+/* @diagram-card:start */
+.diagram-card {
+  margin: 12px 0;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 12px;
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+  opacity: 1;
+  transition: opacity 150ms ease-out;
+}
+
+@starting-style {
+  .diagram-card {
+    opacity: 0;
+  }
+}
+
+/* A diagram answer's row is full width (MessageRow); everything in it except
+   the drawing keeps the 85% measure every other answer has. */
+.diagram-answer-parts > :not(.diagram-card) {
+  max-width: 85%;
+}
+
+.diagram-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 4px 6px 4px 12px;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+}
+
+.diagram-card__label {
+  flex: none;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--overlay-text-muted, currentColor);
+  white-space: nowrap;
+}
+
+.diagram-card__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+.diagram-card__tab {
+  padding: 2px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 16px;
+  color: inherit;
+  opacity: 0.62;
+  transition: opacity 120ms ease-out, background-color 120ms ease-out;
+}
+
+.diagram-card__tab:hover {
+  opacity: 0.9;
+}
+
+.diagram-card__tab[aria-selected='true'] {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.diagram-card__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.diagram-card__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: inherit;
+  opacity: 0.6;
+  transition: opacity 120ms ease-out, background-color 120ms ease-out;
+}
+
+.diagram-card__icon-btn:hover:not(:disabled) {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.diagram-card__icon-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.diagram-card__note {
+  margin-right: 4px;
+  font-size: 11px;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.diagram-card__export {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--overlay-code-border, color-mix(in srgb, currentColor 12%, transparent));
+}
+
+.diagram-card__text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 16px;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  transition: background-color 120ms ease-out, opacity 120ms ease-out;
+}
+
+.diagram-card__text-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.diagram-card__text-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The drawing is an <img> positioned inside a fixed-height window. A plain
+   wheel is never captured here (the chat scrolls); pan-y keeps touch scrolling
+   of the chat working over the diagram too. */
+.diagram-card__viewport {
+  position: relative;
+  /* A margin, not padding: the drawing is fitted to this box's own width, and
+     Mermaid's SVG has almost no margin of its own, so without this a node sits
+     against the card's edge. */
+  margin: 8px;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.diagram-card__viewport.is-zoomed {
+  cursor: grab;
+  touch-action: none;
+}
+
+.diagram-card__viewport.is-zoomed:active {
+  cursor: grabbing;
+}
+
+.diagram-card__img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform-origin: 0 0;
+}
+
+.diagram-card__viewport.is-previous .diagram-card__img {
+  opacity: 0.4;
+}
+
+.diagram-card__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 72px;
+  padding: 12px;
+}
+
+.diagram-card__status-text {
+  font-size: 12px;
+}
+
+.diagram-card__ok {
+  color: #34d399;
+}
+
+.diagram-card__status--over {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+}
+
+.diagram-card__source {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font: 12px/1.55 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  white-space: pre;
+  color: inherit;
+  background: transparent;
+}
+
+.diagram-card__fallback {
+  padding: 12px 14px;
+}
+
+.diagram-card__fallback-text {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  opacity: 0.8;
+}
+
+.diagram-card__fallback-actions {
+  display: flex;
+  gap: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diagram-card,
+  .diagram-card__tab,
+  .diagram-card__icon-btn,
+  .diagram-card__text-btn {
+    transition: none;
+  }
+}
+/* @diagram-card:end */
+
 .overlay-chip-surface {
   background: var(--overlay-chip-bg);
   border-color: transparent;

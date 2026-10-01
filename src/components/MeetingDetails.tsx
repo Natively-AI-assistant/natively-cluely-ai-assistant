@@ -23,6 +23,7 @@ import { splitIntoWordRuns } from '../lib/textRevealAnimation.mjs';
 import { followUpRecipients, recipientSummary, gmailComposeUrl } from '../lib/followUpRecipients.mjs';
 import { reflowFlattenedList, leadingItem, techniqueLabel, techniqueFromApproach, extractComplexity, isNotApplicable, splitTrailingAnswer, plainTitle, breakGluedLines, fixBoldSpacing, latexParensToDollars, stripLeadingReasoning, stripStrayGistLines, plainEmailText, plainMeetingTitle } from '../lib/codingAnswer.mjs';
 import { normalizeFinalizedMarkdownMath } from '../lib/streamingMarkdown';
+import { DiagramAwareMarkdown } from './diagram/DiagramAwareMarkdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 // Transcript turns, and which source-quality notes the page does not show. Kept pure so they are tested on their own.
@@ -197,6 +198,8 @@ function extractCodeBlock(body: string): { lang: string; code: string } | null {
     if (matches.length !== 1) return null;
     const m = matches[0];
     if (trimmed.replace(m[0], '').trim().length > 0) return null; // prose outside fence
+    // A diagram is not a code hero: let the markdown renderer hand it to the diagram card.
+    if ((m[1] || '').toLowerCase() === 'mermaid') return null;
     return { lang: m[1] || '', code: m[2].replace(/\n$/, '') };
 }
 
@@ -359,10 +362,18 @@ const answerMarkdown = (text: string) => normalizeFinalizedMarkdownMath(latexPar
 // the trailing [[GIST]] split off (it becomes a chip elsewhere), and no [[GIST]] lines
 // left in the middle of a multi-part answer.
 const usageAnswerText = (raw?: string | null): string => raw ? stripStrayGistLines(splitGistLine(stripLeadingReasoning(raw)).body) : '';
-const AnswerMarkdown: React.FC<{ children: string }> = ({ children }) => (
-    <ReactMarkdown remarkPlugins={ANSWER_REMARK} rehypePlugins={ANSWER_REHYPE} components={mdComponents}>
-        {answerMarkdown(children)}
+// A saved answer's Mermaid blocks are drawn again from their stored source
+// (nothing but the answer text is persisted), by the same card the live overlay
+// uses. Each block is cut out before the clean-up above runs, so the diagram
+// source is never rewritten by math or bold-spacing normalisation. A replay
+// never starts a repair on its own.
+const renderAnswerChunk = (chunk: string, key: string) => (
+    <ReactMarkdown key={key} remarkPlugins={ANSWER_REMARK} rehypePlugins={ANSWER_REHYPE} components={mdComponents}>
+        {answerMarkdown(chunk)}
     </ReactMarkdown>
+);
+const AnswerMarkdown: React.FC<{ children: string }> = ({ children }) => (
+    <DiagramAwareMarkdown text={children} renderMarkdown={renderAnswerChunk} />
 );
 
 // Bespoke code hero: custom header (language label · technique chip · copy button),

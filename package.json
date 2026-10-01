@@ -126,7 +126,14 @@
     "test:css:pricing-liquid-glass": "electron tests/css/pricing-liquid-glass.check.mjs",
     "test:css:bubble-liquid-glass": "electron tests/css/bubble-liquid-glass.check.mjs",
     "test:meet-dom": "electron tests/meet/meet-dom.check.mjs",
-    "test:phone-mirror": "node tests/phone-mirror/phone-mirror-client.check.mjs"
+    "test:phone-mirror": "node tests/phone-mirror/phone-mirror-client.check.mjs",
+    "test:diagram": "node --experimental-strip-types --test \"src/lib/diagram/__tests__/**/*.test.mjs\" && npm run build:electron && node --test electron/llm/__tests__/DiagramContract2026_10_01.test.mjs electron/services/__tests__/DiagramPhoneAndSession2026_10_01.test.mjs electron/context-intelligence/__tests__/DiagramTurnComposition2026_10_01.test.mjs && npm run test:diagram:wiring:no-build && npm run test:diagram:render && npm run test:diagram:card && npm run test:diagram:overlay",
+    "test:diagram:wiring": "npm run build:electron && npm run test:diagram:wiring:no-build",
+    "test:diagram:wiring:no-build": "cross-env ELECTRON_RUN_AS_NODE=1 electron tests/realtime-prompt/e2e-diagram.cjs && cross-env ELECTRON_RUN_AS_NODE=1 electron tests/realtime-prompt/e2e-diagram.cjs --v3=0",
+    "test:diagram:render": "electron tests/diagram/mermaid-render.check.mjs",
+    "test:diagram:card": "electron tests/diagram/diagram-card.check.mjs",
+    "test:diagram:overlay": "node tests/diagram/overlay-stream.check.mjs",
+    "test:diagram:live": "npm run build:electron && cross-env RUN_DIAGRAM_LIVE=1 ELECTRON_RUN_AS_NODE=1 electron tests/diagram/live-deepseek.cjs && node tests/diagram/live-replay.check.mjs"
   },
   "build": {
     "generateUpdatesFilesForAllChannels": true,
@@ -312,6 +319,7 @@
     "esbuild": "0.21.5",
     "husky": "^9.1.7",
     "js-tiktoken": "^1.0.21",
+    "mermaid": "11.17.2",
     "patch-package": "^8.0.1",
     "postcss": "^8.4.49",
     "react-doctor": "^0.2.10",

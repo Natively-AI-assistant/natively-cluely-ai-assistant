@@ -514,6 +514,9 @@ export class IntelligenceEngine extends EventEmitter {
 
     public beginMeetingConversation(id: string): void {
         this.meetingConversationId = id;
+        // A new meeting never inherits a design drawn before it started (in the
+        // launcher's chat, or in the meeting that just ended).
+        try { this.session.clearActiveDesign(); } catch { /* continuity only */ }
     }
 
     /**
@@ -721,6 +724,13 @@ export class IntelligenceEngine extends EventEmitter {
         super();
         this.llmHelper = llmHelper;
         this.session = session;
+        // The design on the table, for callers that hold no session (AnswerPlanner
+        // is pure and called from many places). One reader, registered here, so
+        // every planner call routes a design follow-up the same way.
+        try {
+            (require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals'))
+                .registerActiveDesignProvider(() => this.session.getActiveDesign());
+        } catch { /* routing aid only */ }
         this.initializeLLMs();
 
         // Dedicated channel: LLMHelper invokes this when KnowledgeOrchestrator
@@ -3797,6 +3807,33 @@ export class IntelligenceEngine extends EventEmitter {
             // PORT, so grounded turns carry real evidence instead of composing a
             // no-evidence disclosure. The port is the shared fail-closed factory
             // — the same one the manual-chat handler uses.
+            // System-design diagram turn — resolved ONCE per run and handed to
+            // every carrier below: the V3 persona (the contract), the V3 composer
+            // (the note + the design on the table), and WhatToAnswerLLM's non-V3
+            // fallback via the request snapshot. One decision, so the prompt
+            // paths cannot disagree about whether this turn draws a diagram.
+            const wtaDiagramTurn = (() => {
+                try {
+                    const dps = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
+                    const turn = dps.resolveDiagramTurn({
+                        question: answerPlan.question,
+                        answerType: answerPlan.answerType,
+                        activeDesign: this.session.getActiveDesign(),
+                        pinnedModeId: snapshotModeInfo?.id,
+                        // Accepting the system-design action card is a design ask
+                        // even when the heard line alone would not route as one.
+                        forceDesign: dps.isSystemDesignActionInstruction(options?.promptInstruction),
+                        hasVisualContext: (imagePaths?.length ?? 0) > 0 || Boolean(options?.domContext) || Boolean(options?.screenContext),
+                    });
+                    // A speculative prefetch may be discarded; only a real run
+                    // says what the next design was drawn for.
+                    if (!isSpeculative && turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId) {
+                        this.session.noteDesignQuestion(answerPlan.question);
+                    }
+                    return turn;
+                } catch { return null; }
+            })();
+
             const wtaV3Prompt = await (async () => {
                 try {
                     const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
@@ -3935,6 +3972,14 @@ export class IntelligenceEngine extends EventEmitter {
                                 const { renderLengthDirectiveForPlan } = require('./llm/AnswerPlanner') as typeof import('./llm/AnswerPlanner');
                                 return renderLengthDirectiveForPlan(answerPlan) || undefined;
                             } catch { return undefined; /* length directive is best-effort */ }
+                        })(),
+                        // The diagram turn's note and the design on the table
+                        // (see ComposeInput.diagramTurn). The contract itself
+                        // rides the persona below.
+                        diagramTurn: (() => {
+                            try {
+                                return (require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals')).v3DiagramTurn(wtaDiagramTurn);
+                            } catch { return undefined; }
                         })(),
                         // CODING CONTRACT ON THE V3 PATH (live regression, 2026-08-11).
                         // `_v3.system` REPLACES the v2 base prompt below
@@ -4101,6 +4146,12 @@ export class IntelligenceEngine extends EventEmitter {
                                 // authorization"; this is an answer-SHAPE mandate
                                 // and belongs on the same channel that already
                                 // carries the coding contract it refers to.
+                                // A DIAGRAM turn keeps 'answer' for the same reason a
+                                // coding turn does: `what_to_say` says "output only
+                                // the exact words the user should say … no labels",
+                                // and a Mermaid block is an artifact on screen, not
+                                // words to read aloud. The two cannot both be obeyed.
+                                const _liveDiagram = Boolean(wtaDiagramTurn?.signals);
                                 const _base = resolveV2SystemPrompt({
                                     action: (_liveCoding || _explanatoryMode) ? 'answer' : 'what_to_say',
                                     // The live overlay: whatever General answers,
@@ -4130,9 +4181,12 @@ export class IntelligenceEngine extends EventEmitter {
                                         })())
                                         : undefined),
                                     suppliedTemplate: codingSignals.suppliedTemplate,
+                                    // A diagram turn takes 'answer' too (see
+                                    // _liveDiagram above) and carries the contract.
+                                    ...(_liveDiagram ? { action: 'answer' as const, diagram: wtaDiagramTurn?.signals ?? null } : {}),
                                 });
                                 require('./llm/promptDebug').setPromptDebugTurnFacts({
-                                    personaAction: (_liveCoding || _explanatoryMode) ? 'answer' : 'what_to_say',
+                                    personaAction: (_liveCoding || _explanatoryMode || _liveDiagram) ? 'answer' : 'what_to_say',
                                     surface: 'live',
                                     mode: snapshotModeInfo?.templateType ?? null,
                                     codingTask: Boolean(codingTask || _promoted),
@@ -4185,6 +4239,7 @@ export class IntelligenceEngine extends EventEmitter {
                 generationId,
                 ...(wtaContextOsGeneration ? { contextOsGeneration: wtaContextOsGeneration } : {}),
                 ...(wtaV3Prompt ? { v3Prompt: wtaV3Prompt } : {}),
+                ...(wtaDiagramTurn && (wtaDiagramTurn.signals || wtaDiagramTurn.turnBlock) ? { diagramTurn: wtaDiagramTurn } : {}),
             });
 
             // T4 (2026-08-28): did V3 compose this turn's prompt? Every
@@ -7253,13 +7308,31 @@ export class IntelligenceEngine extends EventEmitter {
                 }
             } catch { /* Context OS is additive — never break follow-up */ }
 
+            // A refinement is about WORDING ("shorter", "rephrase"). If the
+            // answer being refined holds a diagram, it must come back unchanged
+            // — unless the request is about the design itself.
+            const keepDiagram = (() => {
+                try {
+                    const dps = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
+                    if (!dps.isSystemDesignDiagramsEnabled()) return null;
+                    const refine = require('../src/lib/diagram/diagramRefine.mjs') as typeof import('../src/lib/diagram/diagramRefine.mjs');
+                    const { hasMermaidFence } = require('../src/lib/diagram/fencedBlocks.mjs') as typeof import('../src/lib/diagram/fencedBlocks.mjs');
+                    if (!hasMermaidFence(lastMsg) || refine.refinementTouchesDesign(String(refinementRequest || ''))) return null;
+                    return refine;
+                } catch { return null; }
+            })();
+
             const generationId = ++this.currentGenerationId;
             let fullRefined = "";
+            const followUpOptions = {
+                ...(followUpContractRule ? { contractRule: followUpContractRule } : {}),
+                ...(keepDiagram ? { diagramRule: keepDiagram.REFINE_DIAGRAM_RULE } : {}),
+            };
             const stream = this.followUpLLM.generateStream(
                 lastMsg,
                 refinementRequest,
                 context,
-                followUpContractRule ? { contractRule: followUpContractRule } : undefined
+                Object.keys(followUpOptions).length ? followUpOptions : undefined
             );
             let streamAborted = false;
 
@@ -7275,6 +7348,18 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (!streamAborted && fullRefined) {
+                // The deterministic half of "do not mutate the diagram": a block
+                // the model shortened or dropped is put back as it was. The
+                // corrected text is the authoritative final the renderer swaps in.
+                if (keepDiagram) {
+                    try {
+                        const kept = keepDiagram.preserveDiagramsInRefinement(lastMsg, fullRefined);
+                        if (kept.changed) {
+                            console.log(`[IntelligenceEngine] follow-up: restored ${kept.restored} diagram block(s) the refinement changed or dropped`);
+                            fullRefined = kept.text;
+                        }
+                    } catch { /* keep the model's text */ }
+                }
                 this.session.addAssistantMessage(fullRefined, undefined, 'what_to_answer');
                 this.emit('refined_answer', fullRefined, intent);
 
@@ -7642,6 +7727,24 @@ export class IntelligenceEngine extends EventEmitter {
             // line below runs unchanged. When it returns a prompt, the raw
             // getFormattedContext(120) blob is NOT used at all — that blob is the
             // §32.16 anti-pattern this surface exists to demonstrate.
+            // System-design diagram turn for this surface, resolved once (see
+            // the What-to-Answer site for the full note).
+            const manualDiagramTurn = (() => {
+                try {
+                    const dps = require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals');
+                    const turn = dps.resolveDiagramTurn({
+                        question,
+                        answerType: answerPlan.answerType,
+                        activeDesign: this.session.getActiveDesign(),
+                        pinnedModeId: activeModeInfo?.id,
+                    });
+                    if (turn.request.enabled && turn.request.operation === 'create' && !turn.request.parentArtifactId) {
+                        this.session.noteDesignQuestion(question);
+                    }
+                    return turn;
+                } catch { return null; }
+            })();
+
             let answer: string;
             const _v3 = await (async () => {
                 try {
@@ -7652,6 +7755,11 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!_ctx) return null;
                     return await buildV3Prompt({
                         surface: 'manual-chat',
+                        diagramTurn: (() => {
+                            try {
+                                return (require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals')).v3DiagramTurn(manualDiagramTurn);
+                            } catch { return undefined; }
+                        })(),
                         // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
                         queryRewriter: require('./context-intelligence/retrieval/rewriter-binding').bindQueryRewriter(this.llmHelper),
                         // See the what-to-answer call site.
@@ -7697,7 +7805,7 @@ export class IntelligenceEngine extends EventEmitter {
             if (_v3) {
                 // V3 owns the system prompt entirely; the legacy universal prompt
                 // and the raw context blob are both bypassed.
-                answer = await this.answerLLM.generate(_v3.user, undefined, answerPlan, _v3.system);
+                answer = await this.answerLLM.generate(_v3.user, undefined, answerPlan, _v3.system, manualDiagramTurn);
             } else {
                 // R5 (2026-08-12, review finding): the broad flag stripped the
                 // live transcript from this fallback for template-seeded modes
@@ -7711,7 +7819,7 @@ export class IntelligenceEngine extends EventEmitter {
                 const context = _docEnforced || isCodingAnswerType(answerPlan.answerType)
                     ? undefined
                     : this.session.getFormattedContext(120);
-                answer = await this.answerLLM.generate(question, context, answerPlan);
+                answer = await this.answerLLM.generate(question, context, answerPlan, undefined, manualDiagramTurn);
             }
             const _manualSignals = require('./llm/codingPromptSignals').resolveCodingPromptSignals({
                 answerType: answerPlan.answerType,
@@ -7896,7 +8004,15 @@ export class IntelligenceEngine extends EventEmitter {
             const generationId = ++this.currentGenerationId;
             let fullResult = "";
             const brainstormV3 = await this.buildV3ForTranscriptSurface('brainstorm');
-            const stream = this.brainstormLLM.generateStream(context, imagePaths, brainstormV3 ?? undefined);
+            // When the active task is a system design, "brainstorm" means
+            // alternative designs — with the one worth picking drawn. No design
+            // on the table ⇒ null ⇒ brainstorm exactly as before.
+            const brainstormDiagramTurn = (() => {
+                try {
+                    return (require('./llm/diagramPromptSignals') as typeof import('./llm/diagramPromptSignals')).alternativeDesignTurn(this.session.getActiveDesign());
+                } catch { return null; }
+            })();
+            const stream = this.brainstormLLM.generateStream(context, imagePaths, brainstormV3 ?? undefined, brainstormDiagramTurn);
             let streamAborted = false;
 
             for await (const token of stream) {
