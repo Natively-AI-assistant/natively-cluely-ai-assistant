@@ -43,8 +43,13 @@ export interface VisionProviderBuildInputs {
  *                                → LiteLLM → NVIDIA NIM → Ollama → Codex → Custom
  *   private_vision: Ollama → Codex → local Custom only
  */
-export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionProviderConfig[] {
-  const credentials = CredentialsManager.getInstance();
+export function buildVisionProviders(
+  inputs: VisionProviderBuildInputs,
+  // Injectable so the rung list can be EXECUTED in a test (2026-10-01): each
+  // file is its own bundle, so this module carries a private copy of
+  // CredentialsManager that a test cannot reach from outside.
+  credentials: CredentialsManager = CredentialsManager.getInstance(),
+): VisionProviderConfig[] {
   const providers: VisionProviderConfig[] = [];
 
   const cloudAllowed = inputs.mode !== 'private_vision';
