@@ -499,3 +499,33 @@ promotion; replay gains are evidence, not a verdict.
   verification_spec in any V3 prompt and no verification line in the app log; whether the switch reached the app was
   not confirmed. To count for answer quality the check would have to gate or replace the shown answer — an
   architecture change (docs/BLOCKERS-ASTRA.md §2), not a setting.
+
+### fix11 in-app, dev (aq2-dev-fix11, 360 rows, 0 failed) — objective read, written 10:20Z BEFORE any charter-v2 score
+* Validators 8/9 (DTEAM-034, the sampling case above). No non-English reply, no "the material" in a shown answer.
+* Verifier: passes its gate on 267/360 turns (74%), replaces the text on 110 (31%); spoken turns 92/245; Looking for
+  work 24/32, Call Center 15/30, Team Meet 15/28.
+* Latency vs fix6: TTFT p50 845 ms (854), p95 1549 (1386); TOTAL p50 1997 ms (1555), p95 3386 (2761). The first word
+  is not later; the answer settles ~0.45 s later at the median and the text is swapped on about a third of turns.
+* Over-verification (tools/oververify.mjs): 110 edits → 3 end in a question, 13 flagged "decision lost", 22 cut to
+  under half. Same level as fix10 (115 / 3 / 13); the source-word rail did not touch this class.
+
+### Keep / revert rule for fix11, fixed before the scores exist
+fix11 is a BUNDLE over fix6: I16 hand-back, I18 list-then-rewrite (+ Team Meet, Recruiting, no-document clauses,
+freshness rail), language rail, I21 General spoken, I22 Seminar, claim kinds, source-word rail. Each part was
+replay-tested on its own; in-app and on holdout only the bundle is read. A pass confirms the bundle, not each part.
+Priority in the spec puts realtime usability above p10 and the mean, so the latency above is part of the rule.
+* PROMOTE fix11 over fix6 only if ALL hold on the holdout set (charter v2, paired on common items):
+  1. aggregate fix11 − fix6 ≥ +0.25 and the 95% interval excludes 0 (the price is +0.44 s to the settled answer and
+     a text swap on a third of turns; less than a quarter point does not pay for that);
+  2. hard fails do not go up in total;
+  3. no mode drops by more than 0.4 (the per-mode noise floor on 30 items) with its interval excluding 0;
+  4. Call Center does not drop at all beyond noise (fix6 lost 0.74 there on spoken no-document turns; the no-policy
+     clause exists to repair it, so a further loss means it failed);
+  5. objective validators are not worse than fix6 on dev, holdout and supp-behavior.
+  Dev must agree in sign; a dev gain alone promotes nothing.
+* Gain positive but interval includes 0 → NOT promoted; fix6 stays the reference, fix11 stays a candidate and the
+  report says so.
+* One mode fails rule 3 or 4 while the aggregate passes → the verifier is switched off for that mode (the gate is per
+  mode) and that build needs its own holdout read before promotion; nothing else is tuned on holdout items.
+* Aggregate ≤ 0 → revert to fix6; fix9 is read as the fallback (207 holdout rows, no Seminar / Call Center).
+* The swap itself (show then replace, vs hold until verified) stays Evin's decision either way.

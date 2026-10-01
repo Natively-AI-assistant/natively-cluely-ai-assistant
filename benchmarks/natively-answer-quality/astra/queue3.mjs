@@ -23,34 +23,38 @@ const I8_MODES = 'looking-for-work,sales,call-center,technical-interview,seminar
 // from here on is judged again into its own "-c2" sets: charter-v1 files (abs-dev, abs-holdout, …) are never mixed in.
 // Candidate = fix11 (claim-kinds verifier + source-word rail). Reference = fix6 (provisional). fix9 = I18 + I21 + I22
 // without claim kinds (its holdout is 207 clean rows, no Seminar / Call Center).
-// Tier 1: dev — candidate, reference, fix9, under the same charter.
-// Tier 2: holdout — the same three. A build is promoted only on its holdout read.
-// Tier 3: the starting column: main as it was (dev aq2-dev-cur, holdout aq-holdout-fix2).
-// Tier 4: supp-behavior, blind pairwise reference-vs-candidate, fix10 (the candidate before the rail).
-// Last batch gave ~2,160 judgments: tiers 1-2 need ~1,080 + 750; tier 3 (630) and later spill into the next batch.
+// Order = what the promotion decision needs first (a build is promoted only on its holdout read, vs the reference):
+// Tier 1: dev — candidate and reference.   Tier 2: holdout — candidate and reference (the deciding pair).
+// Tier 3: fix9 (dev + its 207 holdout rows): superseded by fix11, read for attribution and as the fallback.
+// Tier 4: the starting column: main as it was (dev aq2-dev-cur, holdout aq-holdout-fix2).
+// Tier 5: supp-behavior, blind pairwise reference-vs-candidate, fix10 (the candidate before the rail).
+// Last batch gave ~2,160 judgments: tiers 1-2 need ~720 + 540, tier 3 ~570; tier 4 (630) and later may spill.
+const J = (name, set, run) => [name, ['astra/judge.mjs', '--set', set, '--runs', `results/${run}`, '--concurrency', C], `results/${run}`];
 const TIERS = [
   [
     ['calibrate', ['astra/calibrate.mjs']],
   ],
   [
-    ['dev-c2-fix11', ['astra/judge.mjs', '--set', 'abs-dev-c2', '--runs', 'results/aq2-dev-fix11', '--concurrency', C], 'results/aq2-dev-fix11'],
-    ['dev-c2-fix6', ['astra/judge.mjs', '--set', 'abs-dev-c2', '--runs', 'results/aq2-dev-fix6', '--concurrency', C], 'results/aq2-dev-fix6'],
-    ['dev-c2-fix9', ['astra/judge.mjs', '--set', 'abs-dev-c2', '--runs', 'results/aq2-dev-fix9', '--concurrency', C], 'results/aq2-dev-fix9'],
+    J('dev-c2-fix11', 'abs-dev-c2', 'aq2-dev-fix11'),
+    J('dev-c2-fix6', 'abs-dev-c2', 'aq2-dev-fix6'),
   ],
   [
-    ['holdout-c2-fix11', ['astra/judge.mjs', '--set', 'abs-holdout-c2', '--runs', 'results/aq2-holdout-fix11', '--concurrency', C], 'results/aq2-holdout-fix11'],
-    ['holdout-c2-fix6', ['astra/judge.mjs', '--set', 'abs-holdout-c2', '--runs', 'results/aq2-holdout-fix6', '--concurrency', C], 'results/aq2-holdout-fix6'],
-    ['holdout-c2-fix9', ['astra/judge.mjs', '--set', 'abs-holdout-c2', '--runs', 'results/aq2-holdout-fix9', '--concurrency', C], 'results/aq2-holdout-fix9'],
+    J('holdout-c2-fix11', 'abs-holdout-c2', 'aq2-holdout-fix11'),
+    J('holdout-c2-fix6', 'abs-holdout-c2', 'aq2-holdout-fix6'),
   ],
   [
-    ['dev-c2-cur', ['astra/judge.mjs', '--set', 'abs-dev-c2', '--runs', 'results/aq2-dev-cur', '--concurrency', C], 'results/aq2-dev-cur'],
-    ['holdout-c2-cur', ['astra/judge.mjs', '--set', 'abs-holdout-c2', '--runs', 'results/aq-holdout-fix2', '--concurrency', C], 'results/aq-holdout-fix2'],
+    J('dev-c2-fix9', 'abs-dev-c2', 'aq2-dev-fix9'),
+    J('holdout-c2-fix9', 'abs-holdout-c2', 'aq2-holdout-fix9'),
+  ],
+  [
+    J('dev-c2-cur', 'abs-dev-c2', 'aq2-dev-cur'),
+    J('holdout-c2-cur', 'abs-holdout-c2', 'aq-holdout-fix2'),
   ],
   [
     ['sb-c2', ['astra/judge.mjs', '--set', 'abs-sb-c2', '--runs', 'results/aq2-sb-fix11,results/aq2-sb-fix6', '--concurrency', C], 'results/aq2-sb-fix11'],
     ['ab-c2-fix6-vs-fix11', ['astra/ab.mjs', '--set', 'ab-c2-dev-fix6-vs-fix11', '--a', 'results/aq2-dev-fix6', '--b', 'results/aq2-dev-fix11', '--concurrency', C], 'results/aq2-dev-fix11'],
-    ['dev-c2-fix10', ['astra/judge.mjs', '--set', 'abs-dev-c2', '--runs', 'results/aq2-dev-fix10', '--concurrency', C], 'results/aq2-dev-fix10'],
-    ['holdout-c2-fix10', ['astra/judge.mjs', '--set', 'abs-holdout-c2', '--runs', 'results/aq2-holdout-fix10', '--concurrency', C], 'results/aq2-holdout-fix10'],
+    J('dev-c2-fix10', 'abs-dev-c2', 'aq2-dev-fix10'),
+    J('holdout-c2-fix10', 'abs-holdout-c2', 'aq2-holdout-fix10'),
   ],
 ];
 
